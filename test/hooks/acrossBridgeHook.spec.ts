@@ -199,5 +199,149 @@ describe("AcrossBridgeHook", () => {
 
       await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "FillDeadlineOutOfRange");
     });
+
+    it("should succeed when outputAmount equals minOutputAmount exactly", async () => {
+      const { encoded } = buildFulfillData({ outputAmount: commitment.minOutputAmount });
+
+      await expect(subject(encoded)).to.emit(hook, "AcrossBridgeInitiated");
+    });
+
+    it("should revert when quoteTimestamp is too far in the future", async () => {
+      const tooFuture = currentTime.add(quoteBuffer).add(1);
+      const { encoded } = buildFulfillData({ quoteTimestamp: tooFuture });
+
+      await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "QuoteTimestampOutOfRange");
+    });
+
+    it("should revert when fillDeadline is too far in the future", async () => {
+      const tooFuture = currentTime.add(fillBuffer).add(1);
+      const { encoded } = buildFulfillData({ fillDeadline: tooFuture });
+
+      await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "FillDeadlineOutOfRange");
+    });
+  });
+
+  describe("#constructor", () => {
+    it("should set immutable variables correctly", async () => {
+      expect(await hook.inputToken()).to.eq(usdcToken.address);
+      expect(await hook.orchestrator()).to.eq(orchestrator.address);
+      expect(await hook.spokePool()).to.eq(spokePool.address);
+    });
+
+    it("should revert when inputToken is zero address", async () => {
+      const AcrossBridgeHook = await ethers.getContractFactory("AcrossBridgeHook", owner.wallet);
+      await expect(
+        AcrossBridgeHook.deploy(ADDRESS_ZERO, orchestrator.address, spokePool.address)
+      ).to.be.revertedWithCustomError(hook, "ZeroAddress");
+    });
+
+    it("should revert when orchestrator is zero address", async () => {
+      const AcrossBridgeHook = await ethers.getContractFactory("AcrossBridgeHook", owner.wallet);
+      await expect(
+        AcrossBridgeHook.deploy(usdcToken.address, ADDRESS_ZERO, spokePool.address)
+      ).to.be.revertedWithCustomError(hook, "ZeroAddress");
+    });
+
+    it("should revert when spokePool is zero address", async () => {
+      const AcrossBridgeHook = await ethers.getContractFactory("AcrossBridgeHook", owner.wallet);
+      await expect(
+        AcrossBridgeHook.deploy(usdcToken.address, orchestrator.address, ADDRESS_ZERO)
+      ).to.be.revertedWithCustomError(hook, "ZeroAddress");
+    });
+
+    it("should set owner to deployer", async () => {
+      expect(await hook.owner()).to.eq(owner.address);
+    });
+  });
+
+  describe("#rescueERC20", () => {
+    let stuckToken: Contract;
+
+    beforeEach(async () => {
+      stuckToken = await deployer.deployUSDCMock(usdc(1000), "STUCK", "STUCK");
+      await stuckToken.transfer(hook.address, usdc(100));
+    });
+
+    it("should rescue ERC20 tokens to recipient", async () => {
+      const recipientBalanceBefore = await stuckToken.balanceOf(recipient.address);
+
+      await expect(hook.connect(owner.wallet).rescueERC20(stuckToken.address, recipient.address, usdc(100)))
+        .to.emit(hook, "RescueERC20")
+        .withArgs(stuckToken.address, recipient.address, usdc(100));
+
+      const recipientBalanceAfter = await stuckToken.balanceOf(recipient.address);
+      expect(recipientBalanceAfter.sub(recipientBalanceBefore)).to.eq(usdc(100));
+    });
+
+    it("should revert when called by non-owner", async () => {
+      await expect(
+        hook.connect(attacker.wallet).rescueERC20(stuckToken.address, recipient.address, usdc(100))
+      ).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
+    it("should revert when token address is zero", async () => {
+      await expect(
+        hook.connect(owner.wallet).rescueERC20(ADDRESS_ZERO, recipient.address, usdc(100))
+      ).to.be.revertedWithCustomError(hook, "ZeroAddress");
+    });
+
+    it("should revert when recipient address is zero", async () => {
+      await expect(
+        hook.connect(owner.wallet).rescueERC20(stuckToken.address, ADDRESS_ZERO, usdc(100))
+      ).to.be.revertedWithCustomError(hook, "ZeroAddress");
+    });
+  });
+
+  describe("#rescueNative", () => {
+    beforeEach(async () => {
+      await owner.wallet.sendTransaction({
+        to: hook.address,
+        value: ether(1)
+      });
+    });
+
+    it("should rescue native tokens to recipient", async () => {
+      const recipientBalanceBefore = await ethers.provider.getBalance(recipient.address);
+
+      await expect(hook.connect(owner.wallet).rescueNative(recipient.address, ether(1)))
+        .to.emit(hook, "RescueNative")
+        .withArgs(recipient.address, ether(1));
+
+      const recipientBalanceAfter = await ethers.provider.getBalance(recipient.address);
+      expect(recipientBalanceAfter.sub(recipientBalanceBefore)).to.eq(ether(1));
+    });
+
+    it("should revert when called by non-owner", async () => {
+      await expect(
+        hook.connect(attacker.wallet).rescueNative(recipient.address, ether(1))
+      ).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
+    it("should revert when recipient address is zero", async () => {
+      await expect(
+        hook.connect(owner.wallet).rescueNative(ADDRESS_ZERO, ether(1))
+      ).to.be.revertedWithCustomError(hook, "ZeroAddress");
+    });
+
+    it("should allow partial rescue", async () => {
+      await expect(hook.connect(owner.wallet).rescueNative(recipient.address, ether(0.5)))
+        .to.emit(hook, "RescueNative")
+        .withArgs(recipient.address, ether(0.5));
+
+      const hookBalance = await ethers.provider.getBalance(hook.address);
+      expect(hookBalance).to.eq(ether(0.5));
+    });
+  });
+
+  describe("#receive", () => {
+    it("should accept native token transfers", async () => {
+      await owner.wallet.sendTransaction({
+        to: hook.address,
+        value: ether(1)
+      });
+
+      const hookBalance = await ethers.provider.getBalance(hook.address);
+      expect(hookBalance).to.eq(ether(1));
+    });
   });
 });
