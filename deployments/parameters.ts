@@ -63,6 +63,14 @@ export const USDC: any = {
   "base_staging": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 };
 
+export const ACROSS_SPOKE_POOL: any = {
+  "base": "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64",
+  "base_staging": "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64",
+  "base_sepolia": "",
+  "localhost": "",
+  "hardhat": "",
+};
+
 // For Goerli and localhost
 export const USDC_MINT_AMOUNT = usdc(1000000);
 export const USDC_RECIPIENT = "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929";
