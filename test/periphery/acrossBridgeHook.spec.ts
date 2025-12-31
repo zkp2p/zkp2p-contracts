@@ -11,7 +11,7 @@ import { ADDRESS_ZERO } from "@utils/constants";
 
 const expect = getWaffleExpect();
 
-describe.only("AcrossBridgeHook", () => {
+describe("AcrossBridgeHook", () => {
   let owner: Account;
   let orchestrator: Account;
   let recipient: Account;
