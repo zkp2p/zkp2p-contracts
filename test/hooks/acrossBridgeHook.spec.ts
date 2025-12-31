@@ -331,6 +331,15 @@ describe("AcrossBridgeHook", () => {
       const hookBalance = await ethers.provider.getBalance(hook.address);
       expect(hookBalance).to.eq(ether(0.5));
     });
+
+    it("should revert when native transfer fails", async () => {
+      const RejectEtherMock = await ethers.getContractFactory("RejectEtherMock", owner.wallet);
+      const rejectContract = await RejectEtherMock.deploy();
+
+      await expect(
+        hook.connect(owner.wallet).rescueNative(rejectContract.address, ether(1))
+      ).to.be.revertedWithCustomError(hook, "NativeTransferFailed");
+    });
   });
 
   describe("#receive", () => {
