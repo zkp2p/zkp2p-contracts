@@ -68,8 +68,10 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   if (network !== "localhost") {
     try {
       getDeployedContractAddress(hre.network.name, "AcrossBridgeHook");
+      console.log("AcrossBridgeHook already deployed on", network);
       return true;
     } catch (e) {
+      console.log("AcrossBridgeHook not deployed on", network);
       return false;
     }
   }
