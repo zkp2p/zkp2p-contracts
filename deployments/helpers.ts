@@ -146,6 +146,31 @@ export async function addWritePermission(
   }
 }
 
+export async function addPostIntentHook(
+  hre: HardhatRuntimeEnvironment,
+  contract: any,
+  hook: Address
+): Promise<void> {
+  const currentOwner = await contract.owner();
+  if (!(await contract.isWhitelistedHook(hook))) {
+    if ((await hre.getUnnamedAccounts()).includes(currentOwner)) {
+      const data = contract.interface.encodeFunctionData("addPostIntentHook", [hook]);
+      await sendDeploymentTransaction(hre, {
+        from: currentOwner,
+        to: contract.address,
+        data,
+      });
+    } else {
+      console.log(
+        `Contract owner is not in the list of accounts, must be manually added with the following calldata:
+        ${contract.interface.encodeFunctionData("addPostIntentHook", [hook])}
+        contract address: ${contract.address}
+        `
+      );
+    }
+  }
+}
+
 export async function addCurrency(
   hre: HardhatRuntimeEnvironment,
   contract: any,
