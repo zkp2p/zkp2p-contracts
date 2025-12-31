@@ -32,7 +32,17 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   let spokePoolAddress = ACROSS_SPOKE_POOL[network] || "";
   if (!spokePoolAddress) {
-    throw new Error(`Missing Across SpokePool address for network ${network}`);
+    if (network === "localhost" || network === "hardhat") {
+      const spokePoolMock = await deploy("AcrossSpokePoolMock", {
+        from: deployer,
+        args: [],
+      });
+      spokePoolAddress = spokePoolMock.address;
+      console.log("AcrossSpokePoolMock deployed at", spokePoolAddress);
+      await waitForDeploymentDelay(hre);
+    } else {
+      throw new Error(`Missing Across SpokePool address for network ${network}`);
+    }
   }
 
   const acrossBridgeHook = await deploy("AcrossBridgeHook", {

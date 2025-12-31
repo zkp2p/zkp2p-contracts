@@ -67,7 +67,7 @@ export const ACROSS_SPOKE_POOL: any = {
   "base": "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64",
   "base_staging": "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64",
   "base_sepolia": "",
-  "localhost": "",
+  "localhost": "", // Fake address for local testing
   "hardhat": "",
 };
 
