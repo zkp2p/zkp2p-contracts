@@ -95,7 +95,7 @@ describe("CctpBridgeHook", () => {
     beforeEach(async () => {
       commitment = {
         destinationDomain: 7,
-        mintRecipient: ethers.utils.hexZeroPad(recipient.address, 32),
+        mintRecipient: ethers.utils.hexZeroPad(recipient.address.toLowerCase(), 32),
         destinationCaller: ethers.utils.hexZeroPad(ADDRESS_ZERO, 32),
         minFinalityThreshold: 1000,
         maxFeeCap: usdc(1)

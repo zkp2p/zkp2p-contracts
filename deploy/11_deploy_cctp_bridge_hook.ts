@@ -24,12 +24,18 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const [deployer] = await hre.getUnnamedAccounts();
   const multiSig = MULTI_SIG[network] ? MULTI_SIG[network] : deployer;
 
-  const orchestratorAddress = getDeployedContractAddress(network, "Orchestrator");
-  const postIntentHookRegistryAddress = getDeployedContractAddress(network, "PostIntentHookRegistry");
+  const orchestratorAddress = network === "hardhat"
+    ? (await hre.deployments.get("Orchestrator")).address
+    : getDeployedContractAddress(network, "Orchestrator");
+  const postIntentHookRegistryAddress = network === "hardhat"
+    ? (await hre.deployments.get("PostIntentHookRegistry")).address
+    : getDeployedContractAddress(network, "PostIntentHookRegistry");
 
   const usdcAddress = USDC[network]
     ? USDC[network]
-    : getDeployedContractAddress(network, "USDCMock");
+    : network === "hardhat"
+      ? (await hre.deployments.get("USDCMock")).address
+      : getDeployedContractAddress(network, "USDCMock");
 
   let tokenMessengerAddress = CCTP_TOKEN_MESSENGER_V2[network] || "";
   if (!tokenMessengerAddress) {
@@ -83,5 +89,6 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
 };
 
 func.dependencies = ["00_deploy_system"];
+func.tags = ["cctp"];
 
 export default func;

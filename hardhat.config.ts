@@ -16,6 +16,11 @@ import "./tasks/etherscanVerifyWithDelay";
 
 dotenv.config();
 
+const HARDHAT_GAS_LIMIT = process.env.HARDHAT_GAS_LIMIT
+  ? parseInt(process.env.HARDHAT_GAS_LIMIT, 10)
+  : 100_000_000;
+const HARDHAT_SAVE_DEPLOYMENTS = process.env.HARDHAT_SAVE_DEPLOYMENTS === "true";
+
 // Skip non-deploy script files (e.g., Markdown notes, CLAUDE.md etc.) in the deploy/ folder
 // by registering no-op require handlers that instruct hardhat-deploy to skip them.
 // This prevents ts-node from trying to compile arbitrary extensions like .md.
@@ -55,8 +60,9 @@ const config: HardhatUserConfig = {
       initialDate: "2024-01-20 01:15:15 PM",
       allowBlocksWithSameTimestamp: true,
       initialBaseFeePerGas: 0,
-      blockGasLimit: 100_000_000,
-      gas: 100_000_000,
+      blockGasLimit: HARDHAT_GAS_LIMIT,
+      gas: HARDHAT_GAS_LIMIT,
+      saveDeployments: HARDHAT_SAVE_DEPLOYMENTS,
     },
     localhost: {
       allowBlocksWithSameTimestamp: true,
@@ -145,6 +151,8 @@ const config: HardhatUserConfig = {
     tests: "./test",
     cache: "./cache",
     artifacts: "./artifacts",
+    deploy: "./deploy",
+    deployments: "./deployments",
   },
 };
 

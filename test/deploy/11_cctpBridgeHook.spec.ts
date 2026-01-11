@@ -33,28 +33,35 @@ describe("CCTP Bridge Hook Deployment", () => {
 
   const network: string = deployments.getNetworkName();
 
-  function getDeployedContractAddress(network: string, contractName: string): string {
+  async function getDeployedContractAddress(network: string, contractName: string): Promise<string> {
+    if (network === "hardhat") {
+      const deployment = await deployments.get(contractName);
+      return deployment.address;
+    }
     return require(`../../deployments/${network}/${contractName}.json`).address;
   }
 
   before(async () => {
     [deployer] = await getAccounts();
     multiSig = MULTI_SIG[network] ? MULTI_SIG[network] : deployer.address;
+    if (network === "hardhat") {
+      await deployments.fixture(["system", "cctp"]);
+    }
   });
 
   it("should deploy CctpBridgeHook with correct params", async () => {
-    const hookAddress = getDeployedContractAddress(network, "CctpBridgeHook");
+    const hookAddress = await getDeployedContractAddress(network, "CctpBridgeHook");
     const hook = new CctpBridgeHook__factory(deployer.wallet).attach(hookAddress);
 
-    const orchestratorAddress = getDeployedContractAddress(network, "Orchestrator");
+    const orchestratorAddress = await getDeployedContractAddress(network, "Orchestrator");
     const usdcAddress = USDC[network]
       ? USDC[network]
-      : getDeployedContractAddress(network, "USDCMock");
+      : await getDeployedContractAddress(network, "USDCMock");
 
     const configuredMessenger = CCTP_TOKEN_MESSENGER_V2[network];
     const messengerAddress = configuredMessenger && configuredMessenger !== ""
       ? configuredMessenger
-      : getDeployedContractAddress(network, "TokenMessengerV2Mock");
+      : await getDeployedContractAddress(network, "TokenMessengerV2Mock");
 
     expect(await hook.orchestrator()).to.eq(orchestratorAddress);
     expect(await hook.inputToken()).to.eq(usdcAddress);
@@ -63,15 +70,15 @@ describe("CCTP Bridge Hook Deployment", () => {
   });
 
   it("should transfer ownership to multisig", async () => {
-    const hookAddress = getDeployedContractAddress(network, "CctpBridgeHook");
+    const hookAddress = await getDeployedContractAddress(network, "CctpBridgeHook");
     const hook = new CctpBridgeHook__factory(deployer.wallet).attach(hookAddress);
 
     expect(await hook.owner()).to.eq(multiSig);
   });
 
   it("should whitelist the hook in the post intent hook registry", async () => {
-    const hookAddress = getDeployedContractAddress(network, "CctpBridgeHook");
-    const registryAddress = getDeployedContractAddress(network, "PostIntentHookRegistry");
+    const hookAddress = await getDeployedContractAddress(network, "CctpBridgeHook");
+    const registryAddress = await getDeployedContractAddress(network, "PostIntentHookRegistry");
 
     const registry = new PostIntentHookRegistry__factory(deployer.wallet).attach(registryAddress);
     expect(await registry.isWhitelistedHook(hookAddress)).to.eq(true);
