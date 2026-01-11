@@ -71,6 +71,22 @@ export const ACROSS_SPOKE_POOL: any = {
   "hardhat": "",
 };
 
+export const CCTP_TOKEN_MESSENGER_V2: any = {
+  "base": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+  "base_staging": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+  "base_sepolia": "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
+  "localhost": "",
+  "hardhat": "",
+};
+
+export const CCTP_SOURCE_DOMAIN: any = {
+  "base": 6,
+  "base_staging": 6,
+  "base_sepolia": 6,
+  "localhost": 6,
+  "hardhat": 6,
+};
+
 // For Goerli and localhost
 export const USDC_MINT_AMOUNT = usdc(1000000);
 export const USDC_RECIPIENT = "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929";
