@@ -41,7 +41,7 @@ struct CctpBridgeCommitment {
     uint32 minFinalityThreshold; // 1000 (fast) or 2000 (standard)
 }
 ```
-Note: There is no signal-time fee cap; `maxFee` is computed onchain at fulfill time.
+Note: There is no signal-time fee cap; `maxFee` is computed onchain at fulfill time as 10 bps (0.1%) of `amountNetFees`.
 
 Fulfill data supplied at `fulfillIntent` time:
 ```
@@ -57,7 +57,7 @@ struct CctpFulfillData {
    - `destinationDomain != sourceDomain` and `destinationDomain != 0`.
    - `mintRecipient != bytes32(0)`.
    - `minFinalityThreshold` is 1000 or 2000.
-3. Hook computes `maxFee = TokenMessengerV2.getMinFeeAmount(amountNetFees)` and checks:
+3. Hook computes `maxFee = amountNetFees * 10 / 10_000` (10 bps) and checks:
    - `maxFee <= amountNetFees`.
 4. Hook pulls `amountNetFees` from Orchestrator.
 5. Hook calls `TokenMessengerV2.depositForBurn`.
@@ -114,7 +114,7 @@ Add to `deployments/parameters.ts`:
 - `CCTP_SOURCE_DOMAIN[network]` (Base = 6)
 
 ## Offchain Responsibilities
-- Optionally estimate `maxFee` using Iris API: `GET /v2/burn/USDC/fees` for UI display.
+- UI may display Circle fee estimates via Iris API (`GET /v2/burn/USDC/fees`), but onchain `maxFee` is fixed at 10 bps in the hook.
 - For fast transfers, check allowance: `GET /v2/fastBurn/USDC/allowance`.
 - Encode `mintRecipient` as `bytes32` (EVM: left-pad 20 byte address).
 - Provide `postIntentHookData = abi.encode(CctpFulfillData)`.
@@ -124,7 +124,7 @@ Add to `deployments/parameters.ts`:
 ```mermaid
 flowchart TD
     A[User or App] --> B[Offchain coordinator]
-    B --> C[GET /v2/burn/USDC/fees]
+    B --> C[Optional: GET /v2/burn/USDC/fees]
     B --> D[Optional: GET /v2/fastBurn/USDC/allowance]
     B --> E[Signal intent on Orchestrator]
     E --> F[Fulfill intent]
@@ -147,5 +147,5 @@ flowchart TD
 - CCTP enforces a per-transaction burn limit of 10M USDC; larger transfers must be split.
 - Hook must consume exactly `amountNetFees` from the Orchestrator to satisfy invariant checks.
 - `minFinalityThreshold` governs fast (1000) vs standard (2000) attestations.
-- `maxFee` is computed onchain via `TokenMessengerV2.getMinFeeAmount`.
+- `maxFee` is computed onchain as a fixed 10 bps of `amountNetFees`. If Circle’s executed fee exceeds this amount on destination, `receiveMessage` can revert.
 - Keep `destinationCaller = bytes32(0)` unless there is a specific relayer restriction.

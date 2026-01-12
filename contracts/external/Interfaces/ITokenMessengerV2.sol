@@ -28,6 +28,4 @@ interface ITokenMessengerV2 {
         uint32 minFinalityThreshold,
         bytes calldata hookData
     ) external;
-
-    function getMinFeeAmount(uint256 amount) external view returns (uint256);
 }

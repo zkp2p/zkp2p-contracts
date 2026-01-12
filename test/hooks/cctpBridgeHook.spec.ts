@@ -90,7 +90,7 @@ describe("CctpBridgeHook", () => {
     let commitmentData: string;
     let intent: any;
     let amountNetFees: BigNumber;
-    let minFee: BigNumber;
+    let expectedMaxFee: BigNumber;
 
     beforeEach(async () => {
       commitment = {
@@ -103,9 +103,7 @@ describe("CctpBridgeHook", () => {
       commitmentData = encodeCommitment(commitment);
       intent = await buildIntent(commitmentData);
       amountNetFees = usdc(50);
-      minFee = usdc(0.1);
-
-      await tokenMessenger.setMinFeeAmount(minFee);
+      expectedMaxFee = amountNetFees.mul(10).div(10_000);
 
       await usdcToken.connect(orchestrator.wallet).approve(hook.address, amountNetFees);
     });
@@ -124,7 +122,7 @@ describe("CctpBridgeHook", () => {
         commitment.destinationDomain,
         commitment.mintRecipient,
         amountNetFees,
-        minFee,
+        expectedMaxFee,
         commitment.minFinalityThreshold
       );
 
@@ -141,7 +139,7 @@ describe("CctpBridgeHook", () => {
       expect(lastDeposit.mintRecipient).to.eq(commitment.mintRecipient);
       expect(lastDeposit.burnToken).to.eq(usdcToken.address);
       expect(lastDeposit.destinationCaller).to.eq(commitment.destinationCaller);
-      expect(lastDeposit.maxFee).to.eq(minFee);
+      expect(lastDeposit.maxFee).to.eq(expectedMaxFee);
       expect(lastDeposit.minFinalityThreshold).to.eq(commitment.minFinalityThreshold);
     });
 
@@ -189,12 +187,6 @@ describe("CctpBridgeHook", () => {
       await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "InvalidFinalityThreshold");
     });
 
-    it("should revert when minFee exceeds amountNetFees", async () => {
-      await tokenMessenger.setMinFeeAmount(amountNetFees.add(1));
-      const { encoded } = buildFulfillData();
-
-      await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "MaxFeeAboveAmount");
-    });
   });
 
   describe("#constructor", () => {

@@ -60,6 +60,8 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
 
     uint32 internal constant FINALITY_THRESHOLD_CONFIRMED = 1000;
     uint32 internal constant FINALITY_THRESHOLD_FINALIZED = 2000;
+    uint256 internal constant MAX_FEE_BPS = 10;
+    uint256 internal constant BPS_DENOMINATOR = 10_000;
 
     /* ============ State Variables ============ */
 
@@ -117,7 +119,7 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
 
         _validateCommitment(commitment);
 
-        uint256 maxFee = tokenMessenger.getMinFeeAmount(_amountNetFees);
+        uint256 maxFee = (_amountNetFees * MAX_FEE_BPS) / BPS_DENOMINATOR;
         if (maxFee > _amountNetFees) {
             revert MaxFeeAboveAmount(maxFee, _amountNetFees);
         }
