@@ -67,6 +67,7 @@ describe("CCTP Bridge Hook Deployment", () => {
     expect(await hook.inputToken()).to.eq(usdcAddress);
     expect(await hook.tokenMessenger()).to.eq(messengerAddress);
     expect(await hook.sourceDomain()).to.eq(CCTP_SOURCE_DOMAIN[network]);
+    expect(await hook.maxFeeBps()).to.eq(10);
   });
 
   it("should transfer ownership to multisig", async () => {

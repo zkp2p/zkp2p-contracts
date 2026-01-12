@@ -1,5 +1,5 @@
 Goal (incl. success criteria):
-- Update CCTP hook to compute `maxFee` as 0.1% of fulfill amount onchain, update spec/tests, and verify against Circle GitHub contracts; deliver working tests and commit.
+- Keep `maxFee` computed as 10 bps onchain but make it governance-updatable; update spec/tests and ship with passing tests.
 
 Constraints/Assumptions:
 - Must maintain/update this ledger each turn; keep concise facts only.
@@ -7,9 +7,10 @@ Constraints/Assumptions:
 - Scope is source-chain hook only; destination chain out of scope.
 - Environment: workspace-write, network enabled, approval_policy=never.
 - User request: do not fall back; base logic must be grounded in Circle GitHub contract review.
+- User request: do not change the external hook/interface shape beyond adding governance configurability.
 
 Key decisions:
-- Implement fixed 10 bps (0.1%) maxFee computation in hook; remove onchain getMinFeeAmount usage.
+- Implement maxFee as 10 bps default with owner/governance updateable `maxFeeBps`.
 
 State:
 - TokenMessengerV2 on Base Sepolia/Base mainnet lacks `getMinFeeAmount`; source shows only `_maxFee < _amount` on deposit and `fee <= maxFee` on receive.
@@ -51,9 +52,12 @@ Done:
 - Hardhat tests: `npx hardhat test test/hooks/cctpBridgeHook.spec.ts`, `npx hardhat test test/deploy/11_cctpBridgeHook.spec.ts` (PATH includes `.foundry/bin`); passed.
 - Foundry full suite with fork (`BASE_SEPOLIA_RPC_URL=https://sepolia.base.org`): 42 tests passed.
 - Committed and pushed fixed 10 bps maxFee update (`c26c5a0`).
+- Added governance-updatable `maxFeeBps`, event, and error; updated spec and tests.
+- Hardhat tests: `npx hardhat test test/hooks/cctpBridgeHook.spec.ts`, `npx hardhat test test/deploy/11_cctpBridgeHook.spec.ts`; passed.
+- Foundry full suite with fork (`BASE_SEPOLIA_RPC_URL=https://sepolia.base.org`): 42 tests passed.
 
 Now:
-- Await user confirmation on fixed maxFee policy and any additional changes.
+- Stage changes, clean untracked test artifacts, commit and push.
 
 Next:
 - None.

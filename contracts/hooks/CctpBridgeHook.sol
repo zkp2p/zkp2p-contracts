@@ -43,6 +43,7 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
         uint32 minFinalityThreshold
     );
 
+    event MaxFeeBpsUpdated(uint256 previousMaxFeeBps, uint256 newMaxFeeBps);
     event RescueERC20(address indexed token, address indexed to, uint256 amount);
     event RescueNative(address indexed to, uint256 amount);
 
@@ -53,6 +54,7 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
     error InvalidDestinationDomain(uint32 destinationDomain);
     error InvalidRecipient(bytes32 mintRecipient);
     error InvalidFinalityThreshold(uint32 minFinalityThreshold);
+    error InvalidMaxFeeBps(uint256 maxFeeBps);
     error MaxFeeAboveAmount(uint256 maxFee, uint256 amount);
     error NativeTransferFailed(address to, uint256 amount);
 
@@ -60,7 +62,7 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
 
     uint32 internal constant FINALITY_THRESHOLD_CONFIRMED = 1000;
     uint32 internal constant FINALITY_THRESHOLD_FINALIZED = 2000;
-    uint256 internal constant MAX_FEE_BPS = 10;
+    uint256 internal constant DEFAULT_MAX_FEE_BPS = 10;
     uint256 internal constant BPS_DENOMINATOR = 10_000;
 
     /* ============ State Variables ============ */
@@ -69,6 +71,7 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
     address public immutable orchestrator;
     ITokenMessengerV2 public immutable tokenMessenger;
     uint32 public immutable sourceDomain;
+    uint256 public maxFeeBps;
 
     /* ============ Constructor ============ */
 
@@ -96,6 +99,7 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
         orchestrator = _orchestrator;
         tokenMessenger = ITokenMessengerV2(_tokenMessenger);
         sourceDomain = _sourceDomain;
+        maxFeeBps = DEFAULT_MAX_FEE_BPS;
     }
 
     /* ============ External Functions ============ */
@@ -119,7 +123,7 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
 
         _validateCommitment(commitment);
 
-        uint256 maxFee = (_amountNetFees * MAX_FEE_BPS) / BPS_DENOMINATOR;
+        uint256 maxFee = (_amountNetFees * maxFeeBps) / BPS_DENOMINATOR;
         if (maxFee > _amountNetFees) {
             revert MaxFeeAboveAmount(maxFee, _amountNetFees);
         }
@@ -161,6 +165,20 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
         if (_token == address(0) || _to == address(0)) revert ZeroAddress();
         IERC20(_token).safeTransfer(_to, _amount);
         emit RescueERC20(_token, _to, _amount);
+    }
+
+    /**
+     * @notice Updates the max fee bps used for CCTP burns.
+     * @dev Must be less than 10_000 so `maxFee < amount` holds.
+     * @param _maxFeeBps New max fee in basis points
+     */
+    function setMaxFeeBps(uint256 _maxFeeBps) external onlyOwner {
+        if (_maxFeeBps >= BPS_DENOMINATOR) {
+            revert InvalidMaxFeeBps(_maxFeeBps);
+        }
+        uint256 previousMaxFeeBps = maxFeeBps;
+        maxFeeBps = _maxFeeBps;
+        emit MaxFeeBpsUpdated(previousMaxFeeBps, _maxFeeBps);
     }
 
     /**

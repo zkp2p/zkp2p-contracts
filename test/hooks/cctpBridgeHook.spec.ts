@@ -23,6 +23,7 @@ describe("CctpBridgeHook", () => {
   let hook: Contract;
 
   const sourceDomain = 6;
+  const defaultMaxFeeBps = 10;
 
   beforeEach(async () => {
     [owner, orchestrator, recipient, attacker] = await getAccounts();
@@ -103,7 +104,7 @@ describe("CctpBridgeHook", () => {
       commitmentData = encodeCommitment(commitment);
       intent = await buildIntent(commitmentData);
       amountNetFees = usdc(50);
-      expectedMaxFee = amountNetFees.mul(10).div(10_000);
+      expectedMaxFee = amountNetFees.mul(defaultMaxFeeBps).div(10_000);
 
       await usdcToken.connect(orchestrator.wallet).approve(hook.address, amountNetFees);
     });
@@ -187,6 +188,23 @@ describe("CctpBridgeHook", () => {
       await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "InvalidFinalityThreshold");
     });
 
+    it("should use updated maxFeeBps", async () => {
+      const { encoded, data } = buildFulfillData();
+      const newMaxFeeBps = 25;
+      const updatedMaxFee = amountNetFees.mul(newMaxFeeBps).div(10_000);
+
+      await hook.connect(owner.wallet).setMaxFeeBps(newMaxFeeBps);
+
+      await expect(subject(encoded)).to.emit(hook, "CctpBridgeInitiated").withArgs(
+        data.intentHash,
+        commitment.destinationDomain,
+        commitment.mintRecipient,
+        amountNetFees,
+        updatedMaxFee,
+        commitment.minFinalityThreshold
+      );
+    });
+
   });
 
   describe("#constructor", () => {
@@ -195,6 +213,7 @@ describe("CctpBridgeHook", () => {
       expect(await hook.orchestrator()).to.eq(orchestrator.address);
       expect(await hook.tokenMessenger()).to.eq(tokenMessenger.address);
       expect(await hook.sourceDomain()).to.eq(sourceDomain);
+      expect(await hook.maxFeeBps()).to.eq(defaultMaxFeeBps);
     });
 
     it("should revert when inputToken is zero address", async () => {
@@ -227,6 +246,28 @@ describe("CctpBridgeHook", () => {
 
     it("should set owner to deployer", async () => {
       expect(await hook.owner()).to.eq(owner.address);
+    });
+  });
+
+  describe("#setMaxFeeBps", () => {
+    it("should update maxFeeBps when called by owner", async () => {
+      await expect(hook.connect(owner.wallet).setMaxFeeBps(50))
+        .to.emit(hook, "MaxFeeBpsUpdated")
+        .withArgs(defaultMaxFeeBps, 50);
+
+      expect(await hook.maxFeeBps()).to.eq(50);
+    });
+
+    it("should revert when maxFeeBps is too high", async () => {
+      await expect(
+        hook.connect(owner.wallet).setMaxFeeBps(10_000)
+      ).to.be.revertedWithCustomError(hook, "InvalidMaxFeeBps");
+    });
+
+    it("should revert when caller is not owner", async () => {
+      await expect(
+        hook.connect(attacker.wallet).setMaxFeeBps(25)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
     });
   });
 });
