@@ -74,12 +74,11 @@ describe("CctpBridgeHook", () => {
 
   const buildFulfillData = (overrides: any = {}): { encoded: string; data: any } => {
     const data = {
-      intentHash: overrides.intentHash ?? ethers.utils.hexlify(ethers.utils.randomBytes(32)),
-      maxFee: overrides.maxFee ?? usdc(0.1)
+      intentHash: overrides.intentHash ?? ethers.utils.hexlify(ethers.utils.randomBytes(32))
     };
 
     const encoded = ethers.utils.defaultAbiCoder.encode(
-      ["tuple(bytes32 intentHash,uint256 maxFee)"],
+      ["tuple(bytes32 intentHash)"],
       [data]
     );
 
@@ -91,6 +90,7 @@ describe("CctpBridgeHook", () => {
     let commitmentData: string;
     let intent: any;
     let amountNetFees: BigNumber;
+    let minFee: BigNumber;
 
     beforeEach(async () => {
       commitment = {
@@ -103,6 +103,9 @@ describe("CctpBridgeHook", () => {
       commitmentData = encodeCommitment(commitment);
       intent = await buildIntent(commitmentData);
       amountNetFees = usdc(50);
+      minFee = usdc(0.1);
+
+      await tokenMessenger.setMinFeeAmount(minFee);
 
       await usdcToken.connect(orchestrator.wallet).approve(hook.address, amountNetFees);
     });
@@ -121,7 +124,7 @@ describe("CctpBridgeHook", () => {
         commitment.destinationDomain,
         commitment.mintRecipient,
         amountNetFees,
-        data.maxFee,
+        minFee,
         commitment.minFinalityThreshold
       );
 
@@ -138,7 +141,7 @@ describe("CctpBridgeHook", () => {
       expect(lastDeposit.mintRecipient).to.eq(commitment.mintRecipient);
       expect(lastDeposit.burnToken).to.eq(usdcToken.address);
       expect(lastDeposit.destinationCaller).to.eq(commitment.destinationCaller);
-      expect(lastDeposit.maxFee).to.eq(data.maxFee);
+      expect(lastDeposit.maxFee).to.eq(minFee);
       expect(lastDeposit.minFinalityThreshold).to.eq(commitment.minFinalityThreshold);
     });
 
@@ -186,10 +189,9 @@ describe("CctpBridgeHook", () => {
       await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "InvalidFinalityThreshold");
     });
 
-    it("should revert when maxFee exceeds amountNetFees", async () => {
-      commitmentData = encodeCommitment(commitment);
-      intent = await buildIntent(commitmentData);
-      const { encoded } = buildFulfillData({ maxFee: amountNetFees.add(1) });
+    it("should revert when minFee exceeds amountNetFees", async () => {
+      await tokenMessenger.setMinFeeAmount(amountNetFees.add(1));
+      const { encoded } = buildFulfillData();
 
       await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "MaxFeeAboveAmount");
     });

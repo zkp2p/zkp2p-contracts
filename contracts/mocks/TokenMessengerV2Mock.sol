@@ -9,6 +9,8 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  * @notice Mock TokenMessengerV2 for testing CCTP hook behavior.
  */
 contract TokenMessengerV2Mock {
+    uint256 public minFeeAmount;
+
     struct DepositCall {
         uint256 amount;
         uint32 destinationDomain;
@@ -106,7 +108,11 @@ contract TokenMessengerV2Mock {
         );
     }
 
-    function getMinFeeAmount(uint256) external pure returns (uint256) {
-        return 0;
+    function setMinFeeAmount(uint256 _minFeeAmount) external {
+        minFeeAmount = _minFeeAmount;
+    }
+
+    function getMinFeeAmount(uint256) external view returns (uint256) {
+        return minFeeAmount;
     }
 }

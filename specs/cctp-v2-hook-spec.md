@@ -41,13 +41,12 @@ struct CctpBridgeCommitment {
     uint32 minFinalityThreshold; // 1000 (fast) or 2000 (standard)
 }
 ```
-Note: There is no signal-time fee cap; `maxFee` is supplied at fulfill time.
+Note: There is no signal-time fee cap; `maxFee` is computed onchain at fulfill time.
 
 Fulfill data supplied at `fulfillIntent` time:
 ```
 struct CctpFulfillData {
     bytes32 intentHash; // used for event indexing
-    uint256 maxFee;     // max fee to allow on destination mint
 }
 ```
 
@@ -58,10 +57,11 @@ struct CctpFulfillData {
    - `destinationDomain != sourceDomain` and `destinationDomain != 0`.
    - `mintRecipient != bytes32(0)`.
    - `minFinalityThreshold` is 1000 or 2000.
+3. Hook computes `maxFee = TokenMessengerV2.getMinFeeAmount(amountNetFees)` and checks:
    - `maxFee <= amountNetFees`.
-3. Hook pulls `amountNetFees` from Orchestrator.
-4. Hook calls `TokenMessengerV2.depositForBurn`.
-5. Hook emits `CctpBridgeInitiated`.
+4. Hook pulls `amountNetFees` from Orchestrator.
+5. Hook calls `TokenMessengerV2.depositForBurn`.
+6. Hook emits `CctpBridgeInitiated`.
 
 ### CCTP Call
 Use `depositForBurn` (no hook data) on the source chain.
@@ -114,7 +114,7 @@ Add to `deployments/parameters.ts`:
 - `CCTP_SOURCE_DOMAIN[network]` (Base = 6)
 
 ## Offchain Responsibilities
-- Compute `maxFee` using Iris API: `GET /v2/burn/USDC/fees`.
+- Optionally estimate `maxFee` using Iris API: `GET /v2/burn/USDC/fees` for UI display.
 - For fast transfers, check allowance: `GET /v2/fastBurn/USDC/allowance`.
 - Encode `mintRecipient` as `bytes32` (EVM: left-pad 20 byte address).
 - Provide `postIntentHookData = abi.encode(CctpFulfillData)`.
@@ -147,5 +147,5 @@ flowchart TD
 - CCTP enforces a per-transaction burn limit of 10M USDC; larger transfers must be split.
 - Hook must consume exactly `amountNetFees` from the Orchestrator to satisfy invariant checks.
 - `minFinalityThreshold` governs fast (1000) vs standard (2000) attestations.
-- `maxFee` must be computed offchain to avoid onchain revert from fee minimums.
+- `maxFee` is computed onchain via `TokenMessengerV2.getMinFeeAmount`.
 - Keep `destinationCaller = bytes32(0)` unless there is a specific relayer restriction.

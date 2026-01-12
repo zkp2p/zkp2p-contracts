@@ -50,8 +50,7 @@ contract CctpBridgeHookForkTest is Test {
         });
 
         CctpBridgeHook.CctpFulfillData memory fulfillData = CctpBridgeHook.CctpFulfillData({
-            intentHash: keccak256("cctp-fork-test"),
-            maxFee: 0
+            intentHash: keccak256("cctp-fork-test")
         });
 
         IOrchestrator.Intent memory intent = IOrchestrator.Intent({

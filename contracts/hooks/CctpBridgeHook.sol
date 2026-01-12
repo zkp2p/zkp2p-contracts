@@ -27,10 +27,9 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
         uint32 minFinalityThreshold;
     }
 
-    /// @notice JIT data supplied at fulfillIntent time.
+    /// @notice JIT data supplied at fulfillIntent time (event indexing only).
     struct CctpFulfillData {
         bytes32 intentHash;
-        uint256 maxFee;
     }
 
     /* ============ Events ============ */
@@ -116,7 +115,12 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
         CctpBridgeCommitment memory commitment = abi.decode(_intent.data, (CctpBridgeCommitment));
         CctpFulfillData memory fulfillData = abi.decode(_fulfillIntentData, (CctpFulfillData));
 
-        _validateCommitment(commitment, fulfillData, _amountNetFees);
+        _validateCommitment(commitment);
+
+        uint256 maxFee = tokenMessenger.getMinFeeAmount(_amountNetFees);
+        if (maxFee > _amountNetFees) {
+            revert MaxFeeAboveAmount(maxFee, _amountNetFees);
+        }
 
         inputToken.safeTransferFrom(orchestrator, address(this), _amountNetFees);
 
@@ -129,7 +133,7 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
             commitment.mintRecipient,
             address(inputToken),
             commitment.destinationCaller,
-            fulfillData.maxFee,
+            maxFee,
             commitment.minFinalityThreshold
         );
 
@@ -140,7 +144,7 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
             commitment.destinationDomain,
             commitment.mintRecipient,
             _amountNetFees,
-            fulfillData.maxFee,
+            maxFee,
             commitment.minFinalityThreshold
         );
     }
@@ -173,11 +177,7 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
 
     /* ============ Internal Functions ============ */
 
-    function _validateCommitment(
-        CctpBridgeCommitment memory commitment,
-        CctpFulfillData memory fulfillData,
-        uint256 amountNetFees
-    ) internal view {
+    function _validateCommitment(CctpBridgeCommitment memory commitment) internal view {
         if (commitment.destinationDomain == 0 || commitment.destinationDomain == sourceDomain) {
             revert InvalidDestinationDomain(commitment.destinationDomain);
         }
@@ -189,9 +189,6 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
             commitment.minFinalityThreshold != FINALITY_THRESHOLD_FINALIZED
         ) {
             revert InvalidFinalityThreshold(commitment.minFinalityThreshold);
-        }
-        if (fulfillData.maxFee > amountNetFees) {
-            revert MaxFeeAboveAmount(fulfillData.maxFee, amountNetFees);
         }
     }
 }
