@@ -50,12 +50,13 @@ Done:
 - Updated `CctpBridgeHook` to compute `maxFee` as 10 bps onchain; removed `getMinFeeAmount` from interface/mock/tests/spec.
 - Hardhat tests: `npx hardhat test test/hooks/cctpBridgeHook.spec.ts`, `npx hardhat test test/deploy/11_cctpBridgeHook.spec.ts` (PATH includes `.foundry/bin`); passed.
 - Foundry full suite with fork (`BASE_SEPOLIA_RPC_URL=https://sepolia.base.org`): 42 tests passed.
+- Committed and pushed fixed 10 bps maxFee update (`c26c5a0`).
 
 Now:
-- Stage `CONTINUITY.md` and code changes; commit and push.
+- Await user confirmation on fixed maxFee policy and any additional changes.
 
 Next:
-- Provide summary + security note about fixed maxFee policy.
+- None.
 
 Open questions (UNCONFIRMED if needed):
 - UNCONFIRMED: Circle docs list `getMinFeeAmount`, but deployed TokenMessengerV2 lacks it; 10 bps is a local policy choice.
