@@ -39,9 +39,9 @@ struct CctpBridgeCommitment {
     bytes32 mintRecipient;       // bytes32 for EVM or non-EVM address
     bytes32 destinationCaller;   // bytes32(0) = any caller can mint
     uint32 minFinalityThreshold; // 1000 (fast) or 2000 (standard)
-    uint256 maxFeeCap;           // upper bound for maxFee; must be >= min fee for amount
 }
 ```
+Note: There is no signal-time fee cap; `maxFee` is supplied at fulfill time.
 
 Fulfill data supplied at `fulfillIntent` time:
 ```
@@ -58,7 +58,7 @@ struct CctpFulfillData {
    - `destinationDomain != sourceDomain` and `destinationDomain != 0`.
    - `mintRecipient != bytes32(0)`.
    - `minFinalityThreshold` is 1000 or 2000.
-   - `maxFee <= maxFeeCap` and `maxFee <= amountNetFees`.
+   - `maxFee <= amountNetFees`.
 3. Hook pulls `amountNetFees` from Orchestrator.
 4. Hook calls `TokenMessengerV2.depositForBurn`.
 5. Hook emits `CctpBridgeInitiated`.
@@ -95,7 +95,6 @@ event CctpBridgeInitiated(
 - `InvalidDestinationDomain(uint32 destinationDomain)`
 - `InvalidRecipient(bytes32 mintRecipient)`
 - `InvalidFinalityThreshold(uint32 minFinalityThreshold)`
-- `MaxFeeTooHigh(uint256 maxFee, uint256 maxFeeCap)`
 - `MaxFeeAboveAmount(uint256 maxFee, uint256 amount)`
 - `NativeTransferFailed(address to, uint256 amount)`
 
@@ -116,7 +115,6 @@ Add to `deployments/parameters.ts`:
 
 ## Offchain Responsibilities
 - Compute `maxFee` using Iris API: `GET /v2/burn/USDC/fees`.
-- Set `maxFeeCap` at signal time to be >= the minimum fee for the amount (use `TokenMessengerV2.getMinFeeAmount` via RPC), plus a safety buffer.
 - For fast transfers, check allowance: `GET /v2/fastBurn/USDC/allowance`.
 - Encode `mintRecipient` as `bytes32` (EVM: left-pad 20 byte address).
 - Provide `postIntentHookData = abi.encode(CctpFulfillData)`.
@@ -150,5 +148,4 @@ flowchart TD
 - Hook must consume exactly `amountNetFees` from the Orchestrator to satisfy invariant checks.
 - `minFinalityThreshold` governs fast (1000) vs standard (2000) attestations.
 - `maxFee` must be computed offchain to avoid onchain revert from fee minimums.
-- `maxFeeCap` must be set high enough at signal time so a relayer can choose a valid `maxFee` (>= minimum fee).
 - Keep `destinationCaller = bytes32(0)` unless there is a specific relayer restriction.

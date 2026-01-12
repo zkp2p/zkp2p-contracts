@@ -42,7 +42,7 @@ describe("CctpBridgeHook", () => {
   const encodeCommitment = (commitment: any): string => {
     return ethers.utils.defaultAbiCoder.encode(
       [
-        "tuple(uint32 destinationDomain,bytes32 mintRecipient,bytes32 destinationCaller,uint32 minFinalityThreshold,uint256 maxFeeCap)"
+        "tuple(uint32 destinationDomain,bytes32 mintRecipient,bytes32 destinationCaller,uint32 minFinalityThreshold)"
       ],
       [commitment]
     );
@@ -97,8 +97,7 @@ describe("CctpBridgeHook", () => {
         destinationDomain: 7,
         mintRecipient: ethers.utils.hexZeroPad(recipient.address.toLowerCase(), 32),
         destinationCaller: ethers.utils.hexZeroPad(ADDRESS_ZERO, 32),
-        minFinalityThreshold: 1000,
-        maxFeeCap: usdc(1)
+        minFinalityThreshold: 1000
       };
 
       commitmentData = encodeCommitment(commitment);
@@ -187,14 +186,7 @@ describe("CctpBridgeHook", () => {
       await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "InvalidFinalityThreshold");
     });
 
-    it("should revert when maxFee exceeds maxFeeCap", async () => {
-      const { encoded } = buildFulfillData({ maxFee: usdc(2) });
-
-      await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "MaxFeeTooHigh");
-    });
-
     it("should revert when maxFee exceeds amountNetFees", async () => {
-      commitment.maxFeeCap = usdc(100);
       commitmentData = encodeCommitment(commitment);
       intent = await buildIntent(commitmentData);
       const { encoded } = buildFulfillData({ maxFee: amountNetFees.add(1) });

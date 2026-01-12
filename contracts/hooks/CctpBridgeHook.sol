@@ -25,7 +25,6 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
         bytes32 mintRecipient;
         bytes32 destinationCaller;
         uint32 minFinalityThreshold;
-        uint256 maxFeeCap; // upper bound for maxFee; must be >= min fee for amount
     }
 
     /// @notice JIT data supplied at fulfillIntent time.
@@ -55,7 +54,6 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
     error InvalidDestinationDomain(uint32 destinationDomain);
     error InvalidRecipient(bytes32 mintRecipient);
     error InvalidFinalityThreshold(uint32 minFinalityThreshold);
-    error MaxFeeTooHigh(uint256 maxFee, uint256 maxFeeCap);
     error MaxFeeAboveAmount(uint256 maxFee, uint256 amount);
     error NativeTransferFailed(address to, uint256 amount);
 
@@ -191,9 +189,6 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
             commitment.minFinalityThreshold != FINALITY_THRESHOLD_FINALIZED
         ) {
             revert InvalidFinalityThreshold(commitment.minFinalityThreshold);
-        }
-        if (fulfillData.maxFee > commitment.maxFeeCap) {
-            revert MaxFeeTooHigh(fulfillData.maxFee, commitment.maxFeeCap);
         }
         if (fulfillData.maxFee > amountNetFees) {
             revert MaxFeeAboveAmount(fulfillData.maxFee, amountNetFees);

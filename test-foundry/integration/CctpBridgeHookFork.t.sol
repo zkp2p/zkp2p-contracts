@@ -46,8 +46,7 @@ contract CctpBridgeHookForkTest is Test {
             destinationDomain: 26, // Arc Testnet
             mintRecipient: bytes32(uint256(uint160(address(this)))),
             destinationCaller: bytes32(0),
-            minFinalityThreshold: 1000,
-            maxFeeCap: 0
+            minFinalityThreshold: 1000
         });
 
         CctpBridgeHook.CctpFulfillData memory fulfillData = CctpBridgeHook.CctpFulfillData({
