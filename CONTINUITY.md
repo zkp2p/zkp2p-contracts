@@ -55,9 +55,10 @@ Done:
 - Added governance-updatable `maxFeeBps`, event, and error; updated spec and tests.
 - Hardhat tests: `npx hardhat test test/hooks/cctpBridgeHook.spec.ts`, `npx hardhat test test/deploy/11_cctpBridgeHook.spec.ts`; passed.
 - Foundry full suite with fork (`BASE_SEPOLIA_RPC_URL=https://sepolia.base.org`): 42 tests passed.
+- Committed and pushed governance-configurable maxFeeBps (`05f9e0e`).
 
 Now:
-- Stage changes, clean untracked test artifacts, commit and push.
+- Await user confirmation or further changes.
 
 Next:
 - None.
