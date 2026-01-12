@@ -25,7 +25,7 @@ contract CctpBridgeHook is IPostIntentHook, Ownable {
         bytes32 mintRecipient;
         bytes32 destinationCaller;
         uint32 minFinalityThreshold;
-        uint256 maxFeeCap;
+        uint256 maxFeeCap; // upper bound for maxFee; must be >= min fee for amount
     }
 
     /// @notice JIT data supplied at fulfillIntent time.
