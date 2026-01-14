@@ -12,7 +12,19 @@ import { IPostIntentHook } from "../interfaces/IPostIntentHook.sol";
 
 /**
  * @title AcrossBridgeHook
- * @notice Post-intent hook that deposits USDC into Across SpokePool using committed destination params.
+ * @notice Post-intent hook that bridges tokens into Across SpokePool using committed destination params.
+ *
+ * @dev IMPORTANT: This hook is designed for stablecoin-to-stablecoin bridging only.
+ *
+ * NOT RECOMMENDED for volatile assets (ETH, WBTC, etc.) because:
+ * - The `minOutputAmount` is committed at signalIntent time
+ * - The actual `outputAmount` is provided at fulfillIntent time
+ * - If the asset price drops between signal and fulfill, the minOutputAmount check will fail
+ * - Since the user has already made an off-chain fiat payment tied to this intent,
+ *   a reverted fulfillIntent leaves them unable to unlock escrowed funds
+ *
+ * For stablecoin-to-stablecoin routes (e.g., USDC on Base -> USDC on Arbitrum), the price
+ * is stable and minOutputAmount checks will reliably pass.
  */
 contract AcrossBridgeHook is IPostIntentHook, Ownable {
     using SafeERC20 for IERC20;
@@ -20,11 +32,13 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
     /* ============ Structs ============ */
 
     /// @notice Commitment stored in intent.data at signalIntent time.
+    /// @dev For stablecoin-to-stablecoin routes, set minOutputAmount close to expected output (e.g., 99.5%).
+    ///      For volatile assets, this check may fail if price moves unfavorably between signal and fulfill.
     struct BridgeCommitment {
         uint256 destinationChainId;
         address outputToken;
         address recipient;
-        uint256 minOutputAmount;
+        uint256 minOutputAmount;    // Minimum tokens to receive on destination chain
     }
 
     /// @notice JIT data supplied at fulfillIntent time.
@@ -58,6 +72,8 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
     error InvalidDestinationChainId(uint256 destinationChainId);
     error InvalidRecipient(address recipient);
     error InvalidOutputToken(address outputToken);
+    /// @dev Reverts fulfillIntent if outputAmount < minOutputAmount. For volatile assets,
+    ///      this can occur if price dropped between signalIntent and fulfillIntent.
     error OutputBelowMinimum(uint256 outputAmount, uint256 minimum);
     error QuoteTimestampOutOfRange(uint32 quoteTimestamp);
     error FillDeadlineOutOfRange(uint32 fillDeadline);
@@ -73,7 +89,7 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
 
     /**
      * @notice Creates a new AcrossBridgeHook instance.
-     * @param _inputToken USDC token address on this chain
+     * @param _inputToken Token address to bridge (recommended: stablecoins like USDC)
      * @param _orchestrator Orchestrator that invokes this hook
      * @param _spokePool Across SpokePool address on this chain
      */
@@ -159,6 +175,9 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
 
     /* ============ Internal Functions ============ */
 
+    /// @dev Validates bridge commitment parameters. The minOutputAmount check is critical:
+    ///      - For stablecoins: safe to set tight (e.g., 99.5% of input)
+    ///      - For volatile assets: may revert if price dropped since signalIntent
     function _validateCommitment(
         BridgeCommitment memory commitment,
         AcrossFulfillData memory fulfillData
