@@ -69,14 +69,20 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
      * @notice JIT data supplied at fulfillIntent time.
      * @dev fillDeadlineOffset is seconds from current block timestamp until fill deadline expires.
      *      Typical values range from 1800 (30 min) to 21600 (6 hours) depending on route.
+     *      exclusiveRelayer and exclusivityParameter should come from Across suggested-fees API
+     *      to ensure deposits are prioritized by relayers.
      * @param intentHash Hash of the intent being fulfilled
      * @param outputAmount Amount of tokens to receive on destination chain
      * @param fillDeadlineOffset Seconds from current time until fill deadline
+     * @param exclusiveRelayer Address (as bytes32) of the exclusive relayer from Across API
+     * @param exclusivityParameter Seconds of exclusivity for the exclusive relayer
      */
     struct AcrossFulfillData {
         bytes32 intentHash;
         uint256 outputAmount;
         uint32 fillDeadlineOffset;
+        bytes32 exclusiveRelayer;
+        uint32 exclusivityParameter;
     }
 
     /* ============ Events ============ */
@@ -90,6 +96,8 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
      * @param inputAmount Amount of input tokens deposited
      * @param outputAmount Amount of output tokens to receive
      * @param fillDeadlineOffset Offset in seconds for fill deadline
+     * @param exclusiveRelayer Address of the exclusive relayer (bytes32 for cross-chain compatibility)
+     * @param exclusivityParameter Seconds of exclusivity for the exclusive relayer
      */
     event AcrossBridgeInitiated(
         bytes32 indexed intentHash,
@@ -98,7 +106,9 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
         bytes32 recipient,
         uint256 inputAmount,
         uint256 outputAmount,
-        uint32 fillDeadlineOffset
+        uint32 fillDeadlineOffset,
+        bytes32 exclusiveRelayer,
+        uint32 exclusivityParameter
     );
 
     /**
@@ -203,9 +213,9 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
                 _amountNetFees,
                 fulfillData.outputAmount,
                 commitment.destinationChainId,
-                bytes32(0),                        // exclusiveRelayer (none)
+                fulfillData.exclusiveRelayer,      // from Across suggested-fees API
                 fulfillData.fillDeadlineOffset,
-                0,                                 // exclusivityParameter
+                fulfillData.exclusivityParameter,  // from Across suggested-fees API
                 ""                                 // message
             ) {
                 // Bridge succeeded - reset approval and emit success event
@@ -217,7 +227,9 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
                     commitment.recipient,
                     _amountNetFees,
                     fulfillData.outputAmount,
-                    fulfillData.fillDeadlineOffset
+                    fulfillData.fillDeadlineOffset,
+                    fulfillData.exclusiveRelayer,
+                    fulfillData.exclusivityParameter
                 );
                 return;
             } catch {

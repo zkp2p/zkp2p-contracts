@@ -77,11 +77,13 @@ describe("AcrossBridgeHook", () => {
     const data = {
       intentHash: overrides.intentHash ?? ethers.utils.hexlify(ethers.utils.randomBytes(32)),
       outputAmount: overrides.outputAmount ?? BigNumber.from(1_000_000),
-      fillDeadlineOffset: overrides.fillDeadlineOffset ?? 21600  // 6 hours default
+      fillDeadlineOffset: overrides.fillDeadlineOffset ?? 21600,  // 6 hours default
+      exclusiveRelayer: overrides.exclusiveRelayer ?? toBytes32("0x1562A70707D62edBF3a90317E46E1DF075E2d924"),  // Sample relayer from Across
+      exclusivityParameter: overrides.exclusivityParameter ?? 5  // 5 seconds exclusivity (typical Across value)
     };
 
     const encoded = ethers.utils.defaultAbiCoder.encode(
-      ["tuple(bytes32 intentHash,uint256 outputAmount,uint32 fillDeadlineOffset)"],
+      ["tuple(bytes32 intentHash,uint256 outputAmount,uint32 fillDeadlineOffset,bytes32 exclusiveRelayer,uint32 exclusivityParameter)"],
       [data]
     );
 
@@ -136,6 +138,8 @@ describe("AcrossBridgeHook", () => {
       expect(await spokePool.lastOutputAmount()).to.eq(data.outputAmount);
       expect(await spokePool.lastDestinationChainId()).to.eq(commitment.destinationChainId);
       expect(await spokePool.lastFillDeadlineOffset()).to.eq(data.fillDeadlineOffset);
+      expect((await spokePool.lastExclusiveRelayer()).toLowerCase()).to.eq(data.exclusiveRelayer.toLowerCase());
+      expect(await spokePool.lastExclusivityParameter()).to.eq(data.exclusivityParameter);
     });
 
     it("should revert when caller is not orchestrator", async () => {
@@ -235,6 +239,34 @@ describe("AcrossBridgeHook", () => {
 
       await expect(subject(encoded)).to.emit(hook, "AcrossBridgeInitiated");
       expect(await spokePool.lastFillDeadlineOffset()).to.eq(shortOffset);
+    });
+
+    it("should pass exclusiveRelayer and exclusivityParameter to spokePool", async () => {
+      const customRelayer = toBytes32("0xDeadBeefDeadBeefDeadBeefDeadBeefDeadBeef");
+      const customExclusivity = 10;  // 10 seconds
+
+      const { encoded, data } = buildFulfillData({
+        outputAmount: BigNumber.from(700_000),
+        exclusiveRelayer: customRelayer,
+        exclusivityParameter: customExclusivity
+      });
+
+      await subject(encoded);
+
+      expect((await spokePool.lastExclusiveRelayer()).toLowerCase()).to.eq(customRelayer.toLowerCase());
+      expect(await spokePool.lastExclusivityParameter()).to.eq(customExclusivity);
+    });
+
+    it("should work with zero exclusivity (open relay)", async () => {
+      const { encoded } = buildFulfillData({
+        outputAmount: BigNumber.from(700_000),
+        exclusiveRelayer: ZERO_BYTES32,
+        exclusivityParameter: 0
+      });
+
+      await expect(subject(encoded)).to.emit(hook, "AcrossBridgeInitiated");
+      expect(await spokePool.lastExclusiveRelayer()).to.eq(ZERO_BYTES32);
+      expect(await spokePool.lastExclusivityParameter()).to.eq(0);
     });
 
     it("should correctly convert depositor address to bytes32", async () => {

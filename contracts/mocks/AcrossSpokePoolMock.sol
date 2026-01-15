@@ -21,6 +21,8 @@ contract AcrossSpokePoolMock {
     uint256 public lastOutputAmount;
     uint256 public lastDestinationChainId;
     uint32 public lastFillDeadlineOffset;
+    bytes32 public lastExclusiveRelayer;
+    uint32 public lastExclusivityParameter;
 
     bool public shouldRevert;
 
@@ -40,9 +42,9 @@ contract AcrossSpokePoolMock {
         uint256 inputAmount,
         uint256 outputAmount,
         uint256 destinationChainId,
-        bytes32,  // exclusiveRelayer
+        bytes32 exclusiveRelayer,
         uint32 fillDeadlineOffset,
-        uint32,   // exclusivityParameter
+        uint32 exclusivityParameter,
         bytes calldata  // message
     ) external payable {
         // Allow testing of bridge failure scenario
@@ -58,6 +60,8 @@ contract AcrossSpokePoolMock {
         lastOutputAmount = outputAmount;
         lastDestinationChainId = destinationChainId;
         lastFillDeadlineOffset = fillDeadlineOffset;
+        lastExclusiveRelayer = exclusiveRelayer;
+        lastExclusivityParameter = exclusivityParameter;
 
         // Convert bytes32 inputToken to address for ERC20 transfer
         address inputTokenAddr = address(uint160(uint256(inputToken)));
