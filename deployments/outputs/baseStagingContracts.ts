@@ -3,7 +3,7 @@ export default {
   "chainId": "8453",
   "contracts": {
     "AcrossBridgeHook": {
-      "address": "0x49e0b48f5EFd1b20Bf1478E2D04c8C0146972d39",
+      "address": "0xb462cdf54cb32f8d7d3b9eE4Cc1a86a6A9b102CD",
       "abi": [
         {
           "inputs": [
@@ -29,17 +29,6 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "uint32",
-              "name": "fillDeadline",
-              "type": "uint32"
-            }
-          ],
-          "name": "FillDeadlineOutOfRange",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
               "internalType": "uint256",
               "name": "destinationChainId",
               "type": "uint256"
@@ -51,9 +40,9 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "address",
+              "internalType": "bytes32",
               "name": "outputToken",
-              "type": "address"
+              "type": "bytes32"
             }
           ],
           "name": "InvalidOutputToken",
@@ -62,9 +51,9 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "address",
+              "internalType": "bytes32",
               "name": "recipient",
-              "type": "address"
+              "type": "bytes32"
             }
           ],
           "name": "InvalidRecipient",
@@ -84,33 +73,6 @@ export default {
             }
           ],
           "name": "NativeTransferFailed",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint256",
-              "name": "outputAmount",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "minimum",
-              "type": "uint256"
-            }
-          ],
-          "name": "OutputBelowMinimum",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint32",
-              "name": "quoteTimestamp",
-              "type": "uint32"
-            }
-          ],
-          "name": "QuoteTimestampOutOfRange",
           "type": "error"
         },
         {
@@ -146,15 +108,15 @@ export default {
             },
             {
               "indexed": false,
-              "internalType": "address",
+              "internalType": "bytes32",
               "name": "outputToken",
-              "type": "address"
+              "type": "bytes32"
             },
             {
               "indexed": false,
-              "internalType": "address",
+              "internalType": "bytes32",
               "name": "recipient",
-              "type": "address"
+              "type": "bytes32"
             },
             {
               "indexed": false,
@@ -171,17 +133,42 @@ export default {
             {
               "indexed": false,
               "internalType": "uint32",
-              "name": "quoteTimestamp",
-              "type": "uint32"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint32",
-              "name": "fillDeadline",
+              "name": "fillDeadlineOffset",
               "type": "uint32"
             }
           ],
           "name": "AcrossBridgeInitiated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "recipient",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "enum AcrossBridgeHook.FallbackReason",
+              "name": "reason",
+              "type": "uint8"
+            }
+          ],
+          "name": "FallbackTransfer",
           "type": "event"
         },
         {
