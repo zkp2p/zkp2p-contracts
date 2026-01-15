@@ -11,6 +11,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  */
 contract AcrossSpokePoolMock {
     error TransferFailed();
+    error MockBridgeFailure();
 
     bytes32 public lastDepositor;
     bytes32 public lastRecipient;
@@ -20,6 +21,16 @@ contract AcrossSpokePoolMock {
     uint256 public lastOutputAmount;
     uint256 public lastDestinationChainId;
     uint32 public lastFillDeadlineOffset;
+
+    bool public shouldRevert;
+
+    /**
+     * @notice Set whether depositNow should revert (for testing fallback behavior)
+     * @param _shouldRevert True to make depositNow revert
+     */
+    function setShouldRevert(bool _shouldRevert) external {
+        shouldRevert = _shouldRevert;
+    }
 
     function depositNow(
         bytes32 depositor,
@@ -34,6 +45,11 @@ contract AcrossSpokePoolMock {
         uint32,   // exclusivityParameter
         bytes calldata  // message
     ) external payable {
+        // Allow testing of bridge failure scenario
+        if (shouldRevert) {
+            revert MockBridgeFailure();
+        }
+
         lastDepositor = depositor;
         lastRecipient = recipient;
         lastInputToken = inputToken;

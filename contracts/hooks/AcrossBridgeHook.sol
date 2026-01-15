@@ -33,6 +33,17 @@ import { IPostIntentHook } from "../interfaces/IPostIntentHook.sol";
 contract AcrossBridgeHook is IPostIntentHook, Ownable {
     using SafeERC20 for IERC20;
 
+    /* ============ Enums ============ */
+
+    /**
+     * @notice Reason codes for fallback transfer when bridge cannot be initiated.
+     * @dev Used in FallbackTransfer event for gas-efficient reason tracking.
+     */
+    enum FallbackReason {
+        OUTPUT_BELOW_MINIMUM,  // outputAmount < minOutputAmount (price moved unfavorably)
+        BRIDGE_CALL_FAILED     // spokePool.depositNow() reverted
+    }
+
     /* ============ Structs ============ */
 
     /**
@@ -90,6 +101,21 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
         uint32 fillDeadlineOffset
     );
 
+    /**
+     * @notice Emitted when bridge cannot be initiated and funds are transferred directly to recipient.
+     * @dev This is a graceful degradation - user receives funds on source chain instead of destination.
+     * @param intentHash Hash of the intent being fulfilled
+     * @param recipient Address receiving the fallback transfer (intent.to)
+     * @param amount Amount transferred to recipient
+     * @param reason Why the bridge could not be initiated
+     */
+    event FallbackTransfer(
+        bytes32 indexed intentHash,
+        address indexed recipient,
+        uint256 amount,
+        FallbackReason reason
+    );
+
     event RescueERC20(address indexed token, address indexed to, uint256 amount);
     event RescueNative(address indexed to, uint256 amount);
 
@@ -135,6 +161,12 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
      * @notice Executes the hook by depositing USDC into Across SpokePool using depositNow.
      * @dev Destination params are taken from the commitment; fulfill data only supplies JIT fields.
      *      Uses depositNow which automatically uses current block timestamp, eliminating timing issues.
+     *
+     *      FALLBACK BEHAVIOR: If the bridge cannot be initiated (due to price movement causing
+     *      outputAmount < minOutputAmount, or if the SpokePool call reverts), funds are transferred
+     *      directly to intent.to on the source chain instead of reverting. This ensures the user
+     *      always receives their funds after making an off-chain payment, preventing permanent loss.
+     *
      * @param _intent Intent data passed by Orchestrator (includes commitment in intent.data)
      * @param _amountNetFees Net USDC amount after fees
      * @param _fulfillIntentData ABI-encoded AcrossFulfillData
@@ -149,25 +181,60 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
         BridgeCommitment memory commitment = abi.decode(_intent.data, (BridgeCommitment));
         AcrossFulfillData memory fulfillData = abi.decode(_fulfillIntentData, (AcrossFulfillData));
 
-        _validateCommitment(commitment, fulfillData);
+        // Validate non-price parameters (these should always revert if invalid)
+        _validateNonPriceCommitment(commitment);
 
-        _deposit(
-            commitment.recipient,
-            commitment.outputToken,
-            commitment.destinationChainId,
-            _amountNetFees,
-            fulfillData.outputAmount,
-            fulfillData.fillDeadlineOffset
-        );
+        // Pull tokens from Orchestrator first (before any fallback logic)
+        inputToken.safeTransferFrom(orchestrator, address(this), _amountNetFees);
 
-        emit AcrossBridgeInitiated(
+        // Check if bridge is viable based on price
+        bool bridgeViable = _isBridgeViable(fulfillData, commitment.minOutputAmount);
+
+        if (bridgeViable) {
+            // Set approval for bridge attempt
+            inputToken.safeApprove(address(spokePool), 0);
+            inputToken.safeApprove(address(spokePool), _amountNetFees);
+
+            // Try bridge deposit - use try-catch for graceful degradation
+            try spokePool.depositNow(
+                _toBytes32(address(this)),         // depositor
+                commitment.recipient,              // recipient (already bytes32)
+                _toBytes32(address(inputToken)),   // inputToken
+                commitment.outputToken,            // outputToken (already bytes32)
+                _amountNetFees,
+                fulfillData.outputAmount,
+                commitment.destinationChainId,
+                bytes32(0),                        // exclusiveRelayer (none)
+                fulfillData.fillDeadlineOffset,
+                0,                                 // exclusivityParameter
+                ""                                 // message
+            ) {
+                // Bridge succeeded - reset approval and emit success event
+                inputToken.safeApprove(address(spokePool), 0);
+                emit AcrossBridgeInitiated(
+                    fulfillData.intentHash,
+                    commitment.destinationChainId,
+                    commitment.outputToken,
+                    commitment.recipient,
+                    _amountNetFees,
+                    fulfillData.outputAmount,
+                    fulfillData.fillDeadlineOffset
+                );
+                return;
+            } catch {
+                // Bridge call failed - reset approval and fall through to fallback
+                inputToken.safeApprove(address(spokePool), 0);
+            }
+        }
+
+        // Fallback: transfer to intent.to on source chain
+        // This ensures user receives funds even if bridge fails
+        inputToken.safeTransfer(_intent.to, _amountNetFees);
+        emit FallbackTransfer(
             fulfillData.intentHash,
-            commitment.destinationChainId,
-            commitment.outputToken,
-            commitment.recipient,
+            _intent.to,
             _amountNetFees,
-            fulfillData.outputAmount,
-            fulfillData.fillDeadlineOffset
+            bridgeViable ? FallbackReason.BRIDGE_CALL_FAILED : FallbackReason.OUTPUT_BELOW_MINIMUM
         );
     }
 
@@ -200,16 +267,11 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
     /* ============ Internal Functions ============ */
 
     /**
-     * @dev Validates bridge commitment parameters. The minOutputAmount check is critical:
-     *      - For stablecoins: safe to set tight (e.g., 99.5% of input)
-     *      - For volatile assets: may revert if price dropped since signalIntent
+     * @dev Validates non-price bridge commitment parameters. These are structural requirements
+     *      that should always revert if invalid (no fallback possible).
      * @param commitment The bridge commitment containing destination parameters
-     * @param fulfillData The fulfill data containing output amount
      */
-    function _validateCommitment(
-        BridgeCommitment memory commitment,
-        AcrossFulfillData memory fulfillData
-    ) internal pure {
+    function _validateNonPriceCommitment(BridgeCommitment memory commitment) internal pure {
         if (commitment.destinationChainId == 0) {
             revert InvalidDestinationChainId(commitment.destinationChainId);
         }
@@ -219,49 +281,20 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
         if (commitment.outputToken == bytes32(0)) {
             revert InvalidOutputToken(commitment.outputToken);
         }
-
-        if (fulfillData.outputAmount < commitment.minOutputAmount) {
-            revert OutputBelowMinimum(fulfillData.outputAmount, commitment.minOutputAmount);
-        }
     }
 
     /**
-     * @dev Deposits tokens into the Across SpokePool using depositNow.
-     * @param recipient Recipient address on destination chain (bytes32)
-     * @param outputToken Token address on destination chain (bytes32)
-     * @param destinationChainId Target chain ID
-     * @param inputAmount Amount of input tokens to bridge
-     * @param outputAmount Amount of output tokens to receive
-     * @param fillDeadlineOffset Seconds from now until fill deadline
+     * @dev Checks if the bridge output amount meets the minimum requirement.
+     *      Unlike structural validation, this returns a bool for graceful degradation.
+     * @param fulfillData The fulfill data containing output amount
+     * @param minOutputAmount The minimum acceptable output amount from commitment
+     * @return True if outputAmount >= minOutputAmount, false otherwise
      */
-    function _deposit(
-        bytes32 recipient,
-        bytes32 outputToken,
-        uint256 destinationChainId,
-        uint256 inputAmount,
-        uint256 outputAmount,
-        uint32 fillDeadlineOffset
-    ) internal {
-        inputToken.safeTransferFrom(orchestrator, address(this), inputAmount);
-
-        inputToken.safeApprove(address(spokePool), 0);
-        inputToken.safeApprove(address(spokePool), inputAmount);
-
-        spokePool.depositNow(
-            _toBytes32(address(this)),  // depositor
-            recipient,                   // recipient (already bytes32)
-            _toBytes32(address(inputToken)), // inputToken
-            outputToken,                 // outputToken (already bytes32)
-            inputAmount,
-            outputAmount,
-            destinationChainId,
-            bytes32(0),                  // exclusiveRelayer (none)
-            fillDeadlineOffset,          // fill deadline offset from now
-            0,                           // exclusivityParameter
-            ""                           // message
-        );
-
-        inputToken.safeApprove(address(spokePool), 0);
+    function _isBridgeViable(
+        AcrossFulfillData memory fulfillData,
+        uint256 minOutputAmount
+    ) internal pure returns (bool) {
+        return fulfillData.outputAmount >= minOutputAmount;
     }
 
     /**

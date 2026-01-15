@@ -146,10 +146,51 @@ describe("AcrossBridgeHook", () => {
       ).to.be.revertedWithCustomError(hook, "UnauthorizedCaller");
     });
 
-    it("should revert when outputAmount is below minimum", async () => {
-      const { encoded } = buildFulfillData({ outputAmount: commitment.minOutputAmount.sub(1) });
+    it("should fallback to direct transfer when outputAmount is below minimum", async () => {
+      const { encoded, data } = buildFulfillData({ outputAmount: commitment.minOutputAmount.sub(1) });
 
-      await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "OutputBelowMinimum");
+      const orchestratorBalanceBefore = await usdcToken.balanceOf(orchestrator.address);
+      const recipientBalanceBefore = await usdcToken.balanceOf(recipient.address);
+
+      // Should emit FallbackTransfer with OUTPUT_BELOW_MINIMUM reason (enum value 0)
+      await expect(subject(encoded))
+        .to.emit(hook, "FallbackTransfer")
+        .withArgs(data.intentHash, recipient.address, amountNetFees, 0);
+
+      // Verify funds went to recipient (intent.to), not spokePool
+      const orchestratorBalanceAfter = await usdcToken.balanceOf(orchestrator.address);
+      const recipientBalanceAfter = await usdcToken.balanceOf(recipient.address);
+      const hookBalance = await usdcToken.balanceOf(hook.address);
+      const spokePoolBalance = await usdcToken.balanceOf(spokePool.address);
+
+      expect(orchestratorBalanceBefore.sub(orchestratorBalanceAfter)).to.eq(amountNetFees);
+      expect(recipientBalanceAfter.sub(recipientBalanceBefore)).to.eq(amountNetFees);
+      expect(hookBalance).to.eq(0);
+      expect(spokePoolBalance).to.eq(0);
+    });
+
+    it("should fallback to direct transfer when bridge call reverts", async () => {
+      const { encoded, data } = buildFulfillData({ outputAmount: BigNumber.from(700_000) });
+
+      // Make the mock revert
+      await spokePool.setShouldRevert(true);
+
+      const recipientBalanceBefore = await usdcToken.balanceOf(recipient.address);
+
+      // Should emit FallbackTransfer with BRIDGE_CALL_FAILED reason (enum value 1)
+      await expect(subject(encoded))
+        .to.emit(hook, "FallbackTransfer")
+        .withArgs(data.intentHash, recipient.address, amountNetFees, 1);
+
+      // Verify funds went to recipient, not spokePool
+      const recipientBalanceAfter = await usdcToken.balanceOf(recipient.address);
+      const spokePoolBalance = await usdcToken.balanceOf(spokePool.address);
+
+      expect(recipientBalanceAfter.sub(recipientBalanceBefore)).to.eq(amountNetFees);
+      expect(spokePoolBalance).to.eq(0);
+
+      // Reset mock for other tests
+      await spokePool.setShouldRevert(false);
     });
 
     it("should revert when destinationChainId is zero", async () => {
