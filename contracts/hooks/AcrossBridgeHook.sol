@@ -128,7 +128,6 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
     error InvalidOutputToken(bytes32 outputToken);
     /// @dev Reverts fulfillIntent if outputAmount < minOutputAmount. For volatile assets,
     ///      this can occur if price dropped between signalIntent and fulfillIntent.
-    error OutputBelowMinimum(uint256 outputAmount, uint256 minimum);
     error NativeTransferFailed(address to, uint256 amount);
 
     /* ============ State Variables ============ */
