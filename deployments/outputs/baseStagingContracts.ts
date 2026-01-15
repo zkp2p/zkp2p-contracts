@@ -3,7 +3,7 @@ export default {
   "chainId": "8453",
   "contracts": {
     "AcrossBridgeHook": {
-      "address": "0xb462cdf54cb32f8d7d3b9eE4Cc1a86a6A9b102CD",
+      "address": "0x5e44b4c833323860712205825c1119F852782424",
       "abi": [
         {
           "inputs": [
@@ -134,6 +134,18 @@ export default {
               "indexed": false,
               "internalType": "uint32",
               "name": "fillDeadlineOffset",
+              "type": "uint32"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "exclusiveRelayer",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint32",
+              "name": "exclusivityParameter",
               "type": "uint32"
             }
           ],
