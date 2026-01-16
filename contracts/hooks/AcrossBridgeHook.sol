@@ -12,40 +12,118 @@ import { IPostIntentHook } from "../interfaces/IPostIntentHook.sol";
 
 /**
  * @title AcrossBridgeHook
- * @notice Post-intent hook that deposits USDC into Across SpokePool using committed destination params.
+ * @notice Post-intent hook that bridges tokens into Across SpokePool using committed destination params.
+ *
+ * @dev IMPORTANT: This hook is designed for stablecoin-to-stablecoin bridging only.
+ *
+ * NOT RECOMMENDED for volatile assets (ETH, WBTC, etc.) because:
+ * - The `minOutputAmount` is committed at signalIntent time
+ * - The actual `outputAmount` is provided at fulfillIntent time
+ * - If the asset price drops between signal and fulfill, the minOutputAmount check will fail
+ * - Since the user has already made an off-chain fiat payment tied to this intent,
+ *   a reverted fulfillIntent leaves them unable to unlock escrowed funds
+ *
+ * For stablecoin-to-stablecoin routes (e.g., USDC on Base -> USDC on Arbitrum), the price
+ * is stable and minOutputAmount checks will reliably pass.
+ *
+ * @dev Uses depositNow which accepts bytes32 addresses for cross-chain compatibility.
+ * This enables bridging to both EVM chains (addresses left-padded to bytes32) and
+ * non-EVM chains like Solana (native 32-byte addresses).
  */
 contract AcrossBridgeHook is IPostIntentHook, Ownable {
     using SafeERC20 for IERC20;
 
+    /* ============ Enums ============ */
+
+    /**
+     * @notice Reason codes for fallback transfer when bridge cannot be initiated.
+     * @dev Used in FallbackTransfer event for gas-efficient reason tracking.
+     */
+    enum FallbackReason {
+        OUTPUT_BELOW_MINIMUM,  // outputAmount < minOutputAmount (price moved unfavorably)
+        BRIDGE_CALL_FAILED     // spokePool.depositNow() reverted
+    }
+
     /* ============ Structs ============ */
 
-    /// @notice Commitment stored in intent.data at signalIntent time.
+    /**
+     * @notice Commitment stored in intent.data at signalIntent time.
+     * @dev Uses bytes32 for outputToken and recipient to support both EVM and Solana addresses.
+     *      For EVM addresses, use _toBytes32(address) to left-pad to bytes32.
+     *      For Solana addresses, use the native 32-byte public key directly.
+     *      For stablecoin-to-stablecoin routes, set minOutputAmount close to expected output (e.g., 99.5%).
+     *      For volatile assets, this check may fail if price moves unfavorably between signal and fulfill.
+     * @param destinationChainId The chain ID of the destination chain
+     * @param outputToken Token address on destination chain (bytes32 for Solana compatibility)
+     * @param recipient Recipient address on destination chain (bytes32 for Solana compatibility)
+     * @param minOutputAmount Minimum tokens to receive on destination chain
+     */
     struct BridgeCommitment {
         uint256 destinationChainId;
-        address outputToken;
-        address recipient;
+        bytes32 outputToken;
+        bytes32 recipient;
         uint256 minOutputAmount;
     }
 
-    /// @notice JIT data supplied at fulfillIntent time.
+    /**
+     * @notice JIT data supplied at fulfillIntent time.
+     * @dev fillDeadlineOffset is seconds from current block timestamp until fill deadline expires.
+     *      Typical values range from 1800 (30 min) to 21600 (6 hours) depending on route.
+     *      exclusiveRelayer and exclusivityParameter should come from Across suggested-fees API
+     *      to ensure deposits are prioritized by relayers.
+     * @param intentHash Hash of the intent being fulfilled
+     * @param outputAmount Amount of tokens to receive on destination chain
+     * @param fillDeadlineOffset Seconds from current time until fill deadline
+     * @param exclusiveRelayer Address (as bytes32) of the exclusive relayer from Across API
+     * @param exclusivityParameter Seconds of exclusivity for the exclusive relayer
+     */
     struct AcrossFulfillData {
         bytes32 intentHash;
         uint256 outputAmount;
-        uint32 quoteTimestamp;
-        uint32 fillDeadline;
+        uint32 fillDeadlineOffset;
+        bytes32 exclusiveRelayer;
+        uint32 exclusivityParameter;
     }
 
     /* ============ Events ============ */
 
+    /**
+     * @notice Emitted when a bridge deposit is initiated via Across.
+     * @param intentHash Hash of the fulfilled intent
+     * @param destinationChainId Target chain for the bridged tokens
+     * @param outputToken Token address on destination (bytes32 for cross-chain compatibility)
+     * @param recipient Recipient address on destination (bytes32 for cross-chain compatibility)
+     * @param inputAmount Amount of input tokens deposited
+     * @param outputAmount Amount of output tokens to receive
+     * @param fillDeadlineOffset Offset in seconds for fill deadline
+     * @param exclusiveRelayer Address of the exclusive relayer (bytes32 for cross-chain compatibility)
+     * @param exclusivityParameter Seconds of exclusivity for the exclusive relayer
+     */
     event AcrossBridgeInitiated(
         bytes32 indexed intentHash,
         uint256 destinationChainId,
-        address outputToken,
-        address recipient,
+        bytes32 outputToken,
+        bytes32 recipient,
         uint256 inputAmount,
         uint256 outputAmount,
-        uint32 quoteTimestamp,
-        uint32 fillDeadline
+        uint32 fillDeadlineOffset,
+        bytes32 exclusiveRelayer,
+        uint32 exclusivityParameter
+    );
+
+    /**
+     * @notice Emitted when bridge cannot be initiated and funds are transferred directly to recipient.
+     * @dev This is a graceful degradation - user receives funds on source chain instead of destination.
+     * @param intentHash Hash of the intent being fulfilled
+     * @param recipient Address receiving the fallback transfer (intent.to)
+     * @param amount Amount transferred to recipient
+     * @param reason Why the bridge could not be initiated
+     */
+    event FallbackTransfer(
+        bytes32 indexed intentHash,
+        address indexed recipient,
+        uint256 amount,
+        FallbackReason reason
     );
 
     event RescueERC20(address indexed token, address indexed to, uint256 amount);
@@ -56,11 +134,10 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
     error ZeroAddress();
     error UnauthorizedCaller(address caller);
     error InvalidDestinationChainId(uint256 destinationChainId);
-    error InvalidRecipient(address recipient);
-    error InvalidOutputToken(address outputToken);
-    error OutputBelowMinimum(uint256 outputAmount, uint256 minimum);
-    error QuoteTimestampOutOfRange(uint32 quoteTimestamp);
-    error FillDeadlineOutOfRange(uint32 fillDeadline);
+    error InvalidRecipient(bytes32 recipient);
+    error InvalidOutputToken(bytes32 outputToken);
+    /// @dev Reverts fulfillIntent if outputAmount < minOutputAmount. For volatile assets,
+    ///      this can occur if price dropped between signalIntent and fulfillIntent.
     error NativeTransferFailed(address to, uint256 amount);
 
     /* ============ State Variables ============ */
@@ -73,7 +150,7 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
 
     /**
      * @notice Creates a new AcrossBridgeHook instance.
-     * @param _inputToken USDC token address on this chain
+     * @param _inputToken Token address to bridge (recommended: stablecoins like USDC)
      * @param _orchestrator Orchestrator that invokes this hook
      * @param _spokePool Across SpokePool address on this chain
      */
@@ -90,8 +167,15 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
     /* ============ External Functions ============ */
 
     /**
-     * @notice Executes the hook by depositing USDC into Across SpokePool.
+     * @notice Executes the hook by depositing USDC into Across SpokePool using depositNow.
      * @dev Destination params are taken from the commitment; fulfill data only supplies JIT fields.
+     *      Uses depositNow which automatically uses current block timestamp, eliminating timing issues.
+     *
+     *      FALLBACK BEHAVIOR: If the bridge cannot be initiated (due to price movement causing
+     *      outputAmount < minOutputAmount, or if the SpokePool call reverts), funds are transferred
+     *      directly to intent.to on the source chain instead of reverting. This ensures the user
+     *      always receives their funds after making an off-chain payment, preventing permanent loss.
+     *
      * @param _intent Intent data passed by Orchestrator (includes commitment in intent.data)
      * @param _amountNetFees Net USDC amount after fees
      * @param _fulfillIntentData ABI-encoded AcrossFulfillData
@@ -106,28 +190,62 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
         BridgeCommitment memory commitment = abi.decode(_intent.data, (BridgeCommitment));
         AcrossFulfillData memory fulfillData = abi.decode(_fulfillIntentData, (AcrossFulfillData));
 
-        _validateCommitment(commitment, fulfillData);
-        _validateTiming(fulfillData.quoteTimestamp, fulfillData.fillDeadline);
+        // Validate non-price parameters (these should always revert if invalid)
+        _validateNonPriceCommitment(commitment);
 
-        _deposit(
-            commitment.recipient,
-            commitment.outputToken,
-            commitment.destinationChainId,
-            _amountNetFees,
-            fulfillData.outputAmount,
-            fulfillData.quoteTimestamp,
-            fulfillData.fillDeadline
-        );
+        // Pull tokens from Orchestrator first (before any fallback logic)
+        inputToken.safeTransferFrom(orchestrator, address(this), _amountNetFees);
 
-        _emitBridgeInitiated(
+        // Check if bridge is viable based on price
+        bool bridgeViable = _isBridgeViable(fulfillData, commitment.minOutputAmount);
+
+        if (bridgeViable) {
+            // Set approval for bridge attempt
+            inputToken.safeApprove(address(spokePool), 0);
+            inputToken.safeApprove(address(spokePool), _amountNetFees);
+
+            // Try bridge deposit - use try-catch for graceful degradation
+            try spokePool.depositNow(
+                _toBytes32(address(this)),         // depositor
+                commitment.recipient,              // recipient (already bytes32)
+                _toBytes32(address(inputToken)),   // inputToken
+                commitment.outputToken,            // outputToken (already bytes32)
+                _amountNetFees,
+                fulfillData.outputAmount,
+                commitment.destinationChainId,
+                fulfillData.exclusiveRelayer,      // from Across suggested-fees API
+                fulfillData.fillDeadlineOffset,
+                fulfillData.exclusivityParameter,  // from Across suggested-fees API
+                ""                                 // message
+            ) {
+                // Bridge succeeded - reset approval and emit success event
+                inputToken.safeApprove(address(spokePool), 0);
+                emit AcrossBridgeInitiated(
+                    fulfillData.intentHash,
+                    commitment.destinationChainId,
+                    commitment.outputToken,
+                    commitment.recipient,
+                    _amountNetFees,
+                    fulfillData.outputAmount,
+                    fulfillData.fillDeadlineOffset,
+                    fulfillData.exclusiveRelayer,
+                    fulfillData.exclusivityParameter
+                );
+                return;
+            } catch {
+                // Bridge call failed - reset approval and fall through to fallback
+                inputToken.safeApprove(address(spokePool), 0);
+            }
+        }
+
+        // Fallback: transfer to intent.to on source chain
+        // This ensures user receives funds even if bridge fails
+        inputToken.safeTransfer(_intent.to, _amountNetFees);
+        emit FallbackTransfer(
             fulfillData.intentHash,
-            commitment.destinationChainId,
-            commitment.outputToken,
-            commitment.recipient,
+            _intent.to,
             _amountNetFees,
-            fulfillData.outputAmount,
-            fulfillData.quoteTimestamp,
-            fulfillData.fillDeadline
+            bridgeViable ? FallbackReason.BRIDGE_CALL_FAILED : FallbackReason.OUTPUT_BELOW_MINIMUM
         );
     }
 
@@ -159,92 +277,44 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
 
     /* ============ Internal Functions ============ */
 
-    function _validateCommitment(
-        BridgeCommitment memory commitment,
-        AcrossFulfillData memory fulfillData
-    ) internal pure {
+    /**
+     * @dev Validates non-price bridge commitment parameters. These are structural requirements
+     *      that should always revert if invalid (no fallback possible).
+     * @param commitment The bridge commitment containing destination parameters
+     */
+    function _validateNonPriceCommitment(BridgeCommitment memory commitment) internal pure {
         if (commitment.destinationChainId == 0) {
             revert InvalidDestinationChainId(commitment.destinationChainId);
         }
-        if (commitment.recipient == address(0)) {
+        if (commitment.recipient == bytes32(0)) {
             revert InvalidRecipient(commitment.recipient);
         }
-        if (commitment.outputToken == address(0)) {
+        if (commitment.outputToken == bytes32(0)) {
             revert InvalidOutputToken(commitment.outputToken);
         }
-
-        if (fulfillData.outputAmount < commitment.minOutputAmount) {
-            revert OutputBelowMinimum(fulfillData.outputAmount, commitment.minOutputAmount);
-        }
     }
 
-    function _validateTiming(uint32 quoteTimestamp, uint32 fillDeadline) internal view {
-        uint256 current = spokePool.getCurrentTime();
-        uint256 quoteBuffer = spokePool.depositQuoteTimeBuffer();
-        uint256 fillBuffer = spokePool.fillDeadlineBuffer();
-
-        // quoteTimestamp must be within +/- quoteBuffer of current time
-        if (quoteTimestamp > current + quoteBuffer || current > uint256(quoteTimestamp) + quoteBuffer) {
-            revert QuoteTimestampOutOfRange(quoteTimestamp);
-        }
-
-        if (fillDeadline < current || fillDeadline > current + fillBuffer) {
-            revert FillDeadlineOutOfRange(fillDeadline);
-        }
+    /**
+     * @dev Checks if the bridge output amount meets the minimum requirement.
+     *      Unlike structural validation, this returns a bool for graceful degradation.
+     * @param fulfillData The fulfill data containing output amount
+     * @param minOutputAmount The minimum acceptable output amount from commitment
+     * @return True if outputAmount >= minOutputAmount, false otherwise
+     */
+    function _isBridgeViable(
+        AcrossFulfillData memory fulfillData,
+        uint256 minOutputAmount
+    ) internal pure returns (bool) {
+        return fulfillData.outputAmount >= minOutputAmount;
     }
 
-    function _deposit(
-        address recipient,
-        address outputToken,
-        uint256 destinationChainId,
-        uint256 inputAmount,
-        uint256 outputAmount,
-        uint32 quoteTimestamp,
-        uint32 fillDeadline
-    ) internal {
-        inputToken.safeTransferFrom(orchestrator, address(this), inputAmount);
-
-        inputToken.safeApprove(address(spokePool), 0);
-        inputToken.safeApprove(address(spokePool), inputAmount);
-
-        spokePool.depositV3(
-            address(this),
-            recipient,
-            address(inputToken),
-            outputToken,
-            inputAmount,
-            outputAmount,
-            destinationChainId,
-            address(0),
-            quoteTimestamp,
-            fillDeadline,
-            0,
-            ""
-        );
-
-        inputToken.safeApprove(address(spokePool), 0);
+    /**
+     * @dev Converts an address to bytes32 by left-padding with zeros.
+     *      Used for EVM addresses when calling depositNow.
+     * @param addr The address to convert
+     * @return The address as bytes32 (left-padded)
+     */
+    function _toBytes32(address addr) internal pure returns (bytes32) {
+        return bytes32(uint256(uint160(addr)));
     }
-
-    function _emitBridgeInitiated(
-        bytes32 intentHash,
-        uint256 destinationChainId,
-        address outputToken,
-        address recipient,
-        uint256 inputAmount,
-        uint256 outputAmount,
-        uint32 quoteTimestamp,
-        uint32 fillDeadline
-    ) internal {
-        emit AcrossBridgeInitiated(
-            intentHash,
-            destinationChainId,
-            outputToken,
-            recipient,
-            inputAmount,
-            outputAmount,
-            quoteTimestamp,
-            fillDeadline
-        );
-    }
-
 }

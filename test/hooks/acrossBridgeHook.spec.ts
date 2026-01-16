@@ -7,7 +7,7 @@ import DeployHelper from "@utils/deploys";
 import { Account } from "@utils/test/types";
 import { getAccounts, getWaffleExpect } from "@utils/test/index";
 import { usdc, ether } from "@utils/common";
-import { ADDRESS_ZERO } from "@utils/constants";
+import { ADDRESS_ZERO, ZERO_BYTES32 } from "@utils/constants";
 
 const expect = getWaffleExpect();
 
@@ -22,9 +22,10 @@ describe("AcrossBridgeHook", () => {
   let spokePool: Contract;
   let hook: Contract;
 
-  const currentTime = BigNumber.from(1_700_000_000);
-  const quoteBuffer = BigNumber.from(300);
-  const fillBuffer = BigNumber.from(3600);
+  // Helper to convert address to bytes32 (left-padded)
+  const toBytes32 = (addr: string): string => {
+    return ethers.utils.hexZeroPad(addr, 32);
+  };
 
   beforeEach(async () => {
     [owner, orchestrator, recipient, attacker] = await getAccounts();
@@ -38,15 +39,12 @@ describe("AcrossBridgeHook", () => {
     const AcrossBridgeHook = await ethers.getContractFactory("AcrossBridgeHook", owner.wallet);
     hook = await AcrossBridgeHook.deploy(usdcToken.address, orchestrator.address, spokePool.address);
 
-    await spokePool.setCurrentTime(currentTime);
-    await spokePool.setBuffers(quoteBuffer, fillBuffer);
-
     await usdcToken.transfer(orchestrator.address, usdc(1000));
   });
 
   const encodeCommitment = (commitment: any): string => {
     return ethers.utils.defaultAbiCoder.encode(
-      ["tuple(uint256 destinationChainId,address outputToken,address recipient,uint256 minOutputAmount)"],
+      ["tuple(uint256 destinationChainId,bytes32 outputToken,bytes32 recipient,uint256 minOutputAmount)"],
       [commitment]
     );
   };
@@ -79,12 +77,13 @@ describe("AcrossBridgeHook", () => {
     const data = {
       intentHash: overrides.intentHash ?? ethers.utils.hexlify(ethers.utils.randomBytes(32)),
       outputAmount: overrides.outputAmount ?? BigNumber.from(1_000_000),
-      quoteTimestamp: overrides.quoteTimestamp ?? currentTime,
-      fillDeadline: overrides.fillDeadline ?? currentTime.add(1000)
+      fillDeadlineOffset: overrides.fillDeadlineOffset ?? 21600,  // 6 hours default
+      exclusiveRelayer: overrides.exclusiveRelayer ?? toBytes32("0x1562A70707D62edBF3a90317E46E1DF075E2d924"),  // Sample relayer from Across
+      exclusivityParameter: overrides.exclusivityParameter ?? 5  // 5 seconds exclusivity (typical Across value)
     };
 
     const encoded = ethers.utils.defaultAbiCoder.encode(
-      ["tuple(bytes32 intentHash,uint256 outputAmount,uint32 quoteTimestamp,uint32 fillDeadline)"],
+      ["tuple(bytes32 intentHash,uint256 outputAmount,uint32 fillDeadlineOffset,bytes32 exclusiveRelayer,uint32 exclusivityParameter)"],
       [data]
     );
 
@@ -100,8 +99,8 @@ describe("AcrossBridgeHook", () => {
     beforeEach(async () => {
       commitment = {
         destinationChainId: BigNumber.from(10),
-        outputToken: recipient.address,
-        recipient: recipient.address,
+        outputToken: toBytes32(recipient.address),  // Using bytes32
+        recipient: toBytes32(recipient.address),     // Using bytes32
         minOutputAmount: BigNumber.from(500_000)
       };
 
@@ -116,21 +115,12 @@ describe("AcrossBridgeHook", () => {
       return hook.connect(orchestrator.wallet).execute(intent, amountNetFees, encodedFulfillData);
     }
 
-    it("should execute with a valid quote", async () => {
+    it("should execute with valid parameters", async () => {
       const { encoded, data } = buildFulfillData({ outputAmount: BigNumber.from(700_000) });
 
       const orchestratorBalanceBefore = await usdcToken.balanceOf(orchestrator.address);
 
-      await expect(subject(encoded)).to.emit(hook, "AcrossBridgeInitiated").withArgs(
-        data.intentHash,
-        commitment.destinationChainId,
-        commitment.outputToken,
-        commitment.recipient,
-        amountNetFees,
-        data.outputAmount,
-        data.quoteTimestamp,
-        data.fillDeadline
-      );
+      await expect(subject(encoded)).to.emit(hook, "AcrossBridgeInitiated");
 
       const orchestratorBalanceAfter = await usdcToken.balanceOf(orchestrator.address);
       const hookBalance = await usdcToken.balanceOf(hook.address);
@@ -140,10 +130,16 @@ describe("AcrossBridgeHook", () => {
       expect(hookBalance).to.eq(0);
       expect(spokePoolBalance).to.eq(amountNetFees);
 
-      expect(await spokePool.lastRecipient()).to.eq(commitment.recipient);
-      expect(await spokePool.lastInputToken()).to.eq(usdcToken.address);
+      // Verify mock received correct bytes32 values (use toLowerCase for hex comparison)
+      expect((await spokePool.lastRecipient()).toLowerCase()).to.eq(commitment.recipient.toLowerCase());
+      expect((await spokePool.lastInputToken()).toLowerCase()).to.eq(toBytes32(usdcToken.address).toLowerCase());
+      expect((await spokePool.lastOutputToken()).toLowerCase()).to.eq(commitment.outputToken.toLowerCase());
       expect(await spokePool.lastInputAmount()).to.eq(amountNetFees);
+      expect(await spokePool.lastOutputAmount()).to.eq(data.outputAmount);
       expect(await spokePool.lastDestinationChainId()).to.eq(commitment.destinationChainId);
+      expect(await spokePool.lastFillDeadlineOffset()).to.eq(data.fillDeadlineOffset);
+      expect((await spokePool.lastExclusiveRelayer()).toLowerCase()).to.eq(data.exclusiveRelayer.toLowerCase());
+      expect(await spokePool.lastExclusivityParameter()).to.eq(data.exclusivityParameter);
     });
 
     it("should revert when caller is not orchestrator", async () => {
@@ -154,10 +150,51 @@ describe("AcrossBridgeHook", () => {
       ).to.be.revertedWithCustomError(hook, "UnauthorizedCaller");
     });
 
-    it("should revert when outputAmount is below minimum", async () => {
-      const { encoded } = buildFulfillData({ outputAmount: commitment.minOutputAmount.sub(1) });
+    it("should fallback to direct transfer when outputAmount is below minimum", async () => {
+      const { encoded, data } = buildFulfillData({ outputAmount: commitment.minOutputAmount.sub(1) });
 
-      await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "OutputBelowMinimum");
+      const orchestratorBalanceBefore = await usdcToken.balanceOf(orchestrator.address);
+      const recipientBalanceBefore = await usdcToken.balanceOf(recipient.address);
+
+      // Should emit FallbackTransfer with OUTPUT_BELOW_MINIMUM reason (enum value 0)
+      await expect(subject(encoded))
+        .to.emit(hook, "FallbackTransfer")
+        .withArgs(data.intentHash, recipient.address, amountNetFees, 0);
+
+      // Verify funds went to recipient (intent.to), not spokePool
+      const orchestratorBalanceAfter = await usdcToken.balanceOf(orchestrator.address);
+      const recipientBalanceAfter = await usdcToken.balanceOf(recipient.address);
+      const hookBalance = await usdcToken.balanceOf(hook.address);
+      const spokePoolBalance = await usdcToken.balanceOf(spokePool.address);
+
+      expect(orchestratorBalanceBefore.sub(orchestratorBalanceAfter)).to.eq(amountNetFees);
+      expect(recipientBalanceAfter.sub(recipientBalanceBefore)).to.eq(amountNetFees);
+      expect(hookBalance).to.eq(0);
+      expect(spokePoolBalance).to.eq(0);
+    });
+
+    it("should fallback to direct transfer when bridge call reverts", async () => {
+      const { encoded, data } = buildFulfillData({ outputAmount: BigNumber.from(700_000) });
+
+      // Make the mock revert
+      await spokePool.setShouldRevert(true);
+
+      const recipientBalanceBefore = await usdcToken.balanceOf(recipient.address);
+
+      // Should emit FallbackTransfer with BRIDGE_CALL_FAILED reason (enum value 1)
+      await expect(subject(encoded))
+        .to.emit(hook, "FallbackTransfer")
+        .withArgs(data.intentHash, recipient.address, amountNetFees, 1);
+
+      // Verify funds went to recipient, not spokePool
+      const recipientBalanceAfter = await usdcToken.balanceOf(recipient.address);
+      const spokePoolBalance = await usdcToken.balanceOf(spokePool.address);
+
+      expect(recipientBalanceAfter.sub(recipientBalanceBefore)).to.eq(amountNetFees);
+      expect(spokePoolBalance).to.eq(0);
+
+      // Reset mock for other tests
+      await spokePool.setShouldRevert(false);
     });
 
     it("should revert when destinationChainId is zero", async () => {
@@ -169,8 +206,8 @@ describe("AcrossBridgeHook", () => {
       await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "InvalidDestinationChainId");
     });
 
-    it("should revert when recipient is zero", async () => {
-      commitment.recipient = ADDRESS_ZERO;
+    it("should revert when recipient is zero bytes32", async () => {
+      commitment.recipient = ZERO_BYTES32;
       commitmentData = encodeCommitment(commitment);
       intent = await buildIntent(commitmentData);
       const { encoded } = buildFulfillData();
@@ -178,26 +215,13 @@ describe("AcrossBridgeHook", () => {
       await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "InvalidRecipient");
     });
 
-    it("should revert when outputToken is zero", async () => {
-      commitment.outputToken = ADDRESS_ZERO;
+    it("should revert when outputToken is zero bytes32", async () => {
+      commitment.outputToken = ZERO_BYTES32;
       commitmentData = encodeCommitment(commitment);
       intent = await buildIntent(commitmentData);
       const { encoded } = buildFulfillData();
 
       await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "InvalidOutputToken");
-    });
-
-    it("should revert when quoteTimestamp is out of range", async () => {
-      const tooOld = currentTime.sub(quoteBuffer).sub(1);
-      const { encoded } = buildFulfillData({ quoteTimestamp: tooOld });
-
-      await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "QuoteTimestampOutOfRange");
-    });
-
-    it("should revert when fillDeadline is out of range", async () => {
-      const { encoded } = buildFulfillData({ fillDeadline: currentTime.sub(1) });
-
-      await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "FillDeadlineOutOfRange");
     });
 
     it("should succeed when outputAmount equals minOutputAmount exactly", async () => {
@@ -206,18 +230,55 @@ describe("AcrossBridgeHook", () => {
       await expect(subject(encoded)).to.emit(hook, "AcrossBridgeInitiated");
     });
 
-    it("should revert when quoteTimestamp is too far in the future", async () => {
-      const tooFuture = currentTime.add(quoteBuffer).add(1);
-      const { encoded } = buildFulfillData({ quoteTimestamp: tooFuture });
+    it("should work with different fillDeadlineOffset values", async () => {
+      const shortOffset = 1800;  // 30 minutes
+      const { encoded } = buildFulfillData({
+        outputAmount: BigNumber.from(700_000),
+        fillDeadlineOffset: shortOffset
+      });
 
-      await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "QuoteTimestampOutOfRange");
+      await expect(subject(encoded)).to.emit(hook, "AcrossBridgeInitiated");
+      expect(await spokePool.lastFillDeadlineOffset()).to.eq(shortOffset);
     });
 
-    it("should revert when fillDeadline is too far in the future", async () => {
-      const tooFuture = currentTime.add(fillBuffer).add(1);
-      const { encoded } = buildFulfillData({ fillDeadline: tooFuture });
+    it("should pass exclusiveRelayer and exclusivityParameter to spokePool", async () => {
+      const customRelayer = toBytes32("0xDeadBeefDeadBeefDeadBeefDeadBeefDeadBeef");
+      const customExclusivity = 10;  // 10 seconds
 
-      await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "FillDeadlineOutOfRange");
+      const { encoded, data } = buildFulfillData({
+        outputAmount: BigNumber.from(700_000),
+        exclusiveRelayer: customRelayer,
+        exclusivityParameter: customExclusivity
+      });
+
+      await subject(encoded);
+
+      expect((await spokePool.lastExclusiveRelayer()).toLowerCase()).to.eq(customRelayer.toLowerCase());
+      expect(await spokePool.lastExclusivityParameter()).to.eq(customExclusivity);
+    });
+
+    it("should work with zero exclusivity (open relay)", async () => {
+      const { encoded } = buildFulfillData({
+        outputAmount: BigNumber.from(700_000),
+        exclusiveRelayer: ZERO_BYTES32,
+        exclusivityParameter: 0
+      });
+
+      await expect(subject(encoded)).to.emit(hook, "AcrossBridgeInitiated");
+      expect(await spokePool.lastExclusiveRelayer()).to.eq(ZERO_BYTES32);
+      expect(await spokePool.lastExclusivityParameter()).to.eq(0);
+    });
+
+    it("should correctly convert depositor address to bytes32", async () => {
+      const { encoded } = buildFulfillData({ outputAmount: BigNumber.from(700_000) });
+
+      await subject(encoded);
+
+      // Hook address should be the depositor, converted to bytes32
+      // Use toLowerCase for case-insensitive comparison of hex strings
+      const lastDepositor = (await spokePool.lastDepositor()).toLowerCase();
+      const expectedDepositor = toBytes32(hook.address).toLowerCase();
+      expect(lastDepositor).to.eq(expectedDepositor);
     });
   });
 
