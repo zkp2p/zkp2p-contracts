@@ -38,3 +38,10 @@ jobs:
         run: |
           echo "Running invariant tests..."
           forge test --match-contract "Invariant" -vv
+
+      - name: Run Foundry fork tests
+        env:
+          ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
+        run: |
+          echo "Running fork tests..."
+          yarn test:forge:fork

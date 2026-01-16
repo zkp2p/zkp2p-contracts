@@ -9,6 +9,9 @@ optimizer_runs = 800
 solc_version = '0.8.18'
 via_ir = true
 
+[profile.fork]
+evm_version = 'shanghai'
+
 # Remappings for cleaner imports
 remappings = [
     '@openzeppelin/=node_modules/@openzeppelin/',
