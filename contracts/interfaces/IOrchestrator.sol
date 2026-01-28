@@ -75,6 +75,12 @@ interface IOrchestrator {
         bool isManualRelease
     );
 
+    event IntentManagerFeeUpdated(
+        bytes32 indexed intentHash,
+        address indexed feeRecipient,
+        uint256 fee
+    );
+
     event AllowMultipleIntentsUpdated(bool allowMultiple);
 
     event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);

@@ -56,6 +56,14 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Payment verifier registry deployed at", paymentVerifierRegistry.address);
   await waitForDeploymentDelay(hre);
 
+  // Deploy deposit rate manager registry (permissionless)
+  const depositRateManagerRegistry = await deploy("DepositRateManagerRegistryV1", {
+    from: deployer,
+    args: [],
+  });
+  console.log("Deposit rate manager registry deployed at", depositRateManagerRegistry.address);
+  await waitForDeploymentDelay(hre);
+
   // Deploy post intent hook registry
   const postIntentHookRegistry = await deploy("PostIntentHookRegistry", {
     from: deployer,
@@ -134,6 +142,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const escrowContract = await ethers.getContractAt("Escrow", escrow.address);
   await setOrchestrator(hre, escrowContract, orchestrator.address);
   console.log("Orchestrator set on escrow");
+
+  // Set deposit rate manager registry on escrow
+  await escrowContract.setDepositRateManagerRegistry(depositRateManagerRegistry.address);
+  console.log("Deposit rate manager registry set on escrow");
+  await waitForDeploymentDelay(hre);
 
   // Deploy protocol viewer
   const protocolViewer = await deploy("ProtocolViewer", {
