@@ -120,10 +120,8 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         );
 
         (address managerFeeRecipient, uint256 managerFee) = IEscrow(_params.escrow).getDepositManagerFee(_params.depositId);
-        if (managerFee > MAX_MANAGER_FEE) revert FeeExceedsMaximum(managerFee, MAX_MANAGER_FEE);
         intentManagerFeeRecipient[intentHash] = managerFeeRecipient;
         intentManagerFee[intentHash] = managerFee;
-        emit IntentManagerFeeUpdated(intentHash, managerFeeRecipient, managerFee);
         
         intentMinAtSignal[intentHash] = dep.intentAmountRange.min;
         intents[intentHash] = Intent({
@@ -158,6 +156,9 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
             _params.conversionRate, 
             block.timestamp
         );
+
+        // Emit manager fee snapshot last for easier indexing
+        emit IntentManagerFeeUpdated(intentHash, managerFeeRecipient, managerFee);
 
         // Interactions
         IEscrow(_params.escrow).lockFunds(_params.depositId, intentHash, _params.amount);

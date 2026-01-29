@@ -113,22 +113,23 @@ describe("DelegatedRateManagement (MVP)", () => {
 
   async function createRateManager(params?: {
     fee?: BigNumber;
-    minDelegationAmount?: BigNumber;
+    maxFee?: BigNumber;
     name?: string;
     uri?: string;
-  }): Promise<string> {
-    const rateManagerId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(`rm-${rateManagerNonce++}`));
-
-    await rateManagerRegistry.createRateManager(rateManagerId, {
+    hook?: string;
+  }): Promise<BigNumber> {
+    const tx = await rateManagerRegistry.createRateManager({
       manager: manager.address,
       feeRecipient: managerFeeRecipient.address,
-      fee: params?.fee ?? ether(0.01), // 1%
-      minDelegationAmount: params?.minDelegationAmount ?? usdc(0),
+      maxFee: params?.maxFee ?? ether(0.05),
+      fee: params?.fee ?? ether(0.01),
+      depositHook: params?.hook ?? ADDRESS_ZERO,
       name: params?.name ?? "USDCTOAIAT",
       uri: params?.uri ?? "ipfs://example",
     });
-
-    return rateManagerId;
+    const receipt = await tx.wait();
+    const ev = receipt.events?.find((e: any) => e.event === "RateManagerCreated");
+    return ev?.args?.rateManagerId;
   }
 
   async function signalIntent(conversionRate: BigNumber): Promise<string> {
@@ -229,15 +230,5 @@ describe("DelegatedRateManagement (MVP)", () => {
     });
   });
 
-  describe("min delegation", () => {
-    it("reverts when deposit total liquidity is below minDelegationAmount", async () => {
-      await createDeposit(ether(1.0));
-
-      const rateManagerId = await createRateManager({ fee: ZERO, minDelegationAmount: usdc(200) });
-
-      await expect(
-        escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerId)
-      ).to.be.revertedWithCustomError(escrow, "AmountBelowMin");
-    });
-  });
+  // min-delegation check moved to optional hook; no core revert expected in MVP
 });

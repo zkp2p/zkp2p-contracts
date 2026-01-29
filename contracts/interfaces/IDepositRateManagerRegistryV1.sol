@@ -5,7 +5,7 @@ pragma solidity ^0.8.18;
 /**
  * @title IDepositRateManagerRegistryV1
  * @notice Permissionless registry for “deposit rate managers”.
- * A rate manager config is identified by a `rateManagerId` (bytes32) and can be shared across many deposits.
+ * A rate manager config is identified by a sequential `rateManagerId` (uint256) and can be shared across many deposits.
  */
 interface IDepositRateManagerRegistryV1 {
     /* ============ Structs ============ */
@@ -13,8 +13,9 @@ interface IDepositRateManagerRegistryV1 {
     struct RateManagerConfig {
         address manager;
         address feeRecipient;
-        uint256 fee;                 // Flat fee in preciseUnits (1e18 = 100%)
-        uint256 minDelegationAmount; // Minimum deposit size required to opt into this manager (in deposit token units)
+        uint256 maxFee;              // Immutable upper bound on `fee` (preciseUnits, 1e18 = 100%)
+        uint256 fee;                 // Flat fee in preciseUnits (must be <= maxFee)
+        address depositHook;         // Optional hook called on deposit opt-in
         string name;                 // Human-readable name (optional)
         string uri;                  // Metadata URI (optional)
     }
@@ -22,53 +23,55 @@ interface IDepositRateManagerRegistryV1 {
     /* ============ Events ============ */
 
     event RateManagerCreated(
-        bytes32 indexed rateManagerId,
+        uint256 indexed rateManagerId,
         address indexed manager,
         address indexed feeRecipient,
+        uint256 maxFee,
         uint256 fee,
-        uint256 minDelegationAmount,
         string name,
         string uri
     );
 
     event RateManagerConfigUpdated(
-        bytes32 indexed rateManagerId,
+        uint256 indexed rateManagerId,
         address indexed manager,
         address indexed feeRecipient,
-        uint256 minDelegationAmount,
+        address depositHook,
         string name,
         string uri
     );
 
     event RateManagerMinRateUpdated(
-        bytes32 indexed rateManagerId,
+        uint256 indexed rateManagerId,
         bytes32 indexed paymentMethod,
         bytes32 indexed currency,
         uint256 minRate
     );
 
-    event RateManagerMinRatesBatchUpdated(bytes32 indexed rateManagerId, uint256 count);
+    event RateManagerMinRatesBatchUpdated(uint256 indexed rateManagerId, uint256 count);
+    event RateManagerFeeUpdated(uint256 indexed rateManagerId, uint256 fee);
 
     /* ============ External Functions ============ */
 
-    function createRateManager(bytes32 _rateManagerId, RateManagerConfig calldata _config) external;
+    function createRateManager(RateManagerConfig calldata _config) external returns (uint256 rateManagerId);
 
-    function setRateManagerConfig(bytes32 _rateManagerId, address _newManager, address _newFeeRecipient, uint256 _newMinDelegationAmount, string calldata _newName, string calldata _newUri) external;
+    function setRateManagerConfig(uint256 _rateManagerId, address _newManager, address _newFeeRecipient, address _newHook, string calldata _newName, string calldata _newUri) external;
 
-    function setMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency, uint256 _minRate) external;
+    function setFee(uint256 _rateManagerId, uint256 _newFee) external;
 
-    function setMinRatesBatch(bytes32 _rateManagerId, bytes32[] calldata _paymentMethods, bytes32[] calldata _currencies, uint256[] calldata _minRates) external;
+    function setMinRate(uint256 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency, uint256 _minRate) external;
+
+    function setMinRatesBatch(uint256 _rateManagerId, bytes32[] calldata _paymentMethods, bytes32[][] calldata _currencies, uint256[][] calldata _minRates) external;
 
     /* ============ View Functions ============ */
 
-    function isRateManager(bytes32 _rateManagerId) external view returns (bool);
+    function isRateManager(uint256 _rateManagerId) external view returns (bool);
 
-    function getRateManager(bytes32 _rateManagerId) external view returns (RateManagerConfig memory);
+    function getRateManager(uint256 _rateManagerId) external view returns (RateManagerConfig memory);
 
-    function getFee(bytes32 _rateManagerId) external view returns (address feeRecipient, uint256 fee);
+    function getFee(uint256 _rateManagerId) external view returns (address feeRecipient, uint256 fee);
 
-    function getMinDelegationAmount(bytes32 _rateManagerId) external view returns (uint256);
+    function getDepositHook(uint256 _rateManagerId) external view returns (address);
 
-    function getMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency) external view returns (uint256);
+    function getMinRate(uint256 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency) external view returns (uint256);
 }
-
