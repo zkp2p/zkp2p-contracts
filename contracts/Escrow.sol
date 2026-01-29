@@ -21,6 +21,7 @@ import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.
 import { IPostIntentHookRegistry } from "./interfaces/IPostIntentHookRegistry.sol";
 import { IRelayerRegistry } from "./interfaces/IRelayerRegistry.sol";
 import { IDepositRateManagerRegistryV1 } from "./interfaces/IDepositRateManagerRegistryV1.sol";
+import { IRateManagerDepositHook } from "./interfaces/IRateManagerDepositHook.sol";
 pragma solidity ^0.8.18;
 
 /**
@@ -331,10 +332,9 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
         if (address(depositRateManagerRegistry) == address(0)) revert RateManagerRegistryNotSet();
         if (!depositRateManagerRegistry.isRateManager(_rateManagerId)) revert RateManagerNotFound(_rateManagerId);
 
-        uint256 minDelegationAmount = depositRateManagerRegistry.getMinDelegationAmount(_rateManagerId);
-        if (minDelegationAmount > 0) {
-            uint256 totalLiquidity = deposit.remainingDeposits + deposit.outstandingIntentAmount;
-            if (totalLiquidity < minDelegationAmount) revert AmountBelowMin(totalLiquidity, minDelegationAmount);
+        address hook = depositRateManagerRegistry.getDepositHook(_rateManagerId);
+        if (hook != address(0)) {
+            IRateManagerDepositHook(hook).onDepositOptIn(msg.sender, address(this), _depositId);
         }
 
         depositRateManagerId[_depositId] = _rateManagerId;
@@ -351,7 +351,7 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
         if (deposit.depositor != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.depositor);
 
         delete depositRateManagerId[_depositId];
-        emit DepositRateManagerUpdated(_depositId, msg.sender, bytes32(0));
+        emit DepositRateManagerUpdated(_depositId, msg.sender, 0);
     }
 
     /* ============ Deposit Owner OR Delegate Only (External Functions) ============ */

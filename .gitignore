@@ -35,3 +35,4 @@ docs/
 # Local agent state (not part of protocol changes)
 CONTINUITY.md
 .plans/
+.DS_Store
