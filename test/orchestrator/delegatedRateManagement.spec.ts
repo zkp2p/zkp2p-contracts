@@ -117,7 +117,7 @@ describe("DelegatedRateManagement (MVP)", () => {
     name?: string;
     uri?: string;
     hook?: string;
-  }): Promise<BigNumber> {
+  }): Promise<string> {
     const tx = await rateManagerRegistry.createRateManager({
       manager: manager.address,
       feeRecipient: managerFeeRecipient.address,

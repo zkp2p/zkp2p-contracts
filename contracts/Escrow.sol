@@ -76,7 +76,7 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
 
     // Optional: deposit-level rate manager configuration (shared across many deposits via registry).
     // When set, the effective min rate becomes max(deposit floor, manager min rate), and manager can disable pairs by setting 0.
-    mapping(uint256 => uint256) internal depositRateManagerId;
+    mapping(uint256 => bytes32) internal depositRateManagerId;
 
     mapping(uint256 => Deposit) internal deposits;                          // Mapping of depositIds to deposit structs
     mapping(uint256 => bytes32[]) internal depositIntentHashes;             // Mapping of depositId to array of intentHashes
@@ -325,10 +325,10 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
      * @param _depositId       The deposit ID
      * @param _rateManagerId   The rate manager id in `DepositRateManagerRegistryV1`
      */
-    function setDepositRateManager(uint256 _depositId, uint256 _rateManagerId) external whenNotPaused {
+    function setDepositRateManager(uint256 _depositId, bytes32 _rateManagerId) external whenNotPaused {
         Deposit storage deposit = deposits[_depositId];
         if (deposit.depositor != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.depositor);
-        if (_rateManagerId == 0) revert ZeroValue();
+        if (_rateManagerId == bytes32(0)) revert ZeroValue();
         if (address(depositRateManagerRegistry) == address(0)) revert RateManagerRegistryNotSet();
         if (!depositRateManagerRegistry.isRateManager(_rateManagerId)) revert RateManagerNotFound(_rateManagerId);
 
@@ -911,8 +911,8 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
             return 0;
         }
 
-        uint256 rateManagerId = depositRateManagerId[_depositId];
-        if (rateManagerId == 0) {
+        bytes32 rateManagerId = depositRateManagerId[_depositId];
+        if (rateManagerId == bytes32(0)) {
             return floorRate;
         }
 
@@ -928,13 +928,13 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
         return managerRate > floorRate ? managerRate : floorRate;
     }
 
-    function getDepositRateManager(uint256 _depositId) external view returns (uint256) {
+    function getDepositRateManager(uint256 _depositId) external view returns (bytes32) {
         return depositRateManagerId[_depositId];
     }
 
     function getDepositManagerFee(uint256 _depositId) external view returns (address recipient, uint256 fee) {
-        uint256 rateManagerId = depositRateManagerId[_depositId];
-        if (rateManagerId == 0) {
+        bytes32 rateManagerId = depositRateManagerId[_depositId];
+        if (rateManagerId == bytes32(0)) {
             return (address(0), 0);
         }
 

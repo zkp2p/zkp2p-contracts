@@ -17,12 +17,12 @@ contract DepositRateManagerRegistryV1 is IDepositRateManagerRegistryV1 {
     /* ============ State Variables ============ */
 
     uint256 internal nextId = 1;
-    mapping(uint256 => RateManagerConfig) internal rateManagers;
-    mapping(uint256 => mapping(bytes32 => mapping(bytes32 => uint256))) internal minRates;
+    mapping(bytes32 => RateManagerConfig) internal rateManagers;
+    mapping(bytes32 => mapping(bytes32 => mapping(bytes32 => uint256))) internal minRates;
 
     /* ============ Modifiers ============ */
 
-    modifier onlyManager(uint256 _rateManagerId) {
+    modifier onlyManager(bytes32 _rateManagerId) {
         address manager = rateManagers[_rateManagerId].manager;
         require(manager != address(0), "Rate manager does not exist");
         require(msg.sender == manager, "Caller is not manager");
@@ -31,13 +31,13 @@ contract DepositRateManagerRegistryV1 is IDepositRateManagerRegistryV1 {
 
     /* ============ External Functions ============ */
 
-    function createRateManager(RateManagerConfig calldata _config) external returns (uint256 rateManagerId) {
+    function createRateManager(RateManagerConfig calldata _config) external returns (bytes32 rateManagerId) {
         require(_config.manager != address(0), "Invalid manager");
         require(_config.feeRecipient != address(0) || _config.fee == 0, "Invalid fee recipient");
         require(_config.maxFee <= GLOBAL_MAX_MANAGER_FEE, "Max fee exceeds global");
         require(_config.fee <= _config.maxFee, "Fee exceeds maxFee");
-
-        rateManagerId = nextId++;
+        // keccak(address(this), nextId)
+        rateManagerId = keccak256(abi.encodePacked(address(this), nextId++));
         rateManagers[rateManagerId] = _config;
 
         emit RateManagerCreated(
@@ -52,7 +52,7 @@ contract DepositRateManagerRegistryV1 is IDepositRateManagerRegistryV1 {
     }
 
     function setRateManagerConfig(
-        uint256 _rateManagerId,
+        bytes32 _rateManagerId,
         address _newManager,
         address _newFeeRecipient,
         address _newHook,
@@ -81,7 +81,7 @@ contract DepositRateManagerRegistryV1 is IDepositRateManagerRegistryV1 {
         );
     }
 
-    function setFee(uint256 _rateManagerId, uint256 _newFee) external onlyManager(_rateManagerId) {
+    function setFee(bytes32 _rateManagerId, uint256 _newFee) external onlyManager(_rateManagerId) {
         RateManagerConfig storage config = rateManagers[_rateManagerId];
         require(_newFee <= config.maxFee, "Fee exceeds maxFee");
         if (_newFee > 0) {
@@ -91,7 +91,7 @@ contract DepositRateManagerRegistryV1 is IDepositRateManagerRegistryV1 {
         emit RateManagerFeeUpdated(_rateManagerId, _newFee);
     }
 
-    function setMinRate(uint256 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency, uint256 _minRate)
+    function setMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency, uint256 _minRate)
         external
         onlyManager(_rateManagerId)
     {
@@ -104,7 +104,7 @@ contract DepositRateManagerRegistryV1 is IDepositRateManagerRegistryV1 {
     }
 
     function setMinRatesBatch(
-        uint256 _rateManagerId,
+        bytes32 _rateManagerId,
         bytes32[] calldata _paymentMethods,
         bytes32[][] calldata _currencies,
         uint256[][] calldata _minRatesArr
@@ -132,24 +132,24 @@ contract DepositRateManagerRegistryV1 is IDepositRateManagerRegistryV1 {
 
     /* ============ External View Functions ============ */
 
-    function isRateManager(uint256 _rateManagerId) external view returns (bool) {
+    function isRateManager(bytes32 _rateManagerId) external view returns (bool) {
         return rateManagers[_rateManagerId].manager != address(0);
     }
 
-    function getRateManager(uint256 _rateManagerId) external view returns (RateManagerConfig memory) {
+    function getRateManager(bytes32 _rateManagerId) external view returns (RateManagerConfig memory) {
         return rateManagers[_rateManagerId];
     }
 
-    function getFee(uint256 _rateManagerId) external view returns (address feeRecipient, uint256 fee) {
+    function getFee(bytes32 _rateManagerId) external view returns (address feeRecipient, uint256 fee) {
         RateManagerConfig storage config = rateManagers[_rateManagerId];
         return (config.feeRecipient, config.fee);
     }
 
-    function getDepositHook(uint256 _rateManagerId) external view returns (address) {
+    function getDepositHook(bytes32 _rateManagerId) external view returns (address) {
         return rateManagers[_rateManagerId].depositHook;
     }
 
-    function getMinRate(uint256 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency) external view returns (uint256) {
+    function getMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency) external view returns (uint256) {
         return minRates[_rateManagerId][_paymentMethod][_currency];
     }
 }
