@@ -122,6 +122,7 @@ describe("DelegatedRateManagement (MVP)", () => {
   }
 
   // Local helper to create a manager and return id without double-wait patterns
+  // Local helper to create a manager and return id without double-wait patterns
   async function createRateManagerAndGetId(params?: {
     fee?: BigNumber;
     maxFee?: BigNumber;

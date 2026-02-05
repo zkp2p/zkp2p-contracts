@@ -50,7 +50,8 @@ import { Orchestrator__factory } from "../typechain/factories/contracts/index";
 import { UnifiedPaymentVerifier__factory } from "../typechain/factories/contracts/unifiedVerifier";
 import { SimpleAttestationVerifier__factory } from "../typechain/factories/contracts/unifiedVerifier";
 import { RateManagerDepositHookMock__factory } from "../typechain/factories/contracts/mocks/RateManagerDepositHookMock__factory";
-import { DepositRateManagerRegistryV1, RateManagerDepositHookMock } from "../typechain";
+import { DepositRateManagerHookV1__factory } from "../typechain/factories/contracts/hooks/DepositRateManagerHookV1__factory";
+import { DepositRateManagerRegistryV1, RateManagerDepositHookMock, DepositRateManagerHookV1 } from "../typechain";
 
 export default class DeployHelper {
   private _deployerSigner: Signer;
@@ -168,6 +169,10 @@ export default class DeployHelper {
 
   public async deployRateManagerDepositHookMock(): Promise<RateManagerDepositHookMock> {
     return await new RateManagerDepositHookMock__factory(this._deployerSigner).deploy();
+  }
+
+  public async deployDepositRateManagerHookV1(registry: Address): Promise<DepositRateManagerHookV1> {
+    return await new DepositRateManagerHookV1__factory(this._deployerSigner).deploy(registry);
   }
 
 

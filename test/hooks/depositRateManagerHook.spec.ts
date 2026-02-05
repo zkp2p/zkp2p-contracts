@@ -48,8 +48,8 @@ describe("DepositRateManagerHookV1", () => {
     venmoPaymentMethod = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
     await paymentVerifierRegistry.addPaymentMethod(venmoPaymentMethod, verifier.address, [Currency.USD]);
 
-    registry = (await (await ethers.getContractFactory("DepositRateManagerRegistryV1", owner.wallet)).deploy()) as DepositRateManagerRegistryV1;
-    hook = (await (await ethers.getContractFactory("DepositRateManagerHookV1", owner.wallet)).deploy(registry.address)) as DepositRateManagerHookV1;
+    registry = await deployer.deployDepositRateManagerRegistryV1();
+    hook = await deployer.deployDepositRateManagerHookV1(registry.address);
 
     // Common values
     payeeDetailsHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("p"));
@@ -141,13 +141,11 @@ describe("DepositRateManagerHookV1", () => {
       });
     });
   });
+  // Local helper to fetch id from createRateManager without double-wait
+  async function createRateManagerAndGetId(reg: DepositRateManagerRegistryV1, cfg: any): Promise<string> {
+    const tx = await reg.createRateManager(cfg);
+    const rcpt = await tx.wait();
+    const ev = rcpt.events?.find((e: any) => e.event === "RateManagerCreated");
+    return ev?.args?.rateManagerId;
+  }
 });
-
-// Local helper to fetch id from createRateManager without double-wait
-async function createRateManagerAndGetId(reg: DepositRateManagerRegistryV1, cfg: any): Promise<string> {
-  const tx = await reg.createRateManager(cfg);
-  const rcpt = await tx.wait();
-  const ev = rcpt.events?.find((e: any) => e.event === "RateManagerCreated");
-  return ev?.args?.rateManagerId;
-}
-

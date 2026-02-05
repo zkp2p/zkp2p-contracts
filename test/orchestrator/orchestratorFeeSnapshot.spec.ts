@@ -126,12 +126,11 @@ describe("Orchestrator — manager fee snapshot and ordering", () => {
     const expected = usdc(50).mul(ether(0.01)).div(ether(1));
     expect(after.sub(before)).to.eq(expected);
   });
+  // Local test helper to create a rate manager and return its id
+  async function createRateManagerAndGetId(reg: DepositRateManagerRegistryV1, cfg: any): Promise<string> {
+    const tx = await reg.createRateManager(cfg);
+    const rcpt = await tx.wait();
+    const ev = rcpt.events?.find((e: any) => e.event === "RateManagerCreated");
+    return ev?.args?.rateManagerId;
+  }
 });
-
-// Local test helper to create a rate manager and return its id
-async function createRateManagerAndGetId(reg: DepositRateManagerRegistryV1, cfg: any): Promise<string> {
-  const tx = await reg.createRateManager(cfg);
-  const rcpt = await tx.wait();
-  const ev = rcpt.events?.find((e: any) => e.event === "RateManagerCreated");
-  return ev?.args?.rateManagerId;
-}
