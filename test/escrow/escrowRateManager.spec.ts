@@ -40,7 +40,6 @@ describe("Escrow — rate manager", () => {
 
     const rf = await ethers.getContractFactory("DepositRateManagerRegistryV1", owner.wallet);
     registry = await rf.deploy();
-    await escrow.setDepositRateManagerRegistry(registry.address);
 
     const hf = await ethers.getContractFactory("RateManagerDepositHookMock", owner.wallet);
     hook = await hf.deploy();

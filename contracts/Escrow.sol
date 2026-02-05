@@ -48,7 +48,6 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
 
     IOrchestrator public orchestrator;                               // Address of the orchestrator contract
     IPaymentVerifierRegistry public paymentVerifierRegistry;         // Address of the payment verifier registry contract
-    IDepositRateManagerRegistryV1 public depositRateManagerRegistry; // (Deprecated default) deposit rate manager registry contract
     uint256 immutable public chainId;                                // chainId of the chain the escrow is deployed on
 
     mapping(address => uint256[]) internal accountDeposits;          // Mapping of address to depositIds
@@ -802,17 +801,7 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
         emit PaymentVerifierRegistryUpdated(_paymentVerifierRegistry);
     }
 
-    /**
-     * @notice GOVERNANCE ONLY: Updates the deposit rate manager registry address.
-     *
-     * @param _depositRateManagerRegistry   New deposit rate manager registry address
-     */
-    function setDepositRateManagerRegistry(address _depositRateManagerRegistry) external onlyOwner {
-        if (_depositRateManagerRegistry == address(0)) revert ZeroAddress();
-
-        depositRateManagerRegistry = IDepositRateManagerRegistryV1(_depositRateManagerRegistry);
-        emit DepositRateManagerRegistryUpdated(_depositRateManagerRegistry);
-    }
+    // Note: No global/default rate manager registry. Each deposit stores its own (registry, id).
 
     /** 
      * @notice GOVERNANCE ONLY: Sets the dust recipient address.
@@ -947,8 +936,8 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
 
         address registryAddr = depositRateManagerRegistryByDeposit[_depositId];
         if (registryAddr == address(0)) revert RateManagerRegistryNotSet();
-        (uint256 f, address r) = IDepositRateManagerRegistryV1(registryAddr).getFeeAndRecipient(rateManagerId);
-        return (r, f);
+        (uint256 fee, address recipient) = IDepositRateManagerRegistryV1(registryAddr).getFeeAndRecipient(rateManagerId);
+        return (recipient, fee);
     }
 
     function getDepositCurrencyListed(uint256 _depositId, bytes32 _paymentMethod, bytes32 _currencyCode) external view returns (bool) {

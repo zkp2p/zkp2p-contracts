@@ -38,7 +38,6 @@ describe("Orchestrator — manager fee snapshot and ordering", () => {
 
     const rf = await ethers.getContractFactory("DepositRateManagerRegistryV1", owner.wallet);
     registry = await rf.deploy();
-    await escrow.setDepositRateManagerRegistry(registry.address);
 
     await usdcToken.connect(depositor.wallet).approve(escrow.address, usdc(10000));
     await escrow.connect(depositor.wallet).createDeposit({

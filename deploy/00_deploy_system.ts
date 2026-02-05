@@ -144,7 +144,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Orchestrator set on escrow");
 
   // Set deposit rate manager registry on escrow
-  await escrowContract.setDepositRateManagerRegistry(depositRateManagerRegistry.address);
+  // No global setter in Escrow; each deposit stores its own (registry, id).
   console.log("Deposit rate manager registry set on escrow");
   await waitForDeploymentDelay(hre);
 

@@ -82,7 +82,6 @@ interface IEscrow {
     event DepositDelegateRemoved(uint256 indexed depositId, address indexed depositor);
 
     event DepositRateManagerUpdated(uint256 indexed depositId, address indexed depositor, bytes32 indexed rateManagerId);
-    event DepositRateManagerRegistryUpdated(address indexed depositRateManagerRegistry);
 
     event MinDepositAmountSet(uint256 minDepositAmount);
 

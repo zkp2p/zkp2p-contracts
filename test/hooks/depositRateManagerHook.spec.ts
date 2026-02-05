@@ -35,7 +35,6 @@ describe("DepositRateManagerHookV1", () => {
 
     const rf = await ethers.getContractFactory("DepositRateManagerRegistryV1", owner.wallet);
     registry = await rf.deploy();
-    await escrow.setDepositRateManagerRegistry(registry.address);
 
     const hf = await ethers.getContractFactory("DepositRateManagerHookV1", owner.wallet);
     hook = await hf.deploy(registry.address);

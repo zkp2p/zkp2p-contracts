@@ -85,7 +85,6 @@ describe("DelegatedRateManagement (MVP)", () => {
     // Deploy + wire the rate manager registry
     const registryFactory = await ethers.getContractFactory("DepositRateManagerRegistryV1", owner.wallet);
     rateManagerRegistry = await registryFactory.deploy();
-    await escrow.connect(owner.wallet).setDepositRateManagerRegistry(rateManagerRegistry.address);
 
     payeeDetails = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("payeeDetails"));
   });
