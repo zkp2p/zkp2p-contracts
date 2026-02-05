@@ -4,7 +4,7 @@ import { ethers } from "hardhat";
 import { getWaffleExpect, getAccounts } from "@utils/test";
 import { ADDRESS_ZERO } from "@utils/constants";
 import { ether } from "@utils/common";
-import { DepositRateManagerRegistryV1 } from "@typechain";
+import { DepositRateManagerRegistryV1 } from "../../typechain";
 
 const expect = getWaffleExpect();
 

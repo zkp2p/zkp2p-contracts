@@ -19,7 +19,7 @@ import {
   USDCMock,
   PaymentVerifierMock,
 } from "@utils/contracts";
-import { DepositRateManagerRegistryV1 } from "@typechain";
+import { DepositRateManagerRegistryV1 } from "../../typechain";
 
 const expect = getWaffleExpect();
 const blockchain = new Blockchain(ethers.provider);
