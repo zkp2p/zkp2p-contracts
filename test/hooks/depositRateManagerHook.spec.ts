@@ -6,7 +6,7 @@ import DeployHelper from "@utils/deploys";
 import { ADDRESS_ZERO, ZERO } from "@utils/constants";
 import { ether, usdc } from "@utils/common";
 import { Currency } from "@utils/protocolUtils";
-import { DepositRateManagerRegistryV1, DepositRateManagerHookV1 } from "../../typechain";
+import { DepositRateManagerRegistryV1, DepositRateManagerHookV1 } from "@utils/contracts";
 
 const expect = getWaffleExpect();
 

@@ -17,9 +17,10 @@ import {
   EscrowRegistry,
   USDCMock,
   PaymentVerifierMock,
+  DepositRateManagerRegistryV1,
+  RateManagerDepositHookMock,
+  IDepositRateManagerRegistryV1
 } from "@utils/contracts";
-
-import { DepositRateManagerRegistryV1, RateManagerDepositHookMock, IDepositRateManagerRegistryV1 } from "../../typechain";
 
 const expect = getWaffleExpect();
 
