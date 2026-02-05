@@ -43,11 +43,14 @@ import { PaymentVerifierRegistry__factory } from "../typechain/factories/contrac
 import { PostIntentHookRegistry__factory } from "../typechain/factories/contracts/registries";
 import { RelayerRegistry__factory } from "../typechain/factories/contracts/registries";
 import { EscrowRegistry__factory } from "../typechain/factories/contracts/registries";
+import { DepositRateManagerRegistryV1__factory } from "../typechain/factories/contracts/registries/DepositRateManagerRegistryV1__factory";
 import { Escrow__factory } from "../typechain/factories/contracts/index";
 import { ProtocolViewer__factory } from "../typechain/factories/contracts/index";
 import { Orchestrator__factory } from "../typechain/factories/contracts/index";
 import { UnifiedPaymentVerifier__factory } from "../typechain/factories/contracts/unifiedVerifier";
 import { SimpleAttestationVerifier__factory } from "../typechain/factories/contracts/unifiedVerifier";
+import { RateManagerDepositHookMock__factory } from "../typechain/factories/contracts/mocks/RateManagerDepositHookMock__factory";
+import { DepositRateManagerRegistryV1, RateManagerDepositHookMock } from "../typechain";
 
 export default class DeployHelper {
   private _deployerSigner: Signer;
@@ -156,6 +159,15 @@ export default class DeployHelper {
 
   public async deployEscrowRegistry(): Promise<EscrowRegistry> {
     return await new EscrowRegistry__factory(this._deployerSigner).deploy();
+  }
+
+  // Deposit Rate Manager helpers
+  public async deployDepositRateManagerRegistryV1(): Promise<DepositRateManagerRegistryV1> {
+    return await new DepositRateManagerRegistryV1__factory(this._deployerSigner).deploy();
+  }
+
+  public async deployRateManagerDepositHookMock(): Promise<RateManagerDepositHookMock> {
+    return await new RateManagerDepositHookMock__factory(this._deployerSigner).deploy();
   }
 
 
