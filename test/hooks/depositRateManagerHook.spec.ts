@@ -68,11 +68,10 @@ describe("DepositRateManagerHookV1", () => {
     const id = (await (await registry.createRateManager({ manager: manager.address, feeRecipient: feeRecipient.address, maxFee: ether(0.05), fee: 0, depositHook: hook.address, name: "n", uri: "u" })).wait()).events.find((e: any) => e.event === "RateManagerCreated").args.rateManagerId;
     await hook.connect(manager.wallet).setMinLiquidity(id, usdc(200));
 
-    await expect(escrow.connect(depositor.wallet).setDepositRateManager(0, id)).to.be.revertedWithCustomError(hook, "BelowMinLiquidity");
+    await expect(escrow.connect(depositor.wallet).setDepositRateManager(0, registry.address, id)).to.be.revertedWithCustomError(hook, "BelowMinLiquidity");
 
     // Lower min and try again
     await hook.connect(manager.wallet).setMinLiquidity(id, usdc(50));
-    await expect(escrow.connect(depositor.wallet).setDepositRateManager(0, id)).to.emit(escrow, "DepositRateManagerUpdated");
+    await expect(escrow.connect(depositor.wallet).setDepositRateManager(0, registry.address, id)).to.emit(escrow, "DepositRateManagerUpdated");
   });
 });
-

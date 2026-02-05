@@ -161,7 +161,7 @@ describe("DelegatedRateManagement (MVP)", () => {
       const rateManagerId = await createRateManager({ fee: ZERO });
       await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ether(1.05));
 
-      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerId);
+      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
 
       await expect(signalIntent(ether(1.04))).to.be.revertedWithCustomError(orchestrator, "RateBelowMinimum");
       await expect(signalIntent(ether(1.05))).to.not.be.reverted;
@@ -173,7 +173,7 @@ describe("DelegatedRateManagement (MVP)", () => {
       const rateManagerId = await createRateManager({ fee: ZERO });
       await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ether(1.02));
 
-      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerId);
+      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
 
       await expect(signalIntent(ether(1.03))).to.be.revertedWithCustomError(orchestrator, "RateBelowMinimum");
       await expect(signalIntent(ether(1.05))).to.not.be.reverted;
@@ -185,7 +185,7 @@ describe("DelegatedRateManagement (MVP)", () => {
       const rateManagerId = await createRateManager({ fee: ZERO });
       await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ZERO);
 
-      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerId);
+      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
 
       await expect(signalIntent(ether(1.0))).to.be.revertedWithCustomError(orchestrator, "CurrencyNotSupported");
     });
@@ -197,7 +197,7 @@ describe("DelegatedRateManagement (MVP)", () => {
 
       const rateManagerId = await createRateManager({ fee: ether(0.01) }); // 1%
       await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ether(1.0));
-      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerId);
+      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
 
       await verifier.setShouldVerifyPayment(true);
 

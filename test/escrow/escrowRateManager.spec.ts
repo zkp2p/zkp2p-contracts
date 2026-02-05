@@ -69,7 +69,7 @@ describe("Escrow — rate manager", () => {
     const ev = (await tx.wait()).events.find((e: any) => e.event === "RateManagerCreated");
     const id = ev.args.rateManagerId;
 
-    await expect(escrow.connect(depositor.wallet).setDepositRateManager(0, id)).to.emit(escrow, "DepositRateManagerUpdated");
+    await expect(escrow.connect(depositor.wallet).setDepositRateManager(0, registry.address, id)).to.emit(escrow, "DepositRateManagerUpdated");
     expect(await escrow.getDepositRateManager(0)).to.eq(id);
   });
 
@@ -80,7 +80,7 @@ describe("Escrow — rate manager", () => {
     const tx = await registry.createRateManager({ manager: manager.address, feeRecipient: feeRecipient.address, maxFee: ether(0.05), fee: 0, depositHook: hook.address, name: "n", uri: "u" });
     const id = (await tx.wait()).events.find((e: any) => e.event === "RateManagerCreated").args.rateManagerId;
     await hook.setShouldRevert(true);
-    await expect(escrow.connect(depositor.wallet).setDepositRateManager(0, id)).to.be.revertedWith("Hook: revert on opt-in");
+    await expect(escrow.connect(depositor.wallet).setDepositRateManager(0, registry.address, id)).to.be.revertedWith("Hook: revert on opt-in");
   });
 
   it("getDepositCurrencyMinRate branches", async () => {
@@ -92,7 +92,7 @@ describe("Escrow — rate manager", () => {
     // no manager → floor
     expect(await escrow.getDepositCurrencyMinRate(0, pm, Currency.USD)).to.eq(ether(1.0));
     // with manager disabled pair → 0
-    await escrow.connect(depositor.wallet).setDepositRateManager(0, id);
+    await escrow.connect(depositor.wallet).setDepositRateManager(0, registry.address, id);
     await registry.connect(manager.wallet).setMinRate(id, pm, Currency.USD, 0);
     expect(await escrow.getDepositCurrencyMinRate(0, pm, Currency.USD)).to.eq(0);
     // with manager>floor

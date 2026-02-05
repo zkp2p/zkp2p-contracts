@@ -55,7 +55,7 @@ describe("Orchestrator — manager fee snapshot and ordering", () => {
 
     const id = (await (await registry.createRateManager({ manager: manager.address, feeRecipient: feeRecipient.address, maxFee: ether(0.05), fee: ether(0.01), depositHook: ADDRESS_ZERO, name: "n", uri: "u" })).wait()).events.find((e: any) => e.event === "RateManagerCreated").args.rateManagerId;
     await registry.connect(manager.wallet).setMinRate(id, pm, Currency.USD, ether(1));
-    await escrow.connect(depositor.wallet).setDepositRateManager(0, id);
+    await escrow.connect(depositor.wallet).setDepositRateManager(0, registry.address, id);
   });
 
   it("emits fee event last and snapshots", async () => {
@@ -95,4 +95,3 @@ describe("Orchestrator — manager fee snapshot and ordering", () => {
     expect(after.sub(before)).to.eq(expected);
   });
 });
-
