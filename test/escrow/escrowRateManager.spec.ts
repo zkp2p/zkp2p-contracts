@@ -84,6 +84,17 @@ describe("Escrow — rate manager", () => {
     hook = await deployer.deployRateManagerDepositHookMock();
   });
 
+  // Local helper to avoid double-wait patterns when creating managers in tests
+  async function createRateManagerAndGetId(
+    reg: DepositRateManagerRegistryV1,
+    cfg: IDepositRateManagerRegistryV1.RateManagerConfigStruct
+  ): Promise<string> {
+    const tx = await reg.createRateManager(cfg);
+    const receipt = await tx.wait();
+    const ev = receipt.events?.find((e: any) => e.event === "RateManagerCreated");
+    return ev?.args?.rateManagerId;
+  }
+
   async function seedDeposit(minRate: BigNumber) {
     await usdcToken.connect(depositor.wallet).approve(escrow.address, usdc(10000));
     await escrow.connect(depositor.wallet).createDeposit({
@@ -258,15 +269,4 @@ describe("Escrow — rate manager", () => {
       });
     });
   });
-
-  // Local helper to avoid double-wait patterns when creating managers in tests
-  async function createRateManagerAndGetId(
-    reg: DepositRateManagerRegistryV1,
-    cfg: IDepositRateManagerRegistryV1.RateManagerConfigStruct
-  ): Promise<string> {
-    const tx = await reg.createRateManager(cfg);
-    const receipt = await tx.wait();
-    const ev = receipt.events?.find((e: any) => e.event === "RateManagerCreated");
-    return ev?.args?.rateManagerId;
-  }
 });

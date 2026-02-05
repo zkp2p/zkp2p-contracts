@@ -55,6 +55,14 @@ describe("DepositRateManagerHookV1", () => {
     payeeDetailsHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("p"));
   });
 
+  // Local helper to fetch id from createRateManager without double-wait
+  async function createRateManagerAndGetId(reg: DepositRateManagerRegistryV1, cfg: any): Promise<string> {
+    const tx = await reg.createRateManager(cfg);
+    const rcpt = await tx.wait();
+    const ev = rcpt.events?.find((e: any) => e.event === "RateManagerCreated");
+    return ev?.args?.rateManagerId;
+  }
+
   describe("#setMinLiquidity", () => {
     let subjectRateManagerId: BytesLike;
     let subjectMin: BigNumber;
@@ -141,11 +149,4 @@ describe("DepositRateManagerHookV1", () => {
       });
     });
   });
-  // Local helper to fetch id from createRateManager without double-wait
-  async function createRateManagerAndGetId(reg: DepositRateManagerRegistryV1, cfg: any): Promise<string> {
-    const tx = await reg.createRateManager(cfg);
-    const rcpt = await tx.wait();
-    const ev = rcpt.events?.find((e: any) => e.event === "RateManagerCreated");
-    return ev?.args?.rateManagerId;
-  }
 });
