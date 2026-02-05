@@ -46,6 +46,7 @@ contract DepositRateManagerRegistryV1 is IDepositRateManagerRegistryV1 {
             _config.feeRecipient,
             _config.maxFee,
             _config.fee,
+            _config.depositHook,
             _config.name,
             _config.uri
         );

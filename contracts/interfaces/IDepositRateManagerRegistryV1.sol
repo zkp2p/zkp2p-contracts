@@ -28,6 +28,7 @@ interface IDepositRateManagerRegistryV1 {
         address indexed feeRecipient,
         uint256 maxFee,
         uint256 fee,
+        address depositHook,
         string name,
         string uri
     );

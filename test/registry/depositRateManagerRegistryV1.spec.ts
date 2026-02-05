@@ -28,6 +28,7 @@ describe("DepositRateManagerRegistryV1", () => {
     });
     const rcpt = await tx.wait();
     const ev = rcpt.events?.find((e: any) => e.event === "RateManagerCreated");
+    expect(ev.args.depositHook).to.eq(config?.hook ?? ADDRESS_ZERO);
     return ev.args.rateManagerId as string;
   }
 
@@ -92,4 +93,3 @@ describe("DepositRateManagerRegistryV1", () => {
     expect(await registry.getMinRate(id, pm, eur)).to.eq(ether(2));
   });
 });
-
