@@ -1,21 +1,25 @@
 import "module-alias/register";
+import "module-alias/register";
 import { ethers } from "hardhat";
 import { getWaffleExpect, getAccounts } from "@utils/test";
 import { ADDRESS_ZERO } from "@utils/constants";
 import { ether } from "@utils/common";
+import { DepositRateManagerRegistryV1 } from "@typechain";
 
 const expect = getWaffleExpect();
 
 describe("DepositRateManagerRegistryV1", () => {
+  // Accounts
   let owner: any, manager: any, other: any, feeRecipient: any;
-  let registry: any;
+  // Contract
+  let registry: DepositRateManagerRegistryV1;
 
   beforeEach(async () => {
     [owner, manager, other, feeRecipient] = await getAccounts();
-    const f = await ethers.getContractFactory("DepositRateManagerRegistryV1", owner.wallet);
-    registry = await f.deploy();
+    registry = (await (await ethers.getContractFactory("DepositRateManagerRegistryV1", owner.wallet)).deploy()) as DepositRateManagerRegistryV1;
   });
 
+  // Local helper to create a manager and return id without double-wait pattern
   async function create(config?: { maxFee?: any; fee?: any; hook?: string; name?: string; uri?: string }) {
     const tx = await registry.createRateManager({
       manager: manager.address,
@@ -28,8 +32,8 @@ describe("DepositRateManagerRegistryV1", () => {
     });
     const rcpt = await tx.wait();
     const ev = rcpt.events?.find((e: any) => e.event === "RateManagerCreated");
-    expect(ev.args.depositHook).to.eq(config?.hook ?? ADDRESS_ZERO);
-    return ev.args.rateManagerId as string;
+    expect(ev?.args?.depositHook).to.eq(config?.hook ?? ADDRESS_ZERO);
+    return ev?.args?.rateManagerId as string;
   }
 
   it("createRateManager stores config and emits", async () => {
