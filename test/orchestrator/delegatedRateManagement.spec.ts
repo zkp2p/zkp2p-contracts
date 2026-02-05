@@ -9,6 +9,17 @@ import { Blockchain, ether, usdc } from "@utils/common";
 import { Currency } from "@utils/protocolUtils";
 import { ADDRESS_ZERO, ONE, ZERO } from "@utils/constants";
 import { getAccounts, getWaffleExpect } from "@utils/test";
+import {
+  Escrow,
+  Orchestrator,
+  PaymentVerifierRegistry,
+  PostIntentHookRegistry,
+  RelayerRegistry,
+  EscrowRegistry,
+  USDCMock,
+  PaymentVerifierMock,
+} from "@utils/contracts";
+import { DepositRateManagerRegistryV1 } from "@typechain";
 
 const expect = getWaffleExpect();
 const blockchain = new Blockchain(ethers.provider);
@@ -22,16 +33,16 @@ describe("DelegatedRateManagement (MVP)", () => {
 
   let deployer: DeployHelper;
 
-  let usdcToken: any;
-  let escrow: any;
-  let orchestrator: any;
-  let paymentVerifierRegistry: any;
-  let escrowRegistry: any;
-  let postIntentHookRegistry: any;
-  let relayerRegistry: any;
-  let verifier: any;
+  let usdcToken: USDCMock;
+  let escrow: Escrow;
+  let orchestrator: Orchestrator;
+  let paymentVerifierRegistry: PaymentVerifierRegistry;
+  let escrowRegistry: EscrowRegistry;
+  let postIntentHookRegistry: PostIntentHookRegistry;
+  let relayerRegistry: RelayerRegistry;
+  let verifier: PaymentVerifierMock;
 
-  let rateManagerRegistry: any;
+  let rateManagerRegistry: DepositRateManagerRegistryV1;
 
   let chainId: BigNumber = ONE;
   let paymentMethod: BytesLike;
@@ -110,7 +121,8 @@ describe("DelegatedRateManagement (MVP)", () => {
     });
   }
 
-  async function createRateManager(params?: {
+  // Local helper to create a manager and return id without double-wait patterns
+  async function createRateManagerAndGetId(params?: {
     fee?: BigNumber;
     maxFee?: BigNumber;
     name?: string;
@@ -126,12 +138,14 @@ describe("DelegatedRateManagement (MVP)", () => {
       name: params?.name ?? "USDCTOAIAT",
       uri: params?.uri ?? "ipfs://example",
     });
-    const receipt = await tx.wait();
-    const ev = receipt.events?.find((e: any) => e.event === "RateManagerCreated");
+    const rcpt = await tx.wait();
+    const ev = rcpt.events?.find((e: any) => e.event === "RateManagerCreated");
     return ev?.args?.rateManagerId;
   }
 
-  async function signalIntent(conversionRate: BigNumber): Promise<string> {
+  // Subject-pattern for signalIntent
+  let subjectConversionRate: BigNumber;
+  async function subjectSignal(): Promise<string> {
     const tx = await orchestrator.connect(taker.wallet).signalIntent({
       escrow: escrow.address,
       depositId: ZERO,
@@ -139,7 +153,7 @@ describe("DelegatedRateManagement (MVP)", () => {
       to: taker.address,
       paymentMethod,
       fiatCurrency: Currency.USD,
-      conversionRate,
+      conversionRate: subjectConversionRate,
       referrer: ADDRESS_ZERO,
       referrerFee: ZERO,
       gatingServiceSignature: "0x",
@@ -147,46 +161,70 @@ describe("DelegatedRateManagement (MVP)", () => {
       postIntentHook: ADDRESS_ZERO,
       data: "0x",
     });
-
-    const receipt = await tx.wait();
-    const intentSignaled = receipt.events?.find((e: any) => e.event === "IntentSignaled");
-    return intentSignaled.args.intentHash;
+    const rcpt = await tx.wait();
+    const ev = rcpt.events?.find((e: any) => e.event === "IntentSignaled");
+    return ev?.args?.intentHash;
   }
 
   describe("effective min rate", () => {
-    it("enforces manager min rate when above depositor floor", async () => {
-      await createDeposit(ether(1.0));
+    describe("when manager min > depositor floor", () => {
+      let rateManagerId: string;
+      beforeEach(async () => {
+        await createDeposit(ether(1.0));
+        rateManagerId = await createRateManagerAndGetId({ fee: ZERO });
+        await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ether(1.05));
+        await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
+      });
 
-      const rateManagerId = await createRateManager({ fee: ZERO });
-      await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ether(1.05));
+      describe("when below manager min", () => {
+        beforeEach(async () => { subjectConversionRate = ether(1.04); });
+        it("should revert", async () => {
+          await expect(subjectSignal()).to.be.revertedWithCustomError(orchestrator, "RateBelowMinimum");
+        });
+      });
 
-      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
-
-      await expect(signalIntent(ether(1.04))).to.be.revertedWithCustomError(orchestrator, "RateBelowMinimum");
-      await expect(signalIntent(ether(1.05))).to.not.be.reverted;
+      describe("when at manager min", () => {
+        beforeEach(async () => { subjectConversionRate = ether(1.05); });
+        it("should allow signal", async () => {
+          await expect(subjectSignal()).to.not.be.reverted;
+        });
+      });
     });
 
-    it("never allows manager to undercut depositor floor", async () => {
-      await createDeposit(ether(1.05));
-
-      const rateManagerId = await createRateManager({ fee: ZERO });
-      await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ether(1.02));
-
-      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
-
-      await expect(signalIntent(ether(1.03))).to.be.revertedWithCustomError(orchestrator, "RateBelowMinimum");
-      await expect(signalIntent(ether(1.05))).to.not.be.reverted;
+    describe("when manager min < depositor floor", () => {
+      let rateManagerId: string;
+      beforeEach(async () => {
+        await createDeposit(ether(1.05));
+        rateManagerId = await createRateManagerAndGetId({ fee: ZERO });
+        await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ether(1.02));
+        await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
+      });
+      describe("when below floor", () => {
+        beforeEach(async () => { subjectConversionRate = ether(1.03); });
+        it("should revert", async () => {
+          await expect(subjectSignal()).to.be.revertedWithCustomError(orchestrator, "RateBelowMinimum");
+        });
+      });
+      describe("when at floor", () => {
+        beforeEach(async () => { subjectConversionRate = ether(1.05); });
+        it("should allow signal", async () => {
+          await expect(subjectSignal()).to.not.be.reverted;
+        });
+      });
     });
 
-    it("acts as a manager-level allowlist when manager rate is 0", async () => {
-      await createDeposit(ether(1.0));
-
-      const rateManagerId = await createRateManager({ fee: ZERO });
-      await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ZERO);
-
-      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
-
-      await expect(signalIntent(ether(1.0))).to.be.revertedWithCustomError(orchestrator, "CurrencyNotSupported");
+    describe("when manager disables pair (rate=0)", () => {
+      let rateManagerId: string;
+      beforeEach(async () => {
+        await createDeposit(ether(1.0));
+        rateManagerId = await createRateManagerAndGetId({ fee: ZERO });
+        await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ZERO);
+        await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
+        subjectConversionRate = ether(1.0);
+      });
+      it("should revert with CurrencyNotSupported", async () => {
+        await expect(subjectSignal()).to.be.revertedWithCustomError(orchestrator, "CurrencyNotSupported");
+      });
     });
   });
 
@@ -194,13 +232,14 @@ describe("DelegatedRateManagement (MVP)", () => {
     it("transfers manager fee on fulfillment", async () => {
       await createDeposit(ether(1.0));
 
-      const rateManagerId = await createRateManager({ fee: ether(0.01) }); // 1%
+      const rateManagerId = await createRateManagerAndGetId({ fee: ether(0.01) }); // 1%
       await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ether(1.0));
       await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
 
       await verifier.setShouldVerifyPayment(true);
 
-      const intentHash = await signalIntent(ether(1.0));
+      subjectConversionRate = ether(1.0);
+      const intentHash = await subjectSignal();
 
       const beforeTaker = await usdcToken.balanceOf(taker.address);
       const beforeManager = await usdcToken.balanceOf(managerFeeRecipient.address);
