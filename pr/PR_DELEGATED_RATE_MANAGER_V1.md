@@ -27,12 +27,15 @@ Scope (Final State)
     - isRateManager(id), getRateManager(id), getFeeAndRecipient(id) → (fee, recipient), getDepositHook(id), getMinRate(id, pm, curr)
 
 - Escrow integration (Escrow.sol)
-  - Per‑deposit manager link: mapping(uint256 depositId → bytes32 rateManagerId).
-  - setDepositRateManager(depositId, rateManagerId):
-    - Requires registry set and id exists.
-    - If depositHook is set on the manager, calls IRateManagerDepositHook.onDepositOptIn(depositor, escrow, depositId) (view; revert to reject).
-    - Emits DepositRateManagerUpdated(depositId, depositor, rateManagerId).
-  - clearDepositRateManager(depositId): resets id and emits DepositRateManagerUpdated(..., 0x0).
+  - Per‑deposit manager link stores BOTH the registry and the id to avoid bricking on registry upgrades:
+    - `mapping(uint256 => address) depositRateManagerRegistryByDeposit`
+    - `mapping(uint256 => bytes32) depositRateManagerId`
+  - setDepositRateManager(depositId, registry, rateManagerId):
+    - Verifies `registry.isRateManager(rateManagerId)`.
+    - If a `depositHook` is configured, calls `IDepositRateManagerHook.onDepositOptIn(depositor, escrow, depositId, rateManagerId)` (view; revert to reject).
+    - Persists both registry and id; emits `DepositRateManagerUpdated(depositId, depositor, rateManagerId)`.
+  - clearDepositRateManager(depositId): resets registry+id and emits `DepositRateManagerUpdated(..., 0x0)`.
+  - Switching: depositors may call `setDepositRateManager` again with a different (registry, id) pair to switch managers atomically.
   - getDepositCurrencyMinRate(depositId, pm, currency):
     - Returns 0 if depositor floor is 0.
     - If no manager: returns depositor floor.
@@ -57,6 +60,10 @@ Rationale
 - No global loops across deposits
   - Managers update a single onchain config and indexers/fetchers fan out offchain; setMinRatesBatch loops only over calldata‑provided pairs.
 - Event ordering for indexers
+
+Upgrade Safety: Prevent registry upgrades from bricking opt‑ins
+- Problem: A global registry pointer in Escrow caused existing `rateManagerId`s to point to the wrong registry on upgrades, returning zeros for manager data and breaking signals.
+- Solution: Store the registry address per deposit alongside the id. All reads (min‑rate, fee) dereference the stored registry. Switching to a new registry is opt‑in per deposit.
   - Emitting IntentManagerFeeUpdated last lets services derive gross/net without re‑reading state at a blockTag or risking drift.
 
 Security & Safety
@@ -109,6 +116,7 @@ Detailed Testing Plan (Hardhat, iterative)
     - success: clears id; emits DepositRateManagerUpdated with 0x0.
     - failure: caller != depositor.
   - getDepositCurrencyMinRate
+    - manager id set but registry address zero → revert `RateManagerRegistryNotSet`.
     - floor=0 → 0 regardless of manager.
     - no manager → floor.
     - manager set, rate=0 → 0 (allowlist off).
@@ -131,6 +139,7 @@ Detailed Testing Plan (Hardhat, iterative)
 - D) Integration flows
   - End‑to‑end: create deposit → set floor → opt‑in manager (with hook) → set manager min rate → signal → fulfill → assert fee distributions and min‑rate constraints.
   - Allowlist off: manager rate=0 → signal reverts with CurrencyNotSupported.
+  - Switch registry+id for an existing deposit and verify new manager terms apply to subsequent signals.
   - Update fee ≤ maxFee between signals → old intents use old snapshot; new intents use new fee (assert via events).
 
 - E) Negative/edge cases
