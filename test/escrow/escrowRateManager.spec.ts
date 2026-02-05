@@ -20,7 +20,6 @@ import {
 } from "@utils/contracts";
 
 import { DepositRateManagerRegistryV1, RateManagerDepositHookMock, IDepositRateManagerRegistryV1 } from "@typechain";
-import DeployHelper from "@utils/deploys";
 
 const expect = getWaffleExpect();
 
@@ -58,7 +57,15 @@ describe("Escrow — rate manager", () => {
     postIntentHookRegistry = await deployer.deployPostIntentHookRegistry();
     relayerRegistry = await deployer.deployRelayerRegistry();
 
-    escrow = await deployer.deployEscrow(owner.address, 1, paymentVerifierRegistry.address, ADDRESS_ZERO, ZERO, 10, 3600);
+    escrow = await deployer.deployEscrow(
+      owner.address,
+      ethers.BigNumber.from(1),
+      paymentVerifierRegistry.address,
+      ADDRESS_ZERO,
+      ZERO,
+      ethers.BigNumber.from(10),
+      ethers.BigNumber.from(3600)
+    );
     await escrowRegistry.addEscrow(escrow.address);
 
     orchestrator = await deployer.deployOrchestrator(

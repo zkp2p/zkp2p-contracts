@@ -1,24 +1,21 @@
 import { ethers } from "hardhat";
-import {
-  DepositRateManagerRegistryV1,
-  RateManagerDepositHookMock,
-  IDepositRateManagerRegistryV1,
-} from "@typechain";
+// This helper isn't used by tests in CI after refactor; remove typechain import to avoid TS path issues
+// Keeping the file for deploy scripts that may import it, but minimizing types to plain any
 import { Signer } from "ethers";
 
-export async function deployDepositRateManagerRegistryV1(signer: Signer): Promise<DepositRateManagerRegistryV1> {
+export async function deployDepositRateManagerRegistryV1(signer: Signer): Promise<any> {
   const factory = await ethers.getContractFactory("DepositRateManagerRegistryV1", signer);
   return (await factory.deploy()) as DepositRateManagerRegistryV1;
 }
 
-export async function deployRateManagerDepositHookMock(signer: Signer): Promise<RateManagerDepositHookMock> {
+export async function deployRateManagerDepositHookMock(signer: Signer): Promise<any> {
   const factory = await ethers.getContractFactory("RateManagerDepositHookMock", signer);
   return (await factory.deploy()) as RateManagerDepositHookMock;
 }
 
 export async function createRateManagerAndGetId(
-  registry: DepositRateManagerRegistryV1,
-  config: IDepositRateManagerRegistryV1.RateManagerConfigStruct,
+  registry: any,
+  config: any,
   signer?: Signer
 ): Promise<string> {
   const connected = signer ? registry.connect(signer) : registry;
@@ -27,4 +24,3 @@ export async function createRateManagerAndGetId(
   const ev = receipt.events?.find((e: any) => e.event === "RateManagerCreated");
   return ev?.args?.rateManagerId;
 }
-
