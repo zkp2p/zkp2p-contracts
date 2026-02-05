@@ -76,7 +76,7 @@ describe("DepositRateManagerRegistryV1", () => {
     await expect(registry.connect(other.wallet).setFee(id, ether(0.02))).to.be.revertedWith("Caller is not manager");
     await expect(registry.connect(manager.wallet).setFee(id, ether(0.10))).to.be.revertedWith("Fee exceeds maxFee");
     await registry.connect(manager.wallet).setFee(id, ether(0.02));
-    const [recipient, fee] = await registry.getFee(id);
+    const [fee, recipient] = await registry.getFeeAndRecipient(id);
     expect(recipient).to.eq(feeRecipient.address);
     expect(fee).to.eq(ether(0.02));
   });

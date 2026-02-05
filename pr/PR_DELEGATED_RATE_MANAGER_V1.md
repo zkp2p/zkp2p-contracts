@@ -24,7 +24,7 @@ Scope (Final State)
     - RateManagerMinRateUpdated(id, paymentMethod, currency, minRate)
     - RateManagerMinRatesBatchUpdated(id, count)
   - Views:
-    - isRateManager(id), getRateManager(id), getFee(id) → (recipient, fee), getDepositHook(id), getMinRate(id, pm, curr)
+    - isRateManager(id), getRateManager(id), getFeeAndRecipient(id) → (fee, recipient), getDepositHook(id), getMinRate(id, pm, curr)
 
 - Escrow integration (Escrow.sol)
   - Per‑deposit manager link: mapping(uint256 depositId → bytes32 rateManagerId).

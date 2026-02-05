@@ -70,7 +70,7 @@ interface IDepositRateManagerRegistryV1 {
 
     function getRateManager(bytes32 _rateManagerId) external view returns (RateManagerConfig memory);
 
-    function getFee(bytes32 _rateManagerId) external view returns (address feeRecipient, uint256 fee);
+    function getFeeAndRecipient(bytes32 _rateManagerId) external view returns (uint256 fee, address feeRecipient);
 
     function getDepositHook(bytes32 _rateManagerId) external view returns (address);
 

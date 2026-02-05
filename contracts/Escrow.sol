@@ -939,7 +939,8 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
         }
 
         if (address(depositRateManagerRegistry) == address(0)) revert RateManagerRegistryNotSet();
-        return depositRateManagerRegistry.getFee(rateManagerId);
+        (uint256 f, address r) = depositRateManagerRegistry.getFeeAndRecipient(rateManagerId);
+        return (r, f);
     }
 
     function getDepositCurrencyListed(uint256 _depositId, bytes32 _paymentMethod, bytes32 _currencyCode) external view returns (bool) {
