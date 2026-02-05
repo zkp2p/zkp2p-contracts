@@ -21,7 +21,7 @@ import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.
 import { IPostIntentHookRegistry } from "./interfaces/IPostIntentHookRegistry.sol";
 import { IRelayerRegistry } from "./interfaces/IRelayerRegistry.sol";
 import { IDepositRateManagerRegistryV1 } from "./interfaces/IDepositRateManagerRegistryV1.sol";
-import { IRateManagerDepositHook } from "./interfaces/IRateManagerDepositHook.sol";
+import { IDepositRateManagerHook } from "./interfaces/IDepositRateManagerHook.sol";
 pragma solidity ^0.8.18;
 
 /**
@@ -334,7 +334,7 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
 
         address hook = depositRateManagerRegistry.getDepositHook(_rateManagerId);
         if (hook != address(0)) {
-            IRateManagerDepositHook(hook).onDepositOptIn(msg.sender, address(this), _depositId);
+            IDepositRateManagerHook(hook).onDepositOptIn(msg.sender, address(this), _depositId, _rateManagerId);
         }
 
         depositRateManagerId[_depositId] = _rateManagerId;

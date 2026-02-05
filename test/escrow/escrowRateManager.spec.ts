@@ -103,4 +103,3 @@ describe("Escrow — rate manager", () => {
     expect(await escrow.getDepositCurrencyMinRate(0, pm, Currency.USD)).to.eq(ether(1.0));
   });
 });
-

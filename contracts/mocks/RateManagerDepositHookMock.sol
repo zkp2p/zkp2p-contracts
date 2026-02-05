@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import { IRateManagerDepositHook } from "../interfaces/IRateManagerDepositHook.sol";
+import { IDepositRateManagerHook } from "../interfaces/IDepositRateManagerHook.sol";
 
-contract RateManagerDepositHookMock is IRateManagerDepositHook {
+contract RateManagerDepositHookMock is IDepositRateManagerHook {
     event OptInCalled(address depositor, address escrow, uint256 depositId);
 
     bool public shouldRevert;
@@ -12,7 +12,7 @@ contract RateManagerDepositHookMock is IRateManagerDepositHook {
         shouldRevert = value;
     }
 
-    function onDepositOptIn(address depositor, address escrow, uint256 depositId) external view override {
+    function onDepositOptIn(address depositor, address escrow, uint256 depositId, bytes32 /*rateManagerId*/ ) external view override {
         if (shouldRevert) {
             revert("Hook: revert on opt-in");
         }
@@ -20,4 +20,3 @@ contract RateManagerDepositHookMock is IRateManagerDepositHook {
         depositor; escrow; depositId; // silence warnings
     }
 }
-
