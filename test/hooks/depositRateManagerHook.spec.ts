@@ -40,7 +40,7 @@ describe("DepositRateManagerHookV1", () => {
 
     escrow = await deployer.deployEscrow(owner.address, ethers.BigNumber.from(1), paymentVerifierRegistry.address, ADDRESS_ZERO, ZERO, ethers.BigNumber.from(10), ethers.BigNumber.from(3600));
     await escrowRegistry.addEscrow(escrow.address);
-    orchestrator = await deployer.deployOrchestrator(owner.address, 1, escrowRegistry.address, paymentVerifierRegistry.address, postIntentHookRegistry.address, relayerRegistry.address, 0, owner.address);
+    orchestrator = await deployer.deployOrchestrator(owner.address, ethers.BigNumber.from(1), escrowRegistry.address, paymentVerifierRegistry.address, postIntentHookRegistry.address, relayerRegistry.address, ZERO, owner.address);
     await escrow.setOrchestrator(orchestrator.address);
 
     verifier = await deployer.deployPaymentVerifierMock();

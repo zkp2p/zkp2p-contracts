@@ -70,12 +70,12 @@ describe("Escrow — rate manager", () => {
 
     orchestrator = await deployer.deployOrchestrator(
       owner.address,
-      1,
+      ethers.BigNumber.from(1),
       escrowRegistry.address,
       paymentVerifierRegistry.address,
       postIntentHookRegistry.address,
       relayerRegistry.address,
-      0,
+      ZERO,
       owner.address
     );
     await escrow.setOrchestrator(orchestrator.address);
