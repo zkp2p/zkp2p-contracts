@@ -229,48 +229,9 @@ describe("DelegatedRateManagement (MVP)", () => {
   });
 
   describe("manager fee", () => {
-    it("transfers manager fee on fulfillment", async () => {
-      await createDeposit(ether(1.0));
-
-      const rateManagerId = await createRateManagerAndGetId({ fee: ether(0.01) }); // 1%
-      await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ether(1.0));
-      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
-
-      await verifier.setShouldVerifyPayment(true);
-
-      subjectConversionRate = ether(1.0);
-      const intentHash = await subjectSignal();
-
-      const beforeTaker = await usdcToken.balanceOf(taker.address);
-      const beforeManager = await usdcToken.balanceOf(managerFeeRecipient.address);
-
-      const ts = await blockchain.getCurrentTimestamp();
-      const proof = ethers.utils.defaultAbiCoder.encode(
-        ["uint256", "uint256", "bytes32", "bytes32", "bytes32"],
-        [usdc(50), ts, payeeDetails, Currency.USD, intentHash]
-      );
-
-      await orchestrator.connect(taker.wallet).fulfillIntent({
-        paymentProof: proof,
-        intentHash,
-        verificationData: "0x",
-        postIntentHookData: "0x",
-      });
-
-      const afterTaker = await usdcToken.balanceOf(taker.address);
-      const afterManager = await usdcToken.balanceOf(managerFeeRecipient.address);
-
-      const releaseAmount = usdc(50); // conversionRate 1.0
-      const expectedManagerFee = releaseAmount.mul(ether(0.01)).div(ether(1));
-
-      expect(afterManager.sub(beforeManager)).to.eq(expectedManagerFee);
-      expect(afterTaker.sub(beforeTaker)).to.eq(releaseAmount.sub(expectedManagerFee));
-    });
-  });
-
-  describe("manager fee snapshot and event ordering", () => {
     let rateManagerId: string;
-    let subjectTxReceipt: any;
+    let signalReceipt: any;
+    let signaledIntentHash: string;
 
     async function subjectSignalTx() {
       const tx = await orchestrator.connect(taker.wallet).signalIntent({
@@ -288,52 +249,67 @@ describe("DelegatedRateManagement (MVP)", () => {
         postIntentHook: ADDRESS_ZERO,
         data: "0x",
       });
-      subjectTxReceipt = await tx.wait();
+      signalReceipt = await tx.wait();
+      signaledIntentHash = signalReceipt.events?.find((e: any) => e.event === "IntentSignaled")?.args?.intentHash;
     }
 
     beforeEach(async () => {
-      await createDeposit(ether(1));
-      rateManagerId = await createRateManagerAndGetId({ fee: ether(0.01) });
-      await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ether(1));
+      await createDeposit(ether(1.0));
+      rateManagerId = await createRateManagerAndGetId({ fee: ether(0.01) }); // 1%
+      await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ether(1.0));
       await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
       await verifier.setShouldVerifyPayment(true);
-      subjectConversionRate = ether(1);
+      subjectConversionRate = ether(1.0);
     });
 
     it("emits fee event last and snapshots fee at signal", async () => {
       await subjectSignalTx();
-      const idxIntent = subjectTxReceipt.events.findIndex((e: any) => e.event === "IntentSignaled");
-      const idxFee = subjectTxReceipt.events.findIndex((e: any) => e.event === "IntentManagerFeeUpdated");
+      const idxIntent = signalReceipt.events.findIndex((e: any) => e.event === "IntentSignaled");
+      const idxFee = signalReceipt.events.findIndex((e: any) => e.event === "IntentManagerFeeUpdated");
       expect(idxFee).to.be.greaterThan(idxIntent);
-      const intentHash = subjectTxReceipt.events.find((e: any) => e.event === "IntentSignaled").args.intentHash;
 
-      // Update manager fee after signal; fulfill should still use snapshot (1%)
+      // Change manager fee after signal; fulfill should still use 1% snapshot
       const idAfter = await escrow.getDepositRateManager(0);
       await rateManagerRegistry.connect(manager.wallet).setFee(idAfter, ether(0.02));
-
-      const beforeMgr = await usdcToken.balanceOf(managerFeeRecipient.address);
-      const beforeTaker = await usdcToken.balanceOf(taker.address);
 
       const ts = await blockchain.getCurrentTimestamp();
       const proof = ethers.utils.defaultAbiCoder.encode(
         ["uint256", "uint256", "bytes32", "bytes32", "bytes32"],
-        [usdc(50), ts, payeeDetails, Currency.USD, intentHash]
+        [usdc(50), ts, payeeDetails, Currency.USD, signaledIntentHash]
+      );
+      const beforeMgr = await usdcToken.balanceOf(managerFeeRecipient.address);
+      await orchestrator.connect(taker.wallet).fulfillIntent({ paymentProof: proof, intentHash: signaledIntentHash, verificationData: "0x", postIntentHookData: "0x" });
+      const afterMgr = await usdcToken.balanceOf(managerFeeRecipient.address);
+      const expectedManagerFee = usdc(50).mul(ether(0.01)).div(ether(1));
+      expect(afterMgr.sub(beforeMgr)).to.eq(expectedManagerFee);
+    });
+
+    it("transfers manager fee on fulfillment", async () => {
+      await subjectSignalTx();
+      const beforeTaker = await usdcToken.balanceOf(taker.address);
+      const beforeManager = await usdcToken.balanceOf(managerFeeRecipient.address);
+
+      const ts = await blockchain.getCurrentTimestamp();
+      const proof = ethers.utils.defaultAbiCoder.encode(
+        ["uint256", "uint256", "bytes32", "bytes32", "bytes32"],
+        [usdc(50), ts, payeeDetails, Currency.USD, signaledIntentHash]
       );
 
       await orchestrator.connect(taker.wallet).fulfillIntent({
         paymentProof: proof,
-        intentHash,
+        intentHash: signaledIntentHash,
         verificationData: "0x",
         postIntentHookData: "0x",
       });
 
-      const afterMgr = await usdcToken.balanceOf(managerFeeRecipient.address);
       const afterTaker = await usdcToken.balanceOf(taker.address);
+      const afterManager = await usdcToken.balanceOf(managerFeeRecipient.address);
 
       const releaseAmount = usdc(50);
       const expectedManagerFee = releaseAmount.mul(ether(0.01)).div(ether(1));
-      expect(afterMgr.sub(beforeMgr)).to.eq(expectedManagerFee);
+      expect(afterManager.sub(beforeManager)).to.eq(expectedManagerFee);
       expect(afterTaker.sub(beforeTaker)).to.eq(releaseAmount.sub(expectedManagerFee));
     });
   });
+
 });
