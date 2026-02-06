@@ -145,7 +145,9 @@ describe("DepositRateManagerHookV1", () => {
         await hook.connect(manager.wallet).setMinLiquidity(rateManagerId, usdc(50));
       });
       it("emits deposit updated", async () => {
-        await expect(escrow.connect(depositor.wallet).setDepositRateManager(0, registry.address, rateManagerId)).to.emit(escrow, "DepositRateManagerUpdated");
+        await expect(escrow.connect(depositor.wallet).setDepositRateManager(0, registry.address, rateManagerId))
+          .to.emit(escrow, "DepositRateManagerUpdated")
+          .withArgs(0, registry.address, rateManagerId);
       });
     });
   });

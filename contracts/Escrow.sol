@@ -342,7 +342,7 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
 
         depositRateManagerRegistryByDeposit[_depositId] = _registry;
         depositRateManagerId[_depositId] = _rateManagerId;
-        emit DepositRateManagerUpdated(_depositId, msg.sender, _rateManagerId);
+        emit DepositRateManagerUpdated(_depositId, _registry, _rateManagerId);
     }
 
     /**
@@ -354,9 +354,10 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
         Deposit storage deposit = deposits[_depositId];
         if (deposit.depositor != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.depositor);
 
+        address prevRegistry = depositRateManagerRegistryByDeposit[_depositId];
         delete depositRateManagerRegistryByDeposit[_depositId];
         delete depositRateManagerId[_depositId];
-        emit DepositRateManagerUpdated(_depositId, msg.sender, 0);
+        emit DepositRateManagerUpdated(_depositId, prevRegistry, bytes32(0));
     }
 
     /* ============ Deposit Owner OR Delegate Only (External Functions) ============ */

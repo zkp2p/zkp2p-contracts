@@ -145,7 +145,7 @@ describe("Escrow — rate manager", () => {
     });
 
     it("emits and stores rate manager id; hook is invoked", async () => {
-      await expect(subject()).to.emit(escrow, "DepositRateManagerUpdated");
+      await expect(subject()).to.emit(escrow, "DepositRateManagerUpdated").withArgs(subjectDepositId, subjectRegistry, subjectRateManagerId);
       const stored = await escrow.getDepositRateManager(subjectDepositId);
       expect(stored).to.eq(subjectRateManagerId);
     });
