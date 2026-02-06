@@ -196,6 +196,129 @@ describe("Escrow — rate manager", () => {
     });
   });
 
+  describe("#clearDepositRateManager", () => {
+    let subjectDepositId: number;
+    let subjectCaller: any;
+    let rateManagerId: string;
+
+    async function subject() {
+      return escrow.connect(subjectCaller.wallet).clearDepositRateManager(subjectDepositId);
+    }
+
+    describe("when a manager is set", () => {
+      beforeEach(async () => {
+        await seedDeposit(ether(1.0));
+        subjectDepositId = 0;
+
+        // Create a manager and opt-in
+        rateManagerId = await createRateManagerAndGetId(registry, {
+          manager: manager.address,
+          feeRecipient: managerFeeRecipient.address,
+          maxFee: ether(0.05),
+          fee: 0,
+          depositHook: ADDRESS_ZERO,
+          name: "n",
+          uri: "u",
+        });
+        await escrow.connect(depositor.wallet).setDepositRateManager(subjectDepositId, registry.address,
+          rateManagerId);
+
+        subjectCaller = depositor;
+      });
+
+      it("emits with previous registry and zeroed id", async () => {
+        await expect(subject())
+          .to.emit(escrow, "DepositRateManagerUpdated")
+          .withArgs(subjectDepositId, registry.address, ethers.constants.HashZero);
+      });
+
+      it("clears stored manager id and fee snapshot source", async () => {
+        await subject();
+        const id = await escrow.getDepositRateManager(subjectDepositId);
+        expect(id).to.eq(ethers.constants.HashZero);
+
+        const [recipient, fee] = await escrow.getDepositManagerFee(subjectDepositId);
+        expect(recipient).to.eq(ADDRESS_ZERO);
+        expect(fee).to.eq(0);
+      });
+
+      it("restores depositor floor as effective min rate", async () => {
+        // Manager raises min above floor, then clearing should fall back to depositor's floor.
+        await registry.connect(manager.wallet).setMinRate(rateManagerId, venmoPaymentMethod,
+          Currency.USD, ether(1.1));
+        expect(
+          await escrow.getDepositCurrencyMinRate(subjectDepositId, venmoPaymentMethod, Currency.USD)
+        ).to.eq(ether(1.1));
+
+        await subject();
+
+        expect(
+          await escrow.getDepositCurrencyMinRate(subjectDepositId, venmoPaymentMethod, Currency.USD)
+        ).to.eq(ether(1.0));
+      });
+
+      describe("when caller is not depositor", () => {
+        beforeEach(async () => {
+          subjectCaller = manager;
+        });
+        it("should revert", async () => {
+          await expect(subject()).to.be.revertedWithCustomError(escrow, "UnauthorizedCaller");
+        });
+      });
+
+    });
+
+    describe("when no manager is set", () => {
+      beforeEach(async () => {
+        await seedDeposit(ether(1.0));
+        subjectDepositId = 0;
+        subjectCaller = depositor;
+        // no opt-in to any manager
+      });
+
+      it("emits with zero registry and zeroed id, remains idempotent", async () => {
+        await expect(subject())
+          .to.emit(escrow, "DepositRateManagerUpdated")
+          .withArgs(subjectDepositId, ADDRESS_ZERO, ethers.constants.HashZero);
+
+        const id = await escrow.getDepositRateManager(subjectDepositId);
+        expect(id).to.eq(ethers.constants.HashZero);
+      });
+    });
+  });
+
+  describe("#getDepositManagerFee — when manager was set then cleared", () => {
+    let subjectDepositId: number;
+
+    async function subject(): Promise<[string, BigNumber]> {
+      return escrow.getDepositManagerFee(subjectDepositId);
+    }
+
+    beforeEach(async () => {
+      await seedDeposit(ether(1.0));
+      subjectDepositId = 0;
+
+      const rateManagerId = await createRateManagerAndGetId(registry, {
+        manager: manager.address,
+        feeRecipient: managerFeeRecipient.address,
+        maxFee: ether(0.05),
+        fee: ether(0.01),
+        depositHook: ADDRESS_ZERO,
+        name: "n",
+        uri: "u",
+      });
+
+      await escrow.connect(depositor.wallet).setDepositRateManager(subjectDepositId, registry.address, rateManagerId);
+      await escrow.connect(depositor.wallet).clearDepositRateManager(subjectDepositId);
+    });
+
+    it("returns zero recipient and zero fee", async () => {
+      const [recipient, fee] = await subject();
+      expect(recipient).to.eq(ADDRESS_ZERO);
+      expect(fee).to.eq(0);
+    });
+  });
+
   describe("#getDepositCurrencyMinRate", () => {
     let subjectDepositId: number;
     let subjectPaymentMethod: BytesLike;
@@ -215,6 +338,39 @@ describe("Escrow — rate manager", () => {
     it("returns depositor floor when no manager", async () => {
       const result = await subject();
       expect(result).to.eq(ether(1.0));
+    });
+
+    describe("when manager was set then cleared", () => {
+      let rateManagerId: string;
+
+      beforeEach(async () => {
+        rateManagerId = await createRateManagerAndGetId(registry, {
+          manager: manager.address,
+          feeRecipient: managerFeeRecipient.address,
+          maxFee: ether(0.05),
+          fee: 0,
+          depositHook: ADDRESS_ZERO,
+          name: "n",
+          uri: "u",
+        });
+
+        await escrow.connect(depositor.wallet).setDepositRateManager(subjectDepositId, registry.address, rateManagerId);
+
+        // show manager value before clearing
+        await registry.connect(manager.wallet).setMinRate(rateManagerId, subjectPaymentMethod, subjectCurrency, ether(1.1));
+      });
+
+      it("returns the depositor floor after clearing", async () => {
+        await escrow.connect(depositor.wallet).clearDepositRateManager(subjectDepositId);
+        expect(await subject()).to.eq(ether(1.0));
+      });
+
+      it("emits DepositRateManagerUpdated with prev registry and zero id on clear", async () => {
+        await expect(
+          escrow.connect(depositor.wallet).clearDepositRateManager(subjectDepositId)
+        ).to.emit(escrow, "DepositRateManagerUpdated")
+          .withArgs(subjectDepositId, registry.address, ethers.constants.HashZero);
+      });
     });
 
     describe("when manager disables pair", () => {

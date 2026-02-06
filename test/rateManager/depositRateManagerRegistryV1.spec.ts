@@ -167,6 +167,15 @@ describe("DepositRateManagerRegistryV1", () => {
       });
     });
 
+    describe("reverts when newManager is zero", () => {
+      beforeEach(() => {
+        subjectManager = ADDRESS_ZERO;
+      });
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("Invalid manager");
+      });
+    });
+
     it("updates fields", async () => {
       await subject();
       const cfg = await registry.getRateManager(subjectId);
@@ -201,6 +210,18 @@ describe("DepositRateManagerRegistryV1", () => {
     beforeEach(async () => {
       subjectId = await createRateManagerAndGetId();
       subjectFee = ether(0.02);
+    });
+
+    describe("#setFee when id not found", () => {
+      beforeEach(() => {
+        subjectId = ethers.utils.keccak256(
+          ethers.utils.toUtf8Bytes("does-not-exist")
+        );
+        subjectFee = ether(0.01);
+      });
+      it("reverts when rate manager does not exist", async () => {
+        await expect(subject()).to.be.revertedWith("Rate manager does not exist");
+      });
     });
 
     describe("reverts when caller is not manager", () => {
@@ -339,6 +360,16 @@ describe("DepositRateManagerRegistryV1", () => {
     describe("reverts on top-level length mismatch", () => {
       beforeEach(() => {
         subjectPMs = [subjectPMs[0], subjectPMs[0]];
+      });
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("Array length mismatch");
+      });
+    });
+
+    describe("reverts when paymentMethods.length != minRatesArr.length", () => {
+      beforeEach(() => {
+        // Keep currencies aligned with PMs, but change minRates length
+        subjectMins = [[ether(2)], [ether(3)]];
       });
       it("should revert", async () => {
         await expect(subject()).to.be.revertedWith("Array length mismatch");
