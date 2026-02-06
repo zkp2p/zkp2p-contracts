@@ -312,4 +312,59 @@ describe("DelegatedRateManagement (MVP)", () => {
     });
   });
 
+  describe("manager fee cap (signalIntent)", () => {
+    async function deployBypassRegistryMock(params: { fee: BigNumber; recipient: string; minRate?: BigNumber; id?: string }) {
+      const Factory = await ethers.getContractFactory("DepositRateManagerRegistryBypassMock", owner.wallet);
+      const mockId = params.id ?? ethers.utils.keccak256(ethers.utils.toUtf8Bytes("mock-id"));
+      const min = params.minRate ?? ether(1.0);
+      const mock = await Factory.deploy(mockId, params.recipient, params.fee, min);
+      return { mock, mockId };
+    }
+
+    let subjectConversionRate: BigNumber;
+    async function subjectSignal() {
+      const tx = await orchestrator.connect(taker.wallet).signalIntent({
+        escrow: escrow.address,
+        depositId: ZERO,
+        amount: usdc(50),
+        to: taker.address,
+        paymentMethod,
+        fiatCurrency: Currency.USD,
+        conversionRate: subjectConversionRate,
+        referrer: ADDRESS_ZERO,
+        referrerFee: ZERO,
+        gatingServiceSignature: "0x",
+        signatureExpiration: ZERO,
+        postIntentHook: ADDRESS_ZERO,
+        data: "0x",
+      });
+      const rcpt = await tx.wait();
+      const ev = rcpt.events?.find((e: any) => e.event === "IntentSignaled");
+      return ev?.args?.intentHash as string;
+    }
+
+    beforeEach(async () => {
+      await createDeposit(ether(1.0));
+      subjectConversionRate = ether(1.0);
+    });
+
+    it("reverts when manager fee > MAX_MANAGER_FEE at signal", async () => {
+      const { mock, mockId } = await deployBypassRegistryMock({
+        fee: ether(0.20), // 20% > 5% cap
+        recipient: managerFeeRecipient.address,
+      });
+      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, mock.address, mockId);
+      await expect(subjectSignal()).to.be.revertedWithCustomError(orchestrator, "FeeExceedsMaximum");
+    });
+
+    it("allows signal when manager fee == MAX_MANAGER_FEE", async () => {
+      const { mock, mockId } = await deployBypassRegistryMock({
+        fee: ether(0.05), // equal to the 5% cap
+        recipient: managerFeeRecipient.address,
+      });
+      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, mock.address, mockId);
+      await expect(subjectSignal()).to.not.be.reverted;
+    });
+  });
+
 });

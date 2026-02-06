@@ -120,6 +120,8 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         );
 
         (address managerFeeRecipient, uint256 managerFee) = IEscrow(_params.escrow).getDepositManagerFee(_params.depositId);
+        // Enforce manager fee cap regardless of registry implementation
+        if (managerFee > MAX_MANAGER_FEE) revert FeeExceedsMaximum(managerFee, MAX_MANAGER_FEE);  // policy cap (e.g., 5%)
         intentManagerFeeRecipient[intentHash] = managerFeeRecipient;
         intentManagerFee[intentHash] = managerFee;
         
