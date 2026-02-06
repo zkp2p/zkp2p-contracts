@@ -24,7 +24,6 @@ contract DepositRateManagerHookV1 is IDepositRateManagerHook {
     mapping(bytes32 => uint256) public minLiquidity; // per rateManagerId (in deposit token units)
 
     constructor(address _registry) {
-        require(_registry != address(0), "Invalid registry");
         registry = IDepositRateManagerRegistryV1(_registry);
     }
 
