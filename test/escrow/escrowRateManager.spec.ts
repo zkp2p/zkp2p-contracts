@@ -389,8 +389,8 @@ describe("Escrow — rate manager", () => {
         await registry.connect(manager.wallet).setMinRate(rateManagerId, subjectPaymentMethod, subjectCurrency, ether(1.3));
       });
 
-      it("returns 0 because currency is not listed by depositor", async () => {
-        expect(await subject()).to.eq(0);
+      it("returns the manager rate even when not listed by depositor", async () => {
+        expect(await subject()).to.eq(ether(1.3));
       });
     });
 

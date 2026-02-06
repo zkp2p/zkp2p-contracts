@@ -902,31 +902,28 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
     }
 
     function getDepositCurrencyMinRate(uint256 _depositId, bytes32 _paymentMethod, bytes32 _currencyCode) external view returns (uint256) {
-        // Gate by listing first: if currency isn't listed on this deposit/paymentMethod, it's unsupported.
+        uint256 floorRate = depositCurrencyMinRate[_depositId][_paymentMethod][_currencyCode];
+
+        // If delegated, manager defines support; when manager rate > 0, treat as supported regardless of depositor listing.
+        bytes32 rateManagerId = depositRateManagerId[_depositId];
+        if (rateManagerId != bytes32(0)) {
+            address registryAddr = depositRateManagerRegistryByDeposit[_depositId];
+            if (registryAddr == address(0)) revert RateManagerRegistryNotSet();
+
+            uint256 managerRate = IDepositRateManagerRegistryV1(registryAddr).getMinRate(rateManagerId, _paymentMethod, _currencyCode);
+            if (managerRate == 0) {
+                // Manager disables this pair for delegated deposits.
+                return 0;
+            }
+            // Manager cannot undercut depositor floor; if floor is 0, manager fully decides.
+            return managerRate > floorRate ? managerRate : floorRate;
+        }
+
+        // Not delegated: require depositor listing to be supported.
         if (!depositCurrencyListed[_depositId][_paymentMethod][_currencyCode]) {
             return 0;
         }
-
-        uint256 floorRate = depositCurrencyMinRate[_depositId][_paymentMethod][_currencyCode];
-
-        // If not delegated, the depositor's floor fully determines the min (can be zero if deactivated).
-        bytes32 rateManagerId = depositRateManagerId[_depositId];
-        if (rateManagerId == bytes32(0)) {
-            return floorRate;
-        }
-
-        // Delegated: apply manager min if set, as max(floor, manager).
-        address registryAddr = depositRateManagerRegistryByDeposit[_depositId];
-        if (registryAddr == address(0)) revert RateManagerRegistryNotSet();
-
-        uint256 managerRate = IDepositRateManagerRegistryV1(registryAddr).getMinRate(rateManagerId, _paymentMethod, _currencyCode);
-        if (managerRate == 0) {
-            // Disabled by manager (acts as a manager-level allowlist).
-            return 0;
-        }
-
-        // Manager cannot undercut the depositor's floor; when floor is 0, manager fully decides.
-        return managerRate > floorRate ? managerRate : floorRate;
+        return floorRate;
     }
 
     function getDepositRateManager(uint256 _depositId) external view returns (bytes32) {
