@@ -321,6 +321,42 @@ describe("Escrow — rate manager", () => {
 
   describe("#getDepositCurrencyMinRate", () => {
 
+    describe("when manager is set but payment method is inactive", () => {
+      let subjectDepositId: number;
+      let subjectPaymentMethod: BytesLike;
+      let subjectCurrency: BytesLike;
+      let rateManagerId: string;
+
+      async function subject(): Promise<BigNumber> {
+        return escrow.getDepositCurrencyMinRate(subjectDepositId, subjectPaymentMethod, subjectCurrency);
+      }
+
+      beforeEach(async () => {
+        await seedDeposit(ether(1.0));
+        subjectDepositId = 0;
+        subjectPaymentMethod = venmoPaymentMethod;
+        subjectCurrency = Currency.USD;
+
+        rateManagerId = await createRateManagerAndGetId(registry, {
+          manager: manager.address,
+          feeRecipient: managerFeeRecipient.address,
+          maxFee: ether(0.05),
+          fee: 0,
+          depositHook: ADDRESS_ZERO,
+          name: "n",
+          uri: "u",
+        });
+
+        await escrow.connect(depositor.wallet).setPaymentMethodActive(subjectDepositId, subjectPaymentMethod, false);
+        await escrow.connect(depositor.wallet).setDepositRateManager(subjectDepositId, registry.address, rateManagerId);
+        await registry.connect(manager.wallet).setMinRate(rateManagerId, subjectPaymentMethod, subjectCurrency, ether(1.25));
+      });
+
+      it("returns 0 when payment method inactive at deposit", async () => {
+        expect(await subject()).to.eq(0);
+      });
+    });
+
     describe("when listed and depositor floor is 0 and manager rate is > 0", () => {
       let subjectDepositId: number;
       let subjectPaymentMethod: BytesLike;

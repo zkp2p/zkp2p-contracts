@@ -904,9 +904,13 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
     function getDepositCurrencyMinRate(uint256 _depositId, bytes32 _paymentMethod, bytes32 _currencyCode) external view returns (uint256) {
         uint256 floorRate = depositCurrencyMinRate[_depositId][_paymentMethod][_currencyCode];
 
-        // If delegated, manager defines support; when manager rate > 0, treat as supported regardless of depositor listing.
+        // If delegated, manager defines currency support; depositor still gates payment method support.
         bytes32 rateManagerId = depositRateManagerId[_depositId];
         if (rateManagerId != bytes32(0)) {
+            // Payment method must be active at the deposit level.
+            if (!depositPaymentMethodActive[_depositId][_paymentMethod]) {
+                return 0;
+            }
             address registryAddr = depositRateManagerRegistryByDeposit[_depositId];
             if (registryAddr == address(0)) revert RateManagerRegistryNotSet();
 
@@ -919,10 +923,7 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
             return managerRate > floorRate ? managerRate : floorRate;
         }
 
-        // Not delegated: require depositor listing to be supported.
-        if (!depositCurrencyListed[_depositId][_paymentMethod][_currencyCode]) {
-            return 0;
-        }
+        // Not delegated: return depositor floor directly (0 means unsupported).
         return floorRate;
     }
 
