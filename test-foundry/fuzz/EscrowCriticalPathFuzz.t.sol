@@ -8,6 +8,7 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Escrow } from "../../contracts/Escrow.sol";
 import { Orchestrator } from "../../contracts/Orchestrator.sol";
+import { DepositRateManagerController } from "../../contracts/DepositRateManagerController.sol";
 import { IEscrow } from "../../contracts/interfaces/IEscrow.sol";
 import { IOrchestrator } from "../../contracts/interfaces/IOrchestrator.sol";
 import { IPostIntentHook } from "../../contracts/interfaces/IPostIntentHook.sol";
@@ -42,6 +43,7 @@ contract EscrowCriticalPathFuzz is Test {
     // Contracts
     Escrow public escrow;
     Orchestrator public orchestrator;
+    DepositRateManagerController public rateManagerController;
     USDCMock public usdc;
     PaymentVerifierMock public venmoVerifier;
     PaymentVerifierMock public paypalVerifier;
@@ -95,6 +97,10 @@ contract EscrowCriticalPathFuzz is Test {
             1e16, // protocol fee 1%
             protocolFeeRecipient
         );
+        vm.prank(owner);
+        rateManagerController = new DepositRateManagerController();
+        vm.prank(owner);
+        orchestrator.setDepositRateManagerController(address(rateManagerController));
         
         // Deploy escrow
         vm.prank(owner);
