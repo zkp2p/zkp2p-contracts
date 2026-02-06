@@ -197,6 +197,27 @@ describe("DepositRateManagerRegistryV1", () => {
       });
     });
 
+    describe("allows zero feeRecipient when existing fee is 0", () => {
+      beforeEach(async () => {
+        // Create a new manager with zero fee and zero recipient (valid at creation)
+        subjectId = await createRateManagerAndGetId({ fee: ether(0), feeRecipient: ADDRESS_ZERO });
+        subjectManager = manager.address;
+        subjectRecipient = ADDRESS_ZERO;
+        subjectHook = ADDRESS_ZERO;
+        subjectName = "n-zero";
+        subjectUri = "u-zero";
+      });
+      it("updates config with zero recipient without revert", async () => {
+        await subject();
+        const cfg = await registry.getRateManager(subjectId);
+        expect(cfg.fee).to.eq(0);
+        expect(cfg.feeRecipient).to.eq(ADDRESS_ZERO);
+        expect(cfg.manager).to.eq(subjectManager);
+        expect(cfg.name).to.eq(subjectName);
+        expect(cfg.uri).to.eq(subjectUri);
+      });
+    });
+
   });
 
   describe("#setFee", () => {
@@ -252,6 +273,20 @@ describe("DepositRateManagerRegistryV1", () => {
       });
       it("should revert", async () => {
         await expect(subject()).to.be.revertedWith("Invalid fee recipient");
+      });
+    });
+
+    describe("allows setting fee to 0 when feeRecipient is zero", () => {
+      beforeEach(async () => {
+        // Manager created with zero fee and zero recipient
+        subjectId = await createRateManagerAndGetId({ fee: ether(0), feeRecipient: ADDRESS_ZERO });
+        subjectFee = ether(0);
+      });
+      it("updates fee to 0 without requiring recipient", async () => {
+        await subject();
+        const [fee, recipient] = await registry.getFeeAndRecipient(subjectId);
+        expect(fee).to.eq(0);
+        expect(recipient).to.eq(ADDRESS_ZERO);
       });
     });
 
