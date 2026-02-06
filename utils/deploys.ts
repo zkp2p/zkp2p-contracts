@@ -94,7 +94,8 @@ export default class DeployHelper {
     relayerRegistry: Address,
     protocolFee: BigNumber,
     protocolFeeRecipient: Address,
-    depositRateManagerController?: Address
+    depositRateManagerController?: Address,
+    controllerSetter?: Signer
   ): Promise<Orchestrator> {
     const orchestrator = await new Orchestrator__factory(this._deployerSigner).deploy(
       owner,
@@ -107,7 +108,13 @@ export default class DeployHelper {
       protocolFeeRecipient
     );
     const controllerAddress = depositRateManagerController ?? (await this.deployDepositRateManagerController()).address;
-    await orchestrator.setDepositRateManagerController(controllerAddress);
+    const deployerAddress = await this._deployerSigner.getAddress();
+    const setter =
+      controllerSetter ??
+      (deployerAddress.toLowerCase() === owner.toLowerCase() ? this._deployerSigner : undefined);
+    if (setter) {
+      await orchestrator.connect(setter).setDepositRateManagerController(controllerAddress);
+    }
     return orchestrator;
   }
 
