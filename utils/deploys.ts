@@ -44,6 +44,7 @@ import { PostIntentHookRegistry__factory } from "../typechain/factories/contract
 import { RelayerRegistry__factory } from "../typechain/factories/contracts/registries";
 import { EscrowRegistry__factory } from "../typechain/factories/contracts/registries";
 import { DepositRateManagerRegistryV1__factory } from "../typechain/factories/contracts/registries/DepositRateManagerRegistryV1__factory";
+import { DepositRateManagerController__factory } from "../typechain/factories/contracts/DepositRateManagerController.sol/DepositRateManagerController__factory";
 import { Escrow__factory } from "../typechain/factories/contracts/index";
 import { ProtocolViewer__factory } from "../typechain/factories/contracts/index";
 import { Orchestrator__factory } from "../typechain/factories/contracts/index";
@@ -51,7 +52,7 @@ import { UnifiedPaymentVerifier__factory } from "../typechain/factories/contract
 import { SimpleAttestationVerifier__factory } from "../typechain/factories/contracts/unifiedVerifier";
 import { RateManagerDepositHookMock__factory } from "../typechain/factories/contracts/mocks/RateManagerDepositHookMock__factory";
 import { DepositRateManagerHookV1__factory } from "../typechain/factories/contracts/hooks/DepositRateManagerHookV1__factory";
-import { DepositRateManagerRegistryV1, RateManagerDepositHookMock, DepositRateManagerHookV1 } from "../typechain";
+import { DepositRateManagerRegistryV1, DepositRateManagerController, RateManagerDepositHookMock, DepositRateManagerHookV1 } from "../typechain";
 
 export default class DeployHelper {
   private _deployerSigner: Signer;
@@ -92,9 +93,10 @@ export default class DeployHelper {
     postIntentHookRegistry: Address,
     relayerRegistry: Address,
     protocolFee: BigNumber,
-    protocolFeeRecipient: Address
+    protocolFeeRecipient: Address,
+    depositRateManagerController?: Address
   ): Promise<Orchestrator> {
-    return await new Orchestrator__factory(this._deployerSigner).deploy(
+    const orchestrator = await new Orchestrator__factory(this._deployerSigner).deploy(
       owner,
       chainId.toString(),
       escrowRegistry,
@@ -104,6 +106,9 @@ export default class DeployHelper {
       protocolFee,
       protocolFeeRecipient
     );
+    const controllerAddress = depositRateManagerController ?? (await this.deployDepositRateManagerController()).address;
+    await orchestrator.setDepositRateManagerController(controllerAddress);
+    return orchestrator;
   }
 
   public async deployProtocolViewer(escrowAddress: Address, orchestratorAddress: Address): Promise<ProtocolViewer> {
@@ -165,6 +170,10 @@ export default class DeployHelper {
   // Deposit Rate Manager helpers
   public async deployDepositRateManagerRegistryV1(): Promise<DepositRateManagerRegistryV1> {
     return await new DepositRateManagerRegistryV1__factory(this._deployerSigner).deploy();
+  }
+
+  public async deployDepositRateManagerController(): Promise<DepositRateManagerController> {
+    return await new DepositRateManagerController__factory(this._deployerSigner).deploy();
   }
 
   public async deployRateManagerDepositHookMock(): Promise<RateManagerDepositHookMock> {

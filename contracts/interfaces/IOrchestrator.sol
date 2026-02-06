@@ -83,6 +83,7 @@ interface IOrchestrator {
     event PostIntentHookRegistryUpdated(address indexed postIntentHookRegistry);
     event RelayerRegistryUpdated(address indexed relayerRegistry);
     event EscrowRegistryUpdated(address indexed escrowRegistry);
+    event DepositRateManagerControllerUpdated(address indexed depositRateManagerController);
 
     event ProtocolFeeUpdated(uint256 protocolFee);
     event ProtocolFeeRecipientUpdated(address indexed protocolFeeRecipient);
@@ -122,6 +123,7 @@ interface IOrchestrator {
     error InvalidSignature();
     error SignatureExpired(uint256 expiration, uint256 currentTime);
     error PartialReleaseNotAllowedYet(uint256 currentTime, uint256 allowedTime);
+    error DepositRateManagerControllerNotSet();
 
     // Verification errors
     error PaymentVerificationFailed();

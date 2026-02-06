@@ -19,6 +19,7 @@ import {
   USDCMock,
   PaymentVerifierMock,
   DepositRateManagerRegistryV1,
+  DepositRateManagerController,
 } from "@utils/contracts";
 
 const expect = getWaffleExpect();
@@ -43,6 +44,7 @@ describe("DelegatedRateManagement (MVP)", () => {
   let verifier: PaymentVerifierMock;
 
   let rateManagerRegistry: DepositRateManagerRegistryV1;
+  let rateManagerController: DepositRateManagerController;
 
   let chainId: BigNumber = ONE;
   let paymentMethod: BytesLike;
@@ -96,6 +98,8 @@ describe("DelegatedRateManagement (MVP)", () => {
     // Deploy + wire the rate manager registry
     const registryFactory = await ethers.getContractFactory("DepositRateManagerRegistryV1", owner.wallet);
     rateManagerRegistry = await registryFactory.deploy();
+    rateManagerController = await deployer.deployDepositRateManagerController();
+    await orchestrator.connect(owner.wallet).setDepositRateManagerController(rateManagerController.address);
 
     payeeDetails = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("payeeDetails"));
   });
@@ -173,7 +177,7 @@ describe("DelegatedRateManagement (MVP)", () => {
         await createDeposit(ether(1.0));
         rateManagerId = await createRateManagerAndGetId({ fee: ZERO });
         await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ether(1.05));
-        await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
+        await rateManagerController.connect(depositor.wallet).setDepositRateManager(escrow.address, ZERO, rateManagerRegistry.address, rateManagerId);
       });
 
       describe("when below manager min", () => {
@@ -197,7 +201,7 @@ describe("DelegatedRateManagement (MVP)", () => {
         await createDeposit(ether(1.05));
         rateManagerId = await createRateManagerAndGetId({ fee: ZERO });
         await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ether(1.02));
-        await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
+        await rateManagerController.connect(depositor.wallet).setDepositRateManager(escrow.address, ZERO, rateManagerRegistry.address, rateManagerId);
       });
       describe("when below floor", () => {
         beforeEach(async () => { subjectConversionRate = ether(1.03); });
@@ -219,7 +223,7 @@ describe("DelegatedRateManagement (MVP)", () => {
         await createDeposit(ether(1.0));
         rateManagerId = await createRateManagerAndGetId({ fee: ZERO });
         await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ZERO);
-        await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
+        await rateManagerController.connect(depositor.wallet).setDepositRateManager(escrow.address, ZERO, rateManagerRegistry.address, rateManagerId);
         subjectConversionRate = ether(1.0);
       });
       it("should revert with CurrencyNotSupported", async () => {
@@ -257,7 +261,7 @@ describe("DelegatedRateManagement (MVP)", () => {
       await createDeposit(ether(1.0));
       rateManagerId = await createRateManagerAndGetId({ fee: ether(0.01) }); // 1%
       await rateManagerRegistry.connect(manager.wallet).setMinRate(rateManagerId, paymentMethod, Currency.USD, ether(1.0));
-      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, rateManagerRegistry.address, rateManagerId);
+      await rateManagerController.connect(depositor.wallet).setDepositRateManager(escrow.address, ZERO, rateManagerRegistry.address, rateManagerId);
       await verifier.setShouldVerifyPayment(true);
       subjectConversionRate = ether(1.0);
     });
@@ -269,8 +273,8 @@ describe("DelegatedRateManagement (MVP)", () => {
       expect(idxFee).to.be.greaterThan(idxIntent);
 
       // Change manager fee after signal; fulfill should still use 1% snapshot
-      const idAfter = await escrow.getDepositRateManager(0);
-      await rateManagerRegistry.connect(manager.wallet).setFee(idAfter, ether(0.02));
+      const stored = await rateManagerController.getDepositRateManager(escrow.address, 0);
+      await rateManagerRegistry.connect(manager.wallet).setFee(stored.rateManagerId, ether(0.02));
 
       const ts = await blockchain.getCurrentTimestamp();
       const proof = ethers.utils.defaultAbiCoder.encode(
@@ -353,7 +357,7 @@ describe("DelegatedRateManagement (MVP)", () => {
         fee: ether(0.20), // 20% > 5% cap
         recipient: managerFeeRecipient.address,
       });
-      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, mock.address, mockId);
+      await rateManagerController.connect(depositor.wallet).setDepositRateManager(escrow.address, ZERO, mock.address, mockId);
       await expect(subjectSignal()).to.be.revertedWithCustomError(orchestrator, "FeeExceedsMaximum");
     });
 
@@ -362,7 +366,7 @@ describe("DelegatedRateManagement (MVP)", () => {
         fee: ether(0.05), // equal to the 5% cap
         recipient: managerFeeRecipient.address,
       });
-      await escrow.connect(depositor.wallet).setDepositRateManager(ZERO, mock.address, mockId);
+      await rateManagerController.connect(depositor.wallet).setDepositRateManager(escrow.address, ZERO, mock.address, mockId);
       await expect(subjectSignal()).to.not.be.reverted;
     });
   });

@@ -6,7 +6,7 @@ import DeployHelper from "@utils/deploys";
 import { ADDRESS_ZERO, ZERO } from "@utils/constants";
 import { ether, usdc } from "@utils/common";
 import { Currency } from "@utils/protocolUtils";
-import { DepositRateManagerRegistryV1, DepositRateManagerHookV1 } from "@utils/contracts";
+import { DepositRateManagerRegistryV1, DepositRateManagerHookV1, DepositRateManagerController } from "@utils/contracts";
 
 const expect = getWaffleExpect();
 
@@ -18,6 +18,7 @@ describe("DepositRateManagerHookV1", () => {
   let escrow: any;
   let registry: DepositRateManagerRegistryV1;
   let hook: DepositRateManagerHookV1;
+  let controller: DepositRateManagerController;
   let usdcToken: any;
   let orchestrator: any;
   let verifier: any;
@@ -50,6 +51,7 @@ describe("DepositRateManagerHookV1", () => {
 
     registry = await deployer.deployDepositRateManagerRegistryV1();
     hook = await deployer.deployDepositRateManagerHookV1(registry.address);
+    controller = await deployer.deployDepositRateManagerController();
 
     // Common values
     payeeDetailsHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("p"));
@@ -136,7 +138,7 @@ describe("DepositRateManagerHookV1", () => {
         await hook.connect(manager.wallet).setMinLiquidity(rateManagerId, usdc(200));
       });
       it("should revert", async () => {
-        await expect(escrow.connect(depositor.wallet).setDepositRateManager(0, registry.address, rateManagerId)).to.be.revertedWithCustomError(hook, "BelowMinLiquidity");
+        await expect(controller.connect(depositor.wallet).setDepositRateManager(escrow.address, 0, registry.address, rateManagerId)).to.be.revertedWithCustomError(hook, "BelowMinLiquidity");
       });
     });
 
@@ -145,9 +147,9 @@ describe("DepositRateManagerHookV1", () => {
         await hook.connect(manager.wallet).setMinLiquidity(rateManagerId, usdc(50));
       });
       it("emits deposit updated", async () => {
-        await expect(escrow.connect(depositor.wallet).setDepositRateManager(0, registry.address, rateManagerId))
-          .to.emit(escrow, "DepositRateManagerUpdated")
-          .withArgs(0, registry.address, rateManagerId);
+        await expect(controller.connect(depositor.wallet).setDepositRateManager(escrow.address, 0, registry.address, rateManagerId))
+          .to.emit(controller, "DepositRateManagerUpdated")
+          .withArgs(escrow.address, 0, registry.address, rateManagerId);
       });
     });
   });

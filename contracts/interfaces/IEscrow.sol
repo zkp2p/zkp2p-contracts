@@ -81,8 +81,6 @@ interface IEscrow {
     event DepositDelegateSet(uint256 indexed depositId, address indexed depositor, address indexed delegate);
     event DepositDelegateRemoved(uint256 indexed depositId, address indexed depositor);
 
-    event DepositRateManagerUpdated(uint256 indexed depositId, address indexed registry, bytes32 indexed rateManagerId);
-
     event MinDepositAmountSet(uint256 minDepositAmount);
 
     event OrchestratorUpdated(address indexed orchestrator);
@@ -150,10 +148,6 @@ interface IEscrow {
     error PaymentMethodNotWhitelisted(bytes32 paymentMethod);
     error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);
 
-    // Rate manager errors
-    error RateManagerRegistryNotSet();
-    error RateManagerNotFound(bytes32 rateManagerId);
-
     
     /* ============ External Functions for Orchestrator ============ */
 
@@ -169,8 +163,6 @@ interface IEscrow {
     function getDepositPaymentMethods(uint256 _depositId) external view returns (bytes32[] memory);
     function getDepositCurrencies(uint256 _depositId, bytes32 _paymentMethod) external view returns (bytes32[] memory);
     function getDepositCurrencyMinRate(uint256 _depositId, bytes32 _paymentMethod, bytes32 _currencyCode) external view returns (uint256);
-    function getDepositRateManager(uint256 _depositId) external view returns (bytes32);
-    function getDepositManagerFee(uint256 _depositId) external view returns (address recipient, uint256 fee);
     function getDepositPaymentMethodData(uint256 _depositId, bytes32 _paymentMethod) external view returns (DepositPaymentMethodData memory);
     function getDepositPaymentMethodActive(uint256 _depositId, bytes32 _paymentMethod) external view returns (bool);
     function getDepositGatingService(uint256 _depositId, bytes32 _paymentMethod) external view returns (address);

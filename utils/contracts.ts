@@ -22,6 +22,7 @@ export {
   PushPostIntentHookMock,
   ReentrantOrchestratorMock,
   DepositRateManagerRegistryV1,
+  DepositRateManagerController,
   RateManagerDepositHookMock,
   IDepositRateManagerRegistryV1,
   DepositRateManagerHookV1

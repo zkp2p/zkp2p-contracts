@@ -20,8 +20,6 @@ import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
 import { IPostIntentHookRegistry } from "./interfaces/IPostIntentHookRegistry.sol";
 import { IRelayerRegistry } from "./interfaces/IRelayerRegistry.sol";
-import { IDepositRateManagerRegistryV1 } from "./interfaces/IDepositRateManagerRegistryV1.sol";
-import { IDepositRateManagerHook } from "./interfaces/IDepositRateManagerHook.sol";
 pragma solidity ^0.8.18;
 
 /**
@@ -72,12 +70,6 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
     // Do not need to track if a currency is active; if it's min rate is 0 then it's not active
     // Track if a currency code has ever been listed for this deposit+paymentMethod (avoid contains scans and duplicates in depositCurrencies)
     mapping(uint256 => mapping(bytes32 => mapping(bytes32 => bool))) internal depositCurrencyListed;
-
-    // Optional: deposit-level rate manager configuration (shared across many deposits via a specific registry).
-    // Each deposit stores both the registry address and the manager id to avoid bricking on registry upgrades.
-    // When set, the effective min rate becomes max(deposit floor, manager min rate), and manager can disable pairs by setting 0.
-    mapping(uint256 => address) internal depositRateManagerRegistryByDeposit; // registry per deposit
-    mapping(uint256 => bytes32) internal depositRateManagerId;               // id per deposit
 
     mapping(uint256 => Deposit) internal deposits;                          // Mapping of depositIds to deposit structs
     mapping(uint256 => bytes32[]) internal depositIntentHashes;             // Mapping of depositId to array of intentHashes
@@ -314,50 +306,6 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
         delete deposit.delegate;
         
         emit DepositDelegateRemoved(_depositId, msg.sender);
-    }
-
-    /* ============ Deposit Rate Manager Management (Depositor Only) ============ */
-
-    /**
-     * @notice Allows the depositor to opt a deposit into a shared rate manager configuration.
-     * The manager can only raise the effective minimum rate; they cannot undercut the depositor's floor.
-     * @dev Manager fee and supported pairs are determined by the registry config for `_rateManagerId`.
-     *
-     * @param _depositId       The deposit ID
-     * @param _rateManagerId   The rate manager id in `DepositRateManagerRegistryV1`
-     */
-    function setDepositRateManager(uint256 _depositId, address _registry, bytes32 _rateManagerId) external whenNotPaused {
-        Deposit storage deposit = deposits[_depositId];
-        if (deposit.depositor != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.depositor);
-        if (_rateManagerId == bytes32(0)) revert ZeroValue();
-        if (_registry == address(0)) revert ZeroAddress();
-
-        IDepositRateManagerRegistryV1 registry = IDepositRateManagerRegistryV1(_registry);
-        if (!registry.isRateManager(_rateManagerId)) revert RateManagerNotFound(_rateManagerId);
-
-        address hook = registry.getDepositHook(_rateManagerId);
-        if (hook != address(0)) {
-            IDepositRateManagerHook(hook).onDepositOptIn(msg.sender, address(this), _depositId, _rateManagerId);
-        }
-
-        depositRateManagerRegistryByDeposit[_depositId] = _registry;
-        depositRateManagerId[_depositId] = _rateManagerId;
-        emit DepositRateManagerUpdated(_depositId, _registry, _rateManagerId);
-    }
-
-    /**
-     * @notice Allows the depositor to clear the rate manager for a deposit.
-     *
-     * @param _depositId The deposit ID
-     */
-    function clearDepositRateManager(uint256 _depositId) external whenNotPaused {
-        Deposit storage deposit = deposits[_depositId];
-        if (deposit.depositor != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.depositor);
-
-        address prevRegistry = depositRateManagerRegistryByDeposit[_depositId];
-        delete depositRateManagerRegistryByDeposit[_depositId];
-        delete depositRateManagerId[_depositId];
-        emit DepositRateManagerUpdated(_depositId, prevRegistry, bytes32(0));
     }
 
     /* ============ Deposit Owner OR Delegate Only (External Functions) ============ */
@@ -802,8 +750,6 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
         emit PaymentVerifierRegistryUpdated(_paymentVerifierRegistry);
     }
 
-    // Note: No global/default rate manager registry. Each deposit stores its own (registry, id).
-
     /** 
      * @notice GOVERNANCE ONLY: Sets the dust recipient address.
      *
@@ -902,45 +848,7 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
     }
 
     function getDepositCurrencyMinRate(uint256 _depositId, bytes32 _paymentMethod, bytes32 _currencyCode) external view returns (uint256) {
-        uint256 floorRate = depositCurrencyMinRate[_depositId][_paymentMethod][_currencyCode];
-
-        // If delegated, manager defines currency support; depositor still gates payment method support.
-        bytes32 rateManagerId = depositRateManagerId[_depositId];
-        if (rateManagerId != bytes32(0)) {
-            // Payment method must be active at the deposit level.
-            if (!depositPaymentMethodActive[_depositId][_paymentMethod]) {
-                return 0;
-            }
-            address registryAddr = depositRateManagerRegistryByDeposit[_depositId];
-            if (registryAddr == address(0)) revert RateManagerRegistryNotSet();
-
-            uint256 managerRate = IDepositRateManagerRegistryV1(registryAddr).getMinRate(rateManagerId, _paymentMethod, _currencyCode);
-            if (managerRate == 0) {
-                // Manager disables this pair for delegated deposits.
-                return 0;
-            }
-            // Manager cannot undercut depositor floor; if floor is 0, manager fully decides.
-            return managerRate > floorRate ? managerRate : floorRate;
-        }
-
-        // Not delegated: return depositor floor directly (0 means unsupported).
-        return floorRate;
-    }
-
-    function getDepositRateManager(uint256 _depositId) external view returns (bytes32) {
-        return depositRateManagerId[_depositId];
-    }
-
-    function getDepositManagerFee(uint256 _depositId) external view returns (address recipient, uint256 fee) {
-        bytes32 rateManagerId = depositRateManagerId[_depositId];
-        if (rateManagerId == bytes32(0)) {
-            return (address(0), 0);
-        }
-
-        address registryAddr = depositRateManagerRegistryByDeposit[_depositId];
-        if (registryAddr == address(0)) revert RateManagerRegistryNotSet();
-        (uint256 mgrFee, address mgrRecipient) = IDepositRateManagerRegistryV1(registryAddr).getFeeAndRecipient(rateManagerId);
-        return (mgrRecipient, mgrFee);
+        return depositCurrencyMinRate[_depositId][_paymentMethod][_currencyCode];
     }
 
     function getDepositCurrencyListed(uint256 _depositId, bytes32 _paymentMethod, bytes32 _currencyCode) external view returns (bool) {
@@ -1102,8 +1010,6 @@ contract Escrow is Ownable, Pausable, ReentrancyGuard, IEscrow {
         accountDeposits[depositor].removeStorage(_depositId);
         
         _deleteDepositPaymentMethodAndCurrencyData(_depositId);
-        delete depositRateManagerRegistryByDeposit[_depositId];
-        delete depositRateManagerId[_depositId];
         
         delete deposits[_depositId];
         delete _deposit.acceptingIntents;  // Might have been set to false, but delete it to be safe

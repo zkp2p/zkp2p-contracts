@@ -64,6 +64,14 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Deposit rate manager registry deployed at", depositRateManagerRegistry.address);
   await waitForDeploymentDelay(hre);
 
+  // Deploy deposit rate manager controller
+  const depositRateManagerController = await deploy("DepositRateManagerController", {
+    from: deployer,
+    args: [],
+  });
+  console.log("Deposit rate manager controller deployed at", depositRateManagerController.address);
+  await waitForDeploymentDelay(hre);
+
   // Deploy post intent hook registry
   const postIntentHookRegistry = await deploy("PostIntentHookRegistry", {
     from: deployer,
@@ -143,9 +151,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await setOrchestrator(hre, escrowContract, orchestrator.address);
   console.log("Orchestrator set on escrow");
 
-  // Set deposit rate manager registry on escrow
-  // No global setter in Escrow; each deposit stores its own (registry, id).
-  console.log("Deposit rate manager registry set on escrow");
+  // Set deposit rate manager controller on orchestrator
+  const orchestratorContract = await ethers.getContractAt("Orchestrator", orchestrator.address);
+  await orchestratorContract.setDepositRateManagerController(depositRateManagerController.address);
+  console.log("Deposit rate manager controller set on orchestrator");
   await waitForDeploymentDelay(hre);
 
   // Deploy protocol viewer
@@ -156,7 +165,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Protocol viewer deployed at", protocolViewer.address);
   await waitForDeploymentDelay(hre);
 
-  const orchestratorContract = await ethers.getContractAt("Orchestrator", orchestrator.address);
   const paymentVerifierRegistryContract = await ethers.getContractAt("PaymentVerifierRegistry", paymentVerifierRegistry.address);
   const postIntentHookRegistryContract = await ethers.getContractAt("PostIntentHookRegistry", postIntentHookRegistry.address);
   const relayerRegistryContract = await ethers.getContractAt("RelayerRegistry", relayerRegistry.address);

@@ -19,6 +19,7 @@ import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
 import { IPostIntentHookRegistry } from "./interfaces/IPostIntentHookRegistry.sol";
 import { IRelayerRegistry } from "./interfaces/IRelayerRegistry.sol";
+import { IDepositRateManagerController } from "./interfaces/IDepositRateManagerController.sol";
 
 /**
  * @title Orchestrator
@@ -61,6 +62,7 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     IPaymentVerifierRegistry public  paymentVerifierRegistry;          // Registry of payment verifiers
     IPostIntentHookRegistry public postIntentHookRegistry;             // Registry of post intent hooks
     IRelayerRegistry public relayerRegistry;                           // Registry of relayers
+    IDepositRateManagerController public depositRateManagerController; // External controller for rate manager config
 
     // Protocol fee configuration
     uint256 public protocolFee;                                     // Protocol fee taken from taker (in preciseUnits, 1e16 = 1%)
@@ -119,7 +121,7 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
             _params.paymentMethod
         );
 
-        (address managerFeeRecipient, uint256 managerFee) = IEscrow(_params.escrow).getDepositManagerFee(_params.depositId);
+        (address managerFeeRecipient, uint256 managerFee) = depositRateManagerController.getManagerFee(_params.escrow, _params.depositId);
         // Enforce manager fee cap regardless of registry implementation
         if (managerFee > MAX_MANAGER_FEE) revert FeeExceedsMaximum(managerFee, MAX_MANAGER_FEE);  // policy cap (e.g., 5%)
         intentManagerFeeRecipient[intentHash] = managerFeeRecipient;
@@ -368,6 +370,18 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     }
 
     /**
+     * @notice GOVERNANCE ONLY: Updates the deposit rate manager controller address.
+     *
+     * @param _depositRateManagerController   New controller address
+     */
+    function setDepositRateManagerController(address _depositRateManagerController) external onlyOwner {
+        if (_depositRateManagerController == address(0)) revert ZeroAddress();
+
+        depositRateManagerController = IDepositRateManagerController(_depositRateManagerController);
+        emit DepositRateManagerControllerUpdated(_depositRateManagerController);
+    }
+
+    /**
      * @notice GOVERNANCE ONLY: Pauses intent creation and fulfillment functionality.
      * 
      * Functionalities that are paused:
@@ -436,6 +450,8 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
             revert EscrowNotWhitelisted(_intent.escrow);
         }
 
+        if (address(depositRateManagerController) == address(0)) revert DepositRateManagerControllerNotSet();
+
         // Verify payment method is still valid in registry
         address verifier = paymentVerifierRegistry.getVerifier(_intent.paymentMethod);
         if (verifier == address(0)) revert PaymentMethodDoesNotExist(_intent.paymentMethod);
@@ -443,8 +459,11 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         bool isPaymentMethodActive = IEscrow(_intent.escrow).getDepositPaymentMethodActive(_intent.depositId, _intent.paymentMethod);
         if (!isPaymentMethodActive) revert PaymentMethodNotSupported(_intent.paymentMethod);
         
-        uint256 minConversionRate = IEscrow(_intent.escrow).getDepositCurrencyMinRate(
-            _intent.depositId, _intent.paymentMethod, _intent.fiatCurrency
+        uint256 minConversionRate = depositRateManagerController.getEffectiveMinRate(
+            _intent.escrow,
+            _intent.depositId,
+            _intent.paymentMethod,
+            _intent.fiatCurrency
         );
         if (minConversionRate == 0) revert CurrencyNotSupported(_intent.paymentMethod, _intent.fiatCurrency);
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
