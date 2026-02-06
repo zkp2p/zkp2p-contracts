@@ -320,6 +320,80 @@ describe("Escrow — rate manager", () => {
   });
 
   describe("#getDepositCurrencyMinRate", () => {
+
+    describe("when listed and depositor floor is 0 and manager rate is > 0", () => {
+      let subjectDepositId: number;
+      let subjectPaymentMethod: BytesLike;
+      let subjectCurrency: BytesLike;
+      let rateManagerId: string;
+
+      async function subject(): Promise<BigNumber> {
+        return escrow.getDepositCurrencyMinRate(subjectDepositId, subjectPaymentMethod, subjectCurrency);
+      }
+
+      beforeEach(async () => {
+        await seedDeposit(ether(1.0));
+        subjectDepositId = 0;
+        subjectPaymentMethod = venmoPaymentMethod;
+        subjectCurrency = Currency.USD;
+
+        rateManagerId = await createRateManagerAndGetId(registry, {
+          manager: manager.address,
+          feeRecipient: managerFeeRecipient.address,
+          maxFee: ether(0.05),
+          fee: 0,
+          depositHook: ADDRESS_ZERO,
+          name: "n",
+          uri: "u",
+        });
+
+        await escrow.connect(depositor.wallet).setDepositRateManager(subjectDepositId, registry.address, rateManagerId);
+        // Deactivate currency at the depositor level (floor -> 0) but keep it listed
+        await escrow.connect(depositor.wallet).deactivateCurrency(subjectDepositId, subjectPaymentMethod, subjectCurrency);
+        // Manager sets a positive min
+        await registry.connect(manager.wallet).setMinRate(rateManagerId, subjectPaymentMethod, subjectCurrency, ether(1.2));
+      });
+
+      it("returns the manager rate", async () => {
+        expect(await subject()).to.eq(ether(1.2));
+      });
+    });
+
+    describe("when not listed but manager sets a rate", () => {
+      let subjectDepositId: number;
+      let subjectPaymentMethod: BytesLike;
+      let subjectCurrency: BytesLike;
+      let rateManagerId: string;
+
+      async function subject(): Promise<BigNumber> {
+        return escrow.getDepositCurrencyMinRate(subjectDepositId, subjectPaymentMethod, subjectCurrency);
+      }
+
+      beforeEach(async () => {
+        await seedDeposit(ether(1.0));
+        subjectDepositId = 0;
+        subjectPaymentMethod = venmoPaymentMethod;
+        subjectCurrency = Currency.EUR; // not listed on this deposit
+
+        rateManagerId = await createRateManagerAndGetId(registry, {
+          manager: manager.address,
+          feeRecipient: managerFeeRecipient.address,
+          maxFee: ether(0.05),
+          fee: 0,
+          depositHook: ADDRESS_ZERO,
+          name: "n",
+          uri: "u",
+        });
+
+        await escrow.connect(depositor.wallet).setDepositRateManager(subjectDepositId, registry.address, rateManagerId);
+        await registry.connect(manager.wallet).setMinRate(rateManagerId, subjectPaymentMethod, subjectCurrency, ether(1.3));
+      });
+
+      it("returns 0 because currency is not listed by depositor", async () => {
+        expect(await subject()).to.eq(0);
+      });
+    });
+
     let subjectDepositId: number;
     let subjectPaymentMethod: BytesLike;
     let subjectCurrency: BytesLike;
