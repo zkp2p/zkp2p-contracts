@@ -196,6 +196,36 @@ describe("Escrow — rate manager", () => {
     });
   });
 
+  describe("#setDepositRateManager — paused", () => {
+    let subjectDepositId: number;
+    let subjectRegistry: string;
+    let subjectRateManagerId: BytesLike;
+
+    async function subject() {
+      return escrow.connect(depositor.wallet).setDepositRateManager(subjectDepositId, subjectRegistry, subjectRateManagerId);
+    }
+
+    beforeEach(async () => {
+      await seedDeposit(ether(1));
+      subjectDepositId = 0;
+      subjectRegistry = registry.address;
+      subjectRateManagerId = await createRateManagerAndGetId(registry, {
+        manager: manager.address,
+        feeRecipient: managerFeeRecipient.address,
+        maxFee: ether(0.05),
+        fee: 0,
+        depositHook: hook.address,
+        name: "n",
+        uri: "u",
+      });
+      await escrow.connect(owner.wallet).pauseEscrow();
+    });
+
+    it("reverts when escrow is paused", async () => {
+      await expect(subject()).to.be.revertedWith("Pausable: paused");
+    });
+  });
+
   describe("#clearDepositRateManager", () => {
     let subjectDepositId: number;
     let subjectCaller: any;
@@ -287,6 +317,34 @@ describe("Escrow — rate manager", () => {
     });
   });
 
+  describe("#clearDepositRateManager — paused", () => {
+    let subjectDepositId: number;
+
+    async function subject() {
+      return escrow.connect(depositor.wallet).clearDepositRateManager(subjectDepositId);
+    }
+
+    beforeEach(async () => {
+      await seedDeposit(ether(1));
+      subjectDepositId = 0;
+      const rateManagerId = await createRateManagerAndGetId(registry, {
+        manager: manager.address,
+        feeRecipient: managerFeeRecipient.address,
+        maxFee: ether(0.05),
+        fee: 0,
+        depositHook: ADDRESS_ZERO,
+        name: "n",
+        uri: "u",
+      });
+      await escrow.connect(depositor.wallet).setDepositRateManager(subjectDepositId, registry.address, rateManagerId);
+      await escrow.connect(owner.wallet).pauseEscrow();
+    });
+
+    it("reverts when escrow is paused", async () => {
+      await expect(subject()).to.be.revertedWith("Pausable: paused");
+    });
+  });
+
   describe("#getDepositManagerFee — when manager was set then cleared", () => {
     let subjectDepositId: number;
 
@@ -316,6 +374,47 @@ describe("Escrow — rate manager", () => {
       const [recipient, fee] = await subject();
       expect(recipient).to.eq(ADDRESS_ZERO);
       expect(fee).to.eq(0);
+    });
+  });
+
+  describe("#getDepositManagerFee — registry cleared after opt-in", () => {
+    let subjectDepositId: number;
+
+    async function subject(): Promise<[string, BigNumber]> {
+      return escrow.getDepositManagerFee(subjectDepositId);
+    }
+
+    async function clearRegistryMappingOnly(depositId: number) {
+      const mappingSlot = 12; // depositRateManagerRegistryByDeposit
+      const storageKey = ethers.utils.keccak256(
+        ethers.utils.defaultAbiCoder.encode(["uint256", "uint256"], [depositId, mappingSlot])
+      );
+      await ethers.provider.send("hardhat_setStorageAt", [escrow.address, storageKey, "0x" + "00".repeat(32)]);
+      await ethers.provider.send("evm_mine", []);
+    }
+
+    beforeEach(async () => {
+      await seedDeposit(ether(1.0));
+      subjectDepositId = 0;
+
+      const rateManagerId = await createRateManagerAndGetId(registry, {
+        manager: manager.address,
+        feeRecipient: managerFeeRecipient.address,
+        maxFee: ether(0.05),
+        fee: ether(0.01),
+        depositHook: ADDRESS_ZERO,
+        name: "n",
+        uri: "u",
+      });
+
+      await escrow.connect(depositor.wallet).setDepositRateManager(subjectDepositId, registry.address, rateManagerId);
+
+      // Force inconsistent state: id set, registry mapping zeroed
+      await clearRegistryMappingOnly(subjectDepositId);
+    });
+
+    it("reverts with RateManagerRegistryNotSet", async () => {
+      await expect(subject()).to.be.revertedWithCustomError(escrow, "RateManagerRegistryNotSet");
     });
   });
 
@@ -480,6 +579,38 @@ describe("Escrow — rate manager", () => {
           escrow.connect(depositor.wallet).clearDepositRateManager(subjectDepositId)
         ).to.emit(escrow, "DepositRateManagerUpdated")
           .withArgs(subjectDepositId, registry.address, ethers.constants.HashZero);
+      });
+    });
+
+    describe("#getDepositCurrencyMinRate — registry cleared after opt-in", () => {
+      async function clearRegistryMappingOnly(depositId: number) {
+        const mappingSlot = 12; // depositRateManagerRegistryByDeposit
+        const storageKey = ethers.utils.keccak256(
+          ethers.utils.defaultAbiCoder.encode(["uint256", "uint256"], [depositId, mappingSlot])
+        );
+        await ethers.provider.send("hardhat_setStorageAt", [escrow.address, storageKey, "0x" + "00".repeat(32)]);
+        await ethers.provider.send("evm_mine", []);
+      }
+
+      beforeEach(async () => {
+        const rateManagerId = await createRateManagerAndGetId(registry, {
+          manager: manager.address,
+          feeRecipient: managerFeeRecipient.address,
+          maxFee: ether(0.05),
+          fee: 0,
+          depositHook: ADDRESS_ZERO,
+          name: "n",
+          uri: "u",
+        });
+
+        await escrow.connect(depositor.wallet).setDepositRateManager(subjectDepositId, registry.address, rateManagerId);
+
+        // Force inconsistent state: id set, registry mapping zeroed
+        await clearRegistryMappingOnly(subjectDepositId);
+      });
+
+      it("reverts with RateManagerRegistryNotSet", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(escrow, "RateManagerRegistryNotSet");
       });
     });
 
