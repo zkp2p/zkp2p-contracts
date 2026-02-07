@@ -29,6 +29,7 @@ interface IDepositRateManagerController {
     error ZeroAddress();
     error ZeroValue();
     error RateManagerNotFound(bytes32 rateManagerId);
+    error RateManagerAlreadySet(bytes32 rateManagerId);
     error RateManagerRegistryNotSet();
 
     /* ============ External Functions ============ */

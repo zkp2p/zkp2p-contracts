@@ -223,6 +223,16 @@ describe("DepositRateManagerController", () => {
         await expect(subject()).to.be.revertedWithCustomError(controller, "RateManagerNotFound");
       });
     });
+
+    describe("when manager already set", () => {
+      beforeEach(async () => {
+        await controller.connect(depositor.wallet).setDepositRateManager(subjectEscrow, subjectDepositId, subjectRegistry, subjectRateManagerId);
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(controller, "RateManagerAlreadySet");
+      });
+    });
   });
 
   describe("#clearDepositRateManager", () => {

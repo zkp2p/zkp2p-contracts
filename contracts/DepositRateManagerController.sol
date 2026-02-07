@@ -36,8 +36,8 @@ contract DepositRateManagerController is IDepositRateManagerController {
     /**
      * @notice Opt a deposit into a rate manager configuration.
      * @dev Only the depositor can opt in. Reverts if escrow is paused, inputs are zero,
-     *      or the rate manager id is not registered. If a manager hook is configured,
-     *      it is called (view) and may revert to reject the opt-in.
+     *      a manager is already set, or the rate manager id is not registered. If a manager
+     *      hook is configured, it is called (view) and may revert to reject the opt-in.
      * @param _escrow         Escrow contract address.
      * @param _depositId      Deposit id on the escrow.
      * @param _registry       DepositRateManagerRegistryV1 address.
@@ -59,6 +59,9 @@ contract DepositRateManagerController is IDepositRateManagerController {
 
         IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
         if (deposit.depositor != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.depositor);
+
+        DepositManagerConfig memory existing = depositManagerConfig[_escrow][_depositId];
+        if (existing.rateManagerId != bytes32(0)) revert RateManagerAlreadySet(existing.rateManagerId);
 
         IDepositRateManagerRegistryV1 registry = IDepositRateManagerRegistryV1(_registry);
         if (!registry.isRateManager(_rateManagerId)) revert RateManagerNotFound(_rateManagerId);
