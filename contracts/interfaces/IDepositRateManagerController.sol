@@ -9,11 +9,18 @@ pragma solidity ^0.8.18;
 interface IDepositRateManagerController {
     /* ============ Events ============ */
 
-    event DepositRateManagerUpdated(
+    event DepositRateManagerSet(
         address indexed escrow,
         uint256 indexed depositId,
         address indexed registry,
         bytes32 rateManagerId
+    );
+
+    event DepositRateManagerCleared(
+        address indexed escrow,
+        uint256 indexed depositId,
+        address indexed registry,
+        bytes32 prevRateManagerId
     );
 
     /* ============ Errors ============ */

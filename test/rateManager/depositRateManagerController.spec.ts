@@ -133,7 +133,7 @@ describe("DepositRateManagerController", () => {
 
     it("emits and stores rate manager config; hook is invoked", async () => {
       await expect(subject())
-        .to.emit(controller, "DepositRateManagerUpdated")
+        .to.emit(controller, "DepositRateManagerSet")
         .withArgs(subjectEscrow, subjectDepositId, subjectRegistry, subjectRateManagerId);
 
       const stored = await controller.getDepositRateManager(subjectEscrow, subjectDepositId);
@@ -209,6 +209,7 @@ describe("DepositRateManagerController", () => {
     let subjectEscrow: string;
     let subjectDepositId: number;
     let subjectCaller: any;
+    let storedRateManagerId: string;
 
     async function subject() {
       return controller.connect(subjectCaller.wallet).clearDepositRateManager(subjectEscrow, subjectDepositId);
@@ -217,7 +218,7 @@ describe("DepositRateManagerController", () => {
     beforeEach(async () => {
       await seedDeposit(ether(1));
 
-      const rateManagerId = await createRateManagerAndGetId(registry, {
+      storedRateManagerId = await createRateManagerAndGetId(registry, {
         manager: manager.address,
         feeRecipient: managerFeeRecipient.address,
         maxFee: ether(0.05),
@@ -226,7 +227,7 @@ describe("DepositRateManagerController", () => {
         name: "n",
         uri: "u",
       });
-      await controller.connect(depositor.wallet).setDepositRateManager(escrow.address, 0, registry.address, rateManagerId);
+      await controller.connect(depositor.wallet).setDepositRateManager(escrow.address, 0, registry.address, storedRateManagerId);
 
       subjectEscrow = escrow.address;
       subjectDepositId = 0;
@@ -235,8 +236,8 @@ describe("DepositRateManagerController", () => {
 
     it("clears config and emits", async () => {
       await expect(subject())
-        .to.emit(controller, "DepositRateManagerUpdated")
-        .withArgs(subjectEscrow, subjectDepositId, registry.address, ethers.constants.HashZero);
+        .to.emit(controller, "DepositRateManagerCleared")
+        .withArgs(subjectEscrow, subjectDepositId, registry.address, storedRateManagerId);
 
       const stored = await controller.getDepositRateManager(subjectEscrow, subjectDepositId);
       expect(stored.registry).to.eq(ADDRESS_ZERO);

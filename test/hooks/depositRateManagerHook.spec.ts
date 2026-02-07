@@ -148,7 +148,7 @@ describe("DepositRateManagerHookV1", () => {
       });
       it("emits deposit updated", async () => {
         await expect(controller.connect(depositor.wallet).setDepositRateManager(escrow.address, 0, registry.address, rateManagerId))
-          .to.emit(controller, "DepositRateManagerUpdated")
+          .to.emit(controller, "DepositRateManagerSet")
           .withArgs(escrow.address, 0, registry.address, rateManagerId);
       });
     });

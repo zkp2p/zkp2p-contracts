@@ -73,13 +73,13 @@ contract DepositRateManagerController is IDepositRateManagerController {
             rateManagerId: _rateManagerId
         });
 
-        emit DepositRateManagerUpdated(_escrow, _depositId, _registry, _rateManagerId);
+        emit DepositRateManagerSet(_escrow, _depositId, _registry, _rateManagerId);
     }
 
     /**
      * @notice Clear the rate manager for a deposit.
      * @dev Only the depositor can clear. Reverts if escrow is paused.
-     *      Emits DepositRateManagerUpdated with the previous registry and a zero id.
+     *      Emits DepositRateManagerCleared with the previous registry and manager id.
      * @param _escrow    Escrow contract address.
      * @param _depositId Deposit id on the escrow.
      */
@@ -94,7 +94,7 @@ contract DepositRateManagerController is IDepositRateManagerController {
         DepositManagerConfig memory prev = depositManagerConfig[_escrow][_depositId];
         delete depositManagerConfig[_escrow][_depositId];
 
-        emit DepositRateManagerUpdated(_escrow, _depositId, prev.registry, bytes32(0));
+        emit DepositRateManagerCleared(_escrow, _depositId, prev.registry, prev.rateManagerId);
     }
 
     /* ============ View Functions ============ */

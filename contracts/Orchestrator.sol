@@ -162,7 +162,7 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         );
 
         // Emit manager fee snapshot last for easier indexing
-        emit IntentManagerFeeUpdated(intentHash, managerFeeRecipient, managerFee);
+        emit IntentManagerFeeSnapshotted(intentHash, managerFeeRecipient, managerFee);
 
         // Interactions
         IEscrow(_params.escrow).lockFunds(_params.depositId, intentHash, _params.amount);

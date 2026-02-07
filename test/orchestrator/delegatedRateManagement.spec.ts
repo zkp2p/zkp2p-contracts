@@ -363,7 +363,7 @@ describe("DelegatedRateManagement (MVP)", () => {
     it("emits fee event last and snapshots fee at signal", async () => {
       await subjectSignalTx();
       const idxIntent = signalReceipt.events.findIndex((e: any) => e.event === "IntentSignaled");
-      const idxFee = signalReceipt.events.findIndex((e: any) => e.event === "IntentManagerFeeUpdated");
+      const idxFee = signalReceipt.events.findIndex((e: any) => e.event === "IntentManagerFeeSnapshotted");
       expect(idxFee).to.be.greaterThan(idxIntent);
 
       // Change manager fee after signal; fulfill should still use 1% snapshot
