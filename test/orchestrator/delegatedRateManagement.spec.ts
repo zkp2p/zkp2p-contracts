@@ -170,6 +170,100 @@ describe("DelegatedRateManagement (MVP)", () => {
     return ev?.args?.intentHash;
   }
 
+  describe("#setDepositRateManagerController", () => {
+    let subjectDepositRateManagerController: string;
+    let subjectCaller: Account;
+
+    beforeEach(async () => {
+      const newController = await deployer.deployDepositRateManagerController();
+      subjectDepositRateManagerController = newController.address;
+      subjectCaller = owner;
+    });
+
+    async function subject(): Promise<any> {
+      return orchestrator.connect(subjectCaller.wallet).setDepositRateManagerController(subjectDepositRateManagerController);
+    }
+
+    it("should set the correct controller", async () => {
+      const preController = await orchestrator.depositRateManagerController();
+      expect(preController).to.not.eq(subjectDepositRateManagerController);
+
+      await subject();
+
+      const postController = await orchestrator.depositRateManagerController();
+      expect(postController).to.eq(subjectDepositRateManagerController);
+    });
+
+    it("should emit a DepositRateManagerControllerUpdated event", async () => {
+      await expect(subject()).to.emit(orchestrator, "DepositRateManagerControllerUpdated").withArgs(subjectDepositRateManagerController);
+    });
+
+    describe("when the controller is zero address", () => {
+      beforeEach(async () => {
+        subjectDepositRateManagerController = ADDRESS_ZERO;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(orchestrator, "ZeroAddress");
+      });
+    });
+
+    describe("when the caller is not the owner", () => {
+      beforeEach(async () => {
+        subjectCaller = depositor;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+    });
+  });
+
+  describe("#signalIntent", () => {
+    let subjectOrchestrator: Orchestrator;
+    let subjectConversionRate: BigNumber;
+
+    async function subject(): Promise<any> {
+      return subjectOrchestrator.connect(taker.wallet).signalIntent({
+        escrow: escrow.address,
+        depositId: ZERO,
+        amount: usdc(50),
+        to: taker.address,
+        paymentMethod,
+        fiatCurrency: Currency.USD,
+        conversionRate: subjectConversionRate,
+        referrer: ADDRESS_ZERO,
+        referrerFee: ZERO,
+        gatingServiceSignature: "0x",
+        signatureExpiration: ZERO,
+        postIntentHook: ADDRESS_ZERO,
+        data: "0x",
+      });
+    }
+
+    beforeEach(async () => {
+      await createDeposit(ether(1.0));
+      subjectConversionRate = ether(1.0);
+
+      subjectOrchestrator = await deployer.deployOrchestrator(
+        depositor.address,
+        chainId,
+        escrowRegistry.address,
+        paymentVerifierRegistry.address,
+        postIntentHookRegistry.address,
+        relayerRegistry.address,
+        ZERO,
+        owner.address
+      );
+    });
+
+    describe("when the controller is not set", () => {
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(subjectOrchestrator, "DepositRateManagerControllerNotSet");
+      });
+    });
+  });
+
   describe("effective min rate", () => {
     describe("when manager min > depositor floor", () => {
       let rateManagerId: string;
