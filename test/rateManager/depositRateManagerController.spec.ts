@@ -98,6 +98,26 @@ describe("DepositRateManagerController", () => {
     });
   }
 
+  async function setRawDepositManagerConfig(params: { escrowAddress: string; depositId: number; registryAddress: string; rateManagerId: BytesLike }) {
+    const outerSlot = ethers.utils.keccak256(
+      ethers.utils.defaultAbiCoder.encode(["address", "uint256"], [params.escrowAddress, 0])
+    );
+    const entrySlot = ethers.utils.keccak256(
+      ethers.utils.defaultAbiCoder.encode(["uint256", "bytes32"], [params.depositId, outerSlot])
+    );
+    await ethers.provider.send("hardhat_setStorageAt", [
+      controller.address,
+      entrySlot,
+      ethers.utils.hexZeroPad(params.registryAddress, 32),
+    ]);
+    const rateManagerSlot = ethers.BigNumber.from(entrySlot).add(1).toHexString();
+    await ethers.provider.send("hardhat_setStorageAt", [
+      controller.address,
+      rateManagerSlot,
+      ethers.utils.hexZeroPad(ethers.utils.hexlify(params.rateManagerId), 32),
+    ]);
+  }
+
   describe("#setDepositRateManager", () => {
     let subjectEscrow: string;
     let subjectDepositId: number;
@@ -253,6 +273,15 @@ describe("DepositRateManagerController", () => {
       });
     });
 
+    describe("when escrow is zero address", () => {
+      beforeEach(async () => {
+        subjectEscrow = ADDRESS_ZERO;
+      });
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(controller, "ZeroAddress");
+      });
+    });
+
     describe("when caller is not depositor", () => {
       beforeEach(async () => {
         subjectCaller = other;
@@ -384,6 +413,30 @@ describe("DepositRateManagerController", () => {
         expect(await subject()).to.eq(ether(1.2));
       });
     });
+
+    describe("when registry is not set", () => {
+      beforeEach(async () => {
+        const rateManagerId = await createRateManagerAndGetId(registry, {
+          manager: manager.address,
+          feeRecipient: managerFeeRecipient.address,
+          maxFee: ether(0.05),
+          fee: 0,
+          depositHook: ADDRESS_ZERO,
+          name: "n",
+          uri: "u",
+        });
+        await setRawDepositManagerConfig({
+          escrowAddress: escrow.address,
+          depositId: subjectDepositId,
+          registryAddress: ADDRESS_ZERO,
+          rateManagerId,
+        });
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(controller, "RateManagerRegistryNotSet");
+      });
+    });
   });
 
   describe("#getManagerFee", () => {
@@ -422,6 +475,30 @@ describe("DepositRateManagerController", () => {
         const result = await subject();
         expect(result.recipient).to.eq(managerFeeRecipient.address);
         expect(result.fee).to.eq(ether(0.01));
+      });
+    });
+
+    describe("when registry is not set", () => {
+      beforeEach(async () => {
+        const rateManagerId = await createRateManagerAndGetId(registry, {
+          manager: manager.address,
+          feeRecipient: managerFeeRecipient.address,
+          maxFee: ether(0.05),
+          fee: ether(0.01),
+          depositHook: ADDRESS_ZERO,
+          name: "n",
+          uri: "u",
+        });
+        await setRawDepositManagerConfig({
+          escrowAddress: escrow.address,
+          depositId: subjectDepositId,
+          registryAddress: ADDRESS_ZERO,
+          rateManagerId,
+        });
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(controller, "RateManagerRegistryNotSet");
       });
     });
   });
