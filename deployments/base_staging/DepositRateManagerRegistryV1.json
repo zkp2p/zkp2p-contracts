@@ -1,0 +1,773 @@
+{
+  "address": "0x3125F621482887d158cb51cE9b54D9D25b145877",
+  "abi": [
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "manager",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "feeRecipient",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "depositHook",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "uri",
+          "type": "string"
+        }
+      ],
+      "name": "RateManagerConfigUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "manager",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "feeRecipient",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "maxFee",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "fee",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "depositHook",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "uri",
+          "type": "string"
+        }
+      ],
+      "name": "RateManagerCreated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "fee",
+          "type": "uint256"
+        }
+      ],
+      "name": "RateManagerFeeUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "currency",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "minRate",
+          "type": "uint256"
+        }
+      ],
+      "name": "RateManagerMinRateUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "count",
+          "type": "uint256"
+        }
+      ],
+      "name": "RateManagerMinRatesBatchUpdated",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "manager",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "feeRecipient",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "maxFee",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "depositHook",
+              "type": "address"
+            },
+            {
+              "internalType": "string",
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "internalType": "string",
+              "name": "uri",
+              "type": "string"
+            }
+          ],
+          "internalType": "struct IDepositRateManagerRegistryV1.RateManagerConfig",
+          "name": "_config",
+          "type": "tuple"
+        }
+      ],
+      "name": "createRateManager",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getDepositHook",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getFeeAndRecipient",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "fee",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "feeRecipient",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_currency",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getMinRate",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getRateManager",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "manager",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "feeRecipient",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "maxFee",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "depositHook",
+              "type": "address"
+            },
+            {
+              "internalType": "string",
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "internalType": "string",
+              "name": "uri",
+              "type": "string"
+            }
+          ],
+          "internalType": "struct IDepositRateManagerRegistryV1.RateManagerConfig",
+          "name": "",
+          "type": "tuple"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "isRateManager",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_newFee",
+          "type": "uint256"
+        }
+      ],
+      "name": "setFee",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_currency",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_minRate",
+          "type": "uint256"
+        }
+      ],
+      "name": "setMinRate",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32[]",
+          "name": "_paymentMethods",
+          "type": "bytes32[]"
+        },
+        {
+          "internalType": "bytes32[][]",
+          "name": "_currencies",
+          "type": "bytes32[][]"
+        },
+        {
+          "internalType": "uint256[][]",
+          "name": "_minRatesArr",
+          "type": "uint256[][]"
+        }
+      ],
+      "name": "setMinRatesBatch",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "address",
+          "name": "_newManager",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_newFeeRecipient",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_newHook",
+          "type": "address"
+        },
+        {
+          "internalType": "string",
+          "name": "_newName",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "_newUri",
+          "type": "string"
+        }
+      ],
+      "name": "setRateManagerConfig",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0xfec56f80af41639561863190c2b07af858e0ff021367e2d39f7a8620485c4f59",
+  "receipt": {
+    "to": null,
+    "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "contractAddress": "0x3125F621482887d158cb51cE9b54D9D25b145877",
+    "transactionIndex": 146,
+    "gasUsed": "1189478",
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "transactionHash": "0xfec56f80af41639561863190c2b07af858e0ff021367e2d39f7a8620485c4f59",
+    "logs": [],
+    "blockNumber": 41876295,
+    "cumulativeGasUsed": "37039394",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [],
+  "numDeployments": 1,
+  "solcInputHash": "8383b91eb75d51a831b9b659c849b31d",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"manager\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"feeRecipient\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"depositHook\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"uri\",\"type\":\"string\"}],\"name\":\"RateManagerConfigUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"manager\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"feeRecipient\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"maxFee\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"depositHook\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"uri\",\"type\":\"string\"}],\"name\":\"RateManagerCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"RateManagerFeeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"currency\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"minRate\",\"type\":\"uint256\"}],\"name\":\"RateManagerMinRateUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"count\",\"type\":\"uint256\"}],\"name\":\"RateManagerMinRatesBatchUpdated\",\"type\":\"event\"},{\"inputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"manager\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"feeRecipient\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"maxFee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"depositHook\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"uri\",\"type\":\"string\"}],\"internalType\":\"struct IDepositRateManagerRegistryV1.RateManagerConfig\",\"name\":\"_config\",\"type\":\"tuple\"}],\"name\":\"createRateManager\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"}],\"name\":\"getDepositHook\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"}],\"name\":\"getFeeAndRecipient\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"feeRecipient\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"_paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"_currency\",\"type\":\"bytes32\"}],\"name\":\"getMinRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"}],\"name\":\"getRateManager\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"manager\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"feeRecipient\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"maxFee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"depositHook\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"uri\",\"type\":\"string\"}],\"internalType\":\"struct IDepositRateManagerRegistryV1.RateManagerConfig\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"}],\"name\":\"isRateManager\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"_newFee\",\"type\":\"uint256\"}],\"name\":\"setFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"_paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"_currency\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"_minRate\",\"type\":\"uint256\"}],\"name\":\"setMinRate\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32[]\",\"name\":\"_paymentMethods\",\"type\":\"bytes32[]\"},{\"internalType\":\"bytes32[][]\",\"name\":\"_currencies\",\"type\":\"bytes32[][]\"},{\"internalType\":\"uint256[][]\",\"name\":\"_minRatesArr\",\"type\":\"uint256[][]\"}],\"name\":\"setMinRatesBatch\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"_newManager\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_newFeeRecipient\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_newHook\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"_newName\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"_newUri\",\"type\":\"string\"}],\"name\":\"setRateManagerConfig\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"kind\":\"dev\",\"methods\":{\"createRateManager((address,address,uint256,uint256,address,string,string))\":{\"details\":\"The identifier is derived as keccak256(abi.encodePacked(address(this), nextId)).      This ties IDs to the registry deployment and avoids deliberate collisions.      Reverts if inputs are invalid or fee exceeds caps.\",\"params\":{\"_config\":\"Rate manager configuration {manager, feeRecipient, maxFee, fee, depositHook, name, uri}.\"},\"returns\":{\"rateManagerId\":\"Newly minted manager id (bytes32).\"}},\"getDepositHook(bytes32)\":{\"params\":{\"_rateManagerId\":\"Manager id.\"}},\"getFeeAndRecipient(bytes32)\":{\"params\":{\"_rateManagerId\":\"Manager id.\"},\"returns\":{\"fee\":\"         Fee in preciseUnits (1e18 = 100%).\",\"feeRecipient\":\"Address that receives manager fees.\"}},\"getMinRate(bytes32,bytes32,bytes32)\":{\"params\":{\"_currency\":\"Fiat currency key.\",\"_paymentMethod\":\"Payment method key.\",\"_rateManagerId\":\"Manager id.\"},\"returns\":{\"_0\":\"minRate       Minimum rate in preciseUnits (0 means disabled).\"}},\"getRateManager(bytes32)\":{\"params\":{\"_rateManagerId\":\"Manager id.\"}},\"isRateManager(bytes32)\":{\"params\":{\"_rateManagerId\":\"Manager id.\"}},\"setFee(bytes32,uint256)\":{\"details\":\"Only callable by config.manager. New fee must be <= maxFee and if > 0 then feeRecipient must be set.\",\"params\":{\"_newFee\":\"New fee in preciseUnits (1e18 = 100%).\",\"_rateManagerId\":\"Manager id.\"}},\"setMinRate(bytes32,bytes32,bytes32,uint256)\":{\"details\":\"Does not validate whether the payment method or currency are registered; Escrow/Orchestrator enforce      deposit support and payment method whitelisting. Setting to 0 disables the pair at the manager level.\",\"params\":{\"_currency\":\"Fiat currency key.\",\"_minRate\":\"Minimum conversion rate in preciseUnits.\",\"_paymentMethod\":\"Payment method key.\",\"_rateManagerId\":\"Manager id.\"}},\"setMinRatesBatch(bytes32,bytes32[],bytes32[][],uint256[][])\":{\"details\":\"For each i in paymentMethods, currencies[i] and _minRatesArr[i] must be same length.      Reverts on any array length mismatch or zero keys. No validation of platform/currency registration.\",\"params\":{\"_currencies\":\"Array of currency arrays aligned with payment methods.\",\"_minRatesArr\":\"Array of rate arrays aligned with payment methods/currencies.\",\"_paymentMethods\":\"Array of payment methods.\",\"_rateManagerId\":\"Manager id.\"}},\"setRateManagerConfig(bytes32,address,address,address,string,string)\":{\"details\":\"Only callable by the current config.manager. Does not alter maxFee.      If an existing fee is non\\u2011zero, a non\\u2011zero feeRecipient must be supplied.\",\"params\":{\"_newFeeRecipient\":\"New fee recipient address (required when fee>0).\",\"_newHook\":\"Optional deposit hook contract (view callable on opt\\u2011in), or address(0).\",\"_newManager\":\"New manager address (cannot be zero).\",\"_newName\":\"Human\\u2011readable name metadata.\",\"_newUri\":\"URI metadata.\",\"_rateManagerId\":\"Manager id.\"}}},\"title\":\"DepositRateManagerRegistryV1\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"createRateManager((address,address,uint256,uint256,address,string,string))\":{\"notice\":\"Creates a new rate manager configuration.\"},\"getDepositHook(bytes32)\":{\"notice\":\"Returns the deposit hook address configured for a manager id (or address(0) if none).\"},\"getFeeAndRecipient(bytes32)\":{\"notice\":\"Returns the manager fee and recipient for an id.\"},\"getMinRate(bytes32,bytes32,bytes32)\":{\"notice\":\"Returns the manager\\u2011level minimum rate for a (paymentMethod, currency) pair.\"},\"getRateManager(bytes32)\":{\"notice\":\"Returns the full manager configuration for an id.\"},\"isRateManager(bytes32)\":{\"notice\":\"Returns true if the manager id exists.\"},\"setFee(bytes32,uint256)\":{\"notice\":\"Updates the manager fee for a given id.\"},\"setMinRate(bytes32,bytes32,bytes32,uint256)\":{\"notice\":\"Sets the manager\\u2011level minimum rate for a specific (paymentMethod, currency) pair.\"},\"setMinRatesBatch(bytes32,bytes32[],bytes32[][],uint256[][])\":{\"notice\":\"Batch update manager\\u2011level minimum rates.\"},\"setRateManagerConfig(bytes32,address,address,address,string,string)\":{\"notice\":\"Updates mutable fields on a rate manager config.\"}},\"notice\":\"Permissionless registry of \\u201cdeposit rate managers\\u201d. Stores manager fee config, optional deposit hook, and (paymentMethod,currency)->minRate entries.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/registries/DepositRateManagerRegistryV1.sol\":\"DepositRateManagerRegistryV1\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"contracts/interfaces/IDepositRateManagerRegistryV1.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IDepositRateManagerRegistryV1\\n * @notice Permissionless registry for \\u201cdeposit rate managers\\u201d.\\n * A rate manager config is identified by a `rateManagerId` (bytes32) and can be shared across many deposits.\\n */\\ninterface IDepositRateManagerRegistryV1 {\\n    /* ============ Structs ============ */\\n\\n    struct RateManagerConfig {\\n        address manager;\\n        address feeRecipient;\\n        uint256 maxFee;              // Immutable upper bound on `fee` (preciseUnits, 1e18 = 100%)\\n        uint256 fee;                 // Flat fee in preciseUnits (must be <= maxFee)\\n        address depositHook;         // Optional hook called on deposit opt-in\\n        string name;                 // Human-readable name (optional)\\n        string uri;                  // Metadata URI (optional)\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event RateManagerCreated(\\n        bytes32 indexed rateManagerId,\\n        address indexed manager,\\n        address indexed feeRecipient,\\n        uint256 maxFee,\\n        uint256 fee,\\n        address depositHook,\\n        string name,\\n        string uri\\n    );\\n\\n    event RateManagerConfigUpdated(\\n        bytes32 indexed rateManagerId,\\n        address indexed manager,\\n        address indexed feeRecipient,\\n        address depositHook,\\n        string name,\\n        string uri\\n    );\\n\\n    event RateManagerMinRateUpdated(\\n        bytes32 indexed rateManagerId,\\n        bytes32 indexed paymentMethod,\\n        bytes32 indexed currency,\\n        uint256 minRate\\n    );\\n\\n    event RateManagerMinRatesBatchUpdated(bytes32 indexed rateManagerId, uint256 count);\\n    event RateManagerFeeUpdated(bytes32 indexed rateManagerId, uint256 fee);\\n\\n    /* ============ External Functions ============ */\\n\\n    function createRateManager(RateManagerConfig calldata _config) external returns (bytes32 rateManagerId);\\n\\n    function setRateManagerConfig(bytes32 _rateManagerId, address _newManager, address _newFeeRecipient, address _newHook, string calldata _newName, string calldata _newUri) external;\\n\\n    function setFee(bytes32 _rateManagerId, uint256 _newFee) external;\\n\\n    function setMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency, uint256 _minRate) external;\\n\\n    function setMinRatesBatch(bytes32 _rateManagerId, bytes32[] calldata _paymentMethods, bytes32[][] calldata _currencies, uint256[][] calldata _minRates) external;\\n\\n    /* ============ View Functions ============ */\\n\\n    function isRateManager(bytes32 _rateManagerId) external view returns (bool);\\n\\n    function getRateManager(bytes32 _rateManagerId) external view returns (RateManagerConfig memory);\\n\\n    function getFeeAndRecipient(bytes32 _rateManagerId) external view returns (uint256 fee, address feeRecipient);\\n\\n    function getDepositHook(bytes32 _rateManagerId) external view returns (address);\\n\\n    function getMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency) external view returns (uint256);\\n}\\n\",\"keccak256\":\"0xdc5e0ff77829d7f1bc5568ff050285773a4cdf85d6297c245da7ee0de5be6a91\",\"license\":\"MIT\"},\"contracts/registries/DepositRateManagerRegistryV1.sol\":{\"content\":\"//SPDX-License-Identifier: MIT\\n\\nimport { IDepositRateManagerRegistryV1 } from \\\"../interfaces/IDepositRateManagerRegistryV1.sol\\\";\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title DepositRateManagerRegistryV1\\n * @notice Permissionless registry of \\u201cdeposit rate managers\\u201d.\\n * Stores manager fee config, optional deposit hook, and (paymentMethod,currency)->minRate entries.\\n */\\ncontract DepositRateManagerRegistryV1 is IDepositRateManagerRegistryV1 {\\n    /* ============ Constants ============ */\\n\\n    uint256 internal constant GLOBAL_MAX_MANAGER_FEE = 5e16; // 5%\\n\\n    /* ============ State Variables ============ */\\n\\n    uint256 internal nextId = 1;\\n    mapping(bytes32 => RateManagerConfig) internal rateManagers;\\n    mapping(bytes32 => mapping(bytes32 => mapping(bytes32 => uint256))) internal minRates;\\n\\n    /* ============ Modifiers ============ */\\n\\n    modifier onlyManager(bytes32 _rateManagerId) {\\n        address manager = rateManagers[_rateManagerId].manager;\\n        require(manager != address(0), \\\"Rate manager does not exist\\\");\\n        require(msg.sender == manager, \\\"Caller is not manager\\\");\\n        _;\\n    }\\n\\n    /* ============ External Functions ============ */\\n\\n    /**\\n     * @notice Creates a new rate manager configuration.\\n     * @dev The identifier is derived as keccak256(abi.encodePacked(address(this), nextId)).\\n     *      This ties IDs to the registry deployment and avoids deliberate collisions.\\n     *      Reverts if inputs are invalid or fee exceeds caps.\\n     * @param _config Rate manager configuration {manager, feeRecipient, maxFee, fee, depositHook, name, uri}.\\n     * @return rateManagerId Newly minted manager id (bytes32).\\n     */\\n    function createRateManager(RateManagerConfig calldata _config) external returns (bytes32 rateManagerId) {\\n        require(_config.manager != address(0), \\\"Invalid manager\\\");\\n        require(_config.feeRecipient != address(0) || _config.fee == 0, \\\"Invalid fee recipient\\\");\\n        require(_config.maxFee <= GLOBAL_MAX_MANAGER_FEE, \\\"Max fee exceeds global\\\");\\n        require(_config.fee <= _config.maxFee, \\\"Fee exceeds maxFee\\\");\\n        // keccak(address(this), nextId)\\n        rateManagerId = keccak256(abi.encodePacked(address(this), nextId++));\\n        rateManagers[rateManagerId] = _config;\\n\\n        emit RateManagerCreated(\\n            rateManagerId,\\n            _config.manager,\\n            _config.feeRecipient,\\n            _config.maxFee,\\n            _config.fee,\\n            _config.depositHook,\\n            _config.name,\\n            _config.uri\\n        );\\n    }\\n\\n    /**\\n     * @notice Updates mutable fields on a rate manager config.\\n     * @dev Only callable by the current config.manager. Does not alter maxFee.\\n     *      If an existing fee is non\\u2011zero, a non\\u2011zero feeRecipient must be supplied.\\n     * @param _rateManagerId   Manager id.\\n     * @param _newManager      New manager address (cannot be zero).\\n     * @param _newFeeRecipient New fee recipient address (required when fee>0).\\n     * @param _newHook         Optional deposit hook contract (view callable on opt\\u2011in), or address(0).\\n     * @param _newName         Human\\u2011readable name metadata.\\n     * @param _newUri          URI metadata.\\n     */\\n    function setRateManagerConfig(\\n        bytes32 _rateManagerId,\\n        address _newManager,\\n        address _newFeeRecipient,\\n        address _newHook,\\n        string calldata _newName,\\n        string calldata _newUri\\n    ) external onlyManager(_rateManagerId) {\\n        require(_newManager != address(0), \\\"Invalid manager\\\");\\n        if (rateManagers[_rateManagerId].fee > 0) {\\n            require(_newFeeRecipient != address(0), \\\"Invalid fee recipient\\\");\\n        }\\n\\n        RateManagerConfig storage config = rateManagers[_rateManagerId];\\n        config.manager = _newManager;\\n        config.feeRecipient = _newFeeRecipient;\\n        config.depositHook = _newHook;\\n        config.name = _newName;\\n        config.uri = _newUri;\\n\\n        emit RateManagerConfigUpdated(\\n            _rateManagerId,\\n            _newManager,\\n            _newFeeRecipient,\\n            _newHook,\\n            _newName,\\n            _newUri\\n        );\\n    }\\n\\n    /**\\n     * @notice Updates the manager fee for a given id.\\n     * @dev Only callable by config.manager. New fee must be <= maxFee and if > 0 then feeRecipient must be set.\\n     * @param _rateManagerId Manager id.\\n     * @param _newFee        New fee in preciseUnits (1e18 = 100%).\\n     */\\n    function setFee(bytes32 _rateManagerId, uint256 _newFee) external onlyManager(_rateManagerId) {\\n        RateManagerConfig storage config = rateManagers[_rateManagerId];\\n        require(_newFee <= config.maxFee, \\\"Fee exceeds maxFee\\\");\\n        if (_newFee > 0) {\\n            require(config.feeRecipient != address(0), \\\"Invalid fee recipient\\\");\\n        }\\n        config.fee = _newFee;\\n        emit RateManagerFeeUpdated(_rateManagerId, _newFee);\\n    }\\n\\n    /**\\n     * @notice Sets the manager\\u2011level minimum rate for a specific (paymentMethod, currency) pair.\\n     * @dev Does not validate whether the payment method or currency are registered; Escrow/Orchestrator enforce\\n     *      deposit support and payment method whitelisting. Setting to 0 disables the pair at the manager level.\\n     * @param _rateManagerId Manager id.\\n     * @param _paymentMethod Payment method key.\\n     * @param _currency      Fiat currency key.\\n     * @param _minRate       Minimum conversion rate in preciseUnits.\\n     */\\n    function setMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency, uint256 _minRate)\\n        external\\n        onlyManager(_rateManagerId)\\n    {\\n        require(_paymentMethod != bytes32(0), \\\"Invalid payment method\\\");\\n        require(_currency != bytes32(0), \\\"Invalid currency\\\");\\n\\n        minRates[_rateManagerId][_paymentMethod][_currency] = _minRate;\\n\\n        emit RateManagerMinRateUpdated(_rateManagerId, _paymentMethod, _currency, _minRate);\\n    }\\n\\n    /**\\n     * @notice Batch update manager\\u2011level minimum rates.\\n     * @dev For each i in paymentMethods, currencies[i] and _minRatesArr[i] must be same length.\\n     *      Reverts on any array length mismatch or zero keys. No validation of platform/currency registration.\\n     * @param _rateManagerId  Manager id.\\n     * @param _paymentMethods Array of payment methods.\\n     * @param _currencies     Array of currency arrays aligned with payment methods.\\n     * @param _minRatesArr    Array of rate arrays aligned with payment methods/currencies.\\n     */\\n    function setMinRatesBatch(\\n        bytes32 _rateManagerId,\\n        bytes32[] calldata _paymentMethods,\\n        bytes32[][] calldata _currencies,\\n        uint256[][] calldata _minRatesArr\\n    ) external onlyManager(_rateManagerId) {\\n        require(_paymentMethods.length == _currencies.length, \\\"Array length mismatch\\\");\\n        require(_paymentMethods.length == _minRatesArr.length, \\\"Array length mismatch\\\");\\n\\n        uint256 total;\\n        for (uint256 i = 0; i < _paymentMethods.length; i++) {\\n            bytes32 pm = _paymentMethods[i];\\n            require(pm != bytes32(0), \\\"Invalid payment method\\\");\\n            bytes32[] calldata currList = _currencies[i];\\n            uint256[] calldata rateList = _minRatesArr[i];\\n            require(currList.length == rateList.length, \\\"Array length mismatch\\\");\\n            for (uint256 j = 0; j < currList.length; j++) {\\n                bytes32 cur = currList[j];\\n                require(cur != bytes32(0), \\\"Invalid currency\\\");\\n                minRates[_rateManagerId][pm][cur] = rateList[j];\\n                emit RateManagerMinRateUpdated(_rateManagerId, pm, cur, rateList[j]);\\n                total++;\\n            }\\n        }\\n        emit RateManagerMinRatesBatchUpdated(_rateManagerId, total);\\n    }\\n\\n    /* ============ External View Functions ============ */\\n\\n    /**\\n     * @notice Returns true if the manager id exists.\\n     * @param _rateManagerId Manager id.\\n     */\\n    function isRateManager(bytes32 _rateManagerId) external view returns (bool) {\\n        return rateManagers[_rateManagerId].manager != address(0);\\n    }\\n\\n    /**\\n     * @notice Returns the full manager configuration for an id.\\n     * @param _rateManagerId Manager id.\\n     */\\n    function getRateManager(bytes32 _rateManagerId) external view returns (RateManagerConfig memory) {\\n        return rateManagers[_rateManagerId];\\n    }\\n\\n    /**\\n     * @notice Returns the fee tuple (recipient, fee) for a manager id.\\n     * @param _rateManagerId Manager id.\\n     * @return feeRecipient Address that receives manager fees.\\n     * @return fee          Fee in preciseUnits (1e18 = 100%).\\n     */\\n    /**\\n     * @notice Returns the manager fee and recipient for an id.\\n     * @param _rateManagerId Manager id.\\n     * @return fee          Fee in preciseUnits (1e18 = 100%).\\n     * @return feeRecipient Address that receives manager fees.\\n     */\\n    function getFeeAndRecipient(bytes32 _rateManagerId) external view returns (uint256 fee, address feeRecipient) {\\n        RateManagerConfig storage config = rateManagers[_rateManagerId];\\n        return (config.fee, config.feeRecipient);\\n    }\\n\\n    /**\\n     * @notice Returns the deposit hook address configured for a manager id (or address(0) if none).\\n     * @param _rateManagerId Manager id.\\n     */\\n    function getDepositHook(bytes32 _rateManagerId) external view returns (address) {\\n        return rateManagers[_rateManagerId].depositHook;\\n    }\\n\\n    /**\\n     * @notice Returns the manager\\u2011level minimum rate for a (paymentMethod, currency) pair.\\n     * @param _rateManagerId Manager id.\\n     * @param _paymentMethod Payment method key.\\n     * @param _currency      Fiat currency key.\\n     * @return minRate       Minimum rate in preciseUnits (0 means disabled).\\n     */\\n    function getMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency) external view returns (uint256) {\\n        return minRates[_rateManagerId][_paymentMethod][_currency];\\n    }\\n}\\n\",\"keccak256\":\"0xce3b69167167fabc2288263e532e9d1b367c9bd1c0c8b7891595cd46f5ce21fc\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x6080806040523461001b57600160005561142890816100218239f35b600080fdfe6080604052600436101561001257600080fd5b60003560e01c80631c2dee9314610a255780633a258a3a146109e357806364f21b481461099b57806388d0acfd146108f257806390a3a9c5146107c85780639f080ab014610392578063af46f6491461035c578063b96f8f32146102b3578063e7f35697146100c65763ed97afbf1461008a57600080fd5b346100c15760203660031901126100c1576004356000526001602052602060018060a01b0360046040600020015416604051908152f35b600080fd5b346100c15760803660031901126100c1576001600160401b036024358181116100c1576100f7903690600401610fa8565b91906044358281116100c157610111903690600401610fa8565b90926064359081116100c15761012b903690600401610fa8565b9091600435600052600160205261015b60018060a01b036040600020541661015481151561117c565b33146111c8565b610166818714611290565b610171828714611290565b60009560005b8181106101af57876040519081527f711a53042b37d7fa19b4cd1dafbc5e4b041578ce22596becb2283b8d57814c9c602060043592a2005b6101ba8183886112d4565b356101c681151561120c565b6101d182858a6112fa565b906101dd84888a6112fa565b92906101ea848314611290565b6000945b82861061020957505050505050610204906110af565b610177565b90919293949c6102a36102a9918f8461026f610226838a8c6112d4565b3592610233841515611251565b61023e818d8b6112d4565b3560043560005260026020526040600020846000526020526040600020856000526020526040600020558b896112d4565b356040519081527f81cd038fe434fe888c4d6117ceca740d3e7bbefd5de05c63fd1aaa098b4b7956602060043592a46110af565b9d6110af565b94939291906101ee565b346100c15760403660031901126100c1576004357fe6f4631c85a066db4d84bf89ec61874b3060da03c0c164c21076f685cd771b676020602435836000526001825280600360018060a01b03610315816040600020541661015481151561117c565b8660005260018552604060002090610333600283015485111561106e565b83610345575b500155604051908152a2005b61035690600183015416151561102a565b87610339565b346100c15760203660031901126100c1576004356000526001602052602060018060a01b03604060002054161515604051908152f35b346100c15760c03660031901126100c1576024356001600160a01b03811681036100c1576044356001600160a01b03811681036100c1576064356001600160a01b03811681036100c1576084356001600160401b0381116100c1576103fb903690600401610f7b565b909160a4356001600160401b0381116100c15761041c903690600401610f7b565b949093600435600052600160205261044660018060a01b036040600020541661015481151561117c565b61045a6001600160a01b0388161515610fec565b60043560005260016020526003604060002001546107af575b600435600052600160205260406000206bffffffffffffffffffffffff60a01b60018060a01b038916818354161782556001820160018060a01b03851682825416179055600482019060018060a01b038616908254161790556001600160401b0385116106d9576104e76005820154611121565b601f8111610768575b50846000601f82116001146106fa576000916106ef575b508560011b906000198760031b1c19161760058201555b6001600160401b0387116106d9576105396006820154611121565b601f811161068e575b50866000601f82116001146105f057927f08e4136107b2b0c5628d51bb7e0533e30306bbcb30a7187f568c4192aec4bd409695949260066105bf936105e0966000916105e5575b508b60011b906000198d60031b1c1916179101555b60405195869560018060a01b0316865260606020870152606086019161115b565b83810360408501526001600160a01b0391821698909116966004359661115b565b0390a4005b90508a01358d610589565b9050601f19881690600683016000528860206000209260005b8181106106735750926105e095927f08e4136107b2b0c5628d51bb7e0533e30306bbcb30a7187f568c4192aec4bd4099989795926105bf9510610659575b5050600660018b811b0191015561059e565b8a013560001960038d901b60f8161c191690558b80610647565b8a84013585556001909401936020938401938c935001610609565b600682016000526020600020601f890160051c81019160208a106106cf575b601f0160051c01905b8181106106c35750610542565b600081556001016106b6565b90915081906106ad565b634e487b7160e01b600052604160045260246000fd5b905082013589610507565b90506005820160005260206000209060005b601f1988168110610750575086601f19811610610736575b5050600185811b01600582015561051e565b830135600019600388901b60f8161c191690558880610724565b9091602060018192858801358155019301910161070c565b600582016000526020600020601f870160051c8101602088106107a8575b601f830160051c8201811061079c5750506104f0565b60008155600101610786565b5080610786565b6107c36001600160a01b038316151561102a565b610473565b346100c1576020806003193601126100c157606060c06040516107ea816110d4565b6000815260008482015260006040820152600083820152600060808201528260a08201520152600435600052600181526040600020906108ee60405192610830846110d4565b6108db8460018060a01b0380845416825280600185015416938683019485526002810154604084019081526003820154906060850191825283610896600682600487015416956080890196875260a061088b6005830161133e565b99019889520161133e565b9760c08c019889528a826040519d8e9d8e525116908c0152511660408a0152516060890152516080880152511660a08601525160e060c0860152610100850190610f3b565b9051838203601f190160e0850152610f3b565b0390f35b346100c15760803660031901126100c157600435602435604435917f81cd038fe434fe888c4d6117ceca740d3e7bbefd5de05c63fd1aaa098b4b79566020606435836000526001825261095760018060a01b036040600020541661015481151561117c565b61096285151561120c565b61096d861515611251565b83600052600282526040600020856000528252604060002086600052825280604060002055604051908152a4005b346100c15760603660031901126100c1576004356000526002602052604060002060243560005260205260406000206044356000526020526020604060002054604051908152f35b346100c15760203660031901126100c157600435600090815260016020818152604092839020600381015492015483519283526001600160a01b031690820152f35b346100c1576003196020368201126100c1576001600160401b03600435116100c15760e090600435360301126100c157610a756001600160a01b03610a6d6004803501610fd8565b161515610fec565b6001600160a01b03610a8b600435602401610fd8565b1615801590610f2d575b610a9e9061102a565b66b1a2bc2ec500006044600435013511610eef57610aca6044600435013560646004350135111561106e565b600054610ad6816110af565b60005560405160208101913060601b8352603482015260348152606081018181106001600160401b038211176106d95760405251902080600052600160205260406000209060018060a01b03610b30600435600401610fd8565b166bffffffffffffffffffffffff60a01b90818454161783556001830160018060a01b03610b62602460043501610fd8565b82548416911617905560048035604481013560028601556064810135600386015590840191906001600160a01b0390610b9d90608401610fd8565b1690825416179055610bb960a4600435016004356004016110ef565b906001600160401b0382116106d9578190610bd76005860154611121565b601f8111610e9c575b50600090601f8311600114610e2b57600092610e20575b50508160011b916000199060031b1c19161760058301555b610c2360c4600435016004356004016110ef565b6001600160401b0381949294116106d957610c416006830154611121565b93601f8511610dd9575b60209450600090601f8311600114610d6b576006929160009183610d60575b50508160011b916000199060031b1c1916179101555b610c8e600435600401610fd8565b610c9c602460043501610fd8565b827f47c9dd97b9368307bacc84f0603b4afda08ce948ed75afec76540622122523c6610d55610ccf608460043501610fd8565b610ce360a4600435016004356004016110ef565b929095610d38610cfd60c4600435016004356004016110ef565b919098604051968796604460043501358852606460043501358f89015260018060a01b0316604088015260a0606088015260a087019161115b565b84810360808601526001600160a01b03928316999092169761115b565b0390a4604051908152f35b013590508680610c6a565b60068401600052856000209160005b601f1985168110610dc25750918391600193600695601f19811610610da8575b505050811b01910155610c80565b0135600019600384901b60f8161c19169055868080610d9a565b909287600181928686013581550194019101610d7a565b600683016000526020600020601f830160051c810160208410610e19575b601f870160051c82018110610e0d575050610c4b565b60008155600101610df7565b5080610df7565b013590508480610bf7565b909250600585016000526020600020906000935b601f1984168510610e84576001945083601f19811610610e6a575b505050811b016005830155610c0f565b0135600019600384901b60f8161c19169055848080610e5a565b81810135835560209485019460019093019201610e3f565b909150600585016000526020600020601f840160051c810160208510610ee8575b90849392915b601f830160051c82018110610ed9575050610be0565b60008155859450600101610ec3565b5080610ebd565b60405162461bcd60e51b815260206004820152601660248201527513585e0819995948195e18d959591cc819db1bd8985b60521b6044820152606490fd5b506004356064013515610a95565b919082519283825260005b848110610f67575050826000602080949584010152601f8019910116010190565b602081830181015184830182015201610f46565b9181601f840112156100c1578235916001600160401b0383116100c157602083818601950101116100c157565b9181601f840112156100c1578235916001600160401b0383116100c1576020808501948460051b0101116100c157565b356001600160a01b03811681036100c15790565b15610ff357565b60405162461bcd60e51b815260206004820152600f60248201526e24b73b30b634b21036b0b730b3b2b960891b6044820152606490fd5b1561103157565b60405162461bcd60e51b8152602060048201526015602482015274125b9d985b1a5908199959481c9958da5c1a595b9d605a1b6044820152606490fd5b1561107557565b60405162461bcd60e51b81526020600482015260126024820152714665652065786365656473206d617846656560701b6044820152606490fd5b60001981146110be5760010190565b634e487b7160e01b600052601160045260246000fd5b60e081019081106001600160401b038211176106d957604052565b903590601e19813603018212156100c157018035906001600160401b0382116100c1576020019181360383136100c157565b90600182811c92168015611151575b602083101461113b57565b634e487b7160e01b600052602260045260246000fd5b91607f1691611130565b908060209392818452848401376000828201840152601f01601f1916010190565b1561118357565b60405162461bcd60e51b815260206004820152601b60248201527f52617465206d616e6167657220646f6573206e6f7420657869737400000000006044820152606490fd5b156111cf57565b60405162461bcd60e51b815260206004820152601560248201527421b0b63632b91034b9903737ba1036b0b730b3b2b960591b6044820152606490fd5b1561121357565b60405162461bcd60e51b8152602060048201526016602482015275125b9d985b1a59081c185e5b595b9d081b595d1a1bd960521b6044820152606490fd5b1561125857565b60405162461bcd60e51b815260206004820152601060248201526f496e76616c69642063757272656e637960801b6044820152606490fd5b1561129757565b60405162461bcd60e51b8152602060048201526015602482015274082e4e4c2f240d8cadccee8d040dad2e6dac2e8c6d605b1b6044820152606490fd5b91908110156112e45760051b0190565b634e487b7160e01b600052603260045260246000fd5b91908110156112e45760051b81013590601e19813603018212156100c15701908135916001600160401b0383116100c1576020018260051b360381136100c1579190565b906040519160009080549061135282611121565b9081865260019283811690816000146113d15750600114611394575b505050829003601f01601f191682016001600160401b038111838210176106d957604052565b9092506000526020918260002091836000935b8385106113bd575050505083010138808061136e565b8054888601830152930192849082016113a7565b92935050506020925060ff191682850152151560051b83010138808061136e56fea26469706673582212209dd222e231a5493225476790dd7ad99bdc51487238a9660ad27f56b79728a51364736f6c63430008120033",
+  "deployedBytecode": "0x6080604052600436101561001257600080fd5b60003560e01c80631c2dee9314610a255780633a258a3a146109e357806364f21b481461099b57806388d0acfd146108f257806390a3a9c5146107c85780639f080ab014610392578063af46f6491461035c578063b96f8f32146102b3578063e7f35697146100c65763ed97afbf1461008a57600080fd5b346100c15760203660031901126100c1576004356000526001602052602060018060a01b0360046040600020015416604051908152f35b600080fd5b346100c15760803660031901126100c1576001600160401b036024358181116100c1576100f7903690600401610fa8565b91906044358281116100c157610111903690600401610fa8565b90926064359081116100c15761012b903690600401610fa8565b9091600435600052600160205261015b60018060a01b036040600020541661015481151561117c565b33146111c8565b610166818714611290565b610171828714611290565b60009560005b8181106101af57876040519081527f711a53042b37d7fa19b4cd1dafbc5e4b041578ce22596becb2283b8d57814c9c602060043592a2005b6101ba8183886112d4565b356101c681151561120c565b6101d182858a6112fa565b906101dd84888a6112fa565b92906101ea848314611290565b6000945b82861061020957505050505050610204906110af565b610177565b90919293949c6102a36102a9918f8461026f610226838a8c6112d4565b3592610233841515611251565b61023e818d8b6112d4565b3560043560005260026020526040600020846000526020526040600020856000526020526040600020558b896112d4565b356040519081527f81cd038fe434fe888c4d6117ceca740d3e7bbefd5de05c63fd1aaa098b4b7956602060043592a46110af565b9d6110af565b94939291906101ee565b346100c15760403660031901126100c1576004357fe6f4631c85a066db4d84bf89ec61874b3060da03c0c164c21076f685cd771b676020602435836000526001825280600360018060a01b03610315816040600020541661015481151561117c565b8660005260018552604060002090610333600283015485111561106e565b83610345575b500155604051908152a2005b61035690600183015416151561102a565b87610339565b346100c15760203660031901126100c1576004356000526001602052602060018060a01b03604060002054161515604051908152f35b346100c15760c03660031901126100c1576024356001600160a01b03811681036100c1576044356001600160a01b03811681036100c1576064356001600160a01b03811681036100c1576084356001600160401b0381116100c1576103fb903690600401610f7b565b909160a4356001600160401b0381116100c15761041c903690600401610f7b565b949093600435600052600160205261044660018060a01b036040600020541661015481151561117c565b61045a6001600160a01b0388161515610fec565b60043560005260016020526003604060002001546107af575b600435600052600160205260406000206bffffffffffffffffffffffff60a01b60018060a01b038916818354161782556001820160018060a01b03851682825416179055600482019060018060a01b038616908254161790556001600160401b0385116106d9576104e76005820154611121565b601f8111610768575b50846000601f82116001146106fa576000916106ef575b508560011b906000198760031b1c19161760058201555b6001600160401b0387116106d9576105396006820154611121565b601f811161068e575b50866000601f82116001146105f057927f08e4136107b2b0c5628d51bb7e0533e30306bbcb30a7187f568c4192aec4bd409695949260066105bf936105e0966000916105e5575b508b60011b906000198d60031b1c1916179101555b60405195869560018060a01b0316865260606020870152606086019161115b565b83810360408501526001600160a01b0391821698909116966004359661115b565b0390a4005b90508a01358d610589565b9050601f19881690600683016000528860206000209260005b8181106106735750926105e095927f08e4136107b2b0c5628d51bb7e0533e30306bbcb30a7187f568c4192aec4bd4099989795926105bf9510610659575b5050600660018b811b0191015561059e565b8a013560001960038d901b60f8161c191690558b80610647565b8a84013585556001909401936020938401938c935001610609565b600682016000526020600020601f890160051c81019160208a106106cf575b601f0160051c01905b8181106106c35750610542565b600081556001016106b6565b90915081906106ad565b634e487b7160e01b600052604160045260246000fd5b905082013589610507565b90506005820160005260206000209060005b601f1988168110610750575086601f19811610610736575b5050600185811b01600582015561051e565b830135600019600388901b60f8161c191690558880610724565b9091602060018192858801358155019301910161070c565b600582016000526020600020601f870160051c8101602088106107a8575b601f830160051c8201811061079c5750506104f0565b60008155600101610786565b5080610786565b6107c36001600160a01b038316151561102a565b610473565b346100c1576020806003193601126100c157606060c06040516107ea816110d4565b6000815260008482015260006040820152600083820152600060808201528260a08201520152600435600052600181526040600020906108ee60405192610830846110d4565b6108db8460018060a01b0380845416825280600185015416938683019485526002810154604084019081526003820154906060850191825283610896600682600487015416956080890196875260a061088b6005830161133e565b99019889520161133e565b9760c08c019889528a826040519d8e9d8e525116908c0152511660408a0152516060890152516080880152511660a08601525160e060c0860152610100850190610f3b565b9051838203601f190160e0850152610f3b565b0390f35b346100c15760803660031901126100c157600435602435604435917f81cd038fe434fe888c4d6117ceca740d3e7bbefd5de05c63fd1aaa098b4b79566020606435836000526001825261095760018060a01b036040600020541661015481151561117c565b61096285151561120c565b61096d861515611251565b83600052600282526040600020856000528252604060002086600052825280604060002055604051908152a4005b346100c15760603660031901126100c1576004356000526002602052604060002060243560005260205260406000206044356000526020526020604060002054604051908152f35b346100c15760203660031901126100c157600435600090815260016020818152604092839020600381015492015483519283526001600160a01b031690820152f35b346100c1576003196020368201126100c1576001600160401b03600435116100c15760e090600435360301126100c157610a756001600160a01b03610a6d6004803501610fd8565b161515610fec565b6001600160a01b03610a8b600435602401610fd8565b1615801590610f2d575b610a9e9061102a565b66b1a2bc2ec500006044600435013511610eef57610aca6044600435013560646004350135111561106e565b600054610ad6816110af565b60005560405160208101913060601b8352603482015260348152606081018181106001600160401b038211176106d95760405251902080600052600160205260406000209060018060a01b03610b30600435600401610fd8565b166bffffffffffffffffffffffff60a01b90818454161783556001830160018060a01b03610b62602460043501610fd8565b82548416911617905560048035604481013560028601556064810135600386015590840191906001600160a01b0390610b9d90608401610fd8565b1690825416179055610bb960a4600435016004356004016110ef565b906001600160401b0382116106d9578190610bd76005860154611121565b601f8111610e9c575b50600090601f8311600114610e2b57600092610e20575b50508160011b916000199060031b1c19161760058301555b610c2360c4600435016004356004016110ef565b6001600160401b0381949294116106d957610c416006830154611121565b93601f8511610dd9575b60209450600090601f8311600114610d6b576006929160009183610d60575b50508160011b916000199060031b1c1916179101555b610c8e600435600401610fd8565b610c9c602460043501610fd8565b827f47c9dd97b9368307bacc84f0603b4afda08ce948ed75afec76540622122523c6610d55610ccf608460043501610fd8565b610ce360a4600435016004356004016110ef565b929095610d38610cfd60c4600435016004356004016110ef565b919098604051968796604460043501358852606460043501358f89015260018060a01b0316604088015260a0606088015260a087019161115b565b84810360808601526001600160a01b03928316999092169761115b565b0390a4604051908152f35b013590508680610c6a565b60068401600052856000209160005b601f1985168110610dc25750918391600193600695601f19811610610da8575b505050811b01910155610c80565b0135600019600384901b60f8161c19169055868080610d9a565b909287600181928686013581550194019101610d7a565b600683016000526020600020601f830160051c810160208410610e19575b601f870160051c82018110610e0d575050610c4b565b60008155600101610df7565b5080610df7565b013590508480610bf7565b909250600585016000526020600020906000935b601f1984168510610e84576001945083601f19811610610e6a575b505050811b016005830155610c0f565b0135600019600384901b60f8161c19169055848080610e5a565b81810135835560209485019460019093019201610e3f565b909150600585016000526020600020601f840160051c810160208510610ee8575b90849392915b601f830160051c82018110610ed9575050610be0565b60008155859450600101610ec3565b5080610ebd565b60405162461bcd60e51b815260206004820152601660248201527513585e0819995948195e18d959591cc819db1bd8985b60521b6044820152606490fd5b506004356064013515610a95565b919082519283825260005b848110610f67575050826000602080949584010152601f8019910116010190565b602081830181015184830182015201610f46565b9181601f840112156100c1578235916001600160401b0383116100c157602083818601950101116100c157565b9181601f840112156100c1578235916001600160401b0383116100c1576020808501948460051b0101116100c157565b356001600160a01b03811681036100c15790565b15610ff357565b60405162461bcd60e51b815260206004820152600f60248201526e24b73b30b634b21036b0b730b3b2b960891b6044820152606490fd5b1561103157565b60405162461bcd60e51b8152602060048201526015602482015274125b9d985b1a5908199959481c9958da5c1a595b9d605a1b6044820152606490fd5b1561107557565b60405162461bcd60e51b81526020600482015260126024820152714665652065786365656473206d617846656560701b6044820152606490fd5b60001981146110be5760010190565b634e487b7160e01b600052601160045260246000fd5b60e081019081106001600160401b038211176106d957604052565b903590601e19813603018212156100c157018035906001600160401b0382116100c1576020019181360383136100c157565b90600182811c92168015611151575b602083101461113b57565b634e487b7160e01b600052602260045260246000fd5b91607f1691611130565b908060209392818452848401376000828201840152601f01601f1916010190565b1561118357565b60405162461bcd60e51b815260206004820152601b60248201527f52617465206d616e6167657220646f6573206e6f7420657869737400000000006044820152606490fd5b156111cf57565b60405162461bcd60e51b815260206004820152601560248201527421b0b63632b91034b9903737ba1036b0b730b3b2b960591b6044820152606490fd5b1561121357565b60405162461bcd60e51b8152602060048201526016602482015275125b9d985b1a59081c185e5b595b9d081b595d1a1bd960521b6044820152606490fd5b1561125857565b60405162461bcd60e51b815260206004820152601060248201526f496e76616c69642063757272656e637960801b6044820152606490fd5b1561129757565b60405162461bcd60e51b8152602060048201526015602482015274082e4e4c2f240d8cadccee8d040dad2e6dac2e8c6d605b1b6044820152606490fd5b91908110156112e45760051b0190565b634e487b7160e01b600052603260045260246000fd5b91908110156112e45760051b81013590601e19813603018212156100c15701908135916001600160401b0383116100c1576020018260051b360381136100c1579190565b906040519160009080549061135282611121565b9081865260019283811690816000146113d15750600114611394575b505050829003601f01601f191682016001600160401b038111838210176106d957604052565b9092506000526020918260002091836000935b8385106113bd575050505083010138808061136e565b8054888601830152930192849082016113a7565b92935050506020925060ff191682850152151560051b83010138808061136e56fea26469706673582212209dd222e231a5493225476790dd7ad99bdc51487238a9660ad27f56b79728a51364736f6c63430008120033",
+  "devdoc": {
+    "kind": "dev",
+    "methods": {
+      "createRateManager((address,address,uint256,uint256,address,string,string))": {
+        "details": "The identifier is derived as keccak256(abi.encodePacked(address(this), nextId)).      This ties IDs to the registry deployment and avoids deliberate collisions.      Reverts if inputs are invalid or fee exceeds caps.",
+        "params": {
+          "_config": "Rate manager configuration {manager, feeRecipient, maxFee, fee, depositHook, name, uri}."
+        },
+        "returns": {
+          "rateManagerId": "Newly minted manager id (bytes32)."
+        }
+      },
+      "getDepositHook(bytes32)": {
+        "params": {
+          "_rateManagerId": "Manager id."
+        }
+      },
+      "getFeeAndRecipient(bytes32)": {
+        "params": {
+          "_rateManagerId": "Manager id."
+        },
+        "returns": {
+          "fee": "         Fee in preciseUnits (1e18 = 100%).",
+          "feeRecipient": "Address that receives manager fees."
+        }
+      },
+      "getMinRate(bytes32,bytes32,bytes32)": {
+        "params": {
+          "_currency": "Fiat currency key.",
+          "_paymentMethod": "Payment method key.",
+          "_rateManagerId": "Manager id."
+        },
+        "returns": {
+          "_0": "minRate       Minimum rate in preciseUnits (0 means disabled)."
+        }
+      },
+      "getRateManager(bytes32)": {
+        "params": {
+          "_rateManagerId": "Manager id."
+        }
+      },
+      "isRateManager(bytes32)": {
+        "params": {
+          "_rateManagerId": "Manager id."
+        }
+      },
+      "setFee(bytes32,uint256)": {
+        "details": "Only callable by config.manager. New fee must be <= maxFee and if > 0 then feeRecipient must be set.",
+        "params": {
+          "_newFee": "New fee in preciseUnits (1e18 = 100%).",
+          "_rateManagerId": "Manager id."
+        }
+      },
+      "setMinRate(bytes32,bytes32,bytes32,uint256)": {
+        "details": "Does not validate whether the payment method or currency are registered; Escrow/Orchestrator enforce      deposit support and payment method whitelisting. Setting to 0 disables the pair at the manager level.",
+        "params": {
+          "_currency": "Fiat currency key.",
+          "_minRate": "Minimum conversion rate in preciseUnits.",
+          "_paymentMethod": "Payment method key.",
+          "_rateManagerId": "Manager id."
+        }
+      },
+      "setMinRatesBatch(bytes32,bytes32[],bytes32[][],uint256[][])": {
+        "details": "For each i in paymentMethods, currencies[i] and _minRatesArr[i] must be same length.      Reverts on any array length mismatch or zero keys. No validation of platform/currency registration.",
+        "params": {
+          "_currencies": "Array of currency arrays aligned with payment methods.",
+          "_minRatesArr": "Array of rate arrays aligned with payment methods/currencies.",
+          "_paymentMethods": "Array of payment methods.",
+          "_rateManagerId": "Manager id."
+        }
+      },
+      "setRateManagerConfig(bytes32,address,address,address,string,string)": {
+        "details": "Only callable by the current config.manager. Does not alter maxFee.      If an existing fee is non‑zero, a non‑zero feeRecipient must be supplied.",
+        "params": {
+          "_newFeeRecipient": "New fee recipient address (required when fee>0).",
+          "_newHook": "Optional deposit hook contract (view callable on opt‑in), or address(0).",
+          "_newManager": "New manager address (cannot be zero).",
+          "_newName": "Human‑readable name metadata.",
+          "_newUri": "URI metadata.",
+          "_rateManagerId": "Manager id."
+        }
+      }
+    },
+    "title": "DepositRateManagerRegistryV1",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "createRateManager((address,address,uint256,uint256,address,string,string))": {
+        "notice": "Creates a new rate manager configuration."
+      },
+      "getDepositHook(bytes32)": {
+        "notice": "Returns the deposit hook address configured for a manager id (or address(0) if none)."
+      },
+      "getFeeAndRecipient(bytes32)": {
+        "notice": "Returns the manager fee and recipient for an id."
+      },
+      "getMinRate(bytes32,bytes32,bytes32)": {
+        "notice": "Returns the manager‑level minimum rate for a (paymentMethod, currency) pair."
+      },
+      "getRateManager(bytes32)": {
+        "notice": "Returns the full manager configuration for an id."
+      },
+      "isRateManager(bytes32)": {
+        "notice": "Returns true if the manager id exists."
+      },
+      "setFee(bytes32,uint256)": {
+        "notice": "Updates the manager fee for a given id."
+      },
+      "setMinRate(bytes32,bytes32,bytes32,uint256)": {
+        "notice": "Sets the manager‑level minimum rate for a specific (paymentMethod, currency) pair."
+      },
+      "setMinRatesBatch(bytes32,bytes32[],bytes32[][],uint256[][])": {
+        "notice": "Batch update manager‑level minimum rates."
+      },
+      "setRateManagerConfig(bytes32,address,address,address,string,string)": {
+        "notice": "Updates mutable fields on a rate manager config."
+      }
+    },
+    "notice": "Permissionless registry of “deposit rate managers”. Stores manager fee config, optional deposit hook, and (paymentMethod,currency)->minRate entries.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 13731,
+        "contract": "contracts/registries/DepositRateManagerRegistryV1.sol:DepositRateManagerRegistryV1",
+        "label": "nextId",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_uint256"
+      },
+      {
+        "astId": 13736,
+        "contract": "contracts/registries/DepositRateManagerRegistryV1.sol:DepositRateManagerRegistryV1",
+        "label": "rateManagers",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_mapping(t_bytes32,t_struct(RateManagerConfig)10763_storage)"
+      },
+      {
+        "astId": 13744,
+        "contract": "contracts/registries/DepositRateManagerRegistryV1.sol:DepositRateManagerRegistryV1",
+        "label": "minRates",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_mapping(t_bytes32,t_mapping(t_bytes32,t_mapping(t_bytes32,t_uint256)))"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_bytes32": {
+        "encoding": "inplace",
+        "label": "bytes32",
+        "numberOfBytes": "32"
+      },
+      "t_mapping(t_bytes32,t_mapping(t_bytes32,t_mapping(t_bytes32,t_uint256)))": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => mapping(bytes32 => mapping(bytes32 => uint256)))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_bytes32,t_mapping(t_bytes32,t_uint256))"
+      },
+      "t_mapping(t_bytes32,t_mapping(t_bytes32,t_uint256))": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => mapping(bytes32 => uint256))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_bytes32,t_uint256)"
+      },
+      "t_mapping(t_bytes32,t_struct(RateManagerConfig)10763_storage)": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => struct IDepositRateManagerRegistryV1.RateManagerConfig)",
+        "numberOfBytes": "32",
+        "value": "t_struct(RateManagerConfig)10763_storage"
+      },
+      "t_mapping(t_bytes32,t_uint256)": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => uint256)",
+        "numberOfBytes": "32",
+        "value": "t_uint256"
+      },
+      "t_string_storage": {
+        "encoding": "bytes",
+        "label": "string",
+        "numberOfBytes": "32"
+      },
+      "t_struct(RateManagerConfig)10763_storage": {
+        "encoding": "inplace",
+        "label": "struct IDepositRateManagerRegistryV1.RateManagerConfig",
+        "members": [
+          {
+            "astId": 10750,
+            "contract": "contracts/registries/DepositRateManagerRegistryV1.sol:DepositRateManagerRegistryV1",
+            "label": "manager",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address"
+          },
+          {
+            "astId": 10752,
+            "contract": "contracts/registries/DepositRateManagerRegistryV1.sol:DepositRateManagerRegistryV1",
+            "label": "feeRecipient",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_address"
+          },
+          {
+            "astId": 10754,
+            "contract": "contracts/registries/DepositRateManagerRegistryV1.sol:DepositRateManagerRegistryV1",
+            "label": "maxFee",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_uint256"
+          },
+          {
+            "astId": 10756,
+            "contract": "contracts/registries/DepositRateManagerRegistryV1.sol:DepositRateManagerRegistryV1",
+            "label": "fee",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_uint256"
+          },
+          {
+            "astId": 10758,
+            "contract": "contracts/registries/DepositRateManagerRegistryV1.sol:DepositRateManagerRegistryV1",
+            "label": "depositHook",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_address"
+          },
+          {
+            "astId": 10760,
+            "contract": "contracts/registries/DepositRateManagerRegistryV1.sol:DepositRateManagerRegistryV1",
+            "label": "name",
+            "offset": 0,
+            "slot": "5",
+            "type": "t_string_storage"
+          },
+          {
+            "astId": 10762,
+            "contract": "contracts/registries/DepositRateManagerRegistryV1.sol:DepositRateManagerRegistryV1",
+            "label": "uri",
+            "offset": 0,
+            "slot": "6",
+            "type": "t_string_storage"
+          }
+        ],
+        "numberOfBytes": "224"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      }
+    }
+  }
+}

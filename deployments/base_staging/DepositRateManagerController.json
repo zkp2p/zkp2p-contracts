@@ -1,0 +1,425 @@
+{
+  "address": "0x2CF2FA7F21be0F920E1D8f4bb9C08E2c07F0E5d7",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "RateManagerAlreadySet",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "RateManagerNotFound",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "RateManagerRegistryNotSet",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "authorized",
+          "type": "address"
+        }
+      ],
+      "name": "UnauthorizedCaller",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroAddress",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroValue",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "registry",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "prevRateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "DepositRateManagerCleared",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "registry",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "DepositRateManagerSet",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        }
+      ],
+      "name": "clearDepositRateManager",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getDepositRateManager",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "registry",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_currencyCode",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getEffectiveMinRate",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getManagerFee",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "recipient",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "fee",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "_registry",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "setDepositRateManager",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0xf9239357e4bfb81a83e8c57f330b29a055e4684519a62d3502a687290981a5f3",
+  "receipt": {
+    "to": null,
+    "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "contractAddress": "0x2CF2FA7F21be0F920E1D8f4bb9C08E2c07F0E5d7",
+    "transactionIndex": 252,
+    "gasUsed": "664879",
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0xa3dd5514f0bffa29657c0098e999a1628230c52154e17686e95ce6ed9f904851",
+    "transactionHash": "0xf9239357e4bfb81a83e8c57f330b29a055e4684519a62d3502a687290981a5f3",
+    "logs": [],
+    "blockNumber": 41876299,
+    "cumulativeGasUsed": "54763863",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [],
+  "numDeployments": 1,
+  "solcInputHash": "7c47a2c975a247c42fe33a476dbcb79d",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"}],\"name\":\"RateManagerAlreadySet\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"}],\"name\":\"RateManagerNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"RateManagerRegistryNotSet\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"authorized\",\"type\":\"address\"}],\"name\":\"UnauthorizedCaller\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAddress\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroValue\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"registry\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"prevRateManagerId\",\"type\":\"bytes32\"}],\"name\":\"DepositRateManagerCleared\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"registry\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"}],\"name\":\"DepositRateManagerSet\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"}],\"name\":\"clearDepositRateManager\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"}],\"name\":\"getDepositRateManager\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"registry\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"_paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"_currencyCode\",\"type\":\"bytes32\"}],\"name\":\"getEffectiveMinRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"}],\"name\":\"getManagerFee\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"_registry\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"}],\"name\":\"setDepositRateManager\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"kind\":\"dev\",\"methods\":{\"clearDepositRateManager(address,uint256)\":{\"details\":\"Only the depositor can clear. Reverts if escrow is paused.      Emits DepositRateManagerCleared with the previous registry and manager id.\",\"params\":{\"_depositId\":\"Deposit id on the escrow.\",\"_escrow\":\"Escrow contract address.\"}},\"getDepositRateManager(address,uint256)\":{\"details\":\"Returns (address(0), 0) if the deposit has not opted into a manager.\",\"params\":{\"_depositId\":\"Deposit id on the escrow.\",\"_escrow\":\"Escrow contract address.\"},\"returns\":{\"rateManagerId\":\"Manager id.\",\"registry\":\"     Registry address.\"}},\"getEffectiveMinRate(address,uint256,bytes32,bytes32)\":{\"details\":\"If no manager is set, returns the depositor floor. If manager disables the pair      (min rate = 0) or payment method is inactive, returns 0. Reverts if a manager      is set but the registry address is missing.\",\"params\":{\"_currencyCode\":\"Currency code key.\",\"_depositId\":\"Deposit id on the escrow.\",\"_escrow\":\"Escrow contract address.\",\"_paymentMethod\":\"Payment method key.\"},\"returns\":{\"_0\":\"minRate       Effective minimum conversion rate in precise units.\"}},\"getManagerFee(address,uint256)\":{\"details\":\"Returns (address(0), 0) if no manager is set. Reverts if a manager      is set but the registry address is missing.\",\"params\":{\"_depositId\":\"Deposit id on the escrow.\",\"_escrow\":\"Escrow contract address.\"},\"returns\":{\"fee\":\"      Fee in precise units.\",\"recipient\":\"Fee recipient.\"}},\"setDepositRateManager(address,uint256,address,bytes32)\":{\"details\":\"Only the depositor can opt in. Reverts if escrow is paused, inputs are zero,      a manager is already set, or the rate manager id is not registered. If a manager      hook is configured, it is called (view) and may revert to reject the opt-in.\",\"params\":{\"_depositId\":\"Deposit id on the escrow.\",\"_escrow\":\"Escrow contract address.\",\"_rateManagerId\":\"Manager id to opt into.\",\"_registry\":\"DepositRateManagerRegistryV1 address.\"}}},\"title\":\"DepositRateManagerController\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"clearDepositRateManager(address,uint256)\":{\"notice\":\"Clear the rate manager for a deposit.\"},\"getDepositRateManager(address,uint256)\":{\"notice\":\"Returns the stored (registry, rateManagerId) for a deposit.\"},\"getEffectiveMinRate(address,uint256,bytes32,bytes32)\":{\"notice\":\"Returns the effective minimum conversion rate for a deposit/currency pair.\"},\"getManagerFee(address,uint256)\":{\"notice\":\"Returns the manager fee recipient and fee for a deposit.\"},\"setDepositRateManager(address,uint256,address,bytes32)\":{\"notice\":\"Opt a deposit into a rate manager configuration.\"}},\"notice\":\"External controller that stores per-deposit rate manager config and computes effective min rates.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/DepositRateManagerController.sol\":\"DepositRateManagerController\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"@openzeppelin/contracts/token/ERC20/IERC20.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (token/ERC20/IERC20.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Interface of the ERC20 standard as defined in the EIP.\\n */\\ninterface IERC20 {\\n    /**\\n     * @dev Emitted when `value` tokens are moved from one account (`from`) to\\n     * another (`to`).\\n     *\\n     * Note that `value` may be zero.\\n     */\\n    event Transfer(address indexed from, address indexed to, uint256 value);\\n\\n    /**\\n     * @dev Emitted when the allowance of a `spender` for an `owner` is set by\\n     * a call to {approve}. `value` is the new allowance.\\n     */\\n    event Approval(address indexed owner, address indexed spender, uint256 value);\\n\\n    /**\\n     * @dev Returns the amount of tokens in existence.\\n     */\\n    function totalSupply() external view returns (uint256);\\n\\n    /**\\n     * @dev Returns the amount of tokens owned by `account`.\\n     */\\n    function balanceOf(address account) external view returns (uint256);\\n\\n    /**\\n     * @dev Moves `amount` tokens from the caller's account to `to`.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transfer(address to, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Returns the remaining number of tokens that `spender` will be\\n     * allowed to spend on behalf of `owner` through {transferFrom}. This is\\n     * zero by default.\\n     *\\n     * This value changes when {approve} or {transferFrom} are called.\\n     */\\n    function allowance(address owner, address spender) external view returns (uint256);\\n\\n    /**\\n     * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * IMPORTANT: Beware that changing an allowance with this method brings the risk\\n     * that someone may use both the old and the new allowance by unfortunate\\n     * transaction ordering. One possible solution to mitigate this race\\n     * condition is to first reduce the spender's allowance to 0 and set the\\n     * desired value afterwards:\\n     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729\\n     *\\n     * Emits an {Approval} event.\\n     */\\n    function approve(address spender, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Moves `amount` tokens from `from` to `to` using the\\n     * allowance mechanism. `amount` is then deducted from the caller's\\n     * allowance.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transferFrom(address from, address to, uint256 amount) external returns (bool);\\n}\\n\",\"keccak256\":\"0x287b55befed2961a7eabd7d7b1b2839cbca8a5b80ef8dcbb25ed3d4c2002c305\",\"license\":\"MIT\"},\"contracts/DepositRateManagerController.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IEscrow } from \\\"./interfaces/IEscrow.sol\\\";\\nimport { IDepositRateManagerRegistryV1 } from \\\"./interfaces/IDepositRateManagerRegistryV1.sol\\\";\\nimport { IDepositRateManagerHook } from \\\"./interfaces/IDepositRateManagerHook.sol\\\";\\nimport { IDepositRateManagerController } from \\\"./interfaces/IDepositRateManagerController.sol\\\";\\n\\n/**\\n * @dev Minimal interface for pause checks on Escrow.\\n */\\ninterface IPausable {\\n    function paused() external view returns (bool);\\n}\\n\\n/**\\n * @title DepositRateManagerController\\n * @notice External controller that stores per-deposit rate manager config and computes effective min rates.\\n */\\ncontract DepositRateManagerController is IDepositRateManagerController {\\n    /* ============ Structs ============ */\\n\\n    struct DepositManagerConfig {\\n        address registry;\\n        bytes32 rateManagerId;\\n    }\\n\\n    /* ============ State Variables ============ */\\n\\n    // escrow => depositId => config\\n    mapping(address => mapping(uint256 => DepositManagerConfig)) internal depositManagerConfig;\\n\\n    /* ============ External Functions ============ */\\n\\n    /**\\n     * @notice Opt a deposit into a rate manager configuration.\\n     * @dev Only the depositor can opt in. Reverts if escrow is paused, inputs are zero,\\n     *      a manager is already set, or the rate manager id is not registered. If a manager\\n     *      hook is configured, it is called (view) and may revert to reject the opt-in.\\n     * @param _escrow         Escrow contract address.\\n     * @param _depositId      Deposit id on the escrow.\\n     * @param _registry       DepositRateManagerRegistryV1 address.\\n     * @param _rateManagerId  Manager id to opt into.\\n     */\\n    function setDepositRateManager(\\n        address _escrow,\\n        uint256 _depositId,\\n        address _registry,\\n        bytes32 _rateManagerId\\n    )\\n        external\\n    {\\n        if (_escrow == address(0)) revert ZeroAddress();\\n        if (_rateManagerId == bytes32(0)) revert ZeroValue();\\n        if (_registry == address(0)) revert ZeroAddress();\\n\\n        _requireNotPaused(_escrow);\\n\\n        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);\\n        if (deposit.depositor != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.depositor);\\n\\n        DepositManagerConfig memory existing = depositManagerConfig[_escrow][_depositId];\\n        if (existing.rateManagerId != bytes32(0)) revert RateManagerAlreadySet(existing.rateManagerId);\\n\\n        IDepositRateManagerRegistryV1 registry = IDepositRateManagerRegistryV1(_registry);\\n        if (!registry.isRateManager(_rateManagerId)) revert RateManagerNotFound(_rateManagerId);\\n\\n        address hook = registry.getDepositHook(_rateManagerId);\\n        if (hook != address(0)) {\\n            IDepositRateManagerHook(hook).onDepositOptIn(msg.sender, _escrow, _depositId, _rateManagerId);\\n        }\\n\\n        depositManagerConfig[_escrow][_depositId] = DepositManagerConfig({\\n            registry: _registry,\\n            rateManagerId: _rateManagerId\\n        });\\n\\n        emit DepositRateManagerSet(_escrow, _depositId, _registry, _rateManagerId);\\n    }\\n\\n    /**\\n     * @notice Clear the rate manager for a deposit.\\n     * @dev Only the depositor can clear. Reverts if escrow is paused.\\n     *      Emits DepositRateManagerCleared with the previous registry and manager id.\\n     * @param _escrow    Escrow contract address.\\n     * @param _depositId Deposit id on the escrow.\\n     */\\n    function clearDepositRateManager(address _escrow, uint256 _depositId) external {\\n        if (_escrow == address(0)) revert ZeroAddress();\\n\\n        _requireNotPaused(_escrow);\\n\\n        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);\\n        if (deposit.depositor != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.depositor);\\n\\n        DepositManagerConfig memory prev = depositManagerConfig[_escrow][_depositId];\\n        delete depositManagerConfig[_escrow][_depositId];\\n\\n        emit DepositRateManagerCleared(_escrow, _depositId, prev.registry, prev.rateManagerId);\\n    }\\n\\n    /* ============ View Functions ============ */\\n\\n    /**\\n     * @notice Returns the effective minimum conversion rate for a deposit/currency pair.\\n     * @dev If no manager is set, returns the depositor floor. If manager disables the pair\\n     *      (min rate = 0) or payment method is inactive, returns 0. Reverts if a manager\\n     *      is set but the registry address is missing.\\n     * @param _escrow        Escrow contract address.\\n     * @param _depositId     Deposit id on the escrow.\\n     * @param _paymentMethod Payment method key.\\n     * @param _currencyCode  Currency code key.\\n     * @return minRate       Effective minimum conversion rate in precise units.\\n     */\\n    function getEffectiveMinRate(\\n        address _escrow,\\n        uint256 _depositId,\\n        bytes32 _paymentMethod,\\n        bytes32 _currencyCode\\n    )\\n        external\\n        view\\n        returns (uint256)\\n    {\\n        uint256 floorRate = IEscrow(_escrow).getDepositCurrencyMinRate(_depositId, _paymentMethod, _currencyCode);\\n        DepositManagerConfig memory cfg = depositManagerConfig[_escrow][_depositId];\\n\\n        if (cfg.rateManagerId == bytes32(0)) {\\n            return floorRate;\\n        }\\n\\n        // Payment method must be active at the deposit level.\\n        if (!IEscrow(_escrow).getDepositPaymentMethodActive(_depositId, _paymentMethod)) {\\n            return 0;\\n        }\\n\\n        if (cfg.registry == address(0)) revert RateManagerRegistryNotSet();\\n\\n        uint256 managerRate = IDepositRateManagerRegistryV1(cfg.registry).getMinRate(cfg.rateManagerId, _paymentMethod, _currencyCode);\\n        if (managerRate == 0) {\\n            return 0;\\n        }\\n\\n        return managerRate > floorRate ? managerRate : floorRate;\\n    }\\n\\n    /**\\n     * @notice Returns the manager fee recipient and fee for a deposit.\\n     * @dev Returns (address(0), 0) if no manager is set. Reverts if a manager\\n     *      is set but the registry address is missing.\\n     * @param _escrow    Escrow contract address.\\n     * @param _depositId Deposit id on the escrow.\\n     * @return recipient Fee recipient.\\n     * @return fee       Fee in precise units.\\n     */\\n    function getManagerFee(address _escrow, uint256 _depositId) external view returns (address recipient, uint256 fee) {\\n        DepositManagerConfig memory cfg = depositManagerConfig[_escrow][_depositId];\\n        if (cfg.rateManagerId == bytes32(0)) {\\n            return (address(0), 0);\\n        }\\n\\n        if (cfg.registry == address(0)) revert RateManagerRegistryNotSet();\\n\\n        (uint256 mgrFee, address mgrRecipient) = IDepositRateManagerRegistryV1(cfg.registry).getFeeAndRecipient(cfg.rateManagerId);\\n        return (mgrRecipient, mgrFee);\\n    }\\n\\n    /**\\n     * @notice Returns the stored (registry, rateManagerId) for a deposit.\\n     * @dev Returns (address(0), 0) if the deposit has not opted into a manager.\\n     * @param _escrow    Escrow contract address.\\n     * @param _depositId Deposit id on the escrow.\\n     * @return registry      Registry address.\\n     * @return rateManagerId Manager id.\\n     */\\n    function getDepositRateManager(address _escrow, uint256 _depositId) external view returns (address registry, bytes32 rateManagerId) {\\n        DepositManagerConfig memory cfg = depositManagerConfig[_escrow][_depositId];\\n        return (cfg.registry, cfg.rateManagerId);\\n    }\\n\\n    /* ============ Internal Functions ============ */\\n\\n    /**\\n     * @dev Reverts if the escrow is paused.\\n     * @param _escrow Escrow contract address.\\n     */\\n    function _requireNotPaused(address _escrow) internal view {\\n        if (IPausable(_escrow).paused()) revert(\\\"Pausable: paused\\\");\\n    }\\n}\\n\",\"keccak256\":\"0xbfb82697e5ff0d8199b08a43be450e2a5cc4afb4d8885d0aa89247511b7ba841\",\"license\":\"MIT\"},\"contracts/interfaces/IDepositRateManagerController.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IDepositRateManagerController\\n * @notice External controller that manages per-deposit rate manager configuration and effective min rates.\\n */\\ninterface IDepositRateManagerController {\\n    /* ============ Events ============ */\\n\\n    event DepositRateManagerSet(\\n        address indexed escrow,\\n        uint256 indexed depositId,\\n        address indexed registry,\\n        bytes32 rateManagerId\\n    );\\n\\n    event DepositRateManagerCleared(\\n        address indexed escrow,\\n        uint256 indexed depositId,\\n        address indexed registry,\\n        bytes32 prevRateManagerId\\n    );\\n\\n    /* ============ Errors ============ */\\n\\n    error UnauthorizedCaller(address caller, address authorized);\\n    error ZeroAddress();\\n    error ZeroValue();\\n    error RateManagerNotFound(bytes32 rateManagerId);\\n    error RateManagerAlreadySet(bytes32 rateManagerId);\\n    error RateManagerRegistryNotSet();\\n\\n    /* ============ External Functions ============ */\\n\\n    function setDepositRateManager(address escrow, uint256 depositId, address registry, bytes32 rateManagerId) external;\\n\\n    function clearDepositRateManager(address escrow, uint256 depositId) external;\\n\\n    /* ============ View Functions ============ */\\n\\n    function getEffectiveMinRate(\\n        address escrow,\\n        uint256 depositId,\\n        bytes32 paymentMethod,\\n        bytes32 currencyCode\\n    ) external view returns (uint256);\\n\\n    function getManagerFee(address escrow, uint256 depositId) external view returns (address recipient, uint256 fee);\\n\\n    function getDepositRateManager(address escrow, uint256 depositId) external view returns (address registry, bytes32 rateManagerId);\\n}\\n\",\"keccak256\":\"0xc1d976f8576fcbd3deab1b63d7fea17ac0d5811c7715d0f3eef62ce708fa0089\",\"license\":\"MIT\"},\"contracts/interfaces/IDepositRateManagerHook.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IDepositRateManagerHook\\n * @notice Optional manager-controlled validation hook invoked by Escrow when a depositor opts into a rate manager.\\n * @dev Implementations MUST be view-only and revert to reject the opt-in. Escrow may STATICCALL this hook.\\n */\\ninterface IDepositRateManagerHook {\\n    /**\\n     * @notice Called by Escrow before linking a deposit to a rateManagerId.\\n     * @param depositor      The depositor opting in.\\n     * @param escrow         The Escrow contract address.\\n     * @param depositId      The deposit id on the escrow.\\n     * @param rateManagerId  The rate manager id the depositor intends to opt into.\\n     */\\n    function onDepositOptIn(address depositor, address escrow, uint256 depositId, bytes32 rateManagerId) external view;\\n}\\n\\n\",\"keccak256\":\"0x3cfd89236d8f5af9d82b0dc4ad8e2eb2acb574313824c9fff89aeb7a0a92d943\",\"license\":\"MIT\"},\"contracts/interfaces/IDepositRateManagerRegistryV1.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IDepositRateManagerRegistryV1\\n * @notice Permissionless registry for \\u201cdeposit rate managers\\u201d.\\n * A rate manager config is identified by a `rateManagerId` (bytes32) and can be shared across many deposits.\\n */\\ninterface IDepositRateManagerRegistryV1 {\\n    /* ============ Structs ============ */\\n\\n    struct RateManagerConfig {\\n        address manager;\\n        address feeRecipient;\\n        uint256 maxFee;              // Immutable upper bound on `fee` (preciseUnits, 1e18 = 100%)\\n        uint256 fee;                 // Flat fee in preciseUnits (must be <= maxFee)\\n        address depositHook;         // Optional hook called on deposit opt-in\\n        string name;                 // Human-readable name (optional)\\n        string uri;                  // Metadata URI (optional)\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event RateManagerCreated(\\n        bytes32 indexed rateManagerId,\\n        address indexed manager,\\n        address indexed feeRecipient,\\n        uint256 maxFee,\\n        uint256 fee,\\n        address depositHook,\\n        string name,\\n        string uri\\n    );\\n\\n    event RateManagerConfigUpdated(\\n        bytes32 indexed rateManagerId,\\n        address indexed manager,\\n        address indexed feeRecipient,\\n        address depositHook,\\n        string name,\\n        string uri\\n    );\\n\\n    event RateManagerMinRateUpdated(\\n        bytes32 indexed rateManagerId,\\n        bytes32 indexed paymentMethod,\\n        bytes32 indexed currency,\\n        uint256 minRate\\n    );\\n\\n    event RateManagerMinRatesBatchUpdated(bytes32 indexed rateManagerId, uint256 count);\\n    event RateManagerFeeUpdated(bytes32 indexed rateManagerId, uint256 fee);\\n\\n    /* ============ External Functions ============ */\\n\\n    function createRateManager(RateManagerConfig calldata _config) external returns (bytes32 rateManagerId);\\n\\n    function setRateManagerConfig(bytes32 _rateManagerId, address _newManager, address _newFeeRecipient, address _newHook, string calldata _newName, string calldata _newUri) external;\\n\\n    function setFee(bytes32 _rateManagerId, uint256 _newFee) external;\\n\\n    function setMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency, uint256 _minRate) external;\\n\\n    function setMinRatesBatch(bytes32 _rateManagerId, bytes32[] calldata _paymentMethods, bytes32[][] calldata _currencies, uint256[][] calldata _minRates) external;\\n\\n    /* ============ View Functions ============ */\\n\\n    function isRateManager(bytes32 _rateManagerId) external view returns (bool);\\n\\n    function getRateManager(bytes32 _rateManagerId) external view returns (RateManagerConfig memory);\\n\\n    function getFeeAndRecipient(bytes32 _rateManagerId) external view returns (uint256 fee, address feeRecipient);\\n\\n    function getDepositHook(bytes32 _rateManagerId) external view returns (address);\\n\\n    function getMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency) external view returns (uint256);\\n}\\n\",\"keccak256\":\"0xdc5e0ff77829d7f1bc5568ff050285773a4cdf85d6297c245da7ee0de5be6a91\",\"license\":\"MIT\"},\"contracts/interfaces/IEscrow.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IERC20 } from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\nimport { IPostIntentHook } from \\\"./IPostIntentHook.sol\\\";\\n\\ninterface IEscrow {\\n    \\n    /* ============ Structs ============ */\\n\\n    struct Intent {\\n        bytes32 intentHash;                        // Unique identifier for the intent\\n        uint256 amount;                            // Amount locked\\n        uint256 timestamp;                         // When this intent was created\\n        uint256 expiryTime;                        // When this intent expires\\n    }\\n\\n    struct Range {\\n        uint256 min;                                // Minimum value\\n        uint256 max;                                // Maximum value\\n    }\\n\\n    struct Deposit {\\n        address depositor;                          // Address of depositor\\n        address delegate;                           // Address that can manage this deposit (address(0) if no delegate)\\n        IERC20 token;                               // Address of deposit token\\n        Range intentAmountRange;                    // Range of take amount per intent\\n        // Deposit state\\n        bool acceptingIntents;                      // State: True if the deposit is accepting intents, False otherwise\\n        uint256 remainingDeposits;                  // State: Amount of liquidity immediately available to lock\\n        uint256 outstandingIntentAmount;            // State: Amount of outstanding intents (may include expired intents)\\n        // Intent guardian\\n        address intentGuardian;                     // Address that can extend intent expiry times (address(0) if no guardian)\\n        // Retention behavior\\n        bool retainOnEmpty;                         // If true, do not auto-close/sweep when empty; keep config for reuse\\n    }\\n\\n    struct Currency {\\n        bytes32 code;                               // Currency code (keccak256 hash of the currency code)\\n        uint256 minConversionRate;                  // Minimum rate of deposit token to fiat currency (in preciseUnits)\\n    }\\n\\n    struct DepositPaymentMethodData {\\n        address intentGatingService;                // Public key of gating service that will be used to verify intents\\n        bytes32 payeeDetails;                       // Payee details, has to be hash of payee details\\n        bytes data;                                 // Verification Data: Additional data used for payment verification; Can hold attester address\\n                                                    // in case of TLS proofs, domain key hash in case of zkEmail proofs, currency code etc.\\n    }\\n\\n    struct CreateDepositParams {\\n        IERC20 token;                                // The token to be deposited\\n        uint256 amount;                              // The amount of token to deposit\\n        Range intentAmountRange;                     // The max and min take amount for each intent\\n        bytes32[] paymentMethods;                    // The payment methods that deposit supports\\n        DepositPaymentMethodData[] paymentMethodData;// The payment verification data for each payment method that deposit supports\\n        Currency[][] currencies;                     // The currencies for each payment method that deposit supports\\n        address delegate;                            // Optional delegate address that can manage this deposit (address(0) for no delegate)\\n        address intentGuardian;                      // Optional intent guardian address that can extend intent expiry times (address(0) for no guardian)\\n        bool retainOnEmpty;                          // Opt-in: keep deposit and config when empty\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event DepositReceived(uint256 indexed depositId, address indexed depositor, IERC20 indexed token, uint256 amount, Range intentAmountRange, address delegate, address intentGuardian);\\n\\n    event DepositPaymentMethodAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed payeeDetails, address intentGatingService);\\n    event DepositPaymentMethodActiveUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bool active);\\n\\n    event DepositCurrencyAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 minConversionRate);\\n    event DepositMinConversionRateUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 newMinConversionRate);\\n    \\n    event DepositFundsAdded(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositWithdrawn(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositClosed(uint256 depositId, address depositor);\\n    event DepositAcceptingIntentsUpdated(uint256 indexed depositId, bool acceptingIntents);\\n\\n    event DepositIntentAmountRangeUpdated(uint256 indexed depositId, Range intentAmountRange);\\n    event DepositRetainOnEmptyUpdated(uint256 indexed depositId, bool retainOnEmpty);\\n\\n    event DepositDelegateSet(uint256 indexed depositId, address indexed depositor, address indexed delegate);\\n    event DepositDelegateRemoved(uint256 indexed depositId, address indexed depositor);\\n\\n    event MinDepositAmountSet(uint256 minDepositAmount);\\n\\n    event OrchestratorUpdated(address indexed orchestrator);\\n    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);\\n\\n    event FundsLocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount, uint256 expiryTime);\\n    event FundsUnlocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount);\\n    event FundsUnlockedAndTransferred(\\n        uint256 indexed depositId, \\n        bytes32 indexed intentHash, \\n        uint256 unlockedAmount, \\n        uint256 transferredAmount, \\n        address to\\n    );\\n    event IntentExpiryExtended(uint256 indexed depositId, bytes32 indexed intentHash, uint256 newExpiryTime);\\n\\n    event DustRecipientUpdated(address indexed dustRecipient);\\n    event DustCollected(uint256 indexed depositId, uint256 dustAmount, address indexed dustRecipient);\\n    event DustThresholdUpdated(uint256 dustThreshold);\\n    event MaxIntentsPerDepositUpdated(uint256 maxIntentsPerDeposit);\\n    event IntentExpirationPeriodUpdated(uint256 intentExpirationPeriod);\\n\\n    /* ============ Standardized Custom Errors ============ */\\n    \\n    // Zero value errors\\n    error ZeroAddress();\\n    error ZeroValue();\\n    error ZeroMinValue();\\n    error ZeroConversionRate();\\n\\n    // Authorization errors\\n    error UnauthorizedCaller(address caller, address authorized);\\n    error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);\\n\\n    // Range and amount errors\\n    error InvalidRange(uint256 min, uint256 max);\\n    error AmountBelowMin(uint256 amount, uint256 min);\\n    error AmountAboveMax(uint256 amount, uint256 max);\\n    error AmountExceedsAvailable(uint256 requested, uint256 available);\\n\\n    // Not found errors\\n    error DepositNotFound(uint256 depositId);\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodNotActive(uint256 depositId, bytes32 paymentMethod);\\n    error PaymentMethodNotListed(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyNotFound(bytes32 paymentMethod, bytes32 currency);\\n    error DelegateNotFound(uint256 depositId);\\n\\n    // Already exists errors\\n    error PaymentMethodAlreadyExists(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyAlreadyExists(bytes32 paymentMethod, bytes32 currency);\\n    error IntentAlreadyExists(uint256 depositId, bytes32 intentHash);\\n\\n    // State errors\\n    error DepositNotAcceptingIntents(uint256 depositId);\\n    error DepositAlreadyInState(uint256 depositId, bool currentState);\\n    error InsufficientDepositLiquidity(uint256 depositId, uint256 available, uint256 required);\\n    error MaxIntentsExceeded(uint256 depositId, uint256 current, uint256 max);\\n\\n    // Validation errors\\n    error EmptyPayeeDetails();\\n    error ArrayLengthMismatch(uint256 length1, uint256 length2);\\n\\n    // Payment method errors\\n    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n\\n    \\n    /* ============ External Functions for Orchestrator ============ */\\n\\n    function lockFunds(uint256 _depositId, bytes32 _intentHash, uint256 _amount) external;\\n    function unlockFunds(uint256 _depositId, bytes32 _intentHash) external;\\n    function unlockAndTransferFunds(uint256 _depositId, bytes32 _intentHash, uint256 _transferAmount, address _to) external;\\n    function extendIntentExpiry(uint256 _depositId, bytes32 _intentHash, uint256 _newExpiryTime) external;\\n\\n    /* ============ View Functions ============ */\\n\\n    function getDeposit(uint256 _depositId) external view returns (Deposit memory);\\n    function getDepositIntent(uint256 _depositId, bytes32 _intentHash) external view returns (Intent memory);\\n    function getDepositPaymentMethods(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getDepositCurrencies(uint256 _depositId, bytes32 _paymentMethod) external view returns (bytes32[] memory);\\n    function getDepositCurrencyMinRate(uint256 _depositId, bytes32 _paymentMethod, bytes32 _currencyCode) external view returns (uint256);\\n    function getDepositPaymentMethodData(uint256 _depositId, bytes32 _paymentMethod) external view returns (DepositPaymentMethodData memory);\\n    function getDepositPaymentMethodActive(uint256 _depositId, bytes32 _paymentMethod) external view returns (bool);\\n    function getDepositGatingService(uint256 _depositId, bytes32 _paymentMethod) external view returns (address);\\n    function getAccountDeposits(address _account) external view returns (uint256[] memory);\\n    function getDepositIntentHashes(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getExpiredIntents(uint256 _depositId) external view returns (bytes32[] memory expiredIntents, uint256 reclaimableAmount);\\n}\\n\",\"keccak256\":\"0x3df4df7659a48b419cc5b7953463a0ec66995af7afdfa4052bb5668aea641f2d\",\"license\":\"MIT\"},\"contracts/interfaces/IOrchestrator.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IERC20 } from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\nimport { IPostIntentHook } from \\\"./IPostIntentHook.sol\\\";\\n\\ninterface IOrchestrator {\\n    \\n    /* ============ Structs ============ */\\n\\n    struct Intent {\\n        address owner;                              // Address of the intent owner  \\n        address to;                                 // Address to forward funds to (can be same as owner)\\n        address escrow;                             // Address of the escrow contract holding the deposit\\n        uint256 depositId;                          // ID of the deposit the intent is associated with\\n        uint256 amount;                             // Amount of the deposit.token the owner wants to take\\n        uint256 timestamp;                          // Timestamp of the intent\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // Currency code that the owner is paying in offchain (keccak256 hash of the currency code)\\n        uint256 conversionRate;                     // Conversion rate of deposit token to fiat currency at the time of intent\\n        bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain\\n        address referrer;                           // Address of the referrer who brought this intent (if any)\\n        uint256 referrerFee;                        // Fee to be paid to the referrer in preciseUnits (1e16 = 1%)\\n        IPostIntentHook postIntentHook;             // Address of the post-intent hook that will execute any post-intent actions\\n        bytes data;                                 // Additional data to be passed to the post-intent hook contract\\n    }\\n\\n    struct SignalIntentParams {\\n        address escrow;                             // The escrow contract where the deposit is held\\n        uint256 depositId;                          // The ID of the deposit the taker intends to use\\n        uint256 amount;                             // The amount of deposit.token the user wants to take\\n        address to;                                 // Address to forward funds to\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // The currency code for offchain payment\\n        uint256 conversionRate;                     // The conversion rate agreed offchain\\n        address referrer;                           // Address of the referrer (address(0) if no referrer)\\n        uint256 referrerFee;                        // Fee to be paid to the referrer\\n        bytes gatingServiceSignature;               // Signature from the deposit's gating service\\n        uint256 signatureExpiration;                // Timestamp when the gating service signature expires\\n        IPostIntentHook postIntentHook;             // Optional post-intent hook (address(0) for no hook)\\n        bytes data;                                 // Additional data for the intent\\n    }\\n\\n    struct FulfillIntentParams {\\n        bytes paymentProof;                         // Payment proof. Can be Groth16 Proof, TLSNotary proof, TLSProxy proof, attestation etc.\\n        bytes32 intentHash;                         // Identifier of intent being fulfilled\\n        bytes verificationData;                     // Additional data for payment verifier\\n        bytes postIntentHookData;                   // Additional data for post intent hook\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event IntentSignaled(\\n        bytes32 indexed intentHash, \\n        address indexed escrow,\\n        uint256 indexed depositId, \\n        bytes32 paymentMethod, \\n        address owner, \\n        address to, \\n        uint256 amount, \\n        bytes32 fiatCurrency, \\n        uint256 conversionRate, \\n        uint256 timestamp\\n    );\\n\\n    event IntentPruned(\\n        bytes32 indexed intentHash\\n    );\\n\\n    event IntentFulfilled(\\n        bytes32 indexed intentHash,\\n        address indexed fundsTransferredTo,   // Address that funds were transferred to; can be intent.to or postIntentHook address\\n        uint256 amount,\\n        bool isManualRelease\\n    );\\n\\n    event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);\\n\\n    event AllowMultipleIntentsUpdated(bool allowMultiple);\\n\\n    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);\\n    event PostIntentHookRegistryUpdated(address indexed postIntentHookRegistry);\\n    event RelayerRegistryUpdated(address indexed relayerRegistry);\\n    event EscrowRegistryUpdated(address indexed escrowRegistry);\\n    event DepositRateManagerControllerUpdated(address indexed depositRateManagerController);\\n\\n    event ProtocolFeeUpdated(uint256 protocolFee);\\n    event ProtocolFeeRecipientUpdated(address indexed protocolFeeRecipient);\\n    event PartialManualReleaseDelayUpdated(uint256 partialManualReleaseDelay);\\n\\n    /* ============ Standardized Custom Errors ============ */\\n    \\n    // Zero value errors\\n    error ZeroAddress();\\n    error ZeroValue();\\n    \\n    // Authorization errors\\n    error UnauthorizedEscrowCaller(address caller);\\n    error UnauthorizedCaller(address caller, address authorized);\\n    \\n    // Not found errors\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodDoesNotExist(bytes32 paymentMethod);\\n    error PaymentMethodNotSupported(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n    \\n    // Whitelist errors\\n    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);\\n    error PostIntentHookNotWhitelisted(address hook);\\n    error EscrowNotWhitelisted(address escrow);\\n    \\n    // Amount and fee errors\\n    error AmountBelowMin(uint256 amount, uint256 min);\\n    error AmountAboveMax(uint256 amount, uint256 max);\\n    error AmountExceedsLimit(uint256 amount, uint256 limit);\\n    error FeeExceedsMaximum(uint256 fee, uint256 maximum);\\n    error RateBelowMinimum(uint256 rate, uint256 minRate);\\n    \\n    // Validation errors\\n    error AccountHasActiveIntent(address account, bytes32 existingIntent);\\n    error InvalidReferrerFeeConfiguration();\\n    error InvalidSignature();\\n    error SignatureExpired(uint256 expiration, uint256 currentTime);\\n    error PartialReleaseNotAllowedYet(uint256 currentTime, uint256 allowedTime);\\n    error DepositRateManagerControllerNotSet();\\n\\n    // Verification errors\\n    error PaymentVerificationFailed();\\n    error HashMismatch(bytes32 expected, bytes32 actual);\\n     \\n    // Transfer errors\\n    error TransferFailed(address recipient, uint256 amount);\\n    error EscrowLockFailed();\\n\\n    /* ============ View Functions ============ */\\n\\n    function getIntent(bytes32 intentHash) external view returns (Intent memory);\\n    function getAccountIntents(address account) external view returns (bytes32[] memory);\\n    \\n    /* ============ External Functions for Users ============ */\\n\\n    function signalIntent(SignalIntentParams calldata params) external;\\n\\n    function cancelIntent(bytes32 intentHash) external;\\n\\n    function fulfillIntent(FulfillIntentParams calldata params) external;\\n\\n    function releaseFundsToPayer(bytes32 intentHash) external;\\n\\n    /* ============ External Functions for Escrow ============ */\\n\\n    function pruneIntents(bytes32[] calldata intentIds) external;\\n}\\n\",\"keccak256\":\"0x448663f8710e330d6fbb942a83d3247029453ad7af712f4ee3435633fac11742\",\"license\":\"MIT\"},\"contracts/interfaces/IPostIntentHook.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IOrchestrator } from \\\"./IOrchestrator.sol\\\";\\n\\n/**\\n * @title IPostIntentHook\\n * @notice Interface for post-intent hooks\\n */\\ninterface IPostIntentHook {\\n\\n    /**\\n     * @notice Post-intent hook\\n     * @param _intent The intent data structure containing all intent information\\n     * @param _fulfillIntentData The data passed to fulfillIntent\\n     */\\n    function execute(\\n        IOrchestrator.Intent memory _intent,\\n        uint256 _amountNetFees,\\n        bytes calldata _fulfillIntentData\\n    ) external;\\n}\\n\",\"keccak256\":\"0x72ae0d60c98f89eb2363f455445466c1dfaddfb338a63d65d3eb8469cbd9484d\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x6080806040523461001657610b0d908161001c8239f35b600080fdfe6040608081526004908136101561001557600080fd5b600090813560e01c806304f1b5711461058a57806314e45788146105245780633a71204b146104ec578063d3d74d5a146103905763e4813b5e1461005857600080fd5b3461038c57608036600319011261038c576100716105c7565b6024936044356001600160a01b038181169487359493928690036103885760643591808516948515610368578315610378578715610368576100b290610a21565b81516313f3f72d60e31b81528481018790526101409081818c818a5afa91821561026857908392918b9261033b575b5050511633810361030e5750848852602093888552828920878a52855284838a206001855191610110836105e2565b85815416835201549182910152806102f95750825163af46f64960e01b815281810185905285818c818c5afa908115610268578a916102c4575b50156102ae57825163ed97afbf60e01b815281810185905285818c818c5afa908115610268579083918b91610276575b501690816101f8575b5050907f5f5dd941540bd6d66d97a588936d443b72ebe97e057858423673d1803969e5fc93929160018251916101b8836105e2565b89835285830190858252888c528b8752848c208a8d528752848c209351166bffffffffffffffffffffffff60a01b8454161783555191015551908152a480f35b813b1561027257898760848d87519586938492632a2983e560e21b845233888501528301528c60448301528960648301525afa801561026857156101835767ffffffffffffffff829a939a1161025657508252969750873880610183565b634e487b7160e01b8352604190528982fd5b84513d8c823e3d90fd5b8980fd5b809250878092503d83116102a7575b61028f8183610614565b81010312610272576102a18391610636565b3861017a565b503d610285565b82516372b7a02360e11b81529081018490528990fd5b90508581813d83116102f2575b6102db8183610614565b81010312610272576102ec9061064a565b3861014a565b503d6102d1565b8351638cbf8c3f60e01b815291820152899150fd5b825163536dd9ef60e01b8152338187019081526001600160a01b0390921660208301529081906040010390fd5b61035a9250803d10610361575b6103528183610614565b810190610657565b38806100e1565b503d610348565b825163d92e233d60e01b81528590fd5b8251637c946ed760e01b81528590fd5b8680fd5b5080fd5b508290346104e857806003193601126104e8576103ab6105c7565b6001600160a01b0392602435928285169290919083156104d9576103ce90610a21565b81516313f3f72d60e31b8152818101859052610140908181602481885afa9182156104cf579087929189926104b2575b50505116903382036104865750507f13fd1eec3c0600ef23ae2a240cf7a6442292d8c823a2939b803325ec32a8790e908286526020908682528087208588528252808720956001825197610451896105e2565b828154168952015496838101978852858952888452828920878a5284528860018482208281550155511695519051908152a480f35b825163536dd9ef60e01b8152339181019182526001600160a01b03909216602082015281906040010390fd5b6104c89250803d10610361576103528183610614565b88806103fe565b84513d8a823e3d90fd5b50905163d92e233d60e01b8152fd5b8280fd5b503461038c57608036600319011261038c5760209061051d61050c6105c7565b60643590604435906024359061072f565b9051908152f35b5090346105875781600319360112610587576001600160a01b039060209083908361054d6105c7565b168152808352818120602435825283522091600184519161056d836105e2565b845416938483520154918291015282519182526020820152f35b80fd5b509034610587578160031936011261058757506105b16105a86105c7565b60243590610935565b82516001600160a01b0390921682526020820152f35b600435906001600160a01b03821682036105dd57565b600080fd5b6040810190811067ffffffffffffffff8211176105fe57604052565b634e487b7160e01b600052604160045260246000fd5b90601f8019910116810190811067ffffffffffffffff8211176105fe57604052565b51906001600160a01b03821682036105dd57565b519081151582036105dd57565b8091039061014082126105dd5760408051926101209081850185811067ffffffffffffffff8211176105fe57835261068e84610636565b855261069c60208501610636565b602086015283830151906001600160a01b03821682036105dd57839182870152605f1901126105dd5761072891516106d3816105e2565b606084015181526080840151602082015260608501526106f560a0840161064a565b608085015260c083015160a085015260e083015160c08501526101009261071d848201610636565b60e08601520161064a565b9082015290565b6040805163106c002d60e11b81526004810184905260248101859052604481018690529094909390926020926001600160a01b039081168487606481845afa96871561092a576000976108fb575b50806000526000855287600020836000528552876000209060018951926107a3846105e2565b84815416845201549386830194808652156108ee57869060448b5180948193637414f90760e01b835260048301528960248301525afa9081156108e3576000916108ae575b50156108a15781815116156108905791606491859493511690519088519687948593630c9e436960e31b85526004850152602484015260448301525afa9384156108865750600093610855575b5050811561084e5780821115610849575090565b905090565b5050600090565b8181949293943d831161087f575b61086d8183610614565b81010312610587575051903880610835565b503d610863565b513d6000823e3d90fd5b875163d7aaab0d60e01b8152600490fd5b5050505050505050600090565b908682813d83116108dc575b6108c48183610614565b8101031261058757506108d69061064a565b386107e8565b503d6108ba565b89513d6000823e3d90fd5b5050505050505050905090565b90968582813d8311610923575b6109128183610614565b81010312610587575051953861077d565b503d610908565b88513d6000823e3d90fd5b91909160018060a01b038060009216825281602052604093848320908352602052838220908451610965816105e2565b60018284541693848352015492602082019380855215610a165715610a0557908591511691516024825180948193631d12c51d60e11b835260048301525afa9182156109fa57809481936109bb575b5050509190565b919450915083813d81116109f3575b6109d48183610614565b8101031261058757506109eb602083519301610636565b3880806109b4565b503d6109ca565b8451903d90823e3d90fd5b855163d7aaab0d60e01b8152600490fd5b505050508092509190565b604051635c975abb60e01b815290602090829060049082906001600160a01b03165afa908115610acb57600091610a92575b50610a5a57565b60405162461bcd60e51b815260206004820152601060248201526f14185d5cd8589b194e881c185d5cd95960821b6044820152606490fd5b906020823d8211610ac3575b81610aab60209383610614565b810103126105875750610abd9061064a565b38610a53565b3d9150610a9e565b6040513d6000823e3d90fdfea264697066735822122044c5b4eb1b477a1efb12f64c7779f9e1392e42a501ccb565b5be49564f9a909864736f6c63430008120033",
+  "deployedBytecode": "0x6040608081526004908136101561001557600080fd5b600090813560e01c806304f1b5711461058a57806314e45788146105245780633a71204b146104ec578063d3d74d5a146103905763e4813b5e1461005857600080fd5b3461038c57608036600319011261038c576100716105c7565b6024936044356001600160a01b038181169487359493928690036103885760643591808516948515610368578315610378578715610368576100b290610a21565b81516313f3f72d60e31b81528481018790526101409081818c818a5afa91821561026857908392918b9261033b575b5050511633810361030e5750848852602093888552828920878a52855284838a206001855191610110836105e2565b85815416835201549182910152806102f95750825163af46f64960e01b815281810185905285818c818c5afa908115610268578a916102c4575b50156102ae57825163ed97afbf60e01b815281810185905285818c818c5afa908115610268579083918b91610276575b501690816101f8575b5050907f5f5dd941540bd6d66d97a588936d443b72ebe97e057858423673d1803969e5fc93929160018251916101b8836105e2565b89835285830190858252888c528b8752848c208a8d528752848c209351166bffffffffffffffffffffffff60a01b8454161783555191015551908152a480f35b813b1561027257898760848d87519586938492632a2983e560e21b845233888501528301528c60448301528960648301525afa801561026857156101835767ffffffffffffffff829a939a1161025657508252969750873880610183565b634e487b7160e01b8352604190528982fd5b84513d8c823e3d90fd5b8980fd5b809250878092503d83116102a7575b61028f8183610614565b81010312610272576102a18391610636565b3861017a565b503d610285565b82516372b7a02360e11b81529081018490528990fd5b90508581813d83116102f2575b6102db8183610614565b81010312610272576102ec9061064a565b3861014a565b503d6102d1565b8351638cbf8c3f60e01b815291820152899150fd5b825163536dd9ef60e01b8152338187019081526001600160a01b0390921660208301529081906040010390fd5b61035a9250803d10610361575b6103528183610614565b810190610657565b38806100e1565b503d610348565b825163d92e233d60e01b81528590fd5b8251637c946ed760e01b81528590fd5b8680fd5b5080fd5b508290346104e857806003193601126104e8576103ab6105c7565b6001600160a01b0392602435928285169290919083156104d9576103ce90610a21565b81516313f3f72d60e31b8152818101859052610140908181602481885afa9182156104cf579087929189926104b2575b50505116903382036104865750507f13fd1eec3c0600ef23ae2a240cf7a6442292d8c823a2939b803325ec32a8790e908286526020908682528087208588528252808720956001825197610451896105e2565b828154168952015496838101978852858952888452828920878a5284528860018482208281550155511695519051908152a480f35b825163536dd9ef60e01b8152339181019182526001600160a01b03909216602082015281906040010390fd5b6104c89250803d10610361576103528183610614565b88806103fe565b84513d8a823e3d90fd5b50905163d92e233d60e01b8152fd5b8280fd5b503461038c57608036600319011261038c5760209061051d61050c6105c7565b60643590604435906024359061072f565b9051908152f35b5090346105875781600319360112610587576001600160a01b039060209083908361054d6105c7565b168152808352818120602435825283522091600184519161056d836105e2565b845416938483520154918291015282519182526020820152f35b80fd5b509034610587578160031936011261058757506105b16105a86105c7565b60243590610935565b82516001600160a01b0390921682526020820152f35b600435906001600160a01b03821682036105dd57565b600080fd5b6040810190811067ffffffffffffffff8211176105fe57604052565b634e487b7160e01b600052604160045260246000fd5b90601f8019910116810190811067ffffffffffffffff8211176105fe57604052565b51906001600160a01b03821682036105dd57565b519081151582036105dd57565b8091039061014082126105dd5760408051926101209081850185811067ffffffffffffffff8211176105fe57835261068e84610636565b855261069c60208501610636565b602086015283830151906001600160a01b03821682036105dd57839182870152605f1901126105dd5761072891516106d3816105e2565b606084015181526080840151602082015260608501526106f560a0840161064a565b608085015260c083015160a085015260e083015160c08501526101009261071d848201610636565b60e08601520161064a565b9082015290565b6040805163106c002d60e11b81526004810184905260248101859052604481018690529094909390926020926001600160a01b039081168487606481845afa96871561092a576000976108fb575b50806000526000855287600020836000528552876000209060018951926107a3846105e2565b84815416845201549386830194808652156108ee57869060448b5180948193637414f90760e01b835260048301528960248301525afa9081156108e3576000916108ae575b50156108a15781815116156108905791606491859493511690519088519687948593630c9e436960e31b85526004850152602484015260448301525afa9384156108865750600093610855575b5050811561084e5780821115610849575090565b905090565b5050600090565b8181949293943d831161087f575b61086d8183610614565b81010312610587575051903880610835565b503d610863565b513d6000823e3d90fd5b875163d7aaab0d60e01b8152600490fd5b5050505050505050600090565b908682813d83116108dc575b6108c48183610614565b8101031261058757506108d69061064a565b386107e8565b503d6108ba565b89513d6000823e3d90fd5b5050505050505050905090565b90968582813d8311610923575b6109128183610614565b81010312610587575051953861077d565b503d610908565b88513d6000823e3d90fd5b91909160018060a01b038060009216825281602052604093848320908352602052838220908451610965816105e2565b60018284541693848352015492602082019380855215610a165715610a0557908591511691516024825180948193631d12c51d60e11b835260048301525afa9182156109fa57809481936109bb575b5050509190565b919450915083813d81116109f3575b6109d48183610614565b8101031261058757506109eb602083519301610636565b3880806109b4565b503d6109ca565b8451903d90823e3d90fd5b855163d7aaab0d60e01b8152600490fd5b505050508092509190565b604051635c975abb60e01b815290602090829060049082906001600160a01b03165afa908115610acb57600091610a92575b50610a5a57565b60405162461bcd60e51b815260206004820152601060248201526f14185d5cd8589b194e881c185d5cd95960821b6044820152606490fd5b906020823d8211610ac3575b81610aab60209383610614565b810103126105875750610abd9061064a565b38610a53565b3d9150610a9e565b6040513d6000823e3d90fdfea264697066735822122044c5b4eb1b477a1efb12f64c7779f9e1392e42a501ccb565b5be49564f9a909864736f6c63430008120033",
+  "devdoc": {
+    "kind": "dev",
+    "methods": {
+      "clearDepositRateManager(address,uint256)": {
+        "details": "Only the depositor can clear. Reverts if escrow is paused.      Emits DepositRateManagerCleared with the previous registry and manager id.",
+        "params": {
+          "_depositId": "Deposit id on the escrow.",
+          "_escrow": "Escrow contract address."
+        }
+      },
+      "getDepositRateManager(address,uint256)": {
+        "details": "Returns (address(0), 0) if the deposit has not opted into a manager.",
+        "params": {
+          "_depositId": "Deposit id on the escrow.",
+          "_escrow": "Escrow contract address."
+        },
+        "returns": {
+          "rateManagerId": "Manager id.",
+          "registry": "     Registry address."
+        }
+      },
+      "getEffectiveMinRate(address,uint256,bytes32,bytes32)": {
+        "details": "If no manager is set, returns the depositor floor. If manager disables the pair      (min rate = 0) or payment method is inactive, returns 0. Reverts if a manager      is set but the registry address is missing.",
+        "params": {
+          "_currencyCode": "Currency code key.",
+          "_depositId": "Deposit id on the escrow.",
+          "_escrow": "Escrow contract address.",
+          "_paymentMethod": "Payment method key."
+        },
+        "returns": {
+          "_0": "minRate       Effective minimum conversion rate in precise units."
+        }
+      },
+      "getManagerFee(address,uint256)": {
+        "details": "Returns (address(0), 0) if no manager is set. Reverts if a manager      is set but the registry address is missing.",
+        "params": {
+          "_depositId": "Deposit id on the escrow.",
+          "_escrow": "Escrow contract address."
+        },
+        "returns": {
+          "fee": "      Fee in precise units.",
+          "recipient": "Fee recipient."
+        }
+      },
+      "setDepositRateManager(address,uint256,address,bytes32)": {
+        "details": "Only the depositor can opt in. Reverts if escrow is paused, inputs are zero,      a manager is already set, or the rate manager id is not registered. If a manager      hook is configured, it is called (view) and may revert to reject the opt-in.",
+        "params": {
+          "_depositId": "Deposit id on the escrow.",
+          "_escrow": "Escrow contract address.",
+          "_rateManagerId": "Manager id to opt into.",
+          "_registry": "DepositRateManagerRegistryV1 address."
+        }
+      }
+    },
+    "title": "DepositRateManagerController",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "clearDepositRateManager(address,uint256)": {
+        "notice": "Clear the rate manager for a deposit."
+      },
+      "getDepositRateManager(address,uint256)": {
+        "notice": "Returns the stored (registry, rateManagerId) for a deposit."
+      },
+      "getEffectiveMinRate(address,uint256,bytes32,bytes32)": {
+        "notice": "Returns the effective minimum conversion rate for a deposit/currency pair."
+      },
+      "getManagerFee(address,uint256)": {
+        "notice": "Returns the manager fee recipient and fee for a deposit."
+      },
+      "setDepositRateManager(address,uint256,address,bytes32)": {
+        "notice": "Opt a deposit into a rate manager configuration."
+      }
+    },
+    "notice": "External controller that stores per-deposit rate manager config and computes effective min rates.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 2838,
+        "contract": "contracts/DepositRateManagerController.sol:DepositRateManagerController",
+        "label": "depositManagerConfig",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_mapping(t_address,t_mapping(t_uint256,t_struct(DepositManagerConfig)2831_storage))"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_bytes32": {
+        "encoding": "inplace",
+        "label": "bytes32",
+        "numberOfBytes": "32"
+      },
+      "t_mapping(t_address,t_mapping(t_uint256,t_struct(DepositManagerConfig)2831_storage))": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => mapping(uint256 => struct DepositRateManagerController.DepositManagerConfig))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_uint256,t_struct(DepositManagerConfig)2831_storage)"
+      },
+      "t_mapping(t_uint256,t_struct(DepositManagerConfig)2831_storage)": {
+        "encoding": "mapping",
+        "key": "t_uint256",
+        "label": "mapping(uint256 => struct DepositRateManagerController.DepositManagerConfig)",
+        "numberOfBytes": "32",
+        "value": "t_struct(DepositManagerConfig)2831_storage"
+      },
+      "t_struct(DepositManagerConfig)2831_storage": {
+        "encoding": "inplace",
+        "label": "struct DepositRateManagerController.DepositManagerConfig",
+        "members": [
+          {
+            "astId": 2828,
+            "contract": "contracts/DepositRateManagerController.sol:DepositRateManagerController",
+            "label": "registry",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address"
+          },
+          {
+            "astId": 2830,
+            "contract": "contracts/DepositRateManagerController.sol:DepositRateManagerController",
+            "label": "rateManagerId",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_bytes32"
+          }
+        ],
+        "numberOfBytes": "64"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      }
+    }
+  }
+}
