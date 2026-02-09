@@ -1,0 +1,241 @@
+{
+  "address": "0x2bDbB6D74Aed9759E8ae6432B3dF9bAa4B24b948",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_registry",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "actual",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "required",
+          "type": "uint256"
+        }
+      ],
+      "name": "BelowMinLiquidity",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "manager",
+          "type": "address"
+        }
+      ],
+      "name": "NotManager",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "minLiquidity",
+          "type": "uint256"
+        }
+      ],
+      "name": "MinLiquidityUpdated",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "name": "minLiquidity",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "depositor",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "onDepositOptIn",
+      "outputs": [],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "registry",
+      "outputs": [
+        {
+          "internalType": "contract IDepositRateManagerRegistryV1",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint256",
+          "name": "min",
+          "type": "uint256"
+        }
+      ],
+      "name": "setMinLiquidity",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0x95cf614bf32bff8ab8bb0de977d8416e7f4cb6de9e05a1f0d76b81a60106a475",
+  "receipt": {
+    "to": null,
+    "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "contractAddress": "0x2bDbB6D74Aed9759E8ae6432B3dF9bAa4B24b948",
+    "transactionIndex": 89,
+    "gasUsed": "361760",
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0xf7a6700be8149e863b00b0446acc06e03d49dde5b2aa54ae5d404d0b4d01465b",
+    "transactionHash": "0x95cf614bf32bff8ab8bb0de977d8416e7f4cb6de9e05a1f0d76b81a60106a475",
+    "logs": [],
+    "blockNumber": 41921096,
+    "cumulativeGasUsed": "16986189",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [
+    "0x3125F621482887d158cb51cE9b54D9D25b145877"
+  ],
+  "numDeployments": 1,
+  "solcInputHash": "35cc3d10870761880e2fe0c9693668e4",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_registry\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"actual\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"required\",\"type\":\"uint256\"}],\"name\":\"BelowMinLiquidity\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"manager\",\"type\":\"address\"}],\"name\":\"NotManager\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"minLiquidity\",\"type\":\"uint256\"}],\"name\":\"MinLiquidityUpdated\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"minLiquidity\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"depositor\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"}],\"name\":\"onDepositOptIn\",\"outputs\":[],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"registry\",\"outputs\":[{\"internalType\":\"contract IDepositRateManagerRegistryV1\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"min\",\"type\":\"uint256\"}],\"name\":\"setMinLiquidity\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"details\":\"Escrow invokes onDepositOptIn before linking a deposit to a manager id.\",\"kind\":\"dev\",\"methods\":{\"onDepositOptIn(address,address,uint256,bytes32)\":{\"params\":{\"depositId\":\"The deposit id on the escrow.\",\"depositor\":\"The depositor opting in.\",\"escrow\":\"The Escrow contract address.\",\"rateManagerId\":\"The rate manager id the depositor intends to opt into.\"}},\"setMinLiquidity(bytes32,uint256)\":{\"details\":\"Only callable by the manager recorded in the registry for this id.\",\"params\":{\"min\":\"The minimum total liquidity required to opt in (0 = no restriction).\",\"rateManagerId\":\"The rate manager id to configure.\"}}},\"title\":\"DepositRateManagerHookV1\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"onDepositOptIn(address,address,uint256,bytes32)\":{\"notice\":\"Called by Escrow before linking a deposit to a rateManagerId.\"},\"setMinLiquidity(bytes32,uint256)\":{\"notice\":\"Sets the minimum liquidity required for a given manager id.\"}},\"notice\":\"Shared, multi-tenant hook contract that enforces a per-rateManagerId minimum liquidity         requirement for opting into delegated rate management.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/hooks/DepositRateManagerHookV1.sol\":\"DepositRateManagerHookV1\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"@openzeppelin/contracts/token/ERC20/IERC20.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (token/ERC20/IERC20.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Interface of the ERC20 standard as defined in the EIP.\\n */\\ninterface IERC20 {\\n    /**\\n     * @dev Emitted when `value` tokens are moved from one account (`from`) to\\n     * another (`to`).\\n     *\\n     * Note that `value` may be zero.\\n     */\\n    event Transfer(address indexed from, address indexed to, uint256 value);\\n\\n    /**\\n     * @dev Emitted when the allowance of a `spender` for an `owner` is set by\\n     * a call to {approve}. `value` is the new allowance.\\n     */\\n    event Approval(address indexed owner, address indexed spender, uint256 value);\\n\\n    /**\\n     * @dev Returns the amount of tokens in existence.\\n     */\\n    function totalSupply() external view returns (uint256);\\n\\n    /**\\n     * @dev Returns the amount of tokens owned by `account`.\\n     */\\n    function balanceOf(address account) external view returns (uint256);\\n\\n    /**\\n     * @dev Moves `amount` tokens from the caller's account to `to`.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transfer(address to, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Returns the remaining number of tokens that `spender` will be\\n     * allowed to spend on behalf of `owner` through {transferFrom}. This is\\n     * zero by default.\\n     *\\n     * This value changes when {approve} or {transferFrom} are called.\\n     */\\n    function allowance(address owner, address spender) external view returns (uint256);\\n\\n    /**\\n     * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * IMPORTANT: Beware that changing an allowance with this method brings the risk\\n     * that someone may use both the old and the new allowance by unfortunate\\n     * transaction ordering. One possible solution to mitigate this race\\n     * condition is to first reduce the spender's allowance to 0 and set the\\n     * desired value afterwards:\\n     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729\\n     *\\n     * Emits an {Approval} event.\\n     */\\n    function approve(address spender, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Moves `amount` tokens from `from` to `to` using the\\n     * allowance mechanism. `amount` is then deducted from the caller's\\n     * allowance.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transferFrom(address from, address to, uint256 amount) external returns (bool);\\n}\\n\",\"keccak256\":\"0x287b55befed2961a7eabd7d7b1b2839cbca8a5b80ef8dcbb25ed3d4c2002c305\",\"license\":\"MIT\"},\"contracts/hooks/DepositRateManagerHookV1.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity ^0.8.18;\\n\\nimport { IDepositRateManagerHook } from \\\"../interfaces/IDepositRateManagerHook.sol\\\";\\nimport { IDepositRateManagerRegistryV1 } from \\\"../interfaces/IDepositRateManagerRegistryV1.sol\\\";\\nimport { IEscrow } from \\\"../interfaces/IEscrow.sol\\\";\\n\\n/**\\n * @title DepositRateManagerHookV1\\n * @notice Shared, multi-tenant hook contract that enforces a per-rateManagerId minimum liquidity\\n *         requirement for opting into delegated rate management.\\n * @dev Escrow invokes onDepositOptIn before linking a deposit to a manager id.\\n */\\ncontract DepositRateManagerHookV1 is IDepositRateManagerHook {\\n    /* ============ Errors ============ */\\n    error NotManager(bytes32 rateManagerId, address caller, address manager);\\n    error BelowMinLiquidity(uint256 actual, uint256 required);\\n\\n    /* ============ Events ============ */\\n    event MinLiquidityUpdated(bytes32 indexed rateManagerId, uint256 minLiquidity);\\n\\n    /* ============ State ============ */\\n    IDepositRateManagerRegistryV1 public immutable registry;\\n    mapping(bytes32 => uint256) public minLiquidity; // per rateManagerId (in deposit token units)\\n\\n    constructor(address _registry) {\\n        registry = IDepositRateManagerRegistryV1(_registry);\\n    }\\n\\n    /**\\n     * @notice Sets the minimum liquidity required for a given manager id.\\n     * @dev Only callable by the manager recorded in the registry for this id.\\n     * @param rateManagerId The rate manager id to configure.\\n     * @param min           The minimum total liquidity required to opt in (0 = no restriction).\\n     */\\n    function setMinLiquidity(bytes32 rateManagerId, uint256 min) external {\\n        IDepositRateManagerRegistryV1.RateManagerConfig memory cfg = registry.getRateManager(rateManagerId);\\n        if (cfg.manager != msg.sender) revert NotManager(rateManagerId, msg.sender, cfg.manager);\\n        minLiquidity[rateManagerId] = min;\\n        emit MinLiquidityUpdated(rateManagerId, min);\\n    }\\n\\n    /**\\n     * @inheritdoc IDepositRateManagerHook\\n     */\\n    function onDepositOptIn(address depositor, address escrow, uint256 depositId, bytes32 rateManagerId) external view override {\\n        IEscrow.Deposit memory d = IEscrow(escrow).getDeposit(depositId);\\n        uint256 liq = d.remainingDeposits + d.outstandingIntentAmount;\\n        uint256 min = minLiquidity[rateManagerId];\\n        if (min > 0 && liq < min) revert BelowMinLiquidity(liq, min);\\n        depositor; // silence unused var warning\\n    }\\n}\\n\\n\",\"keccak256\":\"0xef24d0a5a1a7949d1bdc07e5605bc4ffe825c6d79418590a742d40bd90ae1f96\",\"license\":\"MIT\"},\"contracts/interfaces/IDepositRateManagerHook.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IDepositRateManagerHook\\n * @notice Optional manager-controlled validation hook invoked by Escrow when a depositor opts into a rate manager.\\n * @dev Implementations MUST be view-only and revert to reject the opt-in. Escrow may STATICCALL this hook.\\n */\\ninterface IDepositRateManagerHook {\\n    /**\\n     * @notice Called by Escrow before linking a deposit to a rateManagerId.\\n     * @param depositor      The depositor opting in.\\n     * @param escrow         The Escrow contract address.\\n     * @param depositId      The deposit id on the escrow.\\n     * @param rateManagerId  The rate manager id the depositor intends to opt into.\\n     */\\n    function onDepositOptIn(address depositor, address escrow, uint256 depositId, bytes32 rateManagerId) external view;\\n}\\n\\n\",\"keccak256\":\"0x3cfd89236d8f5af9d82b0dc4ad8e2eb2acb574313824c9fff89aeb7a0a92d943\",\"license\":\"MIT\"},\"contracts/interfaces/IDepositRateManagerRegistryV1.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IDepositRateManagerRegistryV1\\n * @notice Permissionless registry for \\u201cdeposit rate managers\\u201d.\\n * A rate manager config is identified by a `rateManagerId` (bytes32) and can be shared across many deposits.\\n */\\ninterface IDepositRateManagerRegistryV1 {\\n    /* ============ Structs ============ */\\n\\n    struct RateManagerConfig {\\n        address manager;\\n        address feeRecipient;\\n        uint256 maxFee;              // Immutable upper bound on `fee` (preciseUnits, 1e18 = 100%)\\n        uint256 fee;                 // Flat fee in preciseUnits (must be <= maxFee)\\n        address depositHook;         // Optional hook called on deposit opt-in\\n        string name;                 // Human-readable name (optional)\\n        string uri;                  // Metadata URI (optional)\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event RateManagerCreated(\\n        bytes32 indexed rateManagerId,\\n        address indexed manager,\\n        address indexed feeRecipient,\\n        uint256 maxFee,\\n        uint256 fee,\\n        address depositHook,\\n        string name,\\n        string uri\\n    );\\n\\n    event RateManagerConfigUpdated(\\n        bytes32 indexed rateManagerId,\\n        address indexed manager,\\n        address indexed feeRecipient,\\n        address depositHook,\\n        string name,\\n        string uri\\n    );\\n\\n    event RateManagerMinRateUpdated(\\n        bytes32 indexed rateManagerId,\\n        bytes32 indexed paymentMethod,\\n        bytes32 indexed currency,\\n        uint256 minRate\\n    );\\n\\n    event RateManagerMinRatesBatchUpdated(bytes32 indexed rateManagerId, uint256 count);\\n    event RateManagerFeeUpdated(bytes32 indexed rateManagerId, uint256 fee);\\n\\n    /* ============ External Functions ============ */\\n\\n    function createRateManager(RateManagerConfig calldata _config) external returns (bytes32 rateManagerId);\\n\\n    function setRateManagerConfig(bytes32 _rateManagerId, address _newManager, address _newFeeRecipient, address _newHook, string calldata _newName, string calldata _newUri) external;\\n\\n    function setFee(bytes32 _rateManagerId, uint256 _newFee) external;\\n\\n    function setMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency, uint256 _minRate) external;\\n\\n    function setMinRatesBatch(bytes32 _rateManagerId, bytes32[] calldata _paymentMethods, bytes32[][] calldata _currencies, uint256[][] calldata _minRates) external;\\n\\n    /* ============ View Functions ============ */\\n\\n    function isRateManager(bytes32 _rateManagerId) external view returns (bool);\\n\\n    function getRateManager(bytes32 _rateManagerId) external view returns (RateManagerConfig memory);\\n\\n    function getFeeAndRecipient(bytes32 _rateManagerId) external view returns (uint256 fee, address feeRecipient);\\n\\n    function getDepositHook(bytes32 _rateManagerId) external view returns (address);\\n\\n    function getMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency) external view returns (uint256);\\n}\\n\",\"keccak256\":\"0xdc5e0ff77829d7f1bc5568ff050285773a4cdf85d6297c245da7ee0de5be6a91\",\"license\":\"MIT\"},\"contracts/interfaces/IEscrow.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IERC20 } from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\nimport { IPostIntentHook } from \\\"./IPostIntentHook.sol\\\";\\n\\ninterface IEscrow {\\n    \\n    /* ============ Structs ============ */\\n\\n    struct Intent {\\n        bytes32 intentHash;                        // Unique identifier for the intent\\n        uint256 amount;                            // Amount locked\\n        uint256 timestamp;                         // When this intent was created\\n        uint256 expiryTime;                        // When this intent expires\\n    }\\n\\n    struct Range {\\n        uint256 min;                                // Minimum value\\n        uint256 max;                                // Maximum value\\n    }\\n\\n    struct Deposit {\\n        address depositor;                          // Address of depositor\\n        address delegate;                           // Address that can manage this deposit (address(0) if no delegate)\\n        IERC20 token;                               // Address of deposit token\\n        Range intentAmountRange;                    // Range of take amount per intent\\n        // Deposit state\\n        bool acceptingIntents;                      // State: True if the deposit is accepting intents, False otherwise\\n        uint256 remainingDeposits;                  // State: Amount of liquidity immediately available to lock\\n        uint256 outstandingIntentAmount;            // State: Amount of outstanding intents (may include expired intents)\\n        // Intent guardian\\n        address intentGuardian;                     // Address that can extend intent expiry times (address(0) if no guardian)\\n        // Retention behavior\\n        bool retainOnEmpty;                         // If true, do not auto-close/sweep when empty; keep config for reuse\\n    }\\n\\n    struct Currency {\\n        bytes32 code;                               // Currency code (keccak256 hash of the currency code)\\n        uint256 minConversionRate;                  // Minimum rate of deposit token to fiat currency (in preciseUnits)\\n    }\\n\\n    struct DepositPaymentMethodData {\\n        address intentGatingService;                // Public key of gating service that will be used to verify intents\\n        bytes32 payeeDetails;                       // Payee details, has to be hash of payee details\\n        bytes data;                                 // Verification Data: Additional data used for payment verification; Can hold attester address\\n                                                    // in case of TLS proofs, domain key hash in case of zkEmail proofs, currency code etc.\\n    }\\n\\n    struct CreateDepositParams {\\n        IERC20 token;                                // The token to be deposited\\n        uint256 amount;                              // The amount of token to deposit\\n        Range intentAmountRange;                     // The max and min take amount for each intent\\n        bytes32[] paymentMethods;                    // The payment methods that deposit supports\\n        DepositPaymentMethodData[] paymentMethodData;// The payment verification data for each payment method that deposit supports\\n        Currency[][] currencies;                     // The currencies for each payment method that deposit supports\\n        address delegate;                            // Optional delegate address that can manage this deposit (address(0) for no delegate)\\n        address intentGuardian;                      // Optional intent guardian address that can extend intent expiry times (address(0) for no guardian)\\n        bool retainOnEmpty;                          // Opt-in: keep deposit and config when empty\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event DepositReceived(uint256 indexed depositId, address indexed depositor, IERC20 indexed token, uint256 amount, Range intentAmountRange, address delegate, address intentGuardian);\\n\\n    event DepositPaymentMethodAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed payeeDetails, address intentGatingService);\\n    event DepositPaymentMethodActiveUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bool active);\\n\\n    event DepositCurrencyAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 minConversionRate);\\n    event DepositMinConversionRateUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 newMinConversionRate);\\n    \\n    event DepositFundsAdded(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositWithdrawn(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositClosed(uint256 depositId, address depositor);\\n    event DepositAcceptingIntentsUpdated(uint256 indexed depositId, bool acceptingIntents);\\n\\n    event DepositIntentAmountRangeUpdated(uint256 indexed depositId, Range intentAmountRange);\\n    event DepositRetainOnEmptyUpdated(uint256 indexed depositId, bool retainOnEmpty);\\n\\n    event DepositDelegateSet(uint256 indexed depositId, address indexed depositor, address indexed delegate);\\n    event DepositDelegateRemoved(uint256 indexed depositId, address indexed depositor);\\n\\n    event MinDepositAmountSet(uint256 minDepositAmount);\\n\\n    event OrchestratorUpdated(address indexed orchestrator);\\n    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);\\n\\n    event FundsLocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount, uint256 expiryTime);\\n    event FundsUnlocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount);\\n    event FundsUnlockedAndTransferred(\\n        uint256 indexed depositId, \\n        bytes32 indexed intentHash, \\n        uint256 unlockedAmount, \\n        uint256 transferredAmount, \\n        address to\\n    );\\n    event IntentExpiryExtended(uint256 indexed depositId, bytes32 indexed intentHash, uint256 newExpiryTime);\\n\\n    event DustRecipientUpdated(address indexed dustRecipient);\\n    event DustCollected(uint256 indexed depositId, uint256 dustAmount, address indexed dustRecipient);\\n    event DustThresholdUpdated(uint256 dustThreshold);\\n    event MaxIntentsPerDepositUpdated(uint256 maxIntentsPerDeposit);\\n    event IntentExpirationPeriodUpdated(uint256 intentExpirationPeriod);\\n\\n    /* ============ Standardized Custom Errors ============ */\\n    \\n    // Zero value errors\\n    error ZeroAddress();\\n    error ZeroValue();\\n    error ZeroMinValue();\\n    error ZeroConversionRate();\\n\\n    // Authorization errors\\n    error UnauthorizedCaller(address caller, address authorized);\\n    error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);\\n\\n    // Range and amount errors\\n    error InvalidRange(uint256 min, uint256 max);\\n    error AmountBelowMin(uint256 amount, uint256 min);\\n    error AmountAboveMax(uint256 amount, uint256 max);\\n    error AmountExceedsAvailable(uint256 requested, uint256 available);\\n\\n    // Not found errors\\n    error DepositNotFound(uint256 depositId);\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodNotActive(uint256 depositId, bytes32 paymentMethod);\\n    error PaymentMethodNotListed(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyNotFound(bytes32 paymentMethod, bytes32 currency);\\n    error DelegateNotFound(uint256 depositId);\\n\\n    // Already exists errors\\n    error PaymentMethodAlreadyExists(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyAlreadyExists(bytes32 paymentMethod, bytes32 currency);\\n    error IntentAlreadyExists(uint256 depositId, bytes32 intentHash);\\n\\n    // State errors\\n    error DepositNotAcceptingIntents(uint256 depositId);\\n    error DepositAlreadyInState(uint256 depositId, bool currentState);\\n    error InsufficientDepositLiquidity(uint256 depositId, uint256 available, uint256 required);\\n    error MaxIntentsExceeded(uint256 depositId, uint256 current, uint256 max);\\n\\n    // Validation errors\\n    error EmptyPayeeDetails();\\n    error ArrayLengthMismatch(uint256 length1, uint256 length2);\\n\\n    // Payment method errors\\n    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n\\n    \\n    /* ============ External Functions for Orchestrator ============ */\\n\\n    function lockFunds(uint256 _depositId, bytes32 _intentHash, uint256 _amount) external;\\n    function unlockFunds(uint256 _depositId, bytes32 _intentHash) external;\\n    function unlockAndTransferFunds(uint256 _depositId, bytes32 _intentHash, uint256 _transferAmount, address _to) external;\\n    function extendIntentExpiry(uint256 _depositId, bytes32 _intentHash, uint256 _newExpiryTime) external;\\n\\n    /* ============ View Functions ============ */\\n\\n    function getDeposit(uint256 _depositId) external view returns (Deposit memory);\\n    function getDepositIntent(uint256 _depositId, bytes32 _intentHash) external view returns (Intent memory);\\n    function getDepositPaymentMethods(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getDepositCurrencies(uint256 _depositId, bytes32 _paymentMethod) external view returns (bytes32[] memory);\\n    function getDepositCurrencyMinRate(uint256 _depositId, bytes32 _paymentMethod, bytes32 _currencyCode) external view returns (uint256);\\n    function getDepositPaymentMethodData(uint256 _depositId, bytes32 _paymentMethod) external view returns (DepositPaymentMethodData memory);\\n    function getDepositPaymentMethodActive(uint256 _depositId, bytes32 _paymentMethod) external view returns (bool);\\n    function getDepositGatingService(uint256 _depositId, bytes32 _paymentMethod) external view returns (address);\\n    function getAccountDeposits(address _account) external view returns (uint256[] memory);\\n    function getDepositIntentHashes(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getExpiredIntents(uint256 _depositId) external view returns (bytes32[] memory expiredIntents, uint256 reclaimableAmount);\\n}\\n\",\"keccak256\":\"0x3df4df7659a48b419cc5b7953463a0ec66995af7afdfa4052bb5668aea641f2d\",\"license\":\"MIT\"},\"contracts/interfaces/IOrchestrator.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IERC20 } from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\nimport { IPostIntentHook } from \\\"./IPostIntentHook.sol\\\";\\n\\ninterface IOrchestrator {\\n    \\n    /* ============ Structs ============ */\\n\\n    struct Intent {\\n        address owner;                              // Address of the intent owner  \\n        address to;                                 // Address to forward funds to (can be same as owner)\\n        address escrow;                             // Address of the escrow contract holding the deposit\\n        uint256 depositId;                          // ID of the deposit the intent is associated with\\n        uint256 amount;                             // Amount of the deposit.token the owner wants to take\\n        uint256 timestamp;                          // Timestamp of the intent\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // Currency code that the owner is paying in offchain (keccak256 hash of the currency code)\\n        uint256 conversionRate;                     // Conversion rate of deposit token to fiat currency at the time of intent\\n        bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain\\n        address referrer;                           // Address of the referrer who brought this intent (if any)\\n        uint256 referrerFee;                        // Fee to be paid to the referrer in preciseUnits (1e16 = 1%)\\n        IPostIntentHook postIntentHook;             // Address of the post-intent hook that will execute any post-intent actions\\n        bytes data;                                 // Additional data to be passed to the post-intent hook contract\\n    }\\n\\n    struct SignalIntentParams {\\n        address escrow;                             // The escrow contract where the deposit is held\\n        uint256 depositId;                          // The ID of the deposit the taker intends to use\\n        uint256 amount;                             // The amount of deposit.token the user wants to take\\n        address to;                                 // Address to forward funds to\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // The currency code for offchain payment\\n        uint256 conversionRate;                     // The conversion rate agreed offchain\\n        address referrer;                           // Address of the referrer (address(0) if no referrer)\\n        uint256 referrerFee;                        // Fee to be paid to the referrer\\n        bytes gatingServiceSignature;               // Signature from the deposit's gating service\\n        uint256 signatureExpiration;                // Timestamp when the gating service signature expires\\n        IPostIntentHook postIntentHook;             // Optional post-intent hook (address(0) for no hook)\\n        bytes data;                                 // Additional data for the intent\\n    }\\n\\n    struct FulfillIntentParams {\\n        bytes paymentProof;                         // Payment proof. Can be Groth16 Proof, TLSNotary proof, TLSProxy proof, attestation etc.\\n        bytes32 intentHash;                         // Identifier of intent being fulfilled\\n        bytes verificationData;                     // Additional data for payment verifier\\n        bytes postIntentHookData;                   // Additional data for post intent hook\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event IntentSignaled(\\n        bytes32 indexed intentHash, \\n        address indexed escrow,\\n        uint256 indexed depositId, \\n        bytes32 paymentMethod, \\n        address owner, \\n        address to, \\n        uint256 amount, \\n        bytes32 fiatCurrency, \\n        uint256 conversionRate, \\n        uint256 timestamp\\n    );\\n\\n    event IntentPruned(\\n        bytes32 indexed intentHash\\n    );\\n\\n    event IntentFulfilled(\\n        bytes32 indexed intentHash,\\n        address indexed fundsTransferredTo,   // Address that funds were transferred to; can be intent.to or postIntentHook address\\n        uint256 amount,\\n        bool isManualRelease\\n    );\\n\\n    event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);\\n\\n    event AllowMultipleIntentsUpdated(bool allowMultiple);\\n\\n    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);\\n    event PostIntentHookRegistryUpdated(address indexed postIntentHookRegistry);\\n    event RelayerRegistryUpdated(address indexed relayerRegistry);\\n    event EscrowRegistryUpdated(address indexed escrowRegistry);\\n    event DepositRateManagerControllerUpdated(address indexed depositRateManagerController);\\n\\n    event ProtocolFeeUpdated(uint256 protocolFee);\\n    event ProtocolFeeRecipientUpdated(address indexed protocolFeeRecipient);\\n    event PartialManualReleaseDelayUpdated(uint256 partialManualReleaseDelay);\\n\\n    /* ============ Standardized Custom Errors ============ */\\n    \\n    // Zero value errors\\n    error ZeroAddress();\\n    error ZeroValue();\\n    \\n    // Authorization errors\\n    error UnauthorizedEscrowCaller(address caller);\\n    error UnauthorizedCaller(address caller, address authorized);\\n    \\n    // Not found errors\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodDoesNotExist(bytes32 paymentMethod);\\n    error PaymentMethodNotSupported(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n    \\n    // Whitelist errors\\n    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);\\n    error PostIntentHookNotWhitelisted(address hook);\\n    error EscrowNotWhitelisted(address escrow);\\n    \\n    // Amount and fee errors\\n    error AmountBelowMin(uint256 amount, uint256 min);\\n    error AmountAboveMax(uint256 amount, uint256 max);\\n    error AmountExceedsLimit(uint256 amount, uint256 limit);\\n    error FeeExceedsMaximum(uint256 fee, uint256 maximum);\\n    error RateBelowMinimum(uint256 rate, uint256 minRate);\\n    \\n    // Validation errors\\n    error AccountHasActiveIntent(address account, bytes32 existingIntent);\\n    error InvalidReferrerFeeConfiguration();\\n    error InvalidSignature();\\n    error SignatureExpired(uint256 expiration, uint256 currentTime);\\n    error PartialReleaseNotAllowedYet(uint256 currentTime, uint256 allowedTime);\\n    error DepositRateManagerControllerNotSet();\\n\\n    // Verification errors\\n    error PaymentVerificationFailed();\\n    error HashMismatch(bytes32 expected, bytes32 actual);\\n     \\n    // Transfer errors\\n    error TransferFailed(address recipient, uint256 amount);\\n    error EscrowLockFailed();\\n\\n    /* ============ View Functions ============ */\\n\\n    function getIntent(bytes32 intentHash) external view returns (Intent memory);\\n    function getAccountIntents(address account) external view returns (bytes32[] memory);\\n    \\n    /* ============ External Functions for Users ============ */\\n\\n    function signalIntent(SignalIntentParams calldata params) external;\\n\\n    function cancelIntent(bytes32 intentHash) external;\\n\\n    function fulfillIntent(FulfillIntentParams calldata params) external;\\n\\n    function releaseFundsToPayer(bytes32 intentHash) external;\\n\\n    /* ============ External Functions for Escrow ============ */\\n\\n    function pruneIntents(bytes32[] calldata intentIds) external;\\n}\\n\",\"keccak256\":\"0x448663f8710e330d6fbb942a83d3247029453ad7af712f4ee3435633fac11742\",\"license\":\"MIT\"},\"contracts/interfaces/IPostIntentHook.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IOrchestrator } from \\\"./IOrchestrator.sol\\\";\\n\\n/**\\n * @title IPostIntentHook\\n * @notice Interface for post-intent hooks\\n */\\ninterface IPostIntentHook {\\n\\n    /**\\n     * @notice Post-intent hook\\n     * @param _intent The intent data structure containing all intent information\\n     * @param _fulfillIntentData The data passed to fulfillIntent\\n     */\\n    function execute(\\n        IOrchestrator.Intent memory _intent,\\n        uint256 _amountNetFees,\\n        bytes calldata _fulfillIntentData\\n    ) external;\\n}\\n\",\"keccak256\":\"0x72ae0d60c98f89eb2363f455445466c1dfaddfb338a63d65d3eb8469cbd9484d\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x60a03461007357601f61061a38819003918201601f19168301916001600160401b038311848410176100785780849260209460405283398101031261007357516001600160a01b038116908190036100735760805260405161058b908161008f823960805181818161026b01526102dc0152f35b600080fd5b634e487b7160e01b600052604160045260246000fdfe608060408181526004908136101561001657600080fd5b600092833560e01c90816311b5717214610463575080632eb86f7d1461029e5780637b103999146102565763a8a60f941461005057600080fd5b34610252576080366003190112610252576001600160a01b0382358181160361024e57602490813581811680910361024a57835180916313f3f72d60e31b82526044358783015281856101409485935afa928315610240578793610117575b50505060c060a08201519101518101809111610105576064358552846020528285205492831515806100fc575b6100e4578580f35b5163191da39d60e21b81529384015282015260449150fd5b508382106100dc565b50634e487b7160e01b84526011835283fd5b9082819394503d8511610239575b61012f8183610486565b810103928312610235578451926101209167ffffffffffffffff9183860183811187821017610223578852610163856104be565b8652610171602086016104be565b602087015287850151918216820361021f57879182870152605f19011261021b57855190818701908111828210176102095786526060838101518252608084015160208301528401526101fd906101ca60a08401610548565b608085015260c083015160a085015260e083015160c0850152610100926101f28482016104be565b60e086015201610548565b908201523880806100af565b634e487b7160e01b8952604188528589fd5b8780fd5b8980fd5b634e487b7160e01b8b5260418a52878bfd5b8680fd5b503d610125565b85513d89823e3d90fd5b8580fd5b8380fd5b8280fd5b83823461029a578160031936011261029a57517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b5080fd5b50903461025257816003193601126102525781516390a3a9c560e01b8152813581830181905292602480359391926001600160a01b039187908290817f000000000000000000000000000000000000000000000000000000000000000086165afa908115610459578791610371575b5051163381036103515750507f9899ffdbfcbd89ffb9812877cee06aef118be9ca997dfb3cf1dc44f14685118a91602091848652858352818187205551908152a280f35b846064935192630abf9bb960e21b84528301523360248301526044820152fd5b90503d8088833e6103828183610486565b810160208282031261021b57815167ffffffffffffffff9283821161021f57019060e0828203126104555785519260e08401848110828211176104425787526103ca836104be565b84526103d8602084016104be565b60208501528683015187850152606083015160608501526103fb608084016104be565b608085015260a083015181811161043e57826104189185016104d7565b60a085015260c083015190811161021f5761043392016104d7565b60c08201523861030d565b8a80fd5b634e487b7160e01b8b526041875260248bfd5b8880fd5b84513d89823e3d90fd5b9290503461024e57602036600319011261024e5735835260208381529220548152f35b90601f8019910116810190811067ffffffffffffffff8211176104a857604052565b634e487b7160e01b600052604160045260246000fd5b51906001600160a01b03821682036104d257565b600080fd5b919080601f840112156104d25782519067ffffffffffffffff82116104a85760405191602091610510601f8301601f1916840185610486565b8184528282870101116104d25760005b81811061053557508260009394955001015290565b8581018301518482018401528201610520565b519081151582036104d25756fea2646970667358221220a7ea8f7c1496a193daea1e7a3534772bb4b4c2cfc73195a421e92b1ba21ba84d64736f6c63430008120033",
+  "deployedBytecode": "0x608060408181526004908136101561001657600080fd5b600092833560e01c90816311b5717214610463575080632eb86f7d1461029e5780637b103999146102565763a8a60f941461005057600080fd5b34610252576080366003190112610252576001600160a01b0382358181160361024e57602490813581811680910361024a57835180916313f3f72d60e31b82526044358783015281856101409485935afa928315610240578793610117575b50505060c060a08201519101518101809111610105576064358552846020528285205492831515806100fc575b6100e4578580f35b5163191da39d60e21b81529384015282015260449150fd5b508382106100dc565b50634e487b7160e01b84526011835283fd5b9082819394503d8511610239575b61012f8183610486565b810103928312610235578451926101209167ffffffffffffffff9183860183811187821017610223578852610163856104be565b8652610171602086016104be565b602087015287850151918216820361021f57879182870152605f19011261021b57855190818701908111828210176102095786526060838101518252608084015160208301528401526101fd906101ca60a08401610548565b608085015260c083015160a085015260e083015160c0850152610100926101f28482016104be565b60e086015201610548565b908201523880806100af565b634e487b7160e01b8952604188528589fd5b8780fd5b8980fd5b634e487b7160e01b8b5260418a52878bfd5b8680fd5b503d610125565b85513d89823e3d90fd5b8580fd5b8380fd5b8280fd5b83823461029a578160031936011261029a57517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b5080fd5b50903461025257816003193601126102525781516390a3a9c560e01b8152813581830181905292602480359391926001600160a01b039187908290817f000000000000000000000000000000000000000000000000000000000000000086165afa908115610459578791610371575b5051163381036103515750507f9899ffdbfcbd89ffb9812877cee06aef118be9ca997dfb3cf1dc44f14685118a91602091848652858352818187205551908152a280f35b846064935192630abf9bb960e21b84528301523360248301526044820152fd5b90503d8088833e6103828183610486565b810160208282031261021b57815167ffffffffffffffff9283821161021f57019060e0828203126104555785519260e08401848110828211176104425787526103ca836104be565b84526103d8602084016104be565b60208501528683015187850152606083015160608501526103fb608084016104be565b608085015260a083015181811161043e57826104189185016104d7565b60a085015260c083015190811161021f5761043392016104d7565b60c08201523861030d565b8a80fd5b634e487b7160e01b8b526041875260248bfd5b8880fd5b84513d89823e3d90fd5b9290503461024e57602036600319011261024e5735835260208381529220548152f35b90601f8019910116810190811067ffffffffffffffff8211176104a857604052565b634e487b7160e01b600052604160045260246000fd5b51906001600160a01b03821682036104d257565b600080fd5b919080601f840112156104d25782519067ffffffffffffffff82116104a85760405191602091610510601f8301601f1916840185610486565b8184528282870101116104d25760005b81811061053557508260009394955001015290565b8581018301518482018401528201610520565b519081151582036104d25756fea2646970667358221220a7ea8f7c1496a193daea1e7a3534772bb4b4c2cfc73195a421e92b1ba21ba84d64736f6c63430008120033",
+  "devdoc": {
+    "details": "Escrow invokes onDepositOptIn before linking a deposit to a manager id.",
+    "kind": "dev",
+    "methods": {
+      "onDepositOptIn(address,address,uint256,bytes32)": {
+        "params": {
+          "depositId": "The deposit id on the escrow.",
+          "depositor": "The depositor opting in.",
+          "escrow": "The Escrow contract address.",
+          "rateManagerId": "The rate manager id the depositor intends to opt into."
+        }
+      },
+      "setMinLiquidity(bytes32,uint256)": {
+        "details": "Only callable by the manager recorded in the registry for this id.",
+        "params": {
+          "min": "The minimum total liquidity required to opt in (0 = no restriction).",
+          "rateManagerId": "The rate manager id to configure."
+        }
+      }
+    },
+    "title": "DepositRateManagerHookV1",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "onDepositOptIn(address,address,uint256,bytes32)": {
+        "notice": "Called by Escrow before linking a deposit to a rateManagerId."
+      },
+      "setMinLiquidity(bytes32,uint256)": {
+        "notice": "Sets the minimum liquidity required for a given manager id."
+      }
+    },
+    "notice": "Shared, multi-tenant hook contract that enforces a per-rateManagerId minimum liquidity         requirement for opting into delegated rate management.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 10537,
+        "contract": "contracts/hooks/DepositRateManagerHookV1.sol:DepositRateManagerHookV1",
+        "label": "minLiquidity",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_mapping(t_bytes32,t_uint256)"
+      }
+    ],
+    "types": {
+      "t_bytes32": {
+        "encoding": "inplace",
+        "label": "bytes32",
+        "numberOfBytes": "32"
+      },
+      "t_mapping(t_bytes32,t_uint256)": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => uint256)",
+        "numberOfBytes": "32",
+        "value": "t_uint256"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      }
+    }
+  }
+}

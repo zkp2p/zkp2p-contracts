@@ -718,6 +718,156 @@ export default {
         }
       ]
     },
+    "DepositRateManagerHookV1": {
+      "address": "0x2bDbB6D74Aed9759E8ae6432B3dF9bAa4B24b948",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_registry",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "actual",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "required",
+              "type": "uint256"
+            }
+          ],
+          "name": "BelowMinLiquidity",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "manager",
+              "type": "address"
+            }
+          ],
+          "name": "NotManager",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "minLiquidity",
+              "type": "uint256"
+            }
+          ],
+          "name": "MinLiquidityUpdated",
+          "type": "event"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "",
+              "type": "bytes32"
+            }
+          ],
+          "name": "minLiquidity",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "depositor",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "onDepositOptIn",
+          "outputs": [],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "registry",
+          "outputs": [
+            {
+              "internalType": "contract IDepositRateManagerRegistryV1",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "min",
+              "type": "uint256"
+            }
+          ],
+          "name": "setMinLiquidity",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
     "DepositRateManagerRegistryV1": {
       "address": "0x3125F621482887d158cb51cE9b54D9D25b145877",
       "abi": [
@@ -1206,7 +1356,7 @@ export default {
       ]
     },
     "Escrow": {
-      "address": "0xB63375Ef1d1Fa65515537Bdf4787c7bBA62d0dD7",
+      "address": "0x5C2a8D9246777eE4501B6C426a8B8C7635C7b5b5",
       "abi": [
         {
           "inputs": [
@@ -3419,7 +3569,7 @@ export default {
       ]
     },
     "EscrowRegistry": {
-      "address": "0x4d2cA642c1B260B2c324778BD1a7d7E1125fBA53",
+      "address": "0xc545f336eC77E69bf115729acCbf2e557A00ac91",
       "abi": [
         {
           "inputs": [],
