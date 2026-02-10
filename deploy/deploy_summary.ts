@@ -38,6 +38,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     UnifiedPaymentVerifier:             ${getDeployedContractAddress(network, "UnifiedPaymentVerifier")}
     SimpleAttestationVerifier:          ${getDeployedContractAddress(network, "SimpleAttestationVerifier")}
     AcrossBridgeHook:                   ${getDeployedContractAddress(network, "AcrossBridgeHook")}
+    DepositRateManagerRegistryV1:       ${getDeployedContractAddress(network, "DepositRateManagerRegistryV1")}
+    DepositRateManagerController:       ${getDeployedContractAddress(network, "DepositRateManagerController")}
+    DepositRateManagerHookV1:           ${getDeployedContractAddress(network, "DepositRateManagerHookV1")}
     USDC:                               ${USDC[network] ? USDC[network] : getDeployedContractAddress(network, "USDCMock")}
     `
   );

@@ -3,7 +3,7 @@ export default {
   "chainId": "8453",
   "contracts": {
     "AcrossBridgeHook": {
-      "address": "0x5e44b4c833323860712205825c1119F852782424",
+      "address": "0x5FeD9B38F0eD2E98fd65BcE4364A664d62C27b18",
       "abi": [
         {
           "inputs": [
@@ -457,6 +457,901 @@ export default {
         {
           "stateMutability": "payable",
           "type": "receive"
+        }
+      ]
+    },
+    "DepositRateManagerController": {
+      "address": "0x2CF2FA7F21be0F920E1D8f4bb9C08E2c07F0E5d7",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "RateManagerAlreadySet",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "RateManagerNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "RateManagerRegistryNotSet",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "authorized",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedCaller",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroAddress",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroValue",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "registry",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "prevRateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "DepositRateManagerCleared",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "registry",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "DepositRateManagerSet",
+          "type": "event"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "clearDepositRateManager",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getDepositRateManager",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "registry",
+              "type": "address"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currencyCode",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getEffectiveMinRate",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getManagerFee",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "recipient",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_registry",
+              "type": "address"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "setDepositRateManager",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
+    "DepositRateManagerHookV1": {
+      "address": "0x2bDbB6D74Aed9759E8ae6432B3dF9bAa4B24b948",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_registry",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "actual",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "required",
+              "type": "uint256"
+            }
+          ],
+          "name": "BelowMinLiquidity",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "manager",
+              "type": "address"
+            }
+          ],
+          "name": "NotManager",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "minLiquidity",
+              "type": "uint256"
+            }
+          ],
+          "name": "MinLiquidityUpdated",
+          "type": "event"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "",
+              "type": "bytes32"
+            }
+          ],
+          "name": "minLiquidity",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "depositor",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "onDepositOptIn",
+          "outputs": [],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "registry",
+          "outputs": [
+            {
+              "internalType": "contract IDepositRateManagerRegistryV1",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "min",
+              "type": "uint256"
+            }
+          ],
+          "name": "setMinLiquidity",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
+    "DepositRateManagerRegistryV1": {
+      "address": "0x3125F621482887d158cb51cE9b54D9D25b145877",
+      "abi": [
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "manager",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "feeRecipient",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "depositHook",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
+              "name": "uri",
+              "type": "string"
+            }
+          ],
+          "name": "RateManagerConfigUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "manager",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "feeRecipient",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "maxFee",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "depositHook",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
+              "name": "uri",
+              "type": "string"
+            }
+          ],
+          "name": "RateManagerCreated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            }
+          ],
+          "name": "RateManagerFeeUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "currency",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "minRate",
+              "type": "uint256"
+            }
+          ],
+          "name": "RateManagerMinRateUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "count",
+              "type": "uint256"
+            }
+          ],
+          "name": "RateManagerMinRatesBatchUpdated",
+          "type": "event"
+        },
+        {
+          "inputs": [
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "manager",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "feeRecipient",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "maxFee",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "fee",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "address",
+                  "name": "depositHook",
+                  "type": "address"
+                },
+                {
+                  "internalType": "string",
+                  "name": "name",
+                  "type": "string"
+                },
+                {
+                  "internalType": "string",
+                  "name": "uri",
+                  "type": "string"
+                }
+              ],
+              "internalType": "struct IDepositRateManagerRegistryV1.RateManagerConfig",
+              "name": "_config",
+              "type": "tuple"
+            }
+          ],
+          "name": "createRateManager",
+          "outputs": [
+            {
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getDepositHook",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getFeeAndRecipient",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "feeRecipient",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currency",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getMinRate",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getRateManager",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "manager",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "feeRecipient",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "maxFee",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "fee",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "address",
+                  "name": "depositHook",
+                  "type": "address"
+                },
+                {
+                  "internalType": "string",
+                  "name": "name",
+                  "type": "string"
+                },
+                {
+                  "internalType": "string",
+                  "name": "uri",
+                  "type": "string"
+                }
+              ],
+              "internalType": "struct IDepositRateManagerRegistryV1.RateManagerConfig",
+              "name": "",
+              "type": "tuple"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "isRateManager",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_newFee",
+              "type": "uint256"
+            }
+          ],
+          "name": "setFee",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currency",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_minRate",
+              "type": "uint256"
+            }
+          ],
+          "name": "setMinRate",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32[]",
+              "name": "_paymentMethods",
+              "type": "bytes32[]"
+            },
+            {
+              "internalType": "bytes32[][]",
+              "name": "_currencies",
+              "type": "bytes32[][]"
+            },
+            {
+              "internalType": "uint256[][]",
+              "name": "_minRatesArr",
+              "type": "uint256[][]"
+            }
+          ],
+          "name": "setMinRatesBatch",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "_newManager",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "_newFeeRecipient",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "_newHook",
+              "type": "address"
+            },
+            {
+              "internalType": "string",
+              "name": "_newName",
+              "type": "string"
+            },
+            {
+              "internalType": "string",
+              "name": "_newUri",
+              "type": "string"
+            }
+          ],
+          "name": "setRateManagerConfig",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
         }
       ]
     },
@@ -2891,7 +3786,7 @@ export default {
       ]
     },
     "NullifierRegistry": {
-      "address": "0x3FFd04f7909a16d3476263A1f4ce413A089dCc69",
+      "address": "0xf72098EeA6854EDcD51Ed8C99cBbfC74cB76f958",
       "abi": [
         {
           "inputs": [],
@@ -3107,7 +4002,7 @@ export default {
       ]
     },
     "Orchestrator": {
-      "address": "0xF9b9CD27Deea496B960b3cb5221b514705fCaF5e",
+      "address": "0xd067Ade072a0F034E277BB26CdCE9F360A2a4127",
       "abi": [
         {
           "inputs": [
@@ -3233,6 +4128,11 @@ export default {
             }
           ],
           "name": "CurrencyNotSupported",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "DepositRateManagerControllerNotSet",
           "type": "error"
         },
         {
@@ -3473,6 +4373,19 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
+              "name": "depositRateManagerController",
+              "type": "address"
+            }
+          ],
+          "name": "DepositRateManagerControllerUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
               "name": "escrowRegistry",
               "type": "address"
             }
@@ -3509,6 +4422,31 @@ export default {
             }
           ],
           "name": "IntentFulfilled",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "feeRecipient",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            }
+          ],
+          "name": "IntentManagerFeeSnapshotted",
           "type": "event"
         },
         {
@@ -3748,6 +4686,19 @@ export default {
               "internalType": "uint256",
               "name": "",
               "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "depositRateManagerController",
+          "outputs": [
+            {
+              "internalType": "contract IDepositRateManagerController",
+              "name": "",
+              "type": "address"
             }
           ],
           "stateMutability": "view",
@@ -4091,6 +5042,19 @@ export default {
           "inputs": [
             {
               "internalType": "address",
+              "name": "_depositRateManagerController",
+              "type": "address"
+            }
+          ],
+          "name": "setDepositRateManagerController",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
               "name": "_escrowRegistry",
               "type": "address"
             }
@@ -4255,7 +5219,7 @@ export default {
       ]
     },
     "PaymentVerifierRegistry": {
-      "address": "0x2261416DA54C85f975C73FA56EF4D2D6b0aEF7Cc",
+      "address": "0xdefBB09d61d70934BB8075A3FAfa7ebACf09c252",
       "abi": [
         {
           "inputs": [],
@@ -4590,7 +5554,7 @@ export default {
       ]
     },
     "PostIntentHookRegistry": {
-      "address": "0xA4745c8F735B07fa77cD6EC64A2C77cb787fD0cd",
+      "address": "0x37f1bf88B228785D0FF10D8Ed77e3A1148cAf7C6",
       "abi": [
         {
           "inputs": [],
@@ -4774,7 +5738,7 @@ export default {
       ]
     },
     "ProtocolViewer": {
-      "address": "0x1b2FE4FF7530143f38b7D7f4ccd83a3f1a022840",
+      "address": "0x9eCa5Ed44F514Bc9ddfd2b0B7408b097Fa180df2",
       "abi": [
         {
           "inputs": [
@@ -5994,7 +6958,7 @@ export default {
       ]
     },
     "RelayerRegistry": {
-      "address": "0xB214650b424E6b5fdcB1259566eB7A512D8Bd25E",
+      "address": "0xB76F499A073c13cbc1B24fA33b35860EcE607c24",
       "abi": [
         {
           "inputs": [],
@@ -6159,7 +7123,7 @@ export default {
       ]
     },
     "SimpleAttestationVerifier": {
-      "address": "0x1540c12858Ad8D45EE9DAF8DFf2f28B28F047772",
+      "address": "0xE482E6c263175635fA595921Ac9FCD310389c622",
       "abi": [
         {
           "inputs": [
@@ -6314,7 +7278,7 @@ export default {
       ]
     },
     "UnifiedPaymentVerifier": {
-      "address": "0xfFf74adAE1fb470d49cA37772C9859C4a6dBcc03",
+      "address": "0x12e87AAf09c30A482889C064361235a6a1E28E36",
       "abi": [
         {
           "inputs": [
