@@ -13,6 +13,7 @@ import {
   IBaseRateManagerRegistry,
   OracleRateManagerRegistry,
   RevertingOracleAdapterMock,
+  StaticOracleAdapterMock,
 } from "../../typechain";
 
 const expect = getWaffleExpect();
@@ -262,6 +263,58 @@ describe("OracleRateManagerRegistry", () => {
         expect(min).to.eq(0);
       });
     });
+
+    describe("when adapter returns updatedAt = 0 but marks quote valid (defensive)", () => {
+      let adapter: StaticOracleAdapterMock;
+
+      beforeEach(async () => {
+        adapter = (await (
+          await ethers.getContractFactory("StaticOracleAdapterMock", owner.wallet)
+        ).deploy()) as StaticOracleAdapterMock;
+
+        await registry.connect(manager.wallet).setOracleConfig(
+          rateManagerId,
+          paymentMethod as any,
+          Currency.EUR,
+          adapter.address,
+          ethers.utils.defaultAbiCoder.encode(["bool", "uint256", "uint256"], [true, ether(1), 0]),
+          100,
+          3600
+        );
+      });
+
+      it("returns 0", async () => {
+        const min = await registry.getMinRate(rateManagerId, paymentMethod as any, Currency.EUR);
+        expect(min).to.eq(0);
+      });
+    });
+
+    describe("when adapter returns rate = 0 but marks quote valid (defensive)", () => {
+      let adapter: StaticOracleAdapterMock;
+
+      beforeEach(async () => {
+        adapter = (await (
+          await ethers.getContractFactory("StaticOracleAdapterMock", owner.wallet)
+        ).deploy()) as StaticOracleAdapterMock;
+
+        const now = (await ethers.provider.getBlock("latest")).timestamp;
+
+        await registry.connect(manager.wallet).setOracleConfig(
+          rateManagerId,
+          paymentMethod as any,
+          Currency.EUR,
+          adapter.address,
+          ethers.utils.defaultAbiCoder.encode(["bool", "uint256", "uint256"], [true, 0, now]),
+          100,
+          3600
+        );
+      });
+
+      it("returns 0", async () => {
+        const min = await registry.getMinRate(rateManagerId, paymentMethod as any, Currency.EUR);
+        expect(min).to.eq(0);
+      });
+    });
   });
 
   describe("#setOracleConfig", () => {
@@ -387,6 +440,22 @@ describe("OracleRateManagerRegistry", () => {
         await expect(subject()).to.be.revertedWith("Unsupported decimals");
       });
     });
+
+    describe("reverts when normalized adapter config is too long", () => {
+      let adapter: RevertingOracleAdapterMock;
+
+      beforeEach(async () => {
+        adapter = (await (
+          await ethers.getContractFactory("RevertingOracleAdapterMock", owner.wallet)
+        ).deploy()) as RevertingOracleAdapterMock;
+
+        subjectAdapter = adapter.address;
+        subjectRawAdapterConfig = ethers.utils.hexlify(new Uint8Array(257).fill(0x11));
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("Config too long");
+      });
+    });
   });
 });
-

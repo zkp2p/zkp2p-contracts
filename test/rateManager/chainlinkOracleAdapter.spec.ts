@@ -117,6 +117,24 @@ describe("ChainlinkOracleAdapter", () => {
       });
     });
 
+    describe("when feedDecimals > 18 in normalized config (defensive)", () => {
+      beforeEach(() => {
+        // Bypass validateConfig and provide an intentionally malformed config.
+        // This covers the defensive `feedDecimals > 18` branch.
+        subjectNormalizedConfig = ethers.utils.solidityPack(
+          ["address", "uint8", "uint8"],
+          [feed.address, 19, 0]
+        );
+      });
+
+      it("returns invalid", async () => {
+        const res = await subject();
+        expect(res.valid).to.eq(false);
+        expect(res.rate).to.eq(0);
+        expect(res.updatedAt).to.eq(0);
+      });
+    });
+
     describe("when answer <= 0", () => {
       beforeEach(async () => {
         const now = (await ethers.provider.getBlock("latest")).timestamp;
@@ -170,4 +188,3 @@ describe("ChainlinkOracleAdapter", () => {
     });
   });
 });
-
