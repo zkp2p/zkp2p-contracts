@@ -4,13 +4,13 @@ import { getWaffleExpect, getAccounts } from "@utils/test";
 import { ADDRESS_ZERO } from "@utils/constants";
 import { ether } from "@utils/common";
 import {
-  DepositRateManagerRegistryV1,
-  IDepositRateManagerRegistryV1,
+  ManualRateManagerRegistry,
+  IBaseRateManagerRegistry,
 } from "../../typechain";
 
 const expect = getWaffleExpect();
 
-describe("DepositRateManagerRegistryV1", () => {
+describe("ManualRateManagerRegistry", () => {
   // Accounts
   let owner: any;
   let manager: any;
@@ -18,11 +18,11 @@ describe("DepositRateManagerRegistryV1", () => {
   let feeRecipient: any;
 
   // Contract
-  let registry: DepositRateManagerRegistryV1;
+  let registry: ManualRateManagerRegistry;
 
   // Local helper to create a manager and return id (no double-wait in tests elsewhere)
   async function createRateManagerAndGetId(
-    cfg?: Partial<IDepositRateManagerRegistryV1.RateManagerConfigStruct>
+    cfg?: Partial<IBaseRateManagerRegistry.RateManagerConfigStruct>
   ): Promise<string> {
     const tx = await registry.createRateManager({
       manager: cfg?.manager ?? manager.address,
@@ -41,12 +41,12 @@ describe("DepositRateManagerRegistryV1", () => {
   beforeEach(async () => {
     [owner, manager, other, feeRecipient] = await getAccounts();
     registry = (await (
-      await ethers.getContractFactory("DepositRateManagerRegistryV1", owner.wallet)
-    ).deploy()) as DepositRateManagerRegistryV1;
+      await ethers.getContractFactory("ManualRateManagerRegistry", owner.wallet)
+    ).deploy()) as ManualRateManagerRegistry;
   });
 
   describe("#createRateManager", () => {
-    let subjectConfig: IDepositRateManagerRegistryV1.RateManagerConfigStruct;
+    let subjectConfig: IBaseRateManagerRegistry.RateManagerConfigStruct;
 
     async function subject() {
       return registry.createRateManager(subjectConfig);

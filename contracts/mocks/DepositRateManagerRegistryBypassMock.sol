@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import { IDepositRateManagerRegistryV1 } from "../interfaces/IDepositRateManagerRegistryV1.sol";
+import { IBaseRateManagerRegistry } from "../interfaces/IBaseRateManagerRegistry.sol";
 
-contract DepositRateManagerRegistryBypassMock is IDepositRateManagerRegistryV1 {
+contract DepositRateManagerRegistryBypassMock is IBaseRateManagerRegistry {
     bytes32 public id;
     address public feeRecipient_;
     uint256 public fee_;

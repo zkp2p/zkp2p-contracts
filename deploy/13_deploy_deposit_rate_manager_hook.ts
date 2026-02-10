@@ -14,7 +14,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const [deployer] = await hre.getUnnamedAccounts();
 
-  const registryAddress = getDeployedContractAddress(network, "DepositRateManagerRegistryV1");
+  const registryAddress = getDeployedContractAddress(network, "ManualRateManagerRegistry");
 
   const depositRateManagerHook = await deploy("DepositRateManagerHookV1", {
     from: deployer,

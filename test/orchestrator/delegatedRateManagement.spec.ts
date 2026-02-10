@@ -18,7 +18,7 @@ import {
   EscrowRegistry,
   USDCMock,
   PaymentVerifierMock,
-  DepositRateManagerRegistryV1,
+  ManualRateManagerRegistry,
   DepositRateManagerController,
 } from "@utils/contracts";
 
@@ -43,7 +43,7 @@ describe("DelegatedRateManagement (MVP)", () => {
   let relayerRegistry: RelayerRegistry;
   let verifier: PaymentVerifierMock;
 
-  let rateManagerRegistry: DepositRateManagerRegistryV1;
+  let rateManagerRegistry: ManualRateManagerRegistry;
   let rateManagerController: DepositRateManagerController;
 
   let chainId: BigNumber = ONE;
@@ -96,8 +96,7 @@ describe("DelegatedRateManagement (MVP)", () => {
     await paymentVerifierRegistry.addPaymentMethod(paymentMethod, verifier.address, [Currency.USD]);
 
     // Deploy + wire the rate manager registry
-    const registryFactory = await ethers.getContractFactory("DepositRateManagerRegistryV1", owner.wallet);
-    rateManagerRegistry = await registryFactory.deploy();
+    rateManagerRegistry = await deployer.deployManualRateManagerRegistry();
     rateManagerController = await deployer.deployDepositRateManagerController();
     await orchestrator.connect(owner.wallet).setDepositRateManagerController(rateManagerController.address);
 

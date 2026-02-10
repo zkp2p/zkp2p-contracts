@@ -6,7 +6,7 @@ import DeployHelper from "@utils/deploys";
 import { ADDRESS_ZERO, ZERO } from "@utils/constants";
 import { ether, usdc } from "@utils/common";
 import { Currency } from "@utils/protocolUtils";
-import { DepositRateManagerRegistryV1, DepositRateManagerHookV1, DepositRateManagerController } from "@utils/contracts";
+import { ManualRateManagerRegistry, DepositRateManagerHookV1, DepositRateManagerController } from "@utils/contracts";
 
 const expect = getWaffleExpect();
 
@@ -16,7 +16,7 @@ describe("DepositRateManagerHookV1", () => {
 
   // Contracts
   let escrow: any;
-  let registry: DepositRateManagerRegistryV1;
+  let registry: ManualRateManagerRegistry;
   let hook: DepositRateManagerHookV1;
   let controller: DepositRateManagerController;
   let usdcToken: any;
@@ -49,7 +49,7 @@ describe("DepositRateManagerHookV1", () => {
     venmoPaymentMethod = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
     await paymentVerifierRegistry.addPaymentMethod(venmoPaymentMethod, verifier.address, [Currency.USD]);
 
-    registry = await deployer.deployDepositRateManagerRegistryV1();
+    registry = await deployer.deployManualRateManagerRegistry();
     hook = await deployer.deployDepositRateManagerHookV1(registry.address);
     controller = await deployer.deployDepositRateManagerController();
 
@@ -58,7 +58,7 @@ describe("DepositRateManagerHookV1", () => {
   });
 
   // Local helper to fetch id from createRateManager without double-wait
-  async function createRateManagerAndGetId(reg: DepositRateManagerRegistryV1, cfg: any): Promise<string> {
+  async function createRateManagerAndGetId(reg: ManualRateManagerRegistry, cfg: any): Promise<string> {
     const tx = await reg.createRateManager(cfg);
     const rcpt = await tx.wait();
     const ev = rcpt.events?.find((e: any) => e.event === "RateManagerCreated");

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.18;
 
 import { IDepositRateManagerHook } from "../interfaces/IDepositRateManagerHook.sol";
-import { IDepositRateManagerRegistryV1 } from "../interfaces/IDepositRateManagerRegistryV1.sol";
+import { IBaseRateManagerRegistry } from "../interfaces/IBaseRateManagerRegistry.sol";
 import { IEscrow } from "../interfaces/IEscrow.sol";
 
 /**
@@ -20,11 +20,11 @@ contract DepositRateManagerHookV1 is IDepositRateManagerHook {
     event MinLiquidityUpdated(bytes32 indexed rateManagerId, uint256 minLiquidity);
 
     /* ============ State ============ */
-    IDepositRateManagerRegistryV1 public immutable registry;
+    IBaseRateManagerRegistry public immutable registry;
     mapping(bytes32 => uint256) public minLiquidity; // per rateManagerId (in deposit token units)
 
     constructor(address _registry) {
-        registry = IDepositRateManagerRegistryV1(_registry);
+        registry = IBaseRateManagerRegistry(_registry);
     }
 
     /**
@@ -34,7 +34,7 @@ contract DepositRateManagerHookV1 is IDepositRateManagerHook {
      * @param min           The minimum total liquidity required to opt in (0 = no restriction).
      */
     function setMinLiquidity(bytes32 rateManagerId, uint256 min) external {
-        IDepositRateManagerRegistryV1.RateManagerConfig memory cfg = registry.getRateManager(rateManagerId);
+        IBaseRateManagerRegistry.RateManagerConfig memory cfg = registry.getRateManager(rateManagerId);
         if (cfg.manager != msg.sender) revert NotManager(rateManagerId, msg.sender, cfg.manager);
         minLiquidity[rateManagerId] = min;
         emit MinLiquidityUpdated(rateManagerId, min);
@@ -51,4 +51,3 @@ contract DepositRateManagerHookV1 is IDepositRateManagerHook {
         depositor; // silence unused var warning
     }
 }
-

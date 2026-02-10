@@ -56,12 +56,19 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Payment verifier registry deployed at", paymentVerifierRegistry.address);
   await waitForDeploymentDelay(hre);
 
-  // Deploy deposit rate manager registry (permissionless)
-  const depositRateManagerRegistry = await deploy("DepositRateManagerRegistryV1", {
+  // Deploy deposit rate manager registries (permissionless)
+  const manualRateManagerRegistry = await deploy("ManualRateManagerRegistry", {
     from: deployer,
     args: [],
   });
-  console.log("Deposit rate manager registry deployed at", depositRateManagerRegistry.address);
+  console.log("Manual rate manager registry deployed at", manualRateManagerRegistry.address);
+  await waitForDeploymentDelay(hre);
+
+  const oracleRateManagerRegistry = await deploy("OracleRateManagerRegistry", {
+    from: deployer,
+    args: [],
+  });
+  console.log("Oracle rate manager registry deployed at", oracleRateManagerRegistry.address);
   await waitForDeploymentDelay(hre);
 
   // Deploy deposit rate manager controller

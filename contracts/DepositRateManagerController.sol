@@ -3,7 +3,7 @@
 pragma solidity ^0.8.18;
 
 import { IEscrow } from "./interfaces/IEscrow.sol";
-import { IDepositRateManagerRegistryV1 } from "./interfaces/IDepositRateManagerRegistryV1.sol";
+import { IBaseRateManagerRegistry } from "./interfaces/IBaseRateManagerRegistry.sol";
 import { IDepositRateManagerHook } from "./interfaces/IDepositRateManagerHook.sol";
 import { IDepositRateManagerController } from "./interfaces/IDepositRateManagerController.sol";
 
@@ -40,7 +40,7 @@ contract DepositRateManagerController is IDepositRateManagerController {
      *      hook is configured, it is called (view) and may revert to reject the opt-in.
      * @param _escrow         Escrow contract address.
      * @param _depositId      Deposit id on the escrow.
-     * @param _registry       DepositRateManagerRegistryV1 address.
+     * @param _registry       Rate manager registry address.
      * @param _rateManagerId  Manager id to opt into.
      */
     function setDepositRateManager(
@@ -63,7 +63,7 @@ contract DepositRateManagerController is IDepositRateManagerController {
         DepositManagerConfig memory existing = depositManagerConfig[_escrow][_depositId];
         if (existing.rateManagerId != bytes32(0)) revert RateManagerAlreadySet(existing.rateManagerId);
 
-        IDepositRateManagerRegistryV1 registry = IDepositRateManagerRegistryV1(_registry);
+        IBaseRateManagerRegistry registry = IBaseRateManagerRegistry(_registry);
         if (!registry.isRateManager(_rateManagerId)) revert RateManagerNotFound(_rateManagerId);
 
         address hook = registry.getDepositHook(_rateManagerId);
@@ -137,7 +137,7 @@ contract DepositRateManagerController is IDepositRateManagerController {
 
         if (cfg.registry == address(0)) revert RateManagerRegistryNotSet();
 
-        uint256 managerRate = IDepositRateManagerRegistryV1(cfg.registry).getMinRate(cfg.rateManagerId, _paymentMethod, _currencyCode);
+        uint256 managerRate = IBaseRateManagerRegistry(cfg.registry).getMinRate(cfg.rateManagerId, _paymentMethod, _currencyCode);
         if (managerRate == 0) {
             return 0;
         }
@@ -162,7 +162,7 @@ contract DepositRateManagerController is IDepositRateManagerController {
 
         if (cfg.registry == address(0)) revert RateManagerRegistryNotSet();
 
-        (uint256 mgrFee, address mgrRecipient) = IDepositRateManagerRegistryV1(cfg.registry).getFeeAndRecipient(cfg.rateManagerId);
+        (uint256 mgrFee, address mgrRecipient) = IBaseRateManagerRegistry(cfg.registry).getFeeAndRecipient(cfg.rateManagerId);
         return (mgrRecipient, mgrFee);
     }
 

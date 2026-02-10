@@ -21,10 +21,13 @@ export {
   PartialPullPostIntentHookMock,
   PushPostIntentHookMock,
   ReentrantOrchestratorMock,
-  DepositRateManagerRegistryV1,
+  ManualRateManagerRegistry,
+  OracleRateManagerRegistry,
   DepositRateManagerController,
   RateManagerDepositHookMock,
-  IDepositRateManagerRegistryV1,
+  IBaseRateManagerRegistry,
+  IManualRateManagerRegistry,
+  IOracleRateManagerRegistry,
   DepositRateManagerHookV1
 } from "../typechain";
 export { IEscrow } from "../typechain/contracts/Escrow";

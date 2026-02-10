@@ -33,7 +33,7 @@ describe("DepositRateManagerHookV1 Deployment", () => {
     const hookAddress = getDeployedContractAddress(network, "DepositRateManagerHookV1");
     const hook = new DepositRateManagerHookV1__factory(deployer.wallet).attach(hookAddress);
 
-    const registryAddress = getDeployedContractAddress(network, "DepositRateManagerRegistryV1");
+    const registryAddress = getDeployedContractAddress(network, "ManualRateManagerRegistry");
 
     expect(await hook.registry()).to.eq(registryAddress);
   });
