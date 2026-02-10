@@ -8,22 +8,31 @@ import { ether } from "@utils/common";
 import { Currency } from "@utils/protocolUtils";
 
 import {
-  OracleRateManagerRegistry,
-  IBaseRateManagerRegistry,
   AggregatorV3Mock,
+  ChainlinkOracleAdapter,
+  IBaseRateManagerRegistry,
+  OracleRateManagerRegistry,
+  RevertingOracleAdapterMock,
 } from "../../typechain";
 
 const expect = getWaffleExpect();
 
 describe("OracleRateManagerRegistry", () => {
+  // Accounts
   let owner: any;
   let manager: any;
   let feeRecipient: any;
   let other: any;
 
+  // Contracts
   let registry: OracleRateManagerRegistry;
+  let chainlinkAdapter: ChainlinkOracleAdapter;
 
   let paymentMethod: BytesLike;
+
+  function encodeChainlinkRawConfig(feed: string, invert: boolean): string {
+    return ethers.utils.defaultAbiCoder.encode(["address", "bool"], [feed, invert]);
+  }
 
   async function createRateManagerAndGetId(
     cfg?: Partial<IBaseRateManagerRegistry.RateManagerConfigStruct>
@@ -44,9 +53,14 @@ describe("OracleRateManagerRegistry", () => {
 
   beforeEach(async () => {
     [owner, manager, feeRecipient, other] = await getAccounts();
+
     registry = (await (
       await ethers.getContractFactory("OracleRateManagerRegistry", owner.wallet)
     ).deploy()) as OracleRateManagerRegistry;
+
+    chainlinkAdapter = (await (
+      await ethers.getContractFactory("ChainlinkOracleAdapter", owner.wallet)
+    ).deploy()) as ChainlinkOracleAdapter;
 
     paymentMethod = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
   });
@@ -71,20 +85,27 @@ describe("OracleRateManagerRegistry", () => {
       expect(min).to.eq(0);
     });
 
-    describe("USD fixed-rate (feed = 0)", () => {
+    describe("USD via Chainlink adapter (direct quote)", () => {
+      let feed: AggregatorV3Mock;
+
       beforeEach(async () => {
+        // USD per token = 1.00, 8 decimals
+        feed = (await (
+          await ethers.getContractFactory("AggregatorV3Mock", owner.wallet)
+        ).deploy(8, 100_000_000)) as AggregatorV3Mock;
+
         await registry.connect(manager.wallet).setOracleConfig(
           rateManagerId,
           paymentMethod as any,
           Currency.USD,
-          ADDRESS_ZERO,
+          chainlinkAdapter.address,
+          encodeChainlinkRawConfig(feed.address, false),
           100, // 1%
-          0,
-          false
+          3600
         );
       });
 
-      it("returns 1.0 * (1 + spread) in preciseUnits", async () => {
+      it("returns marketRate * (1 + spread) in preciseUnits", async () => {
         const min = await registry.getMinRate(rateManagerId, paymentMethod as any, Currency.USD);
         expect(min).to.eq(ether(1.01));
       });
@@ -92,11 +113,18 @@ describe("OracleRateManagerRegistry", () => {
       it("returns config via getOracleConfig", async () => {
         const cfg = await registry.getOracleConfig(rateManagerId, paymentMethod as any, Currency.USD);
         expect(cfg.isConfigured).to.eq(true);
-        expect(cfg.feed).to.eq(ADDRESS_ZERO);
-        expect(cfg.feedDecimals).to.eq(0);
+        expect(cfg.adapter).to.eq(chainlinkAdapter.address);
         expect(cfg.spreadBps).to.eq(100);
-        expect(cfg.maxStaleness).to.eq(0);
-        expect(cfg.invert).to.eq(false);
+        expect(cfg.maxStaleness).to.eq(3600);
+
+        // adapterConfig = abi.encodePacked(feed, decimals, invertFlag)
+        expect(cfg.adapterConfig).to.have.length(2 + 22 * 2);
+        const packedFeed = ethers.utils.getAddress("0x" + cfg.adapterConfig.slice(2, 42));
+        const decimals = BigNumber.from("0x" + cfg.adapterConfig.slice(42, 44)).toNumber();
+        const invertFlag = BigNumber.from("0x" + cfg.adapterConfig.slice(44, 46)).toNumber();
+        expect(packedFeed).to.eq(feed.address);
+        expect(decimals).to.eq(8);
+        expect(invertFlag).to.eq(0);
       });
     });
 
@@ -104,7 +132,7 @@ describe("OracleRateManagerRegistry", () => {
       let feed: AggregatorV3Mock;
 
       beforeEach(async () => {
-        // EUR/USD = 1.10 (USD per EUR), 8 decimals
+        // EUR/USD = 1.10 (USD per EUR), 8 decimals. Invert -> EUR per USD.
         feed = (await (
           await ethers.getContractFactory("AggregatorV3Mock", owner.wallet)
         ).deploy(8, 110_000_000)) as AggregatorV3Mock;
@@ -113,10 +141,10 @@ describe("OracleRateManagerRegistry", () => {
           rateManagerId,
           paymentMethod as any,
           Currency.EUR,
-          feed.address,
+          chainlinkAdapter.address,
+          encodeChainlinkRawConfig(feed.address, true),
           100, // 1%
-          3600,
-          true // invert -> EUR per USD
+          3600
         );
       });
 
@@ -125,13 +153,13 @@ describe("OracleRateManagerRegistry", () => {
         const oneE26 = BigNumber.from(10).pow(26);
         const base = oneE26.add(110_000_000 - 1).div(110_000_000); // ceil(1e26/110000000)
         const expected = base.mul(10_000 + 100).add(10_000 - 1).div(10_000); // ceil(base * 10100 / 10000)
+
         const min = await registry.getMinRate(rateManagerId, paymentMethod as any, Currency.EUR);
         expect(min).to.eq(expected);
       });
 
       it("returns 0 when stale", async () => {
         const now = (await ethers.provider.getBlock("latest")).timestamp;
-        // updatedAt older than maxStaleness
         await feed.setRoundData(1, 110_000_000, now - 10_000, now - 10_000, 1);
         const min = await registry.getMinRate(rateManagerId, paymentMethod as any, Currency.EUR);
         expect(min).to.eq(0);
@@ -140,6 +168,13 @@ describe("OracleRateManagerRegistry", () => {
       it("returns 0 when updatedAt is 0", async () => {
         const now = (await ethers.provider.getBlock("latest")).timestamp;
         await feed.setRoundData(1, 110_000_000, now, 0, 1);
+        const min = await registry.getMinRate(rateManagerId, paymentMethod as any, Currency.EUR);
+        expect(min).to.eq(0);
+      });
+
+      it("returns 0 when updatedAt is in the future", async () => {
+        const now = (await ethers.provider.getBlock("latest")).timestamp;
+        await feed.setRoundData(1, 110_000_000, now, now + 60, 1);
         const min = await registry.getMinRate(rateManagerId, paymentMethod as any, Currency.EUR);
         expect(min).to.eq(0);
       });
@@ -161,15 +196,20 @@ describe("OracleRateManagerRegistry", () => {
       it("returns config via getOracleConfig", async () => {
         const cfg = await registry.getOracleConfig(rateManagerId, paymentMethod as any, Currency.EUR);
         expect(cfg.isConfigured).to.eq(true);
-        expect(cfg.feed).to.eq(feed.address);
-        expect(cfg.feedDecimals).to.eq(8);
+        expect(cfg.adapter).to.eq(chainlinkAdapter.address);
         expect(cfg.spreadBps).to.eq(100);
         expect(cfg.maxStaleness).to.eq(3600);
-        expect(cfg.invert).to.eq(true);
+
+        const packedFeed = ethers.utils.getAddress("0x" + cfg.adapterConfig.slice(2, 42));
+        const decimals = BigNumber.from("0x" + cfg.adapterConfig.slice(42, 44)).toNumber();
+        const invertFlag = BigNumber.from("0x" + cfg.adapterConfig.slice(44, 46)).toNumber();
+        expect(packedFeed).to.eq(feed.address);
+        expect(decimals).to.eq(8);
+        expect(invertFlag).to.eq(1);
       });
     });
 
-    describe("Non-inverted feed (covers non-invert math path)", () => {
+    describe("Non-inverted feed (covers direct math path)", () => {
       let feed: AggregatorV3Mock;
 
       beforeEach(async () => {
@@ -182,57 +222,42 @@ describe("OracleRateManagerRegistry", () => {
           rateManagerId,
           paymentMethod as any,
           Currency.EUR,
-          feed.address,
+          chainlinkAdapter.address,
+          encodeChainlinkRawConfig(feed.address, false),
           100, // 1%
-          3600,
-          false
+          3600
         );
       });
 
       it("scales answer to 1e18 and applies spread", async () => {
-        // baseRate = 0.9e18, min = 0.9e18 * 1.01 = 0.909e18
         const expectedBase = ether(0.9);
         const expected = expectedBase.mul(10_000 + 100).add(10_000 - 1).div(10_000); // ceil(base * 10100 / 10000)
+
         const min = await registry.getMinRate(rateManagerId, paymentMethod as any, Currency.EUR);
         expect(min).to.eq(expected);
       });
     });
 
-    describe("Defensive misconfiguration: feed=0 for non-USD currency", () => {
+    describe("when adapter reverts", () => {
+      let adapter: RevertingOracleAdapterMock;
+
       beforeEach(async () => {
-        // Configure USD tuple (this is the only allowed feed=0 config via setter).
+        adapter = (await (
+          await ethers.getContractFactory("RevertingOracleAdapterMock", owner.wallet)
+        ).deploy()) as RevertingOracleAdapterMock;
+
         await registry.connect(manager.wallet).setOracleConfig(
           rateManagerId,
           paymentMethod as any,
-          Currency.USD,
-          ADDRESS_ZERO,
+          Currency.EUR,
+          adapter.address,
+          "0x",
           100,
-          0,
-          false
+          3600
         );
       });
 
       it("returns 0 (pair disabled) rather than reverting", async () => {
-        // Simulate a corrupted storage entry for (rateManagerId, paymentMethod, EUR) by copying the USD tuple's slot.
-        // This hits the defensive `currency != USD` branch inside _getBaseRate.
-        const ORACLE_CONFIGS_SLOT = 2; // after BaseRateManagerRegistry's nextId (slot 0) and rateManagers mapping (slot 1)
-
-        const level1 = ethers.utils.keccak256(
-          ethers.utils.defaultAbiCoder.encode(["bytes32", "uint256"], [rateManagerId, ORACLE_CONFIGS_SLOT])
-        );
-        const level2 = ethers.utils.keccak256(
-          ethers.utils.defaultAbiCoder.encode(["bytes32", "uint256"], [paymentMethod, BigNumber.from(level1)])
-        );
-        const usdSlot = ethers.utils.keccak256(
-          ethers.utils.defaultAbiCoder.encode(["bytes32", "uint256"], [Currency.USD, BigNumber.from(level2)])
-        );
-        const eurSlot = ethers.utils.keccak256(
-          ethers.utils.defaultAbiCoder.encode(["bytes32", "uint256"], [Currency.EUR, BigNumber.from(level2)])
-        );
-
-        const usdValue = await ethers.provider.getStorageAt(registry.address, usdSlot);
-        await ethers.provider.send("hardhat_setStorageAt", [registry.address, eurSlot, usdValue]);
-
         const min = await registry.getMinRate(rateManagerId, paymentMethod as any, Currency.EUR);
         expect(min).to.eq(0);
       });
@@ -241,12 +266,14 @@ describe("OracleRateManagerRegistry", () => {
 
   describe("#setOracleConfig", () => {
     let rateManagerId: string;
+    let feed: AggregatorV3Mock;
+
     let subjectPaymentMethod: BytesLike;
     let subjectCurrency: BytesLike;
-    let subjectFeed: string;
+    let subjectAdapter: string;
+    let subjectRawAdapterConfig: string;
     let subjectSpreadBps: number;
     let subjectMaxStaleness: number;
-    let subjectInvert: boolean;
     let subjectCaller: any;
 
     async function subject() {
@@ -254,26 +281,31 @@ describe("OracleRateManagerRegistry", () => {
         rateManagerId,
         subjectPaymentMethod as any,
         subjectCurrency as any,
-        subjectFeed,
+        subjectAdapter,
+        subjectRawAdapterConfig,
         subjectSpreadBps,
-        subjectMaxStaleness,
-        subjectInvert
+        subjectMaxStaleness
       );
     }
 
     beforeEach(async () => {
       rateManagerId = await createRateManagerAndGetId({ manager: manager.address, feeRecipient: feeRecipient.address, fee: 0 });
+
+      feed = (await (
+        await ethers.getContractFactory("AggregatorV3Mock", owner.wallet)
+      ).deploy(8, 100_000_000)) as AggregatorV3Mock;
+
       subjectCaller = manager;
       subjectPaymentMethod = paymentMethod;
       subjectCurrency = Currency.USD;
-      subjectFeed = ADDRESS_ZERO;
+      subjectAdapter = chainlinkAdapter.address;
+      subjectRawAdapterConfig = encodeChainlinkRawConfig(feed.address, false);
       subjectSpreadBps = 100;
-      subjectMaxStaleness = 0;
-      subjectInvert = false;
+      subjectMaxStaleness = 3600;
     });
 
     describe("reverts when caller is not manager", () => {
-      beforeEach(async () => {
+      beforeEach(() => {
         subjectCaller = other;
       });
       it("should revert", async () => {
@@ -282,7 +314,7 @@ describe("OracleRateManagerRegistry", () => {
     });
 
     describe("reverts when payment method is zero", () => {
-      beforeEach(async () => {
+      beforeEach(() => {
         subjectPaymentMethod = ethers.constants.HashZero;
       });
       it("should revert", async () => {
@@ -291,7 +323,7 @@ describe("OracleRateManagerRegistry", () => {
     });
 
     describe("reverts when currency is zero", () => {
-      beforeEach(async () => {
+      beforeEach(() => {
         subjectCurrency = ethers.constants.HashZero;
       });
       it("should revert", async () => {
@@ -299,8 +331,26 @@ describe("OracleRateManagerRegistry", () => {
       });
     });
 
+    describe("reverts when adapter is zero", () => {
+      beforeEach(() => {
+        subjectAdapter = ADDRESS_ZERO;
+      });
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("Invalid adapter");
+      });
+    });
+
+    describe("reverts when adapter is not a contract", () => {
+      beforeEach(() => {
+        subjectAdapter = other.address; // EOA
+      });
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("Invalid adapter");
+      });
+    });
+
     describe("reverts when spread > 100%", () => {
-      beforeEach(async () => {
+      beforeEach(() => {
         subjectSpreadBps = 10_001;
       });
       it("should revert", async () => {
@@ -308,23 +358,8 @@ describe("OracleRateManagerRegistry", () => {
       });
     });
 
-    describe("reverts when feed is zero for non-USD currency", () => {
-      beforeEach(async () => {
-        subjectCurrency = Currency.EUR;
-        subjectFeed = ADDRESS_ZERO;
-      });
-      it("should revert", async () => {
-        await expect(subject()).to.be.revertedWith("Invalid feed");
-      });
-    });
-
-    describe("reverts when maxStaleness is 0 for non-zero feed", () => {
-      beforeEach(async () => {
-        const feed = (await (
-          await ethers.getContractFactory("AggregatorV3Mock", owner.wallet)
-        ).deploy(8, 110_000_000)) as AggregatorV3Mock;
-        subjectCurrency = Currency.EUR;
-        subjectFeed = feed.address;
+    describe("reverts when maxStaleness is 0", () => {
+      beforeEach(() => {
         subjectMaxStaleness = 0;
       });
       it("should revert", async () => {
@@ -332,14 +367,21 @@ describe("OracleRateManagerRegistry", () => {
       });
     });
 
-    describe("reverts when feed decimals > 18", () => {
+    describe("reverts when adapter config is invalid (feed is zero)", () => {
+      beforeEach(() => {
+        subjectRawAdapterConfig = encodeChainlinkRawConfig(ADDRESS_ZERO, false);
+      });
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("Invalid feed");
+      });
+    });
+
+    describe("reverts when adapter rejects (unsupported decimals)", () => {
       beforeEach(async () => {
-        const feed = (await (
+        feed = (await (
           await ethers.getContractFactory("AggregatorV3Mock", owner.wallet)
         ).deploy(19, 1)) as AggregatorV3Mock;
-        subjectCurrency = Currency.EUR;
-        subjectFeed = feed.address;
-        subjectMaxStaleness = 3600;
+        subjectRawAdapterConfig = encodeChainlinkRawConfig(feed.address, false);
       });
       it("should revert", async () => {
         await expect(subject()).to.be.revertedWith("Unsupported decimals");
@@ -347,3 +389,4 @@ describe("OracleRateManagerRegistry", () => {
     });
   });
 });
+

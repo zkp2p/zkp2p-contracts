@@ -71,6 +71,14 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Oracle rate manager registry deployed at", oracleRateManagerRegistry.address);
   await waitForDeploymentDelay(hre);
 
+  // Deploy oracle adapters (permissionless; used by oracle-backed rate managers)
+  const chainlinkOracleAdapter = await deploy("ChainlinkOracleAdapter", {
+    from: deployer,
+    args: [],
+  });
+  console.log("Chainlink oracle adapter deployed at", chainlinkOracleAdapter.address);
+  await waitForDeploymentDelay(hre);
+
   // Deploy deposit rate manager controller
   const depositRateManagerController = await deploy("DepositRateManagerController", {
     from: deployer,

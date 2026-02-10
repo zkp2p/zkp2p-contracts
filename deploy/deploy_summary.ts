@@ -40,6 +40,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     AcrossBridgeHook:                   ${getDeployedContractAddress(network, "AcrossBridgeHook")}
     ManualRateManagerRegistry:          ${getDeployedContractAddress(network, "ManualRateManagerRegistry")}
     OracleRateManagerRegistry:          ${getDeployedContractAddress(network, "OracleRateManagerRegistry")}
+    ChainlinkOracleAdapter:             ${getDeployedContractAddress(network, "ChainlinkOracleAdapter")}
     DepositRateManagerController:       ${getDeployedContractAddress(network, "DepositRateManagerController")}
     DepositRateManagerHookV1:           ${getDeployedContractAddress(network, "DepositRateManagerHookV1")}
     USDC:                               ${USDC[network] ? USDC[network] : getDeployedContractAddress(network, "USDCMock")}

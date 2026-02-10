@@ -44,7 +44,7 @@ import { PostIntentHookRegistry__factory } from "../typechain/factories/contract
 import { RelayerRegistry__factory } from "../typechain/factories/contracts/registries";
 import { EscrowRegistry__factory } from "../typechain/factories/contracts/registries";
 import { ManualRateManagerRegistry__factory } from "../typechain/factories/contracts/registries/ManualRateManagerRegistry__factory";
-import { OracleRateManagerRegistry__factory } from "../typechain/factories/contracts/registries/OracleRateManagerRegistry.sol/OracleRateManagerRegistry__factory";
+import { OracleRateManagerRegistry__factory } from "../typechain/factories/contracts/registries/OracleRateManagerRegistry__factory";
 import { DepositRateManagerController__factory } from "../typechain/factories/contracts/DepositRateManagerController.sol/DepositRateManagerController__factory";
 import { Escrow__factory } from "../typechain/factories/contracts/index";
 import { ProtocolViewer__factory } from "../typechain/factories/contracts/index";

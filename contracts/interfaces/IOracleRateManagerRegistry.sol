@@ -16,10 +16,10 @@ interface IOracleRateManagerRegistry is IBaseRateManagerRegistry {
         bytes32 indexed rateManagerId,
         bytes32 indexed paymentMethod,
         bytes32 indexed currency,
-        address feed,
+        address adapter,
         uint16 spreadBps,
         uint32 maxStaleness,
-        bool invert
+        bytes adapterConfig
     );
 
     /* ============ External Functions ============ */
@@ -28,10 +28,10 @@ interface IOracleRateManagerRegistry is IBaseRateManagerRegistry {
         bytes32 _rateManagerId,
         bytes32 _paymentMethod,
         bytes32 _currency,
-        address _feed,
+        address _adapter,
+        bytes calldata _rawAdapterConfig,
         uint16 _spreadBps,
-        uint32 _maxStaleness,
-        bool _invert
+        uint32 _maxStaleness
     )
         external;
 
@@ -42,10 +42,9 @@ interface IOracleRateManagerRegistry is IBaseRateManagerRegistry {
         view
         returns (
             bool isConfigured,
-            address feed,
-            uint8 feedDecimals,
+            address adapter,
+            bytes memory adapterConfig,
             uint16 spreadBps,
-            uint32 maxStaleness,
-            bool invert
+            uint32 maxStaleness
         );
 }
