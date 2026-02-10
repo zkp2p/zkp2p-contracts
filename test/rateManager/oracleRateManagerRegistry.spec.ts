@@ -88,6 +88,16 @@ describe("OracleRateManagerRegistry", () => {
         const min = await registry.getMinRate(rateManagerId, paymentMethod as any, Currency.USD);
         expect(min).to.eq(ether(1.01));
       });
+
+      it("returns config via getOracleConfig", async () => {
+        const cfg = await registry.getOracleConfig(rateManagerId, paymentMethod as any, Currency.USD);
+        expect(cfg.isConfigured).to.eq(true);
+        expect(cfg.feed).to.eq(ADDRESS_ZERO);
+        expect(cfg.feedDecimals).to.eq(0);
+        expect(cfg.spreadBps).to.eq(100);
+        expect(cfg.maxStaleness).to.eq(0);
+        expect(cfg.invert).to.eq(false);
+      });
     });
 
     describe("EUR via EUR/USD feed inversion", () => {
@@ -127,6 +137,13 @@ describe("OracleRateManagerRegistry", () => {
         expect(min).to.eq(0);
       });
 
+      it("returns 0 when updatedAt is 0", async () => {
+        const now = (await ethers.provider.getBlock("latest")).timestamp;
+        await feed.setRoundData(1, 110_000_000, now, 0, 1);
+        const min = await registry.getMinRate(rateManagerId, paymentMethod as any, Currency.EUR);
+        expect(min).to.eq(0);
+      });
+
       it("returns 0 when answer <= 0", async () => {
         const now = (await ethers.provider.getBlock("latest")).timestamp;
         await feed.setRoundData(1, 0, now, now, 1);
@@ -137,6 +154,85 @@ describe("OracleRateManagerRegistry", () => {
       it("returns 0 when answeredInRound < roundId", async () => {
         const now = (await ethers.provider.getBlock("latest")).timestamp;
         await feed.setRoundData(2, 110_000_000, now, now, 1);
+        const min = await registry.getMinRate(rateManagerId, paymentMethod as any, Currency.EUR);
+        expect(min).to.eq(0);
+      });
+
+      it("returns config via getOracleConfig", async () => {
+        const cfg = await registry.getOracleConfig(rateManagerId, paymentMethod as any, Currency.EUR);
+        expect(cfg.isConfigured).to.eq(true);
+        expect(cfg.feed).to.eq(feed.address);
+        expect(cfg.feedDecimals).to.eq(8);
+        expect(cfg.spreadBps).to.eq(100);
+        expect(cfg.maxStaleness).to.eq(3600);
+        expect(cfg.invert).to.eq(true);
+      });
+    });
+
+    describe("Non-inverted feed (covers non-invert math path)", () => {
+      let feed: AggregatorV3Mock;
+
+      beforeEach(async () => {
+        // Feed answer 0.90 with 8 decimals
+        feed = (await (
+          await ethers.getContractFactory("AggregatorV3Mock", owner.wallet)
+        ).deploy(8, 90_000_000)) as AggregatorV3Mock;
+
+        await registry.connect(manager.wallet).setOracleConfig(
+          rateManagerId,
+          paymentMethod as any,
+          Currency.EUR,
+          feed.address,
+          100, // 1%
+          3600,
+          false
+        );
+      });
+
+      it("scales answer to 1e18 and applies spread", async () => {
+        // baseRate = 0.9e18, min = 0.9e18 * 1.01 = 0.909e18
+        const expectedBase = ether(0.9);
+        const expected = expectedBase.mul(10_000 + 100).add(10_000 - 1).div(10_000); // ceil(base * 10100 / 10000)
+        const min = await registry.getMinRate(rateManagerId, paymentMethod as any, Currency.EUR);
+        expect(min).to.eq(expected);
+      });
+    });
+
+    describe("Defensive misconfiguration: feed=0 for non-USD currency", () => {
+      beforeEach(async () => {
+        // Configure USD tuple (this is the only allowed feed=0 config via setter).
+        await registry.connect(manager.wallet).setOracleConfig(
+          rateManagerId,
+          paymentMethod as any,
+          Currency.USD,
+          ADDRESS_ZERO,
+          100,
+          0,
+          false
+        );
+      });
+
+      it("returns 0 (pair disabled) rather than reverting", async () => {
+        // Simulate a corrupted storage entry for (rateManagerId, paymentMethod, EUR) by copying the USD tuple's slot.
+        // This hits the defensive `currency != USD` branch inside _getBaseRate.
+        const ORACLE_CONFIGS_SLOT = 2; // after BaseRateManagerRegistry's nextId (slot 0) and rateManagers mapping (slot 1)
+
+        const level1 = ethers.utils.keccak256(
+          ethers.utils.defaultAbiCoder.encode(["bytes32", "uint256"], [rateManagerId, ORACLE_CONFIGS_SLOT])
+        );
+        const level2 = ethers.utils.keccak256(
+          ethers.utils.defaultAbiCoder.encode(["bytes32", "uint256"], [paymentMethod, BigNumber.from(level1)])
+        );
+        const usdSlot = ethers.utils.keccak256(
+          ethers.utils.defaultAbiCoder.encode(["bytes32", "uint256"], [Currency.USD, BigNumber.from(level2)])
+        );
+        const eurSlot = ethers.utils.keccak256(
+          ethers.utils.defaultAbiCoder.encode(["bytes32", "uint256"], [Currency.EUR, BigNumber.from(level2)])
+        );
+
+        const usdValue = await ethers.provider.getStorageAt(registry.address, usdSlot);
+        await ethers.provider.send("hardhat_setStorageAt", [registry.address, eurSlot, usdValue]);
+
         const min = await registry.getMinRate(rateManagerId, paymentMethod as any, Currency.EUR);
         expect(min).to.eq(0);
       });
@@ -235,6 +331,19 @@ describe("OracleRateManagerRegistry", () => {
         await expect(subject()).to.be.revertedWith("Invalid staleness");
       });
     });
+
+    describe("reverts when feed decimals > 18", () => {
+      beforeEach(async () => {
+        const feed = (await (
+          await ethers.getContractFactory("AggregatorV3Mock", owner.wallet)
+        ).deploy(19, 1)) as AggregatorV3Mock;
+        subjectCurrency = Currency.EUR;
+        subjectFeed = feed.address;
+        subjectMaxStaleness = 3600;
+      });
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("Unsupported decimals");
+      });
+    });
   });
 });
-
