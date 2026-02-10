@@ -21,6 +21,7 @@ import {
 import {
   addEscrowToRegistry,
   getDeployedContractAddress,
+  setDepositRateManagerController,
   setNewOwner,
   setOrchestrator,
   waitForDeploymentDelay,
@@ -168,8 +169,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   // Set deposit rate manager controller on orchestrator
   const orchestratorContract = await ethers.getContractAt("Orchestrator", orchestrator.address);
-  await orchestratorContract.setDepositRateManagerController(depositRateManagerController.address);
-  console.log("Deposit rate manager controller set on orchestrator");
+  await setDepositRateManagerController(hre, orchestratorContract, depositRateManagerController.address);
+  console.log("Deposit rate manager controller set on orchestrator (or calldata printed for manual execution)");
   await waitForDeploymentDelay(hre);
 
   // Deploy protocol viewer
@@ -221,7 +222,21 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.network.name;
   if (network != "localhost") {
-    try { getDeployedContractAddress(hre.network.name, "ProtocolViewer") } catch (e) { return false; }
+    const requiredContracts = [
+      "ProtocolViewer",
+      "ManualRateManagerRegistry",
+      "OracleRateManagerRegistry",
+      "ChainlinkOracleAdapter",
+      "DepositRateManagerController",
+    ];
+
+    for (const contractName of requiredContracts) {
+      try {
+        getDeployedContractAddress(hre.network.name, contractName);
+      } catch (e) {
+        return false;
+      }
+    }
     return true;
   }
   return false;
