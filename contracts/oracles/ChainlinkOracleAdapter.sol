@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { IAggregatorV3 } from "../interfaces/IAggregatorV3.sol";
+import { IChainlinkAggregatorV3 } from "../interfaces/IChainlinkAggregatorV3.sol";
 import { IOracleAdapter } from "../interfaces/IOracleAdapter.sol";
 
 /**
@@ -37,10 +37,10 @@ contract ChainlinkOracleAdapter is IOracleAdapter {
         (address feed, bool invert) = abi.decode(rawConfig, (address, bool));
         require(feed != address(0), "Invalid feed");
 
-        uint8 decimals_ = IAggregatorV3(feed).decimals();
-        require(decimals_ <= 18, "Unsupported decimals");
+        uint8 feedDecimals = IChainlinkAggregatorV3(feed).decimals();
+        require(feedDecimals <= 18, "Unsupported decimals");
 
-        normalizedConfig = abi.encodePacked(feed, decimals_, invert ? bytes1(uint8(1)) : bytes1(uint8(0)));
+        normalizedConfig = abi.encodePacked(feed, feedDecimals, invert ? bytes1(uint8(1)) : bytes1(uint8(0)));
     }
 
     /**
@@ -52,8 +52,8 @@ contract ChainlinkOracleAdapter is IOracleAdapter {
         view
         returns (bool valid, uint256 rate, uint256 updatedAt)
     {
-        (address feed, uint8 decimals_, bool invert) = _decodeNormalizedConfig(normalizedConfig);
-        if (decimals_ > 18) {
+        (address feed, uint8 feedDecimals, bool invert) = _decodeNormalizedConfig(normalizedConfig);
+        if (feedDecimals > 18) {
             return (false, 0, 0);
         }
 
@@ -63,7 +63,7 @@ contract ChainlinkOracleAdapter is IOracleAdapter {
             ,
             uint256 updatedAt_,
             uint80 answeredInRound
-        ) = IAggregatorV3(feed).latestRoundData();
+        ) = IChainlinkAggregatorV3(feed).latestRoundData();
 
         if (answer <= 0) {
             return (false, 0, 0);
@@ -75,17 +75,17 @@ contract ChainlinkOracleAdapter is IOracleAdapter {
             return (false, 0, 0);
         }
 
-        uint256 ans = uint256(answer);
-        uint256 scale = 10 ** uint256(decimals_);
+        uint256 answerUint = uint256(answer);
+        uint256 decimalsScale = 10 ** uint256(feedDecimals);
 
         if (invert) {
             // rate = (1e18 * 10^decimals) / answer
-            uint256 invertedRate = Math.mulDiv(PRECISE_UNIT, scale, ans, Math.Rounding.Up);
+            uint256 invertedRate = Math.mulDiv(PRECISE_UNIT, decimalsScale, answerUint, Math.Rounding.Up);
             return (true, invertedRate, updatedAt_);
         }
 
         // rate = (answer * 1e18) / 10^decimals
-        uint256 directRate = Math.mulDiv(ans, PRECISE_UNIT, scale, Math.Rounding.Up);
+        uint256 directRate = Math.mulDiv(answerUint, PRECISE_UNIT, decimalsScale, Math.Rounding.Up);
         return (true, directRate, updatedAt_);
     }
 
@@ -94,18 +94,17 @@ contract ChainlinkOracleAdapter is IOracleAdapter {
     function _decodeNormalizedConfig(bytes calldata normalizedConfig)
         internal
         pure
-        returns (address feed, uint8 decimals_, bool invert)
+        returns (address feed, uint8 feedDecimals, bool invert)
     {
         require(normalizedConfig.length == 22, "Invalid config");
 
-        uint8 invertFlag;
+        uint8 invertByte;
         assembly {
             feed := shr(96, calldataload(normalizedConfig.offset))
-            decimals_ := byte(0, calldataload(add(normalizedConfig.offset, 20)))
-            invertFlag := byte(0, calldataload(add(normalizedConfig.offset, 21)))
+            feedDecimals := byte(0, calldataload(add(normalizedConfig.offset, 20)))
+            invertByte := byte(0, calldataload(add(normalizedConfig.offset, 21)))
         }
 
-        invert = invertFlag != 0;
+        invert = invertByte != 0;
     }
 }
-

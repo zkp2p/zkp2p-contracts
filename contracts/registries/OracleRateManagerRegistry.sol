@@ -25,7 +25,12 @@ contract OracleRateManagerRegistry is IOracleRateManagerRegistry, BaseRateManage
     /* ============ Constants ============ */
 
     uint256 internal constant BPS = 10_000;
-    uint256 internal constant MAX_ADAPTER_CONFIG_LENGTH = 256;
+    // Upper bound for stored adapter config bytes. This keeps storage reads and event logs bounded and helps avoid
+    // accidentally configuring a tuple such that `getMinRate()` becomes prohibitively expensive.
+    //
+    // 256 bytes is intentionally generous for oracle configs (e.g. Chainlink normalized config is 22 bytes) while
+    // still preventing unbounded blobs.
+    uint256 internal constant MAX_ADAPTER_CONFIG_BYTES = 256;
 
     /* ============ Structs ============ */
 
@@ -68,7 +73,7 @@ contract OracleRateManagerRegistry is IOracleRateManagerRegistry, BaseRateManage
         require(_maxStaleness > 0, "Invalid staleness");
 
         bytes memory normalizedAdapterConfig = IOracleAdapter(_adapter).validateConfig(_rawAdapterConfig);
-        require(normalizedAdapterConfig.length <= MAX_ADAPTER_CONFIG_LENGTH, "Config too long");
+        require(normalizedAdapterConfig.length <= MAX_ADAPTER_CONFIG_BYTES, "Config too long");
 
         oracleConfigs[_rateManagerId][_paymentMethod][_currency] = OracleConfig({
             adapter: _adapter,
@@ -125,30 +130,38 @@ contract OracleRateManagerRegistry is IOracleRateManagerRegistry, BaseRateManage
             return 0;
         }
 
-        (bool valid, uint256 baseRate, uint256 updatedAt) = _getBaseRate(cfg);
-        if (!valid || baseRate == 0) {
+        (bool isValidQuote, uint256 marketRate, uint256 rateUpdatedAt) = _getBaseRate(cfg);
+        if (!isValidQuote || marketRate == 0) {
             return 0;
         }
 
-        if (updatedAt == 0) {
+        if (rateUpdatedAt == 0) {
             return 0;
         }
-        if (updatedAt > block.timestamp) {
+        if (rateUpdatedAt > block.timestamp) {
             return 0;
         }
-        if (block.timestamp - updatedAt > cfg.maxStaleness) {
+        if (block.timestamp - rateUpdatedAt > cfg.maxStaleness) {
             return 0;
         }
 
         // Apply spread as a minimum floor: marketRate * (1 + spreadBps)
-        return Math.mulDiv(baseRate, BPS + uint256(cfg.spreadBps), BPS, Math.Rounding.Up);
+        return Math.mulDiv(marketRate, BPS + uint256(cfg.spreadBps), BPS, Math.Rounding.Up);
     }
 
     /* ============ Internal Functions ============ */
 
-    function _getBaseRate(OracleConfig storage cfg) internal view returns (bool valid, uint256 baseRate, uint256 updatedAt) {
-        try IOracleAdapter(cfg.adapter).getRate(cfg.adapterConfig) returns (bool v, uint256 rate, uint256 ts) {
-            return (v, rate, ts);
+    function _getBaseRate(OracleConfig storage cfg)
+        internal
+        view
+        returns (bool isValidQuote, uint256 marketRate, uint256 rateUpdatedAt)
+    {
+        try IOracleAdapter(cfg.adapter).getRate(cfg.adapterConfig) returns (
+            bool valid_,
+            uint256 rate_,
+            uint256 updatedAt_
+        ) {
+            return (valid_, rate_, updatedAt_);
         } catch {
             return (false, 0, 0);
         }
