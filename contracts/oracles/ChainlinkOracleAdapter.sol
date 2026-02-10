@@ -31,11 +31,17 @@ contract ChainlinkOracleAdapter is IOracleAdapter {
 
     /**
      * @notice Validates raw config and returns packed normalized config.
-     * @dev Reverts if feed is zero or feed decimals exceed 18.
+     * @dev Reverts if feed decimals exceed 18.
+     *
+     * Special-case: `feed == address(0)` is allowed and implies a constant 1.0 base rate (in preciseUnits).
+     * This is useful for USD when the deposit token is assumed to be USDC.
      */
     function validateConfig(bytes calldata rawConfig) external view returns (bytes memory normalizedConfig) {
         (address feed, bool invert) = abi.decode(rawConfig, (address, bool));
-        require(feed != address(0), "Invalid feed");
+        if (feed == address(0)) {
+            normalizedConfig = abi.encodePacked(feed, uint8(0), invert ? bytes1(uint8(1)) : bytes1(uint8(0)));
+            return normalizedConfig;
+        }
 
         uint8 feedDecimals = IChainlinkAggregatorV3(feed).decimals();
         require(feedDecimals <= 18, "Unsupported decimals");
@@ -53,6 +59,10 @@ contract ChainlinkOracleAdapter is IOracleAdapter {
         returns (bool valid, uint256 rate, uint256 updatedAt)
     {
         (address feed, uint8 feedDecimals, bool invert) = _decodeNormalizedConfig(normalizedConfig);
+        if (feed == address(0)) {
+            // Constant 1.0 base rate. Use `block.timestamp` so staleness checks can succeed.
+            return (true, PRECISE_UNIT, block.timestamp);
+        }
         if (feedDecimals > 18) {
             return (false, 0, 0);
         }

@@ -129,6 +129,41 @@ describe("OracleRateManagerRegistry", () => {
       });
     });
 
+    describe("USD via Chainlink adapter (constant 1.0 base rate; zero feed)", () => {
+      beforeEach(async () => {
+        await registry.connect(manager.wallet).setOracleConfig(
+          rateManagerId,
+          paymentMethod as any,
+          Currency.USD,
+          chainlinkAdapter.address,
+          encodeChainlinkRawConfig(ADDRESS_ZERO, false),
+          100, // 1%
+          3600
+        );
+      });
+
+      it("returns (1 + spread) in preciseUnits", async () => {
+        const min = await registry.getMinRate(rateManagerId, paymentMethod as any, Currency.USD);
+        expect(min).to.eq(ether(1.01));
+      });
+
+      it("stores normalized config with a zero feed", async () => {
+        const cfg = await registry.getOracleConfig(rateManagerId, paymentMethod as any, Currency.USD);
+
+        expect(cfg.isConfigured).to.eq(true);
+        expect(cfg.adapter).to.eq(chainlinkAdapter.address);
+        expect(cfg.spreadBps).to.eq(100);
+        expect(cfg.maxStaleness).to.eq(3600);
+
+        const packedFeed = ethers.utils.getAddress("0x" + cfg.adapterConfig.slice(2, 42));
+        const decimals = BigNumber.from("0x" + cfg.adapterConfig.slice(42, 44)).toNumber();
+        const invertFlag = BigNumber.from("0x" + cfg.adapterConfig.slice(44, 46)).toNumber();
+        expect(packedFeed).to.eq(ADDRESS_ZERO);
+        expect(decimals).to.eq(0);
+        expect(invertFlag).to.eq(0);
+      });
+    });
+
     describe("EUR via EUR/USD feed inversion", () => {
       let feed: AggregatorV3Mock;
 
@@ -420,12 +455,12 @@ describe("OracleRateManagerRegistry", () => {
       });
     });
 
-    describe("reverts when adapter config is invalid (feed is zero)", () => {
+    describe("allows a zero feed adapter config (constant 1.0 base rate)", () => {
       beforeEach(() => {
         subjectRawAdapterConfig = encodeChainlinkRawConfig(ADDRESS_ZERO, false);
       });
-      it("should revert", async () => {
-        await expect(subject()).to.be.revertedWith("Invalid feed");
+      it("should succeed", async () => {
+        await expect(subject()).to.not.be.reverted;
       });
     });
 

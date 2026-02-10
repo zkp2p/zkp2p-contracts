@@ -58,12 +58,21 @@ describe("ChainlinkOracleAdapter", () => {
       expect(invertFlag).to.eq(1);
     });
 
-    describe("reverts when feed is zero", () => {
+    describe("when feed is zero", () => {
       beforeEach(() => {
         subjectRawConfig = encodeRawConfig(ADDRESS_ZERO, false);
       });
-      it("should revert", async () => {
-        await expect(subject()).to.be.revertedWith("Invalid feed");
+
+      it("returns packed normalized config (constant-rate config)", async () => {
+        const cfg = await subject();
+
+        expect(cfg).to.have.length(2 + 22 * 2);
+        const packedFeed = ethers.utils.getAddress("0x" + cfg.slice(2, 42));
+        const decimals = BigNumber.from("0x" + cfg.slice(42, 44)).toNumber();
+        const invertFlag = BigNumber.from("0x" + cfg.slice(44, 46)).toNumber();
+        expect(packedFeed).to.eq(ADDRESS_ZERO);
+        expect(decimals).to.eq(0);
+        expect(invertFlag).to.eq(0);
       });
     });
 
@@ -113,6 +122,19 @@ describe("ChainlinkOracleAdapter", () => {
         const res = await subject();
         expect(res.valid).to.eq(true);
         expect(res.rate).to.eq(ether(1.1));
+        expect(res.updatedAt).to.be.gt(0);
+      });
+    });
+
+    describe("when feed is zero", () => {
+      beforeEach(async () => {
+        subjectNormalizedConfig = await adapter.validateConfig(encodeRawConfig(ADDRESS_ZERO, false));
+      });
+
+      it("returns constant 1.0 rate in preciseUnits", async () => {
+        const res = await subject();
+        expect(res.valid).to.eq(true);
+        expect(res.rate).to.eq(ether(1));
         expect(res.updatedAt).to.be.gt(0);
       });
     });

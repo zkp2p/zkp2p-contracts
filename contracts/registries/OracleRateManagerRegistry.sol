@@ -50,8 +50,9 @@ contract OracleRateManagerRegistry is IOracleRateManagerRegistry, BaseRateManage
 
     /**
      * @notice Configures an oracle feed + spread for a (rateManagerId, paymentMethod, currency) tuple.
-     * @dev Only callable by the rate manager. For non-USD currencies, feed must be non-zero.
-     *      For USD, a zero feed is allowed and implies a fixed 1.0 market rate (USDC-only assumption).
+     * @dev Only callable by the rate manager. The adapter is responsible for validating and normalizing
+     *      `_rawAdapterConfig` (e.g. Chainlink adapter supports `feed == address(0)` as a constant 1.0 base rate
+     *      which can be used for USD when the deposit token is assumed to be USDC).
      */
     function setOracleConfig(
         bytes32 _rateManagerId,
@@ -117,7 +118,7 @@ contract OracleRateManagerRegistry is IOracleRateManagerRegistry, BaseRateManage
     /**
      * @notice Returns the manager-level minimum rate for a (paymentMethod, currency) pair.
      * @dev Returns 0 if the tuple is not configured, the oracle returns invalid data, or the data is stale.
-     *      For USD with a zero feed, returns (1 + spread) in preciseUnits.
+     *      For constant-rate adapter configs (e.g. Chainlink `feed == address(0)`), returns (1 + spread) in preciseUnits.
      */
     function getMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency)
         external
