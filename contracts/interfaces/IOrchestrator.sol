@@ -75,6 +75,9 @@ interface IOrchestrator {
         bool isManualRelease
     );
 
+    event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
+    event ManagerFeeConfigUpdated(address indexed manager, address indexed feeRecipient, uint256 fee);
+
     event AllowMultipleIntentsUpdated(bool allowMultiple);
 
     event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);
@@ -143,6 +146,8 @@ interface IOrchestrator {
     function fulfillIntent(FulfillIntentParams calldata params) external;
 
     function releaseFundsToPayer(bytes32 intentHash) external;
+
+    function setManagerFeeConfig(address feeRecipient, uint256 fee) external;
 
     /* ============ External Functions for Escrow ============ */
 

@@ -39,6 +39,7 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     uint256 constant CIRCOM_PRIME_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
     uint256 constant MAX_REFERRER_FEE = 5e16;      // 5% max referrer fee
     uint256 constant MAX_PROTOCOL_FEE = 5e16;      // 5% max protocol fee
+    uint256 constant MAX_MANAGER_FEE = 5e16;       // 5% max manager fee
 
     /* ============ State Variables ============ */
 
@@ -50,6 +51,15 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     // Snapshot of the minimum per-intent amount at the time of lock (signal)
     // Used to prevent fulfillments that pay out less than the deposit's min intent amount.
     mapping(bytes32 => uint256) internal intentMinAtSignal;
+
+    // Snapshot of per-intent manager fee terms at the time of signal.
+    // Only applies when the underlying deposit is delegated (deposit.delegate != address(0)).
+    mapping(bytes32 => address) internal intentManagerFeeRecipient;
+    mapping(bytes32 => uint256) internal intentManagerFee;
+
+    // Delegate (manager) fee configuration. Charged to takers on successful release/fulfillment.
+    mapping(address => address) public managerFeeRecipient; // Optional override (address(0) means manager receives fees)
+    mapping(address => uint256) public managerFee;          // Fee in preciseUnits (1e16 = 1%)
 
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
@@ -113,7 +123,23 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
             _params.depositId,
             _params.paymentMethod
         );
-        
+
+        // Snapshot manager fee terms (only when the deposit is delegated).
+        address managerFeeRecipientSnapshot;
+        uint256 managerFeeSnapshot;
+        if (dep.delegate != address(0)) {
+            managerFeeSnapshot = managerFee[dep.delegate];
+            if (managerFeeSnapshot > MAX_MANAGER_FEE) revert FeeExceedsMaximum(managerFeeSnapshot, MAX_MANAGER_FEE);
+            if (managerFeeSnapshot > 0) {
+                managerFeeRecipientSnapshot = managerFeeRecipient[dep.delegate];
+                if (managerFeeRecipientSnapshot == address(0)) {
+                    managerFeeRecipientSnapshot = dep.delegate;
+                }
+            }
+        }
+        intentManagerFeeRecipient[intentHash] = managerFeeRecipientSnapshot;
+        intentManagerFee[intentHash] = managerFeeSnapshot;
+
         intentMinAtSignal[intentHash] = dep.intentAmountRange.min;
         intents[intentHash] = Intent({
             owner: msg.sender,
@@ -147,6 +173,9 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
             _params.conversionRate, 
             block.timestamp
         );
+
+        // Emit manager fee snapshot last for easier indexing.
+        emit IntentManagerFeeSnapshotted(intentHash, managerFeeRecipientSnapshot, managerFeeSnapshot);
 
         // Interactions
         IEscrow(_params.escrow).lockFunds(_params.depositId, intentHash, _params.amount);
@@ -187,6 +216,10 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         if (intent.paymentMethod == bytes32(0)) revert IntentNotFound(_params.intentHash);
         
         IEscrow.Deposit memory deposit = IEscrow(intent.escrow).getDeposit(intent.depositId);
+
+        // Snapshot manager fee terms before pruning (pruning deletes the mappings).
+        address managerFeeRecipientSnapshot = intentManagerFeeRecipient[_params.intentHash];
+        uint256 managerFeeSnapshot = intentManagerFee[_params.intentHash];
         
         address verifier = paymentVerifierRegistry.getVerifier(intent.paymentMethod);
         if (verifier == address(0)) revert PaymentMethodDoesNotExist(intent.paymentMethod);
@@ -218,7 +251,9 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
             _params.intentHash, 
             intent, 
             verificationResult.releaseAmount,
-            _params.postIntentHookData
+            _params.postIntentHookData,
+            managerFeeRecipientSnapshot,
+            managerFeeSnapshot
         );
     }
 
@@ -236,6 +271,10 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
 
         IEscrow.Deposit memory deposit = IEscrow(intent.escrow).getDeposit(intent.depositId);
         if (deposit.depositor != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.depositor);
+
+        // Snapshot manager fee terms before pruning (pruning deletes the mappings).
+        address managerFeeRecipientSnapshot = intentManagerFeeRecipient[_intentHash];
+        uint256 managerFeeSnapshot = intentManagerFee[_intentHash];
         
         // Effects
         _pruneIntent(_intentHash);
@@ -243,7 +282,24 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         // Interactions
         IEscrow(intent.escrow).unlockAndTransferFunds(intent.depositId, _intentHash, intent.amount, address(this));
 
-        _collectFeesAndTransferFunds(deposit.token, _intentHash, intent, intent.amount);
+        _collectFeesAndTransferFunds(deposit.token, _intentHash, intent, intent.amount, managerFeeRecipientSnapshot, managerFeeSnapshot);
+    }
+
+    /* ============ Delegate (Manager) Fee Configuration ============ */
+
+    /**
+     * @notice Sets the caller's manager fee configuration. This fee is only charged on intents that use a delegated deposit
+     * where the deposit's delegate matches the manager (caller).
+     *
+     * @param _feeRecipient  Recipient of manager fees (address(0) means caller receives fees)
+     * @param _fee           Fee in preciseUnits (1e16 = 1%)
+     */
+    function setManagerFeeConfig(address _feeRecipient, uint256 _fee) external {
+        if (_fee > MAX_MANAGER_FEE) revert FeeExceedsMaximum(_fee, MAX_MANAGER_FEE);
+        managerFeeRecipient[msg.sender] = _feeRecipient;
+        managerFee[msg.sender] = _fee;
+
+        emit ManagerFeeConfigUpdated(msg.sender, _feeRecipient, _fee);
     }
 
     /* ============ Escrow Functions ============ */
@@ -465,6 +521,8 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         accountIntents[intent.owner].removeStorage(_intentHash);
         delete intents[_intentHash];
         delete intentMinAtSignal[_intentHash];
+        delete intentManagerFeeRecipient[_intentHash];
+        delete intentManagerFee[_intentHash];
 
         emit IntentPruned(_intentHash);
     }
@@ -475,10 +533,13 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     function _calculateAndTransferFees(
         IERC20 _token,
         Intent memory _intent, 
-        uint256 _releaseAmount
+        uint256 _releaseAmount,
+        address _managerFeeRecipient,
+        uint256 _managerFee
     ) internal returns (uint256 netFees) {
         uint256 protocolFeeAmount;
         uint256 referrerFeeAmount; 
+        uint256 managerFeeAmount;
 
         // Calculate protocol fee (taken from taker) - based on release amount
         if (protocolFeeRecipient != address(0) && protocolFee > 0) {
@@ -492,7 +553,13 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
             _token.safeTransfer(_intent.referrer, referrerFeeAmount);
         }
 
-        netFees = protocolFeeAmount + referrerFeeAmount;
+        // Calculate manager fee (taken from taker) - based on release amount
+        if (_managerFeeRecipient != address(0) && _managerFee > 0) {
+            managerFeeAmount = (_releaseAmount * _managerFee) / PRECISE_UNIT;
+            _token.safeTransfer(_managerFeeRecipient, managerFeeAmount);
+        }
+
+        netFees = protocolFeeAmount + referrerFeeAmount + managerFeeAmount;
     }
 
     /**
@@ -502,9 +569,11 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         IERC20 _token, 
         bytes32 _intentHash, 
         Intent memory _intent,
-        uint256 _releaseAmount
+        uint256 _releaseAmount,
+        address _managerFeeRecipient,
+        uint256 _managerFee
     ) internal {
-        uint256 netFees = _calculateAndTransferFees(_token, _intent, _releaseAmount);
+        uint256 netFees = _calculateAndTransferFees(_token, _intent, _releaseAmount, _managerFeeRecipient, _managerFee);
         uint256 netAmount = _releaseAmount - netFees;
 
         _token.safeTransfer(_intent.to, netAmount);
@@ -525,9 +594,11 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         bytes32 _intentHash, 
         Intent memory _intent, 
         uint256 _releaseAmount,
-        bytes memory _postIntentHookData
+        bytes memory _postIntentHookData,
+        address _managerFeeRecipient,
+        uint256 _managerFee
     ) internal {
-        uint256 netFees = _calculateAndTransferFees(_token, _intent, _releaseAmount);
+        uint256 netFees = _calculateAndTransferFees(_token, _intent, _releaseAmount, _managerFeeRecipient, _managerFee);
         uint256 netAmount = _releaseAmount - netFees;
 
         address fundsTransferredTo = _intent.to;

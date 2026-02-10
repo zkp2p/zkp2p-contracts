@@ -31,3 +31,6 @@ AGENTS.md
 
 docs/
 ./scripts
+
+# Local agent state (not part of protocol changes)
+CONTINUITY.md
