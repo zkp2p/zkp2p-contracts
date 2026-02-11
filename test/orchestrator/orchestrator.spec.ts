@@ -1264,6 +1264,64 @@ describe("Orchestrator", () => {
       });
     });
 
+    describe("when the manager fee recipient is not set for the deposit delegate", async () => {
+      const managerFeePct = ether(0.03); // 3% manager fee
+
+      beforeEach(async () => {
+        // Cancel the existing intent first
+        await orchestrator.connect(onRamper.wallet).cancelIntent(intentHash);
+
+        // Delegate configures their fee but does not specify a recipient (defaults to delegate)
+        await orchestrator.connect(offRamperDelegate.wallet).setManagerFeeConfig(ADDRESS_ZERO, managerFeePct);
+
+        // Signal a new intent that will snapshot the manager fee terms
+        const params = await createSignalIntentParams(
+          orchestrator.address,
+          escrow.address,
+          ZERO,
+          intentAmount,
+          onRamper.address,
+          venmoPaymentMethod,
+          Currency.USD,
+          depositConversionRate,
+          ADDRESS_ZERO,    // referrer
+          ZERO,            // referrerFee
+          gatingService,
+          chainId.toString(),
+          ADDRESS_ZERO,
+          "0x"
+        );
+
+        await orchestrator.connect(onRamper.wallet).signalIntent(params);
+
+        const currentTimestamp = await blockchain.getCurrentTimestamp();
+        intentHash = calculateIntentHash(orchestrator.address, currentIntentCounter);
+        currentIntentCounter++;  // Increment after signalIntent
+
+        subjectProof = ethers.utils.defaultAbiCoder.encode(
+          ["uint256", "uint256", "bytes32", "bytes32", "bytes32"],
+          [usdc(50), currentTimestamp, payeeDetails, Currency.USD, intentHash]
+        );
+        subjectIntentHash = intentHash;
+      });
+
+      it("should default the manager fee recipient to the deposit delegate", async () => {
+        const initialOnRamperBalance = await usdcToken.balanceOf(onRamper.address);
+        const initialDelegateBalance = await usdcToken.balanceOf(offRamperDelegate.address);
+
+        await subject();
+
+        const finalOnRamperBalance = await usdcToken.balanceOf(onRamper.address);
+        const finalDelegateBalance = await usdcToken.balanceOf(offRamperDelegate.address);
+
+        const releaseAmount = usdc(50).mul(ether(1)).div(ether(1.08));
+        const fee = releaseAmount.mul(managerFeePct).div(ether(1)); // pct of release amount
+
+        expect(finalOnRamperBalance.sub(initialOnRamperBalance)).to.eq(releaseAmount.sub(fee));
+        expect(finalDelegateBalance.sub(initialDelegateBalance)).to.eq(fee);
+      });
+    });
+
     describe("when the deposit is not delegated", async () => {
       const managerFeePct = ether(0.03); // 3% manager fee
 
