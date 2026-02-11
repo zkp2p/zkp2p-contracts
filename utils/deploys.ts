@@ -198,8 +198,8 @@ export default class DeployHelper {
     return await new RateManagerDepositHookMock__factory(this._deployerSigner).deploy();
   }
 
-  public async deployDepositRateManagerHookV1(registry: Address): Promise<DepositRateManagerHookV1> {
-    return await new DepositRateManagerHookV1__factory(this._deployerSigner).deploy(registry);
+  public async deployDepositRateManagerHookV1(): Promise<DepositRateManagerHookV1> {
+    return await new DepositRateManagerHookV1__factory(this._deployerSigner).deploy();
   }
 
 

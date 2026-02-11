@@ -68,7 +68,7 @@ contract DepositRateManagerController is IDepositRateManagerController {
 
         address hook = registry.getDepositHook(_rateManagerId);
         if (hook != address(0)) {
-            IDepositRateManagerHook(hook).onDepositOptIn(msg.sender, _escrow, _depositId, _rateManagerId);
+            IDepositRateManagerHook(hook).onDepositOptIn(msg.sender, _escrow, _depositId, _registry, _rateManagerId);
         }
 
         depositManagerConfig[_escrow][_depositId] = DepositManagerConfig({
