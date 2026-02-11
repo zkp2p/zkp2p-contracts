@@ -56,6 +56,7 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     // Only applies when the underlying deposit is delegated (deposit.delegate != address(0)).
     mapping(bytes32 => address) internal intentManagerFeeRecipient;
     mapping(bytes32 => uint256) internal intentManagerFee;
+    mapping(bytes32 => bool) internal intentHasManagerFeeSnapshot;
 
     // Delegate (manager) fee configuration. Charged to takers on successful release/fulfillment.
     mapping(address => address) public managerFeeRecipient; // Optional override (address(0) means manager receives fees)
@@ -129,16 +130,18 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         uint256 managerFeeSnapshot;
         if (dep.delegate != address(0)) {
             managerFeeSnapshot = managerFee[dep.delegate];
+            // Defense-in-depth invariant check: setManagerFeeConfig already enforces this bound.
             if (managerFeeSnapshot > MAX_MANAGER_FEE) revert FeeExceedsMaximum(managerFeeSnapshot, MAX_MANAGER_FEE);
             if (managerFeeSnapshot > 0) {
                 managerFeeRecipientSnapshot = managerFeeRecipient[dep.delegate];
                 if (managerFeeRecipientSnapshot == address(0)) {
                     managerFeeRecipientSnapshot = dep.delegate;
                 }
+                intentManagerFeeRecipient[intentHash] = managerFeeRecipientSnapshot;
+                intentManagerFee[intentHash] = managerFeeSnapshot;
+                intentHasManagerFeeSnapshot[intentHash] = true;
             }
         }
-        intentManagerFeeRecipient[intentHash] = managerFeeRecipientSnapshot;
-        intentManagerFee[intentHash] = managerFeeSnapshot;
 
         intentMinAtSignal[intentHash] = dep.intentAmountRange.min;
         intents[intentHash] = Intent({
@@ -438,6 +441,10 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         return intentMinAtSignal[_intentHash];
     }
 
+    function getIntentManagerFeeSnapshot(bytes32 _intentHash) external view returns (address feeRecipient, uint256 fee) {
+        return (intentManagerFeeRecipient[_intentHash], intentManagerFee[_intentHash]);
+    }
+
     /* ============ Internal Functions ============ */
 
     /**
@@ -521,8 +528,11 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         accountIntents[intent.owner].removeStorage(_intentHash);
         delete intents[_intentHash];
         delete intentMinAtSignal[_intentHash];
-        delete intentManagerFeeRecipient[_intentHash];
-        delete intentManagerFee[_intentHash];
+        if (intentHasManagerFeeSnapshot[_intentHash]) {
+            delete intentManagerFeeRecipient[_intentHash];
+            delete intentManagerFee[_intentHash];
+            delete intentHasManagerFeeSnapshot[_intentHash];
+        }
 
         emit IntentPruned(_intentHash);
     }

@@ -134,8 +134,10 @@ interface IOrchestrator {
 
     /* ============ View Functions ============ */
 
+    function protocolFee() external view returns (uint256);
     function getIntent(bytes32 intentHash) external view returns (Intent memory);
     function getAccountIntents(address account) external view returns (bytes32[] memory);
+    function getIntentManagerFeeSnapshot(bytes32 intentHash) external view returns (address feeRecipient, uint256 fee);
     
     /* ============ External Functions for Users ============ */
 

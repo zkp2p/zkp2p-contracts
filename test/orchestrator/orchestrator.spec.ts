@@ -358,6 +358,22 @@ describe("Orchestrator", () => {
       expect(minAtSignal).to.eq(expectedMinAtSignal);
     });
 
+    it("should expose snapshotted manager fee terms", async () => {
+      const managerFeePct = ether(0.03); // 3%
+      await orchestrator.connect(offRamperDelegate.wallet).setManagerFeeConfig(protocolFeeRecipient.address, managerFeePct);
+
+      const intentHash = calculateIntentHash(
+        orchestrator.address,
+        currentIntentCounter
+      );
+
+      await subject();
+
+      const managerFeeSnapshot = await orchestrator.getIntentManagerFeeSnapshot(intentHash);
+      expect(managerFeeSnapshot.feeRecipient).to.eq(protocolFeeRecipient.address);
+      expect(managerFeeSnapshot.fee).to.eq(managerFeePct);
+    });
+
     it("should emit an IntentSignaled event", async () => {
       const tx = await subject();
       const receipt = await tx.wait();
@@ -817,11 +833,12 @@ describe("Orchestrator", () => {
   describe("#cancelIntent", async () => {
     let subjectIntentHash: string;
     let subjectCaller: Account;
+    let depositConversionRate: BigNumber;
 
     beforeEach(async () => {
       // Create a deposit first
       await usdcToken.connect(offRamper.wallet).approve(escrow.address, usdc(10000));
-      const depositConversionRate = ether(1.01);
+      depositConversionRate = ether(1.01);
 
       await escrow.connect(offRamper.wallet).createDeposit({
         token: usdcToken.address,
@@ -903,6 +920,48 @@ describe("Orchestrator", () => {
 
       const accountIntents = await orchestrator.getAccountIntents(onRamper.address);
       expect(accountIntents).to.not.include(subjectIntentHash);
+    });
+
+    describe("when manager fee snapshot exists", async () => {
+      const managerFeePct = ether(0.03);
+
+      beforeEach(async () => {
+        await orchestrator.connect(offRamperDelegate.wallet).setManagerFeeConfig(protocolFeeRecipient.address, managerFeePct);
+        await orchestrator.connect(onRamper.wallet).cancelIntent(subjectIntentHash);
+
+        const params = await createSignalIntentParams(
+          orchestrator.address,
+          escrow.address,
+          ZERO,
+          usdc(50),
+          onRamper.address,
+          venmoPaymentMethod,
+          Currency.USD,
+          depositConversionRate,
+          ADDRESS_ZERO,
+          ZERO,
+          gatingService,
+          chainId.toString(),
+          ADDRESS_ZERO,
+          "0x"
+        );
+
+        await orchestrator.connect(onRamper.wallet).signalIntent(params);
+        subjectIntentHash = calculateIntentHash(orchestrator.address, currentIntentCounter);
+        currentIntentCounter++;
+      });
+
+      it("should clear the manager fee snapshot on cancel", async () => {
+        const snapshotBefore = await orchestrator.getIntentManagerFeeSnapshot(subjectIntentHash);
+        expect(snapshotBefore.feeRecipient).to.eq(protocolFeeRecipient.address);
+        expect(snapshotBefore.fee).to.eq(managerFeePct);
+
+        await subject();
+
+        const snapshotAfter = await orchestrator.getIntentManagerFeeSnapshot(subjectIntentHash);
+        expect(snapshotAfter.feeRecipient).to.eq(ADDRESS_ZERO);
+        expect(snapshotAfter.fee).to.eq(ZERO);
+      });
     });
 
     describe("when the intent does not exist", async () => {

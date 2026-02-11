@@ -38,4 +38,19 @@ interface IProtocolViewer {
     function getAccountIntents(
         address _account
     ) external view returns (IntentView[] memory intentViews);
+
+    function quoteIntentNetAmount(
+        bytes32 _intentHash,
+        uint256 _releaseAmount
+    )
+        external
+        view
+        returns (
+            uint256 netAmount,
+            uint256 totalFeeAmount,
+            uint256 protocolFeeAmount,
+            uint256 referrerFeeAmount,
+            uint256 managerFeeAmount,
+            address managerFeeRecipient
+        );
 }

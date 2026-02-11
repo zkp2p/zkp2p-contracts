@@ -664,4 +664,82 @@ describe("ProtocolViewer", () => {
       });
     });
   });
+
+  describe("#quoteIntentNetAmount", async () => {
+    let subjectIntentHash: string;
+    let subjectReleaseAmount: BigNumber;
+
+    beforeEach(async () => {
+      await orchestrator.connect(owner.wallet).setProtocolFee(ether(0.02)); // 2%
+      await orchestrator.connect(offRamperNewAcct.wallet).setManagerFeeConfig(protocolFeeRecipient.address, ether(0.03)); // 3%
+
+      await usdcToken.connect(offRamper.wallet).approve(escrow.address, usdc(10000));
+      const depositConversionRate = ether(1.08);
+      await escrow.connect(offRamper.wallet).createDeposit({
+        token: usdcToken.address,
+        amount: usdc(100),
+        intentAmountRange: { min: usdc(10), max: usdc(200) },
+        paymentMethods: [venmoPaymentMethodHash],
+        paymentMethodData: [{
+          intentGatingService: gatingService.address,
+          payeeDetails: ethers.utils.keccak256(ethers.utils.toUtf8Bytes("payeeDetails")),
+          data: "0x"
+        }],
+        currencies: [
+          [{ code: Currency.USD, minConversionRate: depositConversionRate }]
+        ],
+        delegate: offRamperNewAcct.address,
+        intentGuardian: ADDRESS_ZERO,
+        retainOnEmpty: false
+      });
+
+      const params = await createSignalIntentParams(
+        orchestrator.address,
+        escrow.address,
+        ZERO,
+        usdc(50),
+        onRamper.address,
+        venmoPaymentMethodHash,
+        Currency.USD,
+        depositConversionRate,
+        onRamperOtherAddress.address, // referrer
+        ether(0.01),                  // 1% referrer fee
+        gatingService,
+        chainId.toString(),
+        ADDRESS_ZERO,
+        "0x"
+      );
+
+      await orchestrator.connect(onRamper.wallet).signalIntent(params);
+      subjectIntentHash = calculateIntentHash(orchestrator.address, currentIntentCounter);
+      subjectReleaseAmount = usdc(50);
+    });
+
+    async function subject(): Promise<any> {
+      return protocolViewer.quoteIntentNetAmount(subjectIntentHash, subjectReleaseAmount);
+    }
+
+    it("should return fee breakdown including manager fee snapshot", async () => {
+      const quote = await subject();
+
+      expect(quote.protocolFeeAmount).to.eq(usdc(1));        // 2% of 50
+      expect(quote.referrerFeeAmount).to.eq(usdc(1).div(2)); // 1% of 50
+      expect(quote.managerFeeAmount).to.eq(usdc(3).div(2));  // 3% of 50
+      expect(quote.totalFeeAmount).to.eq(usdc(3));           // 6% total
+      expect(quote.netAmount).to.eq(usdc(47));
+      expect(quote.managerFeeRecipient).to.eq(protocolFeeRecipient.address);
+    });
+
+    describe("when release amount is zero", async () => {
+      beforeEach(async () => {
+        subjectReleaseAmount = ZERO;
+      });
+
+      it("should return zero net amount", async () => {
+        const quote = await subject();
+        expect(quote.netAmount).to.eq(ZERO);
+        expect(quote.totalFeeAmount).to.eq(ZERO);
+      });
+    });
+  });
 });

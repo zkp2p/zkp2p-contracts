@@ -8,6 +8,7 @@ import { IOrchestrator } from "./interfaces/IOrchestrator.sol";
 contract ProtocolViewer is IProtocolViewer {
 
     /* ============ State Variables ============ */
+    uint256 internal constant PRECISE_UNIT = 1e18;
     IEscrow public immutable escrowContract;
     IOrchestrator public immutable orchestrator;
 
@@ -129,5 +130,40 @@ contract ProtocolViewer is IProtocolViewer {
         for (uint256 i = 0; i < intentHashes.length; ++i) {
             intentViews[i] = getIntent(intentHashes[i]);
         }
+    }
+
+    /**
+     * @notice Quotes the fee breakdown and net output amount for an intent given a release amount.
+     * @dev Manager fee is taken from the taker payout (same as protocol/referrer fees).
+     */
+    function quoteIntentNetAmount(
+        bytes32 _intentHash,
+        uint256 _releaseAmount
+    )
+        external
+        view
+        returns (
+            uint256 netAmount,
+            uint256 totalFeeAmount,
+            uint256 protocolFeeAmount,
+            uint256 referrerFeeAmount,
+            uint256 managerFeeAmount,
+            address managerFeeRecipient
+        )
+    {
+        IOrchestrator.Intent memory intent = orchestrator.getIntent(_intentHash);
+        uint256 managerFeeRate;
+        (managerFeeRecipient, managerFeeRate) = orchestrator.getIntentManagerFeeSnapshot(_intentHash);
+
+        protocolFeeAmount = (_releaseAmount * orchestrator.protocolFee()) / PRECISE_UNIT;
+        referrerFeeAmount = (_releaseAmount * intent.referrerFee) / PRECISE_UNIT;
+        managerFeeAmount = (_releaseAmount * managerFeeRate) / PRECISE_UNIT;
+        totalFeeAmount = protocolFeeAmount + referrerFeeAmount + managerFeeAmount;
+
+        if (totalFeeAmount >= _releaseAmount) {
+            return (0, totalFeeAmount, protocolFeeAmount, referrerFeeAmount, managerFeeAmount, managerFeeRecipient);
+        }
+
+        netAmount = _releaseAmount - totalFeeAmount;
     }
 }
