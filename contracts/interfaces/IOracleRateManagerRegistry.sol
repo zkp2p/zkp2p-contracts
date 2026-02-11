@@ -21,6 +21,11 @@ interface IOracleRateManagerRegistry is IBaseRateManagerRegistry {
         uint32 maxStaleness,
         bytes adapterConfig
     );
+    event RateManagerOracleConfigRemoved(
+        bytes32 indexed rateManagerId,
+        bytes32 indexed paymentMethod,
+        bytes32 indexed currency
+    );
 
     /* ============ External Functions ============ */
 
@@ -32,6 +37,12 @@ interface IOracleRateManagerRegistry is IBaseRateManagerRegistry {
         bytes calldata _rawAdapterConfig,
         uint16 _spreadBps,
         uint32 _maxStaleness
+    )
+        external;
+    function removeOracleConfig(
+        bytes32 _rateManagerId,
+        bytes32 _paymentMethod,
+        bytes32 _currency
     )
         external;
 

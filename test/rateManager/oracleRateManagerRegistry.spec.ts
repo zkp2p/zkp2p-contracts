@@ -493,4 +493,95 @@ describe("OracleRateManagerRegistry", () => {
       });
     });
   });
+
+  describe("#removeOracleConfig", () => {
+    let rateManagerId: string;
+    let feed: AggregatorV3Mock;
+
+    let subjectPaymentMethod: BytesLike;
+    let subjectCurrency: BytesLike;
+    let subjectCaller: any;
+
+    async function subject() {
+      return registry.connect(subjectCaller.wallet).removeOracleConfig(
+        rateManagerId,
+        subjectPaymentMethod as any,
+        subjectCurrency as any
+      );
+    }
+
+    beforeEach(async () => {
+      rateManagerId = await createRateManagerAndGetId({ manager: manager.address, feeRecipient: feeRecipient.address, fee: 0 });
+
+      feed = (await (
+        await ethers.getContractFactory("AggregatorV3Mock", owner.wallet)
+      ).deploy(8, 100_000_000)) as AggregatorV3Mock;
+
+      await registry.connect(manager.wallet).setOracleConfig(
+        rateManagerId,
+        paymentMethod as any,
+        Currency.USD,
+        chainlinkAdapter.address,
+        encodeChainlinkRawConfig(feed.address, false),
+        100,
+        3600
+      );
+
+      subjectCaller = manager;
+      subjectPaymentMethod = paymentMethod;
+      subjectCurrency = Currency.USD;
+    });
+
+    it("removes config, emits event, and disables pair", async () => {
+      await expect(subject())
+        .to.emit(registry, "RateManagerOracleConfigRemoved")
+        .withArgs(rateManagerId, subjectPaymentMethod, subjectCurrency);
+
+      const cfg = await registry.getOracleConfig(rateManagerId, subjectPaymentMethod as any, subjectCurrency as any);
+      expect(cfg.isConfigured).to.eq(false);
+      expect(cfg.adapter).to.eq(ADDRESS_ZERO);
+      expect(cfg.adapterConfig).to.eq("0x");
+      expect(cfg.spreadBps).to.eq(0);
+      expect(cfg.maxStaleness).to.eq(0);
+
+      const minRate = await registry.getMinRate(rateManagerId, subjectPaymentMethod as any, subjectCurrency as any);
+      expect(minRate).to.eq(0);
+    });
+
+    describe("reverts when caller is not manager", () => {
+      beforeEach(() => {
+        subjectCaller = other;
+      });
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("Caller is not manager");
+      });
+    });
+
+    describe("reverts when payment method is zero", () => {
+      beforeEach(() => {
+        subjectPaymentMethod = ethers.constants.HashZero;
+      });
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("Invalid payment method");
+      });
+    });
+
+    describe("reverts when currency is zero", () => {
+      beforeEach(() => {
+        subjectCurrency = ethers.constants.HashZero;
+      });
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("Invalid currency");
+      });
+    });
+
+    describe("reverts when config is not set", () => {
+      beforeEach(async () => {
+        subjectCurrency = Currency.EUR;
+      });
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("Config not set");
+      });
+    });
+  });
 });

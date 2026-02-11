@@ -95,6 +95,27 @@ contract OracleRateManagerRegistry is IOracleRateManagerRegistry, BaseRateManage
         );
     }
 
+    /**
+     * @notice Removes oracle config for a (rateManagerId, paymentMethod, currency) tuple.
+     * @dev Only callable by the rate manager. After removal, `getMinRate()` returns 0 for the tuple.
+     */
+    function removeOracleConfig(
+        bytes32 _rateManagerId,
+        bytes32 _paymentMethod,
+        bytes32 _currency
+    )
+        external
+        onlyManager(_rateManagerId)
+    {
+        require(_paymentMethod != bytes32(0), "Invalid payment method");
+        require(_currency != bytes32(0), "Invalid currency");
+        require(oracleConfigs[_rateManagerId][_paymentMethod][_currency].isConfigured, "Config not set");
+
+        delete oracleConfigs[_rateManagerId][_paymentMethod][_currency];
+
+        emit RateManagerOracleConfigRemoved(_rateManagerId, _paymentMethod, _currency);
+    }
+
     /* ============ External View Functions ============ */
 
     /**
