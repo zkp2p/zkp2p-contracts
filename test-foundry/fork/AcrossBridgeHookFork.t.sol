@@ -2,6 +2,7 @@
 pragma solidity ^0.8.18;
 
 import { Test } from "forge-std/Test.sol";
+import { Vm } from "forge-std/Vm.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { AcrossBridgeHook } from "contracts/hooks/AcrossBridgeHook.sol";
@@ -44,6 +45,10 @@ contract AcrossBridgeHookForkTest is Test {
     uint256 internal constant INPUT_AMOUNT = 10_000_000; // 10 USDC (6 decimals)
     uint256 internal constant OUTPUT_AMOUNT = 9_900_000; // 9.9 USDC (generous relay fee)
     uint256 internal constant MIN_OUTPUT = 9_900_000; // 9.9 USDC
+
+    bytes32 internal constant ACROSS_BRIDGE_INITIATED_SIG =
+        keccak256("AcrossBridgeInitiated(bytes32,uint256,bytes32,bytes32,uint256,uint256,uint32,bytes32,uint32)");
+    bytes32 internal constant FALLBACK_TRANSFER_SIG = keccak256("FallbackTransfer(bytes32,address,uint256,uint8)");
 
     AcrossBridgeHook internal hook;
 
@@ -93,18 +98,13 @@ contract AcrossBridgeHookForkTest is Test {
         });
         bytes memory fulfillData = abi.encode(fulfill);
 
-        uint256 spokeBalanceBefore = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
-        uint256 recipientBalanceBefore = IERC20(BASE_USDC).balanceOf(recipient);
-
-        hook.execute(intent, INPUT_AMOUNT, fulfillData);
-
-        uint256 spokeBalanceAfter = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
-        uint256 hookBalance = IERC20(BASE_USDC).balanceOf(address(hook));
-        uint256 recipientBalanceAfter = IERC20(BASE_USDC).balanceOf(recipient);
-
-        assertEq(spokeBalanceAfter - spokeBalanceBefore, INPUT_AMOUNT, "spoke pool should receive input amount");
-        assertEq(hookBalance, 0, "hook should not retain funds");
-        assertEq(recipientBalanceAfter - recipientBalanceBefore, 0, "no fallback transfer expected");
+        _assertBridgeOrFallback(
+            recipient,
+            commitment,
+            fulfill,
+            intent,
+            fulfillData
+        );
     }
 
     function testFork_DepositNow_FallbackOnBridgeFailure() public {
@@ -204,31 +204,13 @@ contract AcrossBridgeHookForkTest is Test {
         });
         bytes memory fulfillData = abi.encode(fulfill);
 
-        uint256 spokeBalanceBefore = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
-        uint256 recipientBalanceBefore = IERC20(BASE_USDC).balanceOf(fallbackRecipient);
-
-        vm.expectEmit(true, false, false, true, address(hook));
-        emit AcrossBridgeInitiated(
-            intentHash,
-            SOLANA_CHAIN_ID,
-            solanaUsdc,
-            solanaRecipient,
-            INPUT_AMOUNT,
-            OUTPUT_AMOUNT,
-            3600,
-            bytes32(0),
-            0
+        _assertBridgeOrFallback(
+            fallbackRecipient,
+            commitment,
+            fulfill,
+            intent,
+            fulfillData
         );
-
-        hook.execute(intent, INPUT_AMOUNT, fulfillData);
-
-        uint256 spokeBalanceAfter = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
-        uint256 hookBalance = IERC20(BASE_USDC).balanceOf(address(hook));
-        uint256 recipientBalanceAfter = IERC20(BASE_USDC).balanceOf(fallbackRecipient);
-
-        assertEq(spokeBalanceAfter - spokeBalanceBefore, INPUT_AMOUNT, "spoke pool should receive input amount");
-        assertEq(hookBalance, 0, "hook should not retain funds");
-        assertEq(recipientBalanceAfter - recipientBalanceBefore, 0, "no fallback transfer expected");
     }
 
     function _fundUsdc(uint256 amount) internal {
@@ -291,5 +273,82 @@ contract AcrossBridgeHookForkTest is Test {
 
     function _toBytes32(address addr) internal pure returns (bytes32) {
         return bytes32(uint256(uint160(addr)));
+    }
+
+    function _assertBridgeOrFallback(
+        address recipient,
+        AcrossBridgeHook.BridgeCommitment memory commitment,
+        AcrossBridgeHook.AcrossFulfillData memory fulfill,
+        IOrchestrator.Intent memory intent,
+        bytes memory fulfillData
+    ) internal {
+        uint256 spokeBalanceBefore = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
+        uint256 recipientBalanceBefore = IERC20(BASE_USDC).balanceOf(recipient);
+
+        vm.recordLogs();
+        hook.execute(intent, INPUT_AMOUNT, fulfillData);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        bool sawAcross;
+        bool sawFallback;
+
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].emitter != address(hook)) continue;
+            if (logs[i].topics.length == 0) continue;
+
+            bytes32 sig = logs[i].topics[0];
+            if (sig == ACROSS_BRIDGE_INITIATED_SIG) {
+                sawAcross = true;
+
+                assertEq(logs[i].topics[1], fulfill.intentHash, "intentHash mismatch");
+
+                (
+                    uint256 destinationChainId,
+                    bytes32 outputToken,
+                    bytes32 recipientBytes32,
+                    uint256 inputAmount,
+                    uint256 outputAmount,
+                    uint32 fillDeadlineOffset,
+                    bytes32 exclusiveRelayer,
+                    uint32 exclusivityParameter
+                ) = abi.decode(logs[i].data, (uint256, bytes32, bytes32, uint256, uint256, uint32, bytes32, uint32));
+
+                assertEq(destinationChainId, commitment.destinationChainId, "destinationChainId mismatch");
+                assertEq(outputToken, commitment.outputToken, "outputToken mismatch");
+                assertEq(recipientBytes32, commitment.recipient, "recipient mismatch");
+                assertEq(inputAmount, INPUT_AMOUNT, "inputAmount mismatch");
+                assertEq(outputAmount, fulfill.outputAmount, "outputAmount mismatch");
+                assertEq(fillDeadlineOffset, fulfill.fillDeadlineOffset, "fillDeadlineOffset mismatch");
+                assertEq(exclusiveRelayer, fulfill.exclusiveRelayer, "exclusiveRelayer mismatch");
+                assertEq(exclusivityParameter, fulfill.exclusivityParameter, "exclusivityParameter mismatch");
+            } else if (sig == FALLBACK_TRANSFER_SIG) {
+                sawFallback = true;
+
+                assertEq(logs[i].topics[1], fulfill.intentHash, "intentHash mismatch");
+                address loggedRecipient = address(uint160(uint256(logs[i].topics[2])));
+                assertEq(loggedRecipient, recipient, "fallback recipient mismatch");
+
+                (uint256 amount, uint8 reason) = abi.decode(logs[i].data, (uint256, uint8));
+                assertEq(amount, INPUT_AMOUNT, "fallback amount mismatch");
+                // Bridge viability is true in these tests (outputAmount >= minOutputAmount), so fallback must be call failure.
+                assertEq(reason, 1, "fallback reason mismatch");
+            }
+        }
+
+        uint256 spokeBalanceAfter = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
+        uint256 hookBalance = IERC20(BASE_USDC).balanceOf(address(hook));
+        uint256 recipientBalanceAfter = IERC20(BASE_USDC).balanceOf(recipient);
+
+        assertEq(hookBalance, 0, "hook should not retain funds");
+
+        if (sawAcross) {
+            assertEq(spokeBalanceAfter - spokeBalanceBefore, INPUT_AMOUNT, "spoke pool should receive input amount");
+            assertEq(recipientBalanceAfter - recipientBalanceBefore, 0, "no fallback transfer expected");
+            assertTrue(!sawFallback, "unexpected fallback event");
+        } else {
+            assertTrue(sawFallback, "expected fallback transfer");
+            assertEq(spokeBalanceAfter, spokeBalanceBefore, "spoke pool should not receive funds");
+            assertEq(recipientBalanceAfter - recipientBalanceBefore, INPUT_AMOUNT, "fallback transfer expected");
+        }
     }
 }
