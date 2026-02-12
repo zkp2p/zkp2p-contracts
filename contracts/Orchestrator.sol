@@ -295,6 +295,36 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         }
     }
 
+    /* ============ Anyone callable (External Functions) ============ */
+
+    /**
+     * @notice ANYONE: Cleans up orphaned intents that were pruned from the Escrow but not from the Orchestrator.
+     * An intent is considered orphaned if it exists on the Orchestrator but no longer exists on the Escrow.
+     * This can happen when Escrow._tryOrchestratorPruneIntents runs out of gas and the revert is silently caught.
+     *
+     * @param _intentHashes    Array of intent hashes to check and clean up
+     */
+    function cleanupOrphanedIntents(bytes32[] calldata _intentHashes) external {
+        for (uint256 i = 0; i < _intentHashes.length; i++) {
+            bytes32 intentHash = _intentHashes[i];
+            Intent memory intent = intents[intentHash];
+
+            // Skip if intent doesn't exist on orchestrator
+            if (intent.timestamp == 0) continue;
+
+            // Check if intent still exists on the escrow
+            IEscrow.Intent memory escrowIntent = IEscrow(intent.escrow).getDepositIntent(
+                intent.depositId,
+                intentHash
+            );
+
+            // If intent doesn't exist on escrow, it's orphaned — prune it
+            if (escrowIntent.intentHash == bytes32(0)) {
+                _pruneIntent(intentHash);
+            }
+        }
+    }
+
     /* ============ Governance Functions ============ */
 
     /**
