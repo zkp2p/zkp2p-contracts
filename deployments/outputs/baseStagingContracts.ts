@@ -3,7 +3,7 @@ export default {
   "chainId": "8453",
   "contracts": {
     "AcrossBridgeHook": {
-      "address": "0x5FeD9B38F0eD2E98fd65BcE4364A664d62C27b18",
+      "address": "0x746E69257c652c9462e3D81B0afb559C39f101cc",
       "abi": [
         {
           "inputs": [
@@ -35,6 +35,17 @@ export default {
             }
           ],
           "name": "InvalidDestinationChainId",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "dataLength",
+              "type": "uint256"
+            }
+          ],
+          "name": "InvalidFulfillHookDataLength",
           "type": "error"
         },
         {
@@ -73,6 +84,17 @@ export default {
             }
           ],
           "name": "NativeTransferFailed",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "orchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "SameOrchestrator",
           "type": "error"
         },
         {
@@ -189,6 +211,25 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
+              "name": "previousOrchestrator",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOrchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "OrchestratorUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
               "name": "previousOwner",
               "type": "address"
             },
@@ -251,88 +292,90 @@ export default {
             {
               "components": [
                 {
-                  "internalType": "address",
-                  "name": "owner",
-                  "type": "address"
-                },
-                {
-                  "internalType": "address",
-                  "name": "to",
-                  "type": "address"
-                },
-                {
-                  "internalType": "address",
-                  "name": "escrow",
-                  "type": "address"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "depositId",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "amount",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "timestamp",
-                  "type": "uint256"
-                },
-                {
                   "internalType": "bytes32",
-                  "name": "paymentMethod",
-                  "type": "bytes32"
-                },
-                {
-                  "internalType": "bytes32",
-                  "name": "fiatCurrency",
-                  "type": "bytes32"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "conversionRate",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "bytes32",
-                  "name": "payeeId",
+                  "name": "intentHash",
                   "type": "bytes32"
                 },
                 {
                   "internalType": "address",
-                  "name": "referrer",
+                  "name": "token",
                   "type": "address"
                 },
                 {
                   "internalType": "uint256",
-                  "name": "referrerFee",
+                  "name": "executableAmount",
                   "type": "uint256"
                 },
                 {
-                  "internalType": "contract IPostIntentHook",
-                  "name": "postIntentHook",
-                  "type": "address"
-                },
-                {
-                  "internalType": "bytes",
-                  "name": "data",
-                  "type": "bytes"
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "owner",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "to",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "escrow",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "depositId",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "amount",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "timestamp",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "paymentMethod",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "fiatCurrency",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "conversionRate",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "payeeId",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "bytes",
+                      "name": "signalHookData",
+                      "type": "bytes"
+                    }
+                  ],
+                  "internalType": "struct IPostIntentHook.HookIntentContext",
+                  "name": "intent",
+                  "type": "tuple"
                 }
               ],
-              "internalType": "struct IOrchestrator.Intent",
-              "name": "_intent",
+              "internalType": "struct IPostIntentHook.HookExecutionContext",
+              "name": "_ctx",
               "type": "tuple"
             },
             {
-              "internalType": "uint256",
-              "name": "_amountNetFees",
-              "type": "uint256"
-            },
-            {
               "internalType": "bytes",
-              "name": "_fulfillIntentData",
+              "name": "_fulfillHookData",
               "type": "bytes"
             }
           ],
@@ -429,6 +472,19 @@ export default {
           "type": "function"
         },
         {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_newOrchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "setOrchestrator",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
           "inputs": [],
           "name": "spokePool",
           "outputs": [
@@ -514,7 +570,7 @@ export default {
       ]
     },
     "DepositRateManagerController": {
-      "address": "0x2CF2FA7F21be0F920E1D8f4bb9C08E2c07F0E5d7",
+      "address": "0x51f01aCc92bE39473be482966273a23ffa66F74e",
       "abi": [
         {
           "inputs": [
@@ -3622,7 +3678,7 @@ export default {
       ]
     },
     "EscrowRegistry": {
-      "address": "0xc545f336eC77E69bf115729acCbf2e557A00ac91",
+      "address": "0x13AbbD532Da3d45F2633f37b933CA42231b2686b",
       "abi": [
         {
           "inputs": [],
@@ -4542,7 +4598,7 @@ export default {
       ]
     },
     "OracleRateManagerRegistry": {
-      "address": "0x150616c0cB9617e4107E79b873Edb3faCC3E49E9",
+      "address": "0x7D9Ce1F3bbF9579c1e2f07aB78f5122B00E25C9b",
       "abi": [
         {
           "anonymous": false,
@@ -4659,6 +4715,31 @@ export default {
             }
           ],
           "name": "RateManagerFeeUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "currency",
+              "type": "bytes32"
+            }
+          ],
+          "name": "RateManagerOracleConfigRemoved",
           "type": "event"
         },
         {
@@ -4970,6 +5051,29 @@ export default {
               "type": "bytes32"
             },
             {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currency",
+              "type": "bytes32"
+            }
+          ],
+          "name": "removeOracleConfig",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
               "internalType": "uint256",
               "name": "_newFee",
               "type": "uint256"
@@ -5064,7 +5168,7 @@ export default {
       ]
     },
     "Orchestrator": {
-      "address": "0xd067Ade072a0F034E277BB26CdCE9F360A2a4127",
+      "address": "0x04826F664A8281ADA0ad542EA4c682BC830C6f33",
       "abi": [
         {
           "inputs": [
@@ -5086,11 +5190,6 @@ export default {
             {
               "internalType": "address",
               "name": "_paymentVerifierRegistry",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "_postIntentHookRegistry",
               "type": "address"
             },
             {
@@ -5257,6 +5356,17 @@ export default {
           "type": "error"
         },
         {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "hook",
+              "type": "address"
+            }
+          ],
+          "name": "InvalidPostIntentHook",
+          "type": "error"
+        },
+        {
           "inputs": [],
           "name": "InvalidReferrerFeeConfiguration",
           "type": "error"
@@ -5318,17 +5428,6 @@ export default {
         {
           "inputs": [],
           "name": "PaymentVerificationFailed",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "hook",
-              "type": "address"
-            }
-          ],
-          "name": "PostIntentHookNotWhitelisted",
           "type": "error"
         },
         {
@@ -5655,19 +5754,6 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
-              "name": "postIntentHookRegistry",
-              "type": "address"
-            }
-          ],
-          "name": "PostIntentHookRegistryUpdated",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
               "name": "protocolFeeRecipient",
               "type": "address"
             }
@@ -5751,6 +5837,19 @@ export default {
             }
           ],
           "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32[]",
+              "name": "_intentHashes",
+              "type": "bytes32[]"
+            }
+          ],
+          "name": "cleanupOrphanedIntents",
+          "outputs": [],
+          "stateMutability": "nonpayable",
           "type": "function"
         },
         {
@@ -6004,19 +6103,6 @@ export default {
         },
         {
           "inputs": [],
-          "name": "postIntentHookRegistry",
-          "outputs": [
-            {
-              "internalType": "contract IPostIntentHookRegistry",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [],
           "name": "protocolFee",
           "outputs": [
             {
@@ -6122,19 +6208,6 @@ export default {
             }
           ],
           "name": "setEscrowRegistry",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_postIntentHookRegistry",
-              "type": "address"
-            }
-          ],
-          "name": "setPostIntentHookRegistry",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
@@ -6615,13 +6688,62 @@ export default {
         }
       ]
     },
-    "PostIntentHookRegistry": {
-      "address": "0x37f1bf88B228785D0FF10D8Ed77e3A1148cAf7C6",
+    "ProtocolViewer": {
+      "address": "0xb1Bc56791b888C35F3F06F1611E784a0c5D40893",
       "abi": [
         {
-          "inputs": [],
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "_orchestrator",
+              "type": "address"
+            }
+          ],
           "stateMutability": "nonpayable",
           "type": "constructor"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousEscrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newEscrow",
+              "type": "address"
+            }
+          ],
+          "name": "EscrowContractUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOrchestrator",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOrchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "OrchestratorUpdated",
+          "type": "event"
         },
         {
           "anonymous": false,
@@ -6641,182 +6763,6 @@ export default {
           ],
           "name": "OwnershipTransferred",
           "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "hook",
-              "type": "address"
-            }
-          ],
-          "name": "PostIntentHookAdded",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "hook",
-              "type": "address"
-            }
-          ],
-          "name": "PostIntentHookRemoved",
-          "type": "event"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_hook",
-              "type": "address"
-            }
-          ],
-          "name": "addPostIntentHook",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "getWhitelistedHooks",
-          "outputs": [
-            {
-              "internalType": "address[]",
-              "name": "",
-              "type": "address[]"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
-            }
-          ],
-          "name": "hooks",
-          "outputs": [
-            {
-              "internalType": "address",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_hook",
-              "type": "address"
-            }
-          ],
-          "name": "isWhitelistedHook",
-          "outputs": [
-            {
-              "internalType": "bool",
-              "name": "",
-              "type": "bool"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "owner",
-          "outputs": [
-            {
-              "internalType": "address",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_hook",
-              "type": "address"
-            }
-          ],
-          "name": "removePostIntentHook",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "renounceOwnership",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "newOwner",
-              "type": "address"
-            }
-          ],
-          "name": "transferOwnership",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "name": "whitelistedHooks",
-          "outputs": [
-            {
-              "internalType": "bool",
-              "name": "",
-              "type": "bool"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        }
-      ]
-    },
-    "ProtocolViewer": {
-      "address": "0x9eCa5Ed44F514Bc9ddfd2b0B7408b097Fa180df2",
-      "abi": [
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "_orchestrator",
-              "type": "address"
-            }
-          ],
-          "stateMutability": "nonpayable",
-          "type": "constructor"
         },
         {
           "inputs": [],
@@ -8016,6 +7962,65 @@ export default {
           ],
           "stateMutability": "view",
           "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "owner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "renounceOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            }
+          ],
+          "name": "setEscrowContract",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_orchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "setOrchestrator",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "transferOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
         }
       ]
     },
@@ -8340,7 +8345,7 @@ export default {
       ]
     },
     "UnifiedPaymentVerifier": {
-      "address": "0x12e87AAf09c30A482889C064361235a6a1E28E36",
+      "address": "0x370A195730443e21c5043071517d02e328480F85",
       "abi": [
         {
           "inputs": [
@@ -8380,6 +8385,25 @@ export default {
             }
           ],
           "name": "AttestationVerifierUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "oldOrchestrator",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOrchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "OrchestratorUpdated",
           "type": "event"
         },
         {
@@ -8634,6 +8658,19 @@ export default {
             }
           ],
           "name": "setAttestationVerifier",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_newOrchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "setOrchestrator",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
