@@ -664,4 +664,54 @@ describe("ProtocolViewer", () => {
       });
     });
   });
+
+  describe("governance-controlled pointer rotation", async () => {
+    let replacementEscrow: Escrow;
+    let replacementOrchestrator: Orchestrator;
+
+    beforeEach(async () => {
+      replacementEscrow = await deployer.deployEscrow(
+        owner.address,
+        chainId,
+        paymentVerifierRegistry.address,
+        ADDRESS_ZERO,
+        ZERO,
+        BigNumber.from(10),
+        ONE_DAY_IN_SECONDS
+      );
+
+      replacementOrchestrator = await deployer.deployOrchestrator(
+        owner.address,
+        chainId,
+        escrowRegistry.address,
+        paymentVerifierRegistry.address,
+        postIntentHookRegistry.address,
+        relayerRegistry.address,
+        ZERO,
+        feeRecipient.address
+      );
+    });
+
+    it("allows the owner to update both escrow and orchestrator addresses", async () => {
+      await expect(protocolViewer.connect(owner.wallet).setEscrowContract(replacementEscrow.address))
+        .to.emit(protocolViewer, "EscrowContractUpdated")
+        .withArgs(escrow.address, replacementEscrow.address);
+
+      expect(await protocolViewer.escrowContract()).to.eq(replacementEscrow.address);
+
+      await expect(protocolViewer.connect(owner.wallet).setOrchestrator(replacementOrchestrator.address))
+        .to.emit(protocolViewer, "OrchestratorUpdated")
+        .withArgs(orchestrator.address, replacementOrchestrator.address);
+
+      expect(await protocolViewer.orchestrator()).to.eq(replacementOrchestrator.address);
+    });
+
+    it("prevents non-owner accounts from modifying the pointers", async () => {
+      await expect(protocolViewer.connect(offRamper.wallet).setEscrowContract(replacementEscrow.address))
+        .to.be.revertedWith("Ownable: caller is not the owner");
+
+      await expect(protocolViewer.connect(offRamper.wallet).setOrchestrator(replacementOrchestrator.address))
+        .to.be.revertedWith("Ownable: caller is not the owner");
+    });
+  });
 });

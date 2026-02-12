@@ -25,16 +25,25 @@ abstract contract BaseUnifiedPaymentVerifier is Ownable {
     /* ============ Constants ============ */
 
     uint256 internal constant PRECISE_UNIT = 1e18;
+    uint256 public constant ORCHESTRATOR_UPDATE_DELAY = 2 days;
 
     /* ============ Events ============ */
     
     event PaymentMethodAdded(bytes32 indexed paymentMethod);
     event PaymentMethodRemoved(bytes32 indexed paymentMethod);
     event AttestationVerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
+    event OrchestratorUpdateScheduled(
+        address indexed currentOrchestrator,
+        address indexed pendingOrchestrator,
+        uint256 executeAfter
+    );
+    event OrchestratorUpdated(address indexed oldOrchestrator, address indexed newOrchestrator);
 
     /* ============ State Variables ============ */
     
-    IOrchestrator public immutable orchestrator;
+    IOrchestrator public orchestrator;
+    address public pendingOrchestrator;
+    uint256 public orchestratorUpdateTimestamp;
     INullifierRegistry public immutable nullifierRegistry;
     IAttestationVerifier public attestationVerifier;
 
@@ -44,7 +53,7 @@ abstract contract BaseUnifiedPaymentVerifier is Ownable {
     /* ============ Modifiers ============ */
 
     /**
-     * Modifier to ensure only escrow can call
+     * Modifier to ensure only orchestrator can call.
      */
     modifier onlyOrchestrator() {
         require(msg.sender == address(orchestrator), "Only orchestrator can call");
@@ -109,6 +118,39 @@ abstract contract BaseUnifiedPaymentVerifier is Ownable {
         
         attestationVerifier = IAttestationVerifier(_newVerifier);
         emit AttestationVerifierUpdated(oldVerifier, _newVerifier);
+    }
+
+    /**
+     * @notice Schedules an orchestrator update.
+     * @param _newOrchestrator The orchestrator address to activate after the delay.
+     */
+    function scheduleOrchestratorUpdate(address _newOrchestrator) external onlyOwner {
+        address currentOrchestrator = address(orchestrator);
+        require(_newOrchestrator != address(0), "UPV: Invalid orchestrator");
+        require(_newOrchestrator != currentOrchestrator, "UPV: Same orchestrator");
+        require(_newOrchestrator != pendingOrchestrator, "UPV: Orchestrator already scheduled");
+
+        uint256 executeAfter = block.timestamp + ORCHESTRATOR_UPDATE_DELAY;
+        pendingOrchestrator = _newOrchestrator;
+        orchestratorUpdateTimestamp = executeAfter;
+
+        emit OrchestratorUpdateScheduled(currentOrchestrator, _newOrchestrator, executeAfter);
+    }
+
+    /**
+     * @notice Finalizes a previously scheduled orchestrator update after delay has elapsed.
+     */
+    function finalizeOrchestratorUpdate() external onlyOwner {
+        address newOrchestrator = pendingOrchestrator;
+        require(newOrchestrator != address(0), "UPV: No orchestrator update scheduled");
+        require(block.timestamp >= orchestratorUpdateTimestamp, "UPV: Orchestrator update delay not elapsed");
+
+        address oldOrchestrator = address(orchestrator);
+        orchestrator = IOrchestrator(newOrchestrator);
+        pendingOrchestrator = address(0);
+        orchestratorUpdateTimestamp = 0;
+
+        emit OrchestratorUpdated(oldOrchestrator, newOrchestrator);
     }
                                                                                                                
     

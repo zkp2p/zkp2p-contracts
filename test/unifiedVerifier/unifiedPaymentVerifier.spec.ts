@@ -596,6 +596,68 @@ describe("UnifiedPaymentVerifier", () => {
       });
     });
 
+    describe("when orchestrator is rotated", () => {
+      let replacementOrchestrator: Orchestrator;
+
+      const rotateOrchestrator = async () => {
+        replacementOrchestrator = await deployer.deployOrchestrator(
+          owner.address,
+          BigNumber.from(chainId),
+          escrowRegistry.address,
+          paymentVerifierRegistry.address,
+          postIntentHookRegistry.address,
+          relayerRegistry.address,
+          ZERO,
+          feeRecipient.address,
+        );
+
+        await verifier.connect(owner.wallet).scheduleOrchestratorUpdate(replacementOrchestrator.address);
+        const delay = await verifier.ORCHESTRATOR_UPDATE_DELAY();
+
+        await ethers.provider.send("evm_increaseTime", [delay.toNumber()]);
+        await ethers.provider.send("evm_mine", []);
+        await verifier.connect(owner.wallet).finalizeOrchestratorUpdate();
+      };
+
+      it("rejects calls routed by the old orchestrator", async () => {
+        await rotateOrchestrator();
+
+        const verificationData = await buildVerificationDataForIntent(intentHash);
+        await expect(
+          orchestrator.connect(attacker.wallet).fulfillIntent({
+            paymentProof: builtProof.paymentProof,
+            intentHash,
+            verificationData,
+            postIntentHookData: ZERO_BYTES,
+          }),
+        ).to.be.revertedWith("Only orchestrator can call");
+      });
+
+      it("accepts the new orchestrator caller and proceeds to intent validation", async () => {
+        await rotateOrchestrator();
+
+        const verificationData = await buildVerificationDataForIntent(intentHash);
+        await ethers.provider.send("hardhat_impersonateAccount", [replacementOrchestrator.address]);
+        await ethers.provider.send("hardhat_setBalance", [
+          replacementOrchestrator.address,
+          "0x1000000000000000000",
+        ]);
+
+        try {
+          const replacementSigner = await ethers.getSigner(replacementOrchestrator.address);
+          await expect(
+            verifier.connect(replacementSigner).verifyPayment({
+              intentHash,
+              paymentProof: builtProof.paymentProof,
+              data: verificationData,
+            }),
+          ).to.be.revertedWith("UPV: Snapshot payee mismatch");
+        } finally {
+          await ethers.provider.send("hardhat_stopImpersonatingAccount", [replacementOrchestrator.address]);
+        }
+      });
+    });
+
     describe("when attestation data hash does not match provided data", () => {
       beforeEach(async () => {
         const tamperedDetails = {

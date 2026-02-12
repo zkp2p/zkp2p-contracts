@@ -213,6 +213,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Nullifier registry ownership transferred to", multiSig);
   await setNewOwner(hre, escrowRegistryContract, multiSig);
   console.log("Escrow registry ownership transferred to", multiSig);
+  const protocolViewerContract = await ethers.getContractAt("ProtocolViewer", protocolViewer.address);
+  await setNewOwner(hre, protocolViewerContract, multiSig);
+  console.log("Protocol viewer ownership transferred to", multiSig);
 
   console.log("Deploy finished...");
 

@@ -253,6 +253,11 @@ describe("V2.1 System Deployment", () => {
   });
 
   describe("ProtocolViewer", async () => {
+    it("should have the correct owner", async () => {
+      const actualOwner = await protocolViewer.owner();
+      expect(actualOwner).to.eq(multiSig);
+    });
+
     it("should have the correct escrow and orchestrator set", async () => {
       const actualEscrow = await protocolViewer.escrowContract();
       const actualOrchestrator = await protocolViewer.orchestrator();

@@ -8,12 +8,44 @@ import {
   MULTI_SIG,
 } from "../deployments/parameters";
 import {
+  callContractAsOwner,
   addWritePermission,
   getDeployedContractAddress,
   setNewOwner,
   waitForDeploymentDelay,
 } from "../deployments/helpers";
 import { WITNESS_ADDRESS } from "../deployments/parameters";
+
+const normalizeAddress = (value: string): string => value.toLowerCase();
+
+const syncUnifiedVerifierOrchestrator = async (
+  hre: HardhatRuntimeEnvironment,
+  unifiedPaymentVerifierContract: any,
+  expectedOrchestrator: string
+): Promise<void> => {
+  const currentOrchestrator = await unifiedPaymentVerifierContract.orchestrator();
+  if (normalizeAddress(currentOrchestrator) === normalizeAddress(expectedOrchestrator)) {
+    console.log("UnifiedPaymentVerifier orchestrator already in sync");
+    return;
+  }
+
+  const pendingOrchestrator = await unifiedPaymentVerifierContract.pendingOrchestrator();
+  if (normalizeAddress(pendingOrchestrator) !== normalizeAddress(expectedOrchestrator)) {
+    console.log("Scheduling UnifiedPaymentVerifier orchestrator update...");
+    await callContractAsOwner(hre, unifiedPaymentVerifierContract, "scheduleOrchestratorUpdate", [expectedOrchestrator]);
+    return;
+  }
+
+  const executeAfter = await unifiedPaymentVerifierContract.orchestratorUpdateTimestamp();
+  const latestBlock = await hre.ethers.provider.getBlock("latest");
+  if (latestBlock.timestamp < executeAfter.toNumber()) {
+    console.log(`UnifiedPaymentVerifier orchestrator update is pending until ${executeAfter.toString()}`);
+    return;
+  }
+
+  console.log("Finalizing UnifiedPaymentVerifier orchestrator update...");
+  await callContractAsOwner(hre, unifiedPaymentVerifierContract, "finalizeOrchestratorUpdate", []);
+};
 
 // Deployment Scripts
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
@@ -29,9 +61,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   // Deploy SimpleAttestationVerifier
   const simpleAttestationVerifier = await deploy("SimpleAttestationVerifier", {
     from: deployer,
-    args: [
-      WITNESS_ADDRESS[network]
-    ],
+    args: [WITNESS_ADDRESS[network]],
+    skipIfAlreadyDeployed: true,
   });
   console.log("SimpleAttestationVerifier deployed at", simpleAttestationVerifier.address);
   await waitForDeploymentDelay(hre);
@@ -44,6 +75,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       nullifierRegistryAddress,
       simpleAttestationVerifier.address,
     ],
+    skipIfAlreadyDeployed: true,
   });
   console.log("UnifiedPaymentVerifier deployed at", unifiedPaymentVerifier.address);
   await waitForDeploymentDelay(hre);
@@ -52,6 +84,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const nullifierRegistryContract = await ethers.getContractAt("NullifierRegistry", nullifierRegistryAddress);
   const simpleAttestationVerifierContract = await ethers.getContractAt("SimpleAttestationVerifier", simpleAttestationVerifier.address);
   const unifiedPaymentVerifierContract = await ethers.getContractAt("UnifiedPaymentVerifier", unifiedPaymentVerifier.address);
+
+  if (!unifiedPaymentVerifier.newlyDeployed) {
+    await syncUnifiedVerifierOrchestrator(hre, unifiedPaymentVerifierContract, orchestratorAddress);
+  }
 
   await addWritePermission(hre, nullifierRegistryContract, unifiedPaymentVerifier.address);
   console.log("NullifierRegistry permissions added for UnifiedPaymentVerifier...");
@@ -67,16 +103,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await waitForDeploymentDelay(hre);
 };
 
-func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
-  const network = hre.network.name;
-  if (network != "localhost") {
-    try {
-      getDeployedContractAddress(hre.network.name, "UnifiedPaymentVerifier");
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
+func.skip = async (_hre: HardhatRuntimeEnvironment): Promise<boolean> => {
+  // Keep this script runnable on all networks so mutable orchestrator pointers can be synced
+  // without requiring contract redeploys.
   return false;
 };
 
