@@ -14,6 +14,7 @@ const expect = getWaffleExpect();
 describe("AcrossBridgeHook", () => {
   let owner: Account;
   let orchestrator: Account;
+  let nextOrchestrator: Account;
   let recipient: Account;
   let attacker: Account;
 
@@ -28,7 +29,7 @@ describe("AcrossBridgeHook", () => {
   };
 
   beforeEach(async () => {
-    [owner, orchestrator, recipient, attacker] = await getAccounts();
+    [owner, orchestrator, nextOrchestrator, recipient, attacker] = await getAccounts();
 
     deployer = new DeployHelper(owner.wallet);
     usdcToken = await deployer.deployUSDCMock(usdc(1_000_000), "USDC", "USDC");
@@ -283,7 +284,7 @@ describe("AcrossBridgeHook", () => {
   });
 
   describe("#constructor", () => {
-    it("should set immutable variables correctly", async () => {
+    it("should set initial variables correctly", async () => {
       expect(await hook.inputToken()).to.eq(usdcToken.address);
       expect(await hook.orchestrator()).to.eq(orchestrator.address);
       expect(await hook.spokePool()).to.eq(spokePool.address);
@@ -312,6 +313,79 @@ describe("AcrossBridgeHook", () => {
 
     it("should set owner to deployer", async () => {
       expect(await hook.owner()).to.eq(owner.address);
+    });
+  });
+
+  describe("#setOrchestrator", () => {
+    let intent: any;
+    let amountNetFees: BigNumber;
+    let encodedFulfillData: string;
+
+    beforeEach(async () => {
+      const commitmentData = encodeCommitment({
+        destinationChainId: BigNumber.from(10),
+        outputToken: toBytes32(recipient.address),
+        recipient: toBytes32(recipient.address),
+        minOutputAmount: BigNumber.from(500_000)
+      });
+
+      intent = await buildIntent(commitmentData);
+      amountNetFees = usdc(50);
+
+      const { encoded } = buildFulfillData({ outputAmount: BigNumber.from(700_000) });
+      encodedFulfillData = encoded;
+    });
+
+    it("should update orchestrator immediately", async () => {
+      await expect(
+        hook.connect(owner.wallet).setOrchestrator(nextOrchestrator.address)
+      ).to.emit(hook, "OrchestratorUpdated")
+        .withArgs(orchestrator.address, nextOrchestrator.address);
+
+      expect(await hook.orchestrator()).to.eq(nextOrchestrator.address);
+    });
+
+    it("should revert for zero address", async () => {
+      await expect(
+        hook.connect(owner.wallet).setOrchestrator(ADDRESS_ZERO)
+      ).to.be.revertedWithCustomError(hook, "ZeroAddress");
+    });
+
+    it("should revert when setting the same orchestrator", async () => {
+      await expect(
+        hook.connect(owner.wallet).setOrchestrator(orchestrator.address)
+      ).to.be.revertedWithCustomError(hook, "SameOrchestrator");
+    });
+
+    it("should revert when called by non-owner", async () => {
+      await expect(
+        hook.connect(attacker.wallet).setOrchestrator(nextOrchestrator.address)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
+    it("should gate execute caller before and after orchestrator rotation", async () => {
+      await usdcToken.connect(orchestrator.wallet).approve(hook.address, amountNetFees);
+
+      await expect(
+        hook.connect(nextOrchestrator.wallet).execute(intent, amountNetFees, encodedFulfillData)
+      ).to.be.revertedWithCustomError(hook, "UnauthorizedCaller");
+
+      await expect(
+        hook.connect(orchestrator.wallet).execute(intent, amountNetFees, encodedFulfillData)
+      ).to.emit(hook, "AcrossBridgeInitiated");
+
+      await hook.connect(owner.wallet).setOrchestrator(nextOrchestrator.address);
+
+      await usdcToken.transfer(nextOrchestrator.address, amountNetFees);
+      await usdcToken.connect(nextOrchestrator.wallet).approve(hook.address, amountNetFees);
+
+      await expect(
+        hook.connect(orchestrator.wallet).execute(intent, amountNetFees, encodedFulfillData)
+      ).to.be.revertedWithCustomError(hook, "UnauthorizedCaller");
+
+      await expect(
+        hook.connect(nextOrchestrator.wallet).execute(intent, amountNetFees, encodedFulfillData)
+      ).to.emit(hook, "AcrossBridgeInitiated");
     });
   });
 

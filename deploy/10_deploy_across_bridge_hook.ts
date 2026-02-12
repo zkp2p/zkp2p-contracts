@@ -13,8 +13,17 @@ import {
   addPostIntentHook,
   getDeployedContractAddress,
   setNewOwner,
+  setOrchestrator,
   waitForDeploymentDelay,
 } from "../deployments/helpers";
+
+const syncAcrossBridgeHookOrchestrator = async (
+  hre: HardhatRuntimeEnvironment,
+  acrossBridgeHookContract: any,
+  expectedOrchestrator: string
+): Promise<void> => {
+  await setOrchestrator(hre, acrossBridgeHookContract, expectedOrchestrator);
+};
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deploy } = await hre.deployments;
@@ -48,6 +57,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const acrossBridgeHook = await deploy("AcrossBridgeHook", {
     from: deployer,
     args: [usdcAddress, orchestratorAddress, spokePoolAddress],
+    skipIfAlreadyDeployed: true,
   });
   console.log("AcrossBridgeHook deployed at", acrossBridgeHook.address);
   await waitForDeploymentDelay(hre);
@@ -57,22 +67,19 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("AcrossBridgeHook added to post intent hook registry");
 
   const acrossBridgeHookContract = await ethers.getContractAt("AcrossBridgeHook", acrossBridgeHook.address);
+  if (!acrossBridgeHook.newlyDeployed) {
+    await syncAcrossBridgeHookOrchestrator(hre, acrossBridgeHookContract, orchestratorAddress);
+  }
+
   await setNewOwner(hre, acrossBridgeHookContract, multiSig);
   console.log("AcrossBridgeHook ownership transferred to", multiSig);
 
   await waitForDeploymentDelay(hre);
 };
 
-func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
-  const network = hre.network.name;
-  if (network !== "localhost") {
-    try {
-      getDeployedContractAddress(hre.network.name, "AcrossBridgeHook");
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
+func.skip = async (_hre: HardhatRuntimeEnvironment): Promise<boolean> => {
+  // Keep this script runnable on all networks so mutable orchestrator pointers can be synced
+  // without requiring contract redeploys.
   return false;
 };
 

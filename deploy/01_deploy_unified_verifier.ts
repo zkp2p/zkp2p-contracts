@@ -11,9 +11,18 @@ import {
   addWritePermission,
   getDeployedContractAddress,
   setNewOwner,
+  setOrchestrator,
   waitForDeploymentDelay,
 } from "../deployments/helpers";
 import { WITNESS_ADDRESS } from "../deployments/parameters";
+
+const syncUnifiedVerifierOrchestrator = async (
+  hre: HardhatRuntimeEnvironment,
+  unifiedPaymentVerifierContract: any,
+  expectedOrchestrator: string
+): Promise<void> => {
+  await setOrchestrator(hre, unifiedPaymentVerifierContract, expectedOrchestrator);
+};
 
 // Deployment Scripts
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
@@ -29,9 +38,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   // Deploy SimpleAttestationVerifier
   const simpleAttestationVerifier = await deploy("SimpleAttestationVerifier", {
     from: deployer,
-    args: [
-      WITNESS_ADDRESS[network]
-    ],
+    args: [WITNESS_ADDRESS[network]],
+    skipIfAlreadyDeployed: true,
   });
   console.log("SimpleAttestationVerifier deployed at", simpleAttestationVerifier.address);
   await waitForDeploymentDelay(hre);
@@ -44,6 +52,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       nullifierRegistryAddress,
       simpleAttestationVerifier.address,
     ],
+    skipIfAlreadyDeployed: true,
   });
   console.log("UnifiedPaymentVerifier deployed at", unifiedPaymentVerifier.address);
   await waitForDeploymentDelay(hre);
@@ -52,6 +61,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const nullifierRegistryContract = await ethers.getContractAt("NullifierRegistry", nullifierRegistryAddress);
   const simpleAttestationVerifierContract = await ethers.getContractAt("SimpleAttestationVerifier", simpleAttestationVerifier.address);
   const unifiedPaymentVerifierContract = await ethers.getContractAt("UnifiedPaymentVerifier", unifiedPaymentVerifier.address);
+
+  if (!unifiedPaymentVerifier.newlyDeployed) {
+    await syncUnifiedVerifierOrchestrator(hre, unifiedPaymentVerifierContract, orchestratorAddress);
+  }
 
   await addWritePermission(hre, nullifierRegistryContract, unifiedPaymentVerifier.address);
   console.log("NullifierRegistry permissions added for UnifiedPaymentVerifier...");
@@ -67,16 +80,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await waitForDeploymentDelay(hre);
 };
 
-func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
-  const network = hre.network.name;
-  if (network != "localhost") {
-    try {
-      getDeployedContractAddress(hre.network.name, "UnifiedPaymentVerifier");
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
+func.skip = async (_hre: HardhatRuntimeEnvironment): Promise<boolean> => {
+  // Keep this script runnable on all networks so mutable orchestrator pointers can be synced
+  // without requiring contract redeploys.
   return false;
 };
 

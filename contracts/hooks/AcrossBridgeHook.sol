@@ -126,6 +126,8 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
         FallbackReason reason
     );
 
+    event OrchestratorUpdated(address indexed previousOrchestrator, address indexed newOrchestrator);
+
     event RescueERC20(address indexed token, address indexed to, uint256 amount);
     event RescueNative(address indexed to, uint256 amount);
 
@@ -139,11 +141,12 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
     /// @dev Reverts fulfillIntent if outputAmount < minOutputAmount. For volatile assets,
     ///      this can occur if price dropped between signalIntent and fulfillIntent.
     error NativeTransferFailed(address to, uint256 amount);
+    error SameOrchestrator(address orchestrator);
 
     /* ============ State Variables ============ */
 
     IERC20 public immutable inputToken;
-    address public immutable orchestrator;
+    address public orchestrator;
     IAcrossSpokePool public immutable spokePool;
 
     /* ============ Constructor ============ */
@@ -185,7 +188,8 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
         uint256 _amountNetFees,
         bytes calldata _fulfillIntentData
     ) external override {
-        if (msg.sender != orchestrator) revert UnauthorizedCaller(msg.sender);
+        address activeOrchestrator = orchestrator;
+        if (msg.sender != activeOrchestrator) revert UnauthorizedCaller(msg.sender);
 
         BridgeCommitment memory commitment = abi.decode(_intent.data, (BridgeCommitment));
         AcrossFulfillData memory fulfillData = abi.decode(_fulfillIntentData, (AcrossFulfillData));
@@ -194,7 +198,7 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
         _validateNonPriceCommitment(commitment);
 
         // Pull tokens from Orchestrator first (before any fallback logic)
-        inputToken.safeTransferFrom(orchestrator, address(this), _amountNetFees);
+        inputToken.safeTransferFrom(activeOrchestrator, address(this), _amountNetFees);
 
         // Check if bridge is viable based on price
         bool bridgeViable = _isBridgeViable(fulfillData, commitment.minOutputAmount);
@@ -247,6 +251,16 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
             _amountNetFees,
             bridgeViable ? FallbackReason.BRIDGE_CALL_FAILED : FallbackReason.OUTPUT_BELOW_MINIMUM
         );
+    }
+
+    function setOrchestrator(address _newOrchestrator) external onlyOwner {
+        if (_newOrchestrator == address(0)) revert ZeroAddress();
+        if (_newOrchestrator == orchestrator) revert SameOrchestrator(_newOrchestrator);
+
+        address previousOrchestrator = orchestrator;
+        orchestrator = _newOrchestrator;
+
+        emit OrchestratorUpdated(previousOrchestrator, _newOrchestrator);
     }
 
     /**

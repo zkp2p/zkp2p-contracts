@@ -31,10 +31,11 @@ abstract contract BaseUnifiedPaymentVerifier is Ownable {
     event PaymentMethodAdded(bytes32 indexed paymentMethod);
     event PaymentMethodRemoved(bytes32 indexed paymentMethod);
     event AttestationVerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
+    event OrchestratorUpdated(address indexed oldOrchestrator, address indexed newOrchestrator);
 
     /* ============ State Variables ============ */
     
-    IOrchestrator public immutable orchestrator;
+    IOrchestrator public orchestrator;
     INullifierRegistry public immutable nullifierRegistry;
     IAttestationVerifier public attestationVerifier;
 
@@ -44,7 +45,7 @@ abstract contract BaseUnifiedPaymentVerifier is Ownable {
     /* ============ Modifiers ============ */
 
     /**
-     * Modifier to ensure only escrow can call
+     * Modifier to ensure only orchestrator can call.
      */
     modifier onlyOrchestrator() {
         require(msg.sender == address(orchestrator), "Only orchestrator can call");
@@ -109,6 +110,16 @@ abstract contract BaseUnifiedPaymentVerifier is Ownable {
         
         attestationVerifier = IAttestationVerifier(_newVerifier);
         emit AttestationVerifierUpdated(oldVerifier, _newVerifier);
+    }
+
+    function setOrchestrator(address _newOrchestrator) external onlyOwner {
+        address oldOrchestrator = address(orchestrator);
+        require(_newOrchestrator != address(0), "UPV: Invalid orchestrator");
+        require(_newOrchestrator != oldOrchestrator, "UPV: Same orchestrator");
+
+        orchestrator = IOrchestrator(_newOrchestrator);
+
+        emit OrchestratorUpdated(oldOrchestrator, _newOrchestrator);
     }
                                                                                                                
     

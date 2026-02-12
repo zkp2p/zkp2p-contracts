@@ -18,8 +18,8 @@ describe("BaseUnifiedPaymentVerifier", () => {
   let owner: Account;
   let attacker: Account;
   let escrow: Account;
+  let newOrchestrator: Account;
   let witness1: Account;
-  let _unused: Account;
 
   let BaseUnifiedPaymentVerifier: BaseUnifiedPaymentVerifier;
   let attestationVerifier: SimpleAttestationVerifier;
@@ -36,8 +36,8 @@ describe("BaseUnifiedPaymentVerifier", () => {
       owner,
       attacker,
       escrow,
+      newOrchestrator,
       witness1,
-      _unused
     ] = await getAccounts();
 
     deployer = new DeployHelper(owner.wallet);
@@ -131,6 +131,61 @@ describe("BaseUnifiedPaymentVerifier", () => {
     });
 
     describe("when the caller is not the owner", async () => {
+      beforeEach(async () => {
+        subjectCaller = attacker;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+    });
+  });
+
+  describe("#setOrchestrator", async () => {
+    let subjectOrchestrator: Address;
+    let subjectCaller: Account;
+
+    beforeEach(async () => {
+      subjectOrchestrator = newOrchestrator.address;
+      subjectCaller = owner;
+    });
+
+    async function subject(): Promise<any> {
+      return BaseUnifiedPaymentVerifier.connect(subjectCaller.wallet).setOrchestrator(subjectOrchestrator);
+    }
+
+    it("should update orchestrator immediately", async () => {
+      await subject();
+      expect(await BaseUnifiedPaymentVerifier.orchestrator()).to.eq(subjectOrchestrator);
+    });
+
+    it("should emit the OrchestratorUpdated event", async () => {
+      await expect(subject())
+        .to.emit(BaseUnifiedPaymentVerifier, "OrchestratorUpdated")
+        .withArgs(escrow.address, subjectOrchestrator);
+    });
+
+    describe("when the new orchestrator is zero address", async () => {
+      beforeEach(async () => {
+        subjectOrchestrator = ethers.constants.AddressZero;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("UPV: Invalid orchestrator");
+      });
+    });
+
+    describe("when the new orchestrator matches the current one", async () => {
+      beforeEach(async () => {
+        subjectOrchestrator = escrow.address;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("UPV: Same orchestrator");
+      });
+    });
+
+    describe("when caller is not the owner", async () => {
       beforeEach(async () => {
         subjectCaller = attacker;
       });

@@ -38,4 +38,8 @@ interface IProtocolViewer {
     function getAccountIntents(
         address _account
     ) external view returns (IntentView[] memory intentViews);
+
+    function setEscrowContract(address _escrow) external;
+
+    function setOrchestrator(address _orchestrator) external;
 }
