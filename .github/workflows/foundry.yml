@@ -24,6 +24,9 @@ jobs:
           yarn install
           forge --version
 
+      - name: Build contracts
+        run: forge build
+
       - name: Run Foundry unit tests
         run: |
           echo "Running unit tests..."
