@@ -181,7 +181,7 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
      * @param _ctx Hook execution context passed by Orchestrator
      * @param _fulfillHookData ABI-encoded AcrossFulfillData
      */
-    function executeV2(
+    function execute(
         HookExecutionContext calldata _ctx,
         bytes calldata _fulfillHookData
     ) external override {

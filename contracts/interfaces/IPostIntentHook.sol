@@ -33,7 +33,7 @@ interface IPostIntentHook {
      * @param _ctx The execution context built from intent + fulfill state
      * @param _fulfillHookData The data passed to fulfillIntent for the hook
      */
-    function executeV2(
+    function execute(
         HookExecutionContext calldata _ctx,
         bytes calldata _fulfillHookData
     ) external;

@@ -19,7 +19,7 @@ contract PushPostIntentHookMock is IPostIntentHook {
         orchestrator = _orchestrator;
     }
 
-    function executeV2(
+    function execute(
         HookExecutionContext calldata /* _ctx */,
         bytes calldata /* _fulfillHookData */
     ) external override {

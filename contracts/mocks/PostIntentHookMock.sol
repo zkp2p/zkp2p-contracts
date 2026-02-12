@@ -27,7 +27,7 @@ contract PostIntentHookMock is IPostIntentHook {
      * @notice Executes post-intent action by transferring funds to target address
      * @param _ctx Hook execution context containing target details in signalHookData
      */
-    function executeV2(
+    function execute(
         HookExecutionContext calldata _ctx,
         bytes calldata /*_fulfillHookData*/
     ) external override {

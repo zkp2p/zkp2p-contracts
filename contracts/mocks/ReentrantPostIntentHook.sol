@@ -67,7 +67,7 @@ contract ReentrantPostIntentHook is IPostIntentHook {
      * @notice Executes post-intent action and attempts reentrancy attack
      * @param _ctx Hook execution context
      */
-    function executeV2(
+    function execute(
         HookExecutionContext calldata _ctx,
         bytes calldata /* _fulfillHookData */
     ) external override {

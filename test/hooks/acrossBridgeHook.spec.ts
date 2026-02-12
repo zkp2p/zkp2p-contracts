@@ -115,7 +115,7 @@ describe("AcrossBridgeHook", () => {
     };
   };
 
-  describe("#executeV2", () => {
+  describe("#execute", () => {
     let commitment: any;
     let commitmentData: string;
     let intent: any;
@@ -139,7 +139,7 @@ describe("AcrossBridgeHook", () => {
     });
 
     async function subject(encodedFulfillData: string): Promise<any> {
-      return hook.connect(orchestrator.wallet).executeV2(executionContext, encodedFulfillData);
+      return hook.connect(orchestrator.wallet).execute(executionContext, encodedFulfillData);
     }
 
     it("should execute with valid parameters", async () => {
@@ -173,7 +173,7 @@ describe("AcrossBridgeHook", () => {
       const { encoded } = buildFulfillData();
 
       await expect(
-        hook.connect(attacker.wallet).executeV2(executionContext, encoded)
+        hook.connect(attacker.wallet).execute(executionContext, encoded)
       ).to.be.revertedWithCustomError(hook, "UnauthorizedCaller");
     });
 
@@ -412,15 +412,15 @@ describe("AcrossBridgeHook", () => {
       ).to.be.revertedWith("Ownable: caller is not the owner");
     });
 
-    it("should gate executeV2 caller before and after orchestrator rotation", async () => {
+    it("should gate execute caller before and after orchestrator rotation", async () => {
       await usdcToken.connect(orchestrator.wallet).approve(hook.address, amountNetFees);
 
       await expect(
-        hook.connect(nextOrchestrator.wallet).executeV2(executionContext, encodedFulfillData)
+        hook.connect(nextOrchestrator.wallet).execute(executionContext, encodedFulfillData)
       ).to.be.revertedWithCustomError(hook, "UnauthorizedCaller");
 
       await expect(
-        hook.connect(orchestrator.wallet).executeV2(executionContext, encodedFulfillData)
+        hook.connect(orchestrator.wallet).execute(executionContext, encodedFulfillData)
       ).to.emit(hook, "AcrossBridgeInitiated");
 
       await hook.connect(owner.wallet).setOrchestrator(nextOrchestrator.address);
@@ -429,11 +429,11 @@ describe("AcrossBridgeHook", () => {
       await usdcToken.connect(nextOrchestrator.wallet).approve(hook.address, amountNetFees);
 
       await expect(
-        hook.connect(orchestrator.wallet).executeV2(executionContext, encodedFulfillData)
+        hook.connect(orchestrator.wallet).execute(executionContext, encodedFulfillData)
       ).to.be.revertedWithCustomError(hook, "UnauthorizedCaller");
 
       await expect(
-        hook.connect(nextOrchestrator.wallet).executeV2(executionContext, encodedFulfillData)
+        hook.connect(nextOrchestrator.wallet).execute(executionContext, encodedFulfillData)
       ).to.emit(hook, "AcrossBridgeInitiated");
     });
   });

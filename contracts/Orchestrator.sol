@@ -628,7 +628,7 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
                     signalHookData: _intent.data
                 })
             });
-            _intent.postIntentHook.executeV2(hookCtx, _postIntentHookData);
+            _intent.postIntentHook.execute(hookCtx, _postIntentHookData);
             
             // Enforce that the hook pulled exactly netAmount to prevent stranded funds
             uint256 postBalance = _token.balanceOf(address(this));

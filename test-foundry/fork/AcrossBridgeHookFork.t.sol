@@ -83,7 +83,7 @@ contract AcrossBridgeHookForkTest is Test {
         uint256 spokeBalanceBefore = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
         uint256 recipientBalanceBefore = IERC20(BASE_USDC).balanceOf(recipient);
 
-        hook.executeV2(ctx, fulfillData);
+        hook.execute(ctx, fulfillData);
 
         uint256 spokeBalanceAfter = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
         uint256 hookBalance = IERC20(BASE_USDC).balanceOf(address(hook));
@@ -129,7 +129,7 @@ contract AcrossBridgeHookForkTest is Test {
         vm.expectEmit(true, true, false, true, address(hook));
         emit FallbackTransfer(ctx.intentHash, recipient, INPUT_AMOUNT, 1);
 
-        hook.executeV2(ctx, fulfillData);
+        hook.execute(ctx, fulfillData);
 
         uint256 spokeBalanceAfter = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
         uint256 hookBalance = IERC20(BASE_USDC).balanceOf(address(hook));
@@ -171,7 +171,7 @@ contract AcrossBridgeHookForkTest is Test {
 
         uint256 spokeBalanceBefore = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
         uint256 recipientBalanceBefore = IERC20(BASE_USDC).balanceOf(fallbackRecipient);
-        hook.executeV2(ctx, fulfillData);
+        hook.execute(ctx, fulfillData);
 
         uint256 spokeBalanceAfter = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
         uint256 hookBalance = IERC20(BASE_USDC).balanceOf(address(hook));
