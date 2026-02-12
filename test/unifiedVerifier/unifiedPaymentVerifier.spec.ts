@@ -601,7 +601,6 @@ describe("UnifiedPaymentVerifier", () => {
           BigNumber.from(chainId),
           escrowRegistry.address,
           paymentVerifierRegistry.address,
-          postIntentHookRegistry.address,
           relayerRegistry.address,
           ZERO,
           feeRecipient.address,
