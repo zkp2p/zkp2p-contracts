@@ -18,7 +18,6 @@ import { PaymentVerifierMock } from "../../contracts/mocks/PaymentVerifierMock.s
 import { PostIntentHookMock } from "../../contracts/mocks/PostIntentHookMock.sol";
 import { EscrowRegistry } from "../../contracts/registries/EscrowRegistry.sol";
 import { PaymentVerifierRegistry } from "../../contracts/registries/PaymentVerifierRegistry.sol";
-import { PostIntentHookRegistry } from "../../contracts/registries/PostIntentHookRegistry.sol";
 import { RelayerRegistry } from "../../contracts/registries/RelayerRegistry.sol";
 import { NullifierRegistry } from "../../contracts/registries/NullifierRegistry.sol";
 import { INullifierRegistry } from "../../contracts/interfaces/INullifierRegistry.sol";
@@ -60,7 +59,6 @@ contract OrchestratorCriticalPathFuzz is Test {
     // Registries
     EscrowRegistry public escrowRegistry;
     PaymentVerifierRegistry public paymentVerifierRegistry;
-    PostIntentHookRegistry public postIntentHookRegistry;
     RelayerRegistry public relayerRegistry;
     NullifierRegistry public nullifierRegistry;
     
@@ -91,7 +89,6 @@ contract OrchestratorCriticalPathFuzz is Test {
         vm.startPrank(owner);
         escrowRegistry = new EscrowRegistry();
         paymentVerifierRegistry = new PaymentVerifierRegistry();
-        postIntentHookRegistry = new PostIntentHookRegistry();
         relayerRegistry = new RelayerRegistry();
         nullifierRegistry = new NullifierRegistry();
         vm.stopPrank();
@@ -103,7 +100,6 @@ contract OrchestratorCriticalPathFuzz is Test {
             1, // chainId
             address(escrowRegistry),
             address(paymentVerifierRegistry),
-            address(postIntentHookRegistry),
             address(relayerRegistry),
             1e16, // protocol fee 1%
             protocolFeeRecipient
@@ -145,7 +141,6 @@ contract OrchestratorCriticalPathFuzz is Test {
         
         // Setup post-intent hook
         postIntentHook = new PostIntentHookMock(address(usdc), address(orchestrator));
-        postIntentHookRegistry.addPostIntentHook(address(postIntentHook));
         
         // Set orchestrator on escrow
         escrow.setOrchestrator(address(orchestrator));

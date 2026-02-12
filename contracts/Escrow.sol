@@ -15,11 +15,8 @@ import { Uint256ArrayUtils } from "./external/Uint256ArrayUtils.sol";
 
 import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IOrchestrator } from "./interfaces/IOrchestrator.sol";
-import { IPostIntentHook } from "./interfaces/IPostIntentHook.sol";
 import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
-import { IPostIntentHookRegistry } from "./interfaces/IPostIntentHookRegistry.sol";
-import { IRelayerRegistry } from "./interfaces/IRelayerRegistry.sol";
 pragma solidity ^0.8.18;
 
 /**

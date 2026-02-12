@@ -4,7 +4,6 @@ import { deployments } from "hardhat";
 
 import {
   AcrossBridgeHook__factory,
-  PostIntentHookRegistry__factory,
 } from "../../typechain";
 
 import {
@@ -65,13 +64,5 @@ describe("Across Bridge Hook Deployment", () => {
     const hook = new AcrossBridgeHook__factory(deployer.wallet).attach(hookAddress);
 
     expect(await hook.owner()).to.eq(multiSig);
-  });
-
-  it("should whitelist the hook in the post intent hook registry", async () => {
-    const hookAddress = getDeployedContractAddress(network, "AcrossBridgeHook");
-    const registryAddress = getDeployedContractAddress(network, "PostIntentHookRegistry");
-
-    const registry = new PostIntentHookRegistry__factory(deployer.wallet).attach(registryAddress);
-    expect(await registry.isWhitelistedHook(hookAddress)).to.eq(true);
   });
 });

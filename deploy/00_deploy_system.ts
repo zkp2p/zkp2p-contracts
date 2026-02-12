@@ -88,14 +88,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Deposit rate manager controller deployed at", depositRateManagerController.address);
   await waitForDeploymentDelay(hre);
 
-  // Deploy post intent hook registry
-  const postIntentHookRegistry = await deploy("PostIntentHookRegistry", {
-    from: deployer,
-    args: [],
-  });
-  console.log("Post intent hook registry deployed at", postIntentHookRegistry.address);
-  await waitForDeploymentDelay(hre);
-
   // Deploy relayer registry
   const relayerRegistry = await deploy("RelayerRegistry", {
     from: deployer,
@@ -151,7 +143,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       chainId,
       escrowRegistry.address,
       paymentVerifierRegistry.address,
-      postIntentHookRegistry.address,
       relayerRegistry.address,
       PROTOCOL_TAKER_FEE[network],
       PROTOCOL_TAKER_FEE_RECIPIENT[network] != ""
@@ -182,7 +173,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await waitForDeploymentDelay(hre);
 
   const paymentVerifierRegistryContract = await ethers.getContractAt("PaymentVerifierRegistry", paymentVerifierRegistry.address);
-  const postIntentHookRegistryContract = await ethers.getContractAt("PostIntentHookRegistry", postIntentHookRegistry.address);
   const relayerRegistryContract = await ethers.getContractAt("RelayerRegistry", relayerRegistry.address);
   const nullifierRegistryContract = await ethers.getContractAt("NullifierRegistry", nullifierRegistry.address);
 
@@ -205,8 +195,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Orchestrator ownership transferred to", multiSig);
   await setNewOwner(hre, paymentVerifierRegistryContract, multiSig);
   console.log("Payment verifier registry ownership transferred to", multiSig);
-  await setNewOwner(hre, postIntentHookRegistryContract, multiSig);
-  console.log("Post intent hook registry ownership transferred to", multiSig);
   await setNewOwner(hre, relayerRegistryContract, multiSig);
   console.log("Relayer registry ownership transferred to", multiSig);
   await setNewOwner(hre, nullifierRegistryContract, multiSig);

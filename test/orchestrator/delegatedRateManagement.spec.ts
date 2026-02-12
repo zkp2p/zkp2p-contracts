@@ -13,7 +13,6 @@ import {
   Escrow,
   Orchestrator,
   PaymentVerifierRegistry,
-  PostIntentHookRegistry,
   RelayerRegistry,
   EscrowRegistry,
   USDCMock,
@@ -39,7 +38,6 @@ describe("DelegatedRateManagement (MVP)", () => {
   let orchestrator: Orchestrator;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
   let escrowRegistry: EscrowRegistry;
-  let postIntentHookRegistry: PostIntentHookRegistry;
   let relayerRegistry: RelayerRegistry;
   let verifier: PaymentVerifierMock;
 
@@ -62,7 +60,6 @@ describe("DelegatedRateManagement (MVP)", () => {
 
     escrowRegistry = await deployer.deployEscrowRegistry();
     paymentVerifierRegistry = await deployer.deployPaymentVerifierRegistry();
-    postIntentHookRegistry = await deployer.deployPostIntentHookRegistry();
     relayerRegistry = await deployer.deployRelayerRegistry();
 
     escrow = await deployer.deployEscrow(
@@ -81,7 +78,6 @@ describe("DelegatedRateManagement (MVP)", () => {
       chainId,
       escrowRegistry.address,
       paymentVerifierRegistry.address,
-      postIntentHookRegistry.address,
       relayerRegistry.address,
       ZERO,
       owner.address
@@ -249,7 +245,6 @@ describe("DelegatedRateManagement (MVP)", () => {
         chainId,
         escrowRegistry.address,
         paymentVerifierRegistry.address,
-        postIntentHookRegistry.address,
         relayerRegistry.address,
         ZERO,
         owner.address

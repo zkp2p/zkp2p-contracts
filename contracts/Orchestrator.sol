@@ -17,7 +17,6 @@ import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
 import { IPostIntentHook } from "./interfaces/IPostIntentHook.sol";
 import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
-import { IPostIntentHookRegistry } from "./interfaces/IPostIntentHookRegistry.sol";
 import { IRelayerRegistry } from "./interfaces/IRelayerRegistry.sol";
 import { IDepositRateManagerController } from "./interfaces/IDepositRateManagerController.sol";
 
@@ -60,7 +59,6 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
     IPaymentVerifierRegistry public  paymentVerifierRegistry;          // Registry of payment verifiers
-    IPostIntentHookRegistry public postIntentHookRegistry;             // Registry of post intent hooks
     IRelayerRegistry public relayerRegistry;                           // Registry of relayers
     IDepositRateManagerController public depositRateManagerController; // External controller for rate manager config
 
@@ -78,7 +76,6 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         uint256 _chainId,
         address _escrowRegistry,
         address _paymentVerifierRegistry,
-        address _postIntentHookRegistry,
         address _relayerRegistry,
         uint256 _protocolFee,
         address _protocolFeeRecipient
@@ -88,7 +85,6 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         chainId = _chainId;
         escrowRegistry = IEscrowRegistry(_escrowRegistry);
         paymentVerifierRegistry = IPaymentVerifierRegistry(_paymentVerifierRegistry);
-        postIntentHookRegistry = IPostIntentHookRegistry(_postIntentHookRegistry);
         relayerRegistry = IRelayerRegistry(_relayerRegistry);
         protocolFee = _protocolFee;
         protocolFeeRecipient = _protocolFeeRecipient;
@@ -376,18 +372,6 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     }
 
     /**
-     * @notice GOVERNANCE ONLY: Updates the post intent hook registry address.
-     *
-     * @param _postIntentHookRegistry   New post intent hook registry address
-     */
-    function setPostIntentHookRegistry(address _postIntentHookRegistry) external onlyOwner {
-        if (_postIntentHookRegistry == address(0)) revert ZeroAddress();
-        
-        postIntentHookRegistry = IPostIntentHookRegistry(_postIntentHookRegistry);
-        emit PostIntentHookRegistryUpdated(_postIntentHookRegistry);
-    }
-
-    /**
      * @notice GOVERNANCE ONLY: Updates the relayer registry address.
      *
      * @param _relayerRegistry   New relayer registry address
@@ -470,8 +454,8 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         }
 
         if (address(_intent.postIntentHook) != address(0)) {
-            if (!postIntentHookRegistry.isWhitelistedHook(address(_intent.postIntentHook))) {
-                revert PostIntentHookNotWhitelisted(address(_intent.postIntentHook));
+            if (address(_intent.postIntentHook).code.length == 0) {
+                revert InvalidPostIntentHook(address(_intent.postIntentHook));
             }
         }
 
