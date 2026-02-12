@@ -2576,6 +2576,241 @@ describe("Orchestrator", () => {
     });
   });
 
+  describe("#cleanupOrphanedIntents", async () => {
+    let subjectIntentHashes: string[];
+    let subjectCaller: Account;
+
+    let depositId: BigNumber;
+    let intentHashes: string[];
+
+    beforeEach(async () => {
+      // Create a deposit
+      await usdcToken.connect(offRamper.wallet).approve(escrow.address, usdc(10000));
+      await escrow.connect(offRamper.wallet).createDeposit({
+        token: usdcToken.address,
+        amount: usdc(300),
+        intentAmountRange: { min: usdc(10), max: usdc(100) },
+        paymentMethods: [venmoPaymentMethod],
+        paymentMethodData: [{
+          intentGatingService: gatingService.address,
+          payeeDetails: ethers.utils.keccak256(ethers.utils.toUtf8Bytes("payeeDetails")),
+          data: "0x"
+        }],
+        currencies: [
+          [{ code: Currency.USD, minConversionRate: ether(1.01) }]
+        ],
+        delegate: offRamperDelegate.address,
+        intentGuardian: ADDRESS_ZERO,
+        retainOnEmpty: false
+      });
+
+      // Enable multiple intents
+      await orchestrator.connect(owner.wallet).setAllowMultipleIntents(true);
+
+      depositId = ZERO;
+      intentHashes = [];
+
+      // Signal 3 intents
+      for (let i = 0; i < 3; i++) {
+        const params = await createSignalIntentParams(
+          orchestrator.address,
+          escrow.address,
+          depositId,
+          usdc(50),
+          onRamper.address,
+          venmoPaymentMethod,
+          Currency.USD,
+          ether(1.02),
+          ADDRESS_ZERO,
+          ZERO,
+          gatingService,
+          chainId.toString(),
+          ADDRESS_ZERO,
+          "0x"
+        );
+
+        await orchestrator.connect(onRamper.wallet).signalIntent(params);
+
+        const intentHash = calculateIntentHash(
+          orchestrator.address,
+          currentIntentCounter
+        );
+        currentIntentCounter++;
+        intentHashes.push(intentHash);
+
+        await blockchain.increaseTimeAsync(1);
+      }
+
+      // Fast forward past expiry to make intents expire
+      await blockchain.increaseTimeAsync(ONE_DAY_IN_SECONDS.add(1).toNumber());
+
+      // Simulate the orphan scenario: point escrow's orchestrator to a contract that
+      // will revert on pruneIntents (any deployed contract without that function).
+      // The try/catch in _tryOrchestratorPruneIntents will silently catch the revert,
+      // creating orphaned intents (pruned from Escrow but not from Orchestrator).
+      await escrow.connect(owner.wallet).setOrchestrator(usdcToken.address);
+      await escrow.pruneExpiredIntents(depositId);
+
+      // Restore the real orchestrator
+      await escrow.connect(owner.wallet).setOrchestrator(orchestrator.address);
+
+      // Verify orphan state: intents pruned from escrow but still on orchestrator
+      for (const intentHash of intentHashes) {
+        const escrowIntent = await escrow.getDepositIntent(depositId, intentHash);
+        expect(escrowIntent.intentHash).to.eq(ZERO_BYTES32); // Gone from escrow
+
+        const orchIntent = await orchestrator.getIntent(intentHash);
+        expect(orchIntent.owner).to.eq(onRamper.address); // Still on orchestrator
+      }
+
+      subjectIntentHashes = intentHashes;
+      subjectCaller = onRamper; // Anyone can call
+    });
+
+    async function subject(): Promise<any> {
+      return orchestrator.connect(subjectCaller.wallet).cleanupOrphanedIntents(subjectIntentHashes);
+    }
+
+    it("should prune all orphaned intents from the orchestrator", async () => {
+      await subject();
+
+      for (const intentHash of intentHashes) {
+        const intent = await orchestrator.getIntent(intentHash);
+        expect(intent.owner).to.eq(ADDRESS_ZERO);
+        expect(intent.timestamp).to.eq(ZERO);
+      }
+    });
+
+    it("should remove intents from accountIntents", async () => {
+      const priorIntents = await orchestrator.getAccountIntents(onRamper.address);
+      expect(priorIntents.length).to.eq(3);
+
+      await subject();
+
+      const postIntents = await orchestrator.getAccountIntents(onRamper.address);
+      expect(postIntents.length).to.eq(0);
+    });
+
+    it("should emit IntentPruned for each orphaned intent", async () => {
+      const tx = await subject();
+
+      for (const intentHash of intentHashes) {
+        await expect(tx).to.emit(orchestrator, "IntentPruned").withArgs(intentHash);
+      }
+    });
+
+    describe("when intent is not orphaned (still exists on escrow)", async () => {
+      beforeEach(async () => {
+        // Signal a new intent that is still active (not expired, not pruned from escrow)
+        const params = await createSignalIntentParams(
+          orchestrator.address,
+          escrow.address,
+          depositId,
+          usdc(50),
+          onRamper.address,
+          venmoPaymentMethod,
+          Currency.USD,
+          ether(1.02),
+          ADDRESS_ZERO,
+          ZERO,
+          gatingService,
+          chainId.toString(),
+          ADDRESS_ZERO,
+          "0x"
+        );
+
+        await orchestrator.connect(onRamper.wallet).signalIntent(params);
+
+        const activeIntentHash = calculateIntentHash(
+          orchestrator.address,
+          currentIntentCounter
+        );
+        currentIntentCounter++;
+
+        subjectIntentHashes = [activeIntentHash];
+      });
+
+      it("should not prune the active intent", async () => {
+        const intentBefore = await orchestrator.getIntent(subjectIntentHashes[0]);
+        expect(intentBefore.owner).to.eq(onRamper.address);
+
+        await subject();
+
+        const intentAfter = await orchestrator.getIntent(subjectIntentHashes[0]);
+        expect(intentAfter.owner).to.eq(onRamper.address);
+      });
+    });
+
+    describe("when intent does not exist on orchestrator", async () => {
+      beforeEach(async () => {
+        subjectIntentHashes = [
+          ethers.utils.keccak256(ethers.utils.toUtf8Bytes("nonexistent"))
+        ];
+      });
+
+      it("should not revert", async () => {
+        await expect(subject()).to.not.be.reverted;
+      });
+    });
+
+    describe("when called with empty array", async () => {
+      beforeEach(async () => {
+        subjectIntentHashes = [];
+      });
+
+      it("should not revert", async () => {
+        await expect(subject()).to.not.be.reverted;
+      });
+    });
+
+    describe("when called with mix of orphaned and non-orphaned intents", async () => {
+      let activeIntentHash: string;
+
+      beforeEach(async () => {
+        // Signal a new active intent
+        const params = await createSignalIntentParams(
+          orchestrator.address,
+          escrow.address,
+          depositId,
+          usdc(50),
+          onRamper.address,
+          venmoPaymentMethod,
+          Currency.USD,
+          ether(1.02),
+          ADDRESS_ZERO,
+          ZERO,
+          gatingService,
+          chainId.toString(),
+          ADDRESS_ZERO,
+          "0x"
+        );
+
+        await orchestrator.connect(onRamper.wallet).signalIntent(params);
+
+        activeIntentHash = calculateIntentHash(
+          orchestrator.address,
+          currentIntentCounter
+        );
+        currentIntentCounter++;
+
+        // Mix: first is orphaned, second is active
+        subjectIntentHashes = [intentHashes[0], activeIntentHash];
+      });
+
+      it("should only prune the orphaned intent", async () => {
+        await subject();
+
+        // Orphaned intent should be pruned
+        const orphanedIntent = await orchestrator.getIntent(intentHashes[0]);
+        expect(orphanedIntent.owner).to.eq(ADDRESS_ZERO);
+
+        // Active intent should remain
+        const activeIntent = await orchestrator.getIntent(activeIntentHash);
+        expect(activeIntent.owner).to.eq(onRamper.address);
+      });
+    });
+  });
+
   // Governance Functions
 
   describe("#setEscrowRegistry", async () => {
