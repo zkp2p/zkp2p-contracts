@@ -96,6 +96,35 @@ export async function setOrchestrator(
   }
 }
 
+export async function setDepositRateManagerController(
+  hre: HardhatRuntimeEnvironment,
+  contract: any,
+  depositRateManagerController: Address
+): Promise<void> {
+  const currentOwner = await contract.owner();
+  const currentController = await contract.depositRateManagerController();
+
+  if (currentController == depositRateManagerController) {
+    return;
+  }
+
+  if ((await hre.getUnnamedAccounts()).includes(currentOwner)) {
+    const data = contract.interface.encodeFunctionData("setDepositRateManagerController", [depositRateManagerController]);
+    await sendDeploymentTransaction(hre, {
+      from: currentOwner,
+      to: contract.address,
+      data,
+    });
+  } else {
+    console.log(
+      `Contract owner is not in the list of accounts, must be manually added with the following calldata:
+        ${contract.interface.encodeFunctionData("setDepositRateManagerController", [depositRateManagerController])}
+        contract address: ${contract.address}
+        `
+    );
+  }
+}
+
 export async function addEscrowToRegistry(
   hre: HardhatRuntimeEnvironment,
   contract: any,

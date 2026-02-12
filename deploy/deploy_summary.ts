@@ -19,6 +19,14 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const [deployer] = await hre.getUnnamedAccounts();
   const multiSig = MULTI_SIG[network] ? MULTI_SIG[network] : deployer;
 
+  const tryGetDeployedContractAddress = (contractName: string): string => {
+    try {
+      return getDeployedContractAddress(network, contractName);
+    } catch (e) {
+      return "NOT DEPLOYED";
+    }
+  };
+
   console.log(
     `
     Deploment summary for ${network}:
@@ -27,18 +35,23 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     multiSig:                   ${multiSig}
     multiSig nonce:             ${await hre.ethers.provider.getTransactionCount(multiSig)}
     ----------------------------------------------------------------------
-    Escrow:                             ${getDeployedContractAddress(network, "Escrow")}
-    Orchestrator:                       ${getDeployedContractAddress(network, "Orchestrator")}
-    ProtocolViewer:                     ${getDeployedContractAddress(network, "ProtocolViewer")}
-    EscrowRegistry:                     ${getDeployedContractAddress(network, "EscrowRegistry")}
-    PaymentVerifierRegistry:            ${getDeployedContractAddress(network, "PaymentVerifierRegistry")}
-    PostIntentHookRegistry:             ${getDeployedContractAddress(network, "PostIntentHookRegistry")}
-    RelayerRegistry:                    ${getDeployedContractAddress(network, "RelayerRegistry")}
-    NullifierRegistry:                  ${getDeployedContractAddress(network, "NullifierRegistry")}
-    UnifiedPaymentVerifier:             ${getDeployedContractAddress(network, "UnifiedPaymentVerifier")}
-    SimpleAttestationVerifier:          ${getDeployedContractAddress(network, "SimpleAttestationVerifier")}
-    AcrossBridgeHook:                   ${getDeployedContractAddress(network, "AcrossBridgeHook")}
-    USDC:                               ${USDC[network] ? USDC[network] : getDeployedContractAddress(network, "USDCMock")}
+    Escrow:                             ${tryGetDeployedContractAddress("Escrow")}
+    Orchestrator:                       ${tryGetDeployedContractAddress("Orchestrator")}
+    ProtocolViewer:                     ${tryGetDeployedContractAddress("ProtocolViewer")}
+    EscrowRegistry:                     ${tryGetDeployedContractAddress("EscrowRegistry")}
+    PaymentVerifierRegistry:            ${tryGetDeployedContractAddress("PaymentVerifierRegistry")}
+    PostIntentHookRegistry:             ${tryGetDeployedContractAddress("PostIntentHookRegistry")}
+    RelayerRegistry:                    ${tryGetDeployedContractAddress("RelayerRegistry")}
+    NullifierRegistry:                  ${tryGetDeployedContractAddress("NullifierRegistry")}
+    UnifiedPaymentVerifier:             ${tryGetDeployedContractAddress("UnifiedPaymentVerifier")}
+    SimpleAttestationVerifier:          ${tryGetDeployedContractAddress("SimpleAttestationVerifier")}
+    AcrossBridgeHook:                   ${tryGetDeployedContractAddress("AcrossBridgeHook")}
+    ManualRateManagerRegistry:          ${tryGetDeployedContractAddress("ManualRateManagerRegistry")}
+    OracleRateManagerRegistry:          ${tryGetDeployedContractAddress("OracleRateManagerRegistry")}
+    ChainlinkOracleAdapter:             ${tryGetDeployedContractAddress("ChainlinkOracleAdapter")}
+    DepositRateManagerController:       ${tryGetDeployedContractAddress("DepositRateManagerController")}
+    DepositRateManagerHookV1:           ${tryGetDeployedContractAddress("DepositRateManagerHookV1")}
+    USDC:                               ${USDC[network] ? USDC[network] : tryGetDeployedContractAddress("USDCMock")}
     `
   );
 };

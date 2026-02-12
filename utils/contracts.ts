@@ -20,7 +20,15 @@ export {
   IPaymentVerifier,
   PartialPullPostIntentHookMock,
   PushPostIntentHookMock,
-  ReentrantOrchestratorMock
+  ReentrantOrchestratorMock,
+  ManualRateManagerRegistry,
+  OracleRateManagerRegistry,
+  DepositRateManagerController,
+  RateManagerDepositHookMock,
+  IBaseRateManagerRegistry,
+  IManualRateManagerRegistry,
+  IOracleRateManagerRegistry,
+  DepositRateManagerHookV1
 } from "../typechain";
 export { IEscrow } from "../typechain/contracts/Escrow";
 export { IOrchestrator } from "../typechain/contracts/Orchestrator";

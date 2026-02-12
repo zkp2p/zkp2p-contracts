@@ -7,6 +7,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { Orchestrator } from "../../contracts/Orchestrator.sol";
 import { Escrow } from "../../contracts/Escrow.sol";
+import { DepositRateManagerController } from "../../contracts/DepositRateManagerController.sol";
 import { IOrchestrator } from "../../contracts/interfaces/IOrchestrator.sol";
 import { IEscrow } from "../../contracts/interfaces/IEscrow.sol";
 import { USDCMock } from "../../contracts/mocks/USDCMock.sol";
@@ -35,6 +36,7 @@ contract OrchestratorPruneOnSignalTest is Test {
     PostIntentHookRegistry public postIntentHookRegistry;
     RelayerRegistry public relayerRegistry;
     PaymentVerifierMock public venmoVerifier;
+    DepositRateManagerController public rateManagerController;
 
     // Actors
     address public owner;
@@ -73,6 +75,10 @@ contract OrchestratorPruneOnSignalTest is Test {
             0, // protocol fee 0 for simplicity
             protocolFeeRecipient
         );
+        vm.prank(owner);
+        rateManagerController = new DepositRateManagerController();
+        vm.prank(owner);
+        orchestrator.setDepositRateManagerController(address(rateManagerController));
 
         // Escrow
         vm.prank(owner);

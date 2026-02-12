@@ -21,6 +21,7 @@ import {
 import {
   addEscrowToRegistry,
   getDeployedContractAddress,
+  setDepositRateManagerController,
   setNewOwner,
   setOrchestrator,
   waitForDeploymentDelay,
@@ -54,6 +55,37 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     args: [],
   });
   console.log("Payment verifier registry deployed at", paymentVerifierRegistry.address);
+  await waitForDeploymentDelay(hre);
+
+  // Deploy deposit rate manager registries (permissionless)
+  const manualRateManagerRegistry = await deploy("ManualRateManagerRegistry", {
+    from: deployer,
+    args: [],
+  });
+  console.log("Manual rate manager registry deployed at", manualRateManagerRegistry.address);
+  await waitForDeploymentDelay(hre);
+
+  const oracleRateManagerRegistry = await deploy("OracleRateManagerRegistry", {
+    from: deployer,
+    args: [],
+  });
+  console.log("Oracle rate manager registry deployed at", oracleRateManagerRegistry.address);
+  await waitForDeploymentDelay(hre);
+
+  // Deploy oracle adapters (permissionless; used by oracle-backed rate managers)
+  const chainlinkOracleAdapter = await deploy("ChainlinkOracleAdapter", {
+    from: deployer,
+    args: [],
+  });
+  console.log("Chainlink oracle adapter deployed at", chainlinkOracleAdapter.address);
+  await waitForDeploymentDelay(hre);
+
+  // Deploy deposit rate manager controller
+  const depositRateManagerController = await deploy("DepositRateManagerController", {
+    from: deployer,
+    args: [],
+  });
+  console.log("Deposit rate manager controller deployed at", depositRateManagerController.address);
   await waitForDeploymentDelay(hre);
 
   // Deploy post intent hook registry
@@ -135,6 +167,12 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await setOrchestrator(hre, escrowContract, orchestrator.address);
   console.log("Orchestrator set on escrow");
 
+  // Set deposit rate manager controller on orchestrator
+  const orchestratorContract = await ethers.getContractAt("Orchestrator", orchestrator.address);
+  await setDepositRateManagerController(hre, orchestratorContract, depositRateManagerController.address);
+  console.log("Deposit rate manager controller set on orchestrator (or calldata printed for manual execution)");
+  await waitForDeploymentDelay(hre);
+
   // Deploy protocol viewer
   const protocolViewer = await deploy("ProtocolViewer", {
     from: deployer,
@@ -143,7 +181,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Protocol viewer deployed at", protocolViewer.address);
   await waitForDeploymentDelay(hre);
 
-  const orchestratorContract = await ethers.getContractAt("Orchestrator", orchestrator.address);
   const paymentVerifierRegistryContract = await ethers.getContractAt("PaymentVerifierRegistry", paymentVerifierRegistry.address);
   const postIntentHookRegistryContract = await ethers.getContractAt("PostIntentHookRegistry", postIntentHookRegistry.address);
   const relayerRegistryContract = await ethers.getContractAt("RelayerRegistry", relayerRegistry.address);
@@ -185,7 +222,21 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.network.name;
   if (network != "localhost") {
-    try { getDeployedContractAddress(hre.network.name, "ProtocolViewer") } catch (e) { return false; }
+    const requiredContracts = [
+      "ProtocolViewer",
+      "ManualRateManagerRegistry",
+      "OracleRateManagerRegistry",
+      "ChainlinkOracleAdapter",
+      "DepositRateManagerController",
+    ];
+
+    for (const contractName of requiredContracts) {
+      try {
+        getDeployedContractAddress(hre.network.name, contractName);
+      } catch (e) {
+        return false;
+      }
+    }
     return true;
   }
   return false;

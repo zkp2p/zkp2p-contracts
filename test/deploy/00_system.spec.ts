@@ -7,6 +7,7 @@ import {
   NullifierRegistry,
 } from "../../utils/contracts";
 import {
+  ChainlinkOracleAdapter,
   Escrow__factory,
   NullifierRegistry__factory,
   Orchestrator__factory,
@@ -19,6 +20,13 @@ import {
   RelayerRegistry,
   RelayerRegistry__factory,
   Orchestrator,
+  DepositRateManagerController,
+  DepositRateManagerController__factory,
+  ManualRateManagerRegistry,
+  ManualRateManagerRegistry__factory,
+  OracleRateManagerRegistry,
+  OracleRateManagerRegistry__factory,
+  ChainlinkOracleAdapter__factory,
   EscrowRegistry__factory,
   EscrowRegistry
 } from "../../typechain";
@@ -58,6 +66,10 @@ describe("V2.1 System Deployment", () => {
   let relayerRegistry: RelayerRegistry;
   let protocolViewer: ProtocolViewer;
   let escrowRegistry: EscrowRegistry;
+  let depositRateManagerController: DepositRateManagerController;
+  let manualRateManagerRegistry: ManualRateManagerRegistry;
+  let oracleRateManagerRegistry: OracleRateManagerRegistry;
+  let chainlinkOracleAdapter: ChainlinkOracleAdapter;
 
   const network: string = deployments.getNetworkName();
 
@@ -95,6 +107,18 @@ describe("V2.1 System Deployment", () => {
 
     const protocolViewerAddress = await getDeployedContractAddress(network, "ProtocolViewer");
     protocolViewer = new ProtocolViewer__factory(deployer.wallet).attach(protocolViewerAddress);
+
+    const depositRateManagerControllerAddress = await getDeployedContractAddress(network, "DepositRateManagerController");
+    depositRateManagerController = new DepositRateManagerController__factory(deployer.wallet).attach(depositRateManagerControllerAddress);
+
+    const manualRateManagerRegistryAddress = await getDeployedContractAddress(network, "ManualRateManagerRegistry");
+    manualRateManagerRegistry = new ManualRateManagerRegistry__factory(deployer.wallet).attach(manualRateManagerRegistryAddress);
+
+    const oracleRateManagerRegistryAddress = await getDeployedContractAddress(network, "OracleRateManagerRegistry");
+    oracleRateManagerRegistry = new OracleRateManagerRegistry__factory(deployer.wallet).attach(oracleRateManagerRegistryAddress);
+
+    const chainlinkOracleAdapterAddress = await getDeployedContractAddress(network, "ChainlinkOracleAdapter");
+    chainlinkOracleAdapter = new ChainlinkOracleAdapter__factory(deployer.wallet).attach(chainlinkOracleAdapterAddress);
   });
 
   describe("EscrowRegistry", async () => {
@@ -193,6 +217,11 @@ describe("V2.1 System Deployment", () => {
       const actualEscrowRegistry = await orchestrator.escrowRegistry();
       expect(actualEscrowRegistry).to.eq(escrowRegistry.address);
     });
+
+    it("should have the deposit rate manager controller set", async () => {
+      const actualController = await orchestrator.depositRateManagerController();
+      expect(actualController).to.eq(depositRateManagerController.address);
+    });
   });
 
   describe("NullifierRegistry", async () => {
@@ -229,6 +258,23 @@ describe("V2.1 System Deployment", () => {
       const actualOrchestrator = await protocolViewer.orchestrator();
       expect(actualEscrow).to.eq(escrow.address);
       expect(actualOrchestrator).to.eq(orchestrator.address);
+    });
+  });
+
+  describe("Deposit Rate Manager Registries + Adapters", async () => {
+    it("should have deployed ManualRateManagerRegistry", async () => {
+      expect(manualRateManagerRegistry.address).to.not.eq(ethers.constants.AddressZero);
+      expect(await ethers.provider.getCode(manualRateManagerRegistry.address)).to.not.eq("0x");
+    });
+
+    it("should have deployed OracleRateManagerRegistry", async () => {
+      expect(oracleRateManagerRegistry.address).to.not.eq(ethers.constants.AddressZero);
+      expect(await ethers.provider.getCode(oracleRateManagerRegistry.address)).to.not.eq("0x");
+    });
+
+    it("should have deployed ChainlinkOracleAdapter", async () => {
+      expect(chainlinkOracleAdapter.address).to.not.eq(ethers.constants.AddressZero);
+      expect(await ethers.provider.getCode(chainlinkOracleAdapter.address)).to.not.eq("0x");
     });
   });
 });
