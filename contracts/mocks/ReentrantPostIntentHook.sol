@@ -65,13 +65,11 @@ contract ReentrantPostIntentHook is IPostIntentHook {
 
     /**
      * @notice Executes post-intent action and attempts reentrancy attack
-     * @param _intent The intent data
-     * @param _amountNetFees Amount of funds to transfer after fees are deducted
+     * @param _ctx Hook execution context
      */
-    function execute(
-        IOrchestrator.Intent memory _intent,
-        uint256 _amountNetFees,
-        bytes calldata /* _fulfillIntentData */
+    function executeV2(
+        HookExecutionContext calldata _ctx,
+        bytes calldata /* _fulfillHookData */
     ) external override {
         // Increment attempt counter
         reentrancyAttempts++;
@@ -93,9 +91,9 @@ contract ReentrantPostIntentHook is IPostIntentHook {
         
         // Normal execution - transfer funds to intended recipient
         // Pull USDC from orchestrator (which approved this amount)
-        usdc.transferFrom(msg.sender, _intent.to, _amountNetFees);
+        usdc.transferFrom(msg.sender, _ctx.intent.to, _ctx.executableAmount);
         
-        emit ExecutionCompleted(_intent.to, _amountNetFees);
+        emit ExecutionCompleted(_ctx.intent.to, _ctx.executableAmount);
     }
     
     /**

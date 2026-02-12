@@ -76,7 +76,6 @@ describe("AcrossBridgeHook", () => {
 
   const buildFulfillData = (overrides: any = {}): { encoded: string; data: any } => {
     const data = {
-      intentHash: overrides.intentHash ?? ethers.utils.hexlify(ethers.utils.randomBytes(32)),
       outputAmount: overrides.outputAmount ?? BigNumber.from(1_000_000),
       fillDeadlineOffset: overrides.fillDeadlineOffset ?? 21600,  // 6 hours default
       exclusiveRelayer: overrides.exclusiveRelayer ?? toBytes32("0x1562A70707D62edBF3a90317E46E1DF075E2d924"),  // Sample relayer from Across
@@ -84,18 +83,44 @@ describe("AcrossBridgeHook", () => {
     };
 
     const encoded = ethers.utils.defaultAbiCoder.encode(
-      ["tuple(bytes32 intentHash,uint256 outputAmount,uint32 fillDeadlineOffset,bytes32 exclusiveRelayer,uint32 exclusivityParameter)"],
+      ["tuple(uint256 outputAmount,uint32 fillDeadlineOffset,bytes32 exclusiveRelayer,uint32 exclusivityParameter)"],
       [data]
     );
 
     return { encoded, data };
   };
 
-  describe("#execute", () => {
+  const buildExecutionContext = (
+    intent: any,
+    executableAmount: BigNumber,
+    overrides: any = {}
+  ): any => {
+    return {
+      intentHash: overrides.intentHash ?? ethers.utils.hexlify(ethers.utils.randomBytes(32)),
+      token: overrides.token ?? usdcToken.address,
+      executableAmount: overrides.executableAmount ?? executableAmount,
+      intent: {
+        owner: intent.owner,
+        to: intent.to,
+        escrow: intent.escrow,
+        depositId: intent.depositId,
+        amount: intent.amount,
+        timestamp: intent.timestamp,
+        paymentMethod: intent.paymentMethod,
+        fiatCurrency: intent.fiatCurrency,
+        conversionRate: intent.conversionRate,
+        payeeId: intent.payeeId,
+        signalHookData: intent.data
+      }
+    };
+  };
+
+  describe("#executeV2", () => {
     let commitment: any;
     let commitmentData: string;
     let intent: any;
     let amountNetFees: BigNumber;
+    let executionContext: any;
 
     beforeEach(async () => {
       commitment = {
@@ -108,12 +133,13 @@ describe("AcrossBridgeHook", () => {
       commitmentData = encodeCommitment(commitment);
       intent = await buildIntent(commitmentData);
       amountNetFees = usdc(50);
+      executionContext = buildExecutionContext(intent, amountNetFees);
 
       await usdcToken.connect(orchestrator.wallet).approve(hook.address, amountNetFees);
     });
 
     async function subject(encodedFulfillData: string): Promise<any> {
-      return hook.connect(orchestrator.wallet).execute(intent, amountNetFees, encodedFulfillData);
+      return hook.connect(orchestrator.wallet).executeV2(executionContext, encodedFulfillData);
     }
 
     it("should execute with valid parameters", async () => {
@@ -147,12 +173,12 @@ describe("AcrossBridgeHook", () => {
       const { encoded } = buildFulfillData();
 
       await expect(
-        hook.connect(attacker.wallet).execute(intent, amountNetFees, encoded)
+        hook.connect(attacker.wallet).executeV2(executionContext, encoded)
       ).to.be.revertedWithCustomError(hook, "UnauthorizedCaller");
     });
 
     it("should fallback to direct transfer when outputAmount is below minimum", async () => {
-      const { encoded, data } = buildFulfillData({ outputAmount: commitment.minOutputAmount.sub(1) });
+      const { encoded } = buildFulfillData({ outputAmount: commitment.minOutputAmount.sub(1) });
 
       const orchestratorBalanceBefore = await usdcToken.balanceOf(orchestrator.address);
       const recipientBalanceBefore = await usdcToken.balanceOf(recipient.address);
@@ -160,7 +186,7 @@ describe("AcrossBridgeHook", () => {
       // Should emit FallbackTransfer with OUTPUT_BELOW_MINIMUM reason (enum value 0)
       await expect(subject(encoded))
         .to.emit(hook, "FallbackTransfer")
-        .withArgs(data.intentHash, recipient.address, amountNetFees, 0);
+        .withArgs(executionContext.intentHash, recipient.address, amountNetFees, 0);
 
       // Verify funds went to recipient (intent.to), not spokePool
       const orchestratorBalanceAfter = await usdcToken.balanceOf(orchestrator.address);
@@ -175,7 +201,7 @@ describe("AcrossBridgeHook", () => {
     });
 
     it("should fallback to direct transfer when bridge call reverts", async () => {
-      const { encoded, data } = buildFulfillData({ outputAmount: BigNumber.from(700_000) });
+      const { encoded } = buildFulfillData({ outputAmount: BigNumber.from(700_000) });
 
       // Make the mock revert
       await spokePool.setShouldRevert(true);
@@ -185,7 +211,7 @@ describe("AcrossBridgeHook", () => {
       // Should emit FallbackTransfer with BRIDGE_CALL_FAILED reason (enum value 1)
       await expect(subject(encoded))
         .to.emit(hook, "FallbackTransfer")
-        .withArgs(data.intentHash, recipient.address, amountNetFees, 1);
+        .withArgs(executionContext.intentHash, recipient.address, amountNetFees, 1);
 
       // Verify funds went to recipient, not spokePool
       const recipientBalanceAfter = await usdcToken.balanceOf(recipient.address);
@@ -202,6 +228,7 @@ describe("AcrossBridgeHook", () => {
       commitment.destinationChainId = BigNumber.from(0);
       commitmentData = encodeCommitment(commitment);
       intent = await buildIntent(commitmentData);
+      executionContext = buildExecutionContext(intent, amountNetFees);
       const { encoded } = buildFulfillData();
 
       await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "InvalidDestinationChainId");
@@ -211,6 +238,7 @@ describe("AcrossBridgeHook", () => {
       commitment.recipient = ZERO_BYTES32;
       commitmentData = encodeCommitment(commitment);
       intent = await buildIntent(commitmentData);
+      executionContext = buildExecutionContext(intent, amountNetFees);
       const { encoded } = buildFulfillData();
 
       await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "InvalidRecipient");
@@ -220,6 +248,7 @@ describe("AcrossBridgeHook", () => {
       commitment.outputToken = ZERO_BYTES32;
       commitmentData = encodeCommitment(commitment);
       intent = await buildIntent(commitmentData);
+      executionContext = buildExecutionContext(intent, amountNetFees);
       const { encoded } = buildFulfillData();
 
       await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "InvalidOutputToken");
@@ -246,7 +275,7 @@ describe("AcrossBridgeHook", () => {
       const customRelayer = toBytes32("0xDeadBeefDeadBeefDeadBeefDeadBeefDeadBeef");
       const customExclusivity = 10;  // 10 seconds
 
-      const { encoded, data } = buildFulfillData({
+      const { encoded } = buildFulfillData({
         outputAmount: BigNumber.from(700_000),
         exclusiveRelayer: customRelayer,
         exclusivityParameter: customExclusivity
@@ -320,6 +349,7 @@ describe("AcrossBridgeHook", () => {
     let intent: any;
     let amountNetFees: BigNumber;
     let encodedFulfillData: string;
+    let executionContext: any;
 
     beforeEach(async () => {
       const commitmentData = encodeCommitment({
@@ -331,6 +361,7 @@ describe("AcrossBridgeHook", () => {
 
       intent = await buildIntent(commitmentData);
       amountNetFees = usdc(50);
+      executionContext = buildExecutionContext(intent, amountNetFees);
 
       const { encoded } = buildFulfillData({ outputAmount: BigNumber.from(700_000) });
       encodedFulfillData = encoded;
@@ -363,15 +394,15 @@ describe("AcrossBridgeHook", () => {
       ).to.be.revertedWith("Ownable: caller is not the owner");
     });
 
-    it("should gate execute caller before and after orchestrator rotation", async () => {
+    it("should gate executeV2 caller before and after orchestrator rotation", async () => {
       await usdcToken.connect(orchestrator.wallet).approve(hook.address, amountNetFees);
 
       await expect(
-        hook.connect(nextOrchestrator.wallet).execute(intent, amountNetFees, encodedFulfillData)
+        hook.connect(nextOrchestrator.wallet).executeV2(executionContext, encodedFulfillData)
       ).to.be.revertedWithCustomError(hook, "UnauthorizedCaller");
 
       await expect(
-        hook.connect(orchestrator.wallet).execute(intent, amountNetFees, encodedFulfillData)
+        hook.connect(orchestrator.wallet).executeV2(executionContext, encodedFulfillData)
       ).to.emit(hook, "AcrossBridgeInitiated");
 
       await hook.connect(owner.wallet).setOrchestrator(nextOrchestrator.address);
@@ -380,11 +411,11 @@ describe("AcrossBridgeHook", () => {
       await usdcToken.connect(nextOrchestrator.wallet).approve(hook.address, amountNetFees);
 
       await expect(
-        hook.connect(orchestrator.wallet).execute(intent, amountNetFees, encodedFulfillData)
+        hook.connect(orchestrator.wallet).executeV2(executionContext, encodedFulfillData)
       ).to.be.revertedWithCustomError(hook, "UnauthorizedCaller");
 
       await expect(
-        hook.connect(nextOrchestrator.wallet).execute(intent, amountNetFees, encodedFulfillData)
+        hook.connect(nextOrchestrator.wallet).executeV2(executionContext, encodedFulfillData)
       ).to.emit(hook, "AcrossBridgeInitiated");
     });
   });
