@@ -18,7 +18,7 @@ import {
   EscrowRegistry,
   USDCMock,
   PaymentVerifierMock,
-  DepositRateManagerRegistryV1,
+  ManualRateManagerRegistry,
   DepositRateManagerController,
 } from "@utils/contracts";
 
@@ -43,7 +43,7 @@ describe("DelegatedRateManagement (MVP)", () => {
   let relayerRegistry: RelayerRegistry;
   let verifier: PaymentVerifierMock;
 
-  let rateManagerRegistry: DepositRateManagerRegistryV1;
+  let rateManagerRegistry: ManualRateManagerRegistry;
   let rateManagerController: DepositRateManagerController;
 
   let chainId: BigNumber = ONE;
@@ -96,8 +96,7 @@ describe("DelegatedRateManagement (MVP)", () => {
     await paymentVerifierRegistry.addPaymentMethod(paymentMethod, verifier.address, [Currency.USD]);
 
     // Deploy + wire the rate manager registry
-    const registryFactory = await ethers.getContractFactory("DepositRateManagerRegistryV1", owner.wallet);
-    rateManagerRegistry = await registryFactory.deploy();
+    rateManagerRegistry = await deployer.deployManualRateManagerRegistry();
     rateManagerController = await deployer.deployDepositRateManagerController();
     await orchestrator.connect(owner.wallet).setDepositRateManagerController(rateManagerController.address);
 
@@ -403,6 +402,78 @@ describe("DelegatedRateManagement (MVP)", () => {
       const afterTaker = await usdcToken.balanceOf(taker.address);
       const afterManager = await usdcToken.balanceOf(managerFeeRecipient.address);
 
+      const releaseAmount = usdc(50);
+      const expectedManagerFee = releaseAmount.mul(ether(0.01)).div(ether(1));
+      expect(afterManager.sub(beforeManager)).to.eq(expectedManagerFee);
+      expect(afterTaker.sub(beforeTaker)).to.eq(releaseAmount.sub(expectedManagerFee));
+    });
+
+    it("fulfill uses fee recipient snapshotted at signal even if registry recipient changes", async () => {
+      await subjectSignalTx();
+
+      // Manager changes fee recipient after signal
+      const [,,,,, newRecipient] = await getAccounts();
+      await rateManagerRegistry.connect(manager.wallet).setRateManagerConfig(
+        rateManagerId,
+        manager.address,
+        newRecipient.address,
+        ADDRESS_ZERO,
+        "USDCTOAIAT",
+        "ipfs://example"
+      );
+
+      const beforeOriginal = await usdcToken.balanceOf(managerFeeRecipient.address);
+      const beforeNew = await usdcToken.balanceOf(newRecipient.address);
+
+      const ts = await blockchain.getCurrentTimestamp();
+      const proof = ethers.utils.defaultAbiCoder.encode(
+        ["uint256", "uint256", "bytes32", "bytes32", "bytes32"],
+        [usdc(50), ts, payeeDetails, Currency.USD, signaledIntentHash]
+      );
+      await orchestrator.connect(taker.wallet).fulfillIntent({
+        paymentProof: proof,
+        intentHash: signaledIntentHash,
+        verificationData: "0x",
+        postIntentHookData: "0x",
+      });
+
+      const afterOriginal = await usdcToken.balanceOf(managerFeeRecipient.address);
+      const afterNew = await usdcToken.balanceOf(newRecipient.address);
+
+      const expectedManagerFee = usdc(50).mul(ether(0.01)).div(ether(1));
+      expect(afterOriginal.sub(beforeOriginal)).to.eq(expectedManagerFee);
+      expect(afterNew.sub(beforeNew)).to.eq(ZERO);
+    });
+
+    it("fulfill uses fee terms snapshotted at signal even if deposit manager is cleared", async () => {
+      await subjectSignalTx();
+
+      // Depositor clears the rate manager binding after signal
+      await rateManagerController.connect(depositor.wallet).clearDepositRateManager(escrow.address, ZERO);
+
+      // Verify the binding is actually cleared
+      const stored = await rateManagerController.getDepositRateManager(escrow.address, ZERO);
+      expect(stored.registry).to.eq(ADDRESS_ZERO);
+
+      const beforeManager = await usdcToken.balanceOf(managerFeeRecipient.address);
+      const beforeTaker = await usdcToken.balanceOf(taker.address);
+
+      const ts = await blockchain.getCurrentTimestamp();
+      const proof = ethers.utils.defaultAbiCoder.encode(
+        ["uint256", "uint256", "bytes32", "bytes32", "bytes32"],
+        [usdc(50), ts, payeeDetails, Currency.USD, signaledIntentHash]
+      );
+      await orchestrator.connect(taker.wallet).fulfillIntent({
+        paymentProof: proof,
+        intentHash: signaledIntentHash,
+        verificationData: "0x",
+        postIntentHookData: "0x",
+      });
+
+      const afterManager = await usdcToken.balanceOf(managerFeeRecipient.address);
+      const afterTaker = await usdcToken.balanceOf(taker.address);
+
+      // Fulfill must use the 1% fee snapshotted at signal, not the now-cleared 0% state
       const releaseAmount = usdc(50);
       const expectedManagerFee = releaseAmount.mul(ether(0.01)).div(ether(1));
       expect(afterManager.sub(beforeManager)).to.eq(expectedManagerFee);

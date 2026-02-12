@@ -1,6 +1,6 @@
 import "module-alias/register";
 
-import { deployments } from "hardhat";
+import { deployments, ethers } from "hardhat";
 
 import {
   DepositRateManagerHookV1__factory,
@@ -29,12 +29,11 @@ describe("DepositRateManagerHookV1 Deployment", () => {
     [deployer] = await getAccounts();
   });
 
-  it("should deploy DepositRateManagerHookV1 with correct registry", async () => {
+  it("should deploy DepositRateManagerHookV1", async () => {
     const hookAddress = getDeployedContractAddress(network, "DepositRateManagerHookV1");
     const hook = new DepositRateManagerHookV1__factory(deployer.wallet).attach(hookAddress);
 
-    const registryAddress = getDeployedContractAddress(network, "DepositRateManagerRegistryV1");
-
-    expect(await hook.registry()).to.eq(registryAddress);
+    expect(hook.address).to.not.eq(ethers.constants.AddressZero);
+    expect(await ethers.provider.getCode(hook.address)).to.not.eq("0x");
   });
 });

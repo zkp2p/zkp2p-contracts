@@ -6,7 +6,12 @@ import DeployHelper from "@utils/deploys";
 import { ADDRESS_ZERO, ZERO } from "@utils/constants";
 import { ether, usdc } from "@utils/common";
 import { Currency } from "@utils/protocolUtils";
-import { DepositRateManagerRegistryV1, DepositRateManagerHookV1, DepositRateManagerController } from "@utils/contracts";
+import {
+  ManualRateManagerRegistry,
+  OracleRateManagerRegistry,
+  DepositRateManagerHookV1,
+  DepositRateManagerController
+} from "@utils/contracts";
 
 const expect = getWaffleExpect();
 
@@ -16,7 +21,8 @@ describe("DepositRateManagerHookV1", () => {
 
   // Contracts
   let escrow: any;
-  let registry: DepositRateManagerRegistryV1;
+  let manualRegistry: ManualRateManagerRegistry;
+  let oracleRegistry: OracleRateManagerRegistry;
   let hook: DepositRateManagerHookV1;
   let controller: DepositRateManagerController;
   let usdcToken: any;
@@ -49,8 +55,9 @@ describe("DepositRateManagerHookV1", () => {
     venmoPaymentMethod = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
     await paymentVerifierRegistry.addPaymentMethod(venmoPaymentMethod, verifier.address, [Currency.USD]);
 
-    registry = await deployer.deployDepositRateManagerRegistryV1();
-    hook = await deployer.deployDepositRateManagerHookV1(registry.address);
+    manualRegistry = await deployer.deployManualRateManagerRegistry();
+    oracleRegistry = await deployer.deployOracleRateManagerRegistry();
+    hook = await deployer.deployDepositRateManagerHookV1();
     controller = await deployer.deployDepositRateManagerController();
 
     // Common values
@@ -58,26 +65,28 @@ describe("DepositRateManagerHookV1", () => {
   });
 
   // Local helper to fetch id from createRateManager without double-wait
-  async function createRateManagerAndGetId(reg: DepositRateManagerRegistryV1, cfg: any): Promise<string> {
-    const tx = await reg.createRateManager(cfg);
+  async function createRateManagerAndGetId(registry: ManualRateManagerRegistry | OracleRateManagerRegistry, cfg: any): Promise<string> {
+    const tx = await registry.createRateManager(cfg);
     const rcpt = await tx.wait();
     const ev = rcpt.events?.find((e: any) => e.event === "RateManagerCreated");
     return ev?.args?.rateManagerId;
   }
 
   describe("#setMinLiquidity", () => {
+    let subjectRegistry: string;
     let subjectRateManagerId: BytesLike;
     let subjectMin: BigNumber;
     let subjectCaller: any;
 
     async function subject() {
-      return hook.connect(subjectCaller.wallet).setMinLiquidity(subjectRateManagerId, subjectMin);
+      return hook.connect(subjectCaller.wallet).setMinLiquidity(subjectRegistry, subjectRateManagerId, subjectMin);
     }
 
     beforeEach(async () => {
       subjectCaller = manager;
+      subjectRegistry = manualRegistry.address;
       subjectMin = usdc(200);
-      subjectRateManagerId = await createRateManagerAndGetId(registry, {
+      subjectRateManagerId = await createRateManagerAndGetId(manualRegistry, {
         manager: manager.address,
         feeRecipient: feeRecipient.address,
         maxFee: ether(0.05),
@@ -89,8 +98,8 @@ describe("DepositRateManagerHookV1", () => {
     });
 
     it("updates threshold and emits", async () => {
-      await expect(subject()).to.emit(hook, "MinLiquidityUpdated").withArgs(subjectRateManagerId, subjectMin);
-      expect(await hook.minLiquidity(subjectRateManagerId)).to.eq(subjectMin);
+      await expect(subject()).to.emit(hook, "MinLiquidityUpdated").withArgs(subjectRegistry, subjectRateManagerId, subjectMin);
+      expect(await hook.minLiquidity(subjectRegistry, subjectRateManagerId)).to.eq(subjectMin);
     });
 
     describe("when caller is not manager", () => {
@@ -99,6 +108,15 @@ describe("DepositRateManagerHookV1", () => {
       });
       it("should revert", async () => {
         await expect(subject()).to.be.revertedWithCustomError(hook, "NotManager");
+      });
+    });
+
+    describe("when registry is zero", () => {
+      beforeEach(async () => {
+        subjectRegistry = ADDRESS_ZERO;
+      });
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(hook, "InvalidRegistry");
       });
     });
   });
@@ -122,7 +140,7 @@ describe("DepositRateManagerHookV1", () => {
         retainOnEmpty: false,
       });
 
-      rateManagerId = await createRateManagerAndGetId(registry, {
+      rateManagerId = await createRateManagerAndGetId(manualRegistry, {
         manager: manager.address,
         feeRecipient: feeRecipient.address,
         maxFee: ether(0.05),
@@ -135,21 +153,63 @@ describe("DepositRateManagerHookV1", () => {
 
     describe("when below manager min", () => {
       beforeEach(async () => {
-        await hook.connect(manager.wallet).setMinLiquidity(rateManagerId, usdc(200));
+        await hook.connect(manager.wallet).setMinLiquidity(manualRegistry.address, rateManagerId, usdc(200));
       });
       it("should revert", async () => {
-        await expect(controller.connect(depositor.wallet).setDepositRateManager(escrow.address, 0, registry.address, rateManagerId)).to.be.revertedWithCustomError(hook, "BelowMinLiquidity");
+        await expect(controller.connect(depositor.wallet).setDepositRateManager(escrow.address, 0, manualRegistry.address, rateManagerId)).to.be.revertedWithCustomError(hook, "BelowMinLiquidity");
       });
     });
 
     describe("when above manager min", () => {
       beforeEach(async () => {
-        await hook.connect(manager.wallet).setMinLiquidity(rateManagerId, usdc(50));
+        await hook.connect(manager.wallet).setMinLiquidity(manualRegistry.address, rateManagerId, usdc(50));
       });
       it("emits deposit updated", async () => {
-        await expect(controller.connect(depositor.wallet).setDepositRateManager(escrow.address, 0, registry.address, rateManagerId))
+        await expect(controller.connect(depositor.wallet).setDepositRateManager(escrow.address, 0, manualRegistry.address, rateManagerId))
           .to.emit(controller, "DepositRateManagerSet")
-          .withArgs(escrow.address, 0, registry.address, rateManagerId);
+          .withArgs(escrow.address, 0, manualRegistry.address, rateManagerId);
+      });
+    });
+
+    describe("when opting into an oracle registry manager", () => {
+      let oracleRateManagerId: BytesLike;
+
+      beforeEach(async () => {
+        oracleRateManagerId = await createRateManagerAndGetId(oracleRegistry, {
+          manager: manager.address,
+          feeRecipient: feeRecipient.address,
+          maxFee: ether(0.05),
+          fee: 0,
+          depositHook: hook.address,
+          name: "oracle",
+          uri: "oracle",
+        });
+      });
+
+      describe("and below oracle manager min", () => {
+        beforeEach(async () => {
+          await hook.connect(manager.wallet).setMinLiquidity(oracleRegistry.address, oracleRateManagerId, usdc(200));
+        });
+
+        it("should revert", async () => {
+          await expect(
+            controller.connect(depositor.wallet).setDepositRateManager(escrow.address, 0, oracleRegistry.address, oracleRateManagerId)
+          ).to.be.revertedWithCustomError(hook, "BelowMinLiquidity");
+        });
+      });
+
+      describe("and above oracle manager min", () => {
+        beforeEach(async () => {
+          await hook.connect(manager.wallet).setMinLiquidity(oracleRegistry.address, oracleRateManagerId, usdc(50));
+        });
+
+        it("emits deposit updated", async () => {
+          await expect(
+            controller.connect(depositor.wallet).setDepositRateManager(escrow.address, 0, oracleRegistry.address, oracleRateManagerId)
+          )
+            .to.emit(controller, "DepositRateManagerSet")
+            .withArgs(escrow.address, 0, oracleRegistry.address, oracleRateManagerId);
+        });
       });
     });
   });

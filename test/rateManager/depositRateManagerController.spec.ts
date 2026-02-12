@@ -10,13 +10,13 @@ import { Currency } from "@utils/protocolUtils";
 
 import {
   DepositRateManagerController,
-  DepositRateManagerRegistryV1,
+  ManualRateManagerRegistry,
   Escrow,
   PaymentVerifierMock,
   PaymentVerifierRegistry,
   RateManagerDepositHookMock,
   USDCMock,
-  IDepositRateManagerRegistryV1,
+  IBaseRateManagerRegistry,
 } from "@utils/contracts";
 
 const expect = getWaffleExpect();
@@ -32,7 +32,7 @@ describe("DepositRateManagerController", () => {
   // Contracts
   let escrow: Escrow;
   let controller: DepositRateManagerController;
-  let registry: DepositRateManagerRegistryV1;
+  let registry: ManualRateManagerRegistry;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
   let verifier: PaymentVerifierMock;
   let usdcToken: USDCMock;
@@ -66,7 +66,7 @@ describe("DepositRateManagerController", () => {
     paymentMethod = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
     await paymentVerifierRegistry.addPaymentMethod(paymentMethod, verifier.address, [Currency.USD, Currency.EUR]);
 
-    registry = await deployer.deployDepositRateManagerRegistryV1();
+    registry = await deployer.deployManualRateManagerRegistry();
     controller = await deployer.deployDepositRateManagerController();
     hook = await deployer.deployRateManagerDepositHookMock();
 
@@ -74,8 +74,8 @@ describe("DepositRateManagerController", () => {
   });
 
   async function createRateManagerAndGetId(
-    reg: DepositRateManagerRegistryV1,
-    cfg: IDepositRateManagerRegistryV1.RateManagerConfigStruct
+    reg: ManualRateManagerRegistry,
+    cfg: IBaseRateManagerRegistry.RateManagerConfigStruct
   ): Promise<string> {
     const tx = await reg.createRateManager(cfg);
     const receipt = await tx.wait();

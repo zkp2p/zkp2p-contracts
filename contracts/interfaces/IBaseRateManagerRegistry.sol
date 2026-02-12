@@ -3,11 +3,11 @@
 pragma solidity ^0.8.18;
 
 /**
- * @title IDepositRateManagerRegistryV1
- * @notice Permissionless registry for “deposit rate managers”.
- * A rate manager config is identified by a `rateManagerId` (bytes32) and can be shared across many deposits.
+ * @title IBaseRateManagerRegistry
+ * @notice Shared interface for deposit rate manager registries.
+ * @dev `DepositRateManagerController` depends only on this interface.
  */
-interface IDepositRateManagerRegistryV1 {
+interface IBaseRateManagerRegistry {
     /* ============ Structs ============ */
 
     struct RateManagerConfig {
@@ -42,27 +42,23 @@ interface IDepositRateManagerRegistryV1 {
         string uri
     );
 
-    event RateManagerMinRateUpdated(
-        bytes32 indexed rateManagerId,
-        bytes32 indexed paymentMethod,
-        bytes32 indexed currency,
-        uint256 minRate
-    );
-
-    event RateManagerMinRatesBatchUpdated(bytes32 indexed rateManagerId, uint256 count);
     event RateManagerFeeUpdated(bytes32 indexed rateManagerId, uint256 fee);
 
     /* ============ External Functions ============ */
 
     function createRateManager(RateManagerConfig calldata _config) external returns (bytes32 rateManagerId);
 
-    function setRateManagerConfig(bytes32 _rateManagerId, address _newManager, address _newFeeRecipient, address _newHook, string calldata _newName, string calldata _newUri) external;
+    function setRateManagerConfig(
+        bytes32 _rateManagerId,
+        address _newManager,
+        address _newFeeRecipient,
+        address _newHook,
+        string calldata _newName,
+        string calldata _newUri
+    )
+        external;
 
     function setFee(bytes32 _rateManagerId, uint256 _newFee) external;
-
-    function setMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency, uint256 _minRate) external;
-
-    function setMinRatesBatch(bytes32 _rateManagerId, bytes32[] calldata _paymentMethods, bytes32[][] calldata _currencies, uint256[][] calldata _minRates) external;
 
     /* ============ View Functions ============ */
 
@@ -76,3 +72,4 @@ interface IDepositRateManagerRegistryV1 {
 
     function getMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency) external view returns (uint256);
 }
+

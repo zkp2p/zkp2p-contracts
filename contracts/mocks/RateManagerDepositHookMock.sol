@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 import { IDepositRateManagerHook } from "../interfaces/IDepositRateManagerHook.sol";
 
 contract RateManagerDepositHookMock is IDepositRateManagerHook {
-    event OptInCalled(address depositor, address escrow, uint256 depositId);
+    event OptInCalled(address depositor, address escrow, uint256 depositId, address registry, bytes32 rateManagerId);
 
     bool public shouldRevert;
 
@@ -12,11 +12,21 @@ contract RateManagerDepositHookMock is IDepositRateManagerHook {
         shouldRevert = value;
     }
 
-    function onDepositOptIn(address depositor, address escrow, uint256 depositId, bytes32 /*rateManagerId*/ ) external view override {
+    function onDepositOptIn(
+        address depositor,
+        address escrow,
+        uint256 depositId,
+        address registry,
+        bytes32 rateManagerId
+    )
+        external
+        view
+        override
+    {
         if (shouldRevert) {
             revert("Hook: revert on opt-in");
         }
         // view only; cannot emit here without changing signature. Tests will check revert/non-revert behavior.
-        depositor; escrow; depositId; // silence warnings
+        depositor; escrow; depositId; registry; rateManagerId; // silence warnings
     }
 }

@@ -43,7 +43,8 @@ import { PaymentVerifierRegistry__factory } from "../typechain/factories/contrac
 import { PostIntentHookRegistry__factory } from "../typechain/factories/contracts/registries";
 import { RelayerRegistry__factory } from "../typechain/factories/contracts/registries";
 import { EscrowRegistry__factory } from "../typechain/factories/contracts/registries";
-import { DepositRateManagerRegistryV1__factory } from "../typechain/factories/contracts/registries/DepositRateManagerRegistryV1__factory";
+import { ManualRateManagerRegistry__factory } from "../typechain/factories/contracts/registries/ManualRateManagerRegistry__factory";
+import { OracleRateManagerRegistry__factory } from "../typechain/factories/contracts/registries/OracleRateManagerRegistry__factory";
 import { DepositRateManagerController__factory } from "../typechain/factories/contracts/DepositRateManagerController.sol/DepositRateManagerController__factory";
 import { Escrow__factory } from "../typechain/factories/contracts/index";
 import { ProtocolViewer__factory } from "../typechain/factories/contracts/index";
@@ -52,7 +53,13 @@ import { UnifiedPaymentVerifier__factory } from "../typechain/factories/contract
 import { SimpleAttestationVerifier__factory } from "../typechain/factories/contracts/unifiedVerifier";
 import { RateManagerDepositHookMock__factory } from "../typechain/factories/contracts/mocks/RateManagerDepositHookMock__factory";
 import { DepositRateManagerHookV1__factory } from "../typechain/factories/contracts/hooks/DepositRateManagerHookV1__factory";
-import { DepositRateManagerRegistryV1, DepositRateManagerController, RateManagerDepositHookMock, DepositRateManagerHookV1 } from "../typechain";
+import {
+  ManualRateManagerRegistry,
+  OracleRateManagerRegistry,
+  DepositRateManagerController,
+  RateManagerDepositHookMock,
+  DepositRateManagerHookV1
+} from "../typechain";
 
 export default class DeployHelper {
   private _deployerSigner: Signer;
@@ -175,8 +182,12 @@ export default class DeployHelper {
   }
 
   // Deposit Rate Manager helpers
-  public async deployDepositRateManagerRegistryV1(): Promise<DepositRateManagerRegistryV1> {
-    return await new DepositRateManagerRegistryV1__factory(this._deployerSigner).deploy();
+  public async deployManualRateManagerRegistry(): Promise<ManualRateManagerRegistry> {
+    return await new ManualRateManagerRegistry__factory(this._deployerSigner).deploy();
+  }
+
+  public async deployOracleRateManagerRegistry(): Promise<OracleRateManagerRegistry> {
+    return await new OracleRateManagerRegistry__factory(this._deployerSigner).deploy();
   }
 
   public async deployDepositRateManagerController(): Promise<DepositRateManagerController> {
@@ -187,8 +198,8 @@ export default class DeployHelper {
     return await new RateManagerDepositHookMock__factory(this._deployerSigner).deploy();
   }
 
-  public async deployDepositRateManagerHookV1(registry: Address): Promise<DepositRateManagerHookV1> {
-    return await new DepositRateManagerHookV1__factory(this._deployerSigner).deploy(registry);
+  public async deployDepositRateManagerHookV1(): Promise<DepositRateManagerHookV1> {
+    return await new DepositRateManagerHookV1__factory(this._deployerSigner).deploy();
   }
 
 

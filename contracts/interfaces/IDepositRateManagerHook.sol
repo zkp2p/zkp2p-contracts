@@ -12,8 +12,16 @@ interface IDepositRateManagerHook {
      * @param depositor      The depositor opting in.
      * @param escrow         The Escrow contract address.
      * @param depositId      The deposit id on the escrow.
+     * @param registry       The rate manager registry address for this opt-in.
      * @param rateManagerId  The rate manager id the depositor intends to opt into.
      */
-    function onDepositOptIn(address depositor, address escrow, uint256 depositId, bytes32 rateManagerId) external view;
+    function onDepositOptIn(
+        address depositor,
+        address escrow,
+        uint256 depositId,
+        address registry,
+        bytes32 rateManagerId
+    )
+        external
+        view;
 }
-

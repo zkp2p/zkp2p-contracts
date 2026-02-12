@@ -1,0 +1,818 @@
+{
+  "address": "0x150616c0cB9617e4107E79b873Edb3faCC3E49E9",
+  "abi": [
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "manager",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "feeRecipient",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "depositHook",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "uri",
+          "type": "string"
+        }
+      ],
+      "name": "RateManagerConfigUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "manager",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "feeRecipient",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "maxFee",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "fee",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "depositHook",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "uri",
+          "type": "string"
+        }
+      ],
+      "name": "RateManagerCreated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "fee",
+          "type": "uint256"
+        }
+      ],
+      "name": "RateManagerFeeUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "currency",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "adapter",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint16",
+          "name": "spreadBps",
+          "type": "uint16"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint32",
+          "name": "maxStaleness",
+          "type": "uint32"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes",
+          "name": "adapterConfig",
+          "type": "bytes"
+        }
+      ],
+      "name": "RateManagerOracleConfigUpdated",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "manager",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "feeRecipient",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "maxFee",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "depositHook",
+              "type": "address"
+            },
+            {
+              "internalType": "string",
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "internalType": "string",
+              "name": "uri",
+              "type": "string"
+            }
+          ],
+          "internalType": "struct IBaseRateManagerRegistry.RateManagerConfig",
+          "name": "_config",
+          "type": "tuple"
+        }
+      ],
+      "name": "createRateManager",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getDepositHook",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getFeeAndRecipient",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "fee",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "feeRecipient",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_currency",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getMinRate",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_currency",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getOracleConfig",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "isConfigured",
+          "type": "bool"
+        },
+        {
+          "internalType": "address",
+          "name": "adapter",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes",
+          "name": "adapterConfig",
+          "type": "bytes"
+        },
+        {
+          "internalType": "uint16",
+          "name": "spreadBps",
+          "type": "uint16"
+        },
+        {
+          "internalType": "uint32",
+          "name": "maxStaleness",
+          "type": "uint32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getRateManager",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "manager",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "feeRecipient",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "maxFee",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "depositHook",
+              "type": "address"
+            },
+            {
+              "internalType": "string",
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "internalType": "string",
+              "name": "uri",
+              "type": "string"
+            }
+          ],
+          "internalType": "struct IBaseRateManagerRegistry.RateManagerConfig",
+          "name": "",
+          "type": "tuple"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "isRateManager",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_newFee",
+          "type": "uint256"
+        }
+      ],
+      "name": "setFee",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_currency",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "address",
+          "name": "_adapter",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes",
+          "name": "_rawAdapterConfig",
+          "type": "bytes"
+        },
+        {
+          "internalType": "uint16",
+          "name": "_spreadBps",
+          "type": "uint16"
+        },
+        {
+          "internalType": "uint32",
+          "name": "_maxStaleness",
+          "type": "uint32"
+        }
+      ],
+      "name": "setOracleConfig",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_rateManagerId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "address",
+          "name": "_newManager",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_newFeeRecipient",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_newHook",
+          "type": "address"
+        },
+        {
+          "internalType": "string",
+          "name": "_newName",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "_newUri",
+          "type": "string"
+        }
+      ],
+      "name": "setRateManagerConfig",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0xca5a324733d9c4e1ebdd4b246b9b7ea50d6c9b517465827ca63ef0b70899e6ad",
+  "receipt": {
+    "to": null,
+    "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "contractAddress": "0x150616c0cB9617e4107E79b873Edb3faCC3E49E9",
+    "transactionIndex": 32,
+    "gasUsed": "1370857",
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0x88949d184beabf9fabe180c93151cfbf0e46ea36656b053e5abdbcaa8877426c",
+    "transactionHash": "0xca5a324733d9c4e1ebdd4b246b9b7ea50d6c9b517465827ca63ef0b70899e6ad",
+    "logs": [],
+    "blockNumber": 41977995,
+    "cumulativeGasUsed": "8019513",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [],
+  "numDeployments": 1,
+  "solcInputHash": "800d9fda6a67f8979fc83a655f4a7943",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"manager\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"feeRecipient\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"depositHook\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"uri\",\"type\":\"string\"}],\"name\":\"RateManagerConfigUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"manager\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"feeRecipient\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"maxFee\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"depositHook\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"uri\",\"type\":\"string\"}],\"name\":\"RateManagerCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"RateManagerFeeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"currency\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"adapter\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint16\",\"name\":\"spreadBps\",\"type\":\"uint16\"},{\"indexed\":false,\"internalType\":\"uint32\",\"name\":\"maxStaleness\",\"type\":\"uint32\"},{\"indexed\":false,\"internalType\":\"bytes\",\"name\":\"adapterConfig\",\"type\":\"bytes\"}],\"name\":\"RateManagerOracleConfigUpdated\",\"type\":\"event\"},{\"inputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"manager\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"feeRecipient\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"maxFee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"depositHook\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"uri\",\"type\":\"string\"}],\"internalType\":\"struct IBaseRateManagerRegistry.RateManagerConfig\",\"name\":\"_config\",\"type\":\"tuple\"}],\"name\":\"createRateManager\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"rateManagerId\",\"type\":\"bytes32\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"}],\"name\":\"getDepositHook\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"}],\"name\":\"getFeeAndRecipient\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"feeRecipient\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"_paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"_currency\",\"type\":\"bytes32\"}],\"name\":\"getMinRate\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"_paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"_currency\",\"type\":\"bytes32\"}],\"name\":\"getOracleConfig\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"isConfigured\",\"type\":\"bool\"},{\"internalType\":\"address\",\"name\":\"adapter\",\"type\":\"address\"},{\"internalType\":\"bytes\",\"name\":\"adapterConfig\",\"type\":\"bytes\"},{\"internalType\":\"uint16\",\"name\":\"spreadBps\",\"type\":\"uint16\"},{\"internalType\":\"uint32\",\"name\":\"maxStaleness\",\"type\":\"uint32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"}],\"name\":\"getRateManager\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"manager\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"feeRecipient\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"maxFee\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"depositHook\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"uri\",\"type\":\"string\"}],\"internalType\":\"struct IBaseRateManagerRegistry.RateManagerConfig\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"}],\"name\":\"isRateManager\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"_newFee\",\"type\":\"uint256\"}],\"name\":\"setFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"_paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"_currency\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"_adapter\",\"type\":\"address\"},{\"internalType\":\"bytes\",\"name\":\"_rawAdapterConfig\",\"type\":\"bytes\"},{\"internalType\":\"uint16\",\"name\":\"_spreadBps\",\"type\":\"uint16\"},{\"internalType\":\"uint32\",\"name\":\"_maxStaleness\",\"type\":\"uint32\"}],\"name\":\"setOracleConfig\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_rateManagerId\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"_newManager\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_newFeeRecipient\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_newHook\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"_newName\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"_newUri\",\"type\":\"string\"}],\"name\":\"setRateManagerConfig\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"details\":\"`getMinRate()` is view-only and returns 0 (disabled) if the tuple is unconfigured, the adapter fails,      or the adapter's data is stale. Rate semantics: - All rates returned are in preciseUnits (1e18). - Rates represent \\\"fiat per deposit token\\\".\",\"kind\":\"dev\",\"methods\":{\"createRateManager((address,address,uint256,uint256,address,string,string))\":{\"details\":\"The identifier is derived as keccak256(abi.encodePacked(address(this), nextId)).      This ties IDs to the registry deployment and avoids deliberate collisions.      Reverts if inputs are invalid or fee exceeds caps.\",\"params\":{\"_config\":\"Rate manager configuration {manager, feeRecipient, maxFee, fee, depositHook, name, uri}.\"},\"returns\":{\"rateManagerId\":\"Newly minted manager id (bytes32).\"}},\"getMinRate(bytes32,bytes32,bytes32)\":{\"details\":\"Returns 0 if the tuple is not configured, the oracle returns invalid data, or the data is stale.      For constant-rate adapter configs (e.g. Chainlink `feed == address(0)`), returns (1 + spread) in preciseUnits.\"},\"setFee(bytes32,uint256)\":{\"details\":\"Only callable by config.manager. New fee must be <= maxFee and if > 0 then feeRecipient must be set.\"},\"setOracleConfig(bytes32,bytes32,bytes32,address,bytes,uint16,uint32)\":{\"details\":\"Only callable by the rate manager. The adapter is responsible for validating and normalizing      `_rawAdapterConfig` (e.g. Chainlink adapter supports `feed == address(0)` as a constant 1.0 base rate      which can be used for USD when the deposit token is assumed to be USDC).\"},\"setRateManagerConfig(bytes32,address,address,address,string,string)\":{\"details\":\"Only callable by the current config.manager. Does not alter maxFee.      If an existing fee is non-zero, a non-zero feeRecipient must be supplied.\"}},\"title\":\"OracleRateManagerRegistry\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"createRateManager((address,address,uint256,uint256,address,string,string))\":{\"notice\":\"Creates a new rate manager configuration.\"},\"getDepositHook(bytes32)\":{\"notice\":\"Returns the deposit hook address configured for a manager id (or address(0) if none).\"},\"getFeeAndRecipient(bytes32)\":{\"notice\":\"Returns the manager fee and recipient for an id.\"},\"getMinRate(bytes32,bytes32,bytes32)\":{\"notice\":\"Returns the manager-level minimum rate for a (paymentMethod, currency) pair.\"},\"getOracleConfig(bytes32,bytes32,bytes32)\":{\"notice\":\"Returns the oracle configuration for a tuple.\"},\"getRateManager(bytes32)\":{\"notice\":\"Returns the full manager configuration for an id.\"},\"isRateManager(bytes32)\":{\"notice\":\"Returns true if the manager id exists.\"},\"setFee(bytes32,uint256)\":{\"notice\":\"Updates the manager fee for a given id.\"},\"setOracleConfig(bytes32,bytes32,bytes32,address,bytes,uint16,uint32)\":{\"notice\":\"Configures an oracle feed + spread for a (rateManagerId, paymentMethod, currency) tuple.\"},\"setRateManagerConfig(bytes32,address,address,address,string,string)\":{\"notice\":\"Updates mutable fields on a rate manager config.\"}},\"notice\":\"Permissionless registry of \\u201cdeposit rate managers\\u201d backed by onchain oracles.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/registries/OracleRateManagerRegistry.sol\":\"OracleRateManagerRegistry\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"@openzeppelin/contracts/utils/math/Math.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (utils/math/Math.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Standard math utilities missing in the Solidity language.\\n */\\nlibrary Math {\\n    enum Rounding {\\n        Down, // Toward negative infinity\\n        Up, // Toward infinity\\n        Zero // Toward zero\\n    }\\n\\n    /**\\n     * @dev Returns the largest of two numbers.\\n     */\\n    function max(uint256 a, uint256 b) internal pure returns (uint256) {\\n        return a > b ? a : b;\\n    }\\n\\n    /**\\n     * @dev Returns the smallest of two numbers.\\n     */\\n    function min(uint256 a, uint256 b) internal pure returns (uint256) {\\n        return a < b ? a : b;\\n    }\\n\\n    /**\\n     * @dev Returns the average of two numbers. The result is rounded towards\\n     * zero.\\n     */\\n    function average(uint256 a, uint256 b) internal pure returns (uint256) {\\n        // (a + b) / 2 can overflow.\\n        return (a & b) + (a ^ b) / 2;\\n    }\\n\\n    /**\\n     * @dev Returns the ceiling of the division of two numbers.\\n     *\\n     * This differs from standard division with `/` in that it rounds up instead\\n     * of rounding down.\\n     */\\n    function ceilDiv(uint256 a, uint256 b) internal pure returns (uint256) {\\n        // (a + b - 1) / b can overflow on addition, so we distribute.\\n        return a == 0 ? 0 : (a - 1) / b + 1;\\n    }\\n\\n    /**\\n     * @notice Calculates floor(x * y / denominator) with full precision. Throws if result overflows a uint256 or denominator == 0\\n     * @dev Original credit to Remco Bloemen under MIT license (https://xn--2-umb.com/21/muldiv)\\n     * with further edits by Uniswap Labs also under MIT license.\\n     */\\n    function mulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result) {\\n        unchecked {\\n            // 512-bit multiply [prod1 prod0] = x * y. Compute the product mod 2^256 and mod 2^256 - 1, then use\\n            // use the Chinese Remainder Theorem to reconstruct the 512 bit result. The result is stored in two 256\\n            // variables such that product = prod1 * 2^256 + prod0.\\n            uint256 prod0; // Least significant 256 bits of the product\\n            uint256 prod1; // Most significant 256 bits of the product\\n            assembly {\\n                let mm := mulmod(x, y, not(0))\\n                prod0 := mul(x, y)\\n                prod1 := sub(sub(mm, prod0), lt(mm, prod0))\\n            }\\n\\n            // Handle non-overflow cases, 256 by 256 division.\\n            if (prod1 == 0) {\\n                // Solidity will revert if denominator == 0, unlike the div opcode on its own.\\n                // The surrounding unchecked block does not change this fact.\\n                // See https://docs.soliditylang.org/en/latest/control-structures.html#checked-or-unchecked-arithmetic.\\n                return prod0 / denominator;\\n            }\\n\\n            // Make sure the result is less than 2^256. Also prevents denominator == 0.\\n            require(denominator > prod1, \\\"Math: mulDiv overflow\\\");\\n\\n            ///////////////////////////////////////////////\\n            // 512 by 256 division.\\n            ///////////////////////////////////////////////\\n\\n            // Make division exact by subtracting the remainder from [prod1 prod0].\\n            uint256 remainder;\\n            assembly {\\n                // Compute remainder using mulmod.\\n                remainder := mulmod(x, y, denominator)\\n\\n                // Subtract 256 bit number from 512 bit number.\\n                prod1 := sub(prod1, gt(remainder, prod0))\\n                prod0 := sub(prod0, remainder)\\n            }\\n\\n            // Factor powers of two out of denominator and compute largest power of two divisor of denominator. Always >= 1.\\n            // See https://cs.stackexchange.com/q/138556/92363.\\n\\n            // Does not overflow because the denominator cannot be zero at this stage in the function.\\n            uint256 twos = denominator & (~denominator + 1);\\n            assembly {\\n                // Divide denominator by twos.\\n                denominator := div(denominator, twos)\\n\\n                // Divide [prod1 prod0] by twos.\\n                prod0 := div(prod0, twos)\\n\\n                // Flip twos such that it is 2^256 / twos. If twos is zero, then it becomes one.\\n                twos := add(div(sub(0, twos), twos), 1)\\n            }\\n\\n            // Shift in bits from prod1 into prod0.\\n            prod0 |= prod1 * twos;\\n\\n            // Invert denominator mod 2^256. Now that denominator is an odd number, it has an inverse modulo 2^256 such\\n            // that denominator * inv = 1 mod 2^256. Compute the inverse by starting with a seed that is correct for\\n            // four bits. That is, denominator * inv = 1 mod 2^4.\\n            uint256 inverse = (3 * denominator) ^ 2;\\n\\n            // Use the Newton-Raphson iteration to improve the precision. Thanks to Hensel's lifting lemma, this also works\\n            // in modular arithmetic, doubling the correct bits in each step.\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^8\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^16\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^32\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^64\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^128\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^256\\n\\n            // Because the division is now exact we can divide by multiplying with the modular inverse of denominator.\\n            // This will give us the correct result modulo 2^256. Since the preconditions guarantee that the outcome is\\n            // less than 2^256, this is the final result. We don't need to compute the high bits of the result and prod1\\n            // is no longer required.\\n            result = prod0 * inverse;\\n            return result;\\n        }\\n    }\\n\\n    /**\\n     * @notice Calculates x * y / denominator with full precision, following the selected rounding direction.\\n     */\\n    function mulDiv(uint256 x, uint256 y, uint256 denominator, Rounding rounding) internal pure returns (uint256) {\\n        uint256 result = mulDiv(x, y, denominator);\\n        if (rounding == Rounding.Up && mulmod(x, y, denominator) > 0) {\\n            result += 1;\\n        }\\n        return result;\\n    }\\n\\n    /**\\n     * @dev Returns the square root of a number. If the number is not a perfect square, the value is rounded down.\\n     *\\n     * Inspired by Henry S. Warren, Jr.'s \\\"Hacker's Delight\\\" (Chapter 11).\\n     */\\n    function sqrt(uint256 a) internal pure returns (uint256) {\\n        if (a == 0) {\\n            return 0;\\n        }\\n\\n        // For our first guess, we get the biggest power of 2 which is smaller than the square root of the target.\\n        //\\n        // We know that the \\\"msb\\\" (most significant bit) of our target number `a` is a power of 2 such that we have\\n        // `msb(a) <= a < 2*msb(a)`. This value can be written `msb(a)=2**k` with `k=log2(a)`.\\n        //\\n        // This can be rewritten `2**log2(a) <= a < 2**(log2(a) + 1)`\\n        // \\u2192 `sqrt(2**k) <= sqrt(a) < sqrt(2**(k+1))`\\n        // \\u2192 `2**(k/2) <= sqrt(a) < 2**((k+1)/2) <= 2**(k/2 + 1)`\\n        //\\n        // Consequently, `2**(log2(a) / 2)` is a good first approximation of `sqrt(a)` with at least 1 correct bit.\\n        uint256 result = 1 << (log2(a) >> 1);\\n\\n        // At this point `result` is an estimation with one bit of precision. We know the true value is a uint128,\\n        // since it is the square root of a uint256. Newton's method converges quadratically (precision doubles at\\n        // every iteration). We thus need at most 7 iteration to turn our partial result with one bit of precision\\n        // into the expected uint128 result.\\n        unchecked {\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            return min(result, a / result);\\n        }\\n    }\\n\\n    /**\\n     * @notice Calculates sqrt(a), following the selected rounding direction.\\n     */\\n    function sqrt(uint256 a, Rounding rounding) internal pure returns (uint256) {\\n        unchecked {\\n            uint256 result = sqrt(a);\\n            return result + (rounding == Rounding.Up && result * result < a ? 1 : 0);\\n        }\\n    }\\n\\n    /**\\n     * @dev Return the log in base 2, rounded down, of a positive value.\\n     * Returns 0 if given 0.\\n     */\\n    function log2(uint256 value) internal pure returns (uint256) {\\n        uint256 result = 0;\\n        unchecked {\\n            if (value >> 128 > 0) {\\n                value >>= 128;\\n                result += 128;\\n            }\\n            if (value >> 64 > 0) {\\n                value >>= 64;\\n                result += 64;\\n            }\\n            if (value >> 32 > 0) {\\n                value >>= 32;\\n                result += 32;\\n            }\\n            if (value >> 16 > 0) {\\n                value >>= 16;\\n                result += 16;\\n            }\\n            if (value >> 8 > 0) {\\n                value >>= 8;\\n                result += 8;\\n            }\\n            if (value >> 4 > 0) {\\n                value >>= 4;\\n                result += 4;\\n            }\\n            if (value >> 2 > 0) {\\n                value >>= 2;\\n                result += 2;\\n            }\\n            if (value >> 1 > 0) {\\n                result += 1;\\n            }\\n        }\\n        return result;\\n    }\\n\\n    /**\\n     * @dev Return the log in base 2, following the selected rounding direction, of a positive value.\\n     * Returns 0 if given 0.\\n     */\\n    function log2(uint256 value, Rounding rounding) internal pure returns (uint256) {\\n        unchecked {\\n            uint256 result = log2(value);\\n            return result + (rounding == Rounding.Up && 1 << result < value ? 1 : 0);\\n        }\\n    }\\n\\n    /**\\n     * @dev Return the log in base 10, rounded down, of a positive value.\\n     * Returns 0 if given 0.\\n     */\\n    function log10(uint256 value) internal pure returns (uint256) {\\n        uint256 result = 0;\\n        unchecked {\\n            if (value >= 10 ** 64) {\\n                value /= 10 ** 64;\\n                result += 64;\\n            }\\n            if (value >= 10 ** 32) {\\n                value /= 10 ** 32;\\n                result += 32;\\n            }\\n            if (value >= 10 ** 16) {\\n                value /= 10 ** 16;\\n                result += 16;\\n            }\\n            if (value >= 10 ** 8) {\\n                value /= 10 ** 8;\\n                result += 8;\\n            }\\n            if (value >= 10 ** 4) {\\n                value /= 10 ** 4;\\n                result += 4;\\n            }\\n            if (value >= 10 ** 2) {\\n                value /= 10 ** 2;\\n                result += 2;\\n            }\\n            if (value >= 10 ** 1) {\\n                result += 1;\\n            }\\n        }\\n        return result;\\n    }\\n\\n    /**\\n     * @dev Return the log in base 10, following the selected rounding direction, of a positive value.\\n     * Returns 0 if given 0.\\n     */\\n    function log10(uint256 value, Rounding rounding) internal pure returns (uint256) {\\n        unchecked {\\n            uint256 result = log10(value);\\n            return result + (rounding == Rounding.Up && 10 ** result < value ? 1 : 0);\\n        }\\n    }\\n\\n    /**\\n     * @dev Return the log in base 256, rounded down, of a positive value.\\n     * Returns 0 if given 0.\\n     *\\n     * Adding one to the result gives the number of pairs of hex symbols needed to represent `value` as a hex string.\\n     */\\n    function log256(uint256 value) internal pure returns (uint256) {\\n        uint256 result = 0;\\n        unchecked {\\n            if (value >> 128 > 0) {\\n                value >>= 128;\\n                result += 16;\\n            }\\n            if (value >> 64 > 0) {\\n                value >>= 64;\\n                result += 8;\\n            }\\n            if (value >> 32 > 0) {\\n                value >>= 32;\\n                result += 4;\\n            }\\n            if (value >> 16 > 0) {\\n                value >>= 16;\\n                result += 2;\\n            }\\n            if (value >> 8 > 0) {\\n                result += 1;\\n            }\\n        }\\n        return result;\\n    }\\n\\n    /**\\n     * @dev Return the log in base 256, following the selected rounding direction, of a positive value.\\n     * Returns 0 if given 0.\\n     */\\n    function log256(uint256 value, Rounding rounding) internal pure returns (uint256) {\\n        unchecked {\\n            uint256 result = log256(value);\\n            return result + (rounding == Rounding.Up && 1 << (result << 3) < value ? 1 : 0);\\n        }\\n    }\\n}\\n\",\"keccak256\":\"0xe4455ac1eb7fc497bb7402579e7b4d64d928b846fce7d2b6fde06d366f21c2b3\",\"license\":\"MIT\"},\"contracts/interfaces/IBaseRateManagerRegistry.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IBaseRateManagerRegistry\\n * @notice Shared interface for deposit rate manager registries.\\n * @dev `DepositRateManagerController` depends only on this interface.\\n */\\ninterface IBaseRateManagerRegistry {\\n    /* ============ Structs ============ */\\n\\n    struct RateManagerConfig {\\n        address manager;\\n        address feeRecipient;\\n        uint256 maxFee;              // Immutable upper bound on `fee` (preciseUnits, 1e18 = 100%)\\n        uint256 fee;                 // Flat fee in preciseUnits (must be <= maxFee)\\n        address depositHook;         // Optional hook called on deposit opt-in\\n        string name;                 // Human-readable name (optional)\\n        string uri;                  // Metadata URI (optional)\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event RateManagerCreated(\\n        bytes32 indexed rateManagerId,\\n        address indexed manager,\\n        address indexed feeRecipient,\\n        uint256 maxFee,\\n        uint256 fee,\\n        address depositHook,\\n        string name,\\n        string uri\\n    );\\n\\n    event RateManagerConfigUpdated(\\n        bytes32 indexed rateManagerId,\\n        address indexed manager,\\n        address indexed feeRecipient,\\n        address depositHook,\\n        string name,\\n        string uri\\n    );\\n\\n    event RateManagerFeeUpdated(bytes32 indexed rateManagerId, uint256 fee);\\n\\n    /* ============ External Functions ============ */\\n\\n    function createRateManager(RateManagerConfig calldata _config) external returns (bytes32 rateManagerId);\\n\\n    function setRateManagerConfig(\\n        bytes32 _rateManagerId,\\n        address _newManager,\\n        address _newFeeRecipient,\\n        address _newHook,\\n        string calldata _newName,\\n        string calldata _newUri\\n    )\\n        external;\\n\\n    function setFee(bytes32 _rateManagerId, uint256 _newFee) external;\\n\\n    /* ============ View Functions ============ */\\n\\n    function isRateManager(bytes32 _rateManagerId) external view returns (bool);\\n\\n    function getRateManager(bytes32 _rateManagerId) external view returns (RateManagerConfig memory);\\n\\n    function getFeeAndRecipient(bytes32 _rateManagerId) external view returns (uint256 fee, address feeRecipient);\\n\\n    function getDepositHook(bytes32 _rateManagerId) external view returns (address);\\n\\n    function getMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency) external view returns (uint256);\\n}\\n\\n\",\"keccak256\":\"0x3fa0f39e8f4bd35708898339bf27e30166fa123ca96f69139128b93e91a210f1\",\"license\":\"MIT\"},\"contracts/interfaces/IOracleAdapter.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IOracleAdapter\\n * @notice Generic adapter interface for reading and normalizing oracle rates.\\n * @dev Adapters MUST be view-only (no state mutation) and must normalize rates to 1e18 preciseUnits.\\n *\\n * Rate semantics:\\n * - Returned `rate` is \\\"fiat per deposit token\\\" in preciseUnits (1e18).\\n * - Return `valid=false` (not revert) for typical oracle failure modes (stale round, negative answer, etc.).\\n */\\ninterface IOracleAdapter {\\n    /**\\n     * @notice Validates and normalizes adapter-specific config for storage.\\n     * @dev Should revert on invalid config. The returned bytes are stored by the registry and passed back into `getRate`.\\n     *      Implementations may cache metadata (e.g. feed decimals) in the normalized config to reduce read-time work.\\n     * @param rawConfig Adapter-specific configuration blob.\\n     * @return normalizedConfig Normalized configuration blob suitable for onchain storage.\\n     */\\n    function validateConfig(bytes calldata rawConfig) external view returns (bytes memory normalizedConfig);\\n\\n    /**\\n     * @notice Returns the market rate in 1e18 preciseUnits.\\n     * @dev Should not revert on normal oracle failures; return `valid=false` instead.\\n     * @param normalizedConfig Configuration blob previously returned by `validateConfig`.\\n     * @return valid True iff a usable quote was produced.\\n     * @return rate Market rate in preciseUnits (1e18).\\n     * @return updatedAt Oracle timestamp (0 if unavailable).\\n     */\\n    function getRate(bytes calldata normalizedConfig)\\n        external\\n        view\\n        returns (bool valid, uint256 rate, uint256 updatedAt);\\n}\\n\\n\",\"keccak256\":\"0xc2ff58809f6306feb18d408d7f8154a3f2803560244694144db7c6bf7233894b\",\"license\":\"MIT\"},\"contracts/interfaces/IOracleRateManagerRegistry.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IBaseRateManagerRegistry } from \\\"./IBaseRateManagerRegistry.sol\\\";\\n\\n/**\\n * @title IOracleRateManagerRegistry\\n * @notice Interface for oracle-backed (pull) rate managers.\\n * @dev `getMinRate()` must be a view function and MUST NOT mutate state.\\n */\\ninterface IOracleRateManagerRegistry is IBaseRateManagerRegistry {\\n    /* ============ Events ============ */\\n\\n    event RateManagerOracleConfigUpdated(\\n        bytes32 indexed rateManagerId,\\n        bytes32 indexed paymentMethod,\\n        bytes32 indexed currency,\\n        address adapter,\\n        uint16 spreadBps,\\n        uint32 maxStaleness,\\n        bytes adapterConfig\\n    );\\n\\n    /* ============ External Functions ============ */\\n\\n    function setOracleConfig(\\n        bytes32 _rateManagerId,\\n        bytes32 _paymentMethod,\\n        bytes32 _currency,\\n        address _adapter,\\n        bytes calldata _rawAdapterConfig,\\n        uint16 _spreadBps,\\n        uint32 _maxStaleness\\n    )\\n        external;\\n\\n    /* ============ View Functions ============ */\\n\\n    function getOracleConfig(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency)\\n        external\\n        view\\n        returns (\\n            bool isConfigured,\\n            address adapter,\\n            bytes memory adapterConfig,\\n            uint16 spreadBps,\\n            uint32 maxStaleness\\n        );\\n}\\n\",\"keccak256\":\"0x6505df6d74e434eefe070b5a3e646dbfd2fcbc3145b7dee6a071378e7de995f5\",\"license\":\"MIT\"},\"contracts/registries/BaseRateManagerRegistry.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IBaseRateManagerRegistry } from \\\"../interfaces/IBaseRateManagerRegistry.sol\\\";\\n\\n/**\\n * @title BaseRateManagerRegistry\\n * @notice Shared implementation for deposit rate manager registries.\\n * @dev Concrete implementations must implement `getMinRate`.\\n */\\nabstract contract BaseRateManagerRegistry is IBaseRateManagerRegistry {\\n    /* ============ Constants ============ */\\n\\n    uint256 internal constant GLOBAL_MAX_MANAGER_FEE = 5e16; // 5% (preciseUnits, 1e18 = 100%)\\n\\n    /* ============ State Variables ============ */\\n\\n    uint256 internal nextId = 1;\\n    mapping(bytes32 => RateManagerConfig) internal rateManagers;\\n\\n    /* ============ Modifiers ============ */\\n\\n    modifier onlyManager(bytes32 _rateManagerId) {\\n        address manager = rateManagers[_rateManagerId].manager;\\n        require(manager != address(0), \\\"Rate manager does not exist\\\");\\n        require(msg.sender == manager, \\\"Caller is not manager\\\");\\n        _;\\n    }\\n\\n    /* ============ External Functions ============ */\\n\\n    /**\\n     * @notice Creates a new rate manager configuration.\\n     * @dev The identifier is derived as keccak256(abi.encodePacked(address(this), nextId)).\\n     *      This ties IDs to the registry deployment and avoids deliberate collisions.\\n     *      Reverts if inputs are invalid or fee exceeds caps.\\n     * @param _config Rate manager configuration {manager, feeRecipient, maxFee, fee, depositHook, name, uri}.\\n     * @return rateManagerId Newly minted manager id (bytes32).\\n     */\\n    function createRateManager(RateManagerConfig calldata _config) external returns (bytes32 rateManagerId) {\\n        require(_config.manager != address(0), \\\"Invalid manager\\\");\\n        require(_config.feeRecipient != address(0) || _config.fee == 0, \\\"Invalid fee recipient\\\");\\n        require(_config.maxFee <= GLOBAL_MAX_MANAGER_FEE, \\\"Max fee exceeds global\\\");\\n        require(_config.fee <= _config.maxFee, \\\"Fee exceeds maxFee\\\");\\n\\n        // keccak(address(this), nextId)\\n        rateManagerId = keccak256(abi.encodePacked(address(this), nextId++));\\n        rateManagers[rateManagerId] = _config;\\n\\n        emit RateManagerCreated(\\n            rateManagerId,\\n            _config.manager,\\n            _config.feeRecipient,\\n            _config.maxFee,\\n            _config.fee,\\n            _config.depositHook,\\n            _config.name,\\n            _config.uri\\n        );\\n    }\\n\\n    /**\\n     * @notice Updates mutable fields on a rate manager config.\\n     * @dev Only callable by the current config.manager. Does not alter maxFee.\\n     *      If an existing fee is non-zero, a non-zero feeRecipient must be supplied.\\n     */\\n    function setRateManagerConfig(\\n        bytes32 _rateManagerId,\\n        address _newManager,\\n        address _newFeeRecipient,\\n        address _newHook,\\n        string calldata _newName,\\n        string calldata _newUri\\n    )\\n        external\\n        onlyManager(_rateManagerId)\\n    {\\n        require(_newManager != address(0), \\\"Invalid manager\\\");\\n        if (rateManagers[_rateManagerId].fee > 0) {\\n            require(_newFeeRecipient != address(0), \\\"Invalid fee recipient\\\");\\n        }\\n\\n        RateManagerConfig storage config = rateManagers[_rateManagerId];\\n        config.manager = _newManager;\\n        config.feeRecipient = _newFeeRecipient;\\n        config.depositHook = _newHook;\\n        config.name = _newName;\\n        config.uri = _newUri;\\n\\n        emit RateManagerConfigUpdated(\\n            _rateManagerId,\\n            _newManager,\\n            _newFeeRecipient,\\n            _newHook,\\n            _newName,\\n            _newUri\\n        );\\n    }\\n\\n    /**\\n     * @notice Updates the manager fee for a given id.\\n     * @dev Only callable by config.manager. New fee must be <= maxFee and if > 0 then feeRecipient must be set.\\n     */\\n    function setFee(bytes32 _rateManagerId, uint256 _newFee) external onlyManager(_rateManagerId) {\\n        RateManagerConfig storage config = rateManagers[_rateManagerId];\\n        require(_newFee <= config.maxFee, \\\"Fee exceeds maxFee\\\");\\n        if (_newFee > 0) {\\n            require(config.feeRecipient != address(0), \\\"Invalid fee recipient\\\");\\n        }\\n        config.fee = _newFee;\\n        emit RateManagerFeeUpdated(_rateManagerId, _newFee);\\n    }\\n\\n    /* ============ External View Functions ============ */\\n\\n    /**\\n     * @notice Returns true if the manager id exists.\\n     */\\n    function isRateManager(bytes32 _rateManagerId) external view returns (bool) {\\n        return rateManagers[_rateManagerId].manager != address(0);\\n    }\\n\\n    /**\\n     * @notice Returns the full manager configuration for an id.\\n     */\\n    function getRateManager(bytes32 _rateManagerId) external view returns (RateManagerConfig memory) {\\n        return rateManagers[_rateManagerId];\\n    }\\n\\n    /**\\n     * @notice Returns the manager fee and recipient for an id.\\n     */\\n    function getFeeAndRecipient(bytes32 _rateManagerId) external view returns (uint256 fee, address feeRecipient) {\\n        RateManagerConfig storage config = rateManagers[_rateManagerId];\\n        return (config.fee, config.feeRecipient);\\n    }\\n\\n    /**\\n     * @notice Returns the deposit hook address configured for a manager id (or address(0) if none).\\n     */\\n    function getDepositHook(bytes32 _rateManagerId) external view returns (address) {\\n        return rateManagers[_rateManagerId].depositHook;\\n    }\\n\\n    /**\\n     * @notice Returns the manager-level minimum rate for a (paymentMethod, currency) pair.\\n     * @dev Implementations may return 0 to disable a pair.\\n     */\\n    function getMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency) external view virtual returns (uint256);\\n}\\n\\n\",\"keccak256\":\"0xa6e7eac325f5d59ef271b2d82e8a0c3b80aedd96f2dc488278200c03a5c4f789\",\"license\":\"MIT\"},\"contracts/registries/OracleRateManagerRegistry.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { Math } from \\\"@openzeppelin/contracts/utils/math/Math.sol\\\";\\n\\nimport { IBaseRateManagerRegistry } from \\\"../interfaces/IBaseRateManagerRegistry.sol\\\";\\nimport { IOracleAdapter } from \\\"../interfaces/IOracleAdapter.sol\\\";\\nimport { IOracleRateManagerRegistry } from \\\"../interfaces/IOracleRateManagerRegistry.sol\\\";\\nimport { BaseRateManagerRegistry } from \\\"./BaseRateManagerRegistry.sol\\\";\\n\\n/**\\n * @title OracleRateManagerRegistry\\n * @notice Permissionless registry of \\u201cdeposit rate managers\\u201d backed by onchain oracles.\\n * @dev `getMinRate()` is view-only and returns 0 (disabled) if the tuple is unconfigured, the adapter fails,\\n *      or the adapter's data is stale.\\n *\\n * Rate semantics:\\n * - All rates returned are in preciseUnits (1e18).\\n * - Rates represent \\\"fiat per deposit token\\\".\\n */\\ncontract OracleRateManagerRegistry is IOracleRateManagerRegistry, BaseRateManagerRegistry {\\n    using Math for uint256;\\n\\n    /* ============ Constants ============ */\\n\\n    uint256 internal constant BPS = 10_000;\\n    // Upper bound for stored adapter config bytes. This keeps storage reads and event logs bounded and helps avoid\\n    // accidentally configuring a tuple such that `getMinRate()` becomes prohibitively expensive.\\n    //\\n    // 256 bytes is intentionally generous for oracle configs (e.g. Chainlink normalized config is 22 bytes) while\\n    // still preventing unbounded blobs.\\n    uint256 internal constant MAX_ADAPTER_CONFIG_BYTES = 256;\\n\\n    /* ============ Structs ============ */\\n\\n    struct OracleConfig {\\n        address adapter;\\n        bytes adapterConfig;    // Adapter-specific config blob (normalized via validateConfig)\\n        uint16 spreadBps;       // 100 = 1%\\n        uint32 maxStaleness;    // seconds\\n        bool isConfigured;      // distinguishes \\\"unset\\\" from configured\\n    }\\n\\n    /* ============ State Variables ============ */\\n\\n    mapping(bytes32 => mapping(bytes32 => mapping(bytes32 => OracleConfig))) internal oracleConfigs;\\n\\n    /* ============ External Functions ============ */\\n\\n    /**\\n     * @notice Configures an oracle feed + spread for a (rateManagerId, paymentMethod, currency) tuple.\\n     * @dev Only callable by the rate manager. The adapter is responsible for validating and normalizing\\n     *      `_rawAdapterConfig` (e.g. Chainlink adapter supports `feed == address(0)` as a constant 1.0 base rate\\n     *      which can be used for USD when the deposit token is assumed to be USDC).\\n     */\\n    function setOracleConfig(\\n        bytes32 _rateManagerId,\\n        bytes32 _paymentMethod,\\n        bytes32 _currency,\\n        address _adapter,\\n        bytes calldata _rawAdapterConfig,\\n        uint16 _spreadBps,\\n        uint32 _maxStaleness\\n    )\\n        external\\n        onlyManager(_rateManagerId)\\n    {\\n        require(_paymentMethod != bytes32(0), \\\"Invalid payment method\\\");\\n        require(_currency != bytes32(0), \\\"Invalid currency\\\");\\n        require(_adapter != address(0), \\\"Invalid adapter\\\");\\n        require(_adapter.code.length > 0, \\\"Invalid adapter\\\");\\n        require(_spreadBps <= BPS, \\\"Invalid spread\\\");\\n        require(_maxStaleness > 0, \\\"Invalid staleness\\\");\\n\\n        bytes memory normalizedAdapterConfig = IOracleAdapter(_adapter).validateConfig(_rawAdapterConfig);\\n        require(normalizedAdapterConfig.length <= MAX_ADAPTER_CONFIG_BYTES, \\\"Config too long\\\");\\n\\n        oracleConfigs[_rateManagerId][_paymentMethod][_currency] = OracleConfig({\\n            adapter: _adapter,\\n            adapterConfig: normalizedAdapterConfig,\\n            spreadBps: _spreadBps,\\n            maxStaleness: _maxStaleness,\\n            isConfigured: true\\n        });\\n\\n        emit RateManagerOracleConfigUpdated(\\n            _rateManagerId,\\n            _paymentMethod,\\n            _currency,\\n            _adapter,\\n            _spreadBps,\\n            _maxStaleness,\\n            normalizedAdapterConfig\\n        );\\n    }\\n\\n    /* ============ External View Functions ============ */\\n\\n    /**\\n     * @notice Returns the oracle configuration for a tuple.\\n     */\\n    function getOracleConfig(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency)\\n        external\\n        view\\n        returns (\\n            bool isConfigured,\\n            address adapter,\\n            bytes memory adapterConfig,\\n            uint16 spreadBps,\\n            uint32 maxStaleness\\n        )\\n    {\\n        OracleConfig storage cfg = oracleConfigs[_rateManagerId][_paymentMethod][_currency];\\n        return (cfg.isConfigured, cfg.adapter, cfg.adapterConfig, cfg.spreadBps, cfg.maxStaleness);\\n    }\\n\\n    /**\\n     * @notice Returns the manager-level minimum rate for a (paymentMethod, currency) pair.\\n     * @dev Returns 0 if the tuple is not configured, the oracle returns invalid data, or the data is stale.\\n     *      For constant-rate adapter configs (e.g. Chainlink `feed == address(0)`), returns (1 + spread) in preciseUnits.\\n     */\\n    function getMinRate(bytes32 _rateManagerId, bytes32 _paymentMethod, bytes32 _currency)\\n        external\\n        view\\n        override(BaseRateManagerRegistry, IBaseRateManagerRegistry)\\n        returns (uint256)\\n    {\\n        OracleConfig storage cfg = oracleConfigs[_rateManagerId][_paymentMethod][_currency];\\n        if (!cfg.isConfigured) {\\n            return 0;\\n        }\\n\\n        (bool isValidQuote, uint256 marketRate, uint256 rateUpdatedAt) = _getBaseRate(cfg);\\n        if (!isValidQuote || marketRate == 0) {\\n            return 0;\\n        }\\n\\n        if (rateUpdatedAt == 0) {\\n            return 0;\\n        }\\n        if (rateUpdatedAt > block.timestamp) {\\n            return 0;\\n        }\\n        if (block.timestamp - rateUpdatedAt > cfg.maxStaleness) {\\n            return 0;\\n        }\\n\\n        // Apply spread as a minimum floor: marketRate * (1 + spreadBps)\\n        return Math.mulDiv(marketRate, BPS + uint256(cfg.spreadBps), BPS, Math.Rounding.Up);\\n    }\\n\\n    /* ============ Internal Functions ============ */\\n\\n    function _getBaseRate(OracleConfig storage cfg)\\n        internal\\n        view\\n        returns (bool isValidQuote, uint256 marketRate, uint256 rateUpdatedAt)\\n    {\\n        try IOracleAdapter(cfg.adapter).getRate(cfg.adapterConfig) returns (\\n            bool valid_,\\n            uint256 rate_,\\n            uint256 updatedAt_\\n        ) {\\n            return (valid_, rate_, updatedAt_);\\n        } catch {\\n            return (false, 0, 0);\\n        }\\n    }\\n}\\n\",\"keccak256\":\"0x3176c440de7157f05207023087c63460c9705c261ad8bc80bdf7bb14fed3f3f4\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x6080806040523461001b57600160005561176e90816100218239f35b600080fdfe6080604052600436101561001257600080fd5b60003560e01c8063145321e814610c0d5780631c2dee93146107835780633a258a3a1461074157806364f21b481461072057806385dce7ba1461067a57806390a3a9c5146105315780639f080ab0146101ac578063af46f64914610176578063b96f8f32146100c65763ed97afbf1461008a57600080fd5b346100c15760203660031901126100c1576004356000526001602052602060018060a01b0360046040600020015416604051908152f35b600080fd5b346100c15760403660031901126100c1576004357fe6f4631c85a066db4d84bf89ec61874b3060da03c0c164c21076f685cd771b676020602435836000526001825280600360018060a01b0361012f8160406000205416610128811515611399565b33146113e5565b866000526001855260406000209061014d600283015485111561123b565b8361015f575b500155604051908152a2005b6101709060018301541615156111f7565b87610153565b346100c15760203660031901126100c1576004356000526001602052602060018060a01b03604060002054161515604051908152f35b346100c15760c03660031901126100c1576024356001600160a01b03811681036100c1576044356001600160a01b03811681036100c1576101eb611100565b6084356001600160401b0381116100c15761020a903690600401611116565b909160a4356001600160401b0381116100c15761022b903690600401611116565b949093600435600052600160205261025560018060a01b0360406000205416610128811515611399565b6102696001600160a01b03881615156111b9565b6004356000526001602052600360406000200154610518575b600435600052600160205260406000206bffffffffffffffffffffffff60a01b9360018060a01b038916858354161782556001820160018060a01b03851686825416179055600482019060018060a01b0316809582541617905560058101906001600160401b03861161048c57610303866102fd84546112ea565b84611324565b60009186601f81116001146104ad576006936000916104a2575b508760011b906000198960031b1c19161790555b016001600160401b03871161048c576103548761034e83546112ea565b83611324565b866000601f82116001146103f657927f08e4136107b2b0c5628d51bb7e0533e30306bbcb30a7187f568c4192aec4bd40969594926103c5926103e6956000916103eb575b508a60011b906000198c60031b1c19161790555b6040519586958652606060208701526060860191611378565b83810360408501526001600160a01b03918216989091169660043596611378565b0390a4005b90508901358c610398565b60008381526020812092508990601f198216905b8181106104715750926103e695927f08e4136107b2b0c5628d51bb7e0533e30306bbcb30a7187f568c4192aec4bd4099989795926103c59510610457575b505060018a811b0190556103ac565b8a013560001960038d901b60f8161c191690558b80610448565b8a84013585556001909401936020938401938c93500161040a565b634e487b7160e01b600052604160045260246000fd5b90508401358b61031d565b50600081815260208120909388601f1981165b8087106104fa5760069650106104e0575b5050600187811b019055610331565b85013560001960038a901b60f8161c191690558a806104d1565b878301358455602096870196600190940193909201918a91506104c0565b61052c6001600160a01b03831615156111f7565b610282565b346100c1576020806003193601126100c157606060c06040516105538161127c565b6000815260008482015260006040820152600083820152600060808201528260a08201520152600435600052600181526040600020906106766006610663604051809561059f8261127c565b60018060a01b039081815416835281600182015416878401908152600282015460408501908152836003840154926060870193845261061f82600487015416956080890196875260a0604051996106048b6105fd8160058701611429565b038c611297565b01988952610618604051809c819301611429565b038a611297565b60c08c019889528a826040519d8e9d8e525116908c0152511660408a0152516060890152516080880152511660a08601525160e060c0860152610100850190611180565b9051838203601f190160e0850152611180565b0390f35b346100c15761068836611143565b9160005260026020526040600020906000526020526040600020906000526020526001604060002060028101546106d9838060a01b03835416926106d26040518096819301611429565b0384611297565b63ffffffff61070860405194859460ff8560301c1615158652602086015260a0604086015260a0850190611180565b9161ffff8116606085015260101c1660808301520390f35b346100c157602061073961073336611143565b916114fd565b604051908152f35b346100c15760203660031901126100c157600435600090815260016020818152604092839020600381015492015483519283526001600160a01b031690820152f35b346100c1576003196020368201126100c1576001600160401b03600435116100c15760e090600435360301126100c1576107d36001600160a01b036107cb60048035016111a5565b1615156111b9565b6001600160a01b036107e96004356024016111a5565b1615801590610bff575b6107fc906111f7565b66b1a2bc2ec500006044600435013511610bc1576108286044600435013560646004350135111561123b565b6000546000198114610bab576001810160005560405160208101913060601b8352603482015260348152606081018181106001600160401b0382111761048c57604052519020806000526001602052604060002060018060a01b036108916004356004016111a5565b166bffffffffffffffffffffffff60a01b90818354161782556001820160018060a01b036108c36024600435016111a5565b82548416911617905560048035604481013560028501556064810135600385015590830191906001600160a01b03906108fe906084016111a5565b169082541617905561091a60a4600435016004356004016112b8565b6001600160401b03819492941161048c57600583019061093e816102fd84546112ea565b6000601f8211600114610b44578192939495600092610b39575b50508160011b916000199060031b1c19161790555b61098160c4600435016004356004016112b8565b6001600160401b03819492941161048c576020936109af826109a660068601546112ea565b60068601611324565b600090601f8311600114610acb576006929160009183610ac0575b50508160011b916000199060031b1c1916179101555b6109ee6004356004016111a5565b6109fc6024600435016111a5565b827f47c9dd97b9368307bacc84f0603b4afda08ce948ed75afec76540622122523c6610ab5610a2f6084600435016111a5565b610a4360a4600435016004356004016112b8565b929095610a98610a5d60c4600435016004356004016112b8565b919098604051968796604460043501358852606460043501358f89015260018060a01b0316604088015260a0606088015260a0870191611378565b84810360808601526001600160a01b039283169990921697611378565b0390a4604051908152f35b0135905086806109ca565b60068401600052856000209160005b601f1985168110610b225750918391600193600695601f19811610610b08575b505050811b019101556109e0565b0135600019600384901b60f8161c19169055868080610afa565b909287600181928686013581550194019101610ada565b013590508580610958565b601f198216958360005260206000209160005b888110610b9357508360019596979810610b79575b505050811b01905561096d565b0135600019600384901b60f8161c19169055858080610b6c565b90926020600181928686013581550194019101610b57565b634e487b7160e01b600052601160045260246000fd5b60405162461bcd60e51b815260206004820152601660248201527513585e0819995948195e18d959591cc819db1bd8985b60521b6044820152606490fd5b5060043560640135156107f3565b346100c15760e03660031901126100c157610c26611100565b6084356001600160401b0381116100c157610c45903690600401611116565b60a49291923561ffff811681036100c15760c4359163ffffffff831683036100c157600435600090815260016020526040902054610c91906001600160a01b0316610128811515611399565b602435156110c2576044351561108a57610cb56001600160a01b03851615156114bf565b610cc1843b15156114bf565b61271061ffff8316116110545763ffffffff83161561101b5760405163a913b88160e01b8152602060048201529460009186918291610d0591602484019190611378565b03816001600160a01b0387165afa93841561100f57600094610f85575b50610100845111610f4e576040518060a08101106001600160401b0360a08301111761048c5760a0810160409081526001600160a01b038581168352602080840188815261ffff86168486015263ffffffff8716606086015260016080860152600435600090815260028352848120602435825283528481206044358252909252929020835181546001600160a01b031916921691909117815590518051906001600160401b03821161048c57610de982610de060018601546112ea565b60018601611324565b602090601f8311600114610ed057928261ffff959360029363ffffffff999896600092610ec5575b50508160011b916000199060031b1c19161760018201555b0190836040820151169082549166ff000000000000608065ffffffff0000606085015160101b16930151151560301b169266ffffffffffffff191617171790556040519460018060a01b0316855216602084015216604082015260806060820152604435917f5985efdb7cc62a510b4afac1cd08969ed9f29a3f0dc1c298e98cb60c17cff2fe60243592806103e6600435946080830190611180565b015190508b80610e11565b906001840160005260206000209160005b601f1985168110610f3657508360029363ffffffff9998969360019361ffff9997601f19811610610f1d575b505050811b016001820155610e29565b015160001960f88460031b161c191690558b8080610f0d565b91926020600181928685015181550194019201610ee1565b60405162461bcd60e51b815260206004820152600f60248201526e436f6e66696720746f6f206c6f6e6760881b6044820152606490fd5b9093503d806000833e610f988183611297565b8101906020818303126100c1578051906001600160401b0382116100c1570181601f820112156100c15780516001600160401b03811161048c5760405192610fea601f8301601f191660200185611297565b818452602082840101116100c157611008916020808501910161115d565b9284610d22565b6040513d6000823e3d90fd5b60405162461bcd60e51b8152602060048201526011602482015270496e76616c6964207374616c656e65737360781b6044820152606490fd5b60405162461bcd60e51b815260206004820152600e60248201526d125b9d985b1a59081cdc1c99585960921b6044820152606490fd5b60405162461bcd60e51b815260206004820152601060248201526f496e76616c69642063757272656e637960801b6044820152606490fd5b60405162461bcd60e51b8152602060048201526016602482015275125b9d985b1a59081c185e5b595b9d081b595d1a1bd960521b6044820152606490fd5b606435906001600160a01b03821682036100c157565b9181601f840112156100c1578235916001600160401b0383116100c157602083818601950101116100c157565b60609060031901126100c157600435906024359060443590565b60005b8381106111705750506000910152565b8181015183820152602001611160565b906020916111998151809281855285808601910161115d565b601f01601f1916010190565b356001600160a01b03811681036100c15790565b156111c057565b60405162461bcd60e51b815260206004820152600f60248201526e24b73b30b634b21036b0b730b3b2b960891b6044820152606490fd5b156111fe57565b60405162461bcd60e51b8152602060048201526015602482015274125b9d985b1a5908199959481c9958da5c1a595b9d605a1b6044820152606490fd5b1561124257565b60405162461bcd60e51b81526020600482015260126024820152714665652065786365656473206d617846656560701b6044820152606490fd5b60e081019081106001600160401b0382111761048c57604052565b90601f801991011681019081106001600160401b0382111761048c57604052565b903590601e19813603018212156100c157018035906001600160401b0382116100c1576020019181360383136100c157565b90600182811c9216801561131a575b602083101461130457565b634e487b7160e01b600052602260045260246000fd5b91607f16916112f9565b90601f811161133257505050565b600091825260208220906020601f850160051c8301941061136e575b601f0160051c01915b82811061136357505050565b818155600101611357565b909250829061134e565b908060209392818452848401376000828201840152601f01601f1916010190565b156113a057565b60405162461bcd60e51b815260206004820152601b60248201527f52617465206d616e6167657220646f6573206e6f7420657869737400000000006044820152606490fd5b156113ec57565b60405162461bcd60e51b815260206004820152601560248201527421b0b63632b91034b9903737ba1036b0b730b3b2b960591b6044820152606490fd5b906000929180549161143a836112ea565b91828252600193848116908160001461149c575060011461145c575b50505050565b90919394506000526020928360002092846000945b838610611488575050505001019038808080611456565b805485870183015294019385908201611471565b9294505050602093945060ff191683830152151560051b01019038808080611456565b156114c657565b60405162461bcd60e51b815260206004820152600f60248201526e24b73b30b634b21030b230b83a32b960891b6044820152606490fd5b9190600092835260026020526040832090835260205260408220908252602052604081209060028201549160ff8360301c16156115cd5761153d90611687565b9093911580156115da575b6115d35780156115d3574281116115d35742034281116115b95763ffffffff8260101c16106115cd5761ffff612710911681018082116115b95761158c81856115e2565b9309611596575090565b600182018092116115a5575090565b634e487b7160e01b81526011600452602490fd5b634e487b7160e01b83526011600452602483fd5b50905090565b5050905090565b508315611548565b906000198183098183029182808310920391808303921461167c57612710908282111561163f577fbc01a36e2eb1c432ca57a786c226809d495182a9930be0ded288ce703afb7e91940990828211900360fc1b910360041c170290565b60405162461bcd60e51b81526020600482015260156024820152744d6174683a206d756c446976206f766572666c6f7760581b6044820152606490fd5b505061271091500490565b60606116bd9160018060a01b0381541660405180809581946321e5897760e01b8352602060048401526001602484019101611429565b03915afa600081819382936116e3575b506116e057505050600090600090600090565b92565b91935091506060813d8211611730575b8161170060609383611297565b8101031261172c57805192831515840361172957506040602082015191015192909291386116cd565b80fd5b8280fd5b3d91506116f356fea264697066735822122064e0cef49b50336c77b8477076afb5e510d92844192d40546f68740889e42a3264736f6c63430008120033",
+  "deployedBytecode": "0x6080604052600436101561001257600080fd5b60003560e01c8063145321e814610c0d5780631c2dee93146107835780633a258a3a1461074157806364f21b481461072057806385dce7ba1461067a57806390a3a9c5146105315780639f080ab0146101ac578063af46f64914610176578063b96f8f32146100c65763ed97afbf1461008a57600080fd5b346100c15760203660031901126100c1576004356000526001602052602060018060a01b0360046040600020015416604051908152f35b600080fd5b346100c15760403660031901126100c1576004357fe6f4631c85a066db4d84bf89ec61874b3060da03c0c164c21076f685cd771b676020602435836000526001825280600360018060a01b0361012f8160406000205416610128811515611399565b33146113e5565b866000526001855260406000209061014d600283015485111561123b565b8361015f575b500155604051908152a2005b6101709060018301541615156111f7565b87610153565b346100c15760203660031901126100c1576004356000526001602052602060018060a01b03604060002054161515604051908152f35b346100c15760c03660031901126100c1576024356001600160a01b03811681036100c1576044356001600160a01b03811681036100c1576101eb611100565b6084356001600160401b0381116100c15761020a903690600401611116565b909160a4356001600160401b0381116100c15761022b903690600401611116565b949093600435600052600160205261025560018060a01b0360406000205416610128811515611399565b6102696001600160a01b03881615156111b9565b6004356000526001602052600360406000200154610518575b600435600052600160205260406000206bffffffffffffffffffffffff60a01b9360018060a01b038916858354161782556001820160018060a01b03851686825416179055600482019060018060a01b0316809582541617905560058101906001600160401b03861161048c57610303866102fd84546112ea565b84611324565b60009186601f81116001146104ad576006936000916104a2575b508760011b906000198960031b1c19161790555b016001600160401b03871161048c576103548761034e83546112ea565b83611324565b866000601f82116001146103f657927f08e4136107b2b0c5628d51bb7e0533e30306bbcb30a7187f568c4192aec4bd40969594926103c5926103e6956000916103eb575b508a60011b906000198c60031b1c19161790555b6040519586958652606060208701526060860191611378565b83810360408501526001600160a01b03918216989091169660043596611378565b0390a4005b90508901358c610398565b60008381526020812092508990601f198216905b8181106104715750926103e695927f08e4136107b2b0c5628d51bb7e0533e30306bbcb30a7187f568c4192aec4bd4099989795926103c59510610457575b505060018a811b0190556103ac565b8a013560001960038d901b60f8161c191690558b80610448565b8a84013585556001909401936020938401938c93500161040a565b634e487b7160e01b600052604160045260246000fd5b90508401358b61031d565b50600081815260208120909388601f1981165b8087106104fa5760069650106104e0575b5050600187811b019055610331565b85013560001960038a901b60f8161c191690558a806104d1565b878301358455602096870196600190940193909201918a91506104c0565b61052c6001600160a01b03831615156111f7565b610282565b346100c1576020806003193601126100c157606060c06040516105538161127c565b6000815260008482015260006040820152600083820152600060808201528260a08201520152600435600052600181526040600020906106766006610663604051809561059f8261127c565b60018060a01b039081815416835281600182015416878401908152600282015460408501908152836003840154926060870193845261061f82600487015416956080890196875260a0604051996106048b6105fd8160058701611429565b038c611297565b01988952610618604051809c819301611429565b038a611297565b60c08c019889528a826040519d8e9d8e525116908c0152511660408a0152516060890152516080880152511660a08601525160e060c0860152610100850190611180565b9051838203601f190160e0850152611180565b0390f35b346100c15761068836611143565b9160005260026020526040600020906000526020526040600020906000526020526001604060002060028101546106d9838060a01b03835416926106d26040518096819301611429565b0384611297565b63ffffffff61070860405194859460ff8560301c1615158652602086015260a0604086015260a0850190611180565b9161ffff8116606085015260101c1660808301520390f35b346100c157602061073961073336611143565b916114fd565b604051908152f35b346100c15760203660031901126100c157600435600090815260016020818152604092839020600381015492015483519283526001600160a01b031690820152f35b346100c1576003196020368201126100c1576001600160401b03600435116100c15760e090600435360301126100c1576107d36001600160a01b036107cb60048035016111a5565b1615156111b9565b6001600160a01b036107e96004356024016111a5565b1615801590610bff575b6107fc906111f7565b66b1a2bc2ec500006044600435013511610bc1576108286044600435013560646004350135111561123b565b6000546000198114610bab576001810160005560405160208101913060601b8352603482015260348152606081018181106001600160401b0382111761048c57604052519020806000526001602052604060002060018060a01b036108916004356004016111a5565b166bffffffffffffffffffffffff60a01b90818354161782556001820160018060a01b036108c36024600435016111a5565b82548416911617905560048035604481013560028501556064810135600385015590830191906001600160a01b03906108fe906084016111a5565b169082541617905561091a60a4600435016004356004016112b8565b6001600160401b03819492941161048c57600583019061093e816102fd84546112ea565b6000601f8211600114610b44578192939495600092610b39575b50508160011b916000199060031b1c19161790555b61098160c4600435016004356004016112b8565b6001600160401b03819492941161048c576020936109af826109a660068601546112ea565b60068601611324565b600090601f8311600114610acb576006929160009183610ac0575b50508160011b916000199060031b1c1916179101555b6109ee6004356004016111a5565b6109fc6024600435016111a5565b827f47c9dd97b9368307bacc84f0603b4afda08ce948ed75afec76540622122523c6610ab5610a2f6084600435016111a5565b610a4360a4600435016004356004016112b8565b929095610a98610a5d60c4600435016004356004016112b8565b919098604051968796604460043501358852606460043501358f89015260018060a01b0316604088015260a0606088015260a0870191611378565b84810360808601526001600160a01b039283169990921697611378565b0390a4604051908152f35b0135905086806109ca565b60068401600052856000209160005b601f1985168110610b225750918391600193600695601f19811610610b08575b505050811b019101556109e0565b0135600019600384901b60f8161c19169055868080610afa565b909287600181928686013581550194019101610ada565b013590508580610958565b601f198216958360005260206000209160005b888110610b9357508360019596979810610b79575b505050811b01905561096d565b0135600019600384901b60f8161c19169055858080610b6c565b90926020600181928686013581550194019101610b57565b634e487b7160e01b600052601160045260246000fd5b60405162461bcd60e51b815260206004820152601660248201527513585e0819995948195e18d959591cc819db1bd8985b60521b6044820152606490fd5b5060043560640135156107f3565b346100c15760e03660031901126100c157610c26611100565b6084356001600160401b0381116100c157610c45903690600401611116565b60a49291923561ffff811681036100c15760c4359163ffffffff831683036100c157600435600090815260016020526040902054610c91906001600160a01b0316610128811515611399565b602435156110c2576044351561108a57610cb56001600160a01b03851615156114bf565b610cc1843b15156114bf565b61271061ffff8316116110545763ffffffff83161561101b5760405163a913b88160e01b8152602060048201529460009186918291610d0591602484019190611378565b03816001600160a01b0387165afa93841561100f57600094610f85575b50610100845111610f4e576040518060a08101106001600160401b0360a08301111761048c5760a0810160409081526001600160a01b038581168352602080840188815261ffff86168486015263ffffffff8716606086015260016080860152600435600090815260028352848120602435825283528481206044358252909252929020835181546001600160a01b031916921691909117815590518051906001600160401b03821161048c57610de982610de060018601546112ea565b60018601611324565b602090601f8311600114610ed057928261ffff959360029363ffffffff999896600092610ec5575b50508160011b916000199060031b1c19161760018201555b0190836040820151169082549166ff000000000000608065ffffffff0000606085015160101b16930151151560301b169266ffffffffffffff191617171790556040519460018060a01b0316855216602084015216604082015260806060820152604435917f5985efdb7cc62a510b4afac1cd08969ed9f29a3f0dc1c298e98cb60c17cff2fe60243592806103e6600435946080830190611180565b015190508b80610e11565b906001840160005260206000209160005b601f1985168110610f3657508360029363ffffffff9998969360019361ffff9997601f19811610610f1d575b505050811b016001820155610e29565b015160001960f88460031b161c191690558b8080610f0d565b91926020600181928685015181550194019201610ee1565b60405162461bcd60e51b815260206004820152600f60248201526e436f6e66696720746f6f206c6f6e6760881b6044820152606490fd5b9093503d806000833e610f988183611297565b8101906020818303126100c1578051906001600160401b0382116100c1570181601f820112156100c15780516001600160401b03811161048c5760405192610fea601f8301601f191660200185611297565b818452602082840101116100c157611008916020808501910161115d565b9284610d22565b6040513d6000823e3d90fd5b60405162461bcd60e51b8152602060048201526011602482015270496e76616c6964207374616c656e65737360781b6044820152606490fd5b60405162461bcd60e51b815260206004820152600e60248201526d125b9d985b1a59081cdc1c99585960921b6044820152606490fd5b60405162461bcd60e51b815260206004820152601060248201526f496e76616c69642063757272656e637960801b6044820152606490fd5b60405162461bcd60e51b8152602060048201526016602482015275125b9d985b1a59081c185e5b595b9d081b595d1a1bd960521b6044820152606490fd5b606435906001600160a01b03821682036100c157565b9181601f840112156100c1578235916001600160401b0383116100c157602083818601950101116100c157565b60609060031901126100c157600435906024359060443590565b60005b8381106111705750506000910152565b8181015183820152602001611160565b906020916111998151809281855285808601910161115d565b601f01601f1916010190565b356001600160a01b03811681036100c15790565b156111c057565b60405162461bcd60e51b815260206004820152600f60248201526e24b73b30b634b21036b0b730b3b2b960891b6044820152606490fd5b156111fe57565b60405162461bcd60e51b8152602060048201526015602482015274125b9d985b1a5908199959481c9958da5c1a595b9d605a1b6044820152606490fd5b1561124257565b60405162461bcd60e51b81526020600482015260126024820152714665652065786365656473206d617846656560701b6044820152606490fd5b60e081019081106001600160401b0382111761048c57604052565b90601f801991011681019081106001600160401b0382111761048c57604052565b903590601e19813603018212156100c157018035906001600160401b0382116100c1576020019181360383136100c157565b90600182811c9216801561131a575b602083101461130457565b634e487b7160e01b600052602260045260246000fd5b91607f16916112f9565b90601f811161133257505050565b600091825260208220906020601f850160051c8301941061136e575b601f0160051c01915b82811061136357505050565b818155600101611357565b909250829061134e565b908060209392818452848401376000828201840152601f01601f1916010190565b156113a057565b60405162461bcd60e51b815260206004820152601b60248201527f52617465206d616e6167657220646f6573206e6f7420657869737400000000006044820152606490fd5b156113ec57565b60405162461bcd60e51b815260206004820152601560248201527421b0b63632b91034b9903737ba1036b0b730b3b2b960591b6044820152606490fd5b906000929180549161143a836112ea565b91828252600193848116908160001461149c575060011461145c575b50505050565b90919394506000526020928360002092846000945b838610611488575050505001019038808080611456565b805485870183015294019385908201611471565b9294505050602093945060ff191683830152151560051b01019038808080611456565b156114c657565b60405162461bcd60e51b815260206004820152600f60248201526e24b73b30b634b21030b230b83a32b960891b6044820152606490fd5b9190600092835260026020526040832090835260205260408220908252602052604081209060028201549160ff8360301c16156115cd5761153d90611687565b9093911580156115da575b6115d35780156115d3574281116115d35742034281116115b95763ffffffff8260101c16106115cd5761ffff612710911681018082116115b95761158c81856115e2565b9309611596575090565b600182018092116115a5575090565b634e487b7160e01b81526011600452602490fd5b634e487b7160e01b83526011600452602483fd5b50905090565b5050905090565b508315611548565b906000198183098183029182808310920391808303921461167c57612710908282111561163f577fbc01a36e2eb1c432ca57a786c226809d495182a9930be0ded288ce703afb7e91940990828211900360fc1b910360041c170290565b60405162461bcd60e51b81526020600482015260156024820152744d6174683a206d756c446976206f766572666c6f7760581b6044820152606490fd5b505061271091500490565b60606116bd9160018060a01b0381541660405180809581946321e5897760e01b8352602060048401526001602484019101611429565b03915afa600081819382936116e3575b506116e057505050600090600090600090565b92565b91935091506060813d8211611730575b8161170060609383611297565b8101031261172c57805192831515840361172957506040602082015191015192909291386116cd565b80fd5b8280fd5b3d91506116f356fea264697066735822122064e0cef49b50336c77b8477076afb5e510d92844192d40546f68740889e42a3264736f6c63430008120033",
+  "devdoc": {
+    "details": "`getMinRate()` is view-only and returns 0 (disabled) if the tuple is unconfigured, the adapter fails,      or the adapter's data is stale. Rate semantics: - All rates returned are in preciseUnits (1e18). - Rates represent \"fiat per deposit token\".",
+    "kind": "dev",
+    "methods": {
+      "createRateManager((address,address,uint256,uint256,address,string,string))": {
+        "details": "The identifier is derived as keccak256(abi.encodePacked(address(this), nextId)).      This ties IDs to the registry deployment and avoids deliberate collisions.      Reverts if inputs are invalid or fee exceeds caps.",
+        "params": {
+          "_config": "Rate manager configuration {manager, feeRecipient, maxFee, fee, depositHook, name, uri}."
+        },
+        "returns": {
+          "rateManagerId": "Newly minted manager id (bytes32)."
+        }
+      },
+      "getMinRate(bytes32,bytes32,bytes32)": {
+        "details": "Returns 0 if the tuple is not configured, the oracle returns invalid data, or the data is stale.      For constant-rate adapter configs (e.g. Chainlink `feed == address(0)`), returns (1 + spread) in preciseUnits."
+      },
+      "setFee(bytes32,uint256)": {
+        "details": "Only callable by config.manager. New fee must be <= maxFee and if > 0 then feeRecipient must be set."
+      },
+      "setOracleConfig(bytes32,bytes32,bytes32,address,bytes,uint16,uint32)": {
+        "details": "Only callable by the rate manager. The adapter is responsible for validating and normalizing      `_rawAdapterConfig` (e.g. Chainlink adapter supports `feed == address(0)` as a constant 1.0 base rate      which can be used for USD when the deposit token is assumed to be USDC)."
+      },
+      "setRateManagerConfig(bytes32,address,address,address,string,string)": {
+        "details": "Only callable by the current config.manager. Does not alter maxFee.      If an existing fee is non-zero, a non-zero feeRecipient must be supplied."
+      }
+    },
+    "title": "OracleRateManagerRegistry",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "createRateManager((address,address,uint256,uint256,address,string,string))": {
+        "notice": "Creates a new rate manager configuration."
+      },
+      "getDepositHook(bytes32)": {
+        "notice": "Returns the deposit hook address configured for a manager id (or address(0) if none)."
+      },
+      "getFeeAndRecipient(bytes32)": {
+        "notice": "Returns the manager fee and recipient for an id."
+      },
+      "getMinRate(bytes32,bytes32,bytes32)": {
+        "notice": "Returns the manager-level minimum rate for a (paymentMethod, currency) pair."
+      },
+      "getOracleConfig(bytes32,bytes32,bytes32)": {
+        "notice": "Returns the oracle configuration for a tuple."
+      },
+      "getRateManager(bytes32)": {
+        "notice": "Returns the full manager configuration for an id."
+      },
+      "isRateManager(bytes32)": {
+        "notice": "Returns true if the manager id exists."
+      },
+      "setFee(bytes32,uint256)": {
+        "notice": "Updates the manager fee for a given id."
+      },
+      "setOracleConfig(bytes32,bytes32,bytes32,address,bytes,uint16,uint32)": {
+        "notice": "Configures an oracle feed + spread for a (rateManagerId, paymentMethod, currency) tuple."
+      },
+      "setRateManagerConfig(bytes32,address,address,address,string,string)": {
+        "notice": "Updates mutable fields on a rate manager config."
+      }
+    },
+    "notice": "Permissionless registry of “deposit rate managers” backed by onchain oracles.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 3506,
+        "contract": "contracts/registries/OracleRateManagerRegistry.sol:OracleRateManagerRegistry",
+        "label": "nextId",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_uint256"
+      },
+      {
+        "astId": 3511,
+        "contract": "contracts/registries/OracleRateManagerRegistry.sol:OracleRateManagerRegistry",
+        "label": "rateManagers",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_mapping(t_bytes32,t_struct(RateManagerConfig)1579_storage)"
+      },
+      {
+        "astId": 4167,
+        "contract": "contracts/registries/OracleRateManagerRegistry.sol:OracleRateManagerRegistry",
+        "label": "oracleConfigs",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_mapping(t_bytes32,t_mapping(t_bytes32,t_mapping(t_bytes32,t_struct(OracleConfig)4158_storage)))"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_bool": {
+        "encoding": "inplace",
+        "label": "bool",
+        "numberOfBytes": "1"
+      },
+      "t_bytes32": {
+        "encoding": "inplace",
+        "label": "bytes32",
+        "numberOfBytes": "32"
+      },
+      "t_bytes_storage": {
+        "encoding": "bytes",
+        "label": "bytes",
+        "numberOfBytes": "32"
+      },
+      "t_mapping(t_bytes32,t_mapping(t_bytes32,t_mapping(t_bytes32,t_struct(OracleConfig)4158_storage)))": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => mapping(bytes32 => mapping(bytes32 => struct OracleRateManagerRegistry.OracleConfig)))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_bytes32,t_mapping(t_bytes32,t_struct(OracleConfig)4158_storage))"
+      },
+      "t_mapping(t_bytes32,t_mapping(t_bytes32,t_struct(OracleConfig)4158_storage))": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => mapping(bytes32 => struct OracleRateManagerRegistry.OracleConfig))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_bytes32,t_struct(OracleConfig)4158_storage)"
+      },
+      "t_mapping(t_bytes32,t_struct(OracleConfig)4158_storage)": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => struct OracleRateManagerRegistry.OracleConfig)",
+        "numberOfBytes": "32",
+        "value": "t_struct(OracleConfig)4158_storage"
+      },
+      "t_mapping(t_bytes32,t_struct(RateManagerConfig)1579_storage)": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => struct IBaseRateManagerRegistry.RateManagerConfig)",
+        "numberOfBytes": "32",
+        "value": "t_struct(RateManagerConfig)1579_storage"
+      },
+      "t_string_storage": {
+        "encoding": "bytes",
+        "label": "string",
+        "numberOfBytes": "32"
+      },
+      "t_struct(OracleConfig)4158_storage": {
+        "encoding": "inplace",
+        "label": "struct OracleRateManagerRegistry.OracleConfig",
+        "members": [
+          {
+            "astId": 4149,
+            "contract": "contracts/registries/OracleRateManagerRegistry.sol:OracleRateManagerRegistry",
+            "label": "adapter",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address"
+          },
+          {
+            "astId": 4151,
+            "contract": "contracts/registries/OracleRateManagerRegistry.sol:OracleRateManagerRegistry",
+            "label": "adapterConfig",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_bytes_storage"
+          },
+          {
+            "astId": 4153,
+            "contract": "contracts/registries/OracleRateManagerRegistry.sol:OracleRateManagerRegistry",
+            "label": "spreadBps",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_uint16"
+          },
+          {
+            "astId": 4155,
+            "contract": "contracts/registries/OracleRateManagerRegistry.sol:OracleRateManagerRegistry",
+            "label": "maxStaleness",
+            "offset": 2,
+            "slot": "2",
+            "type": "t_uint32"
+          },
+          {
+            "astId": 4157,
+            "contract": "contracts/registries/OracleRateManagerRegistry.sol:OracleRateManagerRegistry",
+            "label": "isConfigured",
+            "offset": 6,
+            "slot": "2",
+            "type": "t_bool"
+          }
+        ],
+        "numberOfBytes": "96"
+      },
+      "t_struct(RateManagerConfig)1579_storage": {
+        "encoding": "inplace",
+        "label": "struct IBaseRateManagerRegistry.RateManagerConfig",
+        "members": [
+          {
+            "astId": 1566,
+            "contract": "contracts/registries/OracleRateManagerRegistry.sol:OracleRateManagerRegistry",
+            "label": "manager",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address"
+          },
+          {
+            "astId": 1568,
+            "contract": "contracts/registries/OracleRateManagerRegistry.sol:OracleRateManagerRegistry",
+            "label": "feeRecipient",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_address"
+          },
+          {
+            "astId": 1570,
+            "contract": "contracts/registries/OracleRateManagerRegistry.sol:OracleRateManagerRegistry",
+            "label": "maxFee",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_uint256"
+          },
+          {
+            "astId": 1572,
+            "contract": "contracts/registries/OracleRateManagerRegistry.sol:OracleRateManagerRegistry",
+            "label": "fee",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_uint256"
+          },
+          {
+            "astId": 1574,
+            "contract": "contracts/registries/OracleRateManagerRegistry.sol:OracleRateManagerRegistry",
+            "label": "depositHook",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_address"
+          },
+          {
+            "astId": 1576,
+            "contract": "contracts/registries/OracleRateManagerRegistry.sol:OracleRateManagerRegistry",
+            "label": "name",
+            "offset": 0,
+            "slot": "5",
+            "type": "t_string_storage"
+          },
+          {
+            "astId": 1578,
+            "contract": "contracts/registries/OracleRateManagerRegistry.sol:OracleRateManagerRegistry",
+            "label": "uri",
+            "offset": 0,
+            "slot": "6",
+            "type": "t_string_storage"
+          }
+        ],
+        "numberOfBytes": "224"
+      },
+      "t_uint16": {
+        "encoding": "inplace",
+        "label": "uint16",
+        "numberOfBytes": "2"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      },
+      "t_uint32": {
+        "encoding": "inplace",
+        "label": "uint32",
+        "numberOfBytes": "4"
+      }
+    }
+  }
+}
