@@ -141,7 +141,7 @@ describe("BaseUnifiedPaymentVerifier", () => {
     });
   });
 
-  describe("#scheduleOrchestratorUpdate", async () => {
+  describe("#setOrchestrator", async () => {
     let subjectOrchestrator: Address;
     let subjectCaller: Account;
 
@@ -151,24 +151,18 @@ describe("BaseUnifiedPaymentVerifier", () => {
     });
 
     async function subject(): Promise<any> {
-      return BaseUnifiedPaymentVerifier.connect(subjectCaller.wallet).scheduleOrchestratorUpdate(subjectOrchestrator);
+      return BaseUnifiedPaymentVerifier.connect(subjectCaller.wallet).setOrchestrator(subjectOrchestrator);
     }
 
-    it("should schedule an orchestrator update", async () => {
+    it("should update orchestrator immediately", async () => {
       await subject();
-
-      const pendingOrchestrator = await BaseUnifiedPaymentVerifier.pendingOrchestrator();
-      const executeAfter = await BaseUnifiedPaymentVerifier.orchestratorUpdateTimestamp();
-      const delay = await BaseUnifiedPaymentVerifier.ORCHESTRATOR_UPDATE_DELAY();
-      const latestBlock = await ethers.provider.getBlock("latest");
-
-      expect(pendingOrchestrator).to.eq(subjectOrchestrator);
-      expect(executeAfter).to.eq(latestBlock.timestamp + delay.toNumber());
+      expect(await BaseUnifiedPaymentVerifier.orchestrator()).to.eq(subjectOrchestrator);
     });
 
-    it("should emit the OrchestratorUpdateScheduled event", async () => {
+    it("should emit the OrchestratorUpdated event", async () => {
       await expect(subject())
-        .to.emit(BaseUnifiedPaymentVerifier, "OrchestratorUpdateScheduled");
+        .to.emit(BaseUnifiedPaymentVerifier, "OrchestratorUpdated")
+        .withArgs(escrow.address, subjectOrchestrator);
     });
 
     describe("when the new orchestrator is zero address", async () => {
@@ -191,77 +185,8 @@ describe("BaseUnifiedPaymentVerifier", () => {
       });
     });
 
-    describe("when the new orchestrator is already scheduled", async () => {
-      beforeEach(async () => {
-        await BaseUnifiedPaymentVerifier.connect(owner.wallet).scheduleOrchestratorUpdate(subjectOrchestrator);
-      });
-
-      it("should revert", async () => {
-        await expect(subject()).to.be.revertedWith("UPV: Orchestrator already scheduled");
-      });
-    });
-
     describe("when caller is not the owner", async () => {
       beforeEach(async () => {
-        subjectCaller = attacker;
-      });
-
-      it("should revert", async () => {
-        await expect(subject()).to.be.revertedWith("Ownable: caller is not the owner");
-      });
-    });
-  });
-
-  describe("#finalizeOrchestratorUpdate", async () => {
-    let subjectCaller: Account;
-
-    beforeEach(async () => {
-      subjectCaller = owner;
-    });
-
-    async function subject(): Promise<any> {
-      return BaseUnifiedPaymentVerifier.connect(subjectCaller.wallet).finalizeOrchestratorUpdate();
-    }
-
-    it("should finalize the orchestrator update after delay", async () => {
-      await BaseUnifiedPaymentVerifier.connect(owner.wallet).scheduleOrchestratorUpdate(newOrchestrator.address);
-      const delay = await BaseUnifiedPaymentVerifier.ORCHESTRATOR_UPDATE_DELAY();
-
-      await ethers.provider.send("evm_increaseTime", [delay.toNumber()]);
-      await ethers.provider.send("evm_mine", []);
-
-      await expect(subject())
-        .to.emit(BaseUnifiedPaymentVerifier, "OrchestratorUpdated")
-        .withArgs(escrow.address, newOrchestrator.address);
-
-      expect(await BaseUnifiedPaymentVerifier.orchestrator()).to.eq(newOrchestrator.address);
-      expect(await BaseUnifiedPaymentVerifier.pendingOrchestrator()).to.eq(ethers.constants.AddressZero);
-      expect(await BaseUnifiedPaymentVerifier.orchestratorUpdateTimestamp()).to.eq(0);
-    });
-
-    describe("when no orchestrator update is scheduled", async () => {
-      it("should revert", async () => {
-        await expect(subject()).to.be.revertedWith("UPV: No orchestrator update scheduled");
-      });
-    });
-
-    describe("when delay has not elapsed", async () => {
-      beforeEach(async () => {
-        await BaseUnifiedPaymentVerifier.connect(owner.wallet).scheduleOrchestratorUpdate(newOrchestrator.address);
-      });
-
-      it("should revert", async () => {
-        await expect(subject()).to.be.revertedWith("UPV: Orchestrator update delay not elapsed");
-      });
-    });
-
-    describe("when caller is not the owner", async () => {
-      beforeEach(async () => {
-        await BaseUnifiedPaymentVerifier.connect(owner.wallet).scheduleOrchestratorUpdate(newOrchestrator.address);
-        const delay = await BaseUnifiedPaymentVerifier.ORCHESTRATOR_UPDATE_DELAY();
-
-        await ethers.provider.send("evm_increaseTime", [delay.toNumber()]);
-        await ethers.provider.send("evm_mine", []);
         subjectCaller = attacker;
       });
 

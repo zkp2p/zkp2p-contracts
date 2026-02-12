@@ -11,53 +11,18 @@ import {
 } from "../deployments/parameters";
 import {
   addPostIntentHook,
-  callContractAsOwner,
   getDeployedContractAddress,
   setNewOwner,
+  setOrchestrator,
   waitForDeploymentDelay,
 } from "../deployments/helpers";
-
-const ZERO_ADDRESS = ethers.constants.AddressZero;
-
-const normalizeAddress = (value: string): string => value.toLowerCase();
 
 const syncAcrossBridgeHookOrchestrator = async (
   hre: HardhatRuntimeEnvironment,
   acrossBridgeHookContract: any,
   expectedOrchestrator: string
 ): Promise<void> => {
-  const currentOrchestrator = await acrossBridgeHookContract.orchestrator();
-  if (normalizeAddress(currentOrchestrator) === normalizeAddress(expectedOrchestrator)) {
-    console.log("AcrossBridgeHook orchestrator already in sync");
-    return;
-  }
-
-  let pendingOrchestrator = await acrossBridgeHookContract.pendingOrchestrator();
-
-  if (
-    normalizeAddress(pendingOrchestrator) !== normalizeAddress(ZERO_ADDRESS) &&
-    normalizeAddress(pendingOrchestrator) !== normalizeAddress(expectedOrchestrator)
-  ) {
-    console.log("Cancelling stale AcrossBridgeHook pending orchestrator update...");
-    await callContractAsOwner(hre, acrossBridgeHookContract, "cancelOrchestratorUpdate", []);
-    pendingOrchestrator = await acrossBridgeHookContract.pendingOrchestrator();
-  }
-
-  if (normalizeAddress(pendingOrchestrator) !== normalizeAddress(expectedOrchestrator)) {
-    console.log("Proposing AcrossBridgeHook orchestrator update...");
-    await callContractAsOwner(hre, acrossBridgeHookContract, "proposeOrchestrator", [expectedOrchestrator]);
-    return;
-  }
-
-  const executeAfter = await acrossBridgeHookContract.pendingOrchestratorActivationTime();
-  const latestBlock = await hre.ethers.provider.getBlock("latest");
-  if (latestBlock.timestamp < executeAfter.toNumber()) {
-    console.log(`AcrossBridgeHook orchestrator update is pending until ${executeAfter.toString()}`);
-    return;
-  }
-
-  console.log("Accepting AcrossBridgeHook orchestrator update...");
-  await callContractAsOwner(hre, acrossBridgeHookContract, "acceptOrchestrator", []);
+  await setOrchestrator(hre, acrossBridgeHookContract, expectedOrchestrator);
 };
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {

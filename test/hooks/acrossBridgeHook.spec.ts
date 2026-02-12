@@ -6,11 +6,10 @@ import { ethers } from "hardhat";
 import DeployHelper from "@utils/deploys";
 import { Account } from "@utils/test/types";
 import { getAccounts, getWaffleExpect } from "@utils/test/index";
-import { Blockchain, usdc, ether } from "@utils/common";
-import { ADDRESS_ZERO, ZERO_BYTES32, ONE_DAY_IN_SECONDS } from "@utils/constants";
+import { usdc, ether } from "@utils/common";
+import { ADDRESS_ZERO, ZERO_BYTES32 } from "@utils/constants";
 
 const expect = getWaffleExpect();
-const blockchain = new Blockchain(ethers.provider);
 
 describe("AcrossBridgeHook", () => {
   let owner: Account;
@@ -288,9 +287,6 @@ describe("AcrossBridgeHook", () => {
     it("should set initial variables correctly", async () => {
       expect(await hook.inputToken()).to.eq(usdcToken.address);
       expect(await hook.orchestrator()).to.eq(orchestrator.address);
-      expect(await hook.pendingOrchestrator()).to.eq(ADDRESS_ZERO);
-      expect(await hook.pendingOrchestratorActivationTime()).to.eq(0);
-      expect(await hook.ORCHESTRATOR_UPDATE_DELAY()).to.eq(ONE_DAY_IN_SECONDS);
       expect(await hook.spokePool()).to.eq(spokePool.address);
     });
 
@@ -320,7 +316,7 @@ describe("AcrossBridgeHook", () => {
     });
   });
 
-  describe("#orchestratorRotation", () => {
+  describe("#setOrchestrator", () => {
     let intent: any;
     let amountNetFees: BigNumber;
     let encodedFulfillData: string;
@@ -340,43 +336,31 @@ describe("AcrossBridgeHook", () => {
       encodedFulfillData = encoded;
     });
 
-    it("should rotate orchestrator through delayed two-step governance", async () => {
+    it("should update orchestrator immediately", async () => {
       await expect(
-        hook.connect(owner.wallet).proposeOrchestrator(nextOrchestrator.address)
-      ).to.emit(hook, "OrchestratorUpdateProposed");
-
-      expect(await hook.pendingOrchestrator()).to.eq(nextOrchestrator.address);
-
-      await expect(
-        hook.connect(owner.wallet).acceptOrchestrator()
-      ).to.be.revertedWithCustomError(hook, "OrchestratorUpdateDelayActive");
-
-      await blockchain.increaseTimeAsync(ONE_DAY_IN_SECONDS.add(1).toNumber());
-
-      await expect(
-        hook.connect(owner.wallet).acceptOrchestrator()
+        hook.connect(owner.wallet).setOrchestrator(nextOrchestrator.address)
       ).to.emit(hook, "OrchestratorUpdated")
         .withArgs(orchestrator.address, nextOrchestrator.address);
 
       expect(await hook.orchestrator()).to.eq(nextOrchestrator.address);
-      expect(await hook.pendingOrchestrator()).to.eq(ADDRESS_ZERO);
-      expect(await hook.pendingOrchestratorActivationTime()).to.eq(0);
     });
 
-    it("should allow owner to cancel a pending orchestrator update", async () => {
-      await hook.connect(owner.wallet).proposeOrchestrator(nextOrchestrator.address);
-
+    it("should revert for zero address", async () => {
       await expect(
-        hook.connect(owner.wallet).cancelOrchestratorUpdate()
-      ).to.emit(hook, "OrchestratorUpdateCancelled")
-        .withArgs(nextOrchestrator.address);
+        hook.connect(owner.wallet).setOrchestrator(ADDRESS_ZERO)
+      ).to.be.revertedWithCustomError(hook, "ZeroAddress");
+    });
 
-      expect(await hook.pendingOrchestrator()).to.eq(ADDRESS_ZERO);
-      expect(await hook.pendingOrchestratorActivationTime()).to.eq(0);
-
+    it("should revert when setting the same orchestrator", async () => {
       await expect(
-        hook.connect(owner.wallet).acceptOrchestrator()
-      ).to.be.revertedWithCustomError(hook, "NoPendingOrchestratorUpdate");
+        hook.connect(owner.wallet).setOrchestrator(orchestrator.address)
+      ).to.be.revertedWithCustomError(hook, "SameOrchestrator");
+    });
+
+    it("should revert when called by non-owner", async () => {
+      await expect(
+        hook.connect(attacker.wallet).setOrchestrator(nextOrchestrator.address)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
     });
 
     it("should gate execute caller before and after orchestrator rotation", async () => {
@@ -390,9 +374,7 @@ describe("AcrossBridgeHook", () => {
         hook.connect(orchestrator.wallet).execute(intent, amountNetFees, encodedFulfillData)
       ).to.emit(hook, "AcrossBridgeInitiated");
 
-      await hook.connect(owner.wallet).proposeOrchestrator(nextOrchestrator.address);
-      await blockchain.increaseTimeAsync(ONE_DAY_IN_SECONDS.add(1).toNumber());
-      await hook.connect(owner.wallet).acceptOrchestrator();
+      await hook.connect(owner.wallet).setOrchestrator(nextOrchestrator.address);
 
       await usdcToken.transfer(nextOrchestrator.address, amountNetFees);
       await usdcToken.connect(nextOrchestrator.wallet).approve(hook.address, amountNetFees);

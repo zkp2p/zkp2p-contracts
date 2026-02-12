@@ -54,35 +54,6 @@ export function getDeployedContractAddress(network: string, contractName: string
   return require(`./${network}/${contractName}.json`).address;
 }
 
-export async function callContractAsOwner(
-  hre: HardhatRuntimeEnvironment,
-  contract: any,
-  functionName: string,
-  args: any[] = []
-): Promise<boolean> {
-  const currentOwner = (await contract.owner()) as string;
-  const ownerAddresses = (await hre.getUnnamedAccounts()).map((account) => account.toLowerCase());
-  const calldata = contract.interface.encodeFunctionData(functionName, args);
-
-  if (ownerAddresses.includes(currentOwner.toLowerCase())) {
-    await sendDeploymentTransaction(hre, {
-      from: currentOwner,
-      to: contract.address,
-      data: calldata,
-    });
-    return true;
-  }
-
-  console.log(
-    `Contract owner is not in the list of accounts, must be manually added with the following calldata:
-      ${calldata}
-      contract address: ${contract.address}
-      `
-  );
-
-  return false;
-}
-
 export async function setNewOwner(
   hre: HardhatRuntimeEnvironment,
   contract: any,

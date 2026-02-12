@@ -126,12 +126,6 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
         FallbackReason reason
     );
 
-    event OrchestratorUpdateProposed(
-        address indexed currentOrchestrator,
-        address indexed pendingOrchestrator,
-        uint256 executeAfter
-    );
-    event OrchestratorUpdateCancelled(address indexed pendingOrchestrator);
     event OrchestratorUpdated(address indexed previousOrchestrator, address indexed newOrchestrator);
 
     event RescueERC20(address indexed token, address indexed to, uint256 amount);
@@ -147,16 +141,12 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
     /// @dev Reverts fulfillIntent if outputAmount < minOutputAmount. For volatile assets,
     ///      this can occur if price dropped between signalIntent and fulfillIntent.
     error NativeTransferFailed(address to, uint256 amount);
-    error NoPendingOrchestratorUpdate();
-    error OrchestratorUpdateDelayActive(uint256 executeAfter, uint256 currentTimestamp);
+    error SameOrchestrator(address orchestrator);
 
     /* ============ State Variables ============ */
 
     IERC20 public immutable inputToken;
-    uint256 public constant ORCHESTRATOR_UPDATE_DELAY = 1 days;
     address public orchestrator;
-    address public pendingOrchestrator;
-    uint256 public pendingOrchestratorActivationTime;
     IAcrossSpokePool public immutable spokePool;
 
     /* ============ Constructor ============ */
@@ -263,51 +253,14 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
         );
     }
 
-    /**
-     * @notice Proposes a new orchestrator address to be accepted after a delay.
-     * @param _newOrchestrator New orchestrator address
-     */
-    function proposeOrchestrator(address _newOrchestrator) external onlyOwner {
+    function setOrchestrator(address _newOrchestrator) external onlyOwner {
         if (_newOrchestrator == address(0)) revert ZeroAddress();
-
-        uint256 executeAfter = block.timestamp + ORCHESTRATOR_UPDATE_DELAY;
-        pendingOrchestrator = _newOrchestrator;
-        pendingOrchestratorActivationTime = executeAfter;
-
-        emit OrchestratorUpdateProposed(orchestrator, _newOrchestrator, executeAfter);
-    }
-
-    /**
-     * @notice Cancels a pending orchestrator update.
-     */
-    function cancelOrchestratorUpdate() external onlyOwner {
-        address currentPendingOrchestrator = pendingOrchestrator;
-        if (currentPendingOrchestrator == address(0)) revert NoPendingOrchestratorUpdate();
-
-        pendingOrchestrator = address(0);
-        pendingOrchestratorActivationTime = 0;
-
-        emit OrchestratorUpdateCancelled(currentPendingOrchestrator);
-    }
-
-    /**
-     * @notice Accepts the pending orchestrator update after the delay has elapsed.
-     */
-    function acceptOrchestrator() external onlyOwner {
-        address nextOrchestrator = pendingOrchestrator;
-        if (nextOrchestrator == address(0)) revert NoPendingOrchestratorUpdate();
-
-        uint256 executeAfter = pendingOrchestratorActivationTime;
-        if (block.timestamp < executeAfter) {
-            revert OrchestratorUpdateDelayActive(executeAfter, block.timestamp);
-        }
+        if (_newOrchestrator == orchestrator) revert SameOrchestrator(_newOrchestrator);
 
         address previousOrchestrator = orchestrator;
-        orchestrator = nextOrchestrator;
-        pendingOrchestrator = address(0);
-        pendingOrchestratorActivationTime = 0;
+        orchestrator = _newOrchestrator;
 
-        emit OrchestratorUpdated(previousOrchestrator, nextOrchestrator);
+        emit OrchestratorUpdated(previousOrchestrator, _newOrchestrator);
     }
 
     /**

@@ -8,43 +8,20 @@ import {
   MULTI_SIG,
 } from "../deployments/parameters";
 import {
-  callContractAsOwner,
   addWritePermission,
   getDeployedContractAddress,
   setNewOwner,
+  setOrchestrator,
   waitForDeploymentDelay,
 } from "../deployments/helpers";
 import { WITNESS_ADDRESS } from "../deployments/parameters";
-
-const normalizeAddress = (value: string): string => value.toLowerCase();
 
 const syncUnifiedVerifierOrchestrator = async (
   hre: HardhatRuntimeEnvironment,
   unifiedPaymentVerifierContract: any,
   expectedOrchestrator: string
 ): Promise<void> => {
-  const currentOrchestrator = await unifiedPaymentVerifierContract.orchestrator();
-  if (normalizeAddress(currentOrchestrator) === normalizeAddress(expectedOrchestrator)) {
-    console.log("UnifiedPaymentVerifier orchestrator already in sync");
-    return;
-  }
-
-  const pendingOrchestrator = await unifiedPaymentVerifierContract.pendingOrchestrator();
-  if (normalizeAddress(pendingOrchestrator) !== normalizeAddress(expectedOrchestrator)) {
-    console.log("Scheduling UnifiedPaymentVerifier orchestrator update...");
-    await callContractAsOwner(hre, unifiedPaymentVerifierContract, "scheduleOrchestratorUpdate", [expectedOrchestrator]);
-    return;
-  }
-
-  const executeAfter = await unifiedPaymentVerifierContract.orchestratorUpdateTimestamp();
-  const latestBlock = await hre.ethers.provider.getBlock("latest");
-  if (latestBlock.timestamp < executeAfter.toNumber()) {
-    console.log(`UnifiedPaymentVerifier orchestrator update is pending until ${executeAfter.toString()}`);
-    return;
-  }
-
-  console.log("Finalizing UnifiedPaymentVerifier orchestrator update...");
-  await callContractAsOwner(hre, unifiedPaymentVerifierContract, "finalizeOrchestratorUpdate", []);
+  await setOrchestrator(hre, unifiedPaymentVerifierContract, expectedOrchestrator);
 };
 
 // Deployment Scripts

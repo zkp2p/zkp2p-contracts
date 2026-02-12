@@ -4,27 +4,19 @@ This PR implements the **P0 mutability hardening** discussed after PR100/104 pla
 
 ### What changed
 
-1. **Unified verifier orchestrator rotation (two-step, delayed)**
-- `BaseUnifiedPaymentVerifier` now uses a mutable `orchestrator` pointer with governance-controlled delayed rotation:
-  - `scheduleOrchestratorUpdate(address)`
-  - `finalizeOrchestratorUpdate()`
-- Added:
-  - `ORCHESTRATOR_UPDATE_DELAY = 2 days`
-  - `pendingOrchestrator`
-  - `orchestratorUpdateTimestamp`
-  - events: `OrchestratorUpdateScheduled`, `OrchestratorUpdated`
+1. **Unified verifier orchestrator rotation (single-step immediate)**
+- `BaseUnifiedPaymentVerifier` now uses a mutable `orchestrator` pointer with owner-controlled immediate update:
+  - `setOrchestrator(address)`
+- Added/updated:
+  - event: `OrchestratorUpdated`
 - Preserved security anchor: `nullifierRegistry` remains immutable.
 
-2. **Across hook orchestrator rotation (two-step, delayed)**
-- `AcrossBridgeHook` now supports delayed orchestrator rotation:
-  - `proposeOrchestrator(address)`
-  - `cancelOrchestratorUpdate()`
-  - `acceptOrchestrator()`
-- Added:
-  - `ORCHESTRATOR_UPDATE_DELAY = 1 days`
-  - `pendingOrchestrator`
-  - `pendingOrchestratorActivationTime`
-  - events and custom errors for pending/delay flows
+2. **Across hook orchestrator rotation (single-step immediate)**
+- `AcrossBridgeHook` now supports immediate orchestrator rotation:
+  - `setOrchestrator(address)`
+- Added/updated:
+  - event: `OrchestratorUpdated`
+  - custom guard for same-address updates
 - Preserved immutables: `inputToken` and `spokePool` remain immutable.
 
 3. **ProtocolViewer pointer mutability**
@@ -39,17 +31,15 @@ This PR implements the **P0 mutability hardening** discussed after PR100/104 pla
   - transfers `ProtocolViewer` ownership to multisig.
 - `deploy/01_deploy_unified_verifier.ts`
   - now runnable on all networks.
-  - uses `skipIfAlreadyDeployed: true` and sync logic to schedule/finalize unified verifier orchestrator updates when address drift is detected.
+  - uses `skipIfAlreadyDeployed: true` and sync logic to apply immediate unified verifier orchestrator updates when address drift is detected.
 - `deploy/10_deploy_across_bridge_hook.ts`
   - now runnable on all networks.
-  - uses `skipIfAlreadyDeployed: true` and sync logic to propose/accept (and cancel stale) across hook orchestrator updates.
-- `deployments/helpers.ts`
-  - added `callContractAsOwner(...)` utility to execute owner-gated function calls when owner key is available, or print calldata for manual multisig execution.
+  - uses `skipIfAlreadyDeployed: true` and sync logic to apply immediate across hook orchestrator updates.
 
 ## Why this helps
 
 Previously, an Orchestrator replacement forced redeploy/re-registration of multiple downstream components due immutable references. With this PR:
-- Unified verifier and Across hook can be updated in-place (governance + delay).
+- Unified verifier and Across hook can be updated in-place (owner-governed immediate update).
 - ProtocolViewer can be re-pointed without redeploy.
 - Deployment scripts can perform safe pointer reconciliation in repeat runs.
 
@@ -65,7 +55,6 @@ Previously, an Orchestrator replacement forced redeploy/re-registration of multi
 - `deploy/00_deploy_system.ts`
 - `deploy/01_deploy_unified_verifier.ts`
 - `deploy/10_deploy_across_bridge_hook.ts`
-- `deployments/helpers.ts`
 
 ### Tests
 - `test/unifiedVerifier/baseUnifiedPaymentVerifier.spec.ts`
@@ -91,6 +80,5 @@ Result:
 
 ## Notes / Risk
 
-- Delayed rotation means same-run immediate cutover is not possible for affected contracts unless delay has elapsed.
 - Scripts intentionally log/manual-calldata path when multisig owner is not locally unlocked.
 - Existing immutable security roots remain unchanged where intended (`chainId`, verifier `nullifierRegistry`).

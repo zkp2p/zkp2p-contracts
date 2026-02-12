@@ -611,12 +611,7 @@ describe("UnifiedPaymentVerifier", () => {
           feeRecipient.address,
         );
 
-        await verifier.connect(owner.wallet).scheduleOrchestratorUpdate(replacementOrchestrator.address);
-        const delay = await verifier.ORCHESTRATOR_UPDATE_DELAY();
-
-        await ethers.provider.send("evm_increaseTime", [delay.toNumber()]);
-        await ethers.provider.send("evm_mine", []);
-        await verifier.connect(owner.wallet).finalizeOrchestratorUpdate();
+        await verifier.connect(owner.wallet).setOrchestrator(replacementOrchestrator.address);
       };
 
       it("rejects calls routed by the old orchestrator", async () => {
