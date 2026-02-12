@@ -692,26 +692,88 @@ describe("ProtocolViewer", () => {
       );
     });
 
-    it("allows the owner to update both escrow and orchestrator addresses", async () => {
-      await expect(protocolViewer.connect(owner.wallet).setEscrowContract(replacementEscrow.address))
-        .to.emit(protocolViewer, "EscrowContractUpdated")
-        .withArgs(escrow.address, replacementEscrow.address);
+    describe("#setEscrowContract", async () => {
+      let subjectEscrow: string;
+      let subjectCaller: Account;
 
-      expect(await protocolViewer.escrowContract()).to.eq(replacementEscrow.address);
+      async function subject(): Promise<any> {
+        return protocolViewer.connect(subjectCaller.wallet).setEscrowContract(subjectEscrow);
+      }
 
-      await expect(protocolViewer.connect(owner.wallet).setOrchestrator(replacementOrchestrator.address))
-        .to.emit(protocolViewer, "OrchestratorUpdated")
-        .withArgs(orchestrator.address, replacementOrchestrator.address);
+      beforeEach(async () => {
+        subjectEscrow = replacementEscrow.address;
+        subjectCaller = owner;
+      });
 
-      expect(await protocolViewer.orchestrator()).to.eq(replacementOrchestrator.address);
+      it("allows the owner to update the escrow pointer", async () => {
+        await expect(subject())
+          .to.emit(protocolViewer, "EscrowContractUpdated")
+          .withArgs(escrow.address, replacementEscrow.address);
+
+        expect(await protocolViewer.escrowContract()).to.eq(replacementEscrow.address);
+      });
+
+      describe("when escrow is zero address", async () => {
+        beforeEach(async () => {
+          subjectEscrow = ADDRESS_ZERO;
+        });
+
+        it("should revert", async () => {
+          await expect(subject()).to.be.revertedWith("ProtocolViewer: invalid escrow");
+        });
+      });
+
+      describe("when caller is not owner", async () => {
+        beforeEach(async () => {
+          subjectCaller = offRamper;
+        });
+
+        it("should revert", async () => {
+          await expect(subject()).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+      });
     });
 
-    it("prevents non-owner accounts from modifying the pointers", async () => {
-      await expect(protocolViewer.connect(offRamper.wallet).setEscrowContract(replacementEscrow.address))
-        .to.be.revertedWith("Ownable: caller is not the owner");
+    describe("#setOrchestrator", async () => {
+      let subjectOrchestrator: string;
+      let subjectCaller: Account;
 
-      await expect(protocolViewer.connect(offRamper.wallet).setOrchestrator(replacementOrchestrator.address))
-        .to.be.revertedWith("Ownable: caller is not the owner");
+      async function subject(): Promise<any> {
+        return protocolViewer.connect(subjectCaller.wallet).setOrchestrator(subjectOrchestrator);
+      }
+
+      beforeEach(async () => {
+        subjectOrchestrator = replacementOrchestrator.address;
+        subjectCaller = owner;
+      });
+
+      it("allows the owner to update the orchestrator pointer", async () => {
+        await expect(subject())
+          .to.emit(protocolViewer, "OrchestratorUpdated")
+          .withArgs(orchestrator.address, replacementOrchestrator.address);
+
+        expect(await protocolViewer.orchestrator()).to.eq(replacementOrchestrator.address);
+      });
+
+      describe("when orchestrator is zero address", async () => {
+        beforeEach(async () => {
+          subjectOrchestrator = ADDRESS_ZERO;
+        });
+
+        it("should revert", async () => {
+          await expect(subject()).to.be.revertedWith("ProtocolViewer: invalid orchestrator");
+        });
+      });
+
+      describe("when caller is not owner", async () => {
+        beforeEach(async () => {
+          subjectCaller = offRamper;
+        });
+
+        it("should revert", async () => {
+          await expect(subject()).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+      });
     });
   });
 });
