@@ -15,7 +15,6 @@ import {
   PaymentVerifierMock,
   PostIntentHookMock,
   ReentrantPostIntentHook,
-  PostIntentHookRegistry,
   PaymentVerifierRegistry,
   RelayerRegistry,
   NullifierRegistry,
@@ -65,7 +64,6 @@ describe("Orchestrator", () => {
   let protocolViewer: ProtocolViewer;
   let usdcToken: USDCMock;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
-  let postIntentHookRegistry: PostIntentHookRegistry;
   let relayerRegistry: RelayerRegistry;
   let nullifierRegistry: NullifierRegistry;
   let escrowRegistry: EscrowRegistry;
@@ -105,8 +103,6 @@ describe("Orchestrator", () => {
 
     paymentVerifierRegistry = await deployer.deployPaymentVerifierRegistry();
 
-    postIntentHookRegistry = await deployer.deployPostIntentHookRegistry();
-
     relayerRegistry = await deployer.deployRelayerRegistry();
 
     nullifierRegistry = await deployer.deployNullifierRegistry();
@@ -130,7 +126,6 @@ describe("Orchestrator", () => {
       chainId,
       escrowRegistry.address,
       paymentVerifierRegistry.address,
-      postIntentHookRegistry.address,
       relayerRegistry.address,           // relayer registry
       ZERO,                              // protocol fee (0%)
       feeRecipient.address               // protocol fee recipient
@@ -148,13 +143,10 @@ describe("Orchestrator", () => {
     await otherVerifier.connect(owner.wallet).setVerificationContext(orchestrator.address, escrow.address);
 
     postIntentHookMock = await deployer.deployPostIntentHookMock(usdcToken.address, orchestrator.address);
-    await postIntentHookRegistry.addPostIntentHook(postIntentHookMock.address);
 
     partialPostIntentHook = await deployer.deployPartialPullPostIntentHookMock(usdcToken.address, orchestrator.address);
-    await postIntentHookRegistry.addPostIntentHook(partialPostIntentHook.address);
 
     pushPostIntentHook = await deployer.deployPushPostIntentHookMock(usdcToken.address, orchestrator.address);
-    await postIntentHookRegistry.addPostIntentHook(pushPostIntentHook.address);
 
 
     venmoPaymentMethod = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
@@ -170,7 +162,6 @@ describe("Orchestrator", () => {
       const actualChainId = await orchestrator.chainId();
       const actualEscrowRegistry = await orchestrator.escrowRegistry();
       const actualPaymentVerifierRegistry = await orchestrator.paymentVerifierRegistry();
-      const actualPostIntentHookRegistry = await orchestrator.postIntentHookRegistry();
       const actualRelayerRegistry = await orchestrator.relayerRegistry();
       const actualProtocolFee = await orchestrator.protocolFee();
       const actualProtocolFeeRecipient = await orchestrator.protocolFeeRecipient();
@@ -178,7 +169,6 @@ describe("Orchestrator", () => {
       expect(actualChainId).to.eq(chainId);
       expect(actualEscrowRegistry).to.eq(escrowRegistry.address);
       expect(actualPaymentVerifierRegistry).to.eq(paymentVerifierRegistry.address);
-      expect(actualPostIntentHookRegistry).to.eq(postIntentHookRegistry.address);
       expect(actualRelayerRegistry).to.eq(relayerRegistry.address);
       expect(actualProtocolFee).to.eq(ZERO);
       expect(actualProtocolFeeRecipient).to.eq(feeRecipient.address);
@@ -536,13 +526,13 @@ describe("Orchestrator", () => {
         expect(intent.data).to.eq(subjectIntentData);
       });
 
-      describe("when the post intent hook is not whitelisted", async () => {
+      describe("when the post intent hook is not a contract", async () => {
         beforeEach(async () => {
-          await postIntentHookRegistry.removePostIntentHook(postIntentHookMock.address);
+          subjectPostIntentHook = onRamper.address;
         });
 
         it("should revert", async () => {
-          await expect(subject()).to.be.revertedWithCustomError(orchestrator, "PostIntentHookNotWhitelisted");
+          await expect(subject()).to.be.revertedWithCustomError(orchestrator, "InvalidPostIntentHook");
         });
       });
     });
@@ -1720,9 +1710,6 @@ describe("Orchestrator", () => {
           orchestrator.address
         );
 
-        // Whitelist the malicious hook (simulating it passed review)
-        await postIntentHookRegistry.addPostIntentHook(reentrantHook.address);
-
         // Cancel existing intent and create new one with malicious hook
         await orchestrator.connect(onRamper.wallet).cancelIntent(intentHash);
 
@@ -2702,55 +2689,6 @@ describe("Orchestrator", () => {
     describe("when the passed fee recipient is the zero address", async () => {
       beforeEach(async () => {
         subjectProtocolFeeRecipient = ADDRESS_ZERO;
-      });
-
-      it("should revert", async () => {
-        await expect(subject()).to.be.revertedWithCustomError(orchestrator, "ZeroAddress");
-      });
-    });
-
-    describe("when the caller is not the owner", async () => {
-      beforeEach(async () => {
-        subjectCaller = onRamper;
-      });
-
-      it("should revert", async () => {
-        await expect(subject()).to.be.revertedWith("Ownable: caller is not the owner");
-      });
-    });
-  });
-
-  describe("#setPostIntentHookRegistry", async () => {
-    let subjectPostIntentHookRegistry: Address;
-    let subjectCaller: Account;
-
-    beforeEach(async () => {
-      const newRegistry = await deployer.deployPostIntentHookRegistry();
-      subjectPostIntentHookRegistry = newRegistry.address;
-      subjectCaller = owner;
-    });
-
-    async function subject(): Promise<any> {
-      return orchestrator.connect(subjectCaller.wallet).setPostIntentHookRegistry(subjectPostIntentHookRegistry);
-    }
-
-    it("should set the correct post intent hook registry", async () => {
-      const preRegistry = await orchestrator.postIntentHookRegistry();
-      expect(preRegistry).to.not.eq(subjectPostIntentHookRegistry);
-
-      await subject();
-
-      const postRegistry = await orchestrator.postIntentHookRegistry();
-      expect(postRegistry).to.eq(subjectPostIntentHookRegistry);
-    });
-
-    it("should emit a PostIntentHookRegistryUpdated event", async () => {
-      await expect(subject()).to.emit(orchestrator, "PostIntentHookRegistryUpdated").withArgs(subjectPostIntentHookRegistry);
-    });
-
-    describe("when the registry is zero address", async () => {
-      beforeEach(async () => {
-        subjectPostIntentHookRegistry = ADDRESS_ZERO;
       });
 
       it("should revert", async () => {

@@ -13,7 +13,6 @@ import {
   NullifierRegistry,
   Orchestrator,
   PaymentVerifierRegistry,
-  PostIntentHookRegistry,
   RelayerRegistry,
   SimpleAttestationVerifier,
   UnifiedPaymentVerifier,
@@ -50,7 +49,6 @@ describe("UnifiedPaymentVerifier", () => {
   let usdcToken: USDCMock;
   let escrowRegistry: EscrowRegistry;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
-  let postIntentHookRegistry: PostIntentHookRegistry;
   let relayerRegistry: RelayerRegistry;
   let nullifierRegistry: NullifierRegistry;
   let escrow: Escrow;
@@ -89,7 +87,6 @@ describe("UnifiedPaymentVerifier", () => {
 
     escrowRegistry = await deployer.deployEscrowRegistry();
     paymentVerifierRegistry = await deployer.deployPaymentVerifierRegistry();
-    postIntentHookRegistry = await deployer.deployPostIntentHookRegistry();
     relayerRegistry = await deployer.deployRelayerRegistry();
     nullifierRegistry = await deployer.deployNullifierRegistry();
 
@@ -112,7 +109,6 @@ describe("UnifiedPaymentVerifier", () => {
       BigNumber.from(chainId),
       escrowRegistry.address,
       paymentVerifierRegistry.address,
-      postIntentHookRegistry.address,
       relayerRegistry.address,
       ZERO,
       feeRecipient.address,

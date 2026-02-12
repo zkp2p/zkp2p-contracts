@@ -40,7 +40,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     ProtocolViewer:                     ${tryGetDeployedContractAddress("ProtocolViewer")}
     EscrowRegistry:                     ${tryGetDeployedContractAddress("EscrowRegistry")}
     PaymentVerifierRegistry:            ${tryGetDeployedContractAddress("PaymentVerifierRegistry")}
-    PostIntentHookRegistry:             ${tryGetDeployedContractAddress("PostIntentHookRegistry")}
     RelayerRegistry:                    ${tryGetDeployedContractAddress("RelayerRegistry")}
     NullifierRegistry:                  ${tryGetDeployedContractAddress("NullifierRegistry")}
     UnifiedPaymentVerifier:             ${tryGetDeployedContractAddress("UnifiedPaymentVerifier")}

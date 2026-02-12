@@ -80,7 +80,6 @@ interface IOrchestrator {
     event AllowMultipleIntentsUpdated(bool allowMultiple);
 
     event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);
-    event PostIntentHookRegistryUpdated(address indexed postIntentHookRegistry);
     event RelayerRegistryUpdated(address indexed relayerRegistry);
     event EscrowRegistryUpdated(address indexed escrowRegistry);
     event DepositRateManagerControllerUpdated(address indexed depositRateManagerController);
@@ -107,7 +106,6 @@ interface IOrchestrator {
     
     // Whitelist errors
     error PaymentMethodNotWhitelisted(bytes32 paymentMethod);
-    error PostIntentHookNotWhitelisted(address hook);
     error EscrowNotWhitelisted(address escrow);
     
     // Amount and fee errors
@@ -120,6 +118,7 @@ interface IOrchestrator {
     // Validation errors
     error AccountHasActiveIntent(address account, bytes32 existingIntent);
     error InvalidReferrerFeeConfiguration();
+    error InvalidPostIntentHook(address hook);
     error InvalidSignature();
     error SignatureExpired(uint256 expiration, uint256 currentTime);
     error PartialReleaseNotAllowedYet(uint256 currentTime, uint256 allowedTime);

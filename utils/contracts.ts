@@ -9,7 +9,6 @@ export {
   ProtocolViewer,
   Orchestrator,
   PaymentVerifierRegistry,
-  PostIntentHookRegistry,
   RelayerRegistry,
   EscrowRegistry,
   NullifierRegistry,

@@ -14,7 +14,6 @@ import { USDCMock } from "../../contracts/mocks/USDCMock.sol";
 import { PaymentVerifierMock } from "../../contracts/mocks/PaymentVerifierMock.sol";
 import { EscrowRegistry } from "../../contracts/registries/EscrowRegistry.sol";
 import { PaymentVerifierRegistry } from "../../contracts/registries/PaymentVerifierRegistry.sol";
-import { PostIntentHookRegistry } from "../../contracts/registries/PostIntentHookRegistry.sol";
 import { RelayerRegistry } from "../../contracts/registries/RelayerRegistry.sol";
 import { IPostIntentHook } from "../../contracts/interfaces/IPostIntentHook.sol";
 
@@ -33,7 +32,6 @@ contract OrchestratorPruneOnSignalTest is Test {
     USDCMock public usdc;
     PaymentVerifierRegistry public paymentVerifierRegistry;
     EscrowRegistry public escrowRegistry;
-    PostIntentHookRegistry public postIntentHookRegistry;
     RelayerRegistry public relayerRegistry;
     PaymentVerifierMock public venmoVerifier;
     DepositRateManagerController public rateManagerController;
@@ -59,7 +57,6 @@ contract OrchestratorPruneOnSignalTest is Test {
         vm.startPrank(owner);
         escrowRegistry = new EscrowRegistry();
         paymentVerifierRegistry = new PaymentVerifierRegistry();
-        postIntentHookRegistry = new PostIntentHookRegistry();
         relayerRegistry = new RelayerRegistry();
         vm.stopPrank();
 
@@ -70,7 +67,6 @@ contract OrchestratorPruneOnSignalTest is Test {
             1,
             address(escrowRegistry),
             address(paymentVerifierRegistry),
-            address(postIntentHookRegistry),
             address(relayerRegistry),
             0, // protocol fee 0 for simplicity
             protocolFeeRecipient

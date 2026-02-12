@@ -13,8 +13,6 @@ import {
   Orchestrator__factory,
   PaymentVerifierRegistry,
   PaymentVerifierRegistry__factory,
-  PostIntentHookRegistry,
-  PostIntentHookRegistry__factory,
   ProtocolViewer,
   ProtocolViewer__factory,
   RelayerRegistry,
@@ -62,7 +60,6 @@ describe("V2.1 System Deployment", () => {
   let orchestrator: Orchestrator;
   let nullifierRegistry: NullifierRegistry;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
-  let postIntentHookRegistry: PostIntentHookRegistry;
   let relayerRegistry: RelayerRegistry;
   let protocolViewer: ProtocolViewer;
   let escrowRegistry: EscrowRegistry;
@@ -92,9 +89,6 @@ describe("V2.1 System Deployment", () => {
 
     const paymentVerifierRegistryAddress = await getDeployedContractAddress(network, "PaymentVerifierRegistry");
     paymentVerifierRegistry = new PaymentVerifierRegistry__factory(deployer.wallet).attach(paymentVerifierRegistryAddress);
-
-    const postIntentHookRegistryAddress = await getDeployedContractAddress(network, "PostIntentHookRegistry");
-    postIntentHookRegistry = new PostIntentHookRegistry__factory(deployer.wallet).attach(postIntentHookRegistryAddress);
 
     const relayerRegistryAddress = await getDeployedContractAddress(network, "RelayerRegistry");
     relayerRegistry = new RelayerRegistry__factory(deployer.wallet).attach(relayerRegistryAddress);
@@ -203,11 +197,6 @@ describe("V2.1 System Deployment", () => {
       expect(actualProtocolFeeRecipient).to.eq(expectedProtocolFeeRecipient);
     });
 
-    it("should have the correct post intent hook registry set", async () => {
-      const actualPostIntentHookRegistry = await orchestrator.postIntentHookRegistry();
-      expect(actualPostIntentHookRegistry).to.eq(postIntentHookRegistry.address);
-    });
-
     it("should have the correct relayer registry set", async () => {
       const actualRelayerRegistry = await orchestrator.relayerRegistry();
       expect(actualRelayerRegistry).to.eq(relayerRegistry.address);
@@ -234,13 +223,6 @@ describe("V2.1 System Deployment", () => {
   describe("PaymentVerifierRegistry", async () => {
     it("should have the correct owner", async () => {
       const actualOwner = await paymentVerifierRegistry.owner();
-      expect(actualOwner).to.eq(multiSig);
-    });
-  });
-
-  describe("PostIntentHookRegistry", async () => {
-    it("should have the correct owner", async () => {
-      const actualOwner = await postIntentHookRegistry.owner();
       expect(actualOwner).to.eq(multiSig);
     });
   });

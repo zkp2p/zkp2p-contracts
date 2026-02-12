@@ -13,7 +13,6 @@ import {
   NullifierRegistry,
   PostIntentHookMock,
   PaymentVerifierRegistry,
-  PostIntentHookRegistry,
   RelayerRegistry,
   OrchestratorMock,
   EscrowRegistry,
@@ -40,7 +39,6 @@ import {
 } from "../typechain/factories/contracts/mocks/ThresholdSigVerifierUtilsMock__factory";
 import { NullifierRegistry__factory } from "../typechain/factories/contracts/registries";
 import { PaymentVerifierRegistry__factory } from "../typechain/factories/contracts/registries";
-import { PostIntentHookRegistry__factory } from "../typechain/factories/contracts/registries";
 import { RelayerRegistry__factory } from "../typechain/factories/contracts/registries";
 import { EscrowRegistry__factory } from "../typechain/factories/contracts/registries";
 import { ManualRateManagerRegistry__factory } from "../typechain/factories/contracts/registries/ManualRateManagerRegistry__factory";
@@ -97,7 +95,6 @@ export default class DeployHelper {
     chainId: BigNumber,
     escrowRegistry: Address,
     paymentVerifierRegistry: Address,
-    postIntentHookRegistry: Address,
     relayerRegistry: Address,
     protocolFee: BigNumber,
     protocolFeeRecipient: Address,
@@ -109,7 +106,6 @@ export default class DeployHelper {
       chainId.toString(),
       escrowRegistry,
       paymentVerifierRegistry,
-      postIntentHookRegistry,
       relayerRegistry,
       protocolFee,
       protocolFeeRecipient
@@ -167,10 +163,6 @@ export default class DeployHelper {
 
   public async deployPaymentVerifierRegistry(): Promise<PaymentVerifierRegistry> {
     return await new PaymentVerifierRegistry__factory(this._deployerSigner).deploy();
-  }
-
-  public async deployPostIntentHookRegistry(): Promise<PostIntentHookRegistry> {
-    return await new PostIntentHookRegistry__factory(this._deployerSigner).deploy();
   }
 
   public async deployRelayerRegistry(): Promise<RelayerRegistry> {

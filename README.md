@@ -62,7 +62,7 @@ ZKP2P is a decentralized protocol enabling trustless peer-to-peer exchanges betw
 - Locks/unlocks funds on Escrow during intent processing
 - Routes verification requests to appropriate verifiers via registry
 - Collects and distributes protocol/referrer fees
-- Executes optional post-intent hooks for custom logic
+- Executes optional permissionless post-intent hooks for custom logic
 
 **Unified Payment Verifier**
 - Single contract supporting all payment methods via configuration
@@ -74,7 +74,6 @@ ZKP2P is a decentralized protocol enabling trustless peer-to-peer exchanges betw
 - `PaymentVerifierRegistry`: Maps payment methods to verifiers and currencies
 - `EscrowRegistry`: Whitelists valid escrow implementations
 - `RelayerRegistry`: Authorizes relayers for gasless transactions
-- `PostIntentHookRegistry`: Manages approved post-intent hooks
 - `NullifierRegistry`: Tracks used payment proofs globally
 
 **Protocol Viewer**

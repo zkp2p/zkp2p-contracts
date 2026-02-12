@@ -10,7 +10,6 @@ import {
   USDC,
 } from "../deployments/parameters";
 import {
-  addPostIntentHook,
   getDeployedContractAddress,
   setNewOwner,
   waitForDeploymentDelay,
@@ -24,7 +23,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const multiSig = MULTI_SIG[network] ? MULTI_SIG[network] : deployer;
 
   const orchestratorAddress = getDeployedContractAddress(network, "Orchestrator");
-  const postIntentHookRegistryAddress = getDeployedContractAddress(network, "PostIntentHookRegistry");
 
   const usdcAddress = USDC[network]
     ? USDC[network]
@@ -51,10 +49,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   });
   console.log("AcrossBridgeHook deployed at", acrossBridgeHook.address);
   await waitForDeploymentDelay(hre);
-
-  const postIntentHookRegistry = await ethers.getContractAt("PostIntentHookRegistry", postIntentHookRegistryAddress);
-  await addPostIntentHook(hre, postIntentHookRegistry, acrossBridgeHook.address);
-  console.log("AcrossBridgeHook added to post intent hook registry");
 
   const acrossBridgeHookContract = await ethers.getContractAt("AcrossBridgeHook", acrossBridgeHook.address);
   await setNewOwner(hre, acrossBridgeHookContract, multiSig);

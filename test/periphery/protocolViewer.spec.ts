@@ -12,7 +12,6 @@ import {
   IEscrow,
   USDCMock,
   PaymentVerifierMock,
-  PostIntentHookRegistry,
   PaymentVerifierRegistry,
   Orchestrator,
   RelayerRegistry,
@@ -56,7 +55,6 @@ describe("ProtocolViewer", () => {
   let protocolViewer: ProtocolViewer;
   let usdcToken: USDCMock;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
-  let postIntentHookRegistry: PostIntentHookRegistry;
   let relayerRegistry: RelayerRegistry;
   let escrowRegistry: EscrowRegistry;
 
@@ -87,7 +85,6 @@ describe("ProtocolViewer", () => {
     usdcToken = await deployer.deployUSDCMock(usdc(1000000000), "USDC", "USDC");
 
     paymentVerifierRegistry = await deployer.deployPaymentVerifierRegistry();
-    postIntentHookRegistry = await deployer.deployPostIntentHookRegistry();
     escrowRegistry = await deployer.deployEscrowRegistry();
     relayerRegistry = await deployer.deployRelayerRegistry();
 
@@ -110,7 +107,6 @@ describe("ProtocolViewer", () => {
       chainId,
       escrowRegistry.address,
       paymentVerifierRegistry.address,
-      postIntentHookRegistry.address,
       relayerRegistry.address,           // relayer registry
       ZERO,                              // protocol fee (0%)
       feeRecipient.address               // protocol fee recipient
