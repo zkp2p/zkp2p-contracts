@@ -177,6 +177,24 @@ describe("AcrossBridgeHook", () => {
       ).to.be.revertedWithCustomError(hook, "UnauthorizedCaller");
     });
 
+    it("should revert when fulfill hook data uses the legacy tuple shape", async () => {
+      const legacyData = {
+        intentHash: ethers.utils.hexlify(ethers.utils.randomBytes(32)),
+        outputAmount: BigNumber.from(700_000),
+        fillDeadlineOffset: 21600,
+        exclusiveRelayer: toBytes32("0x1562A70707D62edBF3a90317E46E1DF075E2d924"),
+        exclusivityParameter: 5
+      };
+
+      const legacyEncoded = ethers.utils.defaultAbiCoder.encode(
+        ["tuple(bytes32 intentHash,uint256 outputAmount,uint32 fillDeadlineOffset,bytes32 exclusiveRelayer,uint32 exclusivityParameter)"],
+        [legacyData]
+      );
+
+      await expect(subject(legacyEncoded))
+        .to.be.revertedWithCustomError(hook, "InvalidFulfillHookDataLength");
+    });
+
     it("should fallback to direct transfer when outputAmount is below minimum", async () => {
       const { encoded } = buildFulfillData({ outputAmount: commitment.minOutputAmount.sub(1) });
 

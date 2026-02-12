@@ -132,6 +132,7 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
 
     error ZeroAddress();
     error UnauthorizedCaller(address caller);
+    error InvalidFulfillHookDataLength(uint256 dataLength);
     error InvalidDestinationChainId(uint256 destinationChainId);
     error InvalidRecipient(bytes32 recipient);
     error InvalidOutputToken(bytes32 outputToken);
@@ -145,6 +146,7 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
     IERC20 public immutable inputToken;
     address public orchestrator;
     IAcrossSpokePool public immutable spokePool;
+    uint256 private constant ACROSS_FULFILL_DATA_LENGTH = 128;
 
     /* ============ Constructor ============ */
 
@@ -185,6 +187,9 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
     ) external override {
         address activeOrchestrator = orchestrator;
         if (msg.sender != activeOrchestrator) revert UnauthorizedCaller(msg.sender);
+        if (_fulfillHookData.length != ACROSS_FULFILL_DATA_LENGTH) {
+            revert InvalidFulfillHookDataLength(_fulfillHookData.length);
+        }
 
         BridgeCommitment memory commitment = abi.decode(_ctx.intent.signalHookData, (BridgeCommitment));
         AcrossFulfillData memory fulfillData = abi.decode(_fulfillHookData, (AcrossFulfillData));
