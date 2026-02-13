@@ -551,7 +551,7 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
                 conversionRate: _params.conversionRate,
                 referrer: _params.referrer,
                 referrerFee: _params.referrerFee,
-                data: _params.data
+                preIntentHookData: _params.preIntentHookData
             })
         );
     }

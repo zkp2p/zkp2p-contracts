@@ -40,7 +40,8 @@ interface IOrchestrator {
         bytes gatingServiceSignature;               // Signature from the deposit's gating service
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
         IPostIntentHook postIntentHook;             // Optional post-intent hook (address(0) for no hook)
-        bytes data;                                 // Shared signal data: passed to pre-intent hook context and stored for post-intent hook signal data
+        bytes preIntentHookData;                    // Ephemeral data passed only to the pre-intent hook during signalIntent
+        bytes data;                                 // Signal data persisted in Intent and forwarded as post-intent hook signalHookData
     }
 
     struct FulfillIntentParams {

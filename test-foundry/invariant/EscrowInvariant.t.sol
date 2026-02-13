@@ -278,6 +278,7 @@ contract EscrowHandler is Test {
             gatingServiceSignature: "",
             signatureExpiration: 0,
             postIntentHook: IPostIntentHook(address(0)),
+            preIntentHookData: "",
             data: ""
         });
         

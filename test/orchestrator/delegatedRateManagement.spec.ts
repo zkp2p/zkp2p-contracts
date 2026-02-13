@@ -158,6 +158,7 @@ describe("DelegatedRateManagement (MVP)", () => {
       gatingServiceSignature: "0x",
       signatureExpiration: ZERO,
       postIntentHook: ADDRESS_ZERO,
+      preIntentHookData: "0x",
       data: "0x",
     });
     const rcpt = await tx.wait();
@@ -232,6 +233,7 @@ describe("DelegatedRateManagement (MVP)", () => {
         gatingServiceSignature: "0x",
         signatureExpiration: ZERO,
         postIntentHook: ADDRESS_ZERO,
+        preIntentHookData: "0x",
         data: "0x",
       });
     }
@@ -339,6 +341,7 @@ describe("DelegatedRateManagement (MVP)", () => {
         gatingServiceSignature: "0x",
         signatureExpiration: ZERO,
         postIntentHook: ADDRESS_ZERO,
+        preIntentHookData: "0x",
         data: "0x",
       });
       signalReceipt = await tx.wait();
@@ -500,6 +503,7 @@ describe("DelegatedRateManagement (MVP)", () => {
         gatingServiceSignature: "0x",
         signatureExpiration: ZERO,
         postIntentHook: ADDRESS_ZERO,
+        preIntentHookData: "0x",
         data: "0x",
       });
       const rcpt = await tx.wait();

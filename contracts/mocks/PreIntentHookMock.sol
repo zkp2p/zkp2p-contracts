@@ -18,7 +18,7 @@ contract PreIntentHookMock is IPreIntentHook {
     uint256 public lastConversionRate;
     address public lastReferrer;
     uint256 public lastReferrerFee;
-    bytes public lastData;
+    bytes public lastPreIntentHookData;
 
     function setShouldRevert(bool _shouldRevert) external {
         shouldRevert = _shouldRevert;
@@ -40,6 +40,6 @@ contract PreIntentHookMock is IPreIntentHook {
         lastConversionRate = _ctx.conversionRate;
         lastReferrer = _ctx.referrer;
         lastReferrerFee = _ctx.referrerFee;
-        lastData = _ctx.data;
+        lastPreIntentHookData = _ctx.preIntentHookData;
     }
 }

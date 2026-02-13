@@ -1179,6 +1179,7 @@ contract OrchestratorCriticalPathFuzz is Test {
             referrer: useReferrer ? referrer : address(0),
             referrerFee: useReferrer ? referrerFeeRate : 0,
             postIntentHook: usePostHook ? IPostIntentHook(address(postIntentHook)) : IPostIntentHook(address(0)),
+            preIntentHookData: "",
             data: usePostHook ? abi.encode(to) : bytes(""),  // PostIntentHookMock expects target address in data
             signatureExpiration: 0,
             gatingServiceSignature: ""

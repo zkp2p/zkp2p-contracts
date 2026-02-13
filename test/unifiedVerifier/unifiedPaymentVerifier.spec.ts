@@ -208,6 +208,7 @@ describe("UnifiedPaymentVerifier", () => {
       gatingServiceSignature,
       signatureExpiration,
       postIntentHook: ADDRESS_ZERO,
+      preIntentHookData: ZERO_BYTES,
       data: ZERO_BYTES,
     });
 
@@ -532,6 +533,7 @@ describe("UnifiedPaymentVerifier", () => {
           gatingServiceSignature: secondSignature,
           signatureExpiration,
           postIntentHook: ADDRESS_ZERO,
+          preIntentHookData: ZERO_BYTES,
           data: ZERO_BYTES,
         });
 

@@ -9,7 +9,7 @@ import { Currency } from "@utils/protocolUtils";
 import { Account } from "@utils/test/types";
 import { ADDRESS_ZERO, ONE, ZERO } from "@utils/constants";
 import { getAccounts, getWaffleExpect } from "@utils/test";
-import { createSignalIntentParams } from "@utils/test/helpers";
+import { createSignalIntentParams, generateGatingServiceSignature } from "@utils/test/helpers";
 import {
   Escrow,
   Orchestrator,
@@ -19,6 +19,7 @@ import {
   USDCMock,
   PaymentVerifierMock,
   PreIntentHookMock,
+  SignatureGatingPreIntentHook,
 } from "@utils/contracts";
 
 const expect = getWaffleExpect();
@@ -41,6 +42,7 @@ describe("Orchestrator - PreIntentHook", () => {
   let escrowRegistry: EscrowRegistry;
   let verifier: PaymentVerifierMock;
   let preIntentHookMock: PreIntentHookMock;
+  let signatureGatingPreIntentHook: SignatureGatingPreIntentHook;
 
   let chainId: BigNumber;
   let venmoPaymentMethod: BytesLike;
@@ -94,6 +96,7 @@ describe("Orchestrator - PreIntentHook", () => {
     );
 
     preIntentHookMock = await deployer.deployPreIntentHookMock();
+    signatureGatingPreIntentHook = await deployer.deploySignatureGatingPreIntentHook(orchestrator.address);
 
     await usdcToken.connect(depositor.wallet).approve(escrow.address, usdc(10000));
     await escrow.connect(depositor.wallet).createDeposit({
@@ -200,6 +203,7 @@ describe("Orchestrator - PreIntentHook", () => {
   describe("#signalIntent (pre-intent hook)", () => {
     let subjectCaller: Account;
     let subjectConversionRate: BigNumber;
+    let subjectPreIntentHookData: string;
     let subjectData: string;
 
     async function subject(): Promise<any> {
@@ -217,7 +221,9 @@ describe("Orchestrator - PreIntentHook", () => {
         null,
         chainId.toString(),
         ADDRESS_ZERO,
-        subjectData
+        subjectData,
+        undefined,
+        subjectPreIntentHookData
       );
 
       return orchestrator.connect(subjectCaller.wallet).signalIntent(params);
@@ -226,23 +232,32 @@ describe("Orchestrator - PreIntentHook", () => {
     beforeEach(async () => {
       subjectCaller = taker;
       subjectConversionRate = ether(1.02);
+      subjectPreIntentHookData = ethers.utils.defaultAbiCoder.encode(["uint256"], [7]);
       subjectData = ethers.utils.defaultAbiCoder.encode(["uint256"], [42]);
     });
 
-    it("calls pre-intent hook and succeeds", async () => {
+    it("passes preIntentHookData to pre-hook and does not store it on intent", async () => {
       await orchestrator.connect(depositor.wallet).setDepositPreIntentHook(
         escrow.address,
         ZERO,
         preIntentHookMock.address
       );
 
-      await expect(subject()).to.emit(orchestrator, "IntentSignaled");
+      const tx = await subject();
+      const receipt = await tx.wait();
+      const intentHash = receipt.events?.find((e: any) => e.event === "IntentSignaled")?.args?.intentHash;
+
+      expect(intentHash).to.not.eq(undefined);
+      const intent = await orchestrator.getIntent(intentHash);
 
       expect(await preIntentHookMock.callCount()).to.eq(1);
       expect(await preIntentHookMock.lastTaker()).to.eq(taker.address);
       expect(await preIntentHookMock.lastEscrow()).to.eq(escrow.address);
       expect(await preIntentHookMock.lastDepositId()).to.eq(ZERO);
-      expect(await preIntentHookMock.lastData()).to.eq(subjectData);
+      expect(await preIntentHookMock.lastPreIntentHookData()).to.eq(subjectPreIntentHookData);
+
+      expect(intent.data).to.eq(subjectData);
+      expect(intent.data).to.not.eq(subjectPreIntentHookData);
     });
 
     it("reverts when pre-intent hook rejects", async () => {
@@ -281,6 +296,162 @@ describe("Orchestrator - PreIntentHook", () => {
 
       await expect(subject()).to.emit(orchestrator, "IntentSignaled");
       expect(await preIntentHookMock.callCount()).to.eq(0);
+    });
+  });
+
+  describe("SignatureGatingPreIntentHook", () => {
+    describe("#setDepositSigner", () => {
+      let subjectCaller: Account;
+      let subjectSigner: string;
+
+      async function subject(): Promise<any> {
+        return signatureGatingPreIntentHook.connect(subjectCaller.wallet).setDepositSigner(
+          escrow.address,
+          ZERO,
+          subjectSigner
+        );
+      }
+
+      beforeEach(async () => {
+        subjectCaller = depositor;
+        subjectSigner = delegate.address;
+      });
+
+      it("allows depositor to set signer per deposit", async () => {
+        await expect(subject()).to.emit(signatureGatingPreIntentHook, "DepositSignerSet")
+          .withArgs(escrow.address, ZERO, subjectSigner, subjectCaller.address);
+
+        const storedSigner = await signatureGatingPreIntentHook.getDepositSigner(escrow.address, ZERO);
+        expect(storedSigner).to.eq(subjectSigner);
+      });
+    });
+
+    describe("#validateSignalIntent via signalIntent", () => {
+      let subjectCaller: Account;
+      let subjectTo: string;
+      let subjectConversionRate: BigNumber;
+      let subjectSignatureSigner: Account;
+      let subjectSignatureExpiration: BigNumber;
+      let subjectPreIntentHookData: string;
+      let subjectData: string;
+
+      async function subject(): Promise<any> {
+        const params = await createSignalIntentParams(
+          orchestrator.address,
+          escrow.address,
+          ZERO,
+          usdc(50),
+          subjectTo,
+          venmoPaymentMethod,
+          Currency.USD,
+          subjectConversionRate,
+          ADDRESS_ZERO,
+          ZERO,
+          null,
+          chainId.toString(),
+          ADDRESS_ZERO,
+          subjectData,
+          undefined,
+          subjectPreIntentHookData
+        );
+
+        return orchestrator.connect(subjectCaller.wallet).signalIntent(params);
+      }
+
+      beforeEach(async () => {
+        subjectCaller = taker;
+        subjectTo = taker.address;
+        subjectConversionRate = ether(1.02);
+        subjectSignatureSigner = delegate;
+        subjectData = ethers.utils.defaultAbiCoder.encode(["string"], ["post-intent-signal-data"]);
+
+        await signatureGatingPreIntentHook.connect(depositor.wallet).setDepositSigner(
+          escrow.address,
+          ZERO,
+          subjectSignatureSigner.address
+        );
+        await orchestrator.connect(depositor.wallet).setDepositPreIntentHook(
+          escrow.address,
+          ZERO,
+          signatureGatingPreIntentHook.address
+        );
+
+        subjectSignatureExpiration = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp).add(3600);
+        const signature = await generateGatingServiceSignature(
+          subjectSignatureSigner,
+          orchestrator.address,
+          escrow.address,
+          ZERO,
+          usdc(50),
+          subjectTo,
+          venmoPaymentMethod,
+          Currency.USD,
+          subjectConversionRate,
+          chainId.toString(),
+          subjectSignatureExpiration
+        );
+        subjectPreIntentHookData = ethers.utils.defaultAbiCoder.encode(
+          ["bytes", "uint256"],
+          [signature, subjectSignatureExpiration]
+        );
+      });
+
+      it("accepts valid signature data", async () => {
+        await expect(subject()).to.emit(orchestrator, "IntentSignaled");
+      });
+
+      describe("when signature is invalid", () => {
+        beforeEach(async () => {
+          const badSignature = await generateGatingServiceSignature(
+            unauthorizedCaller,
+            orchestrator.address,
+            escrow.address,
+            ZERO,
+            usdc(50),
+            subjectTo,
+            venmoPaymentMethod,
+            Currency.USD,
+            subjectConversionRate,
+            chainId.toString(),
+            subjectSignatureExpiration
+          );
+          subjectPreIntentHookData = ethers.utils.defaultAbiCoder.encode(
+            ["bytes", "uint256"],
+            [badSignature, subjectSignatureExpiration]
+          );
+        });
+
+        it("reverts", async () => {
+          await expect(subject()).to.be.revertedWithCustomError(signatureGatingPreIntentHook, "InvalidSignature");
+        });
+      });
+
+      describe("when signature is expired", () => {
+        beforeEach(async () => {
+          subjectSignatureExpiration = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp).sub(1);
+          const expiredSignature = await generateGatingServiceSignature(
+            subjectSignatureSigner,
+            orchestrator.address,
+            escrow.address,
+            ZERO,
+            usdc(50),
+            subjectTo,
+            venmoPaymentMethod,
+            Currency.USD,
+            subjectConversionRate,
+            chainId.toString(),
+            subjectSignatureExpiration
+          );
+          subjectPreIntentHookData = ethers.utils.defaultAbiCoder.encode(
+            ["bytes", "uint256"],
+            [expiredSignature, subjectSignatureExpiration]
+          );
+        });
+
+        it("reverts", async () => {
+          await expect(subject()).to.be.revertedWithCustomError(signatureGatingPreIntentHook, "SignatureExpired");
+        });
+      });
     });
   });
 });
