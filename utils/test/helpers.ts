@@ -45,7 +45,8 @@ export const createSignalIntentParams = async (
   chainId: string = "1",
   postIntentHook: Address = ethers.constants.AddressZero,
   data: string = "0x",
-  signatureExpiration?: BigNumber
+  signatureExpiration?: BigNumber,
+  preIntentHookData: string = "0x"
 ) => {
   // If no expiration provided, use current block timestamp + 1 day
   if (!signatureExpiration) {
@@ -85,6 +86,7 @@ export const createSignalIntentParams = async (
     gatingServiceSignature,
     signatureExpiration,
     postIntentHook,
+    preIntentHookData,
     data
   };
 }

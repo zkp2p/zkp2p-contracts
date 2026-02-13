@@ -1,9 +1,12 @@
 export {
   USDCMock,
   PaymentVerifierMock,
+  PreIntentHookMock,
   ThresholdSigVerifierUtilsMock,
   PostIntentHookMock,
   ReentrantPostIntentHook,
+  ReentrantPreIntentHookMock,
+  ReentrantSignalIntentCallerMock,
   OrchestratorMock,
   Escrow,
   ProtocolViewer,
@@ -27,7 +30,8 @@ export {
   IBaseRateManagerRegistry,
   IManualRateManagerRegistry,
   IOracleRateManagerRegistry,
-  DepositRateManagerHookV1
+  DepositRateManagerHookV1,
+  SignatureGatingPreIntentHook
 } from "../typechain";
 export { IEscrow } from "../typechain/contracts/Escrow";
 export { IOrchestrator } from "../typechain/contracts/Orchestrator";

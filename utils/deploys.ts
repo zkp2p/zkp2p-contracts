@@ -10,6 +10,7 @@ import {
   ProtocolViewer,
   Orchestrator,
   PaymentVerifierMock,
+  PreIntentHookMock,
   NullifierRegistry,
   PostIntentHookMock,
   PaymentVerifierRegistry,
@@ -20,6 +21,8 @@ import {
   ThresholdSigVerifierUtilsMock,
   SimpleAttestationVerifier,
   ReentrantPostIntentHook,
+  ReentrantPreIntentHookMock,
+  ReentrantSignalIntentCallerMock,
   ReentrantOrchestratorMock,
   PartialPullPostIntentHookMock,
   PushPostIntentHookMock
@@ -27,12 +30,15 @@ import {
 import {
   USDCMock__factory,
   PostIntentHookMock__factory,
+  PreIntentHookMock__factory,
   OrchestratorMock__factory,
   ReentrantPostIntentHook__factory,
+  ReentrantSignalIntentCallerMock__factory,
   ReentrantOrchestratorMock__factory,
   PartialPullPostIntentHookMock__factory,
   PushPostIntentHookMock__factory
 } from "../typechain/factories/contracts/mocks";
+import { ReentrantPreIntentHookMock__factory } from "../typechain/factories/contracts/mocks/ReentrantPreIntentHookMock.sol/ReentrantPreIntentHookMock__factory";
 import { PaymentVerifierMock__factory } from "../typechain/factories/contracts/mocks";
 import {
   ThresholdSigVerifierUtilsMock__factory
@@ -51,12 +57,14 @@ import { UnifiedPaymentVerifier__factory } from "../typechain/factories/contract
 import { SimpleAttestationVerifier__factory } from "../typechain/factories/contracts/unifiedVerifier";
 import { RateManagerDepositHookMock__factory } from "../typechain/factories/contracts/mocks/RateManagerDepositHookMock__factory";
 import { DepositRateManagerHookV1__factory } from "../typechain/factories/contracts/hooks/DepositRateManagerHookV1__factory";
+import { SignatureGatingPreIntentHook__factory } from "../typechain/factories/contracts/hooks/SignatureGatingPreIntentHook.sol/SignatureGatingPreIntentHook__factory";
 import {
   ManualRateManagerRegistry,
   OracleRateManagerRegistry,
   DepositRateManagerController,
   RateManagerDepositHookMock,
-  DepositRateManagerHookV1
+  DepositRateManagerHookV1,
+  SignatureGatingPreIntentHook
 } from "../typechain";
 
 export default class DeployHelper {
@@ -141,6 +149,10 @@ export default class DeployHelper {
     return await new PostIntentHookMock__factory(this._deployerSigner).deploy(usdc, escrow);
   }
 
+  public async deployPreIntentHookMock(): Promise<PreIntentHookMock> {
+    return await new PreIntentHookMock__factory(this._deployerSigner).deploy();
+  }
+
   public async deployPartialPullPostIntentHookMock(
     usdc: Address,
     escrow: Address
@@ -194,6 +206,12 @@ export default class DeployHelper {
     return await new DepositRateManagerHookV1__factory(this._deployerSigner).deploy();
   }
 
+  public async deploySignatureGatingPreIntentHook(
+    orchestrator: Address
+  ): Promise<SignatureGatingPreIntentHook> {
+    return await new SignatureGatingPreIntentHook__factory(this._deployerSigner).deploy(orchestrator);
+  }
+
 
   public async deployUnifiedPaymentVerifier(
     orchestrator: Address,
@@ -227,6 +245,18 @@ export default class DeployHelper {
       usdc,
       orchestrator
     );
+  }
+
+  public async deployReentrantSignalIntentCallerMock(
+    orchestrator: Address
+  ): Promise<ReentrantSignalIntentCallerMock> {
+    return await new ReentrantSignalIntentCallerMock__factory(this._deployerSigner).deploy(orchestrator);
+  }
+
+  public async deployReentrantPreIntentHookMock(
+    reentrantCaller: Address
+  ): Promise<ReentrantPreIntentHookMock> {
+    return await new ReentrantPreIntentHookMock__factory(this._deployerSigner).deploy(reentrantCaller);
   }
 
   public async deployReentrantOrchestratorMock(

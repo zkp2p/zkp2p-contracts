@@ -4,6 +4,7 @@ pragma solidity ^0.8.18;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IPostIntentHook } from "./IPostIntentHook.sol";
+import { IPreIntentHook } from "./IPreIntentHook.sol";
 
 interface IOrchestrator {
     
@@ -39,7 +40,8 @@ interface IOrchestrator {
         bytes gatingServiceSignature;               // Signature from the deposit's gating service
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
         IPostIntentHook postIntentHook;             // Optional post-intent hook (address(0) for no hook)
-        bytes data;                                 // Additional data for the intent
+        bytes preIntentHookData;                    // Ephemeral data passed only to the pre-intent hook during signalIntent
+        bytes data;                                 // Signal data persisted in Intent and forwarded as post-intent hook signalHookData
     }
 
     struct FulfillIntentParams {
@@ -76,6 +78,7 @@ interface IOrchestrator {
     );
 
     event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
+    event DepositPreIntentHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
 
     event AllowMultipleIntentsUpdated(bool allowMultiple);
 
@@ -97,6 +100,7 @@ interface IOrchestrator {
     // Authorization errors
     error UnauthorizedEscrowCaller(address caller);
     error UnauthorizedCaller(address caller, address authorized);
+    error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);
     
     // Not found errors
     error IntentNotFound(bytes32 intentHash);
@@ -119,6 +123,7 @@ interface IOrchestrator {
     error AccountHasActiveIntent(address account, bytes32 existingIntent);
     error InvalidReferrerFeeConfiguration();
     error InvalidPostIntentHook(address hook);
+    error InvalidPreIntentHook(address hook);
     error InvalidSignature();
     error SignatureExpired(uint256 expiration, uint256 currentTime);
     error PartialReleaseNotAllowedYet(uint256 currentTime, uint256 allowedTime);
@@ -136,10 +141,12 @@ interface IOrchestrator {
 
     function getIntent(bytes32 intentHash) external view returns (Intent memory);
     function getAccountIntents(address account) external view returns (bytes32[] memory);
+    function getDepositPreIntentHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
     
     /* ============ External Functions for Users ============ */
 
     function signalIntent(SignalIntentParams calldata params) external;
+    function setDepositPreIntentHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
 
     function cancelIntent(bytes32 intentHash) external;
 

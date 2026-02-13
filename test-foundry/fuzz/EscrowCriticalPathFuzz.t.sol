@@ -379,6 +379,7 @@ contract EscrowCriticalPathFuzz is Test {
             referrer: address(0),
             referrerFee: 0,
             postIntentHook: IPostIntentHook(address(0)),
+            preIntentHookData: "",
             data: "",
             signatureExpiration: 0,
             gatingServiceSignature: ""
@@ -481,6 +482,7 @@ contract EscrowCriticalPathFuzz is Test {
                 referrer: address(0),
                 referrerFee: 0,
                 postIntentHook: IPostIntentHook(address(0)),
+                preIntentHookData: "",
                 data: "",
                 signatureExpiration: 0,
                 gatingServiceSignature: ""
@@ -605,6 +607,7 @@ contract EscrowCriticalPathFuzz is Test {
                 referrer: address(0),
                 referrerFee: 0,
                 postIntentHook: IPostIntentHook(address(0)),
+                preIntentHookData: "",
                 data: "",
                 signatureExpiration: 0,
                 gatingServiceSignature: ""
@@ -721,6 +724,7 @@ contract EscrowCriticalPathFuzz is Test {
             referrer: address(0),
             referrerFee: 0,
             postIntentHook: IPostIntentHook(address(0)),
+            preIntentHookData: "",
             data: "",
             signatureExpiration: 0,
             gatingServiceSignature: ""
@@ -913,6 +917,7 @@ contract EscrowCriticalPathFuzz is Test {
             referrer: address(0),
             referrerFee: 0,
             postIntentHook: IPostIntentHook(address(0)),
+            preIntentHookData: "",
             data: "",
             signatureExpiration: 0,
             gatingServiceSignature: ""
@@ -1073,6 +1078,7 @@ contract EscrowCriticalPathFuzz is Test {
             referrer: address(0),
             referrerFee: 0,
             postIntentHook: IPostIntentHook(address(0)),
+            preIntentHookData: "",
             data: "",
             signatureExpiration: 0,
             gatingServiceSignature: ""

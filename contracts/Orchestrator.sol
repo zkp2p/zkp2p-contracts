@@ -15,6 +15,7 @@ import { IOrchestrator } from "./interfaces/IOrchestrator.sol";
 import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
 import { IPostIntentHook } from "./interfaces/IPostIntentHook.sol";
+import { IPreIntentHook } from "./interfaces/IPreIntentHook.sol";
 import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
 import { IRelayerRegistry } from "./interfaces/IRelayerRegistry.sol";
@@ -55,6 +56,9 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     // Snapshot of per-intent manager fee terms at the time of signal
     mapping(bytes32 => address) internal intentManagerFeeRecipient;
     mapping(bytes32 => uint256) internal intentManagerFee;
+
+    // Optional pre-intent hooks configured per escrow + depositId.
+    mapping(address => mapping(uint256 => IPreIntentHook)) internal depositPreIntentHooks;
 
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
@@ -104,10 +108,12 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
      */
     function signalIntent(SignalIntentParams calldata _params)
         external
+        nonReentrant
         whenNotPaused
     {
         // Checks
         _validateSignalIntent(_params);
+        _executePreIntentHook(_params);
 
         // Effects
         bytes32 intentHash = _calculateIntentHash();
@@ -182,6 +188,34 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
 
         // Interactions
         IEscrow(intent.escrow).unlockFunds(intent.depositId, _intentHash);
+    }
+
+    /**
+     * @notice Sets or removes the pre-intent hook for a specific deposit.
+     * @dev Callable only by the deposit's depositor or delegate.
+     *
+     * @param _escrow       Escrow address.
+     * @param _depositId    Deposit id.
+     * @param _hook         Hook address (address(0) to remove).
+     */
+    function setDepositPreIntentHook(address _escrow, uint256 _depositId, IPreIntentHook _hook) external {
+        if (_escrow == address(0)) revert ZeroAddress();
+
+        address hookAddress = address(_hook);
+        if (hookAddress != address(0) && hookAddress.code.length == 0) {
+            revert InvalidPreIntentHook(hookAddress);
+        }
+
+        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
+        bool isDepositorOrDelegate = msg.sender == deposit.depositor
+            || (deposit.delegate != address(0) && msg.sender == deposit.delegate);
+        if (!isDepositorOrDelegate) {
+            revert UnauthorizedCallerOrDelegate(msg.sender, deposit.depositor, deposit.delegate);
+        }
+
+        depositPreIntentHooks[_escrow][_depositId] = _hook;
+
+        emit DepositPreIntentHookSet(_escrow, _depositId, hookAddress, msg.sender);
     }
 
     /**
@@ -430,6 +464,10 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         return accountIntents[_account];
     }
 
+    function getDepositPreIntentHook(address _escrow, uint256 _depositId) external view returns (IPreIntentHook) {
+        return depositPreIntentHooks[_escrow][_depositId];
+    }
+
     function getIntentMinAtSignal(bytes32 _intentHash) external view returns (uint256) {
         return intentMinAtSignal[_intentHash];
     }
@@ -493,6 +531,30 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
                 revert InvalidSignature();
             }
         }
+    }
+
+    /**
+     * @notice Executes the configured pre-intent hook for a deposit, if present.
+     */
+    function _executePreIntentHook(SignalIntentParams calldata _params) internal {
+        IPreIntentHook preIntentHook = depositPreIntentHooks[_params.escrow][_params.depositId];
+        if (address(preIntentHook) == address(0)) return;
+
+        preIntentHook.validateSignalIntent(
+            IPreIntentHook.PreIntentContext({
+                taker: msg.sender,
+                escrow: _params.escrow,
+                depositId: _params.depositId,
+                amount: _params.amount,
+                to: _params.to,
+                paymentMethod: _params.paymentMethod,
+                fiatCurrency: _params.fiatCurrency,
+                conversionRate: _params.conversionRate,
+                referrer: _params.referrer,
+                referrerFee: _params.referrerFee,
+                preIntentHookData: _params.preIntentHookData
+            })
+        );
     }
 
     /**

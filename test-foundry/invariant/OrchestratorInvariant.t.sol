@@ -184,6 +184,7 @@ contract OrchestratorHandler is Test {
             gatingServiceSignature: "",
             signatureExpiration: 0,
             postIntentHook: IPostIntentHook(address(0)), // Simplified - no hooks for now
+            preIntentHookData: "",
             data: ""
         });
         
