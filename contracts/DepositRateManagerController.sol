@@ -95,6 +95,7 @@ contract DepositRateManagerController is IDepositRateManagerController {
         if (deposit.depositor != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.depositor);
 
         DepositManagerConfig memory prev = depositManagerConfig[_escrow][_depositId];
+        if (prev.rateManagerId == bytes32(0)) revert RateManagerNotFound(bytes32(0));
         delete depositManagerConfig[_escrow][_depositId];
 
         emit DepositRateManagerCleared(_escrow, _depositId, prev.registry, prev.rateManagerId);

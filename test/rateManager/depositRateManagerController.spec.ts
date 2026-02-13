@@ -300,6 +300,16 @@ describe("DepositRateManagerController", () => {
         await expect(subject()).to.be.revertedWithCustomError(controller, "UnauthorizedCaller");
       });
     });
+
+    describe("when no rate manager is set", () => {
+      beforeEach(async () => {
+        // Clear existing delegation first
+        await controller.connect(depositor.wallet).clearDepositRateManager(escrow.address, 0);
+      });
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(controller, "RateManagerNotFound");
+      });
+    });
   });
 
   describe("#getEffectiveMinRate", () => {
