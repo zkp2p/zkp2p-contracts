@@ -175,6 +175,26 @@ describe("Orchestrator - PreIntentHook", () => {
       const storedHook = await orchestrator.getDepositPreIntentHook(subjectEscrow, subjectDepositId);
       expect(storedHook).to.eq(ADDRESS_ZERO);
     });
+
+    describe("when hook is an EOA", () => {
+      beforeEach(async () => {
+        subjectHook = unauthorizedCaller.address;
+      });
+
+      it("reverts with InvalidPreIntentHook", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(orchestrator, "InvalidPreIntentHook");
+      });
+    });
+
+    describe("when deposit does not exist", () => {
+      beforeEach(async () => {
+        subjectDepositId = ONE;
+      });
+
+      it("reverts with UnauthorizedCallerOrDelegate", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(orchestrator, "UnauthorizedCallerOrDelegate");
+      });
+    });
   });
 
   describe("#signalIntent (pre-intent hook)", () => {

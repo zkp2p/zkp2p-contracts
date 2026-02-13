@@ -18,7 +18,7 @@ interface IPreIntentHook {
         uint256 conversionRate;
         address referrer;
         uint256 referrerFee;
-        bytes data;
+        bytes data; // Shared signal data from SignalIntentParams.data (also persisted on the intent for post-intent hook signal data)
     }
 
     /**
