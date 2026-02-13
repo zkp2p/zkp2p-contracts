@@ -149,9 +149,12 @@ describe("WhitelistPreIntentHook", () => {
       subjectTakers = [taker.address, takerTwo.address];
     });
 
-    it("whitelists takers and emits event", async () => {
-      await expect(subject()).to.emit(whitelistHook, "TakersWhitelisted")
-        .withArgs(subjectEscrow, subjectDepositId, subjectTakers);
+    it("whitelists takers and emits per-taker events", async () => {
+      const tx = subject();
+      await expect(tx).to.emit(whitelistHook, "TakerWhitelisted")
+        .withArgs(subjectEscrow, subjectDepositId, taker.address);
+      await expect(tx).to.emit(whitelistHook, "TakerWhitelisted")
+        .withArgs(subjectEscrow, subjectDepositId, takerTwo.address);
 
       expect(await whitelistHook.isWhitelisted(subjectEscrow, subjectDepositId, taker.address)).to.be.true;
       expect(await whitelistHook.isWhitelisted(subjectEscrow, subjectDepositId, takerTwo.address)).to.be.true;
@@ -161,8 +164,11 @@ describe("WhitelistPreIntentHook", () => {
     it("allows delegate to whitelist takers", async () => {
       subjectCaller = delegate;
 
-      await expect(subject()).to.emit(whitelistHook, "TakersWhitelisted")
-        .withArgs(subjectEscrow, subjectDepositId, subjectTakers);
+      const tx = subject();
+      await expect(tx).to.emit(whitelistHook, "TakerWhitelisted")
+        .withArgs(subjectEscrow, subjectDepositId, taker.address);
+      await expect(tx).to.emit(whitelistHook, "TakerWhitelisted")
+        .withArgs(subjectEscrow, subjectDepositId, takerTwo.address);
 
       expect(await whitelistHook.isWhitelisted(subjectEscrow, subjectDepositId, taker.address)).to.be.true;
     });
@@ -226,11 +232,11 @@ describe("WhitelistPreIntentHook", () => {
       );
     });
 
-    it("removes takers from whitelist and emits event", async () => {
+    it("removes takers from whitelist and emits per-taker event", async () => {
       expect(await whitelistHook.isWhitelisted(subjectEscrow, subjectDepositId, taker.address)).to.be.true;
 
-      await expect(subject()).to.emit(whitelistHook, "TakersRemovedFromWhitelist")
-        .withArgs(subjectEscrow, subjectDepositId, subjectTakers);
+      await expect(subject()).to.emit(whitelistHook, "TakerRemovedFromWhitelist")
+        .withArgs(subjectEscrow, subjectDepositId, taker.address);
 
       expect(await whitelistHook.isWhitelisted(subjectEscrow, subjectDepositId, taker.address)).to.be.false;
       // takerTwo should still be whitelisted
@@ -240,7 +246,8 @@ describe("WhitelistPreIntentHook", () => {
     it("allows delegate to remove takers", async () => {
       subjectCaller = delegate;
 
-      await expect(subject()).to.emit(whitelistHook, "TakersRemovedFromWhitelist");
+      await expect(subject()).to.emit(whitelistHook, "TakerRemovedFromWhitelist")
+        .withArgs(subjectEscrow, subjectDepositId, taker.address);
 
       expect(await whitelistHook.isWhitelisted(subjectEscrow, subjectDepositId, taker.address)).to.be.false;
     });

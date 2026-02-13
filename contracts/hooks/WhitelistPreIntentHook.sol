@@ -15,8 +15,8 @@ contract WhitelistPreIntentHook is IPreIntentHook {
 
     /* ============ Events ============ */
 
-    event TakersWhitelisted(address indexed escrow, uint256 indexed depositId, address[] takers);
-    event TakersRemovedFromWhitelist(address indexed escrow, uint256 indexed depositId, address[] takers);
+    event TakerWhitelisted(address indexed escrow, uint256 indexed depositId, address indexed taker);
+    event TakerRemovedFromWhitelist(address indexed escrow, uint256 indexed depositId, address indexed taker);
 
     /* ============ Errors ============ */
 
@@ -59,9 +59,8 @@ contract WhitelistPreIntentHook is IPreIntentHook {
 
         for (uint256 i = 0; i < _takers.length; i++) {
             whitelist[_escrow][_depositId][_takers[i]] = true;
+            emit TakerWhitelisted(_escrow, _depositId, _takers[i]);
         }
-
-        emit TakersWhitelisted(_escrow, _depositId, _takers);
     }
 
     /**
@@ -80,9 +79,8 @@ contract WhitelistPreIntentHook is IPreIntentHook {
 
         for (uint256 i = 0; i < _takers.length; i++) {
             whitelist[_escrow][_depositId][_takers[i]] = false;
+            emit TakerRemovedFromWhitelist(_escrow, _depositId, _takers[i]);
         }
-
-        emit TakersRemovedFromWhitelist(_escrow, _depositId, _takers);
     }
 
     /**
