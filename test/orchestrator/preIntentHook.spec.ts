@@ -19,6 +19,8 @@ import {
   USDCMock,
   PaymentVerifierMock,
   PreIntentHookMock,
+  ReentrantPreIntentHookMock,
+  ReentrantSignalIntentCallerMock,
   SignatureGatingPreIntentHook,
 } from "@utils/contracts";
 
@@ -42,6 +44,8 @@ describe("Orchestrator - PreIntentHook", () => {
   let escrowRegistry: EscrowRegistry;
   let verifier: PaymentVerifierMock;
   let preIntentHookMock: PreIntentHookMock;
+  let reentrantPreIntentHookMock: ReentrantPreIntentHookMock;
+  let reentrantSignalIntentCallerMock: ReentrantSignalIntentCallerMock;
   let signatureGatingPreIntentHook: SignatureGatingPreIntentHook;
 
   let chainId: BigNumber;
@@ -96,6 +100,8 @@ describe("Orchestrator - PreIntentHook", () => {
     );
 
     preIntentHookMock = await deployer.deployPreIntentHookMock();
+    reentrantSignalIntentCallerMock = await deployer.deployReentrantSignalIntentCallerMock(orchestrator.address);
+    reentrantPreIntentHookMock = await deployer.deployReentrantPreIntentHookMock(reentrantSignalIntentCallerMock.address);
     signatureGatingPreIntentHook = await deployer.deploySignatureGatingPreIntentHook(orchestrator.address);
 
     await usdcToken.connect(depositor.wallet).approve(escrow.address, usdc(10000));
@@ -306,6 +312,44 @@ describe("Orchestrator - PreIntentHook", () => {
 
       await expect(subject()).to.emit(orchestrator, "IntentSignaled");
       expect(await preIntentHookMock.callCount()).to.eq(0);
+    });
+
+    it("prevents hook-driven reentrant signalIntent from bypassing one-active-intent rule", async () => {
+      await orchestrator.connect(depositor.wallet).setDepositPreIntentHook(
+        escrow.address,
+        ZERO,
+        reentrantPreIntentHookMock.address
+      );
+
+      const reentrantParams = await createSignalIntentParams(
+        orchestrator.address,
+        escrow.address,
+        ZERO,
+        usdc(50),
+        reentrantSignalIntentCallerMock.address,
+        venmoPaymentMethod,
+        Currency.USD,
+        subjectConversionRate,
+        ADDRESS_ZERO,
+        ZERO,
+        null,
+        chainId.toString(),
+        ADDRESS_ZERO,
+        subjectData,
+        undefined,
+        subjectPreIntentHookData
+      );
+
+      await reentrantSignalIntentCallerMock.setReentryParams(reentrantParams);
+
+      await expect(reentrantSignalIntentCallerMock.signalIntent(reentrantParams))
+        .to.emit(orchestrator, "IntentSignaled");
+
+      expect(await reentrantPreIntentHookMock.reentryAttemptCount()).to.eq(1);
+      expect(await reentrantPreIntentHookMock.lastReentrySucceeded()).to.eq(false);
+
+      const callerIntents = await orchestrator.getAccountIntents(reentrantSignalIntentCallerMock.address);
+      expect(callerIntents.length).to.eq(1);
     });
   });
 

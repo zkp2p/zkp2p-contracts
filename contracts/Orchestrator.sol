@@ -108,6 +108,7 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
      */
     function signalIntent(SignalIntentParams calldata _params)
         external
+        nonReentrant
         whenNotPaused
     {
         // Checks

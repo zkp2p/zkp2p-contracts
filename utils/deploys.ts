@@ -21,6 +21,8 @@ import {
   ThresholdSigVerifierUtilsMock,
   SimpleAttestationVerifier,
   ReentrantPostIntentHook,
+  ReentrantPreIntentHookMock,
+  ReentrantSignalIntentCallerMock,
   ReentrantOrchestratorMock,
   PartialPullPostIntentHookMock,
   PushPostIntentHookMock
@@ -31,10 +33,12 @@ import {
   PreIntentHookMock__factory,
   OrchestratorMock__factory,
   ReentrantPostIntentHook__factory,
+  ReentrantSignalIntentCallerMock__factory,
   ReentrantOrchestratorMock__factory,
   PartialPullPostIntentHookMock__factory,
   PushPostIntentHookMock__factory
 } from "../typechain/factories/contracts/mocks";
+import { ReentrantPreIntentHookMock__factory } from "../typechain/factories/contracts/mocks/ReentrantPreIntentHookMock.sol/ReentrantPreIntentHookMock__factory";
 import { PaymentVerifierMock__factory } from "../typechain/factories/contracts/mocks";
 import {
   ThresholdSigVerifierUtilsMock__factory
@@ -241,6 +245,18 @@ export default class DeployHelper {
       usdc,
       orchestrator
     );
+  }
+
+  public async deployReentrantSignalIntentCallerMock(
+    orchestrator: Address
+  ): Promise<ReentrantSignalIntentCallerMock> {
+    return await new ReentrantSignalIntentCallerMock__factory(this._deployerSigner).deploy(orchestrator);
+  }
+
+  public async deployReentrantPreIntentHookMock(
+    reentrantCaller: Address
+  ): Promise<ReentrantPreIntentHookMock> {
+    return await new ReentrantPreIntentHookMock__factory(this._deployerSigner).deploy(reentrantCaller);
   }
 
   public async deployReentrantOrchestratorMock(
