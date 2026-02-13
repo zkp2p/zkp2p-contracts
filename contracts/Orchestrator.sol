@@ -112,25 +112,7 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     {
         // Checks
         _validateSignalIntent(_params);
-
-        IPreIntentHook preIntentHook = depositPreIntentHooks[_params.escrow][_params.depositId];
-        if (address(preIntentHook) != address(0)) {
-            preIntentHook.validateSignalIntent(
-                IPreIntentHook.PreIntentContext({
-                    taker: msg.sender,
-                    escrow: _params.escrow,
-                    depositId: _params.depositId,
-                    amount: _params.amount,
-                    to: _params.to,
-                    paymentMethod: _params.paymentMethod,
-                    fiatCurrency: _params.fiatCurrency,
-                    conversionRate: _params.conversionRate,
-                    referrer: _params.referrer,
-                    referrerFee: _params.referrerFee,
-                    data: _params.data
-                })
-            );
-        }
+        _executePreIntentHook(_params);
 
         // Effects
         bytes32 intentHash = _calculateIntentHash();
@@ -548,6 +530,30 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
                 revert InvalidSignature();
             }
         }
+    }
+
+    /**
+     * @notice Executes the configured pre-intent hook for a deposit, if present.
+     */
+    function _executePreIntentHook(SignalIntentParams calldata _params) internal {
+        IPreIntentHook preIntentHook = depositPreIntentHooks[_params.escrow][_params.depositId];
+        if (address(preIntentHook) == address(0)) return;
+
+        preIntentHook.validateSignalIntent(
+            IPreIntentHook.PreIntentContext({
+                taker: msg.sender,
+                escrow: _params.escrow,
+                depositId: _params.depositId,
+                amount: _params.amount,
+                to: _params.to,
+                paymentMethod: _params.paymentMethod,
+                fiatCurrency: _params.fiatCurrency,
+                conversionRate: _params.conversionRate,
+                referrer: _params.referrer,
+                referrerFee: _params.referrerFee,
+                data: _params.data
+            })
+        );
     }
 
     /**
