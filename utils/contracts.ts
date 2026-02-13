@@ -1,6 +1,7 @@
 export {
   USDCMock,
   PaymentVerifierMock,
+  PreIntentHookMock,
   ThresholdSigVerifierUtilsMock,
   PostIntentHookMock,
   ReentrantPostIntentHook,

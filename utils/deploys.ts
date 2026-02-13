@@ -10,6 +10,7 @@ import {
   ProtocolViewer,
   Orchestrator,
   PaymentVerifierMock,
+  PreIntentHookMock,
   NullifierRegistry,
   PostIntentHookMock,
   PaymentVerifierRegistry,
@@ -27,6 +28,7 @@ import {
 import {
   USDCMock__factory,
   PostIntentHookMock__factory,
+  PreIntentHookMock__factory,
   OrchestratorMock__factory,
   ReentrantPostIntentHook__factory,
   ReentrantOrchestratorMock__factory,
@@ -139,6 +141,10 @@ export default class DeployHelper {
     escrow: Address
   ): Promise<PostIntentHookMock> {
     return await new PostIntentHookMock__factory(this._deployerSigner).deploy(usdc, escrow);
+  }
+
+  public async deployPreIntentHookMock(): Promise<PreIntentHookMock> {
+    return await new PreIntentHookMock__factory(this._deployerSigner).deploy();
   }
 
   public async deployPartialPullPostIntentHookMock(
