@@ -64,6 +64,12 @@ ZKP2P is a decentralized protocol enabling trustless peer-to-peer exchanges betw
 - Collects and distributes protocol/referrer fees
 - Executes optional post-intent hooks for custom logic
 
+**Across post-intent hook notes**
+- `AcrossBridgeHook` (v1) bridges directly through `depositNow` and falls back to a local USDC transfer on failure.
+- `AcrossBridgeHookV2` keeps the same fallback behavior for bridge-only mode and adds optional `SWAP_AND_BRIDGE`.
+- V2 swap mode trusts an allowlisted `exchange` and the configured `spokePoolPeriphery` for route execution.
+- Worst-case behavior is still a fallback transfer back to `intent.to` in USDC on source chain.
+
 **Unified Payment Verifier**
 - Single contract supporting all payment methods via configuration
 - Validates EIP-712 signed attestations from off-chain services

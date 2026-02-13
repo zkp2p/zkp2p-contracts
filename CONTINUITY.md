@@ -1,0 +1,39 @@
+- Goal (incl. success criteria):
+  - Refactor `AcrossBridgeHookV2` to avoid stack-too-deep behavior in default analysis workflows while preserving behavior.
+  - Perform a comprehensive functional and deployment-audit pass with commands and report residual issues.
+  - Add deployment automation for `AcrossBridgeHookV2` (script + optional allowlist params) and deployment test coverage.
+  - Clarify V2 coverage behavior versus non-V2 and compile constraints without `via-ir`.
+- Constraints/Assumptions:
+  - Orchestrator execute signature remains `execute(IOrchestrator.Intent, uint256, bytes)`.
+  - User preference is immutable constructor arguments and fallback-first behavior unchanged.
+- Key decisions:
+  - Added local deployment script and deployment test for `AcrossBridgeHookV2` in the same pattern as existing v1 flow.
+  - Kept periphery and allowlist addresses in parameters with explicit non-local failure when unknown.
+  - Added deploy tag `AcrossBridgeHookV2` for targeted deploy runs.
+- State:
+  - Done: `contracts/hooks/AcrossBridgeHookV2.sol` refactor to struct-heavy helper flow with reduced inline stack usage.
+  - Done: Added `ACROSS_SPOKE_POOL_PERIPHERY` and `ACROSS_ALLOWED_EXCHANGES` parameter entries.
+  - Done: Added `deploy/11_deploy_across_bridge_hook_v2.ts` deployment script with tag `AcrossBridgeHookV2`.
+  - Done: Added `test/deploy/11_acrossBridgeHookV2.spec.ts` deployment test.
+  - Done: Unit tests for `AcrossBridgeHookV2` currently pass (28/28).
+  - Done: Fork tests for `AcrossBridgeHookV2` pass (4/4).
+  - Open: default `forge coverage --match-path test-foundry/fork/AcrossBridgeHookV2Fork.t.sol` still fails with stack-too-deep.
+  - Done: Coverage succeeds with `--via-ir --ir-minimum`.
+  - Done: Deploy tests compile and run but are pending locally without pre-existing `AcrossBridgeHookV2` artifact.
+- Done:
+  - Added deployment scaffolding for V2 across hook.
+  - Verified compile/test commands for target suites.
+- Now:
+  - Clarify production deploy impact of the V2 via-ir/stack-depth behavior.
+- Next:
+  - If required, do a targeted non-IR stack-depth refactor in the V2 helper stack only.
+- Open questions (UNCONFIRMED if needed):
+  - Should deploy scripts enforce explicit allowlist inputs on localhost instead of deployer fallback for local determinism?
+  - Do you want me to add production-ready `ACROSS_SPOKE_POOL_PERIPHERY` and `ACROSS_ALLOWED_EXCHANGES` values into `deployments/parameters.ts` now?
+- Working set (files/ids/commands):
+  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/contracts/hooks/AcrossBridgeHookV2.sol
+  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/test/hooks/acrossBridgeHookV2.spec.ts
+  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/test-foundry/fork/AcrossBridgeHookV2Fork.t.sol
+  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/deploy/11_deploy_across_bridge_hook_v2.ts
+  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/test/deploy/11_acrossBridgeHookV2.spec.ts
+  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/deployments/parameters.ts

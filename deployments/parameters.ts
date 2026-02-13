@@ -71,6 +71,22 @@ export const ACROSS_SPOKE_POOL: any = {
   "hardhat": "",
 };
 
+export const ACROSS_SPOKE_POOL_PERIPHERY: any = {
+  "base": "",
+  "base_staging": "",
+  "base_sepolia": "",
+  "localhost": "",
+  "hardhat": "",
+};
+
+export const ACROSS_ALLOWED_EXCHANGES: any = {
+  "base": "",
+  "base_staging": "",
+  "base_sepolia": "",
+  "localhost": "",
+  "hardhat": "",
+};
+
 // For Goerli and localhost
 export const USDC_MINT_AMOUNT = usdc(1000000);
 export const USDC_RECIPIENT = "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929";
