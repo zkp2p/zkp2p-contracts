@@ -198,6 +198,16 @@ describe("Orchestrator - PreIntentHook", () => {
         await expect(subject()).to.be.revertedWithCustomError(orchestrator, "UnauthorizedCallerOrDelegate");
       });
     });
+
+    describe("when escrow is zero address", () => {
+      beforeEach(async () => {
+        subjectEscrow = ADDRESS_ZERO;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(orchestrator, "ZeroAddress");
+      });
+    });
   });
 
   describe("#signalIntent (pre-intent hook)", () => {
@@ -300,13 +310,22 @@ describe("Orchestrator - PreIntentHook", () => {
   });
 
   describe("SignatureGatingPreIntentHook", () => {
+    describe("#constructor", () => {
+      it("reverts when orchestrator is zero address", async () => {
+        await expect(
+          deployer.deploySignatureGatingPreIntentHook(ADDRESS_ZERO)
+        ).to.be.revertedWithCustomError(signatureGatingPreIntentHook, "ZeroAddress");
+      });
+    });
+
     describe("#setDepositSigner", () => {
       let subjectCaller: Account;
+      let subjectEscrow: string;
       let subjectSigner: string;
 
       async function subject(): Promise<any> {
         return signatureGatingPreIntentHook.connect(subjectCaller.wallet).setDepositSigner(
-          escrow.address,
+          subjectEscrow,
           ZERO,
           subjectSigner
         );
@@ -314,6 +333,7 @@ describe("Orchestrator - PreIntentHook", () => {
 
       beforeEach(async () => {
         subjectCaller = depositor;
+        subjectEscrow = escrow.address;
         subjectSigner = delegate.address;
       });
 
@@ -345,6 +365,19 @@ describe("Orchestrator - PreIntentHook", () => {
           await expect(subject()).to.be.revertedWithCustomError(
             signatureGatingPreIntentHook,
             "UnauthorizedCallerOrDelegate"
+          );
+        });
+      });
+
+      describe("when escrow is zero address", () => {
+        beforeEach(async () => {
+          subjectEscrow = ADDRESS_ZERO;
+        });
+
+        it("should revert", async () => {
+          await expect(subject()).to.be.revertedWithCustomError(
+            signatureGatingPreIntentHook,
+            "ZeroAddress"
           );
         });
       });
@@ -447,6 +480,44 @@ describe("Orchestrator - PreIntentHook", () => {
 
         it("reverts", async () => {
           await expect(subject()).to.be.revertedWithCustomError(signatureGatingPreIntentHook, "InvalidSignature");
+        });
+      });
+
+      describe("when called directly (not via orchestrator)", () => {
+        it("should revert", async () => {
+          const dummyCtx = {
+            taker: taker.address,
+            escrow: escrow.address,
+            depositId: ZERO,
+            amount: usdc(50),
+            to: taker.address,
+            paymentMethod: venmoPaymentMethod,
+            fiatCurrency: Currency.USD,
+            conversionRate: subjectConversionRate,
+            referrer: ADDRESS_ZERO,
+            referrerFee: ZERO,
+            preIntentHookData: "0x",
+          };
+
+          await expect(
+            signatureGatingPreIntentHook.connect(taker.wallet).validateSignalIntent(dummyCtx)
+          ).to.be.revertedWithCustomError(signatureGatingPreIntentHook, "UnauthorizedOrchestratorCaller");
+        });
+      });
+
+      describe("when signer is not set for deposit", () => {
+        beforeEach(async () => {
+          // Deploy a fresh hook with no signers configured
+          const freshHook = await deployer.deploySignatureGatingPreIntentHook(orchestrator.address);
+          await orchestrator.connect(depositor.wallet).setDepositPreIntentHook(
+            escrow.address,
+            ZERO,
+            freshHook.address
+          );
+        });
+
+        it("should revert", async () => {
+          await expect(subject()).to.be.revertedWithCustomError(signatureGatingPreIntentHook, "SignerNotSet");
         });
       });
 
