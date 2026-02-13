@@ -30,13 +30,13 @@ contract SignatureGatingPreIntentHook is IPreIntentHook {
         address indexed escrow,
         uint256 indexed depositId,
         address indexed signer,
-        address depositor
+        address setter
     );
 
     /* ============ Errors ============ */
 
     error ZeroAddress();
-    error UnauthorizedCaller(address caller, address authorized);
+    error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);
     error UnauthorizedOrchestratorCaller(address caller);
     error SignerNotSet(address escrow, uint256 depositId);
     error SignatureExpired(uint256 expiration, uint256 currentTime);
@@ -63,7 +63,7 @@ contract SignatureGatingPreIntentHook is IPreIntentHook {
 
     /**
      * @notice Sets or clears the authorized signature signer for a specific deposit.
-     * @dev Only the deposit's depositor can set this value.
+     * @dev Callable only by the deposit's depositor or delegate.
      *
      * @param _escrow      Escrow address.
      * @param _depositId   Deposit id.
@@ -73,7 +73,11 @@ contract SignatureGatingPreIntentHook is IPreIntentHook {
         if (_escrow == address(0)) revert ZeroAddress();
 
         IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
-        if (deposit.depositor != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.depositor);
+        bool isDepositorOrDelegate = msg.sender == deposit.depositor
+            || (deposit.delegate != address(0) && msg.sender == deposit.delegate);
+        if (!isDepositorOrDelegate) {
+            revert UnauthorizedCallerOrDelegate(msg.sender, deposit.depositor, deposit.delegate);
+        }
 
         depositSigner[_escrow][_depositId] = _signer;
 

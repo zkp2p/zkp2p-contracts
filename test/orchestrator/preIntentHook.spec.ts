@@ -324,6 +324,30 @@ describe("Orchestrator - PreIntentHook", () => {
         const storedSigner = await signatureGatingPreIntentHook.getDepositSigner(escrow.address, ZERO);
         expect(storedSigner).to.eq(subjectSigner);
       });
+
+      it("allows delegate to set signer per deposit", async () => {
+        subjectCaller = delegate;
+        subjectSigner = owner.address;
+
+        await expect(subject()).to.emit(signatureGatingPreIntentHook, "DepositSignerSet")
+          .withArgs(escrow.address, ZERO, subjectSigner, subjectCaller.address);
+
+        const storedSigner = await signatureGatingPreIntentHook.getDepositSigner(escrow.address, ZERO);
+        expect(storedSigner).to.eq(subjectSigner);
+      });
+
+      describe("when called by unauthorized caller", () => {
+        beforeEach(async () => {
+          subjectCaller = unauthorizedCaller;
+        });
+
+        it("should revert", async () => {
+          await expect(subject()).to.be.revertedWithCustomError(
+            signatureGatingPreIntentHook,
+            "UnauthorizedCallerOrDelegate"
+          );
+        });
+      });
     });
 
     describe("#validateSignalIntent via signalIntent", () => {
