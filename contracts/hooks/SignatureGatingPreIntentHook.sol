@@ -18,7 +18,7 @@ interface IOrchestratorChainIdReader {
 /**
  * @title SignatureGatingPreIntentHook
  * @notice Pre-intent hook that validates taker eligibility using an off-chain signature.
- * @dev Mirrors Orchestrator's built-in intent gating signature format for compatibility.
+ * @dev Uses the built-in gating payload fields and additionally binds the caller taker address.
  */
 contract SignatureGatingPreIntentHook is IPreIntentHook {
     using ECDSA for bytes32;
@@ -107,6 +107,7 @@ contract SignatureGatingPreIntentHook is IPreIntentHook {
             _ctx.escrow,
             _ctx.depositId,
             _ctx.amount,
+            _ctx.taker,
             _ctx.to,
             _ctx.paymentMethod,
             _ctx.fiatCurrency,

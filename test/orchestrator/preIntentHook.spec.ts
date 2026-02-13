@@ -9,7 +9,7 @@ import { Currency } from "@utils/protocolUtils";
 import { Account } from "@utils/test/types";
 import { ADDRESS_ZERO, ONE, ZERO } from "@utils/constants";
 import { getAccounts, getWaffleExpect } from "@utils/test";
-import { createSignalIntentParams, generateGatingServiceSignature } from "@utils/test/helpers";
+import { createSignalIntentParams } from "@utils/test/helpers";
 import {
   Escrow,
   Orchestrator,
@@ -392,6 +392,42 @@ describe("Orchestrator - PreIntentHook", () => {
       let subjectPreIntentHookData: string;
       let subjectData: string;
 
+      async function generateSignature(
+        signer: Account,
+        signatureExpiration: BigNumber
+      ): Promise<string> {
+        const messageHash = ethers.utils.solidityKeccak256(
+          [
+            "address",
+            "address",
+            "uint256",
+            "uint256",
+            "address",
+            "address",
+            "bytes32",
+            "bytes32",
+            "uint256",
+            "uint256",
+            "uint256",
+          ],
+          [
+            orchestrator.address,
+            escrow.address,
+            ZERO,
+            usdc(50),
+            subjectCaller.address,
+            subjectTo,
+            venmoPaymentMethod,
+            Currency.USD,
+            subjectConversionRate,
+            signatureExpiration,
+            chainId,
+          ]
+        );
+
+        return signer.wallet.signMessage(ethers.utils.arrayify(messageHash));
+      }
+
       async function subject(): Promise<any> {
         const params = await createSignalIntentParams(
           orchestrator.address,
@@ -434,19 +470,7 @@ describe("Orchestrator - PreIntentHook", () => {
         );
 
         subjectSignatureExpiration = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp).add(3600);
-        const signature = await generateGatingServiceSignature(
-          subjectSignatureSigner,
-          orchestrator.address,
-          escrow.address,
-          ZERO,
-          usdc(50),
-          subjectTo,
-          venmoPaymentMethod,
-          Currency.USD,
-          subjectConversionRate,
-          chainId.toString(),
-          subjectSignatureExpiration
-        );
+        const signature = await generateSignature(subjectSignatureSigner, subjectSignatureExpiration);
         subjectPreIntentHookData = ethers.utils.defaultAbiCoder.encode(
           ["bytes", "uint256"],
           [signature, subjectSignatureExpiration]
@@ -459,19 +483,7 @@ describe("Orchestrator - PreIntentHook", () => {
 
       describe("when signature is invalid", () => {
         beforeEach(async () => {
-          const badSignature = await generateGatingServiceSignature(
-            unauthorizedCaller,
-            orchestrator.address,
-            escrow.address,
-            ZERO,
-            usdc(50),
-            subjectTo,
-            venmoPaymentMethod,
-            Currency.USD,
-            subjectConversionRate,
-            chainId.toString(),
-            subjectSignatureExpiration
-          );
+          const badSignature = await generateSignature(unauthorizedCaller, subjectSignatureExpiration);
           subjectPreIntentHookData = ethers.utils.defaultAbiCoder.encode(
             ["bytes", "uint256"],
             [badSignature, subjectSignatureExpiration]
@@ -521,22 +533,25 @@ describe("Orchestrator - PreIntentHook", () => {
         });
       });
 
+      describe("when caller differs from signed taker", () => {
+        beforeEach(async () => {
+          const signatureForTaker = await generateSignature(subjectSignatureSigner, subjectSignatureExpiration);
+          subjectPreIntentHookData = ethers.utils.defaultAbiCoder.encode(
+            ["bytes", "uint256"],
+            [signatureForTaker, subjectSignatureExpiration]
+          );
+          subjectCaller = unauthorizedCaller;
+        });
+
+        it("reverts", async () => {
+          await expect(subject()).to.be.revertedWithCustomError(signatureGatingPreIntentHook, "InvalidSignature");
+        });
+      });
+
       describe("when signature is expired", () => {
         beforeEach(async () => {
           subjectSignatureExpiration = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp).sub(1);
-          const expiredSignature = await generateGatingServiceSignature(
-            subjectSignatureSigner,
-            orchestrator.address,
-            escrow.address,
-            ZERO,
-            usdc(50),
-            subjectTo,
-            venmoPaymentMethod,
-            Currency.USD,
-            subjectConversionRate,
-            chainId.toString(),
-            subjectSignatureExpiration
-          );
+          const expiredSignature = await generateSignature(subjectSignatureSigner, subjectSignatureExpiration);
           subjectPreIntentHookData = ethers.utils.defaultAbiCoder.encode(
             ["bytes", "uint256"],
             [expiredSignature, subjectSignatureExpiration]
