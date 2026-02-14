@@ -40,13 +40,14 @@
   - Decision confirmed: user wants both `minOutputAmount` and `minExpectedInputTokenAmount` committed at signal-time and returned from the quote path into intent data.
   - Updated `AcrossSwapBridgeHook` naming/comments to define committed signal-time payload explicitly.
   - Expanded unit + fork tests to assert committed minima and all route fields are propagated into periphery call data; both targeted test sets pass.
+  - Ran `hardhat coverage` on `test/hooks/acrossSwapBridgeHook.spec.ts` and full `yarn coverage`; both runs execute and report `AcrossSwapBridgeHook.sol` as an instrumented file, but all reported coverage metrics are 0%.
 
 - Next:
   - Keep both minima committed and finalize docs/comments so intent producers persist both fields from API quote response.
-  - Optional: run broader suite once for regression confidence.
+  - Verify coverage signal for new hook against this workspace and confirm no meaningful regression.
 
 - Open questions (UNCONFIRMED if needed):
-  - None currently.
+  - `hardhat coverage` in this environment reports 0% for all contracts; likely tooling/env issue (Node version warning). Needs follow-up if you want meaningful percentage enforcement.
 
 - Working set (files/ids/commands):
   - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/contracts/hooks/AcrossSwapBridgeHook.sol
