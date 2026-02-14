@@ -40,7 +40,12 @@
   - Decision confirmed: user wants both `minOutputAmount` and `minExpectedInputTokenAmount` committed at signal-time and returned from the quote path into intent data.
   - Updated `AcrossSwapBridgeHook` naming/comments to define committed signal-time payload explicitly.
   - Expanded unit + fork tests to assert committed minima and all route fields are propagated into periphery call data; both targeted test sets pass.
-  - Ran `hardhat coverage` on `test/hooks/acrossSwapBridgeHook.spec.ts` and full `yarn coverage`; both runs execute and report `AcrossSwapBridgeHook.sol` as an instrumented file, but all reported coverage metrics are 0%.
+  - Added focused tests for previously uncovered lines:
+    - `InvalidMinOutputAmount` validation in `execute`.
+    - `rescueNative` native transfer success (`RescueNative`) and failure (`NativeTransferFailed`) paths.
+  - `npx hardhat test test/hooks/acrossSwapBridgeHook.spec.ts` now passes with 13 tests.
+  - Fork suites continue to pass with `FOUNDRY_PROFILE=fork forge test --match-path "test-foundry/fork/*.t.sol" -vv`.
+  - `hardhat coverage` on the spec still reports 0% globally in this environment (instrumentation/tooling issue), but branch-targeted cases are directly covered by tests.
   - Fixed fork test brittleness in `test-foundry/fork/AcrossBridgeHookFork.t.sol` for live base fork behavior:
     - `testFork_DepositNow_BaseToMainnetUSDC`
     - `testFork_DepositNow_SolanaRecipientBase58`
@@ -48,11 +53,10 @@
   - Full fork suite now passes (6 tests, 0 failed) under `FOUNDRY_PROFILE=fork`.
 
 - Next:
-  - Keep both minima committed and finalize docs/comments so intent producers persist both fields from API quote response.
-  - Verify coverage signal for new hook against this workspace and confirm no meaningful regression.
+  - Confirmed direct coverage-gap areas are now tested; continue if you want additional stress/fuzz coverage around `execute` branching.
 
 - Open questions (UNCONFIRMED if needed):
-  - `hardhat coverage` in this environment reports 0% for all contracts; likely tooling/env issue (Node version warning). Needs follow-up if you want meaningful percentage enforcement.
+  - Whether to migrate coverage tooling or Node version to restore reliable global coverage metrics.
 
 - Working set (files/ids/commands):
   - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/contracts/hooks/AcrossSwapBridgeHook.sol

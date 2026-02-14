@@ -6,7 +6,7 @@ import { ethers } from "hardhat";
 import DeployHelper from "@utils/deploys";
 import { Account } from "@utils/test/types";
 import { getAccounts, getWaffleExpect } from "@utils/test/index";
-import { usdc } from "@utils/common";
+import { ether, usdc } from "@utils/common";
 import { ADDRESS_ZERO, ZERO_BYTES32 } from "@utils/constants";
 
 const expect = getWaffleExpect();
@@ -245,6 +245,44 @@ describe("AcrossSwapBridgeHook", () => {
       const { encoded } = buildFulfillData();
 
       await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "InvalidMinExpectedInputTokenAmount");
+    });
+
+    it("should revert when minOutputAmount is zero", async () => {
+      commitment.minOutputAmount = BigNumber.from(0);
+      commitmentData = encodeCommitment(commitment);
+      intent = await buildIntent(commitmentData);
+      const { encoded } = buildFulfillData();
+
+      await expect(subject(encoded)).to.be.revertedWithCustomError(hook, "InvalidMinOutputAmount");
+    });
+  });
+
+  describe("#rescueNative", () => {
+    beforeEach(async () => {
+      await owner.wallet.sendTransaction({
+        to: hook.address,
+        value: ether(1),
+      });
+    });
+
+    it("should emit rescue event for native transfer", async () => {
+      const recipientBalanceBefore = await ethers.provider.getBalance(recipient.address);
+
+      await expect(hook.connect(owner.wallet).rescueNative(recipient.address, ether(1)))
+        .to.emit(hook, "RescueNative")
+        .withArgs(recipient.address, ether(1));
+
+      const recipientBalanceAfter = await ethers.provider.getBalance(recipient.address);
+      expect(recipientBalanceAfter.sub(recipientBalanceBefore)).to.eq(ether(1));
+    });
+
+    it("should revert when native transfer fails", async () => {
+      const RejectEtherMock = await ethers.getContractFactory("RejectEtherMock", owner.wallet);
+      const rejectContract = await RejectEtherMock.deploy();
+
+      await expect(
+        hook.connect(owner.wallet).rescueNative(rejectContract.address, ether(1))
+      ).to.be.revertedWithCustomError(hook, "NativeTransferFailed");
     });
   });
 });
