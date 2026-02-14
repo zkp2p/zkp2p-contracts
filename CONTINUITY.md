@@ -1,39 +1,58 @@
 - Goal (incl. success criteria):
-  - Refactor `AcrossBridgeHookV2` to avoid stack-too-deep behavior in default analysis workflows while preserving behavior.
-  - Perform a comprehensive functional and deployment-audit pass with commands and report residual issues.
-  - Add deployment automation for `AcrossBridgeHookV2` (script + optional allowlist params) and deployment test coverage.
-  - Clarify V2 coverage behavior versus non-V2 and compile constraints without `via-ir`.
+  - Implement a simplified Across swap-and-bridge-only hook using `AcrossSwapBridgeHook` that follows the legacy v1 flow and remove v2-specific code paths from the current system.
+  - Keep unit + deploy test coverage for the new hook name.
+  - Preserve the existing `AcrossBridgeHook` for backward compatibility.
+
 - Constraints/Assumptions:
-  - Orchestrator execute signature remains `execute(IOrchestrator.Intent, uint256, bytes)`.
-  - User preference is immutable constructor arguments and fallback-first behavior unchanged.
+  - Preserve `IOrchestrator` execute signature.
+  - Keep fallback behavior (revert -> safe fallback transfer) in this request’s simplified hook.
+  - Do not touch orchestrator or registry plumbing.
+
 - Key decisions:
-  - Added local deployment script and deployment test for `AcrossBridgeHookV2` in the same pattern as existing v1 flow.
-  - Kept periphery and allowlist addresses in parameters with explicit non-local failure when unknown.
-  - Added deploy tag `AcrossBridgeHookV2` for targeted deploy runs.
+  - Deleted v2 files: `AcrossBridgeHookV2` contract, v2 deployment/test scripts, and v2 fork/unit tests.
+  - Added new contract `AcrossSwapBridgeHook` with direct `swapAndBridge` flow, plus v1-like validation and fallback.
+  - Added dedicated deploy script/test for `AcrossSwapBridgeHook` at deploy index 11.
+  - Added fork test variant for swap-and-bridge path.
+  - Kept existing `AcrossBridgeHook` (legacy bridge-only) unchanged.
+  - Documented permissionless fulfillment limitation directly in `AcrossSwapBridgeHook` docs:
+    - Hook assumes orchestrator mediates execution and does not authenticate fulfill caller identity.
+  - Current `AcrossSwapBridgeHook` commit surface was expanded to include swap execution fields from Across `swapAndBridge`.
+  - User requests both min guardrails be user-committed: `minOutputAmount` and `minExpectedInputTokenAmount` should remain fixed at `signalIntent`.
+
 - State:
-  - Done: `contracts/hooks/AcrossBridgeHookV2.sol` refactor to struct-heavy helper flow with reduced inline stack usage.
-  - Done: Added `ACROSS_SPOKE_POOL_PERIPHERY` and `ACROSS_ALLOWED_EXCHANGES` parameter entries.
-  - Done: Added `deploy/11_deploy_across_bridge_hook_v2.ts` deployment script with tag `AcrossBridgeHookV2`.
-  - Done: Added `test/deploy/11_acrossBridgeHookV2.spec.ts` deployment test.
-  - Done: Unit tests for `AcrossBridgeHookV2` currently pass (28/28).
-  - Done: Fork tests for `AcrossBridgeHookV2` pass (4/4).
-  - Open: default `forge coverage --match-path test-foundry/fork/AcrossBridgeHookV2Fork.t.sol` still fails with stack-too-deep.
-  - Done: Coverage succeeds with `--via-ir --ir-minimum`.
-  - Done: Deploy tests compile and run but are pending locally without pre-existing `AcrossBridgeHookV2` artifact.
-- Done:
-  - Added deployment scaffolding for V2 across hook.
-  - Verified compile/test commands for target suites.
+  - `contracts/hooks/AcrossSwapBridgeHook.sol` added.
+  - `deploy/11_deploy_across_swap_bridge_hook.ts` added.
+  - `test/hooks/acrossSwapBridgeHook.spec.ts` updated and passing.
+  - `test/deploy/11_acrossSwapBridgeHook.spec.ts` added.
+  - `test-foundry/fork/AcrossSwapBridgeHookFork.t.sol` updated.
+  - Removed:
+    - `contracts/hooks/AcrossBridgeHookV2.sol`
+    - `deploy/11_deploy_across_bridge_hook_v2.ts`
+    - `test/hooks/acrossBridgeHookV2.spec.ts`
+    - `test/deploy/11_acrossBridgeHookV2.spec.ts`
+    - `test-foundry/fork/AcrossBridgeHookV2Fork.t.sol`
+
 - Now:
-  - Clarify production deploy impact of the V2 via-ir/stack-depth behavior.
+  - Repository contains the simplified swap+bridge hook and deploy/test wiring.
+  - New hook contract, unit tests, deploy tests, and fork tests are implemented and passing.
+  - Fulfill data in `AcrossSwapBridgeHook` is now minimal (`intentHash`, `outputAmount`); all route fields are in commitment.
+  - Hook docs now explicitly call out permissionless fulfill limitation and reliance on fallback safety.
+  - Decision confirmed: user wants both `minOutputAmount` and `minExpectedInputTokenAmount` committed at signal-time and returned from the quote path into intent data.
+  - Updated `AcrossSwapBridgeHook` naming/comments to define committed signal-time payload explicitly.
+  - Expanded unit + fork tests to assert committed minima and all route fields are propagated into periphery call data; both targeted test sets pass.
+
 - Next:
-  - If required, do a targeted non-IR stack-depth refactor in the V2 helper stack only.
+  - Keep both minima committed and finalize docs/comments so intent producers persist both fields from API quote response.
+  - Optional: run broader suite once for regression confidence.
+
 - Open questions (UNCONFIRMED if needed):
-  - Should deploy scripts enforce explicit allowlist inputs on localhost instead of deployer fallback for local determinism?
-  - Do you want me to add production-ready `ACROSS_SPOKE_POOL_PERIPHERY` and `ACROSS_ALLOWED_EXCHANGES` values into `deployments/parameters.ts` now?
+  - None currently.
+
 - Working set (files/ids/commands):
-  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/contracts/hooks/AcrossBridgeHookV2.sol
-  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/test/hooks/acrossBridgeHookV2.spec.ts
-  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/test-foundry/fork/AcrossBridgeHookV2Fork.t.sol
-  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/deploy/11_deploy_across_bridge_hook_v2.ts
-  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/test/deploy/11_acrossBridgeHookV2.spec.ts
-  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/deployments/parameters.ts
+  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/contracts/hooks/AcrossSwapBridgeHook.sol
+  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/contracts/hooks/AcrossBridgeHook.sol
+  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/deploy/11_deploy_across_swap_bridge_hook.ts
+  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/test/hooks/acrossSwapBridgeHook.spec.ts
+  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/test/deploy/11_acrossSwapBridgeHook.spec.ts
+  - /Users/richardliang/Documents/zk/zkp2p-v2-contracts/test-foundry/fork/AcrossSwapBridgeHookFork.t.sol
+  - Command run: `cd /Users/richardliang/Documents/zk/zkp2p-v2-contracts && npx hardhat test test/hooks/acrossSwapBridgeHook.spec.ts`

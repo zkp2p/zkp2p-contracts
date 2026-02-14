@@ -5,7 +5,6 @@ import { DeployFunction } from "hardhat-deploy/types";
 import { ethers } from "hardhat";
 
 import {
-  ACROSS_ALLOWED_EXCHANGES,
   ACROSS_SPOKE_POOL,
   ACROSS_SPOKE_POOL_PERIPHERY,
   MULTI_SIG,
@@ -17,14 +16,6 @@ import {
   setNewOwner,
   waitForDeploymentDelay,
 } from "../deployments/helpers";
-
-function _parseAllowedExchanges(raw: string | undefined): string[] {
-  if (!raw) return [];
-  return raw
-    .split(",")
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
-}
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deploy } = await hre.deployments;
@@ -68,32 +59,20 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     }
   }
 
-  let allowedExchanges = _parseAllowedExchanges(ACROSS_ALLOWED_EXCHANGES[network]);
-  if (!allowedExchanges.length && process.env.ACROSS_ALLOWED_EXCHANGES) {
-    allowedExchanges = _parseAllowedExchanges(process.env.ACROSS_ALLOWED_EXCHANGES);
-  }
-  if (!allowedExchanges.length) {
-    if (network === "localhost" || network === "hardhat") {
-      allowedExchanges = [deployer];
-    } else {
-      throw new Error(`Missing allowed exchanges for network ${network}`);
-    }
-  }
-
-  const acrossBridgeHookV2 = await deploy("AcrossBridgeHookV2", {
+  const acrossSwapBridgeHook = await deploy("AcrossSwapBridgeHook", {
     from: deployer,
-    args: [usdcAddress, orchestratorAddress, spokePoolAddress, spokePoolPeripheryAddress, allowedExchanges],
+    args: [usdcAddress, orchestratorAddress, spokePoolAddress, spokePoolPeripheryAddress],
   });
-  console.log("AcrossBridgeHookV2 deployed at", acrossBridgeHookV2.address);
+  console.log("AcrossSwapBridgeHook deployed at", acrossSwapBridgeHook.address);
   await waitForDeploymentDelay(hre);
 
   const postIntentHookRegistry = await ethers.getContractAt("PostIntentHookRegistry", postIntentHookRegistryAddress);
-  await addPostIntentHook(hre, postIntentHookRegistry, acrossBridgeHookV2.address);
-  console.log("AcrossBridgeHookV2 added to post intent hook registry");
+  await addPostIntentHook(hre, postIntentHookRegistry, acrossSwapBridgeHook.address);
+  console.log("AcrossSwapBridgeHook added to post intent hook registry");
 
-  const acrossBridgeHookV2Contract = await ethers.getContractAt("AcrossBridgeHookV2", acrossBridgeHookV2.address);
-  await setNewOwner(hre, acrossBridgeHookV2Contract, multiSig);
-  console.log("AcrossBridgeHookV2 ownership transferred to", multiSig);
+  const acrossSwapBridgeHookContract = await ethers.getContractAt("AcrossSwapBridgeHook", acrossSwapBridgeHook.address);
+  await setNewOwner(hre, acrossSwapBridgeHookContract, multiSig);
+  console.log("AcrossSwapBridgeHook ownership transferred to", multiSig);
 
   await waitForDeploymentDelay(hre);
 };
@@ -102,7 +81,7 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.network.name;
   if (network !== "localhost") {
     try {
-      getDeployedContractAddress(hre.network.name, "AcrossBridgeHookV2");
+      getDeployedContractAddress(hre.network.name, "AcrossSwapBridgeHook");
       return true;
     } catch (e) {
       return false;
@@ -112,6 +91,6 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
 };
 
 func.dependencies = ["00_deploy_system"];
-func.tags = ["AcrossBridgeHookV2"];
+func.tags = ["AcrossSwapBridgeHook"];
 
 export default func;

@@ -1,11 +1,8 @@
 import "module-alias/register";
 
 import { deployments } from "hardhat";
-
-import {
-  AcrossBridgeHookV2__factory,
-  PostIntentHookRegistry__factory,
-} from "../../typechain";
+import { Contract } from "ethers";
+import { ethers } from "hardhat";
 
 import {
   getAccounts,
@@ -21,7 +18,6 @@ import * as fs from "fs";
 import * as path from "path";
 
 import {
-  ACROSS_ALLOWED_EXCHANGES,
   ACROSS_SPOKE_POOL,
   ACROSS_SPOKE_POOL_PERIPHERY,
   MULTI_SIG,
@@ -30,7 +26,7 @@ import {
 
 const expect = getWaffleExpect();
 
-describe("Across Bridge Hook V2 Deployment", () => {
+describe("Across Swap Bridge Hook Deployment", () => {
   let deployer: Account;
   let multiSig: Address;
   let isDeployed = true;
@@ -44,28 +40,10 @@ describe("Across Bridge Hook V2 Deployment", () => {
     return require(`../../deployments/${network}/${contractName}.json`).address;
   }
 
-  function _parseAllowedExchanges(raw: string | undefined): string[] {
-    if (!raw) return [];
-    return raw
-      .split(",")
-      .map((value) => value.trim())
-      .filter((value) => value.length > 0);
-  }
-
-  function _getExpectedSpokePoolPeriphery(network: string, defaultAddress: string | undefined): string {
-    if (defaultAddress) {
-      return defaultAddress;
-    }
-    if (network === "localhost" || network === "hardhat") {
-      return getDeployedContractAddress(network, "AcrossSpokePoolPeripheryMock");
-    }
-    throw new Error(`Missing AcrossSpokePoolPeriphery for network ${network}`);
-  }
-
   before(async () => {
     [deployer] = await getAccounts();
     multiSig = MULTI_SIG[network] ? MULTI_SIG[network] : deployer.address;
-    if (!fs.existsSync(path.resolve(__dirname, `../../deployments/${network}/AcrossBridgeHookV2.json`))) {
+    if (!fs.existsSync(path.resolve(__dirname, `../../deployments/${network}/AcrossSwapBridgeHook.json`))) {
       isDeployed = false;
     }
   });
@@ -74,9 +52,9 @@ describe("Across Bridge Hook V2 Deployment", () => {
     if (!isDeployed) this.skip();
   });
 
-  it("should deploy AcrossBridgeHookV2 with correct params", async () => {
-    const hookAddress = getDeployedContractAddress(network, "AcrossBridgeHookV2");
-    const hook = new AcrossBridgeHookV2__factory(deployer.wallet).attach(hookAddress);
+  it("should deploy AcrossSwapBridgeHook with correct params", async () => {
+    const hookAddress = getDeployedContractAddress(network, "AcrossSwapBridgeHook");
+    const hook = (await ethers.getContractAt("AcrossSwapBridgeHook", hookAddress)) as Contract;
 
     const orchestratorAddress = getDeployedContractAddress(network, "Orchestrator");
     const usdcAddress = USDC[network]
@@ -89,40 +67,28 @@ describe("Across Bridge Hook V2 Deployment", () => {
       : getDeployedContractAddress(network, "AcrossSpokePoolMock");
 
     const configuredSpokePoolPeriphery = ACROSS_SPOKE_POOL_PERIPHERY[network];
-    const spokePoolPeripheryAddress = _getExpectedSpokePoolPeriphery(
-      network,
-      configuredSpokePoolPeriphery && configuredSpokePoolPeriphery !== ""
-        ? configuredSpokePoolPeriphery
-        : undefined
-    );
+    const spokePoolPeripheryAddress = configuredSpokePoolPeriphery && configuredSpokePoolPeriphery !== ""
+      ? configuredSpokePoolPeriphery
+      : getDeployedContractAddress(network, "AcrossSpokePoolPeripheryMock");
 
     expect(await hook.orchestrator()).to.eq(orchestratorAddress);
     expect(await hook.inputToken()).to.eq(usdcAddress);
     expect(await hook.spokePool()).to.eq(spokePoolAddress);
     expect(await hook.spokePoolPeriphery()).to.eq(spokePoolPeripheryAddress);
-    const rawAllowedExchanges = ACROSS_ALLOWED_EXCHANGES[network] || "";
-    const expectedAllowedExchanges = _parseAllowedExchanges(rawAllowedExchanges);
-    const fallbackAllowedExchanges = (expectedAllowedExchanges.length === 0 && (network === "localhost" || network === "hardhat"))
-      ? [deployer.address]
-      : expectedAllowedExchanges;
-
-    if (fallbackAllowedExchanges.length > 0) {
-      expect(await hook.allowedExchanges(fallbackAllowedExchanges[0])).to.eq(true);
-    }
   });
 
   it("should transfer ownership to multisig", async () => {
-    const hookAddress = getDeployedContractAddress(network, "AcrossBridgeHookV2");
-    const hook = new AcrossBridgeHookV2__factory(deployer.wallet).attach(hookAddress);
+    const hookAddress = getDeployedContractAddress(network, "AcrossSwapBridgeHook");
+    const hook = (await ethers.getContractAt("AcrossSwapBridgeHook", hookAddress)) as Contract;
 
     expect(await hook.owner()).to.eq(multiSig);
   });
 
   it("should whitelist the hook in the post intent hook registry", async () => {
-    const hookAddress = getDeployedContractAddress(network, "AcrossBridgeHookV2");
+    const hookAddress = getDeployedContractAddress(network, "AcrossSwapBridgeHook");
     const registryAddress = getDeployedContractAddress(network, "PostIntentHookRegistry");
 
-    const registry = new PostIntentHookRegistry__factory(deployer.wallet).attach(registryAddress);
+    const registry = (await ethers.getContractAt("PostIntentHookRegistry", registryAddress)) as Contract;
     expect(await registry.isWhitelistedHook(hookAddress)).to.eq(true);
   });
 });
