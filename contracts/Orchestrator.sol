@@ -115,8 +115,8 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     {
         // Checks
         _validateSignalIntent(_params);
-        _executePreIntentHook(_params);
-        _executeWhitelistHook(_params);
+        _executeHookIfSet(depositPreIntentHooks[_params.escrow][_params.depositId], _params);
+        _executeHookIfSet(depositWhitelistHooks[_params.escrow][_params.depositId], _params);
 
         // Effects
         bytes32 intentHash = _calculateIntentHash();
@@ -567,37 +567,13 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     }
 
     /**
-     * @notice Executes the configured pre-intent hook for a deposit, if present.
+     * @notice Executes a pre-intent hook if the address is non-zero.
+     * @dev Shared by both the generic pre-intent hook and the dedicated whitelist hook.
      */
-    function _executePreIntentHook(SignalIntentParams calldata _params) internal {
-        IPreIntentHook preIntentHook = depositPreIntentHooks[_params.escrow][_params.depositId];
-        if (address(preIntentHook) == address(0)) return;
+    function _executeHookIfSet(IPreIntentHook _hook, SignalIntentParams calldata _params) internal {
+        if (address(_hook) == address(0)) return;
 
-        preIntentHook.validateSignalIntent(
-            IPreIntentHook.PreIntentContext({
-                taker: msg.sender,
-                escrow: _params.escrow,
-                depositId: _params.depositId,
-                amount: _params.amount,
-                to: _params.to,
-                paymentMethod: _params.paymentMethod,
-                fiatCurrency: _params.fiatCurrency,
-                conversionRate: _params.conversionRate,
-                referrer: _params.referrer,
-                referrerFee: _params.referrerFee,
-                preIntentHookData: _params.preIntentHookData
-            })
-        );
-    }
-
-    /**
-     * @notice Executes the dedicated whitelist hook for a deposit, if present.
-     */
-    function _executeWhitelistHook(SignalIntentParams calldata _params) internal {
-        IPreIntentHook whitelistHook = depositWhitelistHooks[_params.escrow][_params.depositId];
-        if (address(whitelistHook) == address(0)) return;
-
-        whitelistHook.validateSignalIntent(
+        _hook.validateSignalIntent(
             IPreIntentHook.PreIntentContext({
                 taker: msg.sender,
                 escrow: _params.escrow,
