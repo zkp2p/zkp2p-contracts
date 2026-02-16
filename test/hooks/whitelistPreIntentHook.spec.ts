@@ -19,6 +19,7 @@ import {
   USDCMock,
   PaymentVerifierMock,
   WhitelistPreIntentHook,
+  PreIntentHookMock,
 } from "@utils/contracts";
 
 const expect = getWaffleExpect();
@@ -283,7 +284,87 @@ describe("WhitelistPreIntentHook", () => {
     });
   });
 
-  describe("#validateSignalIntent via signalIntent", () => {
+  describe("#setDepositWhitelistHook", () => {
+    let subjectCaller: Account;
+    let subjectEscrow: string;
+    let subjectDepositId: BigNumber;
+    let subjectHook: string;
+
+    async function subject(): Promise<any> {
+      return orchestrator.connect(subjectCaller.wallet).setDepositWhitelistHook(
+        subjectEscrow,
+        subjectDepositId,
+        subjectHook
+      );
+    }
+
+    beforeEach(async () => {
+      subjectCaller = depositor;
+      subjectEscrow = escrow.address;
+      subjectDepositId = ZERO;
+      subjectHook = whitelistHook.address;
+    });
+
+    it("sets whitelist hook and emits event", async () => {
+      await expect(subject()).to.emit(orchestrator, "DepositWhitelistHookSet")
+        .withArgs(subjectEscrow, subjectDepositId, subjectHook, subjectCaller.address);
+
+      const hook = await orchestrator.getDepositWhitelistHook(subjectEscrow, subjectDepositId);
+      expect(hook).to.eq(whitelistHook.address);
+    });
+
+    it("allows delegate to set whitelist hook", async () => {
+      subjectCaller = delegate;
+
+      await expect(subject()).to.emit(orchestrator, "DepositWhitelistHookSet")
+        .withArgs(subjectEscrow, subjectDepositId, subjectHook, delegate.address);
+    });
+
+    it("allows removing whitelist hook by setting to zero address", async () => {
+      // Set hook first
+      await subject();
+
+      // Remove it
+      subjectHook = ADDRESS_ZERO;
+      await expect(subject()).to.emit(orchestrator, "DepositWhitelistHookSet")
+        .withArgs(subjectEscrow, subjectDepositId, ADDRESS_ZERO, subjectCaller.address);
+
+      const hook = await orchestrator.getDepositWhitelistHook(subjectEscrow, subjectDepositId);
+      expect(hook).to.eq(ADDRESS_ZERO);
+    });
+
+    describe("when called by unauthorized caller", () => {
+      beforeEach(async () => {
+        subjectCaller = unauthorizedCaller;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(orchestrator, "UnauthorizedCallerOrDelegate");
+      });
+    });
+
+    describe("when escrow is zero address", () => {
+      beforeEach(async () => {
+        subjectEscrow = ADDRESS_ZERO;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(orchestrator, "ZeroAddress");
+      });
+    });
+
+    describe("when hook is an EOA (no code)", () => {
+      beforeEach(async () => {
+        subjectHook = taker.address;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(orchestrator, "InvalidPreIntentHook");
+      });
+    });
+  });
+
+  describe("#validateSignalIntent via dedicated whitelist hook slot", () => {
     let subjectCaller: Account;
     let subjectConversionRate: BigNumber;
 
@@ -312,8 +393,8 @@ describe("WhitelistPreIntentHook", () => {
       subjectCaller = taker;
       subjectConversionRate = ether(1.02);
 
-      // Set whitelist hook on the deposit
-      await orchestrator.connect(depositor.wallet).setDepositPreIntentHook(
+      // Set whitelist hook on the DEDICATED whitelist slot (not the generic pre-intent hook slot)
+      await orchestrator.connect(depositor.wallet).setDepositWhitelistHook(
         escrow.address,
         ZERO,
         whitelistHook.address
@@ -382,6 +463,117 @@ describe("WhitelistPreIntentHook", () => {
           whitelistHook.connect(taker.wallet).validateSignalIntent(dummyCtx)
         ).to.be.revertedWithCustomError(whitelistHook, "UnauthorizedOrchestratorCaller");
       });
+    });
+  });
+
+  describe("both hooks set independently on same deposit", () => {
+    let preIntentHookMock: PreIntentHookMock;
+    let subjectConversionRate: BigNumber;
+
+    beforeEach(async () => {
+      subjectConversionRate = ether(1.02);
+
+      preIntentHookMock = await deployer.deployPreIntentHookMock();
+
+      // Set both hooks independently
+      await orchestrator.connect(depositor.wallet).setDepositPreIntentHook(
+        escrow.address,
+        ZERO,
+        preIntentHookMock.address
+      );
+      await orchestrator.connect(depositor.wallet).setDepositWhitelistHook(
+        escrow.address,
+        ZERO,
+        whitelistHook.address
+      );
+    });
+
+    it("both hooks are stored independently", async () => {
+      const genericHook = await orchestrator.getDepositPreIntentHook(escrow.address, ZERO);
+      const wlHook = await orchestrator.getDepositWhitelistHook(escrow.address, ZERO);
+
+      expect(genericHook).to.eq(preIntentHookMock.address);
+      expect(wlHook).to.eq(whitelistHook.address);
+    });
+
+    it("signalIntent calls both hooks - whitelisted taker passes", async () => {
+      await whitelistHook.connect(depositor.wallet).addToWhitelist(
+        escrow.address,
+        ZERO,
+        [taker.address]
+      );
+
+      const params = await createSignalIntentParams(
+        orchestrator.address,
+        escrow.address,
+        ZERO,
+        usdc(50),
+        taker.address,
+        venmoPaymentMethod,
+        Currency.USD,
+        subjectConversionRate,
+        ADDRESS_ZERO,
+        ZERO,
+        null,
+        chainId.toString(),
+        ADDRESS_ZERO,
+        "0x"
+      );
+
+      await expect(
+        orchestrator.connect(taker.wallet).signalIntent(params)
+      ).to.emit(orchestrator, "IntentSignaled");
+    });
+
+    it("signalIntent reverts if whitelist hook rejects (taker not whitelisted)", async () => {
+      const params = await createSignalIntentParams(
+        orchestrator.address,
+        escrow.address,
+        ZERO,
+        usdc(50),
+        taker.address,
+        venmoPaymentMethod,
+        Currency.USD,
+        subjectConversionRate,
+        ADDRESS_ZERO,
+        ZERO,
+        null,
+        chainId.toString(),
+        ADDRESS_ZERO,
+        "0x"
+      );
+
+      await expect(
+        orchestrator.connect(taker.wallet).signalIntent(params)
+      ).to.be.revertedWithCustomError(whitelistHook, "TakerNotWhitelisted");
+    });
+
+    it("removing whitelist hook leaves generic hook intact", async () => {
+      await orchestrator.connect(depositor.wallet).setDepositWhitelistHook(
+        escrow.address,
+        ZERO,
+        ADDRESS_ZERO
+      );
+
+      const genericHook = await orchestrator.getDepositPreIntentHook(escrow.address, ZERO);
+      const wlHook = await orchestrator.getDepositWhitelistHook(escrow.address, ZERO);
+
+      expect(genericHook).to.eq(preIntentHookMock.address);
+      expect(wlHook).to.eq(ADDRESS_ZERO);
+    });
+
+    it("removing generic hook leaves whitelist hook intact", async () => {
+      await orchestrator.connect(depositor.wallet).setDepositPreIntentHook(
+        escrow.address,
+        ZERO,
+        ADDRESS_ZERO
+      );
+
+      const genericHook = await orchestrator.getDepositPreIntentHook(escrow.address, ZERO);
+      const wlHook = await orchestrator.getDepositWhitelistHook(escrow.address, ZERO);
+
+      expect(genericHook).to.eq(ADDRESS_ZERO);
+      expect(wlHook).to.eq(whitelistHook.address);
     });
   });
 });

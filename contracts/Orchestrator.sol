@@ -60,6 +60,9 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     // Optional pre-intent hooks configured per escrow + depositId.
     mapping(address => mapping(uint256 => IPreIntentHook)) internal depositPreIntentHooks;
 
+    // Dedicated whitelist hooks configured per escrow + depositId.
+    mapping(address => mapping(uint256 => IPreIntentHook)) internal depositWhitelistHooks;
+
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
     IPaymentVerifierRegistry public  paymentVerifierRegistry;          // Registry of payment verifiers
@@ -113,6 +116,7 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         // Checks
         _validateSignalIntent(_params);
         _executePreIntentHook(_params);
+        _executeWhitelistHook(_params);
 
         // Effects
         bytes32 intentHash = _calculateIntentHash();
@@ -218,8 +222,38 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     }
 
     /**
+     * @notice Sets or removes the whitelist hook for a specific deposit.
+     * @dev Callable only by the deposit's depositor or delegate. The whitelist hook is a
+     * dedicated slot separate from the generic pre-intent hook, enabling private orderbook
+     * functionality without occupying the generic hook slot.
+     *
+     * @param _escrow       Escrow address.
+     * @param _depositId    Deposit id.
+     * @param _hook         Hook address (address(0) to remove).
+     */
+    function setDepositWhitelistHook(address _escrow, uint256 _depositId, IPreIntentHook _hook) external {
+        if (_escrow == address(0)) revert ZeroAddress();
+
+        address hookAddress = address(_hook);
+        if (hookAddress != address(0) && hookAddress.code.length == 0) {
+            revert InvalidPreIntentHook(hookAddress);
+        }
+
+        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
+        bool isDepositorOrDelegate = msg.sender == deposit.depositor
+            || (deposit.delegate != address(0) && msg.sender == deposit.delegate);
+        if (!isDepositorOrDelegate) {
+            revert UnauthorizedCallerOrDelegate(msg.sender, deposit.depositor, deposit.delegate);
+        }
+
+        depositWhitelistHooks[_escrow][_depositId] = _hook;
+
+        emit DepositWhitelistHookSet(_escrow, _depositId, hookAddress, msg.sender);
+    }
+
+    /**
      * @notice Anyone can submit a fulfill intent transaction, even if caller isn't the intent owner. Upon submission the
-     * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated. 
+     * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated.
      * Deposit token is transferred to the intent.to address.
      * @dev This function adds a reentrancy guard as it's calling the post intent hook contract which itself might call 
      * malicious contracts.
@@ -467,6 +501,10 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         return depositPreIntentHooks[_escrow][_depositId];
     }
 
+    function getDepositWhitelistHook(address _escrow, uint256 _depositId) external view returns (IPreIntentHook) {
+        return depositWhitelistHooks[_escrow][_depositId];
+    }
+
     function getIntentMinAtSignal(bytes32 _intentHash) external view returns (uint256) {
         return intentMinAtSignal[_intentHash];
     }
@@ -540,6 +578,30 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         if (address(preIntentHook) == address(0)) return;
 
         preIntentHook.validateSignalIntent(
+            IPreIntentHook.PreIntentContext({
+                taker: msg.sender,
+                escrow: _params.escrow,
+                depositId: _params.depositId,
+                amount: _params.amount,
+                to: _params.to,
+                paymentMethod: _params.paymentMethod,
+                fiatCurrency: _params.fiatCurrency,
+                conversionRate: _params.conversionRate,
+                referrer: _params.referrer,
+                referrerFee: _params.referrerFee,
+                preIntentHookData: _params.preIntentHookData
+            })
+        );
+    }
+
+    /**
+     * @notice Executes the dedicated whitelist hook for a deposit, if present.
+     */
+    function _executeWhitelistHook(SignalIntentParams calldata _params) internal {
+        IPreIntentHook whitelistHook = depositWhitelistHooks[_params.escrow][_params.depositId];
+        if (address(whitelistHook) == address(0)) return;
+
+        whitelistHook.validateSignalIntent(
             IPreIntentHook.PreIntentContext({
                 taker: msg.sender,
                 escrow: _params.escrow,
