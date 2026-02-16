@@ -61,6 +61,20 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("DepositRateManagerController set on Orchestrator");
   await waitForDeploymentDelay(hre);
 
+  // 3a. Update UnifiedPaymentVerifier to trust the new Orchestrator
+  const unifiedPaymentVerifierAddress = getDeployedContractAddress(network, "UnifiedPaymentVerifier");
+  const unifiedPaymentVerifierContract = await ethers.getContractAt("UnifiedPaymentVerifier", unifiedPaymentVerifierAddress);
+  await setOrchestrator(hre, unifiedPaymentVerifierContract, orchestrator.address);
+  console.log("Orchestrator set on UnifiedPaymentVerifier");
+  await waitForDeploymentDelay(hre);
+
+  // 3b. Update AcrossBridgeHook to trust the new Orchestrator
+  const acrossBridgeHookAddress = getDeployedContractAddress(network, "AcrossBridgeHook");
+  const acrossBridgeHookContract = await ethers.getContractAt("AcrossBridgeHook", acrossBridgeHookAddress);
+  await setOrchestrator(hre, acrossBridgeHookContract, orchestrator.address);
+  console.log("Orchestrator set on AcrossBridgeHook");
+  await waitForDeploymentDelay(hre);
+
   // 4. Deploy WhitelistPreIntentHook
   const whitelistHook = await deploy("WhitelistPreIntentHook", {
     from: deployer,
