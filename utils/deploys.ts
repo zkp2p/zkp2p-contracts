@@ -58,13 +58,15 @@ import { SimpleAttestationVerifier__factory } from "../typechain/factories/contr
 import { RateManagerDepositHookMock__factory } from "../typechain/factories/contracts/mocks/RateManagerDepositHookMock__factory";
 import { DepositRateManagerHookV1__factory } from "../typechain/factories/contracts/hooks/DepositRateManagerHookV1__factory";
 import { SignatureGatingPreIntentHook__factory } from "../typechain/factories/contracts/hooks/SignatureGatingPreIntentHook.sol/SignatureGatingPreIntentHook__factory";
+import { WhitelistPreIntentHook__factory } from "../typechain/factories/contracts/hooks/WhitelistPreIntentHook__factory";
 import {
   ManualRateManagerRegistry,
   OracleRateManagerRegistry,
   DepositRateManagerController,
   RateManagerDepositHookMock,
   DepositRateManagerHookV1,
-  SignatureGatingPreIntentHook
+  SignatureGatingPreIntentHook,
+  WhitelistPreIntentHook
 } from "../typechain";
 
 export default class DeployHelper {
@@ -210,6 +212,12 @@ export default class DeployHelper {
     orchestrator: Address
   ): Promise<SignatureGatingPreIntentHook> {
     return await new SignatureGatingPreIntentHook__factory(this._deployerSigner).deploy(orchestrator);
+  }
+
+  public async deployWhitelistPreIntentHook(
+    orchestrator: Address
+  ): Promise<WhitelistPreIntentHook> {
+    return await new WhitelistPreIntentHook__factory(this._deployerSigner).deploy(orchestrator);
   }
 
 

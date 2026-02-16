@@ -31,7 +31,8 @@ export {
   IManualRateManagerRegistry,
   IOracleRateManagerRegistry,
   DepositRateManagerHookV1,
-  SignatureGatingPreIntentHook
+  SignatureGatingPreIntentHook,
+  WhitelistPreIntentHook
 } from "../typechain";
 export { IEscrow } from "../typechain/contracts/Escrow";
 export { IOrchestrator } from "../typechain/contracts/Orchestrator";

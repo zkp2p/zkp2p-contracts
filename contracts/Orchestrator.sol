@@ -60,6 +60,9 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     // Optional pre-intent hooks configured per escrow + depositId.
     mapping(address => mapping(uint256 => IPreIntentHook)) internal depositPreIntentHooks;
 
+    // Dedicated whitelist hooks configured per escrow + depositId.
+    mapping(address => mapping(uint256 => IPreIntentHook)) internal depositWhitelistHooks;
+
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
     IPaymentVerifierRegistry public  paymentVerifierRegistry;          // Registry of payment verifiers
@@ -113,7 +116,8 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     {
         // Checks
         _validateSignalIntent(_params);
-        _executePreIntentHook(_params);
+        _executeHookIfSet(depositPreIntentHooks[_params.escrow][_params.depositId], _params);
+        _executeHookIfSet(depositWhitelistHooks[_params.escrow][_params.depositId], _params);
 
         // Effects
         bytes32 intentHash = _calculateIntentHash();
@@ -199,28 +203,34 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
      * @param _hook         Hook address (address(0) to remove).
      */
     function setDepositPreIntentHook(address _escrow, uint256 _depositId, IPreIntentHook _hook) external {
-        if (_escrow == address(0)) revert ZeroAddress();
-
-        address hookAddress = address(_hook);
-        if (hookAddress != address(0) && hookAddress.code.length == 0) {
-            revert InvalidPreIntentHook(hookAddress);
-        }
-
-        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
-        bool isDepositorOrDelegate = msg.sender == deposit.depositor
-            || (deposit.delegate != address(0) && msg.sender == deposit.delegate);
-        if (!isDepositorOrDelegate) {
-            revert UnauthorizedCallerOrDelegate(msg.sender, deposit.depositor, deposit.delegate);
-        }
+        _validateAndAuthorizeHookSetter(_escrow, _depositId, _hook);
 
         depositPreIntentHooks[_escrow][_depositId] = _hook;
 
-        emit DepositPreIntentHookSet(_escrow, _depositId, hookAddress, msg.sender);
+        emit DepositPreIntentHookSet(_escrow, _depositId, address(_hook), msg.sender);
+    }
+
+    /**
+     * @notice Sets or removes the whitelist hook for a specific deposit.
+     * @dev Callable only by the deposit's depositor or delegate. The whitelist hook is a
+     * dedicated slot separate from the generic pre-intent hook, enabling private orderbook
+     * functionality without occupying the generic hook slot.
+     *
+     * @param _escrow       Escrow address.
+     * @param _depositId    Deposit id.
+     * @param _hook         Hook address (address(0) to remove).
+     */
+    function setDepositWhitelistHook(address _escrow, uint256 _depositId, IPreIntentHook _hook) external {
+        _validateAndAuthorizeHookSetter(_escrow, _depositId, _hook);
+
+        depositWhitelistHooks[_escrow][_depositId] = _hook;
+
+        emit DepositWhitelistHookSet(_escrow, _depositId, address(_hook), msg.sender);
     }
 
     /**
      * @notice Anyone can submit a fulfill intent transaction, even if caller isn't the intent owner. Upon submission the
-     * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated. 
+     * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated.
      * Deposit token is transferred to the intent.to address.
      * @dev This function adds a reentrancy guard as it's calling the post intent hook contract which itself might call 
      * malicious contracts.
@@ -468,6 +478,10 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         return depositPreIntentHooks[_escrow][_depositId];
     }
 
+    function getDepositWhitelistHook(address _escrow, uint256 _depositId) external view returns (IPreIntentHook) {
+        return depositWhitelistHooks[_escrow][_depositId];
+    }
+
     function getIntentMinAtSignal(bytes32 _intentHash) external view returns (uint256) {
         return intentMinAtSignal[_intentHash];
     }
@@ -534,13 +548,33 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     }
 
     /**
-     * @notice Executes the configured pre-intent hook for a deposit, if present.
+     * @notice Validates hook address and authorizes the caller as depositor or delegate.
+     * @dev Shared validation for setDepositPreIntentHook and setDepositWhitelistHook.
      */
-    function _executePreIntentHook(SignalIntentParams calldata _params) internal {
-        IPreIntentHook preIntentHook = depositPreIntentHooks[_params.escrow][_params.depositId];
-        if (address(preIntentHook) == address(0)) return;
+    function _validateAndAuthorizeHookSetter(address _escrow, uint256 _depositId, IPreIntentHook _hook) internal view {
+        if (_escrow == address(0)) revert ZeroAddress();
 
-        preIntentHook.validateSignalIntent(
+        address hookAddress = address(_hook);
+        if (hookAddress != address(0) && hookAddress.code.length == 0) {
+            revert InvalidPreIntentHook(hookAddress);
+        }
+
+        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
+        bool isDepositorOrDelegate = msg.sender == deposit.depositor
+            || (deposit.delegate != address(0) && msg.sender == deposit.delegate);
+        if (!isDepositorOrDelegate) {
+            revert UnauthorizedCallerOrDelegate(msg.sender, deposit.depositor, deposit.delegate);
+        }
+    }
+
+    /**
+     * @notice Executes a pre-intent hook if the address is non-zero.
+     * @dev Shared by both the generic pre-intent hook and the dedicated whitelist hook.
+     */
+    function _executeHookIfSet(IPreIntentHook _hook, SignalIntentParams calldata _params) internal {
+        if (address(_hook) == address(0)) return;
+
+        _hook.validateSignalIntent(
             IPreIntentHook.PreIntentContext({
                 taker: msg.sender,
                 escrow: _params.escrow,
