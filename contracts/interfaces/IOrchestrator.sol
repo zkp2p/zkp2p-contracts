@@ -79,6 +79,7 @@ interface IOrchestrator {
 
     event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
     event DepositPreIntentHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
+    event DepositWhitelistHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
 
     event AllowMultipleIntentsUpdated(bool allowMultiple);
 
@@ -142,11 +143,13 @@ interface IOrchestrator {
     function getIntent(bytes32 intentHash) external view returns (Intent memory);
     function getAccountIntents(address account) external view returns (bytes32[] memory);
     function getDepositPreIntentHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
+    function getDepositWhitelistHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
     
     /* ============ External Functions for Users ============ */
 
     function signalIntent(SignalIntentParams calldata params) external;
     function setDepositPreIntentHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
+    function setDepositWhitelistHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
 
     function cancelIntent(bytes32 intentHash) external;
 
