@@ -5168,7 +5168,7 @@ export default {
       ]
     },
     "Orchestrator": {
-      "address": "0x04826F664A8281ADA0ad542EA4c682BC830C6f33",
+      "address": "0x2466d5B30613309E32a2faFA9b3B3c03eD6c9124",
       "abi": [
         {
           "inputs": [
@@ -5367,6 +5367,17 @@ export default {
           "type": "error"
         },
         {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "hook",
+              "type": "address"
+            }
+          ],
+          "name": "InvalidPreIntentHook",
+          "type": "error"
+        },
+        {
           "inputs": [],
           "name": "InvalidReferrerFeeConfiguration",
           "type": "error"
@@ -5500,6 +5511,27 @@ export default {
               "internalType": "address",
               "name": "caller",
               "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "delegate",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedCallerOrDelegate",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
             }
           ],
           "name": "UnauthorizedEscrowCaller",
@@ -5534,11 +5566,73 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "hook",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "setter",
+              "type": "address"
+            }
+          ],
+          "name": "DepositPreIntentHookSet",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
               "name": "depositRateManagerController",
               "type": "address"
             }
           ],
           "name": "DepositRateManagerControllerUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "hook",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "setter",
+              "type": "address"
+            }
+          ],
+          "name": "DepositWhitelistHookSet",
           "type": "event"
         },
         {
@@ -5935,6 +6029,54 @@ export default {
         {
           "inputs": [
             {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getDepositPreIntentHook",
+          "outputs": [
+            {
+              "internalType": "contract IPreIntentHook",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getDepositWhitelistHook",
+          "outputs": [
+            {
+              "internalType": "contract IPreIntentHook",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
               "internalType": "bytes32",
               "name": "_intentHash",
               "type": "bytes32"
@@ -6190,11 +6332,57 @@ export default {
           "inputs": [
             {
               "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "contract IPreIntentHook",
+              "name": "_hook",
+              "type": "address"
+            }
+          ],
+          "name": "setDepositPreIntentHook",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
               "name": "_depositRateManagerController",
               "type": "address"
             }
           ],
           "name": "setDepositRateManagerController",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "contract IPreIntentHook",
+              "name": "_hook",
+              "type": "address"
+            }
+          ],
+          "name": "setDepositWhitelistHook",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
@@ -6314,6 +6502,11 @@ export default {
                   "internalType": "contract IPostIntentHook",
                   "name": "postIntentHook",
                   "type": "address"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "preIntentHookData",
+                  "type": "bytes"
                 },
                 {
                   "internalType": "bytes",
@@ -6689,7 +6882,7 @@ export default {
       ]
     },
     "ProtocolViewer": {
-      "address": "0xb1Bc56791b888C35F3F06F1611E784a0c5D40893",
+      "address": "0xC5AE0c93abE394Ee9BEAC0ddB916D65F9c382D1B",
       "abi": [
         {
           "inputs": [
@@ -8739,6 +8932,322 @@ export default {
             }
           ],
           "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
+    "WhitelistPreIntentHook": {
+      "address": "0xC665B159621B11d23C8b2832c89BBa8f1D29f407",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_orchestrator",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [],
+          "name": "EmptyArray",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "TakerNotWhitelisted",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "delegate",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedCallerOrDelegate",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedOrchestratorCaller",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroAddress",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            }
+          ],
+          "name": "TakerRemovedFromWhitelist",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            }
+          ],
+          "name": "TakerWhitelisted",
+          "type": "event"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address[]",
+              "name": "_takers",
+              "type": "address[]"
+            }
+          ],
+          "name": "addToWhitelist",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_taker",
+              "type": "address"
+            }
+          ],
+          "name": "isWhitelisted",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "orchestrator",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address[]",
+              "name": "_takers",
+              "type": "address[]"
+            }
+          ],
+          "name": "removeFromWhitelist",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "taker",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "escrow",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "depositId",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "amount",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "address",
+                  "name": "to",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "paymentMethod",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "fiatCurrency",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "conversionRate",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "address",
+                  "name": "referrer",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "referrerFee",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "preIntentHookData",
+                  "type": "bytes"
+                }
+              ],
+              "internalType": "struct IPreIntentHook.PreIntentContext",
+              "name": "_ctx",
+              "type": "tuple"
+            }
+          ],
+          "name": "validateSignalIntent",
+          "outputs": [],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "name": "whitelist",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
           "type": "function"
         }
       ]
