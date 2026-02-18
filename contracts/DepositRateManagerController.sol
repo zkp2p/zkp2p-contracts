@@ -2,8 +2,11 @@
 
 pragma solidity ^0.8.18;
 
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+
 import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IBaseRateManagerRegistry } from "./interfaces/IBaseRateManagerRegistry.sol";
+import { IOracleAdapter } from "./interfaces/IOracleAdapter.sol";
 import { IDepositRateManagerHook } from "./interfaces/IDepositRateManagerHook.sol";
 import { IDepositRateManagerController } from "./interfaces/IDepositRateManagerController.sol";
 
@@ -19,6 +22,13 @@ interface IPausable {
  * @notice External controller that stores per-deposit rate manager config and computes effective min rates.
  */
 contract DepositRateManagerController is IDepositRateManagerController {
+    using Math for uint256;
+
+    /* ============ Constants ============ */
+
+    uint256 internal constant BPS = 10_000;
+    uint256 internal constant MAX_ADAPTER_CONFIG_BYTES = 256;
+
     /* ============ Structs ============ */
 
     struct DepositManagerConfig {
@@ -26,10 +36,20 @@ contract DepositRateManagerController is IDepositRateManagerController {
         bytes32 rateManagerId;
     }
 
+    struct DepositOracleFloorConfig {
+        address adapter;
+        bytes adapterConfig;
+        uint16 spreadBps;
+        uint32 maxStaleness;
+        bool isConfigured;
+    }
+
     /* ============ State Variables ============ */
 
     // escrow => depositId => config
     mapping(address => mapping(uint256 => DepositManagerConfig)) internal depositManagerConfig;
+    // escrow => depositId => paymentMethod => currencyCode => oracle floor config
+    mapping(address => mapping(uint256 => mapping(bytes32 => mapping(bytes32 => DepositOracleFloorConfig)))) internal depositOracleFloorConfig;
 
     /* ============ External Functions ============ */
 
@@ -101,6 +121,103 @@ contract DepositRateManagerController is IDepositRateManagerController {
         emit DepositRateManagerCleared(_escrow, _depositId, prev.registry, prev.rateManagerId);
     }
 
+    /**
+     * @notice Sets or updates oracle floor config for a specific payment method + currency on a deposit.
+     * @dev Only callable by the depositor or delegate set on the deposit.
+     */
+    function setDepositOracleFloorConfig(
+        address _escrow,
+        uint256 _depositId,
+        bytes32 _paymentMethod,
+        bytes32 _currencyCode,
+        address _adapter,
+        bytes calldata _rawAdapterConfig,
+        uint16 _spreadBps,
+        uint32 _maxStaleness
+    )
+        external
+    {
+        if (_escrow == address(0)) revert ZeroAddress();
+
+        _requireNotPaused(_escrow);
+
+        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
+        _requireDepositorOrDelegate(deposit);
+
+        _setDepositOracleFloorConfig(
+            _escrow,
+            _depositId,
+            _paymentMethod,
+            _currencyCode,
+            _adapter,
+            _rawAdapterConfig,
+            _spreadBps,
+            _maxStaleness
+        );
+    }
+
+    /**
+     * @notice Batch sets or updates oracle floor configs for a deposit.
+     * @dev Only callable by the depositor or delegate set on the deposit.
+     */
+    function setDepositOracleFloorConfigs(
+        address _escrow,
+        uint256 _depositId,
+        OracleFloorConfigInput[] calldata _oracleFloorConfigs
+    )
+        external
+    {
+        if (_escrow == address(0)) revert ZeroAddress();
+
+        _requireNotPaused(_escrow);
+
+        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
+        _requireDepositorOrDelegate(deposit);
+
+        uint256 configCount = _oracleFloorConfigs.length;
+        for (uint256 i = 0; i < configCount; i++) {
+            OracleFloorConfigInput calldata floorConfig = _oracleFloorConfigs[i];
+            _setDepositOracleFloorConfig(
+                _escrow,
+                _depositId,
+                floorConfig.paymentMethod,
+                floorConfig.currencyCode,
+                floorConfig.adapter,
+                floorConfig.rawAdapterConfig,
+                floorConfig.spreadBps,
+                floorConfig.maxStaleness
+            );
+        }
+    }
+
+    /**
+     * @notice Clears oracle floor config for a specific payment method + currency on a deposit.
+     * @dev Only callable by the depositor or delegate set on the deposit.
+     */
+    function clearDepositOracleFloorConfig(
+        address _escrow,
+        uint256 _depositId,
+        bytes32 _paymentMethod,
+        bytes32 _currencyCode
+    )
+        external
+    {
+        if (_escrow == address(0)) revert ZeroAddress();
+        if (_paymentMethod == bytes32(0)) revert InvalidPaymentMethod();
+        if (_currencyCode == bytes32(0)) revert InvalidCurrency();
+
+        _requireNotPaused(_escrow);
+
+        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
+        _requireDepositorOrDelegate(deposit);
+
+        DepositOracleFloorConfig storage cfg = depositOracleFloorConfig[_escrow][_depositId][_paymentMethod][_currencyCode];
+        if (!cfg.isConfigured) revert OracleFloorConfigNotSet();
+
+        delete depositOracleFloorConfig[_escrow][_depositId][_paymentMethod][_currencyCode];
+        emit DepositOracleFloorConfigCleared(_escrow, _depositId, _paymentMethod, _currencyCode);
+    }
+
     /* ============ View Functions ============ */
 
     /**
@@ -125,6 +242,17 @@ contract DepositRateManagerController is IDepositRateManagerController {
         returns (uint256)
     {
         uint256 floorRate = IEscrow(_escrow).getDepositCurrencyMinRate(_depositId, _paymentMethod, _currencyCode);
+
+        // Enforce escrow-level currency whitelist.
+        if (floorRate == 0) {
+            return 0;
+        }
+
+        DepositOracleFloorConfig storage floorCfg = depositOracleFloorConfig[_escrow][_depositId][_paymentMethod][_currencyCode];
+        if (floorCfg.isConfigured) {
+            floorRate = _getEffectiveOracleFloorRate(floorCfg, floorRate);
+        }
+
         DepositManagerConfig memory cfg = depositManagerConfig[_escrow][_depositId];
 
         if (cfg.rateManagerId == bytes32(0)) {
@@ -180,7 +308,117 @@ contract DepositRateManagerController is IDepositRateManagerController {
         return (cfg.registry, cfg.rateManagerId);
     }
 
+    /**
+     * @notice Returns the depositor oracle floor config for a specific tuple.
+     */
+    function getDepositOracleFloorConfig(
+        address _escrow,
+        uint256 _depositId,
+        bytes32 _paymentMethod,
+        bytes32 _currencyCode
+    )
+        external
+        view
+        returns (
+            bool isConfigured,
+            address adapter,
+            bytes memory adapterConfig,
+            uint16 spreadBps,
+            uint32 maxStaleness
+        )
+    {
+        DepositOracleFloorConfig storage cfg = depositOracleFloorConfig[_escrow][_depositId][_paymentMethod][_currencyCode];
+        return (cfg.isConfigured, cfg.adapter, cfg.adapterConfig, cfg.spreadBps, cfg.maxStaleness);
+    }
+
     /* ============ Internal Functions ============ */
+
+    function _setDepositOracleFloorConfig(
+        address _escrow,
+        uint256 _depositId,
+        bytes32 _paymentMethod,
+        bytes32 _currencyCode,
+        address _adapter,
+        bytes calldata _rawAdapterConfig,
+        uint16 _spreadBps,
+        uint32 _maxStaleness
+    )
+        internal
+    {
+        if (_paymentMethod == bytes32(0)) revert InvalidPaymentMethod();
+        if (_currencyCode == bytes32(0)) revert InvalidCurrency();
+        if (_adapter == address(0) || _adapter.code.length == 0) revert InvalidAdapter();
+        if (_spreadBps > BPS) revert InvalidSpread();
+        if (_maxStaleness == 0) revert InvalidStaleness();
+
+        bytes memory normalizedAdapterConfig = IOracleAdapter(_adapter).validateConfig(_rawAdapterConfig);
+        if (normalizedAdapterConfig.length > MAX_ADAPTER_CONFIG_BYTES) revert InvalidAdapterConfig();
+
+        depositOracleFloorConfig[_escrow][_depositId][_paymentMethod][_currencyCode] = DepositOracleFloorConfig({
+            adapter: _adapter,
+            adapterConfig: normalizedAdapterConfig,
+            spreadBps: _spreadBps,
+            maxStaleness: _maxStaleness,
+            isConfigured: true
+        });
+
+        emit DepositOracleFloorConfigUpdated(
+            _escrow,
+            _depositId,
+            _paymentMethod,
+            _currencyCode,
+            _adapter,
+            _spreadBps,
+            _maxStaleness,
+            normalizedAdapterConfig
+        );
+    }
+
+    function _getEffectiveOracleFloorRate(
+        DepositOracleFloorConfig storage _oracleFloorConfig,
+        uint256 _fixedFloorRate
+    )
+        internal
+        view
+        returns (uint256)
+    {
+        (bool isValidQuote, uint256 marketRate, uint256 rateUpdatedAt) = _getOracleRate(_oracleFloorConfig);
+        if (!isValidQuote || marketRate == 0) {
+            return _fixedFloorRate;
+        }
+        if (rateUpdatedAt == 0 || rateUpdatedAt > block.timestamp) {
+            return _fixedFloorRate;
+        }
+        if (block.timestamp - rateUpdatedAt > _oracleFloorConfig.maxStaleness) {
+            return _fixedFloorRate;
+        }
+
+        uint256 dynamicFloorRate =
+            Math.mulDiv(marketRate, BPS + uint256(_oracleFloorConfig.spreadBps), BPS, Math.Rounding.Up);
+        return dynamicFloorRate > _fixedFloorRate ? dynamicFloorRate : _fixedFloorRate;
+    }
+
+    function _getOracleRate(DepositOracleFloorConfig storage _oracleFloorConfig)
+        internal
+        view
+        returns (bool isValidQuote, uint256 marketRate, uint256 rateUpdatedAt)
+    {
+        try IOracleAdapter(_oracleFloorConfig.adapter).getRate(_oracleFloorConfig.adapterConfig) returns (
+            bool valid_,
+            uint256 rate_,
+            uint256 updatedAt_
+        ) {
+            return (valid_, rate_, updatedAt_);
+        } catch {
+            return (false, 0, 0);
+        }
+    }
+
+    function _requireDepositorOrDelegate(IEscrow.Deposit memory _deposit) internal view {
+        if (msg.sender != _deposit.depositor && msg.sender != _deposit.delegate) {
+            revert UnauthorizedCallerOrDelegate(msg.sender, _deposit.depositor, _deposit.delegate);
+        }
+    }
 
     /**
      * @dev Reverts if the escrow is paused.
