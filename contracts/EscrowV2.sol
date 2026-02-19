@@ -1192,8 +1192,9 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
             bytes32[] memory singleIntent = new bytes32[](1);
             singleIntent[0] = intentHash;
 
-            try IOrchestrator(orchestratorAddress).pruneIntents(singleIntent) {} catch {}
-            delete intentOrchestrator[intentHash];
+            try IOrchestrator(orchestratorAddress).pruneIntents(singleIntent) {
+                delete intentOrchestrator[intentHash];
+            } catch {}
         }
     }
 

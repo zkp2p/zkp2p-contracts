@@ -73,6 +73,16 @@ describe("EscrowV2", () => {
     ]);
   }
 
+  async function getIntentOrchestrator(intentHash: BytesLike): Promise<string> {
+    const mappingSlot = 16;
+    const storageSlot = ethers.utils.solidityKeccak256(
+      ["bytes32", "uint256"],
+      [intentHash, mappingSlot]
+    );
+    const rawOrchestrator = await ethers.provider.getStorageAt(escrow.address, storageSlot);
+    return ethers.utils.getAddress(ethers.utils.hexDataSlice(rawOrchestrator, 12));
+  }
+
   beforeEach(async () => {
     [owner, depositor, delegate, other, intentGuardian, dustRecipient] = await getAccounts();
     deployer = new DeployHelper(owner.wallet);
@@ -570,6 +580,16 @@ describe("EscrowV2", () => {
       await expect(escrow.connect(other.wallet).pruneExpiredIntents(depositId)).to.not.be.reverted;
       const prunedIntent = await escrow.getDepositIntent(depositId, intentHash);
       expect(prunedIntent.intentHash).to.eq(ethers.constants.HashZero);
+    });
+
+    it("keeps intent orchestrator mapping when orchestrator prune reverts", async () => {
+      const intentHash = await createIntentWith(revertingPruneOrchestrator, usdc(20));
+      await increaseTime(3601);
+
+      await expect(escrow.connect(other.wallet).pruneExpiredIntents(depositId)).to.not.be.reverted;
+      const persistedOrchestrator = await getIntentOrchestrator(intentHash);
+
+      expect(persistedOrchestrator).to.eq(revertingPruneOrchestrator.address);
     });
 
     it("skips orchestrator call when intentOrchestrator is cleared", async () => {
