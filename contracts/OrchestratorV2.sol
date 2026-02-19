@@ -11,21 +11,22 @@ import { SignatureChecker } from "@openzeppelin/contracts/utils/cryptography/Sig
 import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import { AddressArrayUtils } from "./external/AddressArrayUtils.sol";
 import { Bytes32ArrayUtils } from "./external/Bytes32ArrayUtils.sol";
-import { IOrchestrator } from "./interfaces/IOrchestrator.sol";
+import { IOrchestratorV2 } from "./interfaces/IOrchestratorV2.sol";
 import { IEscrow } from "./interfaces/IEscrow.sol";
+import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
 import { IPostIntentHook } from "./interfaces/IPostIntentHook.sol";
+import { IPreIntentHook } from "./interfaces/IPreIntentHook.sol";
 import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
-import { IPostIntentHookRegistry } from "./interfaces/IPostIntentHookRegistry.sol";
 import { IRelayerRegistry } from "./interfaces/IRelayerRegistry.sol";
 
 /**
- * @title Orchestrator
+ * @title OrchestratorV2
  * @notice Orchestrator contract for the ZKP2P protocol. This contract is responsible for managing the intent (order) 
  * lifecycle and orchestrating the P2P trading of fiat currency and onchain assets.
  */
-contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
+contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
 
     using AddressArrayUtils for address[];
     using Bytes32ArrayUtils for bytes32[];
@@ -39,6 +40,7 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     uint256 constant CIRCOM_PRIME_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
     uint256 constant MAX_REFERRER_FEE = 5e16;      // 5% max referrer fee
     uint256 constant MAX_PROTOCOL_FEE = 5e16;      // 5% max protocol fee
+    uint256 constant MAX_MANAGER_FEE = 5e16;       // 5% max manager fee
 
     /* ============ State Variables ============ */
 
@@ -51,10 +53,19 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     // Used to prevent fulfillments that pay out less than the deposit's min intent amount.
     mapping(bytes32 => uint256) internal intentMinAtSignal;
 
+    // Snapshot of per-intent manager fee terms at the time of signal
+    mapping(bytes32 => address) internal intentManagerFeeRecipient;
+    mapping(bytes32 => uint256) internal intentManagerFee;
+
+    // Optional pre-intent hooks configured per escrow + depositId.
+    mapping(address => mapping(uint256 => IPreIntentHook)) internal depositPreIntentHooks;
+
+    // Dedicated whitelist hooks configured per escrow + depositId.
+    mapping(address => mapping(uint256 => IPreIntentHook)) internal depositWhitelistHooks;
+
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
     IPaymentVerifierRegistry public  paymentVerifierRegistry;          // Registry of payment verifiers
-    IPostIntentHookRegistry public postIntentHookRegistry;             // Registry of post intent hooks
     IRelayerRegistry public relayerRegistry;                           // Registry of relayers
 
     // Protocol fee configuration
@@ -71,7 +82,6 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         uint256 _chainId,
         address _escrowRegistry,
         address _paymentVerifierRegistry,
-        address _postIntentHookRegistry,
         address _relayerRegistry,
         uint256 _protocolFee,
         address _protocolFeeRecipient
@@ -81,7 +91,6 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         chainId = _chainId;
         escrowRegistry = IEscrowRegistry(_escrowRegistry);
         paymentVerifierRegistry = IPaymentVerifierRegistry(_paymentVerifierRegistry);
-        postIntentHookRegistry = IPostIntentHookRegistry(_postIntentHookRegistry);
         relayerRegistry = IRelayerRegistry(_relayerRegistry);
         protocolFee = _protocolFee;
         protocolFeeRecipient = _protocolFeeRecipient;
@@ -101,10 +110,13 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
      */
     function signalIntent(SignalIntentParams calldata _params)
         external
+        nonReentrant
         whenNotPaused
     {
         // Checks
         _validateSignalIntent(_params);
+        _executeHookIfSet(depositPreIntentHooks[_params.escrow][_params.depositId], _params);
+        _executeHookIfSet(depositWhitelistHooks[_params.escrow][_params.depositId], _params);
 
         // Effects
         bytes32 intentHash = _calculateIntentHash();
@@ -113,6 +125,12 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
             _params.depositId,
             _params.paymentMethod
         );
+
+        (address managerFeeRecipient, uint256 managerFee) = IEscrowV2(_params.escrow).getManagerFee(_params.depositId);
+        // Enforce manager fee cap regardless of registry implementation
+        if (managerFee > MAX_MANAGER_FEE) revert FeeExceedsMaximum(managerFee, MAX_MANAGER_FEE);  // policy cap (e.g., 5%)
+        intentManagerFeeRecipient[intentHash] = managerFeeRecipient;
+        intentManagerFee[intentHash] = managerFee;
         
         intentMinAtSignal[intentHash] = dep.intentAmountRange.min;
         intents[intentHash] = Intent({
@@ -148,6 +166,9 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
             block.timestamp
         );
 
+        // Emit manager fee snapshot last for easier indexing
+        emit IntentManagerFeeSnapshotted(intentHash, managerFeeRecipient, managerFee);
+
         // Interactions
         IEscrow(_params.escrow).lockFunds(_params.depositId, intentHash, _params.amount);
     }
@@ -173,8 +194,42 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     }
 
     /**
+     * @notice Sets or removes the pre-intent hook for a specific deposit.
+     * @dev Callable only by the deposit's depositor or delegate.
+     *
+     * @param _escrow       Escrow address.
+     * @param _depositId    Deposit id.
+     * @param _hook         Hook address (address(0) to remove).
+     */
+    function setDepositPreIntentHook(address _escrow, uint256 _depositId, IPreIntentHook _hook) external {
+        _validateAndAuthorizeHookSetter(_escrow, _depositId, _hook);
+
+        depositPreIntentHooks[_escrow][_depositId] = _hook;
+
+        emit DepositPreIntentHookSet(_escrow, _depositId, address(_hook), msg.sender);
+    }
+
+    /**
+     * @notice Sets or removes the whitelist hook for a specific deposit.
+     * @dev Callable only by the deposit's depositor or delegate. The whitelist hook is a
+     * dedicated slot separate from the generic pre-intent hook, enabling private orderbook
+     * functionality without occupying the generic hook slot.
+     *
+     * @param _escrow       Escrow address.
+     * @param _depositId    Deposit id.
+     * @param _hook         Hook address (address(0) to remove).
+     */
+    function setDepositWhitelistHook(address _escrow, uint256 _depositId, IPreIntentHook _hook) external {
+        _validateAndAuthorizeHookSetter(_escrow, _depositId, _hook);
+
+        depositWhitelistHooks[_escrow][_depositId] = _hook;
+
+        emit DepositWhitelistHookSet(_escrow, _depositId, address(_hook), msg.sender);
+    }
+
+    /**
      * @notice Anyone can submit a fulfill intent transaction, even if caller isn't the intent owner. Upon submission the
-     * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated. 
+     * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated.
      * Deposit token is transferred to the intent.to address.
      * @dev This function adds a reentrancy guard as it's calling the post intent hook contract which itself might call 
      * malicious contracts.
@@ -187,6 +242,10 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         if (intent.paymentMethod == bytes32(0)) revert IntentNotFound(_params.intentHash);
         
         IEscrow.Deposit memory deposit = IEscrow(intent.escrow).getDeposit(intent.depositId);
+
+        // Snapshot manager fee terms before pruning (pruning deletes the mappings).
+        address managerFeeRecipient = intentManagerFeeRecipient[_params.intentHash];
+        uint256 managerFee = intentManagerFee[_params.intentHash];
         
         address verifier = paymentVerifierRegistry.getVerifier(intent.paymentMethod);
         if (verifier == address(0)) revert PaymentMethodDoesNotExist(intent.paymentMethod);
@@ -218,7 +277,9 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
             _params.intentHash, 
             intent, 
             verificationResult.releaseAmount,
-            _params.postIntentHookData
+            _params.postIntentHookData,
+            managerFeeRecipient,
+            managerFee
         );
     }
 
@@ -236,6 +297,10 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
 
         IEscrow.Deposit memory deposit = IEscrow(intent.escrow).getDeposit(intent.depositId);
         if (deposit.depositor != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.depositor);
+
+        // Snapshot manager fee terms before pruning (pruning deletes the mappings).
+        address managerFeeRecipient = intentManagerFeeRecipient[_intentHash];
+        uint256 managerFee = intentManagerFee[_intentHash];
         
         // Effects
         _pruneIntent(_intentHash);
@@ -243,7 +308,7 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         // Interactions
         IEscrow(intent.escrow).unlockAndTransferFunds(intent.depositId, _intentHash, intent.amount, address(this));
 
-        _collectFeesAndTransferFunds(deposit.token, _intentHash, intent, intent.amount);
+        _collectFeesAndTransferFunds(deposit.token, _intentHash, intent, intent.amount, managerFeeRecipient, managerFee);
     }
 
     /* ============ Escrow Functions ============ */
@@ -265,6 +330,36 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
                 ) {
                     _pruneIntent(intentHash);
                 }
+            }
+        }
+    }
+
+    /* ============ Anyone callable (External Functions) ============ */
+
+    /**
+     * @notice ANYONE: Cleans up orphaned intents that were pruned from the Escrow but not from the Orchestrator.
+     * An intent is considered orphaned if it exists on the Orchestrator but no longer exists on the Escrow.
+     * This can happen when Escrow._tryOrchestratorPruneIntents runs out of gas and the revert is silently caught.
+     *
+     * @param _intentHashes    Array of intent hashes to check and clean up
+     */
+    function cleanupOrphanedIntents(bytes32[] calldata _intentHashes) external {
+        for (uint256 i = 0; i < _intentHashes.length; i++) {
+            bytes32 intentHash = _intentHashes[i];
+            Intent memory intent = intents[intentHash];
+
+            // Skip if intent doesn't exist on orchestrator
+            if (intent.timestamp == 0) continue;
+
+            // Check if intent still exists on the escrow
+            IEscrow.Intent memory escrowIntent = IEscrow(intent.escrow).getDepositIntent(
+                intent.depositId,
+                intentHash
+            );
+
+            // If intent doesn't exist on escrow, it's orphaned — prune it
+            if (escrowIntent.intentHash == bytes32(0)) {
+                _pruneIntent(intentHash);
             }
         }
     }
@@ -320,18 +415,6 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     }
 
     /**
-     * @notice GOVERNANCE ONLY: Updates the post intent hook registry address.
-     *
-     * @param _postIntentHookRegistry   New post intent hook registry address
-     */
-    function setPostIntentHookRegistry(address _postIntentHookRegistry) external onlyOwner {
-        if (_postIntentHookRegistry == address(0)) revert ZeroAddress();
-        
-        postIntentHookRegistry = IPostIntentHookRegistry(_postIntentHookRegistry);
-        emit PostIntentHookRegistryUpdated(_postIntentHookRegistry);
-    }
-
-    /**
      * @notice GOVERNANCE ONLY: Updates the relayer registry address.
      *
      * @param _relayerRegistry   New relayer registry address
@@ -378,6 +461,14 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         return accountIntents[_account];
     }
 
+    function getDepositPreIntentHook(address _escrow, uint256 _depositId) external view returns (IPreIntentHook) {
+        return depositPreIntentHooks[_escrow][_depositId];
+    }
+
+    function getDepositWhitelistHook(address _escrow, uint256 _depositId) external view returns (IPreIntentHook) {
+        return depositWhitelistHooks[_escrow][_depositId];
+    }
+
     function getIntentMinAtSignal(bytes32 _intentHash) external view returns (uint256) {
         return intentMinAtSignal[_intentHash];
     }
@@ -402,8 +493,8 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         }
 
         if (address(_intent.postIntentHook) != address(0)) {
-            if (!postIntentHookRegistry.isWhitelistedHook(address(_intent.postIntentHook))) {
-                revert PostIntentHookNotWhitelisted(address(_intent.postIntentHook));
+            if (address(_intent.postIntentHook).code.length == 0) {
+                revert InvalidPostIntentHook(address(_intent.postIntentHook));
             }
         }
 
@@ -419,8 +510,10 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         bool isPaymentMethodActive = IEscrow(_intent.escrow).getDepositPaymentMethodActive(_intent.depositId, _intent.paymentMethod);
         if (!isPaymentMethodActive) revert PaymentMethodNotSupported(_intent.paymentMethod);
         
-        uint256 minConversionRate = IEscrow(_intent.escrow).getDepositCurrencyMinRate(
-            _intent.depositId, _intent.paymentMethod, _intent.fiatCurrency
+        uint256 minConversionRate = IEscrowV2(_intent.escrow).getEffectiveRate(
+            _intent.depositId,
+            _intent.paymentMethod,
+            _intent.fiatCurrency
         );
         if (minConversionRate == 0) revert CurrencyNotSupported(_intent.paymentMethod, _intent.fiatCurrency);
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
@@ -436,6 +529,50 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
                 revert InvalidSignature();
             }
         }
+    }
+
+    /**
+     * @notice Validates hook address and authorizes the caller as depositor or delegate.
+     * @dev Shared validation for setDepositPreIntentHook and setDepositWhitelistHook.
+     */
+    function _validateAndAuthorizeHookSetter(address _escrow, uint256 _depositId, IPreIntentHook _hook) internal view {
+        if (_escrow == address(0)) revert ZeroAddress();
+
+        address hookAddress = address(_hook);
+        if (hookAddress != address(0) && hookAddress.code.length == 0) {
+            revert InvalidPreIntentHook(hookAddress);
+        }
+
+        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
+        bool isDepositorOrDelegate = msg.sender == deposit.depositor
+            || (deposit.delegate != address(0) && msg.sender == deposit.delegate);
+        if (!isDepositorOrDelegate) {
+            revert UnauthorizedCallerOrDelegate(msg.sender, deposit.depositor, deposit.delegate);
+        }
+    }
+
+    /**
+     * @notice Executes a pre-intent hook if the address is non-zero.
+     * @dev Shared by both the generic pre-intent hook and the dedicated whitelist hook.
+     */
+    function _executeHookIfSet(IPreIntentHook _hook, SignalIntentParams calldata _params) internal {
+        if (address(_hook) == address(0)) return;
+
+        _hook.validateSignalIntent(
+            IPreIntentHook.PreIntentContext({
+                taker: msg.sender,
+                escrow: _params.escrow,
+                depositId: _params.depositId,
+                amount: _params.amount,
+                to: _params.to,
+                paymentMethod: _params.paymentMethod,
+                fiatCurrency: _params.fiatCurrency,
+                conversionRate: _params.conversionRate,
+                referrer: _params.referrer,
+                referrerFee: _params.referrerFee,
+                preIntentHookData: _params.preIntentHookData
+            })
+        );
     }
 
     /**
@@ -465,6 +602,8 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         accountIntents[intent.owner].removeStorage(_intentHash);
         delete intents[_intentHash];
         delete intentMinAtSignal[_intentHash];
+        delete intentManagerFeeRecipient[_intentHash];
+        delete intentManagerFee[_intentHash];
 
         emit IntentPruned(_intentHash);
     }
@@ -475,10 +614,13 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     function _calculateAndTransferFees(
         IERC20 _token,
         Intent memory _intent, 
-        uint256 _releaseAmount
+        uint256 _releaseAmount,
+        address _managerFeeRecipient,
+        uint256 _managerFee
     ) internal returns (uint256 netFees) {
         uint256 protocolFeeAmount;
         uint256 referrerFeeAmount; 
+        uint256 managerFeeAmount;
 
         // Calculate protocol fee (taken from taker) - based on release amount
         if (protocolFeeRecipient != address(0) && protocolFee > 0) {
@@ -492,7 +634,13 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
             _token.safeTransfer(_intent.referrer, referrerFeeAmount);
         }
 
-        netFees = protocolFeeAmount + referrerFeeAmount;
+        // Calculate manager fee (taken from taker) - based on release amount
+        if (_managerFeeRecipient != address(0) && _managerFee > 0) {
+            managerFeeAmount = (_releaseAmount * _managerFee) / PRECISE_UNIT;
+            _token.safeTransfer(_managerFeeRecipient, managerFeeAmount);
+        }
+
+        netFees = protocolFeeAmount + referrerFeeAmount + managerFeeAmount;
     }
 
     /**
@@ -502,9 +650,11 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         IERC20 _token, 
         bytes32 _intentHash, 
         Intent memory _intent,
-        uint256 _releaseAmount
+        uint256 _releaseAmount,
+        address _managerFeeRecipient,
+        uint256 _managerFee
     ) internal {
-        uint256 netFees = _calculateAndTransferFees(_token, _intent, _releaseAmount);
+        uint256 netFees = _calculateAndTransferFees(_token, _intent, _releaseAmount, _managerFeeRecipient, _managerFee);
         uint256 netAmount = _releaseAmount - netFees;
 
         _token.safeTransfer(_intent.to, netAmount);
@@ -525,9 +675,11 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
         bytes32 _intentHash, 
         Intent memory _intent, 
         uint256 _releaseAmount,
-        bytes memory _postIntentHookData
+        bytes memory _postIntentHookData,
+        address _managerFeeRecipient,
+        uint256 _managerFee
     ) internal {
-        uint256 netFees = _calculateAndTransferFees(_token, _intent, _releaseAmount);
+        uint256 netFees = _calculateAndTransferFees(_token, _intent, _releaseAmount, _managerFeeRecipient, _managerFee);
         uint256 netAmount = _releaseAmount - netFees;
 
         address fundsTransferredTo = _intent.to;

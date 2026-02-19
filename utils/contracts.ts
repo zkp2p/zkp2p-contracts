@@ -1,15 +1,22 @@
 export {
   USDCMock,
   PaymentVerifierMock,
+  PreIntentHookMock,
   ThresholdSigVerifierUtilsMock,
   PostIntentHookMock,
   ReentrantPostIntentHook,
+  ReentrantPreIntentHookMock,
+  ReentrantSignalIntentCallerMock,
   OrchestratorMock,
   Escrow,
+  EscrowV2,
   ProtocolViewer,
   Orchestrator,
+  OrchestratorV2,
+  RateManagerV1,
+  OrchestratorRegistry,
+  RateManagerMock,
   PaymentVerifierRegistry,
-  PostIntentHookRegistry,
   RelayerRegistry,
   EscrowRegistry,
   NullifierRegistry,
@@ -20,7 +27,13 @@ export {
   IPaymentVerifier,
   PartialPullPostIntentHookMock,
   PushPostIntentHookMock,
-  ReentrantOrchestratorMock
+  ReentrantOrchestratorMock,
+  SignatureGatingPreIntentHook,
+  WhitelistPreIntentHook,
+  IRateManager,
+  IEscrowV2,
+  IOrchestratorV2,
+  IOrchestratorRegistry
 } from "../typechain";
 export { IEscrow } from "../typechain/contracts/Escrow";
 export { IOrchestrator } from "../typechain/contracts/Orchestrator";

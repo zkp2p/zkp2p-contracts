@@ -7,7 +7,6 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import { IAcrossSpokePool } from "../external/Interfaces/IAcrossSpokePool.sol";
-import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
 import { IPostIntentHook } from "../interfaces/IPostIntentHook.sol";
 
 /**
@@ -71,14 +70,12 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
      *      Typical values range from 1800 (30 min) to 21600 (6 hours) depending on route.
      *      exclusiveRelayer and exclusivityParameter should come from Across suggested-fees API
      *      to ensure deposits are prioritized by relayers.
-     * @param intentHash Hash of the intent being fulfilled
      * @param outputAmount Amount of tokens to receive on destination chain
      * @param fillDeadlineOffset Seconds from current time until fill deadline
      * @param exclusiveRelayer Address (as bytes32) of the exclusive relayer from Across API
      * @param exclusivityParameter Seconds of exclusivity for the exclusive relayer
      */
     struct AcrossFulfillData {
-        bytes32 intentHash;
         uint256 outputAmount;
         uint32 fillDeadlineOffset;
         bytes32 exclusiveRelayer;
@@ -126,6 +123,8 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
         FallbackReason reason
     );
 
+    event OrchestratorUpdated(address indexed previousOrchestrator, address indexed newOrchestrator);
+
     event RescueERC20(address indexed token, address indexed to, uint256 amount);
     event RescueNative(address indexed to, uint256 amount);
 
@@ -133,18 +132,21 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
 
     error ZeroAddress();
     error UnauthorizedCaller(address caller);
+    error InvalidFulfillHookDataLength(uint256 dataLength);
     error InvalidDestinationChainId(uint256 destinationChainId);
     error InvalidRecipient(bytes32 recipient);
     error InvalidOutputToken(bytes32 outputToken);
     /// @dev Reverts fulfillIntent if outputAmount < minOutputAmount. For volatile assets,
     ///      this can occur if price dropped between signalIntent and fulfillIntent.
     error NativeTransferFailed(address to, uint256 amount);
+    error SameOrchestrator(address orchestrator);
 
     /* ============ State Variables ============ */
 
     IERC20 public immutable inputToken;
-    address public immutable orchestrator;
+    address public orchestrator;
     IAcrossSpokePool public immutable spokePool;
+    uint256 private constant ACROSS_FULFILL_DATA_LENGTH = 128;
 
     /* ============ Constructor ============ */
 
@@ -176,25 +178,27 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
      *      directly to intent.to on the source chain instead of reverting. This ensures the user
      *      always receives their funds after making an off-chain payment, preventing permanent loss.
      *
-     * @param _intent Intent data passed by Orchestrator (includes commitment in intent.data)
-     * @param _amountNetFees Net USDC amount after fees
-     * @param _fulfillIntentData ABI-encoded AcrossFulfillData
+     * @param _ctx Hook execution context passed by Orchestrator
+     * @param _fulfillHookData ABI-encoded AcrossFulfillData
      */
     function execute(
-        IOrchestrator.Intent memory _intent,
-        uint256 _amountNetFees,
-        bytes calldata _fulfillIntentData
+        HookExecutionContext calldata _ctx,
+        bytes calldata _fulfillHookData
     ) external override {
-        if (msg.sender != orchestrator) revert UnauthorizedCaller(msg.sender);
+        address activeOrchestrator = orchestrator;
+        if (msg.sender != activeOrchestrator) revert UnauthorizedCaller(msg.sender);
+        if (_fulfillHookData.length != ACROSS_FULFILL_DATA_LENGTH) {
+            revert InvalidFulfillHookDataLength(_fulfillHookData.length);
+        }
 
-        BridgeCommitment memory commitment = abi.decode(_intent.data, (BridgeCommitment));
-        AcrossFulfillData memory fulfillData = abi.decode(_fulfillIntentData, (AcrossFulfillData));
+        BridgeCommitment memory commitment = abi.decode(_ctx.intent.signalHookData, (BridgeCommitment));
+        AcrossFulfillData memory fulfillData = abi.decode(_fulfillHookData, (AcrossFulfillData));
 
         // Validate non-price parameters (these should always revert if invalid)
         _validateNonPriceCommitment(commitment);
 
         // Pull tokens from Orchestrator first (before any fallback logic)
-        inputToken.safeTransferFrom(orchestrator, address(this), _amountNetFees);
+        inputToken.safeTransferFrom(activeOrchestrator, address(this), _ctx.executableAmount);
 
         // Check if bridge is viable based on price
         bool bridgeViable = _isBridgeViable(fulfillData, commitment.minOutputAmount);
@@ -202,7 +206,7 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
         if (bridgeViable) {
             // Set approval for bridge attempt
             inputToken.safeApprove(address(spokePool), 0);
-            inputToken.safeApprove(address(spokePool), _amountNetFees);
+            inputToken.safeApprove(address(spokePool), _ctx.executableAmount);
 
             // Try bridge deposit - use try-catch for graceful degradation
             try spokePool.depositNow(
@@ -210,7 +214,7 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
                 commitment.recipient,              // recipient (already bytes32)
                 _toBytes32(address(inputToken)),   // inputToken
                 commitment.outputToken,            // outputToken (already bytes32)
-                _amountNetFees,
+                _ctx.executableAmount,
                 fulfillData.outputAmount,
                 commitment.destinationChainId,
                 fulfillData.exclusiveRelayer,      // from Across suggested-fees API
@@ -221,11 +225,11 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
                 // Bridge succeeded - reset approval and emit success event
                 inputToken.safeApprove(address(spokePool), 0);
                 emit AcrossBridgeInitiated(
-                    fulfillData.intentHash,
+                    _ctx.intentHash,
                     commitment.destinationChainId,
                     commitment.outputToken,
                     commitment.recipient,
-                    _amountNetFees,
+                    _ctx.executableAmount,
                     fulfillData.outputAmount,
                     fulfillData.fillDeadlineOffset,
                     fulfillData.exclusiveRelayer,
@@ -240,13 +244,23 @@ contract AcrossBridgeHook is IPostIntentHook, Ownable {
 
         // Fallback: transfer to intent.to on source chain
         // This ensures user receives funds even if bridge fails
-        inputToken.safeTransfer(_intent.to, _amountNetFees);
+        inputToken.safeTransfer(_ctx.intent.to, _ctx.executableAmount);
         emit FallbackTransfer(
-            fulfillData.intentHash,
-            _intent.to,
-            _amountNetFees,
+            _ctx.intentHash,
+            _ctx.intent.to,
+            _ctx.executableAmount,
             bridgeViable ? FallbackReason.BRIDGE_CALL_FAILED : FallbackReason.OUTPUT_BELOW_MINIMUM
         );
+    }
+
+    function setOrchestrator(address _newOrchestrator) external onlyOwner {
+        if (_newOrchestrator == address(0)) revert ZeroAddress();
+        if (_newOrchestrator == orchestrator) revert SameOrchestrator(_newOrchestrator);
+
+        address previousOrchestrator = orchestrator;
+        orchestrator = _newOrchestrator;
+
+        emit OrchestratorUpdated(previousOrchestrator, _newOrchestrator);
     }
 
     /**
