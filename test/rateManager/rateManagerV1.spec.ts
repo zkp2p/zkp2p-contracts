@@ -14,6 +14,7 @@ import {
   PaymentVerifierMock,
   PaymentVerifierRegistry,
   RateManagerV1,
+  RevertingOracleAdapterMock,
   StaticOracleAdapterMock,
   USDCMock,
 } from "@utils/contracts";
@@ -36,6 +37,7 @@ describe("RateManagerV1", () => {
   let paymentVerifierRegistry: PaymentVerifierRegistry;
   let verifier: PaymentVerifierMock;
   let staticOracleAdapter: StaticOracleAdapterMock;
+  let revertingOracleAdapter: RevertingOracleAdapterMock;
 
   let paymentMethod: BytesLike;
   let payeeDetails: BytesLike;
@@ -70,6 +72,9 @@ describe("RateManagerV1", () => {
     staticOracleAdapter = (await (
       await ethers.getContractFactory("StaticOracleAdapterMock", owner.wallet)
     ).deploy()) as StaticOracleAdapterMock;
+    revertingOracleAdapter = (await (
+      await ethers.getContractFactory("RevertingOracleAdapterMock", owner.wallet)
+    ).deploy()) as RevertingOracleAdapterMock;
 
     paymentMethod = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
     payeeDetails = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("payee"));
@@ -216,6 +221,335 @@ describe("RateManagerV1", () => {
     });
   });
 
+  describe("#setRateManagerConfig", () => {
+    let subjectCaller: any;
+    let subjectManager: string;
+    let subjectFeeRecipient: string;
+    let subjectName: string;
+    let subjectUri: string;
+
+    async function subject() {
+      return rateManagerV1
+        .connect(subjectCaller.wallet)
+        .setRateManagerConfig(rateManagerId, subjectManager, subjectFeeRecipient, subjectName, subjectUri);
+    }
+
+    beforeEach(async () => {
+      subjectCaller = manager;
+      subjectManager = other.address;
+      subjectFeeRecipient = other.address;
+      subjectName = "Updated RM";
+      subjectUri = "ipfs://updated";
+    });
+
+    it("updates rate manager config fields", async () => {
+      await expect(subject())
+        .to.emit(rateManagerV1, "RateManagerConfigUpdated")
+        .withArgs(rateManagerId, subjectManager, subjectFeeRecipient, subjectName, subjectUri);
+
+      const updatedConfig = await rateManagerV1.getRateManager(rateManagerId);
+      expect(updatedConfig.manager).to.eq(subjectManager);
+      expect(updatedConfig.feeRecipient).to.eq(subjectFeeRecipient);
+      expect(updatedConfig.name).to.eq(subjectName);
+      expect(updatedConfig.uri).to.eq(subjectUri);
+    });
+
+    describe("when manager is zero address", () => {
+      beforeEach(async () => {
+        subjectManager = ADDRESS_ZERO;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroAddress");
+      });
+    });
+
+    describe("when current fee is non-zero and fee recipient is zero address", () => {
+      beforeEach(async () => {
+        subjectFeeRecipient = ADDRESS_ZERO;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroAddress");
+      });
+    });
+
+    describe("when current fee is zero and fee recipient is zero address", () => {
+      beforeEach(async () => {
+        await rateManagerV1.connect(manager.wallet).setFee(rateManagerId, ZERO);
+        subjectFeeRecipient = ADDRESS_ZERO;
+      });
+
+      it("updates config", async () => {
+        await subject();
+        const updatedConfig = await rateManagerV1.getRateManager(rateManagerId);
+        expect(updatedConfig.feeRecipient).to.eq(ADDRESS_ZERO);
+      });
+    });
+  });
+
+  describe("#setRateBatch", () => {
+    let subjectCaller: any;
+    let subjectPaymentMethods: BytesLike[];
+    let subjectCurrencyCodes: BytesLike[][];
+    let subjectRates: BigNumber[][];
+
+    async function subject() {
+      return rateManagerV1
+        .connect(subjectCaller.wallet)
+        .setRateBatch(rateManagerId, subjectPaymentMethods, subjectCurrencyCodes, subjectRates);
+    }
+
+    beforeEach(async () => {
+      subjectCaller = manager;
+      subjectPaymentMethods = [paymentMethod];
+      subjectCurrencyCodes = [[Currency.USD]];
+      subjectRates = [[ether(1.15)]];
+    });
+
+    it("sets manager rates in batch and emits aggregate event", async () => {
+      await expect(subject())
+        .to.emit(rateManagerV1, "RateManagerRatesBatchUpdated")
+        .withArgs(rateManagerId, 1);
+
+      const managerRate = await rateManagerV1.getManagerRate(rateManagerId, paymentMethod, Currency.USD);
+      expect(managerRate).to.eq(ether(1.15));
+    });
+
+    describe("when payment methods length does not match currencies length", () => {
+      beforeEach(async () => {
+        subjectCurrencyCodes = [];
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ArrayLengthMismatch");
+      });
+    });
+
+    describe("when payment methods length does not match rates length", () => {
+      beforeEach(async () => {
+        subjectRates = [];
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ArrayLengthMismatch");
+      });
+    });
+
+    describe("when currency codes length does not match rates length for an index", () => {
+      beforeEach(async () => {
+        subjectCurrencyCodes = [[Currency.USD, ethers.constants.HashZero]];
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ArrayLengthMismatch");
+      });
+    });
+
+    describe("when payment method is zero", () => {
+      beforeEach(async () => {
+        subjectPaymentMethods = [ethers.constants.HashZero];
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroValue");
+      });
+    });
+
+    describe("when currency code is zero", () => {
+      beforeEach(async () => {
+        subjectCurrencyCodes = [[ethers.constants.HashZero]];
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroValue");
+      });
+    });
+  });
+
+  describe("#setDepositorFloorBatch", () => {
+    let subjectCaller: any;
+    let subjectPaymentMethods: BytesLike[];
+    let subjectCurrencyCodes: BytesLike[][];
+    let subjectConfigs: any[][];
+
+    async function subject() {
+      return rateManagerV1
+        .connect(subjectCaller.wallet)
+        .setDepositorFloorBatch(
+          rateManagerId,
+          escrow.address,
+          ZERO,
+          subjectPaymentMethods,
+          subjectCurrencyCodes,
+          subjectConfigs as any
+        );
+    }
+
+    beforeEach(async () => {
+      subjectCaller = depositor;
+      subjectPaymentMethods = [paymentMethod];
+      subjectCurrencyCodes = [[Currency.USD]];
+      subjectConfigs = [[{
+        floorFixed: ether(1.05),
+        floorSpreadBps: 0,
+        oracleAdapter: ADDRESS_ZERO,
+        adapterConfig: "0x",
+        maxStaleness: 0,
+      }]];
+    });
+
+    it("sets depositor floors in batch", async () => {
+      await expect(subject()).to.emit(rateManagerV1, "DepositorFloorSet");
+      const floorConfig = await rateManagerV1.getDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD
+      );
+      expect(floorConfig.floorFixed).to.eq(ether(1.05));
+    });
+
+    describe("when payment methods length does not match currencies length", () => {
+      beforeEach(async () => {
+        subjectCurrencyCodes = [];
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ArrayLengthMismatch");
+      });
+    });
+
+    describe("when payment methods length does not match configs length", () => {
+      beforeEach(async () => {
+        subjectConfigs = [];
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ArrayLengthMismatch");
+      });
+    });
+
+    describe("when currency codes length does not match config length for an index", () => {
+      beforeEach(async () => {
+        subjectCurrencyCodes = [[Currency.USD, ethers.constants.HashZero]];
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ArrayLengthMismatch");
+      });
+    });
+  });
+
+  describe("#setDepositorFloor", () => {
+    let subjectCaller: any;
+    let subjectConfig: any;
+
+    async function subject() {
+      return rateManagerV1.connect(subjectCaller.wallet).setDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        subjectConfig
+      );
+    }
+
+    beforeEach(async () => {
+      subjectCaller = depositor;
+      subjectConfig = {
+        floorFixed: ether(1),
+        floorSpreadBps: 0,
+        oracleAdapter: ADDRESS_ZERO,
+        adapterConfig: "0x",
+        maxStaleness: 0,
+      };
+    });
+
+    describe("when oracle adapter is zero but oracle fields are non-empty", () => {
+      beforeEach(async () => {
+        subjectConfig = {
+          floorFixed: ether(1),
+          floorSpreadBps: 1,
+          oracleAdapter: ADDRESS_ZERO,
+          adapterConfig: "0x1234",
+          maxStaleness: 1,
+        };
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "InvalidOracleAdapter");
+      });
+    });
+  });
+
+  describe("#setDepositorCurrencyEnabledBatch", () => {
+    let subjectCaller: any;
+    let subjectPaymentMethods: BytesLike[];
+    let subjectCurrencyCodes: BytesLike[][];
+    let subjectEnabled: boolean[][];
+
+    async function subject() {
+      return rateManagerV1
+        .connect(subjectCaller.wallet)
+        .setDepositorCurrencyEnabledBatch(
+          rateManagerId,
+          escrow.address,
+          ZERO,
+          subjectPaymentMethods,
+          subjectCurrencyCodes,
+          subjectEnabled
+        );
+    }
+
+    beforeEach(async () => {
+      subjectCaller = depositor;
+      subjectPaymentMethods = [paymentMethod];
+      subjectCurrencyCodes = [[Currency.USD]];
+      subjectEnabled = [[true]];
+    });
+
+    it("sets enabled flags in batch", async () => {
+      await expect(subject()).to.emit(rateManagerV1, "DepositorCurrencyEnabledSet");
+
+      expect(
+        await rateManagerV1.isDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD)
+      ).to.eq(true);
+    });
+
+    describe("when payment methods length does not match currencies length", () => {
+      beforeEach(async () => {
+        subjectCurrencyCodes = [];
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ArrayLengthMismatch");
+      });
+    });
+
+    describe("when payment methods length does not match enabled length", () => {
+      beforeEach(async () => {
+        subjectEnabled = [];
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ArrayLengthMismatch");
+      });
+    });
+
+    describe("when currency codes length does not match enabled length for an index", () => {
+      beforeEach(async () => {
+        subjectCurrencyCodes = [[Currency.USD, ethers.constants.HashZero]];
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ArrayLengthMismatch");
+      });
+    });
+  });
+
   describe("#getRate", () => {
     beforeEach(async () => {
       await rateManagerV1.connect(manager.wallet).setRate(rateManagerId, paymentMethod, Currency.USD, ether(1.1));
@@ -233,6 +567,18 @@ describe("RateManagerV1", () => {
 
       const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
       expect(rate).to.eq(ether(1.1));
+    });
+
+    it("returns zero when manager rate is not configured", async () => {
+      await rateManagerV1
+        .connect(manager.wallet)
+        .setRate(rateManagerId, paymentMethod, Currency.USD, ZERO);
+      await rateManagerV1
+        .connect(depositor.wallet)
+        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
+
+      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
+      expect(rate).to.eq(ZERO);
     });
 
     it("returns max(floorFixed, managerRate)", async () => {
@@ -288,6 +634,165 @@ describe("RateManagerV1", () => {
       const expectedFloor = ether(1.3).mul(10_100).add(9_999).div(10_000);
       const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
       expect(rate).to.eq(expectedFloor);
+    });
+
+    it("falls back to manager rate when oracle quote is invalid", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [false, ether(1.3), currentTimestamp]
+      );
+
+      await rateManagerV1
+        .connect(depositor.wallet)
+        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
+
+      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          floorFixed: ZERO,
+          floorSpreadBps: 200,
+          oracleAdapter: staticOracleAdapter.address,
+          adapterConfig,
+          maxStaleness: 3600,
+        }
+      );
+
+      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
+      expect(rate).to.eq(ether(1.1));
+    });
+
+    it("falls back to manager rate when oracle timestamp is in the future", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1.3), currentTimestamp + 100]
+      );
+
+      await rateManagerV1
+        .connect(depositor.wallet)
+        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
+
+      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          floorFixed: ZERO,
+          floorSpreadBps: 200,
+          oracleAdapter: staticOracleAdapter.address,
+          adapterConfig,
+          maxStaleness: 3600,
+        }
+      );
+
+      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
+      expect(rate).to.eq(ether(1.1));
+    });
+
+    it("falls back to manager rate when oracle quote is stale", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1.3), currentTimestamp - 8_000]
+      );
+
+      await rateManagerV1
+        .connect(depositor.wallet)
+        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
+
+      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          floorFixed: ZERO,
+          floorSpreadBps: 200,
+          oracleAdapter: staticOracleAdapter.address,
+          adapterConfig,
+          maxStaleness: 3600,
+        }
+      );
+
+      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
+      expect(rate).to.eq(ether(1.1));
+    });
+
+    it("falls back to manager rate when oracle adapter reverts", async () => {
+      await rateManagerV1
+        .connect(depositor.wallet)
+        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
+
+      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          floorFixed: ZERO,
+          floorSpreadBps: 200,
+          oracleAdapter: revertingOracleAdapter.address,
+          adapterConfig: "0x1234",
+          maxStaleness: 3600,
+        }
+      );
+
+      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
+      expect(rate).to.eq(ether(1.1));
+    });
+  });
+
+  describe("view getters", () => {
+    it("returns rate manager config via getRateManager", async () => {
+      const config = await rateManagerV1.getRateManager(rateManagerId);
+      expect(config.manager).to.eq(manager.address);
+      expect(config.feeRecipient).to.eq(feeRecipient.address);
+    });
+
+    it("returns depositor floor via getDepositorFloor", async () => {
+      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          floorFixed: ether(1.07),
+          floorSpreadBps: 0,
+          oracleAdapter: ADDRESS_ZERO,
+          adapterConfig: "0x",
+          maxStaleness: 0,
+        }
+      );
+
+      const floor = await rateManagerV1.getDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD
+      );
+
+      expect(floor.floorFixed).to.eq(ether(1.07));
+    });
+
+    it("returns depositor currency enabled via isDepositorCurrencyEnabled", async () => {
+      await rateManagerV1
+        .connect(depositor.wallet)
+        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
+
+      expect(
+        await rateManagerV1.isDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD)
+      ).to.eq(true);
     });
   });
 

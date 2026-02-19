@@ -13,6 +13,7 @@ import {
   OrchestratorRegistry,
   PaymentVerifierMock,
   PaymentVerifierRegistry,
+  RevertingOracleAdapterMock,
   StaticOracleAdapterMock,
   USDCMock,
 } from "@utils/contracts";
@@ -33,6 +34,7 @@ describe("EscrowV2", () => {
   let paymentVerifierRegistry: PaymentVerifierRegistry;
   let verifier: PaymentVerifierMock;
   let staticOracleAdapter: StaticOracleAdapterMock;
+  let revertingOracleAdapter: RevertingOracleAdapterMock;
 
   let paymentMethod: BytesLike;
   let payeeDetails: BytesLike;
@@ -50,6 +52,9 @@ describe("EscrowV2", () => {
     staticOracleAdapter = (await (
       await ethers.getContractFactory("StaticOracleAdapterMock", owner.wallet)
     ).deploy()) as StaticOracleAdapterMock;
+    revertingOracleAdapter = (await (
+      await ethers.getContractFactory("RevertingOracleAdapterMock", owner.wallet)
+    ).deploy()) as RevertingOracleAdapterMock;
 
     paymentMethod = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
     payeeDetails = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("payee"));
@@ -162,6 +167,35 @@ describe("EscrowV2", () => {
       expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
     });
 
+    it("falls back to fixed floor when oracle timestamp is in the future", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      subjectUpdatedAt = BigNumber.from(currentTimestamp + 300);
+      await subject();
+
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
+    });
+
+    it("falls back to fixed floor when oracle adapter reverts", async () => {
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1), subjectUpdatedAt]
+      );
+
+      await escrow.connect(subjectCaller.wallet).setOracleRateConfig(
+        ZERO,
+        paymentMethod,
+        subjectCurrencyCode,
+        {
+          adapter: revertingOracleAdapter.address,
+          adapterConfig,
+          spreadBps: subjectSpreadBps,
+          maxStaleness: subjectMaxStaleness,
+        }
+      );
+
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
+    });
+
     it("allows delegate to set config", async () => {
       subjectCaller = delegate;
 
@@ -217,6 +251,13 @@ describe("EscrowV2", () => {
 
       expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
     });
+
+    it("reverts when tuple is not listed", async () => {
+      const unsupported = ethers.utils.formatBytes32String("JPY");
+      await expect(
+        escrow.connect(subjectCaller.wallet).removeOracleRateConfig(ZERO, paymentMethod, unsupported)
+      ).to.be.revertedWithCustomError(escrow, "CurrencyNotSupported");
+    });
   });
 
   describe("#setOracleRateConfigBatch", () => {
@@ -266,6 +307,92 @@ describe("EscrowV2", () => {
 
       expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(usdExpected);
       expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.EUR)).to.eq(eurExpected);
+    });
+
+    it("reverts when paymentMethods and currencyCodes length mismatch", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const usdAdapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1), currentTimestamp]
+      );
+
+      await expect(
+        escrow.connect(subjectCaller.wallet).setOracleRateConfigBatch(
+          ZERO,
+          [paymentMethod],
+          [],
+          [[{
+            adapter: staticOracleAdapter.address,
+            adapterConfig: usdAdapterConfig,
+            spreadBps: 100,
+            maxStaleness: 3600,
+          }]]
+        )
+      ).to.be.revertedWithCustomError(escrow, "ArrayLengthMismatch");
+    });
+
+    it("reverts when paymentMethods and configs length mismatch", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const usdAdapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1), currentTimestamp]
+      );
+
+      await expect(
+        escrow.connect(subjectCaller.wallet).setOracleRateConfigBatch(
+          ZERO,
+          [paymentMethod],
+          [[Currency.USD]],
+          []
+        )
+      ).to.be.revertedWithCustomError(escrow, "ArrayLengthMismatch");
+    });
+
+    it("reverts when nested currencyCodes and configs length mismatch", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const usdAdapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1), currentTimestamp]
+      );
+
+      await expect(
+        escrow.connect(subjectCaller.wallet).setOracleRateConfigBatch(
+          ZERO,
+          [paymentMethod],
+          [[Currency.USD, Currency.EUR]],
+          [[{
+            adapter: staticOracleAdapter.address,
+            adapterConfig: usdAdapterConfig,
+            spreadBps: 100,
+            maxStaleness: 3600,
+          }]]
+        )
+      ).to.be.revertedWithCustomError(escrow, "ArrayLengthMismatch");
+    });
+  });
+
+  describe("#setOracleRateConfig unsupported tuple", () => {
+    it("reverts when currency is not listed for the payment method", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const unsupported = ethers.utils.formatBytes32String("JPY");
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1), currentTimestamp]
+      );
+
+      await expect(
+        escrow.connect(depositor.wallet).setOracleRateConfig(
+          ZERO,
+          paymentMethod,
+          unsupported,
+          {
+            adapter: staticOracleAdapter.address,
+            adapterConfig,
+            spreadBps: 50,
+            maxStaleness: 3600,
+          }
+        )
+      ).to.be.revertedWithCustomError(escrow, "CurrencyNotSupported");
     });
   });
 });
