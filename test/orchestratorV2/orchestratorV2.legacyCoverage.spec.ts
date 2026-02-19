@@ -20,7 +20,7 @@ import {
   PartialPullPostIntentHookMock,
   ReentrantPostIntentHook,
   ReentrantPreIntentHookMock,
-  ReentrantSignalIntentCallerMock,
+  ReentrantSignalIntentCallerV2Mock,
   PostIntentHookMock,
   PreIntentHookMock,
   PushPostIntentHookMock,
@@ -57,7 +57,7 @@ describe("OrchestratorV2", () => {
   let pushPostIntentHookMock: PushPostIntentHookMock;
   let reentrantPostIntentHook: ReentrantPostIntentHook;
   let reentrantPreIntentHookMock: ReentrantPreIntentHookMock;
-  let reentrantSignalIntentCallerMock: ReentrantSignalIntentCallerMock;
+  let reentrantSignalIntentCallerMock: ReentrantSignalIntentCallerV2Mock;
   let orchestratorMock: OrchestratorMock;
 
   let paymentMethod: BytesLike;
@@ -213,7 +213,7 @@ describe("OrchestratorV2", () => {
     partialPostIntentHookMock = await deployer.deployPartialPullPostIntentHookMock(usdcToken.address, orchestrator.address);
     pushPostIntentHookMock = await deployer.deployPushPostIntentHookMock(usdcToken.address, orchestrator.address);
     reentrantPostIntentHook = await deployer.deployReentrantPostIntentHook(usdcToken.address, orchestrator.address);
-    reentrantSignalIntentCallerMock = await deployer.deployReentrantSignalIntentCallerMock(orchestrator.address);
+    reentrantSignalIntentCallerMock = await deployer.deployReentrantSignalIntentCallerV2Mock(orchestrator.address);
     reentrantPreIntentHookMock = await deployer.deployReentrantPreIntentHookMock(reentrantSignalIntentCallerMock.address);
     orchestratorMock = await deployer.deployOrchestratorMock(escrow.address);
     await usdcToken.transfer(pushPostIntentHookMock.address, usdc(10));
