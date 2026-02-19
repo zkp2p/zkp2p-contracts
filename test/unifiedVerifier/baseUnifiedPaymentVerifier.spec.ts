@@ -141,6 +141,61 @@ describe("BaseUnifiedPaymentVerifier", () => {
     });
   });
 
+  describe("#setOrchestrator", async () => {
+    let subjectOrchestrator: Address;
+    let subjectCaller: Account;
+
+    beforeEach(async () => {
+      subjectOrchestrator = attacker.address;
+      subjectCaller = owner;
+    });
+
+    async function subject(): Promise<any> {
+      return BaseUnifiedPaymentVerifier.connect(subjectCaller.wallet).setOrchestrator(subjectOrchestrator);
+    }
+
+    it("should update the orchestrator", async () => {
+      await subject();
+      expect(await BaseUnifiedPaymentVerifier.orchestrator()).to.eq(subjectOrchestrator);
+    });
+
+    it("should emit the OrchestratorUpdated event", async () => {
+      await expect(subject())
+        .to.emit(BaseUnifiedPaymentVerifier, "OrchestratorUpdated")
+        .withArgs(escrow.address, subjectOrchestrator);
+    });
+
+    describe("when orchestrator is zero", async () => {
+      beforeEach(async () => {
+        subjectOrchestrator = ethers.constants.AddressZero;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("UPV: Invalid orchestrator");
+      });
+    });
+
+    describe("when orchestrator is the same as current", async () => {
+      beforeEach(async () => {
+        subjectOrchestrator = escrow.address;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("UPV: Same orchestrator");
+      });
+    });
+
+    describe("when caller is not owner", async () => {
+      beforeEach(async () => {
+        subjectCaller = attacker;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("Ownable: caller is not the owner");
+      });
+    });
+  });
+
   describe("#addPaymentMethod", async () => {
     let subjectPaymentMethod: string;
     let subjectCaller: Account;

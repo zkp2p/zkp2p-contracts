@@ -14,6 +14,9 @@ import {
   OrchestratorRegistry,
   PaymentVerifierMock,
   PaymentVerifierRegistry,
+  RateManagerMock,
+  RevertingOracleAdapterMock,
+  StaticOracleAdapterMock,
   USDCMock,
 } from "@utils/contracts";
 
@@ -37,6 +40,9 @@ describe("EscrowV2", () => {
   let otherVerifier: PaymentVerifierMock;
   let orchestratorMock: OrchestratorMock;
   let secondaryOrchestratorMock: OrchestratorMock;
+  let staticOracleAdapter: StaticOracleAdapterMock;
+  let revertingOracleAdapter: RevertingOracleAdapterMock;
+  let rateManagerMock: RateManagerMock;
   let revertingPruneOrchestrator: Contract;
 
   let venmoPaymentMethod: BytesLike;
@@ -44,6 +50,7 @@ describe("EscrowV2", () => {
   let payeeDetails: BytesLike;
   let depositId: BigNumber;
   let intentCounter: number;
+  let rateManagerId: BytesLike;
 
   async function increaseTime(seconds: number) {
     await ethers.provider.send("evm_increaseTime", [seconds]);
@@ -83,6 +90,13 @@ describe("EscrowV2", () => {
     return ethers.utils.getAddress(ethers.utils.hexDataSlice(rawOrchestrator, 12));
   }
 
+  function buildOracleAdapterConfig(isValid: boolean, marketRate: BigNumber, updatedAt: BigNumber): string {
+    return ethers.utils.defaultAbiCoder.encode(
+      ["bool", "uint256", "uint256"],
+      [isValid, marketRate, updatedAt]
+    );
+  }
+
   beforeEach(async () => {
     [owner, depositor, delegate, other, intentGuardian, dustRecipient] = await getAccounts();
     deployer = new DeployHelper(owner.wallet);
@@ -97,10 +111,18 @@ describe("EscrowV2", () => {
 
     verifier = await deployer.deployPaymentVerifierMock();
     otherVerifier = await deployer.deployPaymentVerifierMock();
+    rateManagerMock = await deployer.deployRateManagerMock();
+    staticOracleAdapter = (await (
+      await ethers.getContractFactory("StaticOracleAdapterMock", owner.wallet)
+    ).deploy()) as StaticOracleAdapterMock;
+    revertingOracleAdapter = (await (
+      await ethers.getContractFactory("RevertingOracleAdapterMock", owner.wallet)
+    ).deploy()) as RevertingOracleAdapterMock;
 
     venmoPaymentMethod = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
     paypalPaymentMethod = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("paypal"));
     payeeDetails = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("payee"));
+    rateManagerId = ethers.utils.formatBytes32String("manager-1");
 
     await paymentVerifierRegistry
       .connect(owner.wallet)
@@ -760,6 +782,241 @@ describe("EscrowV2", () => {
       await expect(
         escrow.connect(intentGuardian.wallet).extendIntentExpiry(depositId, intentHash, 86400 * 6)
       ).to.be.revertedWithCustomError(escrow, "AmountAboveMax");
+    });
+  });
+
+  describe("oracle and delegated rate manager coverage paths", () => {
+    it("updates fixed floor and emits event in setCurrencyMinRate", async () => {
+      const newFloor = ether(1.15);
+      await expect(
+        escrow.connect(depositor.wallet).setCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD, newFloor)
+      )
+        .to.emit(escrow, "DepositMinConversionRateUpdated")
+        .withArgs(depositId, venmoPaymentMethod, Currency.USD, newFloor);
+
+      expect(await escrow.getDepositCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(newFloor);
+    });
+
+    it("sets oracle config and computes spread floor", async () => {
+      await escrow.connect(depositor.wallet).setCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD, ZERO);
+      const currentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
+      const spreadBps = 100;
+      const marketRate = ether(1.2);
+
+      await expect(
+        escrow.connect(depositor.wallet).setOracleRateConfig(
+          depositId,
+          venmoPaymentMethod,
+          Currency.USD,
+          {
+            adapter: staticOracleAdapter.address,
+            adapterConfig: buildOracleAdapterConfig(true, marketRate, currentTimestamp),
+            spreadBps,
+            maxStaleness: 3600,
+          }
+        )
+      ).to.emit(escrow, "DepositOracleRateConfigSet");
+
+      const expectedSpread = marketRate.mul(10_000 + spreadBps).add(9_999).div(10_000);
+      expect(await escrow.getDepositCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(expectedSpread);
+      expect((await escrow.getDepositOracleRateConfig(depositId, venmoPaymentMethod, Currency.USD)).adapter).to.eq(
+        staticOracleAdapter.address
+      );
+    });
+
+    it("supports batch oracle config updates", async () => {
+      await escrow.connect(depositor.wallet).addCurrencies(
+        depositId,
+        venmoPaymentMethod,
+        [{ code: Currency.EUR, minConversionRate: ether(0.9) }]
+      );
+
+      const currentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
+      await expect(
+        escrow.connect(depositor.wallet).setOracleRateConfigBatch(
+          depositId,
+          [venmoPaymentMethod],
+          [[Currency.USD, Currency.EUR]],
+          [[
+            {
+              adapter: staticOracleAdapter.address,
+              adapterConfig: buildOracleAdapterConfig(true, ether(1.1), currentTimestamp),
+              spreadBps: 50,
+              maxStaleness: 3600,
+            },
+            {
+              adapter: staticOracleAdapter.address,
+              adapterConfig: buildOracleAdapterConfig(true, ether(1), currentTimestamp),
+              spreadBps: 25,
+              maxStaleness: 3600,
+            },
+          ]]
+        )
+      ).to.not.be.reverted;
+    });
+
+    it("reverts batch oracle config when outer arrays mismatch", async () => {
+      await expect(
+        escrow.connect(depositor.wallet).setOracleRateConfigBatch(
+          depositId,
+          [venmoPaymentMethod],
+          [],
+          []
+        )
+      ).to.be.revertedWithCustomError(escrow, "ArrayLengthMismatch");
+    });
+
+    it("removes oracle config and deactivates currency with oracle cleanup", async () => {
+      const currentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
+
+      await escrow.connect(depositor.wallet).setOracleRateConfig(
+        depositId,
+        venmoPaymentMethod,
+        Currency.USD,
+        {
+          adapter: staticOracleAdapter.address,
+          adapterConfig: buildOracleAdapterConfig(true, ether(1.2), currentTimestamp),
+          spreadBps: 0,
+          maxStaleness: 3600,
+        }
+      );
+
+      await expect(
+        escrow.connect(depositor.wallet).removeOracleRateConfig(depositId, venmoPaymentMethod, Currency.USD)
+      )
+        .to.emit(escrow, "DepositOracleRateConfigRemoved")
+        .withArgs(depositId, venmoPaymentMethod, Currency.USD);
+
+      await escrow.connect(depositor.wallet).setOracleRateConfig(
+        depositId,
+        venmoPaymentMethod,
+        Currency.USD,
+        {
+          adapter: staticOracleAdapter.address,
+          adapterConfig: buildOracleAdapterConfig(true, ether(1.2), currentTimestamp),
+          spreadBps: 0,
+          maxStaleness: 3600,
+        }
+      );
+
+      await expect(
+        escrow.connect(depositor.wallet).deactivateCurrency(depositId, venmoPaymentMethod, Currency.USD)
+      )
+        .to.emit(escrow, "DepositOracleRateConfigRemoved")
+        .withArgs(depositId, venmoPaymentMethod, Currency.USD)
+        .and.to.emit(escrow, "DepositMinConversionRateUpdated")
+        .withArgs(depositId, venmoPaymentMethod, Currency.USD, ZERO);
+    });
+
+    it("covers delegated rate manager happy and fallback paths", async () => {
+      await rateManagerMock.connect(owner.wallet).setManager(rateManagerId, true);
+      await rateManagerMock
+        .connect(owner.wallet)
+        .setRate(rateManagerId, escrow.address, depositId, venmoPaymentMethod, Currency.USD, ether(1.22));
+      await rateManagerMock.connect(owner.wallet).setFee(rateManagerId, dustRecipient.address, ether(0.01));
+
+      await expect(
+        escrow.connect(depositor.wallet).setRateManager(depositId, rateManagerMock.address, rateManagerId)
+      )
+        .to.emit(escrow, "DepositRateManagerSet")
+        .withArgs(depositId, rateManagerMock.address, rateManagerId);
+
+      const configuredRateManager = await escrow.getDepositRateManager(depositId);
+      expect(configuredRateManager.rateManager).to.eq(rateManagerMock.address);
+      expect(configuredRateManager.rateManagerId).to.eq(rateManagerId);
+      expect(await escrow.getEffectiveRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(ether(1.22));
+
+      const managerFee = await escrow.getManagerFee(depositId);
+      expect(managerFee.recipient).to.eq(dustRecipient.address);
+      expect(managerFee.fee).to.eq(ether(0.01));
+
+      await rateManagerMock.connect(owner.wallet).setShouldRevertOnGetRate(true);
+      await rateManagerMock.connect(owner.wallet).setShouldRevertOnGetFee(true);
+      expect(await escrow.getEffectiveRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(ether(1));
+      const fallbackFee = await escrow.getManagerFee(depositId);
+      expect(fallbackFee.recipient).to.eq(ADDRESS_ZERO);
+      expect(fallbackFee.fee).to.eq(ZERO);
+    });
+
+    it("clears delegated rate manager", async () => {
+      await rateManagerMock.connect(owner.wallet).setManager(rateManagerId, true);
+      await escrow.connect(depositor.wallet).setRateManager(depositId, rateManagerMock.address, rateManagerId);
+
+      await expect(escrow.connect(depositor.wallet).clearRateManager(depositId))
+        .to.emit(escrow, "DepositRateManagerCleared")
+        .withArgs(depositId, rateManagerMock.address, rateManagerId);
+
+      const clearedConfig = await escrow.getDepositRateManager(depositId);
+      expect(clearedConfig.rateManager).to.eq(ADDRESS_ZERO);
+      expect(clearedConfig.rateManagerId).to.eq(ethers.constants.HashZero);
+    });
+
+    it("falls back to fixed floor when oracle adapter reverts", async () => {
+      const currentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
+      await escrow.connect(depositor.wallet).setOracleRateConfig(
+        depositId,
+        venmoPaymentMethod,
+        Currency.USD,
+        {
+          adapter: revertingOracleAdapter.address,
+          adapterConfig: buildOracleAdapterConfig(true, ether(1.2), currentTimestamp),
+          spreadBps: 100,
+          maxStaleness: 3600,
+        }
+      );
+
+      expect(await escrow.getDepositCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(ether(1));
+    });
+
+    it("falls back to fixed floor when oracle quote is invalid", async () => {
+      const currentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
+      await escrow.connect(depositor.wallet).setOracleRateConfig(
+        depositId,
+        venmoPaymentMethod,
+        Currency.USD,
+        {
+          adapter: staticOracleAdapter.address,
+          adapterConfig: buildOracleAdapterConfig(false, ether(1.2), currentTimestamp),
+          spreadBps: 100,
+          maxStaleness: 3600,
+        }
+      );
+
+      expect(await escrow.getDepositCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(ether(1));
+    });
+
+    it("falls back to fixed floor when oracle timestamp is in the future", async () => {
+      const currentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
+      await escrow.connect(depositor.wallet).setOracleRateConfig(
+        depositId,
+        venmoPaymentMethod,
+        Currency.USD,
+        {
+          adapter: staticOracleAdapter.address,
+          adapterConfig: buildOracleAdapterConfig(true, ether(1.2), currentTimestamp.add(120)),
+          spreadBps: 100,
+          maxStaleness: 3600,
+        }
+      );
+
+      expect(await escrow.getDepositCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(ether(1));
+    });
+
+    it("falls back to fixed floor when oracle quote is stale", async () => {
+      const currentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
+      await escrow.connect(depositor.wallet).setOracleRateConfig(
+        depositId,
+        venmoPaymentMethod,
+        Currency.USD,
+        {
+          adapter: staticOracleAdapter.address,
+          adapterConfig: buildOracleAdapterConfig(true, ether(1.2), currentTimestamp.sub(200)),
+          spreadBps: 100,
+          maxStaleness: 30,
+        }
+      );
+
+      expect(await escrow.getDepositCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(ether(1));
     });
   });
 
