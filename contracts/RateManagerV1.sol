@@ -17,6 +17,7 @@ contract RateManagerV1 is IRateManager {
 
     uint256 public constant GLOBAL_MAX_MANAGER_FEE = 5e16; // 5%
     uint256 internal constant BPS = 10_000;
+    uint256 internal constant MAX_ADAPTER_CONFIG_BYTES = 256;
 
     /* ============ Structs ============ */
 
@@ -47,6 +48,7 @@ contract RateManagerV1 is IRateManager {
     error FeeExceedsMaximum(uint256 fee, uint256 maximum);
     error InvalidSpread(uint256 spreadBps);
     error InvalidOracleAdapter(address adapter);
+    error AdapterConfigTooLong(uint256 length, uint256 maxLength);
     error DepositNotFound(uint256 depositId);
 
     /* ============ Events ============ */
@@ -646,7 +648,11 @@ contract RateManagerV1 is IRateManager {
         if (_config.oracleAdapter.code.length == 0) revert InvalidOracleAdapter(_config.oracleAdapter);
         if (_config.maxStaleness == 0) revert ZeroValue();
 
-        return IOracleAdapter(_config.oracleAdapter).validateConfig(_config.adapterConfig);
+        bytes memory normalizedConfig = IOracleAdapter(_config.oracleAdapter).validateConfig(_config.adapterConfig);
+        if (normalizedConfig.length > MAX_ADAPTER_CONFIG_BYTES) {
+            revert AdapterConfigTooLong(normalizedConfig.length, MAX_ADAPTER_CONFIG_BYTES);
+        }
+        return normalizedConfig;
     }
 
     function _computeEffectiveFloor(DepositorFloorConfig memory _config) internal view returns (uint256) {

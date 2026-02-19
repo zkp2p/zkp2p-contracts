@@ -483,6 +483,22 @@ describe("RateManagerV1", () => {
         await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "InvalidOracleAdapter");
       });
     });
+
+    describe("when normalized adapter config is too long", () => {
+      beforeEach(async () => {
+        subjectConfig = {
+          floorFixed: ether(1),
+          floorSpreadBps: 50,
+          oracleAdapter: staticOracleAdapter.address,
+          adapterConfig: `0x${"11".repeat(257)}`,
+          maxStaleness: 3600,
+        };
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "AdapterConfigTooLong");
+      });
+    });
   });
 
   describe("#setDepositorCurrencyEnabledBatch", () => {

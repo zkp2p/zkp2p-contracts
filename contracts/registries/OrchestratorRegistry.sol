@@ -13,6 +13,8 @@ contract OrchestratorRegistry is Ownable, IOrchestratorRegistry {
     /* ============ Custom Errors ============ */
 
     error ZeroAddress();
+    error OrchestratorAlreadyAdded(address orchestrator);
+    error OrchestratorNotFound(address orchestrator);
 
     /* ============ State Variables ============ */
 
@@ -32,6 +34,7 @@ contract OrchestratorRegistry is Ownable, IOrchestratorRegistry {
      */
     function addOrchestrator(address _orchestrator) external override onlyOwner {
         if (_orchestrator == address(0)) revert ZeroAddress();
+        if (isOrchestrator[_orchestrator]) revert OrchestratorAlreadyAdded(_orchestrator);
 
         isOrchestrator[_orchestrator] = true;
         emit OrchestratorAdded(_orchestrator);
@@ -44,6 +47,7 @@ contract OrchestratorRegistry is Ownable, IOrchestratorRegistry {
      */
     function removeOrchestrator(address _orchestrator) external override onlyOwner {
         if (_orchestrator == address(0)) revert ZeroAddress();
+        if (!isOrchestrator[_orchestrator]) revert OrchestratorNotFound(_orchestrator);
 
         delete isOrchestrator[_orchestrator];
         emit OrchestratorRemoved(_orchestrator);

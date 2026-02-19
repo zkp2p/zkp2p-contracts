@@ -211,6 +211,25 @@ describe("EscrowV2", () => {
         await expect(subject()).to.be.revertedWithCustomError(escrow, "UnauthorizedCallerOrDelegate");
       });
     });
+
+    describe("when normalized adapter config is too long", () => {
+      it("reverts", async () => {
+        const oversizedConfig = `0x${"11".repeat(257)}`;
+        await expect(
+          escrow.connect(subjectCaller.wallet).setOracleRateConfig(
+            ZERO,
+            paymentMethod,
+            subjectCurrencyCode,
+            {
+              adapter: staticOracleAdapter.address,
+              adapterConfig: oversizedConfig,
+              spreadBps: subjectSpreadBps,
+              maxStaleness: subjectMaxStaleness,
+            }
+          )
+        ).to.be.revertedWithCustomError(escrow, "AdapterConfigTooLong");
+      });
+    });
   });
 
   describe("#removeOracleRateConfig", () => {

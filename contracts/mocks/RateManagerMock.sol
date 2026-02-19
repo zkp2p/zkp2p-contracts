@@ -10,6 +10,8 @@ import { IRateManager } from "../interfaces/IRateManager.sol";
  */
 contract RateManagerMock is IRateManager {
     error OptInRejected();
+    error GetRateRejected();
+    error GetFeeRejected();
     struct FeeConfig {
         address recipient;
         uint256 fee;
@@ -20,6 +22,8 @@ contract RateManagerMock is IRateManager {
     mapping(bytes32 => uint256) internal tupleRates;
 
     bool public shouldRevertOnOptIn;
+    bool public shouldRevertOnGetRate;
+    bool public shouldRevertOnGetFee;
 
     event OptedIn(address indexed depositor, address indexed escrow, uint256 indexed depositId, bytes32 rateManagerId);
 
@@ -46,6 +50,14 @@ contract RateManagerMock is IRateManager {
         shouldRevertOnOptIn = _shouldRevert;
     }
 
+    function setShouldRevertOnGetRate(bool _shouldRevert) external {
+        shouldRevertOnGetRate = _shouldRevert;
+    }
+
+    function setShouldRevertOnGetFee(bool _shouldRevert) external {
+        shouldRevertOnGetFee = _shouldRevert;
+    }
+
     function getRate(
         bytes32 _rateManagerId,
         address _escrow,
@@ -53,10 +65,12 @@ contract RateManagerMock is IRateManager {
         bytes32 _paymentMethod,
         bytes32 _currencyCode
     ) external view override returns (uint256 rate) {
+        if (shouldRevertOnGetRate) revert GetRateRejected();
         return tupleRates[_tupleKey(_rateManagerId, _escrow, _depositId, _paymentMethod, _currencyCode)];
     }
 
     function getFee(bytes32 _rateManagerId) external view override returns (address recipient, uint256 fee) {
+        if (shouldRevertOnGetFee) revert GetFeeRejected();
         FeeConfig memory cfg = feeConfigs[_rateManagerId];
         return (cfg.recipient, cfg.fee);
     }

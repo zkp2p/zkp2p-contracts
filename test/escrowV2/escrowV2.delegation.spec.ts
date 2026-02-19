@@ -210,6 +210,13 @@ describe("EscrowV2", () => {
 
       expect(await escrow.getEffectiveRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
     });
+
+    it("falls back to native rate when delegated manager reverts", async () => {
+      await escrow.connect(depositor.wallet).setRateManager(ZERO, rateManagerMock.address, rateManagerId);
+      await rateManagerMock.connect(owner.wallet).setShouldRevertOnGetRate(true);
+
+      expect(await escrow.getEffectiveRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
+    });
   });
 
   describe("#getManagerFee", () => {
@@ -225,6 +232,15 @@ describe("EscrowV2", () => {
       const feeConfig = await escrow.getManagerFee(ZERO);
       expect(feeConfig.recipient).to.eq(feeRecipient.address);
       expect(feeConfig.fee).to.eq(ether(0.01));
+    });
+
+    it("returns zero fee when delegated manager reverts", async () => {
+      await escrow.connect(depositor.wallet).setRateManager(ZERO, rateManagerMock.address, rateManagerId);
+      await rateManagerMock.connect(owner.wallet).setShouldRevertOnGetFee(true);
+
+      const feeConfig = await escrow.getManagerFee(ZERO);
+      expect(feeConfig.recipient).to.eq(ADDRESS_ZERO);
+      expect(feeConfig.fee).to.eq(ZERO);
     });
   });
 });

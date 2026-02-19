@@ -58,6 +58,16 @@ describe("OrchestratorRegistry", () => {
         await expect(subject()).to.be.revertedWithCustomError(registry, "ZeroAddress");
       });
     });
+
+    describe("when orchestrator is already added", () => {
+      beforeEach(async () => {
+        await subject();
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(registry, "OrchestratorAlreadyAdded");
+      });
+    });
   });
 
   describe("#removeOrchestrator", () => {
@@ -96,6 +106,16 @@ describe("OrchestratorRegistry", () => {
 
       it("reverts", async () => {
         await expect(subject()).to.be.revertedWithCustomError(registry, "ZeroAddress");
+      });
+    });
+
+    describe("when orchestrator is not currently added", () => {
+      beforeEach(async () => {
+        await subject();
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(registry, "OrchestratorNotFound");
       });
     });
   });

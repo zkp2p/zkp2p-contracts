@@ -147,6 +147,7 @@ describe("EscrowV2", () => {
     let subjectRangeMin: BigNumber;
     let subjectRangeMax: BigNumber;
     let subjectAmount: BigNumber;
+    let subjectCurrencies: Array<Array<{ code: BytesLike; minConversionRate: BigNumber }>>;
 
     async function subject() {
       return escrow.connect(depositor.wallet).createDeposit({
@@ -161,7 +162,7 @@ describe("EscrowV2", () => {
             data: "0x",
           },
         ],
-        currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+        currencies: subjectCurrencies,
         delegate: delegate.address,
         intentGuardian: intentGuardian.address,
         retainOnEmpty: false,
@@ -172,6 +173,7 @@ describe("EscrowV2", () => {
       subjectRangeMin = usdc(10);
       subjectRangeMax = usdc(100);
       subjectAmount = usdc(50);
+      subjectCurrencies = [[{ code: Currency.USD, minConversionRate: ether(1) }]];
     });
 
     it("reverts when min is greater than max", async () => {
@@ -185,6 +187,12 @@ describe("EscrowV2", () => {
       subjectRangeMax = usdc(100);
       subjectAmount = usdc(10);
       await expect(subject()).to.be.revertedWithCustomError(escrow, "AmountBelowMin");
+    });
+
+    it("reverts when currency min conversion rate is zero", async () => {
+      subjectCurrencies = [[{ code: Currency.USD, minConversionRate: ZERO }]];
+
+      await expect(subject()).to.be.revertedWithCustomError(escrow, "ZeroConversionRate");
     });
   });
 
@@ -509,6 +517,16 @@ describe("EscrowV2", () => {
         )
       ).to.be.revertedWithCustomError(escrow, "CurrencyAlreadyExists");
     });
+
+    it("reverts when min conversion rate is zero", async () => {
+      await expect(
+        escrow.connect(depositor.wallet).addCurrencies(
+          depositId,
+          venmoPaymentMethod,
+          [{ code: Currency.EUR, minConversionRate: ZERO }]
+        )
+      ).to.be.revertedWithCustomError(escrow, "ZeroConversionRate");
+    });
   });
 
   describe("#setAcceptingIntents", () => {
@@ -560,6 +578,20 @@ describe("EscrowV2", () => {
       await clearIntentOrchestrator(intentHash);
 
       await expect(escrow.connect(other.wallet).pruneExpiredIntents(depositId)).to.not.be.reverted;
+    });
+
+    it("batches prunes by orchestrator to avoid one external call per intent", async () => {
+      const orchestratorIntentA = await createIntentWith(orchestratorMock, usdc(20));
+      const orchestratorIntentB = await createIntentWith(orchestratorMock, usdc(20));
+      const secondaryIntent = await createIntentWith(secondaryOrchestratorMock, usdc(20));
+      await increaseTime(3601);
+
+      await escrow.connect(other.wallet).pruneExpiredIntents(depositId);
+
+      expect(await orchestratorMock.getPruneCallCount()).to.eq(1);
+      expect(await secondaryOrchestratorMock.getPruneCallCount()).to.eq(1);
+      expect(await orchestratorMock.getLastPrunedIntents()).to.deep.eq([orchestratorIntentA, orchestratorIntentB]);
+      expect(await secondaryOrchestratorMock.getLastPrunedIntents()).to.deep.eq([secondaryIntent]);
     });
   });
 

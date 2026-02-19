@@ -45,6 +45,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
     uint256 internal constant MAX_DUST_THRESHOLD = 1e6;            // 1 USDC
     uint256 internal constant MAX_TOTAL_INTENT_EXPIRATION_PERIOD = 86400 * 5; // 5 days
     uint256 internal constant PRUNE_ALL_EXPIRED_INTENTS = type(uint256).max;
+    uint256 internal constant MAX_ADAPTER_CONFIG_BYTES = 256;
     
     /* ============ State Variables ============ */
 
@@ -1015,13 +1016,17 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
     {
         RateManagerConfig memory config = depositRateManagerConfig[_depositId];
         if (config.rateManager != address(0)) {
-            return IRateManager(config.rateManager).getRate(
+            try IRateManager(config.rateManager).getRate(
                 config.rateManagerId,
                 address(this),
                 _depositId,
                 _paymentMethod,
                 _currencyCode
-            );
+            ) returns (uint256 delegatedRate) {
+                return delegatedRate;
+            } catch {
+                return _getDepositCurrencyMinRate(_depositId, _paymentMethod, _currencyCode);
+            }
         }
         return _getDepositCurrencyMinRate(_depositId, _paymentMethod, _currencyCode);
     }
@@ -1031,7 +1036,14 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         if (config.rateManager == address(0)) {
             return (address(0), 0);
         }
-        return IRateManager(config.rateManager).getFee(config.rateManagerId);
+        try IRateManager(config.rateManager).getFee(config.rateManagerId) returns (
+            address delegatedRecipient,
+            uint256 delegatedFee
+        ) {
+            return (delegatedRecipient, delegatedFee);
+        } catch {
+            return (address(0), 0);
+        }
     }
 
     function getDepositRateManager(uint256 _depositId)
@@ -1170,17 +1182,61 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
       * Note: If the orchestrator reverts, it is caught and ignored to allow the function to continue execution.
       */
     function _tryOrchestratorPruneIntents(bytes32[] memory _intents) internal {
-        for (uint256 i = 0; i < _intents.length; i++) {
-            bytes32 intentHash = _intents[i];
-            address orchestratorAddress = intentOrchestrator[intentHash];
-            if (orchestratorAddress == address(0)) {
-                continue;
+        uint256 intentsLength = _intents.length;
+        if (intentsLength == 0) {
+            return;
+        }
+
+        address[] memory uniqueOrchestrators = new address[](intentsLength);
+        uint256[] memory orchestratorIntentCounts = new uint256[](intentsLength);
+        uint256 uniqueOrchestratorCount = 0;
+
+        for (uint256 i = 0; i < intentsLength; i++) {
+            address orchestratorAddress = intentOrchestrator[_intents[i]];
+            if (orchestratorAddress == address(0)) continue;
+
+            bool found = false;
+            for (uint256 j = 0; j < uniqueOrchestratorCount; j++) {
+                if (uniqueOrchestrators[j] == orchestratorAddress) {
+                    orchestratorIntentCounts[j]++;
+                    found = true;
+                    break;
+                }
             }
 
-            bytes32[] memory singleIntent = new bytes32[](1);
-            singleIntent[0] = intentHash;
+            if (!found) {
+                uniqueOrchestrators[uniqueOrchestratorCount] = orchestratorAddress;
+                orchestratorIntentCounts[uniqueOrchestratorCount] = 1;
+                uniqueOrchestratorCount++;
+            }
+        }
 
-            try IOrchestrator(orchestratorAddress).pruneIntents(singleIntent) {} catch {}
+        bytes32[][] memory groupedIntents = new bytes32[][](uniqueOrchestratorCount);
+        uint256[] memory groupedWriteIndex = new uint256[](uniqueOrchestratorCount);
+
+        for (uint256 i = 0; i < uniqueOrchestratorCount; i++) {
+            groupedIntents[i] = new bytes32[](orchestratorIntentCounts[i]);
+        }
+
+        for (uint256 i = 0; i < intentsLength; i++) {
+            bytes32 intentHash = _intents[i];
+            address orchestratorAddress = intentOrchestrator[intentHash];
+            if (orchestratorAddress == address(0)) continue;
+
+            for (uint256 j = 0; j < uniqueOrchestratorCount; j++) {
+                if (uniqueOrchestrators[j] == orchestratorAddress) {
+                    groupedIntents[j][groupedWriteIndex[j]++] = intentHash;
+                    break;
+                }
+            }
+        }
+
+        for (uint256 i = 0; i < uniqueOrchestratorCount; i++) {
+            try IOrchestrator(uniqueOrchestrators[i]).pruneIntents(groupedIntents[i]) {} catch {}
+        }
+
+        for (uint256 i = 0; i < intentsLength; i++) {
+            bytes32 intentHash = _intents[i];
             delete intentOrchestrator[intentHash];
         }
     }
@@ -1317,6 +1373,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         if (!paymentVerifierRegistry.isCurrency(_paymentMethod, _currencyCode)) {
             revert CurrencyNotSupported(_paymentMethod, _currencyCode);
         }
+        if (_minConversionRate == 0) revert ZeroConversionRate();
         if (depositCurrencyListed[_depositId][_paymentMethod][_currencyCode]) {
             revert CurrencyAlreadyExists(_paymentMethod, _currencyCode);
         }
@@ -1344,6 +1401,9 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         if (_config.maxStaleness == 0) revert ZeroValue();
 
         bytes memory normalizedConfig = IOracleAdapter(_config.adapter).validateConfig(_config.adapterConfig);
+        if (normalizedConfig.length > MAX_ADAPTER_CONFIG_BYTES) {
+            revert AdapterConfigTooLong(normalizedConfig.length, MAX_ADAPTER_CONFIG_BYTES);
+        }
 
         depositOracleRateConfig[_depositId][_paymentMethod][_currencyCode] = OracleRateConfig({
             adapter: _config.adapter,

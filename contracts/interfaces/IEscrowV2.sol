@@ -58,6 +58,7 @@ interface IEscrowV2 is IEscrow {
     /* ============ Custom Errors ============ */
 
     error InvalidOracleAdapter(address adapter);
+    error AdapterConfigTooLong(uint256 length, uint256 maxLength);
     error InvalidRateManager(address rateManager);
     error InvalidSpread(uint256 spreadBps);
     error RateManagerAlreadySet(bytes32 rateManagerId);
