@@ -50,6 +50,7 @@ contract RateManagerV1 is IRateManager {
     error InvalidOracleAdapter(address adapter);
     error AdapterConfigTooLong(uint256 length, uint256 maxLength);
     error DepositNotFound(uint256 depositId);
+    error BelowMinLiquidity(uint256 totalLiquidity, uint256 required);
 
     /* ============ Events ============ */
 
@@ -88,6 +89,8 @@ contract RateManagerV1 is IRateManager {
         uint32 maxStaleness
     );
 
+    event MinLiquidityUpdated(bytes32 indexed rateManagerId, uint256 minLiquidity);
+
     event DepositorCurrencyEnabledSet(
         bytes32 indexed rateManagerId,
         address indexed escrow,
@@ -108,6 +111,7 @@ contract RateManagerV1 is IRateManager {
         internal depositorFloors;
     mapping(bytes32 => mapping(address => mapping(uint256 => mapping(bytes32 => mapping(bytes32 => bool)))))
         internal depositorCurrencyEnabled;
+    mapping(bytes32 => uint256) public minLiquidity;
 
     /* ============ Modifiers ============ */
 
@@ -193,6 +197,11 @@ contract RateManagerV1 is IRateManager {
 
         config.fee = _fee;
         emit RateManagerFeeUpdated(_rateManagerId, _fee);
+    }
+
+    function setMinLiquidity(bytes32 _rateManagerId, uint256 _minLiquidity) external onlyManager(_rateManagerId) {
+        minLiquidity[_rateManagerId] = _minLiquidity;
+        emit MinLiquidityUpdated(_rateManagerId, _minLiquidity);
     }
 
     /**
@@ -427,6 +436,12 @@ contract RateManagerV1 is IRateManager {
         IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
         if (deposit.depositor == address(0)) revert DepositNotFound(_depositId);
         if (deposit.depositor != _depositor) revert UnauthorizedCaller(_depositor, deposit.depositor);
+
+        uint256 totalLiquidity = deposit.remainingDeposits + deposit.outstandingIntentAmount;
+        uint256 required = minLiquidity[_rateManagerId];
+        if (required > 0 && totalLiquidity < required) {
+            revert BelowMinLiquidity(totalLiquidity, required);
+        }
     }
 
     /* ============ External View Functions ============ */

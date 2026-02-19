@@ -1233,6 +1233,104 @@ describe("RateManagerV1", () => {
     });
   });
 
+  describe("#setMinLiquidity", () => {
+    let subjectCaller: any;
+    let subjectRateManagerId: BytesLike;
+    let subjectMinLiquidity: BigNumber;
+
+    async function subject() {
+      return rateManagerV1
+        .connect(subjectCaller.wallet)
+        .setMinLiquidity(subjectRateManagerId, subjectMinLiquidity);
+    }
+
+    beforeEach(async () => {
+      subjectCaller = manager;
+      subjectRateManagerId = rateManagerId;
+      subjectMinLiquidity = usdc(100);
+    });
+
+    it("sets min liquidity and emits MinLiquidityUpdated event", async () => {
+      await expect(subject())
+        .to.emit(rateManagerV1, "MinLiquidityUpdated")
+        .withArgs(rateManagerId, subjectMinLiquidity);
+
+      expect(await rateManagerV1.minLiquidity(rateManagerId)).to.eq(subjectMinLiquidity);
+    });
+
+    it("reads back via minLiquidity public getter", async () => {
+      await subject();
+      expect(await rateManagerV1.minLiquidity(rateManagerId)).to.eq(usdc(100));
+    });
+
+    describe("when setting to 0 clears the requirement", () => {
+      beforeEach(async () => {
+        await rateManagerV1.connect(manager.wallet).setMinLiquidity(rateManagerId, usdc(100));
+        subjectMinLiquidity = ZERO;
+      });
+
+      it("clears min liquidity", async () => {
+        await subject();
+        expect(await rateManagerV1.minLiquidity(rateManagerId)).to.eq(ZERO);
+      });
+    });
+
+    describe("when caller is not manager", () => {
+      beforeEach(async () => {
+        subjectCaller = other;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "UnauthorizedCaller");
+      });
+    });
+
+    describe("when rate manager id does not exist", () => {
+      beforeEach(async () => {
+        subjectRateManagerId = ethers.utils.formatBytes32String("missing-manager");
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "RateManagerNotFound");
+      });
+    });
+  });
+
+  describe("#onDepositOptIn with minLiquidity", () => {
+    it("passes when no min liquidity set (0 = disabled)", async () => {
+      await expect(
+        rateManagerV1.onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
+      ).to.not.be.reverted;
+    });
+
+    it("passes when deposit liquidity meets threshold", async () => {
+      // Deposit has 500 USDC, set min to 100 USDC
+      await rateManagerV1.connect(manager.wallet).setMinLiquidity(rateManagerId, usdc(100));
+
+      await expect(
+        rateManagerV1.onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
+      ).to.not.be.reverted;
+    });
+
+    it("reverts with BelowMinLiquidity when deposit liquidity is below threshold", async () => {
+      // Deposit has 500 USDC, set min to 1000 USDC
+      await rateManagerV1.connect(manager.wallet).setMinLiquidity(rateManagerId, usdc(1000));
+
+      await expect(
+        rateManagerV1.onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
+      ).to.be.revertedWithCustomError(rateManagerV1, "BelowMinLiquidity");
+    });
+
+    it("passes when min liquidity is set then cleared back to 0", async () => {
+      await rateManagerV1.connect(manager.wallet).setMinLiquidity(rateManagerId, usdc(1000));
+      await rateManagerV1.connect(manager.wallet).setMinLiquidity(rateManagerId, ZERO);
+
+      await expect(
+        rateManagerV1.onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
+      ).to.not.be.reverted;
+    });
+  });
+
   describe("depositor authorization", () => {
     it("reverts when non-depositor sets depositor floor", async () => {
       await expect(
