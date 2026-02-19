@@ -9,8 +9,15 @@ export {
   ReentrantSignalIntentCallerMock,
   OrchestratorMock,
   Escrow,
+  EscrowV2,
   ProtocolViewer,
   Orchestrator,
+  OrchestratorV2,
+  RateManagerV1,
+  OrchestratorRegistry,
+  RateManagerMock,
+  StaticOracleAdapterMock,
+  RevertingOracleAdapterMock,
   PaymentVerifierRegistry,
   RelayerRegistry,
   EscrowRegistry,
@@ -32,7 +39,11 @@ export {
   IOracleRateManagerRegistry,
   DepositRateManagerHookV1,
   SignatureGatingPreIntentHook,
-  WhitelistPreIntentHook
+  WhitelistPreIntentHook,
+  IRateManager,
+  IEscrowV2,
+  IOrchestratorV2,
+  IOrchestratorRegistry
 } from "../typechain";
 export { IEscrow } from "../typechain/contracts/Escrow";
 export { IOrchestrator } from "../typechain/contracts/Orchestrator";

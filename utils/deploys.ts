@@ -7,8 +7,12 @@ const circom = require("circomlibjs");
 import {
   USDCMock,
   Escrow,
+  EscrowV2,
   ProtocolViewer,
   Orchestrator,
+  OrchestratorV2,
+  RateManagerV1,
+  OrchestratorRegistry,
   PaymentVerifierMock,
   PreIntentHookMock,
   NullifierRegistry,
@@ -25,13 +29,15 @@ import {
   ReentrantSignalIntentCallerMock,
   ReentrantOrchestratorMock,
   PartialPullPostIntentHookMock,
-  PushPostIntentHookMock
+  PushPostIntentHookMock,
+  RateManagerMock
 } from "./contracts";
 import {
   USDCMock__factory,
   PostIntentHookMock__factory,
   PreIntentHookMock__factory,
   OrchestratorMock__factory,
+  RateManagerMock__factory,
   ReentrantPostIntentHook__factory,
   ReentrantSignalIntentCallerMock__factory,
   ReentrantOrchestratorMock__factory,
@@ -51,14 +57,18 @@ import { ManualRateManagerRegistry__factory } from "../typechain/factories/contr
 import { OracleRateManagerRegistry__factory } from "../typechain/factories/contracts/registries/OracleRateManagerRegistry__factory";
 import { DepositRateManagerController__factory } from "../typechain/factories/contracts/DepositRateManagerController.sol/DepositRateManagerController__factory";
 import { Escrow__factory } from "../typechain/factories/contracts/index";
+import { EscrowV2__factory } from "../typechain/factories/contracts/EscrowV2__factory";
 import { ProtocolViewer__factory } from "../typechain/factories/contracts/index";
 import { Orchestrator__factory } from "../typechain/factories/contracts/index";
+import { OrchestratorV2__factory } from "../typechain/factories/contracts/OrchestratorV2__factory";
+import { RateManagerV1__factory } from "../typechain/factories/contracts/RateManagerV1__factory";
 import { UnifiedPaymentVerifier__factory } from "../typechain/factories/contracts/unifiedVerifier";
 import { SimpleAttestationVerifier__factory } from "../typechain/factories/contracts/unifiedVerifier";
 import { RateManagerDepositHookMock__factory } from "../typechain/factories/contracts/mocks/RateManagerDepositHookMock__factory";
 import { DepositRateManagerHookV1__factory } from "../typechain/factories/contracts/hooks/DepositRateManagerHookV1__factory";
 import { SignatureGatingPreIntentHook__factory } from "../typechain/factories/contracts/hooks/SignatureGatingPreIntentHook.sol/SignatureGatingPreIntentHook__factory";
 import { WhitelistPreIntentHook__factory } from "../typechain/factories/contracts/hooks/WhitelistPreIntentHook__factory";
+import { OrchestratorRegistry__factory } from "../typechain/factories/contracts/registries/OrchestratorRegistry__factory";
 import {
   ManualRateManagerRegistry,
   OracleRateManagerRegistry,
@@ -100,6 +110,39 @@ export default class DeployHelper {
     );
   }
 
+  public async deployOrchestratorRegistry(owner?: Address): Promise<OrchestratorRegistry> {
+    const registry = await new OrchestratorRegistry__factory(this._deployerSigner).deploy();
+    if (owner) {
+      const deployerAddress = await this._deployerSigner.getAddress();
+      if (deployerAddress.toLowerCase() !== owner.toLowerCase()) {
+        await registry.transferOwnership(owner);
+      }
+    }
+    return registry;
+  }
+
+  public async deployEscrowV2(
+    owner: Address,
+    chainId: BigNumber,
+    orchestratorRegistry: Address,
+    paymentVerifierRegistry: Address,
+    dustRecipient: Address,
+    dustThreshold: BigNumber,
+    maxIntentsPerDeposit: BigNumber,
+    intentExpirationPeriod: BigNumber
+  ): Promise<EscrowV2> {
+    return await new EscrowV2__factory(this._deployerSigner).deploy(
+      owner,
+      chainId.toString(),
+      orchestratorRegistry,
+      paymentVerifierRegistry,
+      dustRecipient,
+      dustThreshold,
+      maxIntentsPerDeposit,
+      intentExpirationPeriod
+    );
+  }
+
   public async deployOrchestrator(
     owner: Address,
     chainId: BigNumber,
@@ -129,6 +172,26 @@ export default class DeployHelper {
       await orchestrator.connect(setter).setDepositRateManagerController(controllerAddress);
     }
     return orchestrator;
+  }
+
+  public async deployOrchestratorV2(
+    owner: Address,
+    chainId: BigNumber,
+    escrowRegistry: Address,
+    paymentVerifierRegistry: Address,
+    relayerRegistry: Address,
+    protocolFee: BigNumber,
+    protocolFeeRecipient: Address
+  ): Promise<OrchestratorV2> {
+    return await new OrchestratorV2__factory(this._deployerSigner).deploy(
+      owner,
+      chainId.toString(),
+      escrowRegistry,
+      paymentVerifierRegistry,
+      relayerRegistry,
+      protocolFee,
+      protocolFeeRecipient
+    );
   }
 
   public async deployProtocolViewer(escrowAddress: Address, orchestratorAddress: Address): Promise<ProtocolViewer> {
@@ -198,6 +261,14 @@ export default class DeployHelper {
 
   public async deployDepositRateManagerController(): Promise<DepositRateManagerController> {
     return await new DepositRateManagerController__factory(this._deployerSigner).deploy();
+  }
+
+  public async deployRateManagerV1(): Promise<RateManagerV1> {
+    return await new RateManagerV1__factory(this._deployerSigner).deploy();
+  }
+
+  public async deployRateManagerMock(): Promise<RateManagerMock> {
+    return await new RateManagerMock__factory(this._deployerSigner).deploy();
   }
 
   public async deployRateManagerDepositHookMock(): Promise<RateManagerDepositHookMock> {
