@@ -1182,61 +1182,17 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
       * Note: If the orchestrator reverts, it is caught and ignored to allow the function to continue execution.
       */
     function _tryOrchestratorPruneIntents(bytes32[] memory _intents) internal {
-        uint256 intentsLength = _intents.length;
-        if (intentsLength == 0) {
-            return;
-        }
-
-        address[] memory uniqueOrchestrators = new address[](intentsLength);
-        uint256[] memory orchestratorIntentCounts = new uint256[](intentsLength);
-        uint256 uniqueOrchestratorCount = 0;
-
-        for (uint256 i = 0; i < intentsLength; i++) {
-            address orchestratorAddress = intentOrchestrator[_intents[i]];
-            if (orchestratorAddress == address(0)) continue;
-
-            bool found = false;
-            for (uint256 j = 0; j < uniqueOrchestratorCount; j++) {
-                if (uniqueOrchestrators[j] == orchestratorAddress) {
-                    orchestratorIntentCounts[j]++;
-                    found = true;
-                    break;
-                }
-            }
-
-            if (!found) {
-                uniqueOrchestrators[uniqueOrchestratorCount] = orchestratorAddress;
-                orchestratorIntentCounts[uniqueOrchestratorCount] = 1;
-                uniqueOrchestratorCount++;
-            }
-        }
-
-        bytes32[][] memory groupedIntents = new bytes32[][](uniqueOrchestratorCount);
-        uint256[] memory groupedWriteIndex = new uint256[](uniqueOrchestratorCount);
-
-        for (uint256 i = 0; i < uniqueOrchestratorCount; i++) {
-            groupedIntents[i] = new bytes32[](orchestratorIntentCounts[i]);
-        }
-
-        for (uint256 i = 0; i < intentsLength; i++) {
+        for (uint256 i = 0; i < _intents.length; i++) {
             bytes32 intentHash = _intents[i];
             address orchestratorAddress = intentOrchestrator[intentHash];
-            if (orchestratorAddress == address(0)) continue;
-
-            for (uint256 j = 0; j < uniqueOrchestratorCount; j++) {
-                if (uniqueOrchestrators[j] == orchestratorAddress) {
-                    groupedIntents[j][groupedWriteIndex[j]++] = intentHash;
-                    break;
-                }
+            if (orchestratorAddress == address(0)) {
+                continue;
             }
-        }
 
-        for (uint256 i = 0; i < uniqueOrchestratorCount; i++) {
-            try IOrchestrator(uniqueOrchestrators[i]).pruneIntents(groupedIntents[i]) {} catch {}
-        }
+            bytes32[] memory singleIntent = new bytes32[](1);
+            singleIntent[0] = intentHash;
 
-        for (uint256 i = 0; i < intentsLength; i++) {
-            bytes32 intentHash = _intents[i];
+            try IOrchestrator(orchestratorAddress).pruneIntents(singleIntent) {} catch {}
             delete intentOrchestrator[intentHash];
         }
     }

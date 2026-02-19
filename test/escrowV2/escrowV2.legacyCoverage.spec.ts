@@ -580,7 +580,7 @@ describe("EscrowV2", () => {
       await expect(escrow.connect(other.wallet).pruneExpiredIntents(depositId)).to.not.be.reverted;
     });
 
-    it("batches prunes by orchestrator to avoid one external call per intent", async () => {
+    it("prunes each expired intent with a per-intent orchestrator call", async () => {
       const orchestratorIntentA = await createIntentWith(orchestratorMock, usdc(20));
       const orchestratorIntentB = await createIntentWith(orchestratorMock, usdc(20));
       const secondaryIntent = await createIntentWith(secondaryOrchestratorMock, usdc(20));
@@ -588,10 +588,11 @@ describe("EscrowV2", () => {
 
       await escrow.connect(other.wallet).pruneExpiredIntents(depositId);
 
-      expect(await orchestratorMock.getPruneCallCount()).to.eq(1);
+      expect(await orchestratorMock.getPruneCallCount()).to.eq(2);
       expect(await secondaryOrchestratorMock.getPruneCallCount()).to.eq(1);
-      expect(await orchestratorMock.getLastPrunedIntents()).to.deep.eq([orchestratorIntentA, orchestratorIntentB]);
+      expect(await orchestratorMock.getLastPrunedIntents()).to.deep.eq([orchestratorIntentB]);
       expect(await secondaryOrchestratorMock.getLastPrunedIntents()).to.deep.eq([secondaryIntent]);
+      expect(orchestratorIntentA).to.not.eq(orchestratorIntentB);
     });
   });
 
