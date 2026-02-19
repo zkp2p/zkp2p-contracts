@@ -171,6 +171,16 @@ describe("OrchestratorV2", () => {
         await expect(subject()).to.be.revertedWithCustomError(orchestrator, "RateBelowMinimum");
       });
     });
+
+    describe("when delegated manager fee exceeds orchestrator max", () => {
+      beforeEach(async () => {
+        await rateManagerMock.connect(owner.wallet).setFee(rateManagerId, managerFeeRecipient.address, ether(0.06));
+      });
+
+      it("reverts with FeeExceedsMaximum", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(orchestrator, "FeeExceedsMaximum");
+      });
+    });
   });
 
   describe("#fulfillIntent", () => {

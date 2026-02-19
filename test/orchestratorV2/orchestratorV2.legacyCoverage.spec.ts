@@ -1,7 +1,7 @@
 import "module-alias/register";
 
 import { ethers } from "hardhat";
-import { BigNumber, BytesLike } from "ethers";
+import { BigNumber, BytesLike, Contract } from "ethers";
 
 import DeployHelper from "@utils/deploys";
 import { ether, usdc } from "@utils/common";
@@ -17,8 +17,13 @@ import {
   OrchestratorV2,
   PaymentVerifierMock,
   PaymentVerifierRegistry,
+  PartialPullPostIntentHookMock,
+  ReentrantPostIntentHook,
+  ReentrantPreIntentHookMock,
+  ReentrantSignalIntentCallerMock,
   PostIntentHookMock,
   PreIntentHookMock,
+  PushPostIntentHookMock,
   RelayerRegistry,
   USDCMock,
 } from "@utils/contracts";
@@ -48,6 +53,11 @@ describe("OrchestratorV2", () => {
   let preIntentHookMock: PreIntentHookMock;
   let whitelistHookMock: PreIntentHookMock;
   let postIntentHookMock: PostIntentHookMock;
+  let partialPostIntentHookMock: PartialPullPostIntentHookMock;
+  let pushPostIntentHookMock: PushPostIntentHookMock;
+  let reentrantPostIntentHook: ReentrantPostIntentHook;
+  let reentrantPreIntentHookMock: ReentrantPreIntentHookMock;
+  let reentrantSignalIntentCallerMock: ReentrantSignalIntentCallerMock;
   let orchestratorMock: OrchestratorMock;
 
   let paymentMethod: BytesLike;
@@ -200,7 +210,13 @@ describe("OrchestratorV2", () => {
     );
 
     postIntentHookMock = await deployer.deployPostIntentHookMock(usdcToken.address, orchestrator.address);
+    partialPostIntentHookMock = await deployer.deployPartialPullPostIntentHookMock(usdcToken.address, orchestrator.address);
+    pushPostIntentHookMock = await deployer.deployPushPostIntentHookMock(usdcToken.address, orchestrator.address);
+    reentrantPostIntentHook = await deployer.deployReentrantPostIntentHook(usdcToken.address, orchestrator.address);
+    reentrantSignalIntentCallerMock = await deployer.deployReentrantSignalIntentCallerMock(orchestrator.address);
+    reentrantPreIntentHookMock = await deployer.deployReentrantPreIntentHookMock(reentrantSignalIntentCallerMock.address);
     orchestratorMock = await deployer.deployOrchestratorMock(escrow.address);
+    await usdcToken.transfer(pushPostIntentHookMock.address, usdc(10));
 
     await escrowRegistry.connect(owner.wallet).addEscrow(escrow.address);
     await orchestratorRegistry.connect(owner.wallet).addOrchestrator(orchestrator.address);
@@ -313,6 +329,63 @@ describe("OrchestratorV2", () => {
       expect(protocolAfter).to.be.gt(protocolBefore);
       expect(referrerAfter).to.be.gt(referrerBefore);
     });
+
+    it("reverts when intent does not exist", async () => {
+      await expect(
+        orchestrator.connect(depositor.wallet).releaseFundsToPayer(ethers.utils.formatBytes32String("missing"))
+      ).to.be.revertedWithCustomError(orchestrator, "IntentNotFound");
+    });
+
+    it("reverts when caller is not the depositor", async () => {
+      const intentHash = await signalIntent();
+
+      await expect(
+        orchestrator.connect(other.wallet).releaseFundsToPayer(intentHash)
+      ).to.be.revertedWithCustomError(orchestrator, "UnauthorizedCaller");
+    });
+
+    it("blocks escrow-triggered reentrant release calls", async () => {
+      const reentrantEscrowFactory = await ethers.getContractFactory("ReentrantReleaseEscrowMock", owner.wallet);
+      const reentrantEscrow = (await reentrantEscrowFactory.deploy(
+        usdcToken.address,
+        orchestrator.address,
+        depositor.address,
+        payeeDetails
+      )) as Contract;
+
+      await escrowRegistry.connect(owner.wallet).addEscrow(reentrantEscrow.address);
+      await usdcToken.transfer(reentrantEscrow.address, usdc(100));
+
+      const params = await createSignalIntentParams(
+        orchestrator.address,
+        reentrantEscrow.address,
+        ZERO,
+        usdc(50),
+        taker.address,
+        paymentMethod,
+        Currency.USD,
+        ether(1),
+        ADDRESS_ZERO,
+        ZERO,
+        null,
+        "1",
+        ADDRESS_ZERO,
+        "0x",
+        undefined,
+        "0x"
+      );
+
+      const signalTx = await orchestrator.connect(taker.wallet).signalIntent(params);
+      const receipt = await signalTx.wait();
+      const signaledEvent = receipt.events?.find((event: any) => event.event === "IntentSignaled");
+      const intentHash = signaledEvent?.args?.intentHash;
+
+      await reentrantEscrow.setReentryIntent(intentHash, true);
+
+      await expect(orchestrator.connect(depositor.wallet).releaseFundsToPayer(intentHash))
+        .to.emit(reentrantEscrow, "ReentryAttempted")
+        .withArgs(false);
+    });
   });
 
   describe("#fulfillIntent", () => {
@@ -332,6 +405,52 @@ describe("OrchestratorV2", () => {
           postIntentHookData: "0x",
         })
       ).to.be.revertedWithCustomError(orchestrator, "AmountBelowMin");
+    });
+
+    it("reverts when intent does not exist", async () => {
+      await expect(
+        fulfillIntent(ethers.utils.formatBytes32String("missing"))
+      ).to.be.revertedWithCustomError(orchestrator, "IntentNotFound");
+    });
+
+    it("reverts when payment method is removed after signal", async () => {
+      const intentHash = await signalIntent();
+      await paymentVerifierRegistry.connect(owner.wallet).removePaymentMethod(paymentMethod);
+
+      await expect(fulfillIntent(intentHash)).to.be.revertedWithCustomError(orchestrator, "PaymentMethodDoesNotExist");
+    });
+
+    it("reverts when verifier marks payment as failed", async () => {
+      const intentHash = await signalIntent();
+      await verifier.connect(owner.wallet).setShouldReturnFalse(true);
+
+      await expect(fulfillIntent(intentHash)).to.be.revertedWithCustomError(orchestrator, "PaymentVerificationFailed");
+    });
+
+    it("reverts on intent hash mismatch in verifier result", async () => {
+      const intentHash = await signalIntent();
+      const timestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
+      const mismatchedHash = ethers.utils.formatBytes32String("other-hash");
+      const paymentProof = ethers.utils.defaultAbiCoder.encode(
+        ["uint256", "uint256", "bytes32", "bytes32", "bytes32"],
+        [usdc(50), timestamp, payeeDetails, Currency.USD, mismatchedHash]
+      );
+
+      await expect(
+        orchestrator.connect(owner.wallet).fulfillIntent({
+          paymentProof,
+          intentHash,
+          verificationData: "0x",
+          postIntentHookData: "0x",
+        })
+      ).to.be.revertedWithCustomError(orchestrator, "HashMismatch");
+    });
+
+    it("reverts when orchestrator is paused", async () => {
+      const intentHash = await signalIntent();
+      await orchestrator.connect(owner.wallet).pauseOrchestrator();
+
+      await expect(fulfillIntent(intentHash)).to.be.revertedWith("Pausable: paused");
     });
   });
 
@@ -363,6 +482,30 @@ describe("OrchestratorV2", () => {
       const prunedIntent = await orchestrator.getIntent(intentHash);
       expect(prunedIntent.owner).to.eq(ADDRESS_ZERO);
     });
+
+    it("skips cleanup when intent hash is unknown", async () => {
+      await expect(
+        orchestrator.connect(other.wallet).cleanupOrphanedIntents([ethers.utils.formatBytes32String("unknown-intent")])
+      ).to.not.be.reverted;
+    });
+
+    it("does not prune active intents during orphan cleanup", async () => {
+      const intentHash = await signalIntent();
+
+      await orchestrator.connect(other.wallet).cleanupOrphanedIntents([intentHash]);
+
+      const activeIntent = await orchestrator.getIntent(intentHash);
+      expect(activeIntent.owner).to.eq(taker.address);
+    });
+
+    it("ignores zero hashes and non-escrow callers in pruneIntents", async () => {
+      const intentHash = await signalIntent();
+
+      await orchestrator.connect(other.wallet).pruneIntents([ethers.constants.HashZero, intentHash]);
+
+      const stillActiveIntent = await orchestrator.getIntent(intentHash);
+      expect(stillActiveIntent.owner).to.eq(taker.address);
+    });
   });
 
   describe("governance and views", () => {
@@ -392,6 +535,27 @@ describe("OrchestratorV2", () => {
       expect(await orchestrator.paused()).to.eq(false);
     });
 
+    it("reverts when governance setters receive invalid values", async () => {
+      await expect(orchestrator.connect(owner.wallet).setEscrowRegistry(ADDRESS_ZERO))
+        .to.be.revertedWithCustomError(orchestrator, "ZeroAddress");
+      await expect(orchestrator.connect(owner.wallet).setProtocolFee(ether(0.06)))
+        .to.be.revertedWithCustomError(orchestrator, "FeeExceedsMaximum");
+      await expect(orchestrator.connect(owner.wallet).setProtocolFeeRecipient(ADDRESS_ZERO))
+        .to.be.revertedWithCustomError(orchestrator, "ZeroAddress");
+      await expect(orchestrator.connect(owner.wallet).setRelayerRegistry(ADDRESS_ZERO))
+        .to.be.revertedWithCustomError(orchestrator, "ZeroAddress");
+    });
+
+    it("reverts governance-only functions for non-owner callers", async () => {
+      await expect(orchestrator.connect(other.wallet).pauseOrchestrator()).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(orchestrator.connect(other.wallet).unpauseOrchestrator()).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(orchestrator.connect(other.wallet).setAllowMultipleIntents(true)).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(orchestrator.connect(other.wallet).setEscrowRegistry(escrowRegistry.address)).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(orchestrator.connect(other.wallet).setProtocolFee(ether(0.01))).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(orchestrator.connect(other.wallet).setProtocolFeeRecipient(other.address)).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(orchestrator.connect(other.wallet).setRelayerRegistry(relayerRegistry.address)).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
     it("returns account intents and min-at-signal snapshot", async () => {
       const intentHash = await signalIntent();
       const accountIntents = await orchestrator.getAccountIntents(taker.address);
@@ -415,6 +579,48 @@ describe("OrchestratorV2", () => {
       await expect(
         signalIntent()
       ).to.be.revertedWithCustomError(orchestrator, "EscrowNotWhitelisted");
+    });
+
+    it("reverts when orchestrator is paused", async () => {
+      await orchestrator.connect(owner.wallet).pauseOrchestrator();
+
+      await expect(signalIntent()).to.be.revertedWith("Pausable: paused");
+    });
+
+    it("reverts when recipient is zero", async () => {
+      await expect(
+        signalIntent({ subjectTo: ADDRESS_ZERO })
+      ).to.be.revertedWithCustomError(orchestrator, "ZeroAddress");
+    });
+
+    it("reverts when referrer fee exceeds max", async () => {
+      await expect(
+        signalIntent({ subjectReferrer: referrer.address, subjectReferrerFee: ether(0.06) })
+      ).to.be.revertedWithCustomError(orchestrator, "FeeExceedsMaximum");
+    });
+
+    it("reverts when referrer is zero and fee is non-zero", async () => {
+      await expect(
+        signalIntent({ subjectReferrer: ADDRESS_ZERO, subjectReferrerFee: ether(0.001) })
+      ).to.be.revertedWithCustomError(orchestrator, "InvalidReferrerFeeConfiguration");
+    });
+
+    it("reverts when payment method is removed from registry", async () => {
+      await paymentVerifierRegistry.connect(owner.wallet).removePaymentMethod(paymentMethod);
+
+      await expect(signalIntent()).to.be.revertedWithCustomError(orchestrator, "PaymentMethodDoesNotExist");
+    });
+
+    it("reverts when payment method is inactive on deposit", async () => {
+      await escrow.connect(depositor.wallet).setPaymentMethodActive(depositId, paymentMethod, false);
+
+      await expect(signalIntent()).to.be.revertedWithCustomError(orchestrator, "PaymentMethodNotSupported");
+    });
+
+    it("reverts when currency is disabled on deposit", async () => {
+      await escrow.connect(depositor.wallet).deactivateCurrency(depositId, paymentMethod, Currency.USD);
+
+      await expect(signalIntent()).to.be.revertedWithCustomError(orchestrator, "CurrencyNotSupported");
     });
 
     it("reverts when post-intent hook is an EOA", async () => {
@@ -454,6 +660,83 @@ describe("OrchestratorV2", () => {
       const targetAfter = await usdcToken.balanceOf(target);
 
       expect(targetAfter).to.be.gt(targetBefore);
+    });
+
+    it("blocks hook-driven signalIntent reentrancy", async () => {
+      await orchestrator.connect(depositor.wallet).setDepositPreIntentHook(
+        escrow.address,
+        depositId,
+        reentrantPreIntentHookMock.address
+      );
+
+      const params = await createSignalIntentParams(
+        orchestrator.address,
+        escrow.address,
+        depositId,
+        usdc(50),
+        reentrantSignalIntentCallerMock.address,
+        paymentMethod,
+        Currency.USD,
+        ether(1),
+        ADDRESS_ZERO,
+        ZERO,
+        null,
+        "1",
+        ADDRESS_ZERO,
+        "0x",
+        undefined,
+        "0x"
+      );
+
+      await reentrantSignalIntentCallerMock.setReentryParams(params);
+
+      await expect(reentrantSignalIntentCallerMock.signalIntent(params)).to.emit(orchestrator, "IntentSignaled");
+      expect(await reentrantPreIntentHookMock.reentryAttemptCount()).to.eq(1);
+      expect(await reentrantPreIntentHookMock.lastReentrySucceeded()).to.eq(false);
+    });
+
+    it("reverts when post-intent hook pulls less than net amount", async () => {
+      const target = other.address;
+      const intentHash = await signalIntent({
+        subjectPostIntentHook: partialPostIntentHookMock.address,
+        subjectData: ethers.utils.defaultAbiCoder.encode(["address"], [target]),
+      });
+
+      await expect(fulfillIntent(intentHash)).to.be.revertedWith("PostIntentHook: must pull exact netAmount");
+    });
+
+    it("reverts when post-intent hook increases orchestrator balance", async () => {
+      const target = other.address;
+      const intentHash = await signalIntent({
+        subjectPostIntentHook: pushPostIntentHookMock.address,
+        subjectData: ethers.utils.defaultAbiCoder.encode(["address"], [target]),
+      });
+
+      await expect(fulfillIntent(intentHash)).to.be.revertedWith("PostIntentHook: unexpected balance increase");
+    });
+
+    it("blocks reentrant fulfillIntent calls from post-intent hook", async () => {
+      const intentHash = await signalIntent({
+        subjectPostIntentHook: reentrantPostIntentHook.address,
+      });
+      const timestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
+      const paymentProof = ethers.utils.defaultAbiCoder.encode(
+        ["uint256", "uint256", "bytes32", "bytes32", "bytes32"],
+        [usdc(50), timestamp, payeeDetails, Currency.USD, intentHash]
+      );
+
+      await reentrantPostIntentHook.setFulfillParams(paymentProof, intentHash, "0x", "0x");
+
+      await expect(
+        orchestrator.connect(owner.wallet).fulfillIntent({
+          paymentProof,
+          intentHash,
+          verificationData: "0x",
+          postIntentHookData: "0x",
+        })
+      )
+        .to.emit(reentrantPostIntentHook, "ReentrancyAttempted")
+        .withArgs(false);
     });
   });
 

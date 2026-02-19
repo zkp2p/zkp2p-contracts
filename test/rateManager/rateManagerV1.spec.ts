@@ -153,20 +153,57 @@ describe("RateManagerV1", () => {
         await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "FeeExceedsMaximum");
       });
     });
+
+    describe("when manager is zero address", () => {
+      beforeEach(async () => {
+        subjectManager = ADDRESS_ZERO;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroAddress");
+      });
+    });
+
+    describe("when fee recipient is zero and fee is non-zero", () => {
+      beforeEach(async () => {
+        subjectFeeRecipient = ADDRESS_ZERO;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroAddress");
+      });
+    });
+
+    describe("when fee exceeds maxFee", () => {
+      beforeEach(async () => {
+        subjectFee = ether(0.02);
+        subjectMaxFee = ether(0.01);
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "FeeExceedsMaximum");
+      });
+    });
   });
 
   describe("#setRate", () => {
     let subjectCaller: any;
+    let subjectRateManagerId: BytesLike;
+    let subjectPaymentMethod: BytesLike;
+    let subjectCurrencyCode: BytesLike;
     let subjectRate: BigNumber;
 
     async function subject() {
       return rateManagerV1
         .connect(subjectCaller.wallet)
-        .setRate(rateManagerId, paymentMethod, Currency.USD, subjectRate);
+        .setRate(subjectRateManagerId, subjectPaymentMethod, subjectCurrencyCode, subjectRate);
     }
 
     beforeEach(async () => {
       subjectCaller = manager;
+      subjectRateManagerId = rateManagerId;
+      subjectPaymentMethod = paymentMethod;
+      subjectCurrencyCode = Currency.USD;
       subjectRate = ether(1.1);
     });
 
@@ -187,18 +224,50 @@ describe("RateManagerV1", () => {
         await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "UnauthorizedCaller");
       });
     });
+
+    describe("when rate manager id does not exist", () => {
+      beforeEach(async () => {
+        subjectRateManagerId = ethers.utils.formatBytes32String("missing-manager");
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "RateManagerNotFound");
+      });
+    });
+
+    describe("when payment method is zero", () => {
+      beforeEach(async () => {
+        subjectPaymentMethod = ethers.constants.HashZero;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroValue");
+      });
+    });
+
+    describe("when currency code is zero", () => {
+      beforeEach(async () => {
+        subjectCurrencyCode = ethers.constants.HashZero;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroValue");
+      });
+    });
   });
 
   describe("#setFee", () => {
     let subjectCaller: any;
+    let subjectRateManagerId: BytesLike;
     let subjectFee: BigNumber;
 
     async function subject() {
-      return rateManagerV1.connect(subjectCaller.wallet).setFee(rateManagerId, subjectFee);
+      return rateManagerV1.connect(subjectCaller.wallet).setFee(subjectRateManagerId, subjectFee);
     }
 
     beforeEach(async () => {
       subjectCaller = manager;
+      subjectRateManagerId = rateManagerId;
       subjectFee = ether(0.02);
     });
 
@@ -219,10 +288,44 @@ describe("RateManagerV1", () => {
         await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "FeeExceedsMaximum");
       });
     });
+
+    describe("when caller is not manager", () => {
+      beforeEach(async () => {
+        subjectCaller = other;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "UnauthorizedCaller");
+      });
+    });
+
+    describe("when rate manager id does not exist", () => {
+      beforeEach(async () => {
+        subjectRateManagerId = ethers.utils.formatBytes32String("missing-manager");
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "RateManagerNotFound");
+      });
+    });
+
+    describe("when fee recipient is zero and fee is set above zero", () => {
+      beforeEach(async () => {
+        await rateManagerV1.connect(manager.wallet).setFee(rateManagerId, ZERO);
+        await rateManagerV1
+          .connect(manager.wallet)
+          .setRateManagerConfig(rateManagerId, manager.address, ADDRESS_ZERO, "RM", "ipfs://rm");
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroAddress");
+      });
+    });
   });
 
   describe("#setRateManagerConfig", () => {
     let subjectCaller: any;
+    let subjectRateManagerId: BytesLike;
     let subjectManager: string;
     let subjectFeeRecipient: string;
     let subjectName: string;
@@ -231,11 +334,12 @@ describe("RateManagerV1", () => {
     async function subject() {
       return rateManagerV1
         .connect(subjectCaller.wallet)
-        .setRateManagerConfig(rateManagerId, subjectManager, subjectFeeRecipient, subjectName, subjectUri);
+        .setRateManagerConfig(subjectRateManagerId, subjectManager, subjectFeeRecipient, subjectName, subjectUri);
     }
 
     beforeEach(async () => {
       subjectCaller = manager;
+      subjectRateManagerId = rateManagerId;
       subjectManager = other.address;
       subjectFeeRecipient = other.address;
       subjectName = "Updated RM";
@@ -286,10 +390,31 @@ describe("RateManagerV1", () => {
         expect(updatedConfig.feeRecipient).to.eq(ADDRESS_ZERO);
       });
     });
+
+    describe("when caller is not manager", () => {
+      beforeEach(async () => {
+        subjectCaller = other;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "UnauthorizedCaller");
+      });
+    });
+
+    describe("when rate manager id does not exist", () => {
+      beforeEach(async () => {
+        subjectRateManagerId = ethers.utils.formatBytes32String("missing-manager");
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "RateManagerNotFound");
+      });
+    });
   });
 
   describe("#setRateBatch", () => {
     let subjectCaller: any;
+    let subjectRateManagerId: BytesLike;
     let subjectPaymentMethods: BytesLike[];
     let subjectCurrencyCodes: BytesLike[][];
     let subjectRates: BigNumber[][];
@@ -297,11 +422,12 @@ describe("RateManagerV1", () => {
     async function subject() {
       return rateManagerV1
         .connect(subjectCaller.wallet)
-        .setRateBatch(rateManagerId, subjectPaymentMethods, subjectCurrencyCodes, subjectRates);
+        .setRateBatch(subjectRateManagerId, subjectPaymentMethods, subjectCurrencyCodes, subjectRates);
     }
 
     beforeEach(async () => {
       subjectCaller = manager;
+      subjectRateManagerId = rateManagerId;
       subjectPaymentMethods = [paymentMethod];
       subjectCurrencyCodes = [[Currency.USD]];
       subjectRates = [[ether(1.15)]];
@@ -363,6 +489,26 @@ describe("RateManagerV1", () => {
 
       it("reverts", async () => {
         await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroValue");
+      });
+    });
+
+    describe("when caller is not manager", () => {
+      beforeEach(async () => {
+        subjectCaller = other;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "UnauthorizedCaller");
+      });
+    });
+
+    describe("when rate manager id does not exist", () => {
+      beforeEach(async () => {
+        subjectRateManagerId = ethers.utils.formatBytes32String("missing-manager");
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "RateManagerNotFound");
       });
     });
   });
@@ -444,21 +590,31 @@ describe("RateManagerV1", () => {
 
   describe("#setDepositorFloor", () => {
     let subjectCaller: any;
+    let subjectRateManagerId: BytesLike;
+    let subjectEscrow: string;
+    let subjectDepositId: BigNumber;
+    let subjectPaymentMethod: BytesLike;
+    let subjectCurrencyCode: BytesLike;
     let subjectConfig: any;
 
     async function subject() {
       return rateManagerV1.connect(subjectCaller.wallet).setDepositorFloor(
-        rateManagerId,
-        escrow.address,
-        ZERO,
-        paymentMethod,
-        Currency.USD,
+        subjectRateManagerId,
+        subjectEscrow,
+        subjectDepositId,
+        subjectPaymentMethod,
+        subjectCurrencyCode,
         subjectConfig
       );
     }
 
     beforeEach(async () => {
       subjectCaller = depositor;
+      subjectRateManagerId = rateManagerId;
+      subjectEscrow = escrow.address;
+      subjectDepositId = ZERO;
+      subjectPaymentMethod = paymentMethod;
+      subjectCurrencyCode = Currency.USD;
       subjectConfig = {
         floorFixed: ether(1),
         floorSpreadBps: 0,
@@ -468,6 +624,19 @@ describe("RateManagerV1", () => {
       };
     });
 
+    it("sets depositor floor", async () => {
+      await expect(subject()).to.emit(rateManagerV1, "DepositorFloorSet");
+
+      const floorConfig = await rateManagerV1.getDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD
+      );
+      expect(floorConfig.floorFixed).to.eq(ether(1));
+    });
+
     describe("when oracle adapter is zero but oracle fields are non-empty", () => {
       beforeEach(async () => {
         subjectConfig = {
@@ -475,6 +644,38 @@ describe("RateManagerV1", () => {
           floorSpreadBps: 1,
           oracleAdapter: ADDRESS_ZERO,
           adapterConfig: "0x1234",
+          maxStaleness: 1,
+        };
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "InvalidOracleAdapter");
+      });
+    });
+
+    describe("when oracle adapter is zero and only adapterConfig is set", () => {
+      beforeEach(async () => {
+        subjectConfig = {
+          floorFixed: ether(1),
+          floorSpreadBps: 0,
+          oracleAdapter: ADDRESS_ZERO,
+          adapterConfig: "0x1234",
+          maxStaleness: 0,
+        };
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "InvalidOracleAdapter");
+      });
+    });
+
+    describe("when oracle adapter is zero and only maxStaleness is set", () => {
+      beforeEach(async () => {
+        subjectConfig = {
+          floorFixed: ether(1),
+          floorSpreadBps: 0,
+          oracleAdapter: ADDRESS_ZERO,
+          adapterConfig: "0x",
           maxStaleness: 1,
         };
       });
@@ -497,6 +698,167 @@ describe("RateManagerV1", () => {
 
       it("reverts", async () => {
         await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "AdapterConfigTooLong");
+      });
+    });
+
+    describe("when rate manager id does not exist", () => {
+      beforeEach(async () => {
+        subjectRateManagerId = ethers.utils.formatBytes32String("missing-manager");
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "RateManagerNotFound");
+      });
+    });
+
+    describe("when payment method is zero", () => {
+      beforeEach(async () => {
+        subjectPaymentMethod = ethers.constants.HashZero;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroValue");
+      });
+    });
+
+    describe("when currency code is zero", () => {
+      beforeEach(async () => {
+        subjectCurrencyCode = ethers.constants.HashZero;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroValue");
+      });
+    });
+
+    describe("when floor spread exceeds max bps", () => {
+      beforeEach(async () => {
+        subjectConfig.floorSpreadBps = 10_001;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "InvalidSpread");
+      });
+    });
+
+    describe("when oracle adapter is an EOA", () => {
+      beforeEach(async () => {
+        subjectConfig = {
+          floorFixed: ether(1),
+          floorSpreadBps: 100,
+          oracleAdapter: other.address,
+          adapterConfig: "0x1234",
+          maxStaleness: 3600,
+        };
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "InvalidOracleAdapter");
+      });
+    });
+
+    describe("when max staleness is zero for oracle floor", () => {
+      beforeEach(async () => {
+        subjectConfig = {
+          floorFixed: ether(1),
+          floorSpreadBps: 100,
+          oracleAdapter: staticOracleAdapter.address,
+          adapterConfig: "0x1234",
+          maxStaleness: 0,
+        };
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroValue");
+      });
+    });
+
+    describe("when escrow is zero", () => {
+      beforeEach(async () => {
+        subjectEscrow = ADDRESS_ZERO;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroAddress");
+      });
+    });
+
+    describe("when deposit does not exist", () => {
+      beforeEach(async () => {
+        subjectDepositId = BigNumber.from(999);
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "DepositNotFound");
+      });
+    });
+  });
+
+  describe("#setDepositorCurrencyEnabled", () => {
+    let subjectCaller: any;
+    let subjectRateManagerId: BytesLike;
+    let subjectEscrow: string;
+    let subjectDepositId: BigNumber;
+    let subjectPaymentMethod: BytesLike;
+    let subjectCurrencyCode: BytesLike;
+    let subjectEnabled: boolean;
+
+    async function subject() {
+      return rateManagerV1.connect(subjectCaller.wallet).setDepositorCurrencyEnabled(
+        subjectRateManagerId,
+        subjectEscrow,
+        subjectDepositId,
+        subjectPaymentMethod,
+        subjectCurrencyCode,
+        subjectEnabled
+      );
+    }
+
+    beforeEach(async () => {
+      subjectCaller = depositor;
+      subjectRateManagerId = rateManagerId;
+      subjectEscrow = escrow.address;
+      subjectDepositId = ZERO;
+      subjectPaymentMethod = paymentMethod;
+      subjectCurrencyCode = Currency.USD;
+      subjectEnabled = true;
+    });
+
+    it("sets depositor currency enabled state", async () => {
+      await expect(subject()).to.emit(rateManagerV1, "DepositorCurrencyEnabledSet");
+
+      expect(
+        await rateManagerV1.isDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD)
+      ).to.eq(true);
+    });
+
+    describe("when rate manager id does not exist", () => {
+      beforeEach(async () => {
+        subjectRateManagerId = ethers.utils.formatBytes32String("missing-manager");
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "RateManagerNotFound");
+      });
+    });
+
+    describe("when payment method is zero", () => {
+      beforeEach(async () => {
+        subjectPaymentMethod = ethers.constants.HashZero;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroValue");
+      });
+    });
+
+    describe("when currency code is zero", () => {
+      beforeEach(async () => {
+        subjectCurrencyCode = ethers.constants.HashZero;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerV1, "ZeroValue");
       });
     });
   });
@@ -765,6 +1127,65 @@ describe("RateManagerV1", () => {
       const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
       expect(rate).to.eq(ether(1.1));
     });
+
+    it("falls back to manager rate when oracle market rate is zero", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ZERO, currentTimestamp]
+      );
+
+      await rateManagerV1
+        .connect(depositor.wallet)
+        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
+
+      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          floorFixed: ZERO,
+          floorSpreadBps: 200,
+          oracleAdapter: staticOracleAdapter.address,
+          adapterConfig,
+          maxStaleness: 3600,
+        }
+      );
+
+      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
+      expect(rate).to.eq(ether(1.1));
+    });
+
+    it("falls back to manager rate when oracle timestamp is zero", async () => {
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1.3), ZERO]
+      );
+
+      await rateManagerV1
+        .connect(depositor.wallet)
+        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
+
+      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          floorFixed: ZERO,
+          floorSpreadBps: 200,
+          oracleAdapter: staticOracleAdapter.address,
+          adapterConfig,
+          maxStaleness: 3600,
+        }
+      );
+
+      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
+      expect(rate).to.eq(ether(1.1));
+    });
   });
 
   describe("view getters", () => {
@@ -836,6 +1257,35 @@ describe("RateManagerV1", () => {
       await expect(
         rateManagerV1.onDepositOptIn(other.address, escrow.address, ZERO, rateManagerId)
       ).to.be.reverted;
+    });
+
+    it("reverts on onDepositOptIn when escrow is zero", async () => {
+      await expect(
+        rateManagerV1.onDepositOptIn(depositor.address, ADDRESS_ZERO, ZERO, rateManagerId)
+      ).to.be.revertedWithCustomError(rateManagerV1, "ZeroAddress");
+    });
+
+    it("reverts on onDepositOptIn when manager id does not exist", async () => {
+      await expect(
+        rateManagerV1.onDepositOptIn(
+          depositor.address,
+          escrow.address,
+          ZERO,
+          ethers.utils.formatBytes32String("missing-manager")
+        )
+      ).to.be.reverted;
+    });
+
+    it("reverts on onDepositOptIn when deposit does not exist", async () => {
+      await expect(
+        rateManagerV1.onDepositOptIn(depositor.address, escrow.address, BigNumber.from(999), rateManagerId)
+      ).to.be.revertedWithCustomError(rateManagerV1, "DepositNotFound");
+    });
+
+    it("passes on onDepositOptIn for valid depositor", async () => {
+      await expect(
+        rateManagerV1.onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
+      ).to.not.be.reverted;
     });
   });
 });
