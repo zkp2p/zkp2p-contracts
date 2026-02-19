@@ -30,7 +30,9 @@ import {
   ReentrantOrchestratorMock,
   PartialPullPostIntentHookMock,
   PushPostIntentHookMock,
-  RateManagerMock
+  RateManagerMock,
+  ReentrantSignalIntentCallerV2Mock,
+  PostIntentHookRegistry
 } from "./contracts";
 import {
   USDCMock__factory,
@@ -44,6 +46,7 @@ import {
   PartialPullPostIntentHookMock__factory,
   PushPostIntentHookMock__factory
 } from "../typechain/factories/contracts/mocks";
+import { ReentrantSignalIntentCallerV2Mock__factory } from "../typechain/factories/contracts/mocks/ReentrantSignalIntentCallerV2Mock__factory";
 import { ReentrantPreIntentHookMock__factory } from "../typechain/factories/contracts/mocks/ReentrantPreIntentHookMock.sol/ReentrantPreIntentHookMock__factory";
 import { PaymentVerifierMock__factory } from "../typechain/factories/contracts/mocks";
 import {
@@ -53,6 +56,7 @@ import { NullifierRegistry__factory } from "../typechain/factories/contracts/reg
 import { PaymentVerifierRegistry__factory } from "../typechain/factories/contracts/registries";
 import { RelayerRegistry__factory } from "../typechain/factories/contracts/registries";
 import { EscrowRegistry__factory } from "../typechain/factories/contracts/registries";
+import { PostIntentHookRegistry__factory } from "../typechain/factories/contracts/registries";
 import { Escrow__factory } from "../typechain/factories/contracts/index";
 import { EscrowV2__factory } from "../typechain/factories/contracts/EscrowV2__factory";
 import { ProtocolViewer__factory } from "../typechain/factories/contracts/index";
@@ -138,6 +142,7 @@ export default class DeployHelper {
     chainId: BigNumber,
     escrowRegistry: Address,
     paymentVerifierRegistry: Address,
+    postIntentHookRegistry: Address,
     relayerRegistry: Address,
     protocolFee: BigNumber,
     protocolFeeRecipient: Address
@@ -147,6 +152,7 @@ export default class DeployHelper {
       chainId.toString(),
       escrowRegistry,
       paymentVerifierRegistry,
+      postIntentHookRegistry,
       relayerRegistry,
       protocolFee,
       protocolFeeRecipient
@@ -229,6 +235,10 @@ export default class DeployHelper {
     return await new EscrowRegistry__factory(this._deployerSigner).deploy();
   }
 
+  public async deployPostIntentHookRegistry(): Promise<PostIntentHookRegistry> {
+    return await new PostIntentHookRegistry__factory(this._deployerSigner).deploy();
+  }
+
   public async deployRateManagerV1(): Promise<RateManagerV1> {
     return await new RateManagerV1__factory(this._deployerSigner).deploy();
   }
@@ -288,6 +298,12 @@ export default class DeployHelper {
     orchestrator: Address
   ): Promise<ReentrantSignalIntentCallerMock> {
     return await new ReentrantSignalIntentCallerMock__factory(this._deployerSigner).deploy(orchestrator);
+  }
+
+  public async deployReentrantSignalIntentCallerV2Mock(
+    orchestrator: Address
+  ): Promise<ReentrantSignalIntentCallerV2Mock> {
+    return await new ReentrantSignalIntentCallerV2Mock__factory(this._deployerSigner).deploy(orchestrator);
   }
 
   public async deployReentrantPreIntentHookMock(

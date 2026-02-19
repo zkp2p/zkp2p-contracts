@@ -7,6 +7,7 @@ export {
   ReentrantPostIntentHook,
   ReentrantPreIntentHookMock,
   ReentrantSignalIntentCallerMock,
+  ReentrantSignalIntentCallerV2Mock,
   OrchestratorMock,
   Escrow,
   EscrowV2,
@@ -28,12 +29,15 @@ export {
   PartialPullPostIntentHookMock,
   PushPostIntentHookMock,
   ReentrantOrchestratorMock,
+  PostIntentHookRegistry,
   SignatureGatingPreIntentHook,
   WhitelistPreIntentHook,
   IRateManager,
   IEscrowV2,
   IOrchestratorV2,
-  IOrchestratorRegistry
+  IOrchestratorRegistry,
+  StaticOracleAdapterMock,
+  RevertingOracleAdapterMock
 } from "../typechain";
 export { IEscrow } from "../typechain/contracts/Escrow";
 export { IOrchestrator } from "../typechain/contracts/Orchestrator";

@@ -37,7 +37,7 @@
     "test:forge": "forge test",
     "test:forge:fuzz": "FOUNDRY_FUZZ_RUNS=100 forge test --match-contract 'Fuzz'",
     "test:forge:invariant": "forge test --match-contract 'Invariant'",
-    "test:forge:fork": "FOUNDRY_PROFILE=fork forge test --match-path \"test-foundry/fork/*.t.sol\" -vv",
+    "test:forge:fork": "FOUNDRY_PROFILE=fork forge test --match-path \"test-foundry/fork/*.t.sol\" --evm-version cancun -vv",
     "test:forge:coverage": "forge coverage",
     "typechain": "hardhat typechain",
     "transpile": "tsc"

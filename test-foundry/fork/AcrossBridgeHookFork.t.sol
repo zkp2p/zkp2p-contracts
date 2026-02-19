@@ -5,7 +5,6 @@ import { Test } from "forge-std/Test.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { AcrossBridgeHook } from "contracts/hooks/AcrossBridgeHook.sol";
-import { IOrchestrator } from "contracts/interfaces/IOrchestrator.sol";
 import { IPostIntentHook } from "contracts/interfaces/IPostIntentHook.sol";
 
 contract AcrossBridgeHookForkTest is Test {
@@ -67,25 +66,26 @@ contract AcrossBridgeHookForkTest is Test {
         });
         bytes memory commitmentData = abi.encode(commitment);
 
-        IOrchestrator.Intent memory intent = IOrchestrator.Intent({
-            owner: address(this),
-            to: recipient,
-            escrow: address(0),
-            depositId: 0,
-            amount: INPUT_AMOUNT,
-            timestamp: block.timestamp,
-            paymentMethod: bytes32(0),
-            fiatCurrency: bytes32(0),
-            conversionRate: 0,
-            payeeId: bytes32(0),
-            referrer: address(0),
-            referrerFee: 0,
-            postIntentHook: IPostIntentHook(address(hook)),
-            data: commitmentData
+        IPostIntentHook.HookExecutionContext memory ctx = IPostIntentHook.HookExecutionContext({
+            intentHash: keccak256("across-intent"),
+            token: BASE_USDC,
+            executableAmount: INPUT_AMOUNT,
+            intent: IPostIntentHook.HookIntentContext({
+                owner: address(this),
+                to: recipient,
+                escrow: address(0),
+                depositId: 0,
+                amount: INPUT_AMOUNT,
+                timestamp: block.timestamp,
+                paymentMethod: bytes32(0),
+                fiatCurrency: bytes32(0),
+                conversionRate: 0,
+                payeeId: bytes32(0),
+                signalHookData: commitmentData
+            })
         });
 
         AcrossBridgeHook.AcrossFulfillData memory fulfill = AcrossBridgeHook.AcrossFulfillData({
-            intentHash: keccak256("across-intent"),
             outputAmount: OUTPUT_AMOUNT,
             fillDeadlineOffset: 3600,
             exclusiveRelayer: bytes32(0),
@@ -96,7 +96,7 @@ contract AcrossBridgeHookForkTest is Test {
         uint256 spokeBalanceBefore = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
         uint256 recipientBalanceBefore = IERC20(BASE_USDC).balanceOf(recipient);
 
-        hook.execute(intent, INPUT_AMOUNT, fulfillData);
+        hook.execute(ctx, fulfillData);
 
         uint256 spokeBalanceAfter = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
         uint256 hookBalance = IERC20(BASE_USDC).balanceOf(address(hook));
@@ -118,25 +118,27 @@ contract AcrossBridgeHookForkTest is Test {
         });
         bytes memory commitmentData = abi.encode(commitment);
 
-        IOrchestrator.Intent memory intent = IOrchestrator.Intent({
-            owner: address(this),
-            to: recipient,
-            escrow: address(0),
-            depositId: 0,
-            amount: INPUT_AMOUNT,
-            timestamp: block.timestamp,
-            paymentMethod: bytes32(0),
-            fiatCurrency: bytes32(0),
-            conversionRate: 0,
-            payeeId: bytes32(0),
-            referrer: address(0),
-            referrerFee: 0,
-            postIntentHook: IPostIntentHook(address(hook)),
-            data: commitmentData
+        bytes32 intentHash = keccak256("across-fallback-intent");
+        IPostIntentHook.HookExecutionContext memory ctx = IPostIntentHook.HookExecutionContext({
+            intentHash: intentHash,
+            token: BASE_USDC,
+            executableAmount: INPUT_AMOUNT,
+            intent: IPostIntentHook.HookIntentContext({
+                owner: address(this),
+                to: recipient,
+                escrow: address(0),
+                depositId: 0,
+                amount: INPUT_AMOUNT,
+                timestamp: block.timestamp,
+                paymentMethod: bytes32(0),
+                fiatCurrency: bytes32(0),
+                conversionRate: 0,
+                payeeId: bytes32(0),
+                signalHookData: commitmentData
+            })
         });
 
         AcrossBridgeHook.AcrossFulfillData memory fulfill = AcrossBridgeHook.AcrossFulfillData({
-            intentHash: keccak256("across-fallback-intent"),
             outputAmount: OUTPUT_AMOUNT,
             fillDeadlineOffset: 3600,
             exclusiveRelayer: bytes32(0),
@@ -148,9 +150,9 @@ contract AcrossBridgeHookForkTest is Test {
         uint256 recipientBalanceBefore = IERC20(BASE_USDC).balanceOf(recipient);
 
         vm.expectEmit(true, true, false, true, address(hook));
-        emit FallbackTransfer(fulfill.intentHash, recipient, INPUT_AMOUNT, 1);
+        emit FallbackTransfer(intentHash, recipient, INPUT_AMOUNT, 1);
 
-        hook.execute(intent, INPUT_AMOUNT, fulfillData);
+        hook.execute(ctx, fulfillData);
 
         uint256 spokeBalanceAfter = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
         uint256 hookBalance = IERC20(BASE_USDC).balanceOf(address(hook));
@@ -177,26 +179,27 @@ contract AcrossBridgeHookForkTest is Test {
         });
         bytes memory commitmentData = abi.encode(commitment);
 
-        IOrchestrator.Intent memory intent = IOrchestrator.Intent({
-            owner: address(this),
-            to: fallbackRecipient,
-            escrow: address(0),
-            depositId: 0,
-            amount: INPUT_AMOUNT,
-            timestamp: block.timestamp,
-            paymentMethod: bytes32(0),
-            fiatCurrency: bytes32(0),
-            conversionRate: 0,
-            payeeId: bytes32(0),
-            referrer: address(0),
-            referrerFee: 0,
-            postIntentHook: IPostIntentHook(address(hook)),
-            data: commitmentData
+        bytes32 intentHash = keccak256("across-solana-intent");
+        IPostIntentHook.HookExecutionContext memory ctx = IPostIntentHook.HookExecutionContext({
+            intentHash: intentHash,
+            token: BASE_USDC,
+            executableAmount: INPUT_AMOUNT,
+            intent: IPostIntentHook.HookIntentContext({
+                owner: address(this),
+                to: fallbackRecipient,
+                escrow: address(0),
+                depositId: 0,
+                amount: INPUT_AMOUNT,
+                timestamp: block.timestamp,
+                paymentMethod: bytes32(0),
+                fiatCurrency: bytes32(0),
+                conversionRate: 0,
+                payeeId: bytes32(0),
+                signalHookData: commitmentData
+            })
         });
 
-        bytes32 intentHash = keccak256("across-solana-intent");
         AcrossBridgeHook.AcrossFulfillData memory fulfill = AcrossBridgeHook.AcrossFulfillData({
-            intentHash: intentHash,
             outputAmount: OUTPUT_AMOUNT,
             fillDeadlineOffset: 3600,
             exclusiveRelayer: bytes32(0),
@@ -220,7 +223,7 @@ contract AcrossBridgeHookForkTest is Test {
             0
         );
 
-        hook.execute(intent, INPUT_AMOUNT, fulfillData);
+        hook.execute(ctx, fulfillData);
 
         uint256 spokeBalanceAfter = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
         uint256 hookBalance = IERC20(BASE_USDC).balanceOf(address(hook));
