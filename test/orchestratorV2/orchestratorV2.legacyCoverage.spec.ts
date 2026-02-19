@@ -142,6 +142,19 @@ describe("OrchestratorV2", () => {
     });
   }
 
+  async function clearIntentOrchestrator(intentHash: BytesLike) {
+    const mappingSlot = 16;
+    const storageSlot = ethers.utils.solidityKeccak256(
+      ["bytes32", "uint256"],
+      [intentHash, mappingSlot]
+    );
+    await ethers.provider.send("hardhat_setStorageAt", [
+      escrow.address,
+      storageSlot,
+      ethers.constants.HashZero,
+    ]);
+  }
+
   beforeEach(async () => {
     [owner, depositor, delegate, taker, other, referrer, protocolFeeRecipient, gatingService] = await getAccounts();
     deployer = new DeployHelper(owner.wallet);
@@ -337,7 +350,14 @@ describe("OrchestratorV2", () => {
     it("cleans up orphaned intents", async () => {
       const intentHash = await signalIntent();
 
-      await orchestratorMock.connect(owner.wallet).unlockFunds(depositId, intentHash);
+      await clearIntentOrchestrator(intentHash);
+      await ethers.provider.send("evm_increaseTime", [3601]);
+      await ethers.provider.send("evm_mine", []);
+      await escrow.connect(other.wallet).pruneExpiredIntents(depositId);
+
+      const orphanedIntent = await orchestrator.getIntent(intentHash);
+      expect(orphanedIntent.owner).to.eq(taker.address);
+
       await orchestrator.connect(other.wallet).cleanupOrphanedIntents([intentHash]);
 
       const prunedIntent = await orchestrator.getIntent(intentHash);

@@ -759,9 +759,10 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
     }
 
     /**
-     * @notice ORCHESTRATOR ONLY: Unlocks funds from a cancelled intent by removing the specific intent. 
+     * @notice ORCHESTRATOR ONLY: Unlocks funds from a cancelled intent by removing the specific intent.
+     * @dev Caller must be the same orchestrator that originally locked the intent.
      * Releases the lock on deposit liquidity and adds it back to the deposit.
-     * 
+     *
      * @param _depositId The deposit ID to unlock funds from
      * @param _intentHash The intent hash to find and remove the intent for
      */
@@ -776,6 +777,8 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
 
         if (deposit.depositor == address(0)) revert DepositNotFound(_depositId);
         if (intent.intentHash == bytes32(0)) revert IntentNotFound(_intentHash);
+        address intentOwnerOrchestrator = intentOrchestrator[_intentHash];
+        if (intentOwnerOrchestrator != msg.sender) revert UnauthorizedCaller(msg.sender, intentOwnerOrchestrator);
 
         // Effects
         deposit.remainingDeposits += intent.amount;
@@ -788,9 +791,9 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
 
     /**
      * @notice ORCHESTRATOR ONLY: Unlocks and transfers funds from a fulfilled intent by removing the specific intent.
-     * Only callable by orchestrator. Releases the lock on deposlit liquidity and transfers out partial/full locked
-     * amount to the given to address.
-     * 
+     * @dev Caller must be the same orchestrator that originally locked the intent.
+     * Releases the lock on deposit liquidity and transfers out partial/full locked amount to the given to address.
+     *
      * @param _depositId The deposit ID to transfer from
      * @param _intentHash The intent hash to find and remove the intent for
      * @param _transferAmount The amount to actually transfer (may be less than intent amount)
@@ -812,6 +815,8 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         
         if (deposit.depositor == address(0)) revert DepositNotFound(_depositId);
         if (intent.intentHash == bytes32(0)) revert IntentNotFound(_intentHash);
+        address intentOwnerOrchestrator = intentOrchestrator[_intentHash];
+        if (intentOwnerOrchestrator != msg.sender) revert UnauthorizedCaller(msg.sender, intentOwnerOrchestrator);
         if (_transferAmount == 0) revert ZeroValue();
         if (_transferAmount > intent.amount) revert AmountExceedsAvailable(_transferAmount, intent.amount);
         

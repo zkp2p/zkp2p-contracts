@@ -36,6 +36,7 @@ describe("EscrowV2", () => {
   let verifier: PaymentVerifierMock;
   let otherVerifier: PaymentVerifierMock;
   let orchestratorMock: OrchestratorMock;
+  let secondaryOrchestratorMock: OrchestratorMock;
   let revertingPruneOrchestrator: Contract;
 
   let venmoPaymentMethod: BytesLike;
@@ -111,6 +112,8 @@ describe("EscrowV2", () => {
 
     orchestratorMock = await deployer.deployOrchestratorMock(escrow.address);
     await orchestratorRegistry.connect(owner.wallet).addOrchestrator(orchestratorMock.address);
+    secondaryOrchestratorMock = await deployer.deployOrchestratorMock(escrow.address);
+    await orchestratorRegistry.connect(owner.wallet).addOrchestrator(secondaryOrchestratorMock.address);
 
     const revertingFactory = await ethers.getContractFactory("RevertingPruneOrchestratorMock", owner.wallet);
     revertingPruneOrchestrator = await revertingFactory.deploy(escrow.address);
@@ -618,6 +621,13 @@ describe("EscrowV2", () => {
         .to.emit(escrow, "FundsUnlocked")
         .withArgs(depositId, intentHash, usdc(20));
     });
+
+    it("reverts when a different allowlisted orchestrator attempts to unlock", async () => {
+      const intentHash = await createIntentWith(orchestratorMock, usdc(20));
+
+      await expect(secondaryOrchestratorMock.connect(owner.wallet).unlockFunds(depositId, intentHash))
+        .to.be.revertedWithCustomError(escrow, "UnauthorizedCaller");
+    });
   });
 
   describe("#unlockAndTransferFunds", () => {
@@ -667,6 +677,17 @@ describe("EscrowV2", () => {
       await expect(
         orchestratorMock.connect(owner.wallet).unlockAndTransferFunds(secondDepositId, intentHash, usdc(9), other.address)
       ).to.emit(escrow, "DustCollected").withArgs(secondDepositId, usdc(1), dustRecipient.address);
+    });
+
+    it("reverts when a different allowlisted orchestrator attempts to unlock and transfer", async () => {
+      const intentHash = await createIntentWith(orchestratorMock, usdc(20));
+
+      await expect(
+        secondaryOrchestratorMock
+          .connect(owner.wallet)
+          .unlockAndTransferFunds(depositId, intentHash, usdc(20), other.address)
+      )
+        .to.be.revertedWithCustomError(escrow, "UnauthorizedCaller");
     });
   });
 
