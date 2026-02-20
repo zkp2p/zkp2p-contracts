@@ -460,6 +460,477 @@ export default {
         }
       ]
     },
+    "AcrossBridgeHookV2": {
+      "address": "0x048C214aC2382E982AEB810696AAC20b082e2b70",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_inputToken",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "_orchestrator",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "_spokePool",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "destinationChainId",
+              "type": "uint256"
+            }
+          ],
+          "name": "InvalidDestinationChainId",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "dataLength",
+              "type": "uint256"
+            }
+          ],
+          "name": "InvalidFulfillHookDataLength",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "outputToken",
+              "type": "bytes32"
+            }
+          ],
+          "name": "InvalidOutputToken",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "recipient",
+              "type": "bytes32"
+            }
+          ],
+          "name": "InvalidRecipient",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "to",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            }
+          ],
+          "name": "NativeTransferFailed",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedCaller",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroAddress",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "destinationChainId",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "outputToken",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "recipient",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "inputAmount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "outputAmount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint32",
+              "name": "fillDeadlineOffset",
+              "type": "uint32"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "exclusiveRelayer",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint32",
+              "name": "exclusivityParameter",
+              "type": "uint32"
+            }
+          ],
+          "name": "AcrossBridgeInitiated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "recipient",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "enum AcrossBridgeHookV2.FallbackReason",
+              "name": "reason",
+              "type": "uint8"
+            }
+          ],
+          "name": "FallbackTransfer",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferred",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "token",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "to",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            }
+          ],
+          "name": "RescueERC20",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "to",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            }
+          ],
+          "name": "RescueNative",
+          "type": "event"
+        },
+        {
+          "inputs": [
+            {
+              "components": [
+                {
+                  "internalType": "bytes32",
+                  "name": "intentHash",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "address",
+                  "name": "token",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "executableAmount",
+                  "type": "uint256"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "owner",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "to",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "escrow",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "depositId",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "amount",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "timestamp",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "paymentMethod",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "fiatCurrency",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "conversionRate",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "payeeId",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "bytes",
+                      "name": "signalHookData",
+                      "type": "bytes"
+                    }
+                  ],
+                  "internalType": "struct IPostIntentHookV2.HookIntentContext",
+                  "name": "intent",
+                  "type": "tuple"
+                }
+              ],
+              "internalType": "struct IPostIntentHookV2.HookExecutionContext",
+              "name": "_ctx",
+              "type": "tuple"
+            },
+            {
+              "internalType": "bytes",
+              "name": "_fulfillHookData",
+              "type": "bytes"
+            }
+          ],
+          "name": "execute",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "inputToken",
+          "outputs": [
+            {
+              "internalType": "contract IERC20",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "orchestrator",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "owner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "renounceOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_token",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "_to",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_amount",
+              "type": "uint256"
+            }
+          ],
+          "name": "rescueERC20",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address payable",
+              "name": "_to",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_amount",
+              "type": "uint256"
+            }
+          ],
+          "name": "rescueNative",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "spokePool",
+          "outputs": [
+            {
+              "internalType": "contract IAcrossSpokePool",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "transferOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "stateMutability": "payable",
+          "type": "receive"
+        }
+      ]
+    },
     "Escrow": {
       "address": "0x5C2a8D9246777eE4501B6C426a8B8C7635C7b5b5",
       "abi": [
@@ -2890,6 +3361,2730 @@ export default {
         }
       ]
     },
+    "EscrowV2": {
+      "address": "0x07Cc97c254A5Fb0957553E9F58E4040699357f28",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_owner",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_chainId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_orchestratorRegistry",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "_paymentVerifierRegistry",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "_dustRecipient",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_dustThreshold",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_maxIntentsPerDeposit",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_intentExpirationPeriod",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "length",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "maxLength",
+              "type": "uint256"
+            }
+          ],
+          "name": "AdapterConfigTooLong",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "max",
+              "type": "uint256"
+            }
+          ],
+          "name": "AmountAboveMax",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "min",
+              "type": "uint256"
+            }
+          ],
+          "name": "AmountBelowMin",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "requested",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "available",
+              "type": "uint256"
+            }
+          ],
+          "name": "AmountExceedsAvailable",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "length1",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "length2",
+              "type": "uint256"
+            }
+          ],
+          "name": "ArrayLengthMismatch",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "currency",
+              "type": "bytes32"
+            }
+          ],
+          "name": "CurrencyAlreadyExists",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "currency",
+              "type": "bytes32"
+            }
+          ],
+          "name": "CurrencyNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "currency",
+              "type": "bytes32"
+            }
+          ],
+          "name": "CurrencyNotSupported",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "DelegateNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "currentState",
+              "type": "bool"
+            }
+          ],
+          "name": "DepositAlreadyInState",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "DepositNotAcceptingIntents",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "DepositNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "EmptyPayeeDetails",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "available",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "required",
+              "type": "uint256"
+            }
+          ],
+          "name": "InsufficientDepositLiquidity",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "IntentAlreadyExists",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "IntentNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "adapter",
+              "type": "address"
+            }
+          ],
+          "name": "InvalidOracleAdapter",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "min",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "max",
+              "type": "uint256"
+            }
+          ],
+          "name": "InvalidRange",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "rateManager",
+              "type": "address"
+            }
+          ],
+          "name": "InvalidRateManager",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "spreadBps",
+              "type": "uint256"
+            }
+          ],
+          "name": "InvalidSpread",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "current",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "max",
+              "type": "uint256"
+            }
+          ],
+          "name": "MaxIntentsExceeded",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "PaymentMethodAlreadyExists",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "PaymentMethodNotActive",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "PaymentMethodNotListed",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "PaymentMethodNotWhitelisted",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "RateManagerAlreadySet",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "RateManagerNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "RateManagerNotSet",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "authorized",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedCaller",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "delegate",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedCallerOrDelegate",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroAddress",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroConversionRate",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroMinValue",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroValue",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "bool",
+              "name": "acceptingIntents",
+              "type": "bool"
+            }
+          ],
+          "name": "DepositAcceptingIntentsUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "depositor",
+              "type": "address"
+            }
+          ],
+          "name": "DepositClosed",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "currency",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "minConversionRate",
+              "type": "uint256"
+            }
+          ],
+          "name": "DepositCurrencyAdded",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "depositor",
+              "type": "address"
+            }
+          ],
+          "name": "DepositDelegateRemoved",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "depositor",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "delegate",
+              "type": "address"
+            }
+          ],
+          "name": "DepositDelegateSet",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "depositor",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            }
+          ],
+          "name": "DepositFundsAdded",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "uint256",
+                  "name": "min",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "max",
+                  "type": "uint256"
+                }
+              ],
+              "indexed": false,
+              "internalType": "struct IEscrow.Range",
+              "name": "intentAmountRange",
+              "type": "tuple"
+            }
+          ],
+          "name": "DepositIntentAmountRangeUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "currency",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "newMinConversionRate",
+              "type": "uint256"
+            }
+          ],
+          "name": "DepositMinConversionRateUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "currencyCode",
+              "type": "bytes32"
+            }
+          ],
+          "name": "DepositOracleRateConfigRemoved",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "currencyCode",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "adapter",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes",
+              "name": "adapterConfig",
+              "type": "bytes"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint16",
+              "name": "spreadBps",
+              "type": "uint16"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint32",
+              "name": "maxStaleness",
+              "type": "uint32"
+            }
+          ],
+          "name": "DepositOracleRateConfigSet",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "bool",
+              "name": "active",
+              "type": "bool"
+            }
+          ],
+          "name": "DepositPaymentMethodActiveUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "payeeDetails",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "intentGatingService",
+              "type": "address"
+            }
+          ],
+          "name": "DepositPaymentMethodAdded",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "rateManager",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "DepositRateManagerCleared",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "rateManager",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "DepositRateManagerSet",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "depositor",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "contract IERC20",
+              "name": "token",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "uint256",
+                  "name": "min",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "max",
+                  "type": "uint256"
+                }
+              ],
+              "indexed": false,
+              "internalType": "struct IEscrow.Range",
+              "name": "intentAmountRange",
+              "type": "tuple"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "delegate",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "intentGuardian",
+              "type": "address"
+            }
+          ],
+          "name": "DepositReceived",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "bool",
+              "name": "retainOnEmpty",
+              "type": "bool"
+            }
+          ],
+          "name": "DepositRetainOnEmptyUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "depositor",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            }
+          ],
+          "name": "DepositWithdrawn",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "dustAmount",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "dustRecipient",
+              "type": "address"
+            }
+          ],
+          "name": "DustCollected",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "dustRecipient",
+              "type": "address"
+            }
+          ],
+          "name": "DustRecipientUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "dustThreshold",
+              "type": "uint256"
+            }
+          ],
+          "name": "DustThresholdUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "expiryTime",
+              "type": "uint256"
+            }
+          ],
+          "name": "FundsLocked",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            }
+          ],
+          "name": "FundsUnlocked",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "unlockedAmount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "transferredAmount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "to",
+              "type": "address"
+            }
+          ],
+          "name": "FundsUnlockedAndTransferred",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "intentExpirationPeriod",
+              "type": "uint256"
+            }
+          ],
+          "name": "IntentExpirationPeriodUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "newExpiryTime",
+              "type": "uint256"
+            }
+          ],
+          "name": "IntentExpiryExtended",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "maxIntentsPerDeposit",
+              "type": "uint256"
+            }
+          ],
+          "name": "MaxIntentsPerDepositUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "minDepositAmount",
+              "type": "uint256"
+            }
+          ],
+          "name": "MinDepositAmountSet",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "orchestratorRegistry",
+              "type": "address"
+            }
+          ],
+          "name": "OrchestratorRegistryUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "orchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "OrchestratorUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferred",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "account",
+              "type": "address"
+            }
+          ],
+          "name": "Paused",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "paymentVerifierRegistry",
+              "type": "address"
+            }
+          ],
+          "name": "PaymentVerifierRegistryUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "account",
+              "type": "address"
+            }
+          ],
+          "name": "Unpaused",
+          "type": "event"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "bytes32",
+                  "name": "code",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "minConversionRate",
+                  "type": "uint256"
+                }
+              ],
+              "internalType": "struct IEscrow.Currency[]",
+              "name": "_currencies",
+              "type": "tuple[]"
+            }
+          ],
+          "name": "addCurrencies",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_amount",
+              "type": "uint256"
+            }
+          ],
+          "name": "addFunds",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32[]",
+              "name": "_paymentMethods",
+              "type": "bytes32[]"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "intentGatingService",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "payeeDetails",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "data",
+                  "type": "bytes"
+                }
+              ],
+              "internalType": "struct IEscrow.DepositPaymentMethodData[]",
+              "name": "_paymentMethodData",
+              "type": "tuple[]"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "bytes32",
+                  "name": "code",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "minConversionRate",
+                  "type": "uint256"
+                }
+              ],
+              "internalType": "struct IEscrow.Currency[][]",
+              "name": "_currencies",
+              "type": "tuple[][]"
+            }
+          ],
+          "name": "addPaymentMethods",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "chainId",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "clearRateManager",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "components": [
+                {
+                  "internalType": "contract IERC20",
+                  "name": "token",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "amount",
+                  "type": "uint256"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "uint256",
+                      "name": "min",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "max",
+                      "type": "uint256"
+                    }
+                  ],
+                  "internalType": "struct IEscrow.Range",
+                  "name": "intentAmountRange",
+                  "type": "tuple"
+                },
+                {
+                  "internalType": "bytes32[]",
+                  "name": "paymentMethods",
+                  "type": "bytes32[]"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "intentGatingService",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "payeeDetails",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "bytes",
+                      "name": "data",
+                      "type": "bytes"
+                    }
+                  ],
+                  "internalType": "struct IEscrow.DepositPaymentMethodData[]",
+                  "name": "paymentMethodData",
+                  "type": "tuple[]"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "bytes32",
+                      "name": "code",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "minConversionRate",
+                      "type": "uint256"
+                    }
+                  ],
+                  "internalType": "struct IEscrow.Currency[][]",
+                  "name": "currencies",
+                  "type": "tuple[][]"
+                },
+                {
+                  "internalType": "address",
+                  "name": "delegate",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "intentGuardian",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bool",
+                  "name": "retainOnEmpty",
+                  "type": "bool"
+                }
+              ],
+              "internalType": "struct IEscrow.CreateDepositParams",
+              "name": "_params",
+              "type": "tuple"
+            }
+          ],
+          "name": "createDeposit",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currencyCode",
+              "type": "bytes32"
+            }
+          ],
+          "name": "deactivateCurrency",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "depositCounter",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "dustRecipient",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "dustThreshold",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_intentHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_additionalTime",
+              "type": "uint256"
+            }
+          ],
+          "name": "extendIntentExpiry",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_account",
+              "type": "address"
+            }
+          ],
+          "name": "getAccountDeposits",
+          "outputs": [
+            {
+              "internalType": "uint256[]",
+              "name": "",
+              "type": "uint256[]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getDeposit",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "depositor",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "delegate",
+                  "type": "address"
+                },
+                {
+                  "internalType": "contract IERC20",
+                  "name": "token",
+                  "type": "address"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "uint256",
+                      "name": "min",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "max",
+                      "type": "uint256"
+                    }
+                  ],
+                  "internalType": "struct IEscrow.Range",
+                  "name": "intentAmountRange",
+                  "type": "tuple"
+                },
+                {
+                  "internalType": "bool",
+                  "name": "acceptingIntents",
+                  "type": "bool"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "remainingDeposits",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "outstandingIntentAmount",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "address",
+                  "name": "intentGuardian",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bool",
+                  "name": "retainOnEmpty",
+                  "type": "bool"
+                }
+              ],
+              "internalType": "struct IEscrow.Deposit",
+              "name": "",
+              "type": "tuple"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getDepositCurrencies",
+          "outputs": [
+            {
+              "internalType": "bytes32[]",
+              "name": "",
+              "type": "bytes32[]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currencyCode",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getDepositCurrencyListed",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currencyCode",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getDepositCurrencyMinRate",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getDepositGatingService",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_intentHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getDepositIntent",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "bytes32",
+                  "name": "intentHash",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "amount",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "timestamp",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "expiryTime",
+                  "type": "uint256"
+                }
+              ],
+              "internalType": "struct IEscrow.Intent",
+              "name": "",
+              "type": "tuple"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getDepositIntentHashes",
+          "outputs": [
+            {
+              "internalType": "bytes32[]",
+              "name": "",
+              "type": "bytes32[]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currencyCode",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getDepositOracleRateConfig",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "adapter",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "adapterConfig",
+                  "type": "bytes"
+                },
+                {
+                  "internalType": "uint16",
+                  "name": "spreadBps",
+                  "type": "uint16"
+                },
+                {
+                  "internalType": "uint32",
+                  "name": "maxStaleness",
+                  "type": "uint32"
+                }
+              ],
+              "internalType": "struct IEscrowV2.OracleRateConfig",
+              "name": "",
+              "type": "tuple"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getDepositPaymentMethodActive",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getDepositPaymentMethodData",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "intentGatingService",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "payeeDetails",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "data",
+                  "type": "bytes"
+                }
+              ],
+              "internalType": "struct IEscrow.DepositPaymentMethodData",
+              "name": "",
+              "type": "tuple"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getDepositPaymentMethodListed",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getDepositPaymentMethods",
+          "outputs": [
+            {
+              "internalType": "bytes32[]",
+              "name": "",
+              "type": "bytes32[]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getDepositRateManager",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "rateManager",
+              "type": "address"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currencyCode",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getEffectiveRate",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getExpiredIntents",
+          "outputs": [
+            {
+              "internalType": "bytes32[]",
+              "name": "expiredIntents",
+              "type": "bytes32[]"
+            },
+            {
+              "internalType": "uint256",
+              "name": "reclaimableAmount",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getManagerFee",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "recipient",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "intentExpirationPeriod",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_intentHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_amount",
+              "type": "uint256"
+            }
+          ],
+          "name": "lockFunds",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "maxIntentsPerDeposit",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "orchestratorRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IOrchestratorRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "owner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "pauseEscrow",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "paused",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "paymentVerifierRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IPaymentVerifierRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "pruneExpiredIntents",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "removeDelegate",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_amount",
+              "type": "uint256"
+            }
+          ],
+          "name": "removeFunds",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currencyCode",
+              "type": "bytes32"
+            }
+          ],
+          "name": "removeOracleRateConfig",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "renounceOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "_acceptingIntents",
+              "type": "bool"
+            }
+          ],
+          "name": "setAcceptingIntents",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_fiatCurrency",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_newMinConversionRate",
+              "type": "uint256"
+            }
+          ],
+          "name": "setCurrencyMinRate",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_delegate",
+              "type": "address"
+            }
+          ],
+          "name": "setDelegate",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_dustRecipient",
+              "type": "address"
+            }
+          ],
+          "name": "setDustRecipient",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_dustThreshold",
+              "type": "uint256"
+            }
+          ],
+          "name": "setDustThreshold",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_intentExpirationPeriod",
+              "type": "uint256"
+            }
+          ],
+          "name": "setIntentExpirationPeriod",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "uint256",
+                  "name": "min",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "max",
+                  "type": "uint256"
+                }
+              ],
+              "internalType": "struct IEscrow.Range",
+              "name": "_intentAmountRange",
+              "type": "tuple"
+            }
+          ],
+          "name": "setIntentRange",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_maxIntentsPerDeposit",
+              "type": "uint256"
+            }
+          ],
+          "name": "setMaxIntentsPerDeposit",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currencyCode",
+              "type": "bytes32"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "adapter",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "adapterConfig",
+                  "type": "bytes"
+                },
+                {
+                  "internalType": "uint16",
+                  "name": "spreadBps",
+                  "type": "uint16"
+                },
+                {
+                  "internalType": "uint32",
+                  "name": "maxStaleness",
+                  "type": "uint32"
+                }
+              ],
+              "internalType": "struct IEscrowV2.OracleRateConfig",
+              "name": "_config",
+              "type": "tuple"
+            }
+          ],
+          "name": "setOracleRateConfig",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32[]",
+              "name": "_paymentMethods",
+              "type": "bytes32[]"
+            },
+            {
+              "internalType": "bytes32[][]",
+              "name": "_currencyCodes",
+              "type": "bytes32[][]"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "adapter",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "adapterConfig",
+                  "type": "bytes"
+                },
+                {
+                  "internalType": "uint16",
+                  "name": "spreadBps",
+                  "type": "uint16"
+                },
+                {
+                  "internalType": "uint32",
+                  "name": "maxStaleness",
+                  "type": "uint32"
+                }
+              ],
+              "internalType": "struct IEscrowV2.OracleRateConfig[][]",
+              "name": "_configs",
+              "type": "tuple[][]"
+            }
+          ],
+          "name": "setOracleRateConfigBatch",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_orchestratorRegistry",
+              "type": "address"
+            }
+          ],
+          "name": "setOrchestratorRegistry",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bool",
+              "name": "_isActive",
+              "type": "bool"
+            }
+          ],
+          "name": "setPaymentMethodActive",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_paymentVerifierRegistry",
+              "type": "address"
+            }
+          ],
+          "name": "setPaymentVerifierRegistry",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_rateManager",
+              "type": "address"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "setRateManager",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "_retainOnEmpty",
+              "type": "bool"
+            }
+          ],
+          "name": "setRetainOnEmpty",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "transferOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_intentHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_transferAmount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_to",
+              "type": "address"
+            }
+          ],
+          "name": "unlockAndTransferFunds",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_intentHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "unlockFunds",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "unpauseEscrow",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "withdrawDeposit",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
     "NullifierRegistry": {
       "address": "0x3FFd04f7909a16d3476263A1f4ce413A089dCc69",
       "abi": [
@@ -4223,6 +7418,1480 @@ export default {
                 }
               ],
               "internalType": "struct IOrchestrator.SignalIntentParams",
+              "name": "_params",
+              "type": "tuple"
+            }
+          ],
+          "name": "signalIntent",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "transferOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "unpauseOrchestrator",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
+    "OrchestratorRegistry": {
+      "address": "0xb6F9BF66928C915CB9a0eAFc33146B89f683280e",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "orchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "OrchestratorAlreadyAdded",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "orchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "OrchestratorNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroAddress",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "orchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "OrchestratorAdded",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "orchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "OrchestratorRemoved",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferred",
+          "type": "event"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_orchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "addOrchestrator",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "name": "isOrchestrator",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "owner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_orchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "removeOrchestrator",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "renounceOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "transferOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
+    "OrchestratorV2": {
+      "address": "0xF5BCD3f3106DE021c1AA35D44a12a18d4fb4f45f",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_owner",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_chainId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_escrowRegistry",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "_paymentVerifierRegistry",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "_relayerRegistry",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_protocolFee",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_protocolFeeRecipient",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "account",
+              "type": "address"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "existingIntent",
+              "type": "bytes32"
+            }
+          ],
+          "name": "AccountHasActiveIntent",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "max",
+              "type": "uint256"
+            }
+          ],
+          "name": "AmountAboveMax",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "min",
+              "type": "uint256"
+            }
+          ],
+          "name": "AmountBelowMin",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "limit",
+              "type": "uint256"
+            }
+          ],
+          "name": "AmountExceedsLimit",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "currency",
+              "type": "bytes32"
+            }
+          ],
+          "name": "CurrencyNotSupported",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "EscrowLockFailed",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            }
+          ],
+          "name": "EscrowNotWhitelisted",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "maximum",
+              "type": "uint256"
+            }
+          ],
+          "name": "FeeExceedsMaximum",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "expected",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "actual",
+              "type": "bytes32"
+            }
+          ],
+          "name": "HashMismatch",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "IntentNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "hook",
+              "type": "address"
+            }
+          ],
+          "name": "InvalidPostIntentHook",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "hook",
+              "type": "address"
+            }
+          ],
+          "name": "InvalidPreIntentHook",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "InvalidReferrerFeeConfiguration",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "InvalidSignature",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "PaymentMethodDoesNotExist",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "PaymentMethodNotSupported",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "PaymentMethodNotWhitelisted",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "PaymentVerificationFailed",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "rate",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "minRate",
+              "type": "uint256"
+            }
+          ],
+          "name": "RateBelowMinimum",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "expiration",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "currentTime",
+              "type": "uint256"
+            }
+          ],
+          "name": "SignatureExpired",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "recipient",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            }
+          ],
+          "name": "TransferFailed",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "authorized",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedCaller",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "delegate",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedCallerOrDelegate",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedEscrowCaller",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroAddress",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroValue",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": false,
+              "internalType": "bool",
+              "name": "allowMultiple",
+              "type": "bool"
+            }
+          ],
+          "name": "AllowMultipleIntentsUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "hook",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "setter",
+              "type": "address"
+            }
+          ],
+          "name": "DepositPreIntentHookSet",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "hook",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "setter",
+              "type": "address"
+            }
+          ],
+          "name": "DepositWhitelistHookSet",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrowRegistry",
+              "type": "address"
+            }
+          ],
+          "name": "EscrowRegistryUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "fundsTransferredTo",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "bool",
+              "name": "isManualRelease",
+              "type": "bool"
+            }
+          ],
+          "name": "IntentFulfilled",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "feeRecipient",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            }
+          ],
+          "name": "IntentManagerFeeSnapshotted",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "IntentPruned",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "to",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "fiatCurrency",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "conversionRate",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "timestamp",
+              "type": "uint256"
+            }
+          ],
+          "name": "IntentSignaled",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferred",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "partialManualReleaseDelay",
+              "type": "uint256"
+            }
+          ],
+          "name": "PartialManualReleaseDelayUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "account",
+              "type": "address"
+            }
+          ],
+          "name": "Paused",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "paymentVerifierRegistry",
+              "type": "address"
+            }
+          ],
+          "name": "PaymentVerifierRegistryUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "protocolFeeRecipient",
+              "type": "address"
+            }
+          ],
+          "name": "ProtocolFeeRecipientUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "protocolFee",
+              "type": "uint256"
+            }
+          ],
+          "name": "ProtocolFeeUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "relayerRegistry",
+              "type": "address"
+            }
+          ],
+          "name": "RelayerRegistryUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "account",
+              "type": "address"
+            }
+          ],
+          "name": "Unpaused",
+          "type": "event"
+        },
+        {
+          "inputs": [],
+          "name": "allowMultipleIntents",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_intentHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "cancelIntent",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "chainId",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32[]",
+              "name": "_intentHashes",
+              "type": "bytes32[]"
+            }
+          ],
+          "name": "cleanupOrphanedIntents",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "escrowRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IEscrowRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "components": [
+                {
+                  "internalType": "bytes",
+                  "name": "paymentProof",
+                  "type": "bytes"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "intentHash",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "verificationData",
+                  "type": "bytes"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "postIntentHookData",
+                  "type": "bytes"
+                }
+              ],
+              "internalType": "struct IOrchestratorV2.FulfillIntentParams",
+              "name": "_params",
+              "type": "tuple"
+            }
+          ],
+          "name": "fulfillIntent",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_account",
+              "type": "address"
+            }
+          ],
+          "name": "getAccountIntents",
+          "outputs": [
+            {
+              "internalType": "bytes32[]",
+              "name": "",
+              "type": "bytes32[]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getDepositPreIntentHook",
+          "outputs": [
+            {
+              "internalType": "contract IPreIntentHook",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getDepositWhitelistHook",
+          "outputs": [
+            {
+              "internalType": "contract IPreIntentHook",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_intentHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getIntent",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "owner",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "to",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "escrow",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "depositId",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "amount",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "timestamp",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "paymentMethod",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "fiatCurrency",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "conversionRate",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "payeeId",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "address",
+                  "name": "referrer",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "referrerFee",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "contract IPostIntentHookV2",
+                  "name": "postIntentHook",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "data",
+                  "type": "bytes"
+                }
+              ],
+              "internalType": "struct IOrchestratorV2.Intent",
+              "name": "",
+              "type": "tuple"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_intentHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getIntentMinAtSignal",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "intentCounter",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "owner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "pauseOrchestrator",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "paused",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "paymentVerifierRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IPaymentVerifierRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "protocolFee",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "protocolFeeRecipient",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32[]",
+              "name": "_intents",
+              "type": "bytes32[]"
+            }
+          ],
+          "name": "pruneIntents",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "relayerRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IRelayerRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_intentHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "releaseFundsToPayer",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "renounceOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bool",
+              "name": "_allowMultiple",
+              "type": "bool"
+            }
+          ],
+          "name": "setAllowMultipleIntents",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "contract IPreIntentHook",
+              "name": "_hook",
+              "type": "address"
+            }
+          ],
+          "name": "setDepositPreIntentHook",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "contract IPreIntentHook",
+              "name": "_hook",
+              "type": "address"
+            }
+          ],
+          "name": "setDepositWhitelistHook",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrowRegistry",
+              "type": "address"
+            }
+          ],
+          "name": "setEscrowRegistry",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_protocolFee",
+              "type": "uint256"
+            }
+          ],
+          "name": "setProtocolFee",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_protocolFeeRecipient",
+              "type": "address"
+            }
+          ],
+          "name": "setProtocolFeeRecipient",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_relayerRegistry",
+              "type": "address"
+            }
+          ],
+          "name": "setRelayerRegistry",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "escrow",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "depositId",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "amount",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "address",
+                  "name": "to",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "paymentMethod",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "fiatCurrency",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "conversionRate",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "address",
+                  "name": "referrer",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "referrerFee",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "gatingServiceSignature",
+                  "type": "bytes"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "signatureExpiration",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "contract IPostIntentHookV2",
+                  "name": "postIntentHook",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "preIntentHookData",
+                  "type": "bytes"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "data",
+                  "type": "bytes"
+                }
+              ],
+              "internalType": "struct IOrchestratorV2.SignalIntentParams",
               "name": "_params",
               "type": "tuple"
             }
@@ -5993,6 +10662,2474 @@ export default {
         }
       ]
     },
+    "ProtocolViewerV2": {
+      "address": "0x6ee5ff5cAFFa655d94f76a9654e1151f6E735aaF",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "_orchestrator",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousEscrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newEscrow",
+              "type": "address"
+            }
+          ],
+          "name": "EscrowContractUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOrchestrator",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOrchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "OrchestratorUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferred",
+          "type": "event"
+        },
+        {
+          "inputs": [],
+          "name": "escrowContract",
+          "outputs": [
+            {
+              "internalType": "contract IEscrow",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_account",
+              "type": "address"
+            }
+          ],
+          "name": "getAccountDeposits",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "uint256",
+                  "name": "depositId",
+                  "type": "uint256"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "depositor",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "delegate",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "contract IERC20",
+                      "name": "token",
+                      "type": "address"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "uint256",
+                          "name": "min",
+                          "type": "uint256"
+                        },
+                        {
+                          "internalType": "uint256",
+                          "name": "max",
+                          "type": "uint256"
+                        }
+                      ],
+                      "internalType": "struct IEscrow.Range",
+                      "name": "intentAmountRange",
+                      "type": "tuple"
+                    },
+                    {
+                      "internalType": "bool",
+                      "name": "acceptingIntents",
+                      "type": "bool"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "remainingDeposits",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "outstandingIntentAmount",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "intentGuardian",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "bool",
+                      "name": "retainOnEmpty",
+                      "type": "bool"
+                    }
+                  ],
+                  "internalType": "struct IEscrow.Deposit",
+                  "name": "deposit",
+                  "type": "tuple"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "availableLiquidity",
+                  "type": "uint256"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "bytes32",
+                      "name": "paymentMethod",
+                      "type": "bytes32"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "address",
+                          "name": "intentGatingService",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "bytes32",
+                          "name": "payeeDetails",
+                          "type": "bytes32"
+                        },
+                        {
+                          "internalType": "bytes",
+                          "name": "data",
+                          "type": "bytes"
+                        }
+                      ],
+                      "internalType": "struct IEscrow.DepositPaymentMethodData",
+                      "name": "verificationData",
+                      "type": "tuple"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "bytes32",
+                          "name": "code",
+                          "type": "bytes32"
+                        },
+                        {
+                          "internalType": "uint256",
+                          "name": "minConversionRate",
+                          "type": "uint256"
+                        }
+                      ],
+                      "internalType": "struct IEscrow.Currency[]",
+                      "name": "currencies",
+                      "type": "tuple[]"
+                    }
+                  ],
+                  "internalType": "struct IProtocolViewer.PaymentMethodDataView[]",
+                  "name": "paymentMethods",
+                  "type": "tuple[]"
+                },
+                {
+                  "internalType": "bytes32[]",
+                  "name": "intentHashes",
+                  "type": "bytes32[]"
+                }
+              ],
+              "internalType": "struct IProtocolViewer.DepositView[]",
+              "name": "depositArray",
+              "type": "tuple[]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_account",
+              "type": "address"
+            }
+          ],
+          "name": "getAccountIntents",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "bytes32",
+                  "name": "intentHash",
+                  "type": "bytes32"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "owner",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "to",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "escrow",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "depositId",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "amount",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "timestamp",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "paymentMethod",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "fiatCurrency",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "conversionRate",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "payeeId",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "referrer",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "referrerFee",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "contract IPostIntentHook",
+                      "name": "postIntentHook",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "bytes",
+                      "name": "data",
+                      "type": "bytes"
+                    }
+                  ],
+                  "internalType": "struct IOrchestrator.Intent",
+                  "name": "intent",
+                  "type": "tuple"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "uint256",
+                      "name": "depositId",
+                      "type": "uint256"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "address",
+                          "name": "depositor",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "address",
+                          "name": "delegate",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "contract IERC20",
+                          "name": "token",
+                          "type": "address"
+                        },
+                        {
+                          "components": [
+                            {
+                              "internalType": "uint256",
+                              "name": "min",
+                              "type": "uint256"
+                            },
+                            {
+                              "internalType": "uint256",
+                              "name": "max",
+                              "type": "uint256"
+                            }
+                          ],
+                          "internalType": "struct IEscrow.Range",
+                          "name": "intentAmountRange",
+                          "type": "tuple"
+                        },
+                        {
+                          "internalType": "bool",
+                          "name": "acceptingIntents",
+                          "type": "bool"
+                        },
+                        {
+                          "internalType": "uint256",
+                          "name": "remainingDeposits",
+                          "type": "uint256"
+                        },
+                        {
+                          "internalType": "uint256",
+                          "name": "outstandingIntentAmount",
+                          "type": "uint256"
+                        },
+                        {
+                          "internalType": "address",
+                          "name": "intentGuardian",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "bool",
+                          "name": "retainOnEmpty",
+                          "type": "bool"
+                        }
+                      ],
+                      "internalType": "struct IEscrow.Deposit",
+                      "name": "deposit",
+                      "type": "tuple"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "availableLiquidity",
+                      "type": "uint256"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "bytes32",
+                          "name": "paymentMethod",
+                          "type": "bytes32"
+                        },
+                        {
+                          "components": [
+                            {
+                              "internalType": "address",
+                              "name": "intentGatingService",
+                              "type": "address"
+                            },
+                            {
+                              "internalType": "bytes32",
+                              "name": "payeeDetails",
+                              "type": "bytes32"
+                            },
+                            {
+                              "internalType": "bytes",
+                              "name": "data",
+                              "type": "bytes"
+                            }
+                          ],
+                          "internalType": "struct IEscrow.DepositPaymentMethodData",
+                          "name": "verificationData",
+                          "type": "tuple"
+                        },
+                        {
+                          "components": [
+                            {
+                              "internalType": "bytes32",
+                              "name": "code",
+                              "type": "bytes32"
+                            },
+                            {
+                              "internalType": "uint256",
+                              "name": "minConversionRate",
+                              "type": "uint256"
+                            }
+                          ],
+                          "internalType": "struct IEscrow.Currency[]",
+                          "name": "currencies",
+                          "type": "tuple[]"
+                        }
+                      ],
+                      "internalType": "struct IProtocolViewer.PaymentMethodDataView[]",
+                      "name": "paymentMethods",
+                      "type": "tuple[]"
+                    },
+                    {
+                      "internalType": "bytes32[]",
+                      "name": "intentHashes",
+                      "type": "bytes32[]"
+                    }
+                  ],
+                  "internalType": "struct IProtocolViewer.DepositView",
+                  "name": "deposit",
+                  "type": "tuple"
+                }
+              ],
+              "internalType": "struct IProtocolViewer.IntentView[]",
+              "name": "intentViews",
+              "type": "tuple[]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getDeposit",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "uint256",
+                  "name": "depositId",
+                  "type": "uint256"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "depositor",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "delegate",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "contract IERC20",
+                      "name": "token",
+                      "type": "address"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "uint256",
+                          "name": "min",
+                          "type": "uint256"
+                        },
+                        {
+                          "internalType": "uint256",
+                          "name": "max",
+                          "type": "uint256"
+                        }
+                      ],
+                      "internalType": "struct IEscrow.Range",
+                      "name": "intentAmountRange",
+                      "type": "tuple"
+                    },
+                    {
+                      "internalType": "bool",
+                      "name": "acceptingIntents",
+                      "type": "bool"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "remainingDeposits",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "outstandingIntentAmount",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "intentGuardian",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "bool",
+                      "name": "retainOnEmpty",
+                      "type": "bool"
+                    }
+                  ],
+                  "internalType": "struct IEscrow.Deposit",
+                  "name": "deposit",
+                  "type": "tuple"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "availableLiquidity",
+                  "type": "uint256"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "bytes32",
+                      "name": "paymentMethod",
+                      "type": "bytes32"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "address",
+                          "name": "intentGatingService",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "bytes32",
+                          "name": "payeeDetails",
+                          "type": "bytes32"
+                        },
+                        {
+                          "internalType": "bytes",
+                          "name": "data",
+                          "type": "bytes"
+                        }
+                      ],
+                      "internalType": "struct IEscrow.DepositPaymentMethodData",
+                      "name": "verificationData",
+                      "type": "tuple"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "bytes32",
+                          "name": "code",
+                          "type": "bytes32"
+                        },
+                        {
+                          "internalType": "uint256",
+                          "name": "minConversionRate",
+                          "type": "uint256"
+                        }
+                      ],
+                      "internalType": "struct IEscrow.Currency[]",
+                      "name": "currencies",
+                      "type": "tuple[]"
+                    }
+                  ],
+                  "internalType": "struct IProtocolViewer.PaymentMethodDataView[]",
+                  "name": "paymentMethods",
+                  "type": "tuple[]"
+                },
+                {
+                  "internalType": "bytes32[]",
+                  "name": "intentHashes",
+                  "type": "bytes32[]"
+                }
+              ],
+              "internalType": "struct IProtocolViewer.DepositView",
+              "name": "depositView",
+              "type": "tuple"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256[]",
+              "name": "_depositIds",
+              "type": "uint256[]"
+            }
+          ],
+          "name": "getDepositFromIds",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "uint256",
+                  "name": "depositId",
+                  "type": "uint256"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "depositor",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "delegate",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "contract IERC20",
+                      "name": "token",
+                      "type": "address"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "uint256",
+                          "name": "min",
+                          "type": "uint256"
+                        },
+                        {
+                          "internalType": "uint256",
+                          "name": "max",
+                          "type": "uint256"
+                        }
+                      ],
+                      "internalType": "struct IEscrow.Range",
+                      "name": "intentAmountRange",
+                      "type": "tuple"
+                    },
+                    {
+                      "internalType": "bool",
+                      "name": "acceptingIntents",
+                      "type": "bool"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "remainingDeposits",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "outstandingIntentAmount",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "intentGuardian",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "bool",
+                      "name": "retainOnEmpty",
+                      "type": "bool"
+                    }
+                  ],
+                  "internalType": "struct IEscrow.Deposit",
+                  "name": "deposit",
+                  "type": "tuple"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "availableLiquidity",
+                  "type": "uint256"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "bytes32",
+                      "name": "paymentMethod",
+                      "type": "bytes32"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "address",
+                          "name": "intentGatingService",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "bytes32",
+                          "name": "payeeDetails",
+                          "type": "bytes32"
+                        },
+                        {
+                          "internalType": "bytes",
+                          "name": "data",
+                          "type": "bytes"
+                        }
+                      ],
+                      "internalType": "struct IEscrow.DepositPaymentMethodData",
+                      "name": "verificationData",
+                      "type": "tuple"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "bytes32",
+                          "name": "code",
+                          "type": "bytes32"
+                        },
+                        {
+                          "internalType": "uint256",
+                          "name": "minConversionRate",
+                          "type": "uint256"
+                        }
+                      ],
+                      "internalType": "struct IEscrow.Currency[]",
+                      "name": "currencies",
+                      "type": "tuple[]"
+                    }
+                  ],
+                  "internalType": "struct IProtocolViewer.PaymentMethodDataView[]",
+                  "name": "paymentMethods",
+                  "type": "tuple[]"
+                },
+                {
+                  "internalType": "bytes32[]",
+                  "name": "intentHashes",
+                  "type": "bytes32[]"
+                }
+              ],
+              "internalType": "struct IProtocolViewer.DepositView[]",
+              "name": "depositArray",
+              "type": "tuple[]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_intentHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getIntent",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "bytes32",
+                  "name": "intentHash",
+                  "type": "bytes32"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "owner",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "to",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "escrow",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "depositId",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "amount",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "timestamp",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "paymentMethod",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "fiatCurrency",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "conversionRate",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "payeeId",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "referrer",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "referrerFee",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "contract IPostIntentHook",
+                      "name": "postIntentHook",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "bytes",
+                      "name": "data",
+                      "type": "bytes"
+                    }
+                  ],
+                  "internalType": "struct IOrchestrator.Intent",
+                  "name": "intent",
+                  "type": "tuple"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "uint256",
+                      "name": "depositId",
+                      "type": "uint256"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "address",
+                          "name": "depositor",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "address",
+                          "name": "delegate",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "contract IERC20",
+                          "name": "token",
+                          "type": "address"
+                        },
+                        {
+                          "components": [
+                            {
+                              "internalType": "uint256",
+                              "name": "min",
+                              "type": "uint256"
+                            },
+                            {
+                              "internalType": "uint256",
+                              "name": "max",
+                              "type": "uint256"
+                            }
+                          ],
+                          "internalType": "struct IEscrow.Range",
+                          "name": "intentAmountRange",
+                          "type": "tuple"
+                        },
+                        {
+                          "internalType": "bool",
+                          "name": "acceptingIntents",
+                          "type": "bool"
+                        },
+                        {
+                          "internalType": "uint256",
+                          "name": "remainingDeposits",
+                          "type": "uint256"
+                        },
+                        {
+                          "internalType": "uint256",
+                          "name": "outstandingIntentAmount",
+                          "type": "uint256"
+                        },
+                        {
+                          "internalType": "address",
+                          "name": "intentGuardian",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "bool",
+                          "name": "retainOnEmpty",
+                          "type": "bool"
+                        }
+                      ],
+                      "internalType": "struct IEscrow.Deposit",
+                      "name": "deposit",
+                      "type": "tuple"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "availableLiquidity",
+                      "type": "uint256"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "bytes32",
+                          "name": "paymentMethod",
+                          "type": "bytes32"
+                        },
+                        {
+                          "components": [
+                            {
+                              "internalType": "address",
+                              "name": "intentGatingService",
+                              "type": "address"
+                            },
+                            {
+                              "internalType": "bytes32",
+                              "name": "payeeDetails",
+                              "type": "bytes32"
+                            },
+                            {
+                              "internalType": "bytes",
+                              "name": "data",
+                              "type": "bytes"
+                            }
+                          ],
+                          "internalType": "struct IEscrow.DepositPaymentMethodData",
+                          "name": "verificationData",
+                          "type": "tuple"
+                        },
+                        {
+                          "components": [
+                            {
+                              "internalType": "bytes32",
+                              "name": "code",
+                              "type": "bytes32"
+                            },
+                            {
+                              "internalType": "uint256",
+                              "name": "minConversionRate",
+                              "type": "uint256"
+                            }
+                          ],
+                          "internalType": "struct IEscrow.Currency[]",
+                          "name": "currencies",
+                          "type": "tuple[]"
+                        }
+                      ],
+                      "internalType": "struct IProtocolViewer.PaymentMethodDataView[]",
+                      "name": "paymentMethods",
+                      "type": "tuple[]"
+                    },
+                    {
+                      "internalType": "bytes32[]",
+                      "name": "intentHashes",
+                      "type": "bytes32[]"
+                    }
+                  ],
+                  "internalType": "struct IProtocolViewer.DepositView",
+                  "name": "deposit",
+                  "type": "tuple"
+                }
+              ],
+              "internalType": "struct IProtocolViewer.IntentView",
+              "name": "intentView",
+              "type": "tuple"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32[]",
+              "name": "_intentHashes",
+              "type": "bytes32[]"
+            }
+          ],
+          "name": "getIntents",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "bytes32",
+                  "name": "intentHash",
+                  "type": "bytes32"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "owner",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "to",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "escrow",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "depositId",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "amount",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "timestamp",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "paymentMethod",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "fiatCurrency",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "conversionRate",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "payeeId",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "address",
+                      "name": "referrer",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "referrerFee",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "contract IPostIntentHook",
+                      "name": "postIntentHook",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "bytes",
+                      "name": "data",
+                      "type": "bytes"
+                    }
+                  ],
+                  "internalType": "struct IOrchestrator.Intent",
+                  "name": "intent",
+                  "type": "tuple"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "uint256",
+                      "name": "depositId",
+                      "type": "uint256"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "address",
+                          "name": "depositor",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "address",
+                          "name": "delegate",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "contract IERC20",
+                          "name": "token",
+                          "type": "address"
+                        },
+                        {
+                          "components": [
+                            {
+                              "internalType": "uint256",
+                              "name": "min",
+                              "type": "uint256"
+                            },
+                            {
+                              "internalType": "uint256",
+                              "name": "max",
+                              "type": "uint256"
+                            }
+                          ],
+                          "internalType": "struct IEscrow.Range",
+                          "name": "intentAmountRange",
+                          "type": "tuple"
+                        },
+                        {
+                          "internalType": "bool",
+                          "name": "acceptingIntents",
+                          "type": "bool"
+                        },
+                        {
+                          "internalType": "uint256",
+                          "name": "remainingDeposits",
+                          "type": "uint256"
+                        },
+                        {
+                          "internalType": "uint256",
+                          "name": "outstandingIntentAmount",
+                          "type": "uint256"
+                        },
+                        {
+                          "internalType": "address",
+                          "name": "intentGuardian",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "bool",
+                          "name": "retainOnEmpty",
+                          "type": "bool"
+                        }
+                      ],
+                      "internalType": "struct IEscrow.Deposit",
+                      "name": "deposit",
+                      "type": "tuple"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "availableLiquidity",
+                      "type": "uint256"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "bytes32",
+                          "name": "paymentMethod",
+                          "type": "bytes32"
+                        },
+                        {
+                          "components": [
+                            {
+                              "internalType": "address",
+                              "name": "intentGatingService",
+                              "type": "address"
+                            },
+                            {
+                              "internalType": "bytes32",
+                              "name": "payeeDetails",
+                              "type": "bytes32"
+                            },
+                            {
+                              "internalType": "bytes",
+                              "name": "data",
+                              "type": "bytes"
+                            }
+                          ],
+                          "internalType": "struct IEscrow.DepositPaymentMethodData",
+                          "name": "verificationData",
+                          "type": "tuple"
+                        },
+                        {
+                          "components": [
+                            {
+                              "internalType": "bytes32",
+                              "name": "code",
+                              "type": "bytes32"
+                            },
+                            {
+                              "internalType": "uint256",
+                              "name": "minConversionRate",
+                              "type": "uint256"
+                            }
+                          ],
+                          "internalType": "struct IEscrow.Currency[]",
+                          "name": "currencies",
+                          "type": "tuple[]"
+                        }
+                      ],
+                      "internalType": "struct IProtocolViewer.PaymentMethodDataView[]",
+                      "name": "paymentMethods",
+                      "type": "tuple[]"
+                    },
+                    {
+                      "internalType": "bytes32[]",
+                      "name": "intentHashes",
+                      "type": "bytes32[]"
+                    }
+                  ],
+                  "internalType": "struct IProtocolViewer.DepositView",
+                  "name": "deposit",
+                  "type": "tuple"
+                }
+              ],
+              "internalType": "struct IProtocolViewer.IntentView[]",
+              "name": "intentArray",
+              "type": "tuple[]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "orchestrator",
+          "outputs": [
+            {
+              "internalType": "contract IOrchestrator",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "owner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "renounceOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            }
+          ],
+          "name": "setEscrowContract",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_orchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "setOrchestrator",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "transferOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
+    "RateManagerV1": {
+      "address": "0x77775A861041343E9e4AF46df34E475091F547C7",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "length",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "maxLength",
+              "type": "uint256"
+            }
+          ],
+          "name": "AdapterConfigTooLong",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "length1",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "length2",
+              "type": "uint256"
+            }
+          ],
+          "name": "ArrayLengthMismatch",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "totalLiquidity",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "required",
+              "type": "uint256"
+            }
+          ],
+          "name": "BelowMinLiquidity",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "DepositNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "maximum",
+              "type": "uint256"
+            }
+          ],
+          "name": "FeeExceedsMaximum",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "adapter",
+              "type": "address"
+            }
+          ],
+          "name": "InvalidOracleAdapter",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "spreadBps",
+              "type": "uint256"
+            }
+          ],
+          "name": "InvalidSpread",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "RateManagerNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "authorized",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedCaller",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroAddress",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroValue",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "currencyCode",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "bool",
+              "name": "enabled",
+              "type": "bool"
+            }
+          ],
+          "name": "DepositorCurrencyEnabledSet",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "currencyCode",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "floorFixed",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint16",
+              "name": "floorSpreadBps",
+              "type": "uint16"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "oracleAdapter",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes",
+              "name": "adapterConfig",
+              "type": "bytes"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint32",
+              "name": "maxStaleness",
+              "type": "uint32"
+            }
+          ],
+          "name": "DepositorFloorSet",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "minLiquidity",
+              "type": "uint256"
+            }
+          ],
+          "name": "MinLiquidityUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "manager",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "feeRecipient",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
+              "name": "uri",
+              "type": "string"
+            }
+          ],
+          "name": "RateManagerConfigUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "manager",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "feeRecipient",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "maxFee",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
+              "name": "uri",
+              "type": "string"
+            }
+          ],
+          "name": "RateManagerCreated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            }
+          ],
+          "name": "RateManagerFeeUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "currencyCode",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "rate",
+              "type": "uint256"
+            }
+          ],
+          "name": "RateManagerRateUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "totalUpdated",
+              "type": "uint256"
+            }
+          ],
+          "name": "RateManagerRatesBatchUpdated",
+          "type": "event"
+        },
+        {
+          "inputs": [],
+          "name": "GLOBAL_MAX_MANAGER_FEE",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "manager",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "feeRecipient",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "maxFee",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "fee",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "string",
+                  "name": "name",
+                  "type": "string"
+                },
+                {
+                  "internalType": "string",
+                  "name": "uri",
+                  "type": "string"
+                }
+              ],
+              "internalType": "struct RateManagerV1.RateManagerConfig",
+              "name": "_config",
+              "type": "tuple"
+            }
+          ],
+          "name": "createRateManager",
+          "outputs": [
+            {
+              "internalType": "bytes32",
+              "name": "rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currencyCode",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getDepositorFloor",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "uint256",
+                  "name": "floorFixed",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint16",
+                  "name": "floorSpreadBps",
+                  "type": "uint16"
+                },
+                {
+                  "internalType": "address",
+                  "name": "oracleAdapter",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "adapterConfig",
+                  "type": "bytes"
+                },
+                {
+                  "internalType": "uint32",
+                  "name": "maxStaleness",
+                  "type": "uint32"
+                }
+              ],
+              "internalType": "struct RateManagerV1.DepositorFloorConfig",
+              "name": "config",
+              "type": "tuple"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getFee",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "recipient",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "fee",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currencyCode",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getManagerRate",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "rate",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currencyCode",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getRate",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "rate",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getRateManager",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "manager",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "feeRecipient",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "maxFee",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "fee",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "string",
+                  "name": "name",
+                  "type": "string"
+                },
+                {
+                  "internalType": "string",
+                  "name": "uri",
+                  "type": "string"
+                }
+              ],
+              "internalType": "struct RateManagerV1.RateManagerConfig",
+              "name": "config",
+              "type": "tuple"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currencyCode",
+              "type": "bytes32"
+            }
+          ],
+          "name": "isDepositorCurrencyEnabled",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "enabled",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "isRateManager",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "exists",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "",
+              "type": "bytes32"
+            }
+          ],
+          "name": "minLiquidity",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_depositor",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "onDepositOptIn",
+          "outputs": [],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currencyCode",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bool",
+              "name": "_enabled",
+              "type": "bool"
+            }
+          ],
+          "name": "setDepositorCurrencyEnabled",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32[]",
+              "name": "_paymentMethods",
+              "type": "bytes32[]"
+            },
+            {
+              "internalType": "bytes32[][]",
+              "name": "_currencyCodes",
+              "type": "bytes32[][]"
+            },
+            {
+              "internalType": "bool[][]",
+              "name": "_enabled",
+              "type": "bool[][]"
+            }
+          ],
+          "name": "setDepositorCurrencyEnabledBatch",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currencyCode",
+              "type": "bytes32"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "uint256",
+                  "name": "floorFixed",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint16",
+                  "name": "floorSpreadBps",
+                  "type": "uint16"
+                },
+                {
+                  "internalType": "address",
+                  "name": "oracleAdapter",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "adapterConfig",
+                  "type": "bytes"
+                },
+                {
+                  "internalType": "uint32",
+                  "name": "maxStaleness",
+                  "type": "uint32"
+                }
+              ],
+              "internalType": "struct RateManagerV1.DepositorFloorConfig",
+              "name": "_config",
+              "type": "tuple"
+            }
+          ],
+          "name": "setDepositorFloor",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32[]",
+              "name": "_paymentMethods",
+              "type": "bytes32[]"
+            },
+            {
+              "internalType": "bytes32[][]",
+              "name": "_currencyCodes",
+              "type": "bytes32[][]"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "uint256",
+                  "name": "floorFixed",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint16",
+                  "name": "floorSpreadBps",
+                  "type": "uint16"
+                },
+                {
+                  "internalType": "address",
+                  "name": "oracleAdapter",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "adapterConfig",
+                  "type": "bytes"
+                },
+                {
+                  "internalType": "uint32",
+                  "name": "maxStaleness",
+                  "type": "uint32"
+                }
+              ],
+              "internalType": "struct RateManagerV1.DepositorFloorConfig[][]",
+              "name": "_configs",
+              "type": "tuple[][]"
+            }
+          ],
+          "name": "setDepositorFloorBatch",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_fee",
+              "type": "uint256"
+            }
+          ],
+          "name": "setFee",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_minLiquidity",
+              "type": "uint256"
+            }
+          ],
+          "name": "setMinLiquidity",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_currencyCode",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_rate",
+              "type": "uint256"
+            }
+          ],
+          "name": "setRate",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32[]",
+              "name": "_paymentMethods",
+              "type": "bytes32[]"
+            },
+            {
+              "internalType": "bytes32[][]",
+              "name": "_currencyCodes",
+              "type": "bytes32[][]"
+            },
+            {
+              "internalType": "uint256[][]",
+              "name": "_rates",
+              "type": "uint256[][]"
+            }
+          ],
+          "name": "setRateBatch",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_rateManagerId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "_manager",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "_feeRecipient",
+              "type": "address"
+            },
+            {
+              "internalType": "string",
+              "name": "_name",
+              "type": "string"
+            },
+            {
+              "internalType": "string",
+              "name": "_uri",
+              "type": "string"
+            }
+          ],
+          "name": "setRateManagerConfig",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
     "RelayerRegistry": {
       "address": "0xB214650b424E6b5fdcB1259566eB7A512D8Bd25E",
       "abi": [
@@ -6154,6 +13291,299 @@ export default {
           "name": "transferOwnership",
           "outputs": [],
           "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
+    "SignatureGatingPreIntentHook": {
+      "address": "0xF5Abf597C11b3fa827446990E29E4A2C5a1e1302",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_orchestratorRegistry",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_chainId",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [],
+          "name": "InvalidSignature",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "expiration",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "currentTime",
+              "type": "uint256"
+            }
+          ],
+          "name": "SignatureExpired",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "SignerNotSet",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "delegate",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedCallerOrDelegate",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedOrchestratorCaller",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroAddress",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "signer",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "setter",
+              "type": "address"
+            }
+          ],
+          "name": "DepositSignerSet",
+          "type": "event"
+        },
+        {
+          "inputs": [],
+          "name": "chainId",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "name": "depositSigner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getDepositSigner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "orchestratorRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IOrchestratorRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_signer",
+              "type": "address"
+            }
+          ],
+          "name": "setDepositSigner",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "taker",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "escrow",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "depositId",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "amount",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "address",
+                  "name": "to",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "paymentMethod",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "fiatCurrency",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "conversionRate",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "address",
+                  "name": "referrer",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "referrerFee",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "preIntentHookData",
+                  "type": "bytes"
+                }
+              ],
+              "internalType": "struct IPreIntentHook.PreIntentContext",
+              "name": "_ctx",
+              "type": "tuple"
+            }
+          ],
+          "name": "validateSignalIntent",
+          "outputs": [],
+          "stateMutability": "view",
           "type": "function"
         }
       ]
@@ -6676,6 +14106,689 @@ export default {
             }
           ],
           "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
+    "UnifiedPaymentVerifierV2": {
+      "address": "0x03b4D3bF7B8274323022c8b6CC1D85fF2bDF815E",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "contract IOrchestratorRegistry",
+              "name": "_orchestratorRegistry",
+              "type": "address"
+            },
+            {
+              "internalType": "contract INullifierRegistry",
+              "name": "_nullifierRegistry",
+              "type": "address"
+            },
+            {
+              "internalType": "contract IAttestationVerifier",
+              "name": "_attestationVerifier",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "oldVerifier",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newVerifier",
+              "type": "address"
+            }
+          ],
+          "name": "AttestationVerifierUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferred",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "PaymentMethodAdded",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "PaymentMethodRemoved",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "method",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "currency",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "timestamp",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "paymentId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
+              "name": "payeeId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "PaymentVerified",
+          "type": "event"
+        },
+        {
+          "inputs": [],
+          "name": "DOMAIN_SEPARATOR",
+          "outputs": [
+            {
+              "internalType": "bytes32",
+              "name": "",
+              "type": "bytes32"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "addPaymentMethod",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "attestationVerifier",
+          "outputs": [
+            {
+              "internalType": "contract IAttestationVerifier",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "getPaymentMethods",
+          "outputs": [
+            {
+              "internalType": "bytes32[]",
+              "name": "",
+              "type": "bytes32[]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "",
+              "type": "bytes32"
+            }
+          ],
+          "name": "isPaymentMethod",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "nullifierRegistry",
+          "outputs": [
+            {
+              "internalType": "contract INullifierRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "orchestratorRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IOrchestratorRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "owner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "name": "paymentMethods",
+          "outputs": [
+            {
+              "internalType": "bytes32",
+              "name": "",
+              "type": "bytes32"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "removePaymentMethod",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "renounceOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_newVerifier",
+              "type": "address"
+            }
+          ],
+          "name": "setAttestationVerifier",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "transferOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "components": [
+                {
+                  "internalType": "bytes32",
+                  "name": "intentHash",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "paymentProof",
+                  "type": "bytes"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "data",
+                  "type": "bytes"
+                }
+              ],
+              "internalType": "struct IPaymentVerifier.VerifyPaymentData",
+              "name": "_verifyPaymentData",
+              "type": "tuple"
+            }
+          ],
+          "name": "verifyPayment",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "bool",
+                  "name": "success",
+                  "type": "bool"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "intentHash",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "releaseAmount",
+                  "type": "uint256"
+                }
+              ],
+              "internalType": "struct IPaymentVerifier.PaymentVerificationResult",
+              "name": "result",
+              "type": "tuple"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
+    "WhitelistPreIntentHook": {
+      "address": "0x179853915d4878e8D480D7484bbDfFAa965aBA4d",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_orchestratorRegistry",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [],
+          "name": "EmptyArray",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "TakerNotWhitelisted",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "delegate",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedCallerOrDelegate",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedOrchestratorCaller",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroAddress",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            }
+          ],
+          "name": "TakerRemovedFromWhitelist",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            }
+          ],
+          "name": "TakerWhitelisted",
+          "type": "event"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address[]",
+              "name": "_takers",
+              "type": "address[]"
+            }
+          ],
+          "name": "addToWhitelist",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_taker",
+              "type": "address"
+            }
+          ],
+          "name": "isWhitelisted",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "orchestratorRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IOrchestratorRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address[]",
+              "name": "_takers",
+              "type": "address[]"
+            }
+          ],
+          "name": "removeFromWhitelist",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "taker",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "escrow",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "depositId",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "amount",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "address",
+                  "name": "to",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "paymentMethod",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "fiatCurrency",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "conversionRate",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "address",
+                  "name": "referrer",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "referrerFee",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "preIntentHookData",
+                  "type": "bytes"
+                }
+              ],
+              "internalType": "struct IPreIntentHook.PreIntentContext",
+              "name": "_ctx",
+              "type": "tuple"
+            }
+          ],
+          "name": "validateSignalIntent",
+          "outputs": [],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "name": "whitelist",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
           "type": "function"
         }
       ]

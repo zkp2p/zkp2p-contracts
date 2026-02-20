@@ -1,0 +1,446 @@
+{
+  "address": "0x179853915d4878e8D480D7484bbDfFAa965aBA4d",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_orchestratorRegistry",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [],
+      "name": "EmptyArray",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "taker",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        }
+      ],
+      "name": "TakerNotWhitelisted",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "delegate",
+          "type": "address"
+        }
+      ],
+      "name": "UnauthorizedCallerOrDelegate",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        }
+      ],
+      "name": "UnauthorizedOrchestratorCaller",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroAddress",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "taker",
+          "type": "address"
+        }
+      ],
+      "name": "TakerRemovedFromWhitelist",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "taker",
+          "type": "address"
+        }
+      ],
+      "name": "TakerWhitelisted",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address[]",
+          "name": "_takers",
+          "type": "address[]"
+        }
+      ],
+      "name": "addToWhitelist",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "_taker",
+          "type": "address"
+        }
+      ],
+      "name": "isWhitelisted",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "orchestratorRegistry",
+      "outputs": [
+        {
+          "internalType": "contract IOrchestratorRegistry",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address[]",
+          "name": "_takers",
+          "type": "address[]"
+        }
+      ],
+      "name": "removeFromWhitelist",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "to",
+              "type": "address"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "fiatCurrency",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "conversionRate",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "referrer",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "referrerFee",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes",
+              "name": "preIntentHookData",
+              "type": "bytes"
+            }
+          ],
+          "internalType": "struct IPreIntentHook.PreIntentContext",
+          "name": "_ctx",
+          "type": "tuple"
+        }
+      ],
+      "name": "validateSignalIntent",
+      "outputs": [],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "whitelist",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0x334324a954e975139a22fabf781b9eacfcc3fcc1d2f960a3fd40c257db48bbed",
+  "receipt": {
+    "to": null,
+    "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "contractAddress": "0x179853915d4878e8D480D7484bbDfFAa965aBA4d",
+    "transactionIndex": 117,
+    "gasUsed": "475552",
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0x741f01ad5793f151030d9f12a5d68cf743d96e51d3a3af8e41a8529e9b225e36",
+    "transactionHash": "0x334324a954e975139a22fabf781b9eacfcc3fcc1d2f960a3fd40c257db48bbed",
+    "logs": [],
+    "blockNumber": 42395104,
+    "cumulativeGasUsed": "23567907",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [
+    "0xb6F9BF66928C915CB9a0eAFc33146B89f683280e"
+  ],
+  "numDeployments": 1,
+  "solcInputHash": "d9d2635d1c5a5dc3dc79bd6236a30fb2",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_orchestratorRegistry\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"EmptyArray\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"}],\"name\":\"TakerNotWhitelisted\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"delegate\",\"type\":\"address\"}],\"name\":\"UnauthorizedCallerOrDelegate\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"}],\"name\":\"UnauthorizedOrchestratorCaller\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAddress\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"}],\"name\":\"TakerRemovedFromWhitelist\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"}],\"name\":\"TakerWhitelisted\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"address[]\",\"name\":\"_takers\",\"type\":\"address[]\"}],\"name\":\"addToWhitelist\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"_taker\",\"type\":\"address\"}],\"name\":\"isWhitelisted\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"orchestratorRegistry\",\"outputs\":[{\"internalType\":\"contract IOrchestratorRegistry\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"address[]\",\"name\":\"_takers\",\"type\":\"address[]\"}],\"name\":\"removeFromWhitelist\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"fiatCurrency\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"conversionRate\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"referrer\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"referrerFee\",\"type\":\"uint256\"},{\"internalType\":\"bytes\",\"name\":\"preIntentHookData\",\"type\":\"bytes\"}],\"internalType\":\"struct IPreIntentHook.PreIntentContext\",\"name\":\"_ctx\",\"type\":\"tuple\"}],\"name\":\"validateSignalIntent\",\"outputs\":[],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"whitelist\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"}],\"devdoc\":{\"details\":\"Enables \\\"private orderbook\\\" functionality: deposits are visible on-chain but only whitelisted addresses can lock liquidity against them.\",\"kind\":\"dev\",\"methods\":{\"addToWhitelist(address,uint256,address[])\":{\"details\":\"Callable only by the deposit's depositor or delegate.\",\"params\":{\"_depositId\":\"Deposit id.\",\"_escrow\":\"Escrow address.\",\"_takers\":\"Array of taker addresses to whitelist.\"}},\"isWhitelisted(address,uint256,address)\":{\"params\":{\"_depositId\":\"Deposit id.\",\"_escrow\":\"Escrow address.\",\"_taker\":\"Taker address to check.\"}},\"removeFromWhitelist(address,uint256,address[])\":{\"details\":\"Callable only by the deposit's depositor or delegate.\",\"params\":{\"_depositId\":\"Deposit id.\",\"_escrow\":\"Escrow address.\",\"_takers\":\"Array of taker addresses to remove.\"}},\"validateSignalIntent((address,address,uint256,uint256,address,bytes32,bytes32,uint256,address,uint256,bytes))\":{\"details\":\"Implementations should revert to reject the incoming intent.\",\"params\":{\"_ctx\":\"Incoming intent context.\"}}},\"title\":\"WhitelistPreIntentHook\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"addToWhitelist(address,uint256,address[])\":{\"notice\":\"Adds takers to the whitelist for a specific deposit.\"},\"isWhitelisted(address,uint256,address)\":{\"notice\":\"Checks if a taker is whitelisted for a specific deposit.\"},\"removeFromWhitelist(address,uint256,address[])\":{\"notice\":\"Removes takers from the whitelist for a specific deposit.\"},\"validateSignalIntent((address,address,uint256,uint256,address,bytes32,bytes32,uint256,address,uint256,bytes))\":{\"notice\":\"Called by the Orchestrator during signalIntent before state changes.\"}},\"notice\":\"Pre-intent hook that restricts intent signaling to a depositor-managed whitelist of takers.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/hooks/WhitelistPreIntentHook.sol\":\"WhitelistPreIntentHook\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"@openzeppelin/contracts/token/ERC20/IERC20.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (token/ERC20/IERC20.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Interface of the ERC20 standard as defined in the EIP.\\n */\\ninterface IERC20 {\\n    /**\\n     * @dev Emitted when `value` tokens are moved from one account (`from`) to\\n     * another (`to`).\\n     *\\n     * Note that `value` may be zero.\\n     */\\n    event Transfer(address indexed from, address indexed to, uint256 value);\\n\\n    /**\\n     * @dev Emitted when the allowance of a `spender` for an `owner` is set by\\n     * a call to {approve}. `value` is the new allowance.\\n     */\\n    event Approval(address indexed owner, address indexed spender, uint256 value);\\n\\n    /**\\n     * @dev Returns the amount of tokens in existence.\\n     */\\n    function totalSupply() external view returns (uint256);\\n\\n    /**\\n     * @dev Returns the amount of tokens owned by `account`.\\n     */\\n    function balanceOf(address account) external view returns (uint256);\\n\\n    /**\\n     * @dev Moves `amount` tokens from the caller's account to `to`.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transfer(address to, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Returns the remaining number of tokens that `spender` will be\\n     * allowed to spend on behalf of `owner` through {transferFrom}. This is\\n     * zero by default.\\n     *\\n     * This value changes when {approve} or {transferFrom} are called.\\n     */\\n    function allowance(address owner, address spender) external view returns (uint256);\\n\\n    /**\\n     * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * IMPORTANT: Beware that changing an allowance with this method brings the risk\\n     * that someone may use both the old and the new allowance by unfortunate\\n     * transaction ordering. One possible solution to mitigate this race\\n     * condition is to first reduce the spender's allowance to 0 and set the\\n     * desired value afterwards:\\n     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729\\n     *\\n     * Emits an {Approval} event.\\n     */\\n    function approve(address spender, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Moves `amount` tokens from `from` to `to` using the\\n     * allowance mechanism. `amount` is then deducted from the caller's\\n     * allowance.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transferFrom(address from, address to, uint256 amount) external returns (bool);\\n}\\n\",\"keccak256\":\"0x287b55befed2961a7eabd7d7b1b2839cbca8a5b80ef8dcbb25ed3d4c2002c305\",\"license\":\"MIT\"},\"contracts/hooks/WhitelistPreIntentHook.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IEscrow } from \\\"../interfaces/IEscrow.sol\\\";\\nimport { IOrchestratorRegistry } from \\\"../interfaces/IOrchestratorRegistry.sol\\\";\\nimport { IPreIntentHook } from \\\"../interfaces/IPreIntentHook.sol\\\";\\n\\n/**\\n * @title WhitelistPreIntentHook\\n * @notice Pre-intent hook that restricts intent signaling to a depositor-managed whitelist of takers.\\n * @dev Enables \\\"private orderbook\\\" functionality: deposits are visible on-chain but only\\n * whitelisted addresses can lock liquidity against them.\\n */\\ncontract WhitelistPreIntentHook is IPreIntentHook {\\n\\n    /* ============ Events ============ */\\n\\n    event TakerWhitelisted(address indexed escrow, uint256 indexed depositId, address indexed taker);\\n    event TakerRemovedFromWhitelist(address indexed escrow, uint256 indexed depositId, address indexed taker);\\n\\n    /* ============ Errors ============ */\\n\\n    error ZeroAddress();\\n    error EmptyArray();\\n    error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);\\n    error UnauthorizedOrchestratorCaller(address caller);\\n    error TakerNotWhitelisted(address taker, address escrow, uint256 depositId);\\n\\n    /* ============ State Variables ============ */\\n\\n    IOrchestratorRegistry public immutable orchestratorRegistry;\\n\\n    // escrow => depositId => taker => whitelisted\\n    mapping(address => mapping(uint256 => mapping(address => bool))) public whitelist;\\n\\n    /* ============ Constructor ============ */\\n\\n    constructor(address _orchestratorRegistry) {\\n        if (_orchestratorRegistry == address(0)) revert ZeroAddress();\\n\\n        orchestratorRegistry = IOrchestratorRegistry(_orchestratorRegistry);\\n    }\\n\\n    /* ============ External Functions ============ */\\n\\n    /**\\n     * @notice Adds takers to the whitelist for a specific deposit.\\n     * @dev Callable only by the deposit's depositor or delegate.\\n     *\\n     * @param _escrow      Escrow address.\\n     * @param _depositId   Deposit id.\\n     * @param _takers      Array of taker addresses to whitelist.\\n     */\\n    function addToWhitelist(address _escrow, uint256 _depositId, address[] calldata _takers) external {\\n        if (_escrow == address(0)) revert ZeroAddress();\\n        if (_takers.length == 0) revert EmptyArray();\\n\\n        _validateDepositorOrDelegate(_escrow, _depositId);\\n\\n        for (uint256 i = 0; i < _takers.length; i++) {\\n            whitelist[_escrow][_depositId][_takers[i]] = true;\\n            emit TakerWhitelisted(_escrow, _depositId, _takers[i]);\\n        }\\n    }\\n\\n    /**\\n     * @notice Removes takers from the whitelist for a specific deposit.\\n     * @dev Callable only by the deposit's depositor or delegate.\\n     *\\n     * @param _escrow      Escrow address.\\n     * @param _depositId   Deposit id.\\n     * @param _takers      Array of taker addresses to remove.\\n     */\\n    function removeFromWhitelist(address _escrow, uint256 _depositId, address[] calldata _takers) external {\\n        if (_escrow == address(0)) revert ZeroAddress();\\n        if (_takers.length == 0) revert EmptyArray();\\n\\n        _validateDepositorOrDelegate(_escrow, _depositId);\\n\\n        for (uint256 i = 0; i < _takers.length; i++) {\\n            whitelist[_escrow][_depositId][_takers[i]] = false;\\n            emit TakerRemovedFromWhitelist(_escrow, _depositId, _takers[i]);\\n        }\\n    }\\n\\n    /**\\n     * @notice Checks if a taker is whitelisted for a specific deposit.\\n     *\\n     * @param _escrow      Escrow address.\\n     * @param _depositId   Deposit id.\\n     * @param _taker       Taker address to check.\\n     */\\n    function isWhitelisted(address _escrow, uint256 _depositId, address _taker) external view returns (bool) {\\n        return whitelist[_escrow][_depositId][_taker];\\n    }\\n\\n    /**\\n     * @inheritdoc IPreIntentHook\\n     */\\n    function validateSignalIntent(PreIntentContext calldata _ctx) external view override {\\n        if (!orchestratorRegistry.isOrchestrator(msg.sender)) revert UnauthorizedOrchestratorCaller(msg.sender);\\n\\n        if (!whitelist[_ctx.escrow][_ctx.depositId][_ctx.taker]) {\\n            revert TakerNotWhitelisted(_ctx.taker, _ctx.escrow, _ctx.depositId);\\n        }\\n    }\\n\\n    /* ============ Internal Functions ============ */\\n\\n    function _validateDepositorOrDelegate(address _escrow, uint256 _depositId) internal view {\\n        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);\\n        bool isDepositorOrDelegate = msg.sender == deposit.depositor\\n            || (deposit.delegate != address(0) && msg.sender == deposit.delegate);\\n        if (!isDepositorOrDelegate) {\\n            revert UnauthorizedCallerOrDelegate(msg.sender, deposit.depositor, deposit.delegate);\\n        }\\n    }\\n}\\n\",\"keccak256\":\"0xa1a35bd544019b041a7094756284cb54c9bcafd82a145075f8029748f4c064cb\",\"license\":\"MIT\"},\"contracts/interfaces/IEscrow.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IERC20 } from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\nimport { IPostIntentHook } from \\\"./IPostIntentHook.sol\\\";\\n\\ninterface IEscrow {\\n    \\n    /* ============ Structs ============ */\\n\\n    struct Intent {\\n        bytes32 intentHash;                        // Unique identifier for the intent\\n        uint256 amount;                            // Amount locked\\n        uint256 timestamp;                         // When this intent was created\\n        uint256 expiryTime;                        // When this intent expires\\n    }\\n\\n    struct Range {\\n        uint256 min;                                // Minimum value\\n        uint256 max;                                // Maximum value\\n    }\\n\\n    struct Deposit {\\n        address depositor;                          // Address of depositor\\n        address delegate;                           // Address that can manage this deposit (address(0) if no delegate)\\n        IERC20 token;                               // Address of deposit token\\n        Range intentAmountRange;                    // Range of take amount per intent\\n        // Deposit state\\n        bool acceptingIntents;                      // State: True if the deposit is accepting intents, False otherwise\\n        uint256 remainingDeposits;                  // State: Amount of liquidity immediately available to lock\\n        uint256 outstandingIntentAmount;            // State: Amount of outstanding intents (may include expired intents)\\n        // Intent guardian\\n        address intentGuardian;                     // Address that can extend intent expiry times (address(0) if no guardian)\\n        // Retention behavior\\n        bool retainOnEmpty;                         // If true, do not auto-close/sweep when empty; keep config for reuse\\n    }\\n\\n    struct Currency {\\n        bytes32 code;                               // Currency code (keccak256 hash of the currency code)\\n        uint256 minConversionRate;                  // Minimum rate of deposit token to fiat currency (in preciseUnits)\\n    }\\n\\n    struct DepositPaymentMethodData {\\n        address intentGatingService;                // Public key of gating service that will be used to verify intents\\n        bytes32 payeeDetails;                       // Payee details, has to be hash of payee details\\n        bytes data;                                 // Verification Data: Additional data used for payment verification; Can hold attester address\\n                                                    // in case of TLS proofs, domain key hash in case of zkEmail proofs, currency code etc.\\n    }\\n\\n    struct CreateDepositParams {\\n        IERC20 token;                                // The token to be deposited\\n        uint256 amount;                              // The amount of token to deposit\\n        Range intentAmountRange;                     // The max and min take amount for each intent\\n        bytes32[] paymentMethods;                    // The payment methods that deposit supports\\n        DepositPaymentMethodData[] paymentMethodData;// The payment verification data for each payment method that deposit supports\\n        Currency[][] currencies;                     // The currencies for each payment method that deposit supports\\n        address delegate;                            // Optional delegate address that can manage this deposit (address(0) for no delegate)\\n        address intentGuardian;                      // Optional intent guardian address that can extend intent expiry times (address(0) for no guardian)\\n        bool retainOnEmpty;                          // Opt-in: keep deposit and config when empty\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event DepositReceived(uint256 indexed depositId, address indexed depositor, IERC20 indexed token, uint256 amount, Range intentAmountRange, address delegate, address intentGuardian);\\n\\n    event DepositPaymentMethodAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed payeeDetails, address intentGatingService);\\n    event DepositPaymentMethodActiveUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bool active);\\n\\n    event DepositCurrencyAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 minConversionRate);\\n    event DepositMinConversionRateUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 newMinConversionRate);\\n    \\n    event DepositFundsAdded(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositWithdrawn(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositClosed(uint256 depositId, address depositor);\\n    event DepositAcceptingIntentsUpdated(uint256 indexed depositId, bool acceptingIntents);\\n\\n    event DepositIntentAmountRangeUpdated(uint256 indexed depositId, Range intentAmountRange);\\n    event DepositRetainOnEmptyUpdated(uint256 indexed depositId, bool retainOnEmpty);\\n\\n    event DepositDelegateSet(uint256 indexed depositId, address indexed depositor, address indexed delegate);\\n    event DepositDelegateRemoved(uint256 indexed depositId, address indexed depositor);\\n\\n    event MinDepositAmountSet(uint256 minDepositAmount);\\n\\n    event OrchestratorUpdated(address indexed orchestrator);\\n    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);\\n\\n    event FundsLocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount, uint256 expiryTime);\\n    event FundsUnlocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount);\\n    event FundsUnlockedAndTransferred(\\n        uint256 indexed depositId, \\n        bytes32 indexed intentHash, \\n        uint256 unlockedAmount, \\n        uint256 transferredAmount, \\n        address to\\n    );\\n    event IntentExpiryExtended(uint256 indexed depositId, bytes32 indexed intentHash, uint256 newExpiryTime);\\n\\n    event DustRecipientUpdated(address indexed dustRecipient);\\n    event DustCollected(uint256 indexed depositId, uint256 dustAmount, address indexed dustRecipient);\\n    event DustThresholdUpdated(uint256 dustThreshold);\\n    event MaxIntentsPerDepositUpdated(uint256 maxIntentsPerDeposit);\\n    event IntentExpirationPeriodUpdated(uint256 intentExpirationPeriod);\\n\\n    /* ============ Standardized Custom Errors ============ */\\n    \\n    // Zero value errors\\n    error ZeroAddress();\\n    error ZeroValue();\\n    error ZeroMinValue();\\n    error ZeroConversionRate();\\n\\n    // Authorization errors\\n    error UnauthorizedCaller(address caller, address authorized);\\n    error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);\\n\\n    // Range and amount errors\\n    error InvalidRange(uint256 min, uint256 max);\\n    error AmountBelowMin(uint256 amount, uint256 min);\\n    error AmountAboveMax(uint256 amount, uint256 max);\\n    error AmountExceedsAvailable(uint256 requested, uint256 available);\\n\\n    // Not found errors\\n    error DepositNotFound(uint256 depositId);\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodNotActive(uint256 depositId, bytes32 paymentMethod);\\n    error PaymentMethodNotListed(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyNotFound(bytes32 paymentMethod, bytes32 currency);\\n    error DelegateNotFound(uint256 depositId);\\n\\n    // Already exists errors\\n    error PaymentMethodAlreadyExists(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyAlreadyExists(bytes32 paymentMethod, bytes32 currency);\\n    error IntentAlreadyExists(uint256 depositId, bytes32 intentHash);\\n\\n    // State errors\\n    error DepositNotAcceptingIntents(uint256 depositId);\\n    error DepositAlreadyInState(uint256 depositId, bool currentState);\\n    error InsufficientDepositLiquidity(uint256 depositId, uint256 available, uint256 required);\\n    error MaxIntentsExceeded(uint256 depositId, uint256 current, uint256 max);\\n\\n    // Validation errors\\n    error EmptyPayeeDetails();\\n    error ArrayLengthMismatch(uint256 length1, uint256 length2);\\n\\n    // Payment method errors\\n    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n\\n    \\n    /* ============ External Functions for Orchestrator ============ */\\n\\n    function lockFunds(uint256 _depositId, bytes32 _intentHash, uint256 _amount) external;\\n    function unlockFunds(uint256 _depositId, bytes32 _intentHash) external;\\n    function unlockAndTransferFunds(uint256 _depositId, bytes32 _intentHash, uint256 _transferAmount, address _to) external;\\n    function extendIntentExpiry(uint256 _depositId, bytes32 _intentHash, uint256 _newExpiryTime) external;\\n\\n    /* ============ View Functions ============ */\\n\\n    function getDeposit(uint256 _depositId) external view returns (Deposit memory);\\n    function getDepositIntent(uint256 _depositId, bytes32 _intentHash) external view returns (Intent memory);\\n    function getDepositPaymentMethods(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getDepositCurrencies(uint256 _depositId, bytes32 _paymentMethod) external view returns (bytes32[] memory);\\n    function getDepositCurrencyMinRate(uint256 _depositId, bytes32 _paymentMethod, bytes32 _currencyCode) external view returns (uint256);\\n    function getDepositPaymentMethodData(uint256 _depositId, bytes32 _paymentMethod) external view returns (DepositPaymentMethodData memory);\\n    function getDepositPaymentMethodActive(uint256 _depositId, bytes32 _paymentMethod) external view returns (bool);\\n    function getDepositGatingService(uint256 _depositId, bytes32 _paymentMethod) external view returns (address);\\n    function getAccountDeposits(address _account) external view returns (uint256[] memory);\\n    function getDepositIntentHashes(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getExpiredIntents(uint256 _depositId) external view returns (bytes32[] memory expiredIntents, uint256 reclaimableAmount);\\n}\\n\",\"keccak256\":\"0x3df4df7659a48b419cc5b7953463a0ec66995af7afdfa4052bb5668aea641f2d\",\"license\":\"MIT\"},\"contracts/interfaces/IOrchestrator.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IERC20 } from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\nimport { IPostIntentHook } from \\\"./IPostIntentHook.sol\\\";\\n\\ninterface IOrchestrator {\\n    \\n    /* ============ Structs ============ */\\n\\n    struct Intent {\\n        address owner;                              // Address of the intent owner  \\n        address to;                                 // Address to forward funds to (can be same as owner)\\n        address escrow;                             // Address of the escrow contract holding the deposit\\n        uint256 depositId;                          // ID of the deposit the intent is associated with\\n        uint256 amount;                             // Amount of the deposit.token the owner wants to take\\n        uint256 timestamp;                          // Timestamp of the intent\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // Currency code that the owner is paying in offchain (keccak256 hash of the currency code)\\n        uint256 conversionRate;                     // Conversion rate of deposit token to fiat currency at the time of intent\\n        bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain\\n        address referrer;                           // Address of the referrer who brought this intent (if any)\\n        uint256 referrerFee;                        // Fee to be paid to the referrer in preciseUnits (1e16 = 1%)\\n        IPostIntentHook postIntentHook;             // Address of the post-intent hook that will execute any post-intent actions\\n        bytes data;                                 // Additional data to be passed to the post-intent hook contract\\n    }\\n\\n    struct SignalIntentParams {\\n        address escrow;                             // The escrow contract where the deposit is held\\n        uint256 depositId;                          // The ID of the deposit the taker intends to use\\n        uint256 amount;                             // The amount of deposit.token the user wants to take\\n        address to;                                 // Address to forward funds to\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // The currency code for offchain payment\\n        uint256 conversionRate;                     // The conversion rate agreed offchain\\n        address referrer;                           // Address of the referrer (address(0) if no referrer)\\n        uint256 referrerFee;                        // Fee to be paid to the referrer\\n        bytes gatingServiceSignature;               // Signature from the deposit's gating service\\n        uint256 signatureExpiration;                // Timestamp when the gating service signature expires\\n        IPostIntentHook postIntentHook;             // Optional post-intent hook (address(0) for no hook)\\n        bytes data;                                 // Additional data for the intent\\n    }\\n\\n    struct FulfillIntentParams {\\n        bytes paymentProof;                         // Payment proof. Can be Groth16 Proof, TLSNotary proof, TLSProxy proof, attestation etc.\\n        bytes32 intentHash;                         // Identifier of intent being fulfilled\\n        bytes verificationData;                     // Additional data for payment verifier\\n        bytes postIntentHookData;                   // Additional data for post intent hook\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event IntentSignaled(\\n        bytes32 indexed intentHash, \\n        address indexed escrow,\\n        uint256 indexed depositId, \\n        bytes32 paymentMethod, \\n        address owner, \\n        address to, \\n        uint256 amount, \\n        bytes32 fiatCurrency, \\n        uint256 conversionRate, \\n        uint256 timestamp\\n    );\\n\\n    event IntentPruned(\\n        bytes32 indexed intentHash\\n    );\\n\\n    event IntentFulfilled(\\n        bytes32 indexed intentHash,\\n        address indexed fundsTransferredTo,   // Address that funds were transferred to; can be intent.to or postIntentHook address\\n        uint256 amount,\\n        bool isManualRelease\\n    );\\n\\n    event AllowMultipleIntentsUpdated(bool allowMultiple);\\n\\n    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);\\n    event PostIntentHookRegistryUpdated(address indexed postIntentHookRegistry);\\n    event RelayerRegistryUpdated(address indexed relayerRegistry);\\n    event EscrowRegistryUpdated(address indexed escrowRegistry);\\n\\n    event ProtocolFeeUpdated(uint256 protocolFee);\\n    event ProtocolFeeRecipientUpdated(address indexed protocolFeeRecipient);\\n    event PartialManualReleaseDelayUpdated(uint256 partialManualReleaseDelay);\\n\\n    /* ============ Standardized Custom Errors ============ */\\n    \\n    // Zero value errors\\n    error ZeroAddress();\\n    error ZeroValue();\\n    \\n    // Authorization errors\\n    error UnauthorizedEscrowCaller(address caller);\\n    error UnauthorizedCaller(address caller, address authorized);\\n    \\n    // Not found errors\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodDoesNotExist(bytes32 paymentMethod);\\n    error PaymentMethodNotSupported(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n    \\n    // Whitelist errors\\n    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);\\n    error PostIntentHookNotWhitelisted(address hook);\\n    error EscrowNotWhitelisted(address escrow);\\n    \\n    // Amount and fee errors\\n    error AmountBelowMin(uint256 amount, uint256 min);\\n    error AmountAboveMax(uint256 amount, uint256 max);\\n    error AmountExceedsLimit(uint256 amount, uint256 limit);\\n    error FeeExceedsMaximum(uint256 fee, uint256 maximum);\\n    error RateBelowMinimum(uint256 rate, uint256 minRate);\\n    \\n    // Validation errors\\n    error AccountHasActiveIntent(address account, bytes32 existingIntent);\\n    error InvalidReferrerFeeConfiguration();\\n    error InvalidSignature();\\n    error SignatureExpired(uint256 expiration, uint256 currentTime);\\n    error PartialReleaseNotAllowedYet(uint256 currentTime, uint256 allowedTime);\\n\\n    // Verification errors\\n    error PaymentVerificationFailed();\\n    error HashMismatch(bytes32 expected, bytes32 actual);\\n     \\n    // Transfer errors\\n    error TransferFailed(address recipient, uint256 amount);\\n    error EscrowLockFailed();\\n\\n    /* ============ View Functions ============ */\\n\\n    function getIntent(bytes32 intentHash) external view returns (Intent memory);\\n    function getAccountIntents(address account) external view returns (bytes32[] memory);\\n    \\n    /* ============ External Functions for Users ============ */\\n\\n    function signalIntent(SignalIntentParams calldata params) external;\\n\\n    function cancelIntent(bytes32 intentHash) external;\\n\\n    function fulfillIntent(FulfillIntentParams calldata params) external;\\n\\n    function releaseFundsToPayer(bytes32 intentHash) external;\\n\\n    /* ============ External Functions for Escrow ============ */\\n\\n    function pruneIntents(bytes32[] calldata intentIds) external;\\n}\",\"keccak256\":\"0xcf8db7a4c1481049dbdc2516f47cc0a4ea3a6e71093ee7c637a51294096accbf\",\"license\":\"MIT\"},\"contracts/interfaces/IOrchestratorRegistry.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IOrchestratorRegistry\\n * @notice Interface for EscrowV2 orchestrator authorization registry.\\n */\\ninterface IOrchestratorRegistry {\\n    /**\\n     * @notice Adds an orchestrator to the allowlist.\\n     * @param _orchestrator Orchestrator address to add.\\n     */\\n    function addOrchestrator(address _orchestrator) external;\\n\\n    /**\\n     * @notice Removes an orchestrator from the allowlist.\\n     * @param _orchestrator Orchestrator address to remove.\\n     */\\n    function removeOrchestrator(address _orchestrator) external;\\n\\n    /**\\n     * @notice Returns whether an address is currently allowlisted as orchestrator.\\n     * @param _orchestrator Address to check.\\n     * @return allowed True when `_orchestrator` is authorized.\\n     */\\n    function isOrchestrator(address _orchestrator) external view returns (bool allowed);\\n}\\n\",\"keccak256\":\"0xbb2d52f475b9ebd4aadd233040b62a438cf296463fd7b269d12f28c273d0a040\",\"license\":\"MIT\"},\"contracts/interfaces/IPostIntentHook.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IOrchestrator } from \\\"./IOrchestrator.sol\\\";\\n\\n/**\\n * @title IPostIntentHook\\n * @notice Interface for post-intent hooks\\n */\\ninterface IPostIntentHook {\\n\\n    /**\\n     * @notice Post-intent hook\\n     * @param _intent The intent data structure containing all intent information\\n     * @param _fulfillIntentData The data passed to fulfillIntent\\n     */\\n    function execute(\\n        IOrchestrator.Intent memory _intent,\\n        uint256 _amountNetFees,\\n        bytes calldata _fulfillIntentData\\n    ) external;\\n}\\n\",\"keccak256\":\"0x72ae0d60c98f89eb2363f455445466c1dfaddfb338a63d65d3eb8469cbd9484d\",\"license\":\"MIT\"},\"contracts/interfaces/IPreIntentHook.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IPreIntentHook\\n * @notice Interface for pre-intent hooks that run during signalIntent.\\n */\\ninterface IPreIntentHook {\\n    struct PreIntentContext {\\n        address taker;\\n        address escrow;\\n        uint256 depositId;\\n        uint256 amount;\\n        address to;\\n        bytes32 paymentMethod;\\n        bytes32 fiatCurrency;\\n        uint256 conversionRate;\\n        address referrer;\\n        uint256 referrerFee;\\n        bytes preIntentHookData; // Ephemeral hook-specific data from SignalIntentParams.preIntentHookData\\n    }\\n\\n    /**\\n     * @notice Called by the Orchestrator during signalIntent before state changes.\\n     * @dev Implementations should revert to reject the incoming intent.\\n     * @param _ctx Incoming intent context.\\n     */\\n    function validateSignalIntent(PreIntentContext calldata _ctx) external;\\n}\\n\",\"keccak256\":\"0xf88bfb1024ca765a795dc093ecdaa642f0d54e1a5951de323a6a9922ce1b3b39\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x60a03461008b57601f61083f38819003918201601f19168301916001600160401b038311848410176100905780849260209460405283398101031261008b57516001600160a01b0381169081900361008b5780156100795760805260405161079890816100a782396080518181816102a401526103cd0152f35b60405163d92e233d60e01b8152600490fd5b600080fd5b634e487b7160e01b600052604160045260246000fdfe6080604081815260048036101561001557600080fd5b600092833560e01c90816349fb59e8146103fc575080635e785905146103b8578063723907b01461024a5780637dbdd22c1461018f578063866fd38e146101475763e2967fad1461006557600080fd5b346101435761007336610477565b91936001600160a01b038085169490939291851561013557831561012757508561009c91610594565b865b8281106100a9578780f35b610122908589526020898152888a20888b528152888a2090866100d56100d0858989610501565b610527565b168b5252878920805460ff19166001179055846100f66100d0838787610501565b1687877f05a86b1bbd6df799d3990592478928407f16e8d122a292d2980c032267eeda7e8c80a46104dc565b61009e565b875163521299a960e01b8152fd5b875163d92e233d60e01b8152fd5b8280fd5b50503461018b5760ff8160209361015d3661043e565b6001600160a01b03928316845283885284842091845290875283832091168252855220549151911615158152f35b5080fd5b50346101435761019e36610477565b91936001600160a01b03808516949093929185156101355783156101275750856101c791610594565b865b8281106101d4578780f35b610245908589526020898152888a20888b528152888a2090866101fb6100d0858989610501565b168b5252878920805460ff19169055846102196100d0838787610501565b1687877fdc04c7452cc3caa015e89464953fd4cd7675bb0e4f18c9f235ecc83acb6e5fe28c80a46104dc565b6101c9565b5034610143576020916003199083823601126103b45782359267ffffffffffffffff84116103b0576101608482019385360301126103b057815163d701dcbd60e01b815233828201526001600160a01b03939086816024817f000000000000000000000000000000000000000000000000000000000000000089165afa9081156103a657889161036d575b5015610356576024850195846102ea88610527565b1688528781526044848920960135958689528152838820908561030c84610527565b1689525260ff838820541615610320578680f35b606496506103376103318592610527565b96610527565b925163691a1b2d60e01b81529516908501521660248301526044820152fd5b506024915190630256d21960e31b82523390820152fd5b90508681813d831161039f575b610384818361053b565b8101031261039b5761039590610573565b386102d5565b8780fd5b503d61037a565b84513d8a823e3d90fd5b8580fd5b8480fd5b50503461018b578160031936011261018b57517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b849084346101435760ff906020936104133661043e565b6001600160a01b03928316845283885284842091845290875283832091168252855220541615158152f35b6060906003190112610472576001600160a01b03600435818116810361047257916024359160443590811681036104725790565b600080fd5b906060600319830112610472576004356001600160a01b038116810361047257916024359160443567ffffffffffffffff9283821161047257806023830112156104725781600401359384116104725760248460051b83010111610472576024019190565b60001981146104eb5760010190565b634e487b7160e01b600052601160045260246000fd5b91908110156105115760051b0190565b634e487b7160e01b600052603260045260246000fd5b356001600160a01b03811681036104725790565b90601f8019910116810190811067ffffffffffffffff82111761055d57604052565b634e487b7160e01b600052604160045260246000fd5b5190811515820361047257565b51906001600160a01b038216820361047257565b6040908151926313f3f72d60e31b8452600484015261014092838160248160018060a01b038096165afa93841561075757600094610633575b505080835116928333148015610611575b156105e95750505050565b606494506020015116905191639a313e5960e01b835233600484015260248301526044820152fd5b50816020820151168015159081610629575b506105de565b9050331438610623565b81819593953d8311610750575b61064a818361053b565b810103908112610143578351926101209167ffffffffffffffff908386018281118782101761073c57875261067e85610580565b865261068c60208601610580565b60208701528685015188811681036107385786880152605f1901861361018b578551918287019182118383101761072457508552606083810151825260808401516020830152840152610718906106e560a08401610573565b608085015260c083015160a085015260e083015160c08501526101009261070d848201610580565b60e086015201610573565b908201529138806105cd565b634e487b7160e01b81526041600452602490fd5b8380fd5b634e487b7160e01b84526041600452602484fd5b503d610640565b83513d6000823e3d90fdfea2646970667358221220a43acfc5e15b1204d5f0601e43f0fd987b27382e89acbf39df98df700a36ce9b64736f6c63430008120033",
+  "deployedBytecode": "0x6080604081815260048036101561001557600080fd5b600092833560e01c90816349fb59e8146103fc575080635e785905146103b8578063723907b01461024a5780637dbdd22c1461018f578063866fd38e146101475763e2967fad1461006557600080fd5b346101435761007336610477565b91936001600160a01b038085169490939291851561013557831561012757508561009c91610594565b865b8281106100a9578780f35b610122908589526020898152888a20888b528152888a2090866100d56100d0858989610501565b610527565b168b5252878920805460ff19166001179055846100f66100d0838787610501565b1687877f05a86b1bbd6df799d3990592478928407f16e8d122a292d2980c032267eeda7e8c80a46104dc565b61009e565b875163521299a960e01b8152fd5b875163d92e233d60e01b8152fd5b8280fd5b50503461018b5760ff8160209361015d3661043e565b6001600160a01b03928316845283885284842091845290875283832091168252855220549151911615158152f35b5080fd5b50346101435761019e36610477565b91936001600160a01b03808516949093929185156101355783156101275750856101c791610594565b865b8281106101d4578780f35b610245908589526020898152888a20888b528152888a2090866101fb6100d0858989610501565b168b5252878920805460ff19169055846102196100d0838787610501565b1687877fdc04c7452cc3caa015e89464953fd4cd7675bb0e4f18c9f235ecc83acb6e5fe28c80a46104dc565b6101c9565b5034610143576020916003199083823601126103b45782359267ffffffffffffffff84116103b0576101608482019385360301126103b057815163d701dcbd60e01b815233828201526001600160a01b03939086816024817f000000000000000000000000000000000000000000000000000000000000000089165afa9081156103a657889161036d575b5015610356576024850195846102ea88610527565b1688528781526044848920960135958689528152838820908561030c84610527565b1689525260ff838820541615610320578680f35b606496506103376103318592610527565b96610527565b925163691a1b2d60e01b81529516908501521660248301526044820152fd5b506024915190630256d21960e31b82523390820152fd5b90508681813d831161039f575b610384818361053b565b8101031261039b5761039590610573565b386102d5565b8780fd5b503d61037a565b84513d8a823e3d90fd5b8580fd5b8480fd5b50503461018b578160031936011261018b57517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b849084346101435760ff906020936104133661043e565b6001600160a01b03928316845283885284842091845290875283832091168252855220541615158152f35b6060906003190112610472576001600160a01b03600435818116810361047257916024359160443590811681036104725790565b600080fd5b906060600319830112610472576004356001600160a01b038116810361047257916024359160443567ffffffffffffffff9283821161047257806023830112156104725781600401359384116104725760248460051b83010111610472576024019190565b60001981146104eb5760010190565b634e487b7160e01b600052601160045260246000fd5b91908110156105115760051b0190565b634e487b7160e01b600052603260045260246000fd5b356001600160a01b03811681036104725790565b90601f8019910116810190811067ffffffffffffffff82111761055d57604052565b634e487b7160e01b600052604160045260246000fd5b5190811515820361047257565b51906001600160a01b038216820361047257565b6040908151926313f3f72d60e31b8452600484015261014092838160248160018060a01b038096165afa93841561075757600094610633575b505080835116928333148015610611575b156105e95750505050565b606494506020015116905191639a313e5960e01b835233600484015260248301526044820152fd5b50816020820151168015159081610629575b506105de565b9050331438610623565b81819593953d8311610750575b61064a818361053b565b810103908112610143578351926101209167ffffffffffffffff908386018281118782101761073c57875261067e85610580565b865261068c60208601610580565b60208701528685015188811681036107385786880152605f1901861361018b578551918287019182118383101761072457508552606083810151825260808401516020830152840152610718906106e560a08401610573565b608085015260c083015160a085015260e083015160c08501526101009261070d848201610580565b60e086015201610573565b908201529138806105cd565b634e487b7160e01b81526041600452602490fd5b8380fd5b634e487b7160e01b84526041600452602484fd5b503d610640565b83513d6000823e3d90fdfea2646970667358221220a43acfc5e15b1204d5f0601e43f0fd987b27382e89acbf39df98df700a36ce9b64736f6c63430008120033",
+  "devdoc": {
+    "details": "Enables \"private orderbook\" functionality: deposits are visible on-chain but only whitelisted addresses can lock liquidity against them.",
+    "kind": "dev",
+    "methods": {
+      "addToWhitelist(address,uint256,address[])": {
+        "details": "Callable only by the deposit's depositor or delegate.",
+        "params": {
+          "_depositId": "Deposit id.",
+          "_escrow": "Escrow address.",
+          "_takers": "Array of taker addresses to whitelist."
+        }
+      },
+      "isWhitelisted(address,uint256,address)": {
+        "params": {
+          "_depositId": "Deposit id.",
+          "_escrow": "Escrow address.",
+          "_taker": "Taker address to check."
+        }
+      },
+      "removeFromWhitelist(address,uint256,address[])": {
+        "details": "Callable only by the deposit's depositor or delegate.",
+        "params": {
+          "_depositId": "Deposit id.",
+          "_escrow": "Escrow address.",
+          "_takers": "Array of taker addresses to remove."
+        }
+      },
+      "validateSignalIntent((address,address,uint256,uint256,address,bytes32,bytes32,uint256,address,uint256,bytes))": {
+        "details": "Implementations should revert to reject the incoming intent.",
+        "params": {
+          "_ctx": "Incoming intent context."
+        }
+      }
+    },
+    "title": "WhitelistPreIntentHook",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "addToWhitelist(address,uint256,address[])": {
+        "notice": "Adds takers to the whitelist for a specific deposit."
+      },
+      "isWhitelisted(address,uint256,address)": {
+        "notice": "Checks if a taker is whitelisted for a specific deposit."
+      },
+      "removeFromWhitelist(address,uint256,address[])": {
+        "notice": "Removes takers from the whitelist for a specific deposit."
+      },
+      "validateSignalIntent((address,address,uint256,uint256,address,bytes32,bytes32,uint256,address,uint256,bytes))": {
+        "notice": "Called by the Orchestrator during signalIntent before state changes."
+      }
+    },
+    "notice": "Pre-intent hook that restricts intent signaling to a depositor-managed whitelist of takers.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 18660,
+        "contract": "contracts/hooks/WhitelistPreIntentHook.sol:WhitelistPreIntentHook",
+        "label": "whitelist",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_mapping(t_address,t_mapping(t_uint256,t_mapping(t_address,t_bool)))"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_bool": {
+        "encoding": "inplace",
+        "label": "bool",
+        "numberOfBytes": "1"
+      },
+      "t_mapping(t_address,t_bool)": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => bool)",
+        "numberOfBytes": "32",
+        "value": "t_bool"
+      },
+      "t_mapping(t_address,t_mapping(t_uint256,t_mapping(t_address,t_bool)))": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => mapping(uint256 => mapping(address => bool)))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_uint256,t_mapping(t_address,t_bool))"
+      },
+      "t_mapping(t_uint256,t_mapping(t_address,t_bool))": {
+        "encoding": "mapping",
+        "key": "t_uint256",
+        "label": "mapping(uint256 => mapping(address => bool))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_address,t_bool)"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      }
+    }
+  }
+}
