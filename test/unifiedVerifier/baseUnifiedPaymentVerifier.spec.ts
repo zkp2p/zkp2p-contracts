@@ -145,64 +145,6 @@ describe("BaseUnifiedPaymentVerifier", () => {
     });
   });
 
-  describe("#setOrchestratorRegistry", async () => {
-    let subjectOrchestratorRegistry: Address;
-    let subjectCaller: Account;
-
-    let newOrchestratorRegistry: OrchestratorRegistry;
-
-    beforeEach(async () => {
-      newOrchestratorRegistry = await deployer.deployOrchestratorRegistry();
-      subjectOrchestratorRegistry = newOrchestratorRegistry.address;
-      subjectCaller = owner;
-    });
-
-    async function subject(): Promise<any> {
-      return BaseUnifiedPaymentVerifier.connect(subjectCaller.wallet).setOrchestratorRegistry(subjectOrchestratorRegistry);
-    }
-
-    it("should update the orchestrator registry", async () => {
-      await subject();
-      expect(await BaseUnifiedPaymentVerifier.orchestratorRegistry()).to.eq(subjectOrchestratorRegistry);
-    });
-
-    it("should emit the OrchestratorRegistryUpdated event", async () => {
-      await expect(subject())
-        .to.emit(BaseUnifiedPaymentVerifier, "OrchestratorRegistryUpdated")
-        .withArgs(orchestratorRegistry.address, subjectOrchestratorRegistry);
-    });
-
-    describe("when orchestrator registry is zero", async () => {
-      beforeEach(async () => {
-        subjectOrchestratorRegistry = ethers.constants.AddressZero;
-      });
-
-      it("should revert", async () => {
-        await expect(subject()).to.be.revertedWith("UPV: Invalid orchestrator registry");
-      });
-    });
-
-    describe("when orchestrator registry is the same as current", async () => {
-      beforeEach(async () => {
-        subjectOrchestratorRegistry = orchestratorRegistry.address;
-      });
-
-      it("should revert", async () => {
-        await expect(subject()).to.be.revertedWith("UPV: Same registry");
-      });
-    });
-
-    describe("when caller is not owner", async () => {
-      beforeEach(async () => {
-        subjectCaller = attacker;
-      });
-
-      it("should revert", async () => {
-        await expect(subject()).to.be.revertedWith("Ownable: caller is not the owner");
-      });
-    });
-  });
-
   describe("#addPaymentMethod", async () => {
     let subjectPaymentMethod: string;
     let subjectCaller: Account;

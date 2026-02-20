@@ -31,11 +31,9 @@ abstract contract BaseUnifiedPaymentVerifier is Ownable {
     event PaymentMethodAdded(bytes32 indexed paymentMethod);
     event PaymentMethodRemoved(bytes32 indexed paymentMethod);
     event AttestationVerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
-    event OrchestratorRegistryUpdated(address indexed oldRegistry, address indexed newRegistry);
-
     /* ============ State Variables ============ */
 
-    IOrchestratorRegistry public orchestratorRegistry;
+    IOrchestratorRegistry public immutable orchestratorRegistry;
     INullifierRegistry public immutable nullifierRegistry;
     IAttestationVerifier public attestationVerifier;
 
@@ -111,17 +109,6 @@ abstract contract BaseUnifiedPaymentVerifier is Ownable {
         attestationVerifier = IAttestationVerifier(_newVerifier);
         emit AttestationVerifierUpdated(oldVerifier, _newVerifier);
     }
-
-    function setOrchestratorRegistry(address _newOrchestratorRegistry) external onlyOwner {
-        require(_newOrchestratorRegistry != address(0), "UPV: Invalid orchestrator registry");
-        require(_newOrchestratorRegistry != address(orchestratorRegistry), "UPV: Same registry");
-
-        address oldRegistry = address(orchestratorRegistry);
-        orchestratorRegistry = IOrchestratorRegistry(_newOrchestratorRegistry);
-
-        emit OrchestratorRegistryUpdated(oldRegistry, _newOrchestratorRegistry);
-    }
-
 
     /* ============ View Functions ============ */
 
