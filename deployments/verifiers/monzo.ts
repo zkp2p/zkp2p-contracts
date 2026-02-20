@@ -1,4 +1,3 @@
-import { BigNumber, ethers } from "ethers";
 import { calculatePaymentMethodHash, Currency } from "@utils/protocolUtils";
 
 export const MONZO_PAYMENT_METHOD_HASH = calculatePaymentMethodHash("monzo");

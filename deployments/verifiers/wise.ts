@@ -1,4 +1,3 @@
-import { BigNumber } from "ethers";
 import { calculatePaymentMethodHash, Currency } from "@utils/protocolUtils";
 
 // 0x554a007c2217df766b977723b276671aee5ebb4adaea0edb6433c88b3e61dac5
