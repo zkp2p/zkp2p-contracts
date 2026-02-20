@@ -61,7 +61,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 };
 
 func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
-  return false;
+  return true; // Frozen: payment methods are now managed by 22_configure_v2_payment_methods
 };
 
 export default func;
