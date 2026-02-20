@@ -275,6 +275,87 @@ export async function addPaymentMethodToUnifiedVerifier(
   }
 }
 
+export async function addOrchestratorToRegistry(
+  hre: HardhatRuntimeEnvironment,
+  contract: any,
+  orchestrator: Address
+): Promise<void> {
+  const currentOwner = await contract.owner();
+
+  if (!(await contract.isOrchestrator(orchestrator))) {
+    if ((await hre.getUnnamedAccounts()).includes(currentOwner)) {
+      const data = contract.interface.encodeFunctionData("addOrchestrator", [orchestrator]);
+      await sendDeploymentTransaction(hre, {
+        from: currentOwner,
+        to: contract.address,
+        data,
+      });
+    } else {
+      console.log(
+        `Contract owner is not in the list of accounts, must be manually added with the following calldata:
+        ${contract.interface.encodeFunctionData("addOrchestrator", [orchestrator])}
+        contract address: ${contract.address}
+        `
+      );
+    }
+  }
+}
+
+export async function removePaymentMethodFromRegistry(
+  hre: HardhatRuntimeEnvironment,
+  contract: any,
+  paymentMethodHash: string
+): Promise<void> {
+  const currentOwner = await contract.owner();
+
+  if (await contract.isPaymentMethod(paymentMethodHash)) {
+    if ((await hre.getUnnamedAccounts()).includes(currentOwner)) {
+      console.log(`Removing payment method ${paymentMethodHash} from registry`);
+      const data = contract.interface.encodeFunctionData("removePaymentMethod", [paymentMethodHash]);
+      await sendDeploymentTransaction(hre, {
+        from: currentOwner,
+        to: contract.address,
+        data,
+      });
+    } else {
+      console.log(
+        `Contract owner is not in the list of accounts, must be manually removed with the following calldata:
+        ${contract.interface.encodeFunctionData("removePaymentMethod", [paymentMethodHash])}
+        contract address: ${contract.address}
+        `
+      );
+    }
+  } else {
+    console.log(`Payment method ${paymentMethodHash} not found in registry`);
+  }
+}
+
+export async function removeWritePermission(
+  hre: HardhatRuntimeEnvironment,
+  contract: any,
+  writer: Address
+): Promise<void> {
+  const currentOwner = await contract.owner();
+
+  if (await contract.isWriter(writer)) {
+    if ((await hre.getUnnamedAccounts()).includes(currentOwner)) {
+      const data = contract.interface.encodeFunctionData("removeWritePermission", [writer]);
+      await sendDeploymentTransaction(hre, {
+        from: currentOwner,
+        to: contract.address,
+        data,
+      });
+    } else {
+      console.log(
+        `Contract owner is not in the list of accounts, must be manually removed with the following calldata:
+        ${contract.interface.encodeFunctionData("removeWritePermission", [writer])}
+        contract address: ${contract.address}
+        `
+      );
+    }
+  }
+}
+
 // Persist payment method snapshots per network to avoid drift between code and configured on-chain state
 export function savePaymentMethodSnapshot(
   network: string,
