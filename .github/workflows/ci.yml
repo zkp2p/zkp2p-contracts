@@ -26,11 +26,10 @@ jobs:
           PORT: 8545
       - name: Run tests
         run: yarn test
-      # Deploy scripts will be updated in a separate branch
-      # - name: Check deploy
-      #   run: yarn deploy:localhost
-      # - name: Test deploy
-      #   run: yarn test:deploy --network localhost
+      - name: Deploy to localhost
+        run: yarn deploy:localhost
+      - name: Test deploy
+        run: yarn test:deploy --network localhost
 
   coverage:
     # Runs independently and in parallel with other jobs
