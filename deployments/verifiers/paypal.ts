@@ -1,4 +1,3 @@
-import { BigNumber } from "ethers";
 import { calculatePaymentMethodHash, Currency } from "@utils/protocolUtils";
 
 export const PAYPAL_PAYMENT_METHOD_HASH = calculatePaymentMethodHash("paypal");
