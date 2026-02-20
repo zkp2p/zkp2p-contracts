@@ -1,6 +1,6 @@
 {
   "name": "@zkp2p/contracts-v2",
-  "version": "0.0.9",
+  "version": "0.1.11-rc.2",
   "description": "ZKP2P V2 smart contract interfaces and utilities",
   "main": "./_cjs/index.js",
   "module": "./_esm/index.js",
@@ -100,14 +100,6 @@
       "default": "./abis/base.mjs"
     },
     "./abis/base/*.json": "./abis/base/*.json",
-    "./abis/baseSepolia": {
-      "types": "./abis/baseSepolia.d.ts",
-      "import": "./abis/baseSepolia.mjs",
-      "react-native": "./abis/baseSepolia.mjs",
-      "require": "./abis/baseSepolia.cjs",
-      "default": "./abis/baseSepolia.mjs"
-    },
-    "./abis/baseSepolia/*.json": "./abis/baseSepolia/*.json",
     "./abis/baseStaging": {
       "types": "./abis/baseStaging.d.ts",
       "import": "./abis/baseStaging.mjs",
@@ -128,13 +120,6 @@
       "react-native": "./networks/base.mjs",
       "require": "./networks/base.cjs",
       "default": "./networks/base.mjs"
-    },
-    "./networks/baseSepolia": {
-      "types": "./networks/baseSepolia.d.ts",
-      "import": "./networks/baseSepolia.mjs",
-      "react-native": "./networks/baseSepolia.mjs",
-      "require": "./networks/baseSepolia.cjs",
-      "default": "./networks/baseSepolia.mjs"
     },
     "./networks/baseStaging": {
       "types": "./networks/baseStaging.d.ts",

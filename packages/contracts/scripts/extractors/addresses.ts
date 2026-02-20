@@ -30,13 +30,15 @@ function normalizeNetworkName(fileName: string): string {
 export async function extractAddresses(): Promise<void> {
   ensureDir(ADDRESSES_DIR);
 
+  const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
   const files = fs
     .readdirSync(OUTPUTS_DIR)
-    .filter((f) => f.endsWith('Contracts.ts') && !f.startsWith('localhost')); // Exclude localhost
+    .filter((f) => f.endsWith('Contracts.ts') && !f.startsWith('localhost') && !f.startsWith('baseSepolia'));
 
-  const indexExports: string[] = [];
-  const dtsExports: string[] = [];
-  const networksList: string[] = [];
+  // First pass: load all networks and collect the union of all contract names
+  const networksData: { file: string; network: string; data: OutputsFileShape }[] = [];
+  const allContractNames = new Set<string>();
 
   for (const file of files) {
     const network = normalizeNetworkName(file);
@@ -44,11 +46,25 @@ export async function extractAddresses(): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = require(modPath);
     const data: OutputsFileShape = mod.default || mod;
+    networksData.push({ file, network, data });
+
+    for (const name of Object.keys(data.contracts)) {
+      allContractNames.add(name);
+    }
+  }
+
+  const indexExports: string[] = [];
+  const dtsExports: string[] = [];
+  const networksList: string[] = [];
+
+  // Second pass: write address files, backfilling zero addresses for missing contracts
+  for (const { network, data } of networksData) {
     const chainId = typeof data.chainId === 'string' ? Number(data.chainId) : data.chainId;
 
     const contracts: Record<string, string> = {};
-    for (const [name, entry] of Object.entries(data.contracts)) {
-      contracts[name] = entry.address;
+    for (const name of allContractNames) {
+      const entry = data.contracts[name];
+      contracts[name] = entry ? entry.address : ZERO_ADDRESS;
     }
 
     const payload = {
