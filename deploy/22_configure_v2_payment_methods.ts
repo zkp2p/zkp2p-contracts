@@ -47,11 +47,16 @@ const ALL_PAYMENT_METHODS = [
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const network = hre.deployments.getNetworkName();
 
+  const [deployer] = await hre.getUnnamedAccounts();
   const v2VerifierAddress = getDeployedContractAddress(network, "UnifiedPaymentVerifierV2");
   const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
 
   const v2VerifierContract = await ethers.getContractAt("UnifiedPaymentVerifier", v2VerifierAddress);
   const paymentVerifierRegistryContract = await ethers.getContractAt("PaymentVerifierRegistry", paymentVerifierRegistryAddress);
+
+  // Detect whether deployer can execute transactions directly
+  const registryOwner = await paymentVerifierRegistryContract.owner();
+  const deployerIsOwner = (await hre.getUnnamedAccounts()).includes(registryOwner);
 
   for (const { key, config } of ALL_PAYMENT_METHODS) {
     console.log(`\nConfiguring payment method: ${key}`);
@@ -78,13 +83,31 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     }
 
     // Step 4: Re-add with V2 verifier
-    await addPaymentMethodToRegistry(
-      hre,
-      paymentVerifierRegistryContract,
-      config.paymentMethodHash,
-      v2VerifierAddress,
-      config.currencies
-    );
+    // On production (deployer ≠ owner), the removal in step 3 only logged calldata
+    // without executing, so isPaymentMethod() still returns true. The
+    // addPaymentMethodToRegistry helper would skip due to its idempotency check.
+    // Bypass it by encoding the calldata directly.
+    if (!deployerIsOwner && isPaymentMethod) {
+      const addCalldata = paymentVerifierRegistryContract.interface.encodeFunctionData("addPaymentMethod", [
+        config.paymentMethodHash,
+        v2VerifierAddress,
+        config.currencies
+      ]);
+      console.log(
+        `Contract owner is not in the list of accounts, must be manually added with the following calldata:
+        ${addCalldata}
+        contract address: ${paymentVerifierRegistryContract.address}
+        `
+      );
+    } else {
+      await addPaymentMethodToRegistry(
+        hre,
+        paymentVerifierRegistryContract,
+        config.paymentMethodHash,
+        v2VerifierAddress,
+        config.currencies
+      );
+    }
     console.log(`${key} added to PaymentVerifierRegistry with V2 verifier`);
 
     // Step 5: Save snapshot
