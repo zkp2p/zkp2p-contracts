@@ -6,6 +6,7 @@ import { INullifierRegistry } from "../interfaces/INullifierRegistry.sol";
 import { IPaymentVerifier } from "../interfaces/IPaymentVerifier.sol";
 import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
 import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
+import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
 import { IEscrow } from "../interfaces/IEscrow.sol";
 
 /**
@@ -93,11 +94,11 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
     /* ============ Constructor ============ */
     
     constructor(
-        IOrchestrator _orchestrator,
+        IOrchestratorRegistry _orchestratorRegistry,
         INullifierRegistry _nullifierRegistry,
         IAttestationVerifier _attestationVerifier
     ) BaseUnifiedPaymentVerifier(
-        _orchestrator,
+        _orchestratorRegistry,
         _nullifierRegistry,
         _attestationVerifier
     ) {
@@ -222,7 +223,7 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
     ) internal view {
         require(snapshot.intentHash == intentHash, "UPV: Snapshot hash mismatch");
 
-        IOrchestrator.Intent memory intent = IOrchestrator(orchestrator).getIntent(intentHash);
+        IOrchestrator.Intent memory intent = IOrchestrator(msg.sender).getIntent(intentHash);
         require(snapshot.payeeDetails == intent.payeeId, "UPV: Snapshot payee mismatch");
         require(snapshot.amount == intent.amount, "UPV: Snapshot amount mismatch");
         require(snapshot.paymentMethod == intent.paymentMethod, "UPV: Snapshot method mismatch");

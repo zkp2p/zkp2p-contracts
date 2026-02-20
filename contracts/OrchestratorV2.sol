@@ -15,7 +15,7 @@ import { IOrchestratorV2 } from "./interfaces/IOrchestratorV2.sol";
 import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
-import { IPostIntentHook } from "./interfaces/IPostIntentHook.sol";
+import { IPostIntentHookV2 } from "./interfaces/IPostIntentHookV2.sol";
 import { IPreIntentHook } from "./interfaces/IPreIntentHook.sol";
 import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
@@ -690,11 +690,11 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
             // Grant exact allowance to the post-intent hook using SafeERC20 with zero-before-set
             _token.safeApprove(address(_intent.postIntentHook), 0);
             _token.safeApprove(address(_intent.postIntentHook), netAmount);
-            IPostIntentHook.HookExecutionContext memory hookCtx = IPostIntentHook.HookExecutionContext({
+            IPostIntentHookV2.HookExecutionContext memory hookCtx = IPostIntentHookV2.HookExecutionContext({
                 intentHash: _intentHash,
                 token: address(_token),
                 executableAmount: netAmount,
-                intent: IPostIntentHook.HookIntentContext({
+                intent: IPostIntentHookV2.HookIntentContext({
                     owner: _intent.owner,
                     to: _intent.to,
                     escrow: _intent.escrow,

@@ -12,6 +12,7 @@ import {
   IOrchestrator,
   NullifierRegistry,
   Orchestrator,
+  OrchestratorRegistry,
   PaymentVerifierRegistry,
   PostIntentHookRegistry,
   RelayerRegistry,
@@ -49,6 +50,7 @@ describe("UnifiedPaymentVerifier", () => {
 
   let usdcToken: USDCMock;
   let escrowRegistry: EscrowRegistry;
+  let orchestratorRegistry: OrchestratorRegistry;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
   let postIntentHookRegistry: PostIntentHookRegistry;
   let relayerRegistry: RelayerRegistry;
@@ -120,10 +122,13 @@ describe("UnifiedPaymentVerifier", () => {
 
     await escrow.connect(owner.wallet).setOrchestrator(orchestrator.address);
 
+    orchestratorRegistry = await deployer.deployOrchestratorRegistry();
+    await orchestratorRegistry.addOrchestrator(orchestrator.address);
+
     attestationVerifier = await deployer.deploySimpleAttestationVerifier(witness.address);
 
     verifier = await deployer.deployUnifiedPaymentVerifier(
-      orchestrator.address,
+      orchestratorRegistry.address,
       nullifierRegistry.address,
       attestationVerifier.address,
     );

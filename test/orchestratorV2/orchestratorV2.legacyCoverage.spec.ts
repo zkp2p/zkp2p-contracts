@@ -17,13 +17,13 @@ import {
   OrchestratorV2,
   PaymentVerifierMock,
   PaymentVerifierRegistry,
-  PartialPullPostIntentHookMock,
-  ReentrantPostIntentHook,
+  PartialPullPostIntentHookV2Mock,
+  ReentrantPostIntentHookV2,
   ReentrantPreIntentHookMock,
   ReentrantSignalIntentCallerV2Mock,
-  PostIntentHookMock,
+  PostIntentHookV2Mock,
   PreIntentHookMock,
-  PushPostIntentHookMock,
+  PushPostIntentHookV2Mock,
   RelayerRegistry,
   USDCMock,
 } from "@utils/contracts";
@@ -52,10 +52,10 @@ describe("OrchestratorV2", () => {
   let verifier: PaymentVerifierMock;
   let preIntentHookMock: PreIntentHookMock;
   let whitelistHookMock: PreIntentHookMock;
-  let postIntentHookMock: PostIntentHookMock;
-  let partialPostIntentHookMock: PartialPullPostIntentHookMock;
-  let pushPostIntentHookMock: PushPostIntentHookMock;
-  let reentrantPostIntentHook: ReentrantPostIntentHook;
+  let postIntentHookMock: PostIntentHookV2Mock;
+  let partialPostIntentHookMock: PartialPullPostIntentHookV2Mock;
+  let pushPostIntentHookMock: PushPostIntentHookV2Mock;
+  let reentrantPostIntentHook: ReentrantPostIntentHookV2;
   let reentrantPreIntentHookMock: ReentrantPreIntentHookMock;
   let reentrantSignalIntentCallerMock: ReentrantSignalIntentCallerV2Mock;
   let orchestratorMock: OrchestratorMock;
@@ -209,10 +209,10 @@ describe("OrchestratorV2", () => {
       protocolFeeRecipient.address
     );
 
-    postIntentHookMock = await deployer.deployPostIntentHookMock(usdcToken.address, orchestrator.address);
-    partialPostIntentHookMock = await deployer.deployPartialPullPostIntentHookMock(usdcToken.address, orchestrator.address);
-    pushPostIntentHookMock = await deployer.deployPushPostIntentHookMock(usdcToken.address, orchestrator.address);
-    reentrantPostIntentHook = await deployer.deployReentrantPostIntentHook(usdcToken.address, orchestrator.address);
+    postIntentHookMock = await deployer.deployPostIntentHookV2Mock(usdcToken.address, orchestrator.address);
+    partialPostIntentHookMock = await deployer.deployPartialPullPostIntentHookV2Mock(usdcToken.address, orchestrator.address);
+    pushPostIntentHookMock = await deployer.deployPushPostIntentHookV2Mock(usdcToken.address, orchestrator.address);
+    reentrantPostIntentHook = await deployer.deployReentrantPostIntentHookV2(usdcToken.address, orchestrator.address);
     reentrantSignalIntentCallerMock = await deployer.deployReentrantSignalIntentCallerV2Mock(orchestrator.address);
     reentrantPreIntentHookMock = await deployer.deployReentrantPreIntentHookMock(reentrantSignalIntentCallerMock.address);
     orchestratorMock = await deployer.deployOrchestratorMock(escrow.address);

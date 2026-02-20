@@ -2,7 +2,7 @@ import "module-alias/register";
 
 import { ethers } from "hardhat";
 
-import { BaseUnifiedPaymentVerifier, NullifierRegistry, SimpleAttestationVerifier } from "@utils/contracts";
+import { BaseUnifiedPaymentVerifier, NullifierRegistry, OrchestratorRegistry, SimpleAttestationVerifier } from "@utils/contracts";
 import { Account } from "@utils/test/types";
 import { Address } from "@utils/types";
 import DeployHelper from "@utils/deploys";
@@ -24,6 +24,7 @@ describe("BaseUnifiedPaymentVerifier", () => {
   let BaseUnifiedPaymentVerifier: BaseUnifiedPaymentVerifier;
   let attestationVerifier: SimpleAttestationVerifier;
   let nullifierRegistry: NullifierRegistry;
+  let orchestratorRegistry: OrchestratorRegistry;
 
   let deployer: DeployHelper;
 
@@ -49,18 +50,21 @@ describe("BaseUnifiedPaymentVerifier", () => {
       witness1.address
     );
 
+    orchestratorRegistry = await deployer.deployOrchestratorRegistry();
+    await orchestratorRegistry.addOrchestrator(escrow.address);
+
     // Deploy the UnifiedPaymentVerifier (which inherits BaseUnifiedPaymentVerifier functionality)
     BaseUnifiedPaymentVerifier = await deployer.deployUnifiedPaymentVerifier(
-      escrow.address,
+      orchestratorRegistry.address,
       nullifierRegistry.address,
       attestationVerifier.address
     );
   });
 
   describe("#constructor", async () => {
-    it("should set the correct escrow address", async () => {
-      const escrowAddress = await BaseUnifiedPaymentVerifier.orchestrator();
-      expect(escrowAddress).to.eq(escrow.address);
+    it("should set the correct orchestrator registry address", async () => {
+      const registryAddress = await BaseUnifiedPaymentVerifier.orchestratorRegistry();
+      expect(registryAddress).to.eq(orchestratorRegistry.address);
     });
 
     it("should set the correct nullifier registry", async () => {
@@ -141,47 +145,50 @@ describe("BaseUnifiedPaymentVerifier", () => {
     });
   });
 
-  describe("#setOrchestrator", async () => {
-    let subjectOrchestrator: Address;
+  describe("#setOrchestratorRegistry", async () => {
+    let subjectOrchestratorRegistry: Address;
     let subjectCaller: Account;
 
+    let newOrchestratorRegistry: OrchestratorRegistry;
+
     beforeEach(async () => {
-      subjectOrchestrator = attacker.address;
+      newOrchestratorRegistry = await deployer.deployOrchestratorRegistry();
+      subjectOrchestratorRegistry = newOrchestratorRegistry.address;
       subjectCaller = owner;
     });
 
     async function subject(): Promise<any> {
-      return BaseUnifiedPaymentVerifier.connect(subjectCaller.wallet).setOrchestrator(subjectOrchestrator);
+      return BaseUnifiedPaymentVerifier.connect(subjectCaller.wallet).setOrchestratorRegistry(subjectOrchestratorRegistry);
     }
 
-    it("should update the orchestrator", async () => {
+    it("should update the orchestrator registry", async () => {
       await subject();
-      expect(await BaseUnifiedPaymentVerifier.orchestrator()).to.eq(subjectOrchestrator);
+      expect(await BaseUnifiedPaymentVerifier.orchestratorRegistry()).to.eq(subjectOrchestratorRegistry);
     });
 
-    it("should emit the OrchestratorUpdated event", async () => {
+    it("should emit the OrchestratorRegistryUpdated event", async () => {
       await expect(subject())
-        .to.emit(BaseUnifiedPaymentVerifier, "OrchestratorUpdated")
-        .withArgs(escrow.address, subjectOrchestrator);
+        .to.emit(BaseUnifiedPaymentVerifier, "OrchestratorRegistryUpdated")
+        .withArgs(orchestratorRegistry.address, subjectOrchestratorRegistry);
     });
 
-    describe("when orchestrator is zero", async () => {
+    describe("when orchestrator registry is zero", async () => {
       beforeEach(async () => {
-        subjectOrchestrator = ethers.constants.AddressZero;
+        subjectOrchestratorRegistry = ethers.constants.AddressZero;
       });
 
       it("should revert", async () => {
-        await expect(subject()).to.be.revertedWith("UPV: Invalid orchestrator");
+        await expect(subject()).to.be.revertedWith("UPV: Invalid orchestrator registry");
       });
     });
 
-    describe("when orchestrator is the same as current", async () => {
+    describe("when orchestrator registry is the same as current", async () => {
       beforeEach(async () => {
-        subjectOrchestrator = escrow.address;
+        subjectOrchestratorRegistry = orchestratorRegistry.address;
       });
 
       it("should revert", async () => {
-        await expect(subject()).to.be.revertedWith("UPV: Same orchestrator");
+        await expect(subject()).to.be.revertedWith("UPV: Same registry");
       });
     });
 

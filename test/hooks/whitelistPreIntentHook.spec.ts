@@ -99,7 +99,7 @@ describe("WhitelistPreIntentHook", () => {
       [Currency.USD]
     );
 
-    whitelistHook = await deployer.deployWhitelistPreIntentHook(orchestrator.address);
+    whitelistHook = await deployer.deployWhitelistPreIntentHook(orchestratorRegistry.address);
 
     await usdcToken.connect(depositor.wallet).approve(escrow.address, usdc(10000));
     await escrow.connect(depositor.wallet).createDeposit({
@@ -122,14 +122,14 @@ describe("WhitelistPreIntentHook", () => {
   });
 
   describe("#constructor", () => {
-    it("reverts when orchestrator is zero address", async () => {
+    it("reverts when orchestratorRegistry is zero address", async () => {
       await expect(
         deployer.deployWhitelistPreIntentHook(ADDRESS_ZERO)
       ).to.be.revertedWithCustomError(whitelistHook, "ZeroAddress");
     });
 
-    it("sets orchestrator correctly", async () => {
-      expect(await whitelistHook.orchestrator()).to.eq(orchestrator.address);
+    it("sets orchestratorRegistry correctly", async () => {
+      expect(await whitelistHook.orchestratorRegistry()).to.eq(orchestratorRegistry.address);
     });
   });
 

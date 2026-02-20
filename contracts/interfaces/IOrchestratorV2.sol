@@ -3,7 +3,7 @@
 pragma solidity ^0.8.18;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { IPostIntentHook } from "./IPostIntentHook.sol";
+import { IPostIntentHookV2 } from "./IPostIntentHookV2.sol";
 import { IPreIntentHook } from "./IPreIntentHook.sol";
 
 /**
@@ -28,7 +28,7 @@ interface IOrchestratorV2 {
         bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain
         address referrer;                           // Address of the referrer who brought this intent (if any)
         uint256 referrerFee;                        // Fee to be paid to the referrer in preciseUnits (1e16 = 1%)
-        IPostIntentHook postIntentHook;             // Address of the post-intent hook that will execute any post-intent actions
+        IPostIntentHookV2 postIntentHook;            // Address of the post-intent hook that will execute any post-intent actions
         bytes data;                                 // Additional data to be passed to the post-intent hook contract
     }
 
@@ -44,7 +44,7 @@ interface IOrchestratorV2 {
         uint256 referrerFee;                        // Fee to be paid to the referrer
         bytes gatingServiceSignature;               // Signature from the deposit's gating service
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
-        IPostIntentHook postIntentHook;             // Optional post-intent hook (address(0) for no hook)
+        IPostIntentHookV2 postIntentHook;           // Optional post-intent hook (address(0) for no hook)
         bytes preIntentHookData;                    // Ephemeral data passed only to the pre-intent hook during signalIntent
         bytes data;                                 // Signal data persisted in Intent and forwarded as post-intent hook signalHookData
     }

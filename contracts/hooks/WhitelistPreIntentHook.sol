@@ -3,6 +3,7 @@
 pragma solidity ^0.8.18;
 
 import { IEscrow } from "../interfaces/IEscrow.sol";
+import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
 import { IPreIntentHook } from "../interfaces/IPreIntentHook.sol";
 
 /**
@@ -28,17 +29,17 @@ contract WhitelistPreIntentHook is IPreIntentHook {
 
     /* ============ State Variables ============ */
 
-    address public immutable orchestrator;
+    IOrchestratorRegistry public immutable orchestratorRegistry;
 
     // escrow => depositId => taker => whitelisted
     mapping(address => mapping(uint256 => mapping(address => bool))) public whitelist;
 
     /* ============ Constructor ============ */
 
-    constructor(address _orchestrator) {
-        if (_orchestrator == address(0)) revert ZeroAddress();
+    constructor(address _orchestratorRegistry) {
+        if (_orchestratorRegistry == address(0)) revert ZeroAddress();
 
-        orchestrator = _orchestrator;
+        orchestratorRegistry = IOrchestratorRegistry(_orchestratorRegistry);
     }
 
     /* ============ External Functions ============ */
@@ -98,7 +99,7 @@ contract WhitelistPreIntentHook is IPreIntentHook {
      * @inheritdoc IPreIntentHook
      */
     function validateSignalIntent(PreIntentContext calldata _ctx) external view override {
-        if (msg.sender != orchestrator) revert UnauthorizedOrchestratorCaller(msg.sender);
+        if (!orchestratorRegistry.isOrchestrator(msg.sender)) revert UnauthorizedOrchestratorCaller(msg.sender);
 
         if (!whitelist[_ctx.escrow][_ctx.depositId][_ctx.taker]) {
             revert TakerNotWhitelisted(_ctx.taker, _ctx.escrow, _ctx.depositId);

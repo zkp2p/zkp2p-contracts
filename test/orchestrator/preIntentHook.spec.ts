@@ -106,7 +106,7 @@ describe("OrchestratorV2 - PreIntentHook", () => {
     preIntentHookMock = await deployer.deployPreIntentHookMock();
     reentrantSignalIntentCallerMock = await deployer.deployReentrantSignalIntentCallerV2Mock(orchestrator.address);
     reentrantPreIntentHookMock = await deployer.deployReentrantPreIntentHookMock(reentrantSignalIntentCallerMock.address);
-    signatureGatingPreIntentHook = await deployer.deploySignatureGatingPreIntentHook(orchestrator.address);
+    signatureGatingPreIntentHook = await deployer.deploySignatureGatingPreIntentHook(orchestratorRegistry.address, chainId);
 
     await usdcToken.connect(depositor.wallet).approve(escrow.address, usdc(10000));
     await escrow.connect(depositor.wallet).createDeposit({
@@ -361,7 +361,7 @@ describe("OrchestratorV2 - PreIntentHook", () => {
     describe("#constructor", () => {
       it("reverts when orchestrator is zero address", async () => {
         await expect(
-          deployer.deploySignatureGatingPreIntentHook(ADDRESS_ZERO)
+          deployer.deploySignatureGatingPreIntentHook(ADDRESS_ZERO, chainId)
         ).to.be.revertedWithCustomError(signatureGatingPreIntentHook, "ZeroAddress");
       });
     });
@@ -568,7 +568,7 @@ describe("OrchestratorV2 - PreIntentHook", () => {
       describe("when signer is not set for deposit", () => {
         beforeEach(async () => {
           // Deploy a fresh hook with no signers configured
-          const freshHook = await deployer.deploySignatureGatingPreIntentHook(orchestrator.address);
+          const freshHook = await deployer.deploySignatureGatingPreIntentHook(orchestratorRegistry.address, chainId);
           await orchestrator.connect(depositor.wallet).setDepositPreIntentHook(
             escrow.address,
             ZERO,

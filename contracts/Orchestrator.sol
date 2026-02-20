@@ -538,25 +538,7 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
             // Grant exact allowance to the post-intent hook using SafeERC20 with zero-before-set
             _token.safeApprove(address(_intent.postIntentHook), 0);
             _token.safeApprove(address(_intent.postIntentHook), netAmount);
-            IPostIntentHook.HookExecutionContext memory hookCtx = IPostIntentHook.HookExecutionContext({
-                intentHash: _intentHash,
-                token: address(_token),
-                executableAmount: netAmount,
-                intent: IPostIntentHook.HookIntentContext({
-                    owner: _intent.owner,
-                    to: _intent.to,
-                    escrow: _intent.escrow,
-                    depositId: _intent.depositId,
-                    amount: _intent.amount,
-                    timestamp: _intent.timestamp,
-                    paymentMethod: _intent.paymentMethod,
-                    fiatCurrency: _intent.fiatCurrency,
-                    conversionRate: _intent.conversionRate,
-                    payeeId: _intent.payeeId,
-                    signalHookData: _intent.data
-                })
-            });
-            _intent.postIntentHook.execute(hookCtx, _postIntentHookData);
+            _intent.postIntentHook.execute(_intent, netAmount, _postIntentHookData);
             
             // Enforce that the hook pulled exactly netAmount to prevent stranded funds
             uint256 postBalance = _token.balanceOf(address(this));

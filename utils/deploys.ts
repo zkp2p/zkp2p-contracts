@@ -29,10 +29,14 @@ import {
   ReentrantSignalIntentCallerMock,
   ReentrantOrchestratorMock,
   PartialPullPostIntentHookMock,
+  PartialPullPostIntentHookV2Mock,
   PushPostIntentHookMock,
+  PushPostIntentHookV2Mock,
+  ReentrantPostIntentHookV2,
   RateManagerMock,
   ReentrantSignalIntentCallerV2Mock,
-  PostIntentHookRegistry
+  PostIntentHookRegistry,
+  PostIntentHookV2Mock
 } from "./contracts";
 import {
   USDCMock__factory,
@@ -44,7 +48,11 @@ import {
   ReentrantSignalIntentCallerMock__factory,
   ReentrantOrchestratorMock__factory,
   PartialPullPostIntentHookMock__factory,
-  PushPostIntentHookMock__factory
+  PartialPullPostIntentHookV2Mock__factory,
+  PushPostIntentHookMock__factory,
+  PushPostIntentHookV2Mock__factory,
+  ReentrantPostIntentHookV2__factory,
+  PostIntentHookV2Mock__factory
 } from "../typechain/factories/contracts/mocks";
 import { ReentrantSignalIntentCallerV2Mock__factory } from "../typechain/factories/contracts/mocks/ReentrantSignalIntentCallerV2Mock__factory";
 import { ReentrantPreIntentHookMock__factory } from "../typechain/factories/contracts/mocks/ReentrantPreIntentHookMock.sol/ReentrantPreIntentHookMock__factory";
@@ -65,7 +73,7 @@ import { OrchestratorV2__factory } from "../typechain/factories/contracts/Orches
 import { RateManagerV1__factory } from "../typechain/factories/contracts/RateManagerV1__factory";
 import { UnifiedPaymentVerifier__factory } from "../typechain/factories/contracts/unifiedVerifier";
 import { SimpleAttestationVerifier__factory } from "../typechain/factories/contracts/unifiedVerifier";
-import { SignatureGatingPreIntentHook__factory } from "../typechain/factories/contracts/hooks/SignatureGatingPreIntentHook.sol/SignatureGatingPreIntentHook__factory";
+import { SignatureGatingPreIntentHook__factory } from "../typechain/factories/contracts/hooks/SignatureGatingPreIntentHook__factory";
 import { WhitelistPreIntentHook__factory } from "../typechain/factories/contracts/hooks/WhitelistPreIntentHook__factory";
 import { OrchestratorRegistry__factory } from "../typechain/factories/contracts/registries/OrchestratorRegistry__factory";
 import {
@@ -248,27 +256,59 @@ export default class DeployHelper {
   }
 
   public async deploySignatureGatingPreIntentHook(
-    orchestrator: Address
+    orchestratorRegistry: Address,
+    chainId: BigNumber
   ): Promise<SignatureGatingPreIntentHook> {
-    return await new SignatureGatingPreIntentHook__factory(this._deployerSigner).deploy(orchestrator);
+    return await new SignatureGatingPreIntentHook__factory(this._deployerSigner).deploy(orchestratorRegistry, chainId);
   }
 
   public async deployWhitelistPreIntentHook(
-    orchestrator: Address
+    orchestratorRegistry: Address
   ): Promise<WhitelistPreIntentHook> {
-    return await new WhitelistPreIntentHook__factory(this._deployerSigner).deploy(orchestrator);
+    return await new WhitelistPreIntentHook__factory(this._deployerSigner).deploy(orchestratorRegistry);
   }
 
 
   public async deployUnifiedPaymentVerifier(
-    orchestrator: Address,
+    orchestratorRegistry: Address,
     nullifierRegistry: Address,
     attestationVerifier: Address
   ): Promise<UnifiedPaymentVerifier> {
     return await new UnifiedPaymentVerifier__factory(this._deployerSigner).deploy(
-      orchestrator,
+      orchestratorRegistry,
       nullifierRegistry,
       attestationVerifier
+    );
+  }
+
+  public async deployPostIntentHookV2Mock(
+    usdc: Address,
+    orchestrator: Address
+  ): Promise<PostIntentHookV2Mock> {
+    return await new PostIntentHookV2Mock__factory(this._deployerSigner).deploy(usdc, orchestrator);
+  }
+
+  public async deployPartialPullPostIntentHookV2Mock(
+    usdc: Address,
+    orchestrator: Address
+  ): Promise<PartialPullPostIntentHookV2Mock> {
+    return await new PartialPullPostIntentHookV2Mock__factory(this._deployerSigner).deploy(usdc, orchestrator);
+  }
+
+  public async deployPushPostIntentHookV2Mock(
+    usdc: Address,
+    orchestrator: Address
+  ): Promise<PushPostIntentHookV2Mock> {
+    return await new PushPostIntentHookV2Mock__factory(this._deployerSigner).deploy(usdc, orchestrator);
+  }
+
+  public async deployReentrantPostIntentHookV2(
+    usdc: Address,
+    orchestrator: Address
+  ): Promise<ReentrantPostIntentHookV2> {
+    return await new ReentrantPostIntentHookV2__factory(this._deployerSigner).deploy(
+      usdc,
+      orchestrator
     );
   }
 

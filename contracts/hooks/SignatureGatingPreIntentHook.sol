@@ -6,14 +6,8 @@ import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import { SignatureChecker } from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 
 import { IEscrow } from "../interfaces/IEscrow.sol";
+import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
 import { IPreIntentHook } from "../interfaces/IPreIntentHook.sol";
-
-/**
- * @dev Minimal reader for Orchestrator chainId.
- */
-interface IOrchestratorChainIdReader {
-    function chainId() external view returns (uint256);
-}
 
 /**
  * @title SignatureGatingPreIntentHook
@@ -44,7 +38,7 @@ contract SignatureGatingPreIntentHook is IPreIntentHook {
 
     /* ============ State Variables ============ */
 
-    address public immutable orchestrator;
+    IOrchestratorRegistry public immutable orchestratorRegistry;
     uint256 public immutable chainId;
 
     // escrow => depositId => authorized signer
@@ -52,11 +46,11 @@ contract SignatureGatingPreIntentHook is IPreIntentHook {
 
     /* ============ Constructor ============ */
 
-    constructor(address _orchestrator) {
-        if (_orchestrator == address(0)) revert ZeroAddress();
+    constructor(address _orchestratorRegistry, uint256 _chainId) {
+        if (_orchestratorRegistry == address(0)) revert ZeroAddress();
 
-        orchestrator = _orchestrator;
-        chainId = IOrchestratorChainIdReader(_orchestrator).chainId();
+        orchestratorRegistry = IOrchestratorRegistry(_orchestratorRegistry);
+        chainId = _chainId;
     }
 
     /* ============ External Functions ============ */
@@ -92,7 +86,7 @@ contract SignatureGatingPreIntentHook is IPreIntentHook {
      * @inheritdoc IPreIntentHook
      */
     function validateSignalIntent(PreIntentContext calldata _ctx) external view override {
-        if (msg.sender != orchestrator) revert UnauthorizedOrchestratorCaller(msg.sender);
+        if (!orchestratorRegistry.isOrchestrator(msg.sender)) revert UnauthorizedOrchestratorCaller(msg.sender);
 
         address signer = depositSigner[_ctx.escrow][_ctx.depositId];
         if (signer == address(0)) revert SignerNotSet(_ctx.escrow, _ctx.depositId);
@@ -103,7 +97,7 @@ contract SignatureGatingPreIntentHook is IPreIntentHook {
         }
 
         bytes memory message = abi.encodePacked(
-            orchestrator,
+            msg.sender,
             _ctx.escrow,
             _ctx.depositId,
             _ctx.amount,
