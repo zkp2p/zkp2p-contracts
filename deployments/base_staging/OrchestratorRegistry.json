@@ -1,0 +1,286 @@
+{
+  "address": "0xb6F9BF66928C915CB9a0eAFc33146B89f683280e",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "orchestrator",
+          "type": "address"
+        }
+      ],
+      "name": "OrchestratorAlreadyAdded",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "orchestrator",
+          "type": "address"
+        }
+      ],
+      "name": "OrchestratorNotFound",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroAddress",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "orchestrator",
+          "type": "address"
+        }
+      ],
+      "name": "OrchestratorAdded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "orchestrator",
+          "type": "address"
+        }
+      ],
+      "name": "OrchestratorRemoved",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_orchestrator",
+          "type": "address"
+        }
+      ],
+      "name": "addOrchestrator",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "isOrchestrator",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_orchestrator",
+          "type": "address"
+        }
+      ],
+      "name": "removeOrchestrator",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0x85997dc1bc5ce881e71938e1efbb0a0eca358a1bb61f8e4058060031bbdc9503",
+  "receipt": {
+    "to": null,
+    "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "contractAddress": "0xb6F9BF66928C915CB9a0eAFc33146B89f683280e",
+    "transactionIndex": 124,
+    "gasUsed": "287465",
+    "logsBloom": "0x00000000000000000000000000000000000000000000004000800000000000000000000000000000000000000001000000000000010000000000000000000000000000000000000000010000000000000001000000000000000000000000000000000000020000000000000000000800000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0x13e9c901c14f3532386c73c1a965063478e23cf4ac0aaeb912c98967c524ffb5",
+    "transactionHash": "0x85997dc1bc5ce881e71938e1efbb0a0eca358a1bb61f8e4058060031bbdc9503",
+    "logs": [
+      {
+        "transactionIndex": 124,
+        "blockNumber": 42395052,
+        "transactionHash": "0x85997dc1bc5ce881e71938e1efbb0a0eca358a1bb61f8e4058060031bbdc9503",
+        "address": "0xb6F9BF66928C915CB9a0eAFc33146B89f683280e",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x00000000000000000000000084e113087c97cd80ea9d78983d4b8ff61eca1929"
+        ],
+        "data": "0x",
+        "logIndex": 527,
+        "blockHash": "0x13e9c901c14f3532386c73c1a965063478e23cf4ac0aaeb912c98967c524ffb5"
+      }
+    ],
+    "blockNumber": 42395052,
+    "cumulativeGasUsed": "23013337",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [],
+  "numDeployments": 1,
+  "solcInputHash": "d9d2635d1c5a5dc3dc79bd6236a30fb2",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"orchestrator\",\"type\":\"address\"}],\"name\":\"OrchestratorAlreadyAdded\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"orchestrator\",\"type\":\"address\"}],\"name\":\"OrchestratorNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAddress\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"orchestrator\",\"type\":\"address\"}],\"name\":\"OrchestratorAdded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"orchestrator\",\"type\":\"address\"}],\"name\":\"OrchestratorRemoved\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_orchestrator\",\"type\":\"address\"}],\"name\":\"addOrchestrator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"isOrchestrator\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_orchestrator\",\"type\":\"address\"}],\"name\":\"removeOrchestrator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"kind\":\"dev\",\"methods\":{\"addOrchestrator(address)\":{\"details\":\"Reverts on zero address.\",\"params\":{\"_orchestrator\":\"Orchestrator address to authorize.\"}},\"owner()\":{\"details\":\"Returns the address of the current owner.\"},\"removeOrchestrator(address)\":{\"details\":\"Reverts on zero address.\",\"params\":{\"_orchestrator\":\"Orchestrator address to de-authorize.\"}},\"renounceOwnership()\":{\"details\":\"Leaves the contract without owner. It will not be possible to call `onlyOwner` functions. Can only be called by the current owner. NOTE: Renouncing ownership will leave the contract without an owner, thereby disabling any functionality that is only available to the owner.\"},\"transferOwnership(address)\":{\"details\":\"Transfers ownership of the contract to a new account (`newOwner`). Can only be called by the current owner.\"}},\"stateVariables\":{\"isOrchestrator\":{\"params\":{\"_orchestrator\":\"Address to check.\"},\"return\":\"True when `_orchestrator` is authorized.\",\"returns\":{\"_0\":\"True when `_orchestrator` is authorized.\"}}},\"title\":\"OrchestratorRegistry\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"addOrchestrator(address)\":{\"notice\":\"GOVERNANCE ONLY: Adds an orchestrator to the allowlist.\"},\"isOrchestrator(address)\":{\"notice\":\"Returns whether an address is currently allowlisted as orchestrator.\"},\"removeOrchestrator(address)\":{\"notice\":\"GOVERNANCE ONLY: Removes an orchestrator from the allowlist.\"}},\"notice\":\"Owner-managed allowlist of orchestrator contracts authorized to call EscrowV2.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/registries/OrchestratorRegistry.sol\":\"OrchestratorRegistry\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"@openzeppelin/contracts/access/Ownable.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (access/Ownable.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"../utils/Context.sol\\\";\\n\\n/**\\n * @dev Contract module which provides a basic access control mechanism, where\\n * there is an account (an owner) that can be granted exclusive access to\\n * specific functions.\\n *\\n * By default, the owner account will be the one that deploys the contract. This\\n * can later be changed with {transferOwnership}.\\n *\\n * This module is used through inheritance. It will make available the modifier\\n * `onlyOwner`, which can be applied to your functions to restrict their use to\\n * the owner.\\n */\\nabstract contract Ownable is Context {\\n    address private _owner;\\n\\n    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);\\n\\n    /**\\n     * @dev Initializes the contract setting the deployer as the initial owner.\\n     */\\n    constructor() {\\n        _transferOwnership(_msgSender());\\n    }\\n\\n    /**\\n     * @dev Throws if called by any account other than the owner.\\n     */\\n    modifier onlyOwner() {\\n        _checkOwner();\\n        _;\\n    }\\n\\n    /**\\n     * @dev Returns the address of the current owner.\\n     */\\n    function owner() public view virtual returns (address) {\\n        return _owner;\\n    }\\n\\n    /**\\n     * @dev Throws if the sender is not the owner.\\n     */\\n    function _checkOwner() internal view virtual {\\n        require(owner() == _msgSender(), \\\"Ownable: caller is not the owner\\\");\\n    }\\n\\n    /**\\n     * @dev Leaves the contract without owner. It will not be possible to call\\n     * `onlyOwner` functions. Can only be called by the current owner.\\n     *\\n     * NOTE: Renouncing ownership will leave the contract without an owner,\\n     * thereby disabling any functionality that is only available to the owner.\\n     */\\n    function renounceOwnership() public virtual onlyOwner {\\n        _transferOwnership(address(0));\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Can only be called by the current owner.\\n     */\\n    function transferOwnership(address newOwner) public virtual onlyOwner {\\n        require(newOwner != address(0), \\\"Ownable: new owner is the zero address\\\");\\n        _transferOwnership(newOwner);\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Internal function without access restriction.\\n     */\\n    function _transferOwnership(address newOwner) internal virtual {\\n        address oldOwner = _owner;\\n        _owner = newOwner;\\n        emit OwnershipTransferred(oldOwner, newOwner);\\n    }\\n}\\n\",\"keccak256\":\"0xba43b97fba0d32eb4254f6a5a297b39a19a247082a02d6e69349e071e2946218\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/Context.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts v4.4.1 (utils/Context.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Provides information about the current execution context, including the\\n * sender of the transaction and its data. While these are generally available\\n * via msg.sender and msg.data, they should not be accessed in such a direct\\n * manner, since when dealing with meta-transactions the account sending and\\n * paying for execution may not be the actual sender (as far as an application\\n * is concerned).\\n *\\n * This contract is only required for intermediate, library-like contracts.\\n */\\nabstract contract Context {\\n    function _msgSender() internal view virtual returns (address) {\\n        return msg.sender;\\n    }\\n\\n    function _msgData() internal view virtual returns (bytes calldata) {\\n        return msg.data;\\n    }\\n}\\n\",\"keccak256\":\"0xe2e337e6dde9ef6b680e07338c493ebea1b5fd09b43424112868e9cc1706bca7\",\"license\":\"MIT\"},\"contracts/interfaces/IOrchestratorRegistry.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IOrchestratorRegistry\\n * @notice Interface for EscrowV2 orchestrator authorization registry.\\n */\\ninterface IOrchestratorRegistry {\\n    /**\\n     * @notice Adds an orchestrator to the allowlist.\\n     * @param _orchestrator Orchestrator address to add.\\n     */\\n    function addOrchestrator(address _orchestrator) external;\\n\\n    /**\\n     * @notice Removes an orchestrator from the allowlist.\\n     * @param _orchestrator Orchestrator address to remove.\\n     */\\n    function removeOrchestrator(address _orchestrator) external;\\n\\n    /**\\n     * @notice Returns whether an address is currently allowlisted as orchestrator.\\n     * @param _orchestrator Address to check.\\n     * @return allowed True when `_orchestrator` is authorized.\\n     */\\n    function isOrchestrator(address _orchestrator) external view returns (bool allowed);\\n}\\n\",\"keccak256\":\"0xbb2d52f475b9ebd4aadd233040b62a438cf296463fd7b269d12f28c273d0a040\",\"license\":\"MIT\"},\"contracts/registries/OrchestratorRegistry.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { Ownable } from \\\"@openzeppelin/contracts/access/Ownable.sol\\\";\\nimport { IOrchestratorRegistry } from \\\"../interfaces/IOrchestratorRegistry.sol\\\";\\n\\n/**\\n * @title OrchestratorRegistry\\n * @notice Owner-managed allowlist of orchestrator contracts authorized to call EscrowV2.\\n */\\ncontract OrchestratorRegistry is Ownable, IOrchestratorRegistry {\\n    /* ============ Custom Errors ============ */\\n\\n    error ZeroAddress();\\n    error OrchestratorAlreadyAdded(address orchestrator);\\n    error OrchestratorNotFound(address orchestrator);\\n\\n    /* ============ State Variables ============ */\\n\\n    mapping(address => bool) public override isOrchestrator;\\n\\n    /* ============ Events ============ */\\n\\n    event OrchestratorAdded(address indexed orchestrator);\\n    event OrchestratorRemoved(address indexed orchestrator);\\n\\n    /* ============ External Functions ============ */\\n\\n    /**\\n     * @notice GOVERNANCE ONLY: Adds an orchestrator to the allowlist.\\n     * @dev Reverts on zero address.\\n     * @param _orchestrator Orchestrator address to authorize.\\n     */\\n    function addOrchestrator(address _orchestrator) external override onlyOwner {\\n        if (_orchestrator == address(0)) revert ZeroAddress();\\n        if (isOrchestrator[_orchestrator]) revert OrchestratorAlreadyAdded(_orchestrator);\\n\\n        isOrchestrator[_orchestrator] = true;\\n        emit OrchestratorAdded(_orchestrator);\\n    }\\n\\n    /**\\n     * @notice GOVERNANCE ONLY: Removes an orchestrator from the allowlist.\\n     * @dev Reverts on zero address.\\n     * @param _orchestrator Orchestrator address to de-authorize.\\n     */\\n    function removeOrchestrator(address _orchestrator) external override onlyOwner {\\n        if (_orchestrator == address(0)) revert ZeroAddress();\\n        if (!isOrchestrator[_orchestrator]) revert OrchestratorNotFound(_orchestrator);\\n\\n        delete isOrchestrator[_orchestrator];\\n        emit OrchestratorRemoved(_orchestrator);\\n    }\\n}\\n\",\"keccak256\":\"0xb763fecfb43e379e54bddf708c5414d3b0227e26d6c3d6b3f4651e25006fe029\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x6080806040523461005b5760008054336001600160a01b0319821681178355916001600160a01b03909116907f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e09080a36103c890816100618239f35b600080fdfe60406080815260048036101561001457600080fd5b600091823560e01c806319c28b20146102a2578063715018a6146102455780638da5cb5b14610219578063d701dcbd146101da578063ea535e801461012e5763f2fde38b1461006257600080fd5b3461012a57602036600319011261012a576001600160a01b038235818116939192908490036101265761009361033a565b83156100d457505082546001600160a01b0319811683178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b906020608492519162461bcd60e51b8352820152602660248201527f4f776e61626c653a206e6577206f776e657220697320746865207a65726f206160448201526564647265737360d01b6064820152fd5b8480fd5b8280fd5b503461012a57602036600319011261012a5781356001600160a01b03811692908390036101d65761015d61033a565b82156101c857828452600160205260ff82852054166101b3575081835260016020528220600160ff198254161790557fe8634ee4705b838130ef5f5704acc336c6fd18a8bfe0430e9102ff6bcf9184d38280a280f35b826024925191630f418caf60e41b8352820152fd5b905163d92e233d60e01b8152fd5b8380fd5b50903461012a57602036600319011261012a57356001600160a01b0381169081900361012a57818360ff92602095526001855220541690519015158152f35b838234610241578160031936011261024157905490516001600160a01b039091168152602090f35b5080fd5b833461029f578060031936011261029f5761025e61033a565b80546001600160a01b03198116825581906001600160a01b03167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08280a380f35b80fd5b503461012a57602036600319011261012a5781356001600160a01b03811692908390036101d6576102d161033a565b82156101c857828452600160205260ff828520541615610325575081835260016020528220805460ff191690557ff43b5a4338c3885b9a0472860e7018779fb25c5852ad2fa47e6665a5cc0568088280a280f35b82602492519163ff70f3fd60e01b8352820152fd5b6000546001600160a01b0316330361034e57565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fdfea26469706673582212209775e1fad6a40f0762b9e0c3c66a31555f16c64b9ffab8448eb4980142f16d9e64736f6c63430008120033",
+  "deployedBytecode": "0x60406080815260048036101561001457600080fd5b600091823560e01c806319c28b20146102a2578063715018a6146102455780638da5cb5b14610219578063d701dcbd146101da578063ea535e801461012e5763f2fde38b1461006257600080fd5b3461012a57602036600319011261012a576001600160a01b038235818116939192908490036101265761009361033a565b83156100d457505082546001600160a01b0319811683178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b906020608492519162461bcd60e51b8352820152602660248201527f4f776e61626c653a206e6577206f776e657220697320746865207a65726f206160448201526564647265737360d01b6064820152fd5b8480fd5b8280fd5b503461012a57602036600319011261012a5781356001600160a01b03811692908390036101d65761015d61033a565b82156101c857828452600160205260ff82852054166101b3575081835260016020528220600160ff198254161790557fe8634ee4705b838130ef5f5704acc336c6fd18a8bfe0430e9102ff6bcf9184d38280a280f35b826024925191630f418caf60e41b8352820152fd5b905163d92e233d60e01b8152fd5b8380fd5b50903461012a57602036600319011261012a57356001600160a01b0381169081900361012a57818360ff92602095526001855220541690519015158152f35b838234610241578160031936011261024157905490516001600160a01b039091168152602090f35b5080fd5b833461029f578060031936011261029f5761025e61033a565b80546001600160a01b03198116825581906001600160a01b03167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08280a380f35b80fd5b503461012a57602036600319011261012a5781356001600160a01b03811692908390036101d6576102d161033a565b82156101c857828452600160205260ff828520541615610325575081835260016020528220805460ff191690557ff43b5a4338c3885b9a0472860e7018779fb25c5852ad2fa47e6665a5cc0568088280a280f35b82602492519163ff70f3fd60e01b8352820152fd5b6000546001600160a01b0316330361034e57565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fdfea26469706673582212209775e1fad6a40f0762b9e0c3c66a31555f16c64b9ffab8448eb4980142f16d9e64736f6c63430008120033",
+  "devdoc": {
+    "kind": "dev",
+    "methods": {
+      "addOrchestrator(address)": {
+        "details": "Reverts on zero address.",
+        "params": {
+          "_orchestrator": "Orchestrator address to authorize."
+        }
+      },
+      "owner()": {
+        "details": "Returns the address of the current owner."
+      },
+      "removeOrchestrator(address)": {
+        "details": "Reverts on zero address.",
+        "params": {
+          "_orchestrator": "Orchestrator address to de-authorize."
+        }
+      },
+      "renounceOwnership()": {
+        "details": "Leaves the contract without owner. It will not be possible to call `onlyOwner` functions. Can only be called by the current owner. NOTE: Renouncing ownership will leave the contract without an owner, thereby disabling any functionality that is only available to the owner."
+      },
+      "transferOwnership(address)": {
+        "details": "Transfers ownership of the contract to a new account (`newOwner`). Can only be called by the current owner."
+      }
+    },
+    "stateVariables": {
+      "isOrchestrator": {
+        "params": {
+          "_orchestrator": "Address to check."
+        },
+        "return": "True when `_orchestrator` is authorized.",
+        "returns": {
+          "_0": "True when `_orchestrator` is authorized."
+        }
+      }
+    },
+    "title": "OrchestratorRegistry",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "addOrchestrator(address)": {
+        "notice": "GOVERNANCE ONLY: Adds an orchestrator to the allowlist."
+      },
+      "isOrchestrator(address)": {
+        "notice": "Returns whether an address is currently allowlisted as orchestrator."
+      },
+      "removeOrchestrator(address)": {
+        "notice": "GOVERNANCE ONLY: Removes an orchestrator from the allowlist."
+      }
+    },
+    "notice": "Owner-managed allowlist of orchestrator contracts authorized to call EscrowV2.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 7,
+        "contract": "contracts/registries/OrchestratorRegistry.sol:OrchestratorRegistry",
+        "label": "_owner",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_address"
+      },
+      {
+        "astId": 24423,
+        "contract": "contracts/registries/OrchestratorRegistry.sol:OrchestratorRegistry",
+        "label": "isOrchestrator",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_mapping(t_address,t_bool)"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_bool": {
+        "encoding": "inplace",
+        "label": "bool",
+        "numberOfBytes": "1"
+      },
+      "t_mapping(t_address,t_bool)": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => bool)",
+        "numberOfBytes": "32",
+        "value": "t_bool"
+      }
+    }
+  }
+}

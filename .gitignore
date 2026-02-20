@@ -31,3 +31,6 @@ AGENTS.md
 
 docs/
 ./scripts
+
+# Solidity compiler inputs (large, reproducible from source)
+deployments/*/solcInputs/
