@@ -68,16 +68,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 };
 
 func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
-  const network = hre.network.name;
-  if (network != "localhost") {
-    try {
-      getDeployedContractAddress(hre.network.name, "UnifiedPaymentVerifier");
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-  return false;
+  return true; // Frozen: V2 unified verifier is deployed by 13_deploy_v2_system
 };
 
 func.dependencies = ["00_deploy_system"];
