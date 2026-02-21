@@ -14,6 +14,8 @@ permissions:
 jobs:
   update-docs:
     runs-on: ubuntu-latest
+    outputs:
+      branch: ${{ steps.create-pr.outputs.branch }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -40,11 +42,13 @@ jobs:
           fi
 
       - name: Create Pull Request
+        id: create-pr
         if: steps.changes.outputs.has_changes == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BRANCH="auto-docs/update-$(date +%Y-%m-%d)"
+          BRANCH="auto-docs/update-$(date +%Y-%m-%d)-${{ github.run_id }}"
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
@@ -55,7 +59,7 @@ jobs:
             --title "docs: daily doc update" \
             --body "Automated daily update of CLAUDE.md to reflect recent codebase changes." \
             --label "auto-docs"
-          gh pr merge --squash --delete-branch
+          gh pr merge --auto --squash --delete-branch
 
   notify-internal-docs:
     needs: update-docs
@@ -67,7 +71,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BRANCH="auto-docs/update-$(date +%Y-%m-%d)"
+          BRANCH="${{ needs.update-docs.outputs.branch }}"
+          if [ -z "$BRANCH" ]; then
+            echo "No branch output from update-docs job, skipping"
+            exit 0
+          fi
           PR=$(gh pr list --repo ${{ github.repository }} --head "$BRANCH" --state merged --json number -q '.[0].number' 2>/dev/null || true)
           if [ -n "$PR" ]; then
             echo "merged=true" >> $GITHUB_OUTPUT
@@ -78,7 +86,7 @@ jobs:
         if: steps.check.outputs.merged == 'true'
         continue-on-error: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.INTERNAL_DOCS_PAT }}
         run: |
           gh api repos/zkp2p/zkp2p-internal-docs/dispatches \
             -f event_type=repo-docs-updated \
