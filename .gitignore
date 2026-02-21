@@ -15,19 +15,14 @@ yarn-error.log
 
 .yarn/install-state.gz
 
-*CLAUDE.md
-
-CLAUDE.md
-*/CLAUDE.md
-*/*/CLAUDE.md
-*/*/*/CLAUDE.md
 docs/ai-context/
 
 out/
 cache_forge/
 
-AGENTS.md
-
-
 docs/
 ./scripts
+
+# AI agent local overrides
+CLAUDE.local.md
+AGENTS.override.md
