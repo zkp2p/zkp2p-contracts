@@ -1,0 +1,67 @@
+name: Update CLAUDE.md
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2am UTC
+  workflow_dispatch:
+  repository_dispatch:
+    types: [update-docs]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run Claude to update CLAUDE.md
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          claude -p "$(cat .github/prompts/update-docs.md)" \
+            --allowedTools "Read,Glob,Grep,Write,Edit" \
+            --model claude-sonnet-4-6 \
+            --max-turns 15
+
+      - name: Check for changes
+        id: changes
+        run: |
+          git diff --exit-code || echo "has_changes=true" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.has_changes == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="auto-docs/update-$(date +%Y-%m-%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "docs: daily CLAUDE.md update"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "docs: daily doc update" \
+            --body "Automated daily update of CLAUDE.md to reflect recent codebase changes." \
+            --label "auto-docs"
+          gh pr merge --auto --squash
+
+      - name: Notify internal-docs repo
+        if: steps.changes.outputs.has_changes == 'true'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/zkp2p/zkp2p-internal-docs/dispatches \
+            -f event_type=repo-docs-updated \
+            -f client_payload[repo]=${{ github.repository }}

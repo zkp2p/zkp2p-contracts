@@ -31,3 +31,7 @@ AGENTS.md
 
 docs/
 ./scripts
+
+# AI agent local overrides
+CLAUDE.local.md
+AGENTS.override.md
