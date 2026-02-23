@@ -127,6 +127,13 @@ describe("V2 Periphery Deployment", () => {
     });
   });
 
+  describe("ChainlinkOracleAdapter", async () => {
+    it("should be deployed", async () => {
+      const address = getDeployedContractAddress(network, "ChainlinkOracleAdapter");
+      expect(address).to.not.eq("0x0000000000000000000000000000000000000000");
+    });
+  });
+
   describe("ProtocolViewerV2", async () => {
     it("should have the correct escrow contract", async () => {
       const viewerAddress = getDeployedContractAddress(network, "ProtocolViewerV2");

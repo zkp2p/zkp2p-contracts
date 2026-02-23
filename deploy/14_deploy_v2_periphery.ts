@@ -87,6 +87,14 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("RateManagerV1 deployed at", rateManagerV1.address);
   await waitForDeploymentDelay(hre);
 
+  // Deploy ChainlinkOracleAdapter (NOT Ownable, stateless)
+  const chainlinkOracleAdapter = await deploy("ChainlinkOracleAdapter", {
+    from: deployer,
+    args: [],
+  });
+  console.log("ChainlinkOracleAdapter deployed at", chainlinkOracleAdapter.address);
+  await waitForDeploymentDelay(hre);
+
   // Deploy ProtocolViewerV2 (same contract, new deployment name with V2 addresses)
   const protocolViewerV2 = await deploy("ProtocolViewerV2", {
     contract: "ProtocolViewer",
@@ -120,7 +128,7 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.network.name;
   if (network !== "localhost") {
     try {
-      getDeployedContractAddress(hre.network.name, "ProtocolViewerV2");
+      getDeployedContractAddress(hre.network.name, "ChainlinkOracleAdapter");
       return true;
     } catch (e) {
       return false;
