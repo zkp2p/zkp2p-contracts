@@ -52,6 +52,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     SignatureGatingPreIntentHook:       ${tryGetAddress(network, "SignatureGatingPreIntentHook")}
     AcrossBridgeHookV2:                 ${tryGetAddress(network, "AcrossBridgeHookV2")}
     RateManagerV1:                      ${tryGetAddress(network, "RateManagerV1")}
+    ChainlinkOracleAdapter:             ${tryGetAddress(network, "ChainlinkOracleAdapter")}
     ProtocolViewerV2:                   ${tryGetAddress(network, "ProtocolViewerV2")}
     `
   );

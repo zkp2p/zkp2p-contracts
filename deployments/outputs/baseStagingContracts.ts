@@ -931,6 +931,59 @@ export default {
         }
       ]
     },
+    "ChainlinkOracleAdapter": {
+      "address": "0xfc81D1b5841e697973AF3072fc8E03Af76cb39EF",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "bytes",
+              "name": "normalizedConfig",
+              "type": "bytes"
+            }
+          ],
+          "name": "getRate",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "valid",
+              "type": "bool"
+            },
+            {
+              "internalType": "uint256",
+              "name": "rate",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "updatedAt",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes",
+              "name": "rawConfig",
+              "type": "bytes"
+            }
+          ],
+          "name": "validateConfig",
+          "outputs": [
+            {
+              "internalType": "bytes",
+              "name": "normalizedConfig",
+              "type": "bytes"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        }
+      ]
+    },
     "Escrow": {
       "address": "0x5C2a8D9246777eE4501B6C426a8B8C7635C7b5b5",
       "abi": [
