@@ -477,9 +477,15 @@ contract RateManagerV1 is IRateManager {
             return 0;
         }
 
-        uint256 effectiveFloor = _computeEffectiveFloor(
-            depositorFloors[_rateManagerId][_escrow][_depositId][_paymentMethod][_currencyCode]
-        );
+        DepositorFloorConfig memory floorConfig = depositorFloors[_rateManagerId][_escrow][_depositId][_paymentMethod][_currencyCode];
+        uint256 effectiveFloor = _computeEffectiveFloor(floorConfig);
+
+        // If depositor configured oracle protection but it resolved to zero
+        // (stale, invalid, or reverted) and no fixed floor backup exists,
+        // disable the pair to prevent unprotected exposure to manager rate
+        if (floorConfig.oracleAdapter != address(0) && effectiveFloor == 0) {
+            return 0;
+        }
 
         return managerRate > effectiveFloor ? managerRate : effectiveFloor;
     }

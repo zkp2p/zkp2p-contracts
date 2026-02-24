@@ -1014,7 +1014,7 @@ describe("RateManagerV1", () => {
       expect(rate).to.eq(expectedFloor);
     });
 
-    it("falls back to manager rate when oracle quote is invalid", async () => {
+    it("disables pair when oracle quote is invalid and no fixed floor", async () => {
       const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
       const adapterConfig = ethers.utils.defaultAbiCoder.encode(
         ["bool", "uint256", "uint256"],
@@ -1041,10 +1041,40 @@ describe("RateManagerV1", () => {
       );
 
       const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
+      expect(rate).to.eq(ZERO);
+    });
+
+    it("falls back to fixed floor when oracle quote is invalid", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [false, ether(1.3), currentTimestamp]
+      );
+
+      await rateManagerV1
+        .connect(depositor.wallet)
+        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
+
+      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          floorFixed: ether(0.9),
+          floorSpreadBps: 200,
+          oracleAdapter: staticOracleAdapter.address,
+          adapterConfig,
+          maxStaleness: 3600,
+        }
+      );
+
+      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
       expect(rate).to.eq(ether(1.1));
     });
 
-    it("falls back to manager rate when oracle timestamp is in the future", async () => {
+    it("disables pair when oracle timestamp is in the future and no fixed floor", async () => {
       const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
       const adapterConfig = ethers.utils.defaultAbiCoder.encode(
         ["bool", "uint256", "uint256"],
@@ -1071,10 +1101,40 @@ describe("RateManagerV1", () => {
       );
 
       const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
+      expect(rate).to.eq(ZERO);
+    });
+
+    it("falls back to fixed floor when oracle timestamp is in the future", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1.3), currentTimestamp + 100]
+      );
+
+      await rateManagerV1
+        .connect(depositor.wallet)
+        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
+
+      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          floorFixed: ether(0.9),
+          floorSpreadBps: 200,
+          oracleAdapter: staticOracleAdapter.address,
+          adapterConfig,
+          maxStaleness: 3600,
+        }
+      );
+
+      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
       expect(rate).to.eq(ether(1.1));
     });
 
-    it("falls back to manager rate when oracle quote is stale", async () => {
+    it("disables pair when oracle quote is stale and no fixed floor", async () => {
       const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
       const adapterConfig = ethers.utils.defaultAbiCoder.encode(
         ["bool", "uint256", "uint256"],
@@ -1101,10 +1161,40 @@ describe("RateManagerV1", () => {
       );
 
       const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
+      expect(rate).to.eq(ZERO);
+    });
+
+    it("falls back to fixed floor when oracle quote is stale", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1.3), currentTimestamp - 8_000]
+      );
+
+      await rateManagerV1
+        .connect(depositor.wallet)
+        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
+
+      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          floorFixed: ether(0.9),
+          floorSpreadBps: 200,
+          oracleAdapter: staticOracleAdapter.address,
+          adapterConfig,
+          maxStaleness: 3600,
+        }
+      );
+
+      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
       expect(rate).to.eq(ether(1.1));
     });
 
-    it("falls back to manager rate when oracle adapter reverts", async () => {
+    it("disables pair when oracle adapter reverts and no fixed floor", async () => {
       await rateManagerV1
         .connect(depositor.wallet)
         .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
@@ -1125,10 +1215,34 @@ describe("RateManagerV1", () => {
       );
 
       const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
+      expect(rate).to.eq(ZERO);
+    });
+
+    it("falls back to fixed floor when oracle adapter reverts", async () => {
+      await rateManagerV1
+        .connect(depositor.wallet)
+        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
+
+      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          floorFixed: ether(0.9),
+          floorSpreadBps: 200,
+          oracleAdapter: revertingOracleAdapter.address,
+          adapterConfig: "0x1234",
+          maxStaleness: 3600,
+        }
+      );
+
+      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
       expect(rate).to.eq(ether(1.1));
     });
 
-    it("falls back to manager rate when oracle market rate is zero", async () => {
+    it("disables pair when oracle market rate is zero and no fixed floor", async () => {
       const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
       const adapterConfig = ethers.utils.defaultAbiCoder.encode(
         ["bool", "uint256", "uint256"],
@@ -1155,10 +1269,40 @@ describe("RateManagerV1", () => {
       );
 
       const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
+      expect(rate).to.eq(ZERO);
+    });
+
+    it("falls back to fixed floor when oracle market rate is zero", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ZERO, currentTimestamp]
+      );
+
+      await rateManagerV1
+        .connect(depositor.wallet)
+        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
+
+      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          floorFixed: ether(0.9),
+          floorSpreadBps: 200,
+          oracleAdapter: staticOracleAdapter.address,
+          adapterConfig,
+          maxStaleness: 3600,
+        }
+      );
+
+      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
       expect(rate).to.eq(ether(1.1));
     });
 
-    it("falls back to manager rate when oracle timestamp is zero", async () => {
+    it("disables pair when oracle timestamp is zero and no fixed floor", async () => {
       const adapterConfig = ethers.utils.defaultAbiCoder.encode(
         ["bool", "uint256", "uint256"],
         [true, ether(1.3), ZERO]
@@ -1176,6 +1320,35 @@ describe("RateManagerV1", () => {
         Currency.USD,
         {
           floorFixed: ZERO,
+          floorSpreadBps: 200,
+          oracleAdapter: staticOracleAdapter.address,
+          adapterConfig,
+          maxStaleness: 3600,
+        }
+      );
+
+      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
+      expect(rate).to.eq(ZERO);
+    });
+
+    it("falls back to fixed floor when oracle timestamp is zero", async () => {
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1.3), ZERO]
+      );
+
+      await rateManagerV1
+        .connect(depositor.wallet)
+        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
+
+      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
+        rateManagerId,
+        escrow.address,
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          floorFixed: ether(0.9),
           floorSpreadBps: 200,
           oracleAdapter: staticOracleAdapter.address,
           adapterConfig,
