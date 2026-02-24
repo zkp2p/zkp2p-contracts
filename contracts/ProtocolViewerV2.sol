@@ -20,6 +20,7 @@ contract ProtocolViewerV2 is IProtocolViewerV2 {
         address _escrow,
         uint256[] calldata _depositIds
     ) external view returns (IProtocolViewerV2.DepositView[] memory depositArray) {
+        _escrowContract(_escrow);
         depositArray = new DepositView[](_depositIds.length);
 
         for (uint256 i = 0; i < _depositIds.length; ++i) {

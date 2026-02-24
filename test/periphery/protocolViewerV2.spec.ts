@@ -161,6 +161,13 @@ describe("ProtocolViewerV2", () => {
       expect(deposits[1].depositId).to.eq(ONE);
       expect(deposits[1].deposit.remainingDeposits).to.eq(usdc(250));
     });
+
+    it("reverts when escrow is zero even with empty deposit ids", async () => {
+      await expect(protocolViewerV2.getDepositFromIds(ADDRESS_ZERO, [])).to.be.revertedWithCustomError(
+        protocolViewerV2,
+        "InvalidEscrow"
+      );
+    });
   });
 
   describe("#getAccountDeposits", () => {
