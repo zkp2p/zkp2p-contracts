@@ -769,10 +769,10 @@ describe("Orchestrator", () => {
       });
     });
 
-    describe("when referrer fee is 100% or more", async () => {
+    describe("when referrer fee exceeds maximum", async () => {
       beforeEach(async () => {
         subjectReferrer = receiver.address;
-        subjectReferrerFee = ether(1); // 100% is invalid, must be strictly less than PRECISE_UNIT
+        subjectReferrerFee = ether(0.51); // 51% > 50% max
       });
 
       it("should revert", async () => {
@@ -813,10 +813,10 @@ describe("Orchestrator", () => {
       });
     });
 
-    describe("when referrer fee is just below 100%", async () => {
+    describe("when referrer fee is at maximum", async () => {
       beforeEach(async () => {
         subjectReferrer = receiver.address;
-        subjectReferrerFee = ether(1).sub(1);
+        subjectReferrerFee = ether(0.5); // 50% max
       });
 
       it("should create intent", async () => {
