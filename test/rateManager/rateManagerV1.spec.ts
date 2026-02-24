@@ -9,6 +9,7 @@ import { ADDRESS_ZERO, ONE, ZERO } from "@utils/constants";
 import { Currency } from "@utils/protocolUtils";
 import { getAccounts, getWaffleExpect } from "@utils/test";
 import {
+  EscrowRegistry,
   EscrowV2,
   OrchestratorRegistry,
   PaymentVerifierMock,
@@ -33,6 +34,7 @@ describe("RateManagerV1", () => {
   let rateManagerV1: RateManagerV1;
   let usdcToken: USDCMock;
   let escrow: EscrowV2;
+  let escrowRegistry: EscrowRegistry;
   let orchestratorRegistry: OrchestratorRegistry;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
   let verifier: PaymentVerifierMock;
@@ -61,7 +63,8 @@ describe("RateManagerV1", () => {
     [owner, manager, depositor, feeRecipient, other] = await getAccounts();
     deployer = new DeployHelper(owner.wallet);
 
-    rateManagerV1 = await deployer.deployRateManagerV1();
+    escrowRegistry = await deployer.deployEscrowRegistry();
+    rateManagerV1 = await deployer.deployRateManagerV1(escrowRegistry.address);
 
     usdcToken = await deployer.deployUSDCMock(usdc(1_000_000_000), "USDC", "USDC");
     await usdcToken.transfer(depositor.address, usdc(100_000));
@@ -93,6 +96,8 @@ describe("RateManagerV1", () => {
       BigNumber.from(20),
       BigNumber.from(60 * 60)
     );
+
+    await escrowRegistry.addEscrow(escrow.address);
 
     await usdcToken.connect(depositor.wallet).approve(escrow.address, usdc(100_000));
     await escrow.connect(depositor.wallet).createDeposit({
@@ -1470,6 +1475,11 @@ describe("RateManagerV1", () => {
   });
 
   describe("#onDepositOptIn with minLiquidity", () => {
+    beforeEach(async () => {
+      // Whitelist the test caller (owner) so direct calls to onDepositOptIn pass access control
+      await escrowRegistry.addEscrow(owner.address);
+    });
+
     it("passes when no min liquidity set (0 = disabled)", async () => {
       await expect(
         rateManagerV1.onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
@@ -1504,6 +1514,58 @@ describe("RateManagerV1", () => {
     });
   });
 
+  describe("#onDepositOptIn access control", () => {
+    it("reverts when caller is not a whitelisted escrow", async () => {
+      await expect(
+        rateManagerV1.connect(other.wallet).onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
+      ).to.be.revertedWithCustomError(rateManagerV1, "UnauthorizedEscrow");
+    });
+
+    it("passes when caller is a whitelisted escrow", async () => {
+      await escrowRegistry.addEscrow(owner.address);
+
+      await expect(
+        rateManagerV1.onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
+      ).to.not.be.reverted;
+    });
+
+    it("passes when acceptAllEscrows is enabled", async () => {
+      await escrowRegistry.setAcceptAllEscrows(true);
+
+      await expect(
+        rateManagerV1.connect(other.wallet).onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
+      ).to.not.be.reverted;
+    });
+  });
+
+  describe("#setEscrowRegistry", () => {
+    it("updates escrow registry", async () => {
+      const newRegistry = await deployer.deployEscrowRegistry();
+      await rateManagerV1.setEscrowRegistry(newRegistry.address);
+      expect(await rateManagerV1.escrowRegistry()).to.eq(newRegistry.address);
+    });
+
+    it("emits EscrowRegistryUpdated", async () => {
+      const newRegistry = await deployer.deployEscrowRegistry();
+      await expect(rateManagerV1.setEscrowRegistry(newRegistry.address))
+        .to.emit(rateManagerV1, "EscrowRegistryUpdated")
+        .withArgs(newRegistry.address);
+    });
+
+    it("reverts when called by non-owner", async () => {
+      const newRegistry = await deployer.deployEscrowRegistry();
+      await expect(
+        rateManagerV1.connect(other.wallet).setEscrowRegistry(newRegistry.address)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
+    it("reverts when zero address", async () => {
+      await expect(
+        rateManagerV1.setEscrowRegistry(ADDRESS_ZERO)
+      ).to.be.revertedWithCustomError(rateManagerV1, "ZeroAddress");
+    });
+  });
+
   describe("depositor authorization", () => {
     it("reverts when non-depositor sets depositor floor", async () => {
       await expect(
@@ -1522,41 +1584,6 @@ describe("RateManagerV1", () => {
           }
         )
       ).to.be.revertedWithCustomError(rateManagerV1, "UnauthorizedCaller");
-    });
-
-    it("validates onDepositOptIn depositor ownership", async () => {
-      await expect(
-        rateManagerV1.onDepositOptIn(other.address, escrow.address, ZERO, rateManagerId)
-      ).to.be.reverted;
-    });
-
-    it("reverts on onDepositOptIn when escrow is zero", async () => {
-      await expect(
-        rateManagerV1.onDepositOptIn(depositor.address, ADDRESS_ZERO, ZERO, rateManagerId)
-      ).to.be.revertedWithCustomError(rateManagerV1, "ZeroAddress");
-    });
-
-    it("reverts on onDepositOptIn when manager id does not exist", async () => {
-      await expect(
-        rateManagerV1.onDepositOptIn(
-          depositor.address,
-          escrow.address,
-          ZERO,
-          ethers.utils.formatBytes32String("missing-manager")
-        )
-      ).to.be.reverted;
-    });
-
-    it("reverts on onDepositOptIn when deposit does not exist", async () => {
-      await expect(
-        rateManagerV1.onDepositOptIn(depositor.address, escrow.address, BigNumber.from(999), rateManagerId)
-      ).to.be.revertedWithCustomError(rateManagerV1, "DepositNotFound");
-    });
-
-    it("passes on onDepositOptIn for valid depositor", async () => {
-      await expect(
-        rateManagerV1.onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
-      ).to.not.be.reverted;
     });
   });
 });

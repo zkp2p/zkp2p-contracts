@@ -4,7 +4,10 @@ pragma solidity ^0.8.18;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+
 import { IEscrow } from "./interfaces/IEscrow.sol";
+import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
 import { IOracleAdapter } from "./interfaces/IOracleAdapter.sol";
 import { IRateManager } from "./interfaces/IRateManager.sol";
 
@@ -12,7 +15,7 @@ import { IRateManager } from "./interfaces/IRateManager.sol";
  * @title RateManagerV1
  * @notice Canonical delegated rate manager with manager-owned rates and depositor-owned per-deposit floors.
  */
-contract RateManagerV1 is IRateManager {
+contract RateManagerV1 is Ownable, IRateManager {
     /* ============ Constants ============ */
 
     uint256 public constant GLOBAL_MAX_MANAGER_FEE = 5e16; // 5%
@@ -51,6 +54,7 @@ contract RateManagerV1 is IRateManager {
     error AdapterConfigTooLong(uint256 length, uint256 maxLength);
     error DepositNotFound(uint256 depositId);
     error BelowMinLiquidity(uint256 totalLiquidity, uint256 required);
+    error UnauthorizedEscrow(address escrow);
 
     /* ============ Events ============ */
 
@@ -90,6 +94,7 @@ contract RateManagerV1 is IRateManager {
     );
 
     event MinLiquidityUpdated(bytes32 indexed rateManagerId, uint256 minLiquidity);
+    event EscrowRegistryUpdated(address indexed escrowRegistry);
 
     event DepositorCurrencyEnabledSet(
         bytes32 indexed rateManagerId,
@@ -102,6 +107,7 @@ contract RateManagerV1 is IRateManager {
 
     /* ============ State Variables ============ */
 
+    IEscrowRegistry public escrowRegistry;
     uint256 internal nextRateManagerId = 1;
 
     mapping(bytes32 => RateManagerConfig) internal rateManagers;
@@ -112,6 +118,13 @@ contract RateManagerV1 is IRateManager {
     mapping(bytes32 => mapping(address => mapping(uint256 => mapping(bytes32 => mapping(bytes32 => bool)))))
         internal depositorCurrencyEnabled;
     mapping(bytes32 => uint256) public minLiquidity;
+
+    /* ============ Constructor ============ */
+
+    constructor(address _escrowRegistry) Ownable() {
+        if (_escrowRegistry == address(0)) revert ZeroAddress();
+        escrowRegistry = IEscrowRegistry(_escrowRegistry);
+    }
 
     /* ============ Modifiers ============ */
 
@@ -202,6 +215,17 @@ contract RateManagerV1 is IRateManager {
     function setMinLiquidity(bytes32 _rateManagerId, uint256 _minLiquidity) external onlyManager(_rateManagerId) {
         minLiquidity[_rateManagerId] = _minLiquidity;
         emit MinLiquidityUpdated(_rateManagerId, _minLiquidity);
+    }
+
+    /**
+     * @notice Updates the escrow registry address.
+     * @dev Only contract owner can call.
+     * @param _escrowRegistry New escrow registry address.
+     */
+    function setEscrowRegistry(address _escrowRegistry) external onlyOwner {
+        if (_escrowRegistry == address(0)) revert ZeroAddress();
+        escrowRegistry = IEscrowRegistry(_escrowRegistry);
+        emit EscrowRegistryUpdated(_escrowRegistry);
     }
 
     /**
@@ -414,14 +438,14 @@ contract RateManagerV1 is IRateManager {
 
     /**
      * @notice Callback invoked by EscrowV2 when a deposit opts into this manager.
-     * @dev Reverts when manager does not exist or `_depositor` is not deposit owner on `_escrow`.
-     * @param _depositor Depositor account passed by escrow.
+     * @dev Only callable by whitelisted escrows. Deposit existence, depositor ownership, and
+     *      rate manager existence are validated by the calling escrow before this callback.
      * @param _escrow Escrow address.
      * @param _depositId Deposit id.
      * @param _rateManagerId Manager id.
      */
     function onDepositOptIn(
-        address _depositor,
+        address,
         address _escrow,
         uint256 _depositId,
         bytes32 _rateManagerId
@@ -430,17 +454,17 @@ contract RateManagerV1 is IRateManager {
         view
         override
     {
-        if (_escrow == address(0)) revert ZeroAddress();
-        if (rateManagers[_rateManagerId].manager == address(0)) revert RateManagerNotFound(_rateManagerId);
+        if (!escrowRegistry.isWhitelistedEscrow(msg.sender) && !escrowRegistry.isAcceptingAllEscrows()) {
+            revert UnauthorizedEscrow(msg.sender);
+        }
 
-        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
-        if (deposit.depositor == address(0)) revert DepositNotFound(_depositId);
-        if (deposit.depositor != _depositor) revert UnauthorizedCaller(_depositor, deposit.depositor);
-
-        uint256 totalLiquidity = deposit.remainingDeposits + deposit.outstandingIntentAmount;
         uint256 required = minLiquidity[_rateManagerId];
-        if (required > 0 && totalLiquidity < required) {
-            revert BelowMinLiquidity(totalLiquidity, required);
+        if (required > 0) {
+            IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
+            uint256 totalLiquidity = deposit.remainingDeposits + deposit.outstandingIntentAmount;
+            if (totalLiquidity < required) {
+                revert BelowMinLiquidity(totalLiquidity, required);
+            }
         }
     }
 

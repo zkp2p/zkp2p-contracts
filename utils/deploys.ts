@@ -247,8 +247,8 @@ export default class DeployHelper {
     return await new PostIntentHookRegistry__factory(this._deployerSigner).deploy();
   }
 
-  public async deployRateManagerV1(): Promise<RateManagerV1> {
-    return await new RateManagerV1__factory(this._deployerSigner).deploy();
+  public async deployRateManagerV1(escrowRegistry: Address): Promise<RateManagerV1> {
+    return await new RateManagerV1__factory(this._deployerSigner).deploy(escrowRegistry);
   }
 
   public async deployRateManagerMock(): Promise<RateManagerMock> {
