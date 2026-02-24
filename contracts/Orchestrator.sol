@@ -37,8 +37,8 @@ contract Orchestrator is Ownable, Pausable, ReentrancyGuard, IOrchestrator {
     /* ============ Constants ============ */
     uint256 internal constant PRECISE_UNIT = 1e18;
     uint256 constant CIRCOM_PRIME_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
-    uint256 constant MAX_REFERRER_FEE = 5e16;      // 5% max referrer fee
-    uint256 constant MAX_PROTOCOL_FEE = 5e16;      // 5% max protocol fee
+    uint256 constant MAX_REFERRER_FEE = PRECISE_UNIT - 1; // Referrer fee must be strictly less than 100%
+    uint256 constant MAX_PROTOCOL_FEE = 1e17;      // 10% max protocol fee
 
     /* ============ State Variables ============ */
 
