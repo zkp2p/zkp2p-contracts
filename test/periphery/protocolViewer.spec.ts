@@ -139,6 +139,47 @@ describe("ProtocolViewer", () => {
     );
   });
 
+  describe("#constructor", async () => {
+    let subjectEscrow: Address;
+    let subjectOrchestrator: Address;
+
+    async function subject(): Promise<any> {
+      return deployer.deployProtocolViewer(subjectEscrow, subjectOrchestrator);
+    }
+
+    beforeEach(async () => {
+      subjectEscrow = escrow.address;
+      subjectOrchestrator = orchestrator.address;
+    });
+
+    it("should set the initial escrow and orchestrator", async () => {
+      const deployedProtocolViewer = await subject();
+
+      expect(await deployedProtocolViewer.escrowContract()).to.eq(subjectEscrow);
+      expect(await deployedProtocolViewer.orchestrator()).to.eq(subjectOrchestrator);
+    });
+
+    describe("when escrow is zero address", async () => {
+      beforeEach(async () => {
+        subjectEscrow = ADDRESS_ZERO;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("ProtocolViewer: invalid escrow");
+      });
+    });
+
+    describe("when orchestrator is zero address", async () => {
+      beforeEach(async () => {
+        subjectOrchestrator = ADDRESS_ZERO;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("ProtocolViewer: invalid orchestrator");
+      });
+    });
+  });
+
   describe("#getDeposit", async () => {
     let subjectDepositId: BigNumber;
 

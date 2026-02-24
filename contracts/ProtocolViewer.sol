@@ -14,6 +14,8 @@ contract ProtocolViewer is IProtocolViewer {
     /* ============ Constructor ============ */
 
     constructor(address _escrow, address _orchestrator) {
+        require(_escrow != address(0), "ProtocolViewer: invalid escrow");
+        require(_orchestrator != address(0), "ProtocolViewer: invalid orchestrator");
         escrowContract = IEscrow(_escrow);
         orchestrator = IOrchestrator(_orchestrator);
     }
