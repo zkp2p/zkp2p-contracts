@@ -3,9 +3,9 @@
 pragma solidity ^0.8.18;
 
 import { IEscrow } from "./IEscrow.sol";
-import { IOrchestrator } from "./IOrchestrator.sol";
+import { IOrchestratorV2 } from "./IOrchestratorV2.sol";
 
-interface IProtocolViewer {
+interface IProtocolViewerV2 {
 
     /* ============ Structs ============ */
 
@@ -25,17 +25,33 @@ interface IProtocolViewer {
 
     struct IntentView {
         bytes32 intentHash;
-        IOrchestrator.Intent intent;
+        IOrchestratorV2.Intent intent;
         DepositView deposit;
     }
 
     /* ============ Functions ============ */
 
+    function getDeposit(address _escrow, uint256 _depositId) external view returns (DepositView memory depositView);
+
     function getDepositFromIds(
-        uint256[] memory _depositIds
-    ) external view returns (DepositView[] memory);
+        address _escrow,
+        uint256[] calldata _depositIds
+    ) external view returns (DepositView[] memory depositArray);
+
+    function getAccountDeposits(
+        address _escrow,
+        address _account
+    ) external view returns (DepositView[] memory depositArray);
+
+    function getIntent(address _orchestrator, bytes32 _intentHash) external view returns (IntentView memory intentView);
+
+    function getIntents(
+        address _orchestrator,
+        bytes32[] calldata _intentHashes
+    ) external view returns (IntentView[] memory intentArray);
 
     function getAccountIntents(
+        address _orchestrator,
         address _account
     ) external view returns (IntentView[] memory intentViews);
 }
