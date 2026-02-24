@@ -153,7 +153,7 @@ describe("OrchestratorV2", () => {
   }
 
   async function clearIntentOrchestrator(intentHash: BytesLike) {
-    const mappingSlot = 16;
+    const mappingSlot = 15;
     const storageSlot = ethers.utils.solidityKeccak256(
       ["bytes32", "uint256"],
       [intentHash, mappingSlot]
