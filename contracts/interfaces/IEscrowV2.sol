@@ -67,6 +67,8 @@ interface IEscrowV2 is IEscrow {
 
     /* ============ External Functions ============ */
 
+    function depositTo(address _depositor, CreateDepositParams calldata _params) external;
+
     function setOracleRateConfig(
         uint256 _depositId,
         bytes32 _paymentMethod,

@@ -175,6 +175,34 @@ describe("EscrowV2 -- Branch Coverage", () => {
     });
   });
 
+  describe("#depositTo", () => {
+    describe("when target depositor is zero address", () => {
+      async function subject() {
+        return escrow.connect(other.wallet).depositTo(ADDRESS_ZERO, {
+          token: usdcToken.address,
+          amount: usdc(50),
+          intentAmountRange: { min: usdc(10), max: usdc(100) },
+          paymentMethods: [paypalPaymentMethod],
+          paymentMethodData: [
+            {
+              intentGatingService: ADDRESS_ZERO,
+              payeeDetails,
+              data: "0x",
+            },
+          ],
+          currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+          delegate: delegate.address,
+          intentGuardian: intentGuardian.address,
+          retainOnEmpty: false,
+        });
+      }
+
+      it("reverts with ZeroAddress", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(escrow, "ZeroAddress");
+      });
+    });
+  });
+
   /* ================================================================
    *  1b. withdrawDeposit -- additional branches
    * ================================================================ */
@@ -1487,6 +1515,32 @@ describe("EscrowV2 -- Branch Coverage", () => {
     describe("#createDeposit when paused", () => {
       async function subject() {
         return escrow.connect(depositor.wallet).createDeposit({
+          token: usdcToken.address,
+          amount: usdc(50),
+          intentAmountRange: { min: usdc(10), max: usdc(100) },
+          paymentMethods: [venmoPaymentMethod],
+          paymentMethodData: [
+            {
+              intentGatingService: ADDRESS_ZERO,
+              payeeDetails,
+              data: "0x",
+            },
+          ],
+          currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+          delegate: delegate.address,
+          intentGuardian: intentGuardian.address,
+          retainOnEmpty: false,
+        });
+      }
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWith("Pausable: paused");
+      });
+    });
+
+    describe("#depositTo when paused", () => {
+      async function subject() {
+        return escrow.connect(other.wallet).depositTo(depositor.address, {
           token: usdcToken.address,
           amount: usdc(50),
           intentAmountRange: { min: usdc(10), max: usdc(100) },

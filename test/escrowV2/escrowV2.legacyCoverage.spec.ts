@@ -228,6 +228,75 @@ describe("EscrowV2", () => {
     });
   });
 
+  describe("#depositTo", () => {
+    let subjectCaller: any;
+    let subjectDepositor: string;
+    let subjectAmount: BigNumber;
+    let subjectIntentAmountRange: { min: BigNumber; max: BigNumber };
+
+    async function subject() {
+      return escrow.connect(subjectCaller.wallet).depositTo(subjectDepositor, {
+        token: usdcToken.address,
+        amount: subjectAmount,
+        intentAmountRange: subjectIntentAmountRange,
+        paymentMethods: [venmoPaymentMethod],
+        paymentMethodData: [
+          {
+            intentGatingService: ADDRESS_ZERO,
+            payeeDetails,
+            data: "0x",
+          },
+        ],
+        currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+        delegate: delegate.address,
+        intentGuardian: intentGuardian.address,
+        retainOnEmpty: false,
+      });
+    }
+
+    beforeEach(async () => {
+      subjectCaller = other;
+      subjectDepositor = depositor.address;
+      subjectAmount = usdc(30);
+      subjectIntentAmountRange = { min: usdc(10), max: usdc(100) };
+    });
+
+    it("creates a deposit for the specified owner while pulling funds from caller", async () => {
+      const newDepositId = ONE;
+      const callerBalanceBefore = await usdcToken.balanceOf(other.address);
+      const ownerBalanceBefore = await usdcToken.balanceOf(depositor.address);
+      const escrowBalanceBefore = await usdcToken.balanceOf(escrow.address);
+
+      await expect(subject())
+        .to.emit(escrow, "DepositReceived")
+        .withArgs(
+          newDepositId,
+          depositor.address,
+          usdcToken.address,
+          subjectAmount,
+          subjectIntentAmountRange,
+          delegate.address,
+          intentGuardian.address
+        );
+
+      const createdDeposit = await escrow.getDeposit(newDepositId);
+      expect(createdDeposit.depositor).to.eq(depositor.address);
+      expect(createdDeposit.remainingDeposits).to.eq(subjectAmount);
+
+      const ownerDeposits = await escrow.getAccountDeposits(depositor.address);
+      expect(ownerDeposits).to.deep.eq([depositId, newDepositId]);
+      const callerDeposits = await escrow.getAccountDeposits(other.address);
+      expect(callerDeposits).to.deep.eq([]);
+
+      const callerBalanceAfter = await usdcToken.balanceOf(other.address);
+      const ownerBalanceAfter = await usdcToken.balanceOf(depositor.address);
+      const escrowBalanceAfter = await usdcToken.balanceOf(escrow.address);
+      expect(callerBalanceBefore.sub(callerBalanceAfter)).to.eq(subjectAmount);
+      expect(ownerBalanceAfter).to.eq(ownerBalanceBefore);
+      expect(escrowBalanceAfter.sub(escrowBalanceBefore)).to.eq(subjectAmount);
+    });
+  });
+
   describe("#addFunds", () => {
     let subjectCaller: any;
     let subjectDepositId: BigNumber;

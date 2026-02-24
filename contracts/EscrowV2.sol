@@ -139,7 +139,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         transferOwnership(_owner);
     }
 
-    /* ============ Deposit Owner Only (External Functions) ============ */
+    /* ============ Deposit Creation (External Functions) ============ */
 
     /**
      * @notice Creates a deposit entry by locking liquidity in the escrow contract that can be taken by signaling intents. This function will 
@@ -149,45 +149,21 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
      * Note that the order of the payment methods, verification data, and currency data must match.
      */
     function createDeposit(CreateDepositParams calldata _params) external whenNotPaused {
-        // Checks
-        if (_params.intentAmountRange.min == 0) revert ZeroMinValue();
-        if (_params.intentAmountRange.min > _params.intentAmountRange.max) { 
-            revert InvalidRange(_params.intentAmountRange.min, _params.intentAmountRange.max);
-        }
-        if (_params.amount < _params.intentAmountRange.min) {
-            revert AmountBelowMin(_params.amount, _params.intentAmountRange.min);
-        }
-        
-        // Effects
-        uint256 depositId = depositCounter++;
-        accountDeposits[msg.sender].push(depositId);
-        deposits[depositId] = Deposit({
-            depositor: msg.sender,
-            delegate: _params.delegate,
-            token: _params.token,
-            intentAmountRange: _params.intentAmountRange,
-            acceptingIntents: true,
-            remainingDeposits: _params.amount,
-            outstandingIntentAmount: 0,
-            intentGuardian: _params.intentGuardian,
-            retainOnEmpty: _params.retainOnEmpty
-        });
-
-        emit DepositReceived(
-            depositId, 
-            msg.sender, 
-            _params.token,
-            _params.amount,
-            _params.intentAmountRange, 
-            _params.delegate, 
-            _params.intentGuardian
-        );
-
-        _addPaymentMethodsToDeposit(depositId, _params.paymentMethods, _params.paymentMethodData, _params.currencies);
-
-        // Interactions
-        _params.token.safeTransferFrom(msg.sender, address(this), _params.amount);
+        _createDeposit(msg.sender, _params);
     }
+
+    /**
+     * @notice Creates a deposit owned by `_depositor` while pulling funds from `msg.sender`.
+     * This enables contracts (e.g. bridge adapters) to fund liquidity on behalf of users.
+     *
+     * @param _depositor    Address that will own and manage the created deposit
+     * @param _params       Deposit configuration and funding parameters
+     */
+    function depositTo(address _depositor, CreateDepositParams calldata _params) external whenNotPaused {
+        _createDeposit(_depositor, _params);
+    }
+
+    /* ============ Deposit Owner Only (External Functions) ============ */
 
     /**
      * @notice Adds additional funds to an existing deposit. Any EOA or contract can add funds.
@@ -956,7 +932,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
      * @notice GOVERNANCE ONLY: Pauses deposit modifications and new deposit creation.
      * 
      * Functionalities that are paused:
-     * - Deposit creation (createDeposit)
+     * - Deposit creation (createDeposit, depositTo)
      * - Adding/removing funds to deposits (addFunds, removeFunds)
      * - Updating deposit parameters (conversion rates, intent ranges, accepting intents state)
      * - Adding/removing payment methods and currencies
@@ -1097,6 +1073,52 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
 
 
     /* ============ Internal Functions ============ */
+
+    /**
+     * @notice Shared deposit creation path for direct user deposits and third-party funded deposits.
+     * @dev Funds are always pulled from `msg.sender` and ownership is assigned to `_depositor`.
+     */
+    function _createDeposit(address _depositor, CreateDepositParams calldata _params) internal {
+        // Checks
+        if (_depositor == address(0)) revert ZeroAddress();
+        if (_params.intentAmountRange.min == 0) revert ZeroMinValue();
+        if (_params.intentAmountRange.min > _params.intentAmountRange.max) {
+            revert InvalidRange(_params.intentAmountRange.min, _params.intentAmountRange.max);
+        }
+        if (_params.amount < _params.intentAmountRange.min) {
+            revert AmountBelowMin(_params.amount, _params.intentAmountRange.min);
+        }
+
+        // Effects
+        uint256 depositId = depositCounter++;
+        accountDeposits[_depositor].push(depositId);
+        deposits[depositId] = Deposit({
+            depositor: _depositor,
+            delegate: _params.delegate,
+            token: _params.token,
+            intentAmountRange: _params.intentAmountRange,
+            acceptingIntents: true,
+            remainingDeposits: _params.amount,
+            outstandingIntentAmount: 0,
+            intentGuardian: _params.intentGuardian,
+            retainOnEmpty: _params.retainOnEmpty
+        });
+
+        emit DepositReceived(
+            depositId,
+            _depositor,
+            _params.token,
+            _params.amount,
+            _params.intentAmountRange,
+            _params.delegate,
+            _params.intentGuardian
+        );
+
+        _addPaymentMethodsToDeposit(depositId, _params.paymentMethods, _params.paymentMethodData, _params.currencies);
+
+        // Interactions
+        _params.token.safeTransferFrom(msg.sender, address(this), _params.amount);
+    }
 
     /**
      * @notice Cycles through all intents currently open on a deposit and sees if any have expired. If they have expired
