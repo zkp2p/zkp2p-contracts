@@ -163,7 +163,38 @@ describe("ProtocolViewerV2", () => {
     });
   });
 
-  describe("#getIntent and #getAccountIntents", () => {
+  describe("#getAccountDeposits", () => {
+    beforeEach(async () => {
+      await escrow.connect(depositor.wallet).createDeposit({
+        token: usdcToken.address,
+        amount: usdc(250),
+        intentAmountRange: { min: usdc(10), max: usdc(200) },
+        paymentMethods: [paymentMethod],
+        paymentMethodData: [
+          {
+            intentGatingService: ADDRESS_ZERO,
+            payeeDetails,
+            data: "0x",
+          },
+        ],
+        currencies: [[{ code: Currency.USD, minConversionRate: ether(1.01) }]],
+        delegate: ADDRESS_ZERO,
+        intentGuardian: ADDRESS_ZERO,
+        retainOnEmpty: false,
+      });
+    });
+
+    it("returns deposits for an account from the provided escrow", async () => {
+      const deposits = await protocolViewerV2.getAccountDeposits(escrow.address, depositor.address);
+
+      expect(deposits.length).to.eq(2);
+      expect(deposits[0].depositId).to.eq(ZERO);
+      expect(deposits[1].depositId).to.eq(ONE);
+      expect(deposits[1].deposit.remainingDeposits).to.eq(usdc(250));
+    });
+  });
+
+  describe("#getIntent, #getIntents and #getAccountIntents", () => {
     let intentHash: string;
 
     beforeEach(async () => {
@@ -228,6 +259,17 @@ describe("ProtocolViewerV2", () => {
       const intents = await protocolViewerV2.getAccountIntents(orchestrator.address, taker.address);
 
       expect(intents.length).to.eq(2);
+      expect(intents[0].intent.owner).to.eq(taker.address);
+      expect(intents[1].intent.owner).to.eq(taker.address);
+    });
+
+    it("returns intents for a provided list of hashes", async () => {
+      const intentHashes = await orchestrator.getAccountIntents(taker.address);
+      const intents = await protocolViewerV2.getIntents(orchestrator.address, intentHashes);
+
+      expect(intents.length).to.eq(2);
+      expect(intents[0].intentHash).to.eq(intentHashes[0]);
+      expect(intents[1].intentHash).to.eq(intentHashes[1]);
       expect(intents[0].intent.owner).to.eq(taker.address);
       expect(intents[1].intent.owner).to.eq(taker.address);
     });
