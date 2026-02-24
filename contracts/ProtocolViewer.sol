@@ -4,44 +4,20 @@ pragma solidity ^0.8.18;
 import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IProtocolViewer } from "./interfaces/IProtocolViewer.sol";
 import { IOrchestrator } from "./interfaces/IOrchestrator.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract ProtocolViewer is Ownable, IProtocolViewer {
+contract ProtocolViewer is IProtocolViewer {
 
     /* ============ State Variables ============ */
-    IEscrow public escrowContract;
-    IOrchestrator public orchestrator;
-
-    event EscrowContractUpdated(address indexed previousEscrow, address indexed newEscrow);
-    event OrchestratorUpdated(address indexed previousOrchestrator, address indexed newOrchestrator);
+    IEscrow public immutable escrowContract;
+    IOrchestrator public immutable orchestrator;
 
     /* ============ Constructor ============ */
 
     constructor(address _escrow, address _orchestrator) {
-        _setEscrowContract(_escrow);
-        _setOrchestrator(_orchestrator);
-    }
-
-    function setEscrowContract(address _escrow) external onlyOwner {
-        _setEscrowContract(_escrow);
-    }
-
-    function setOrchestrator(address _orchestrator) external onlyOwner {
-        _setOrchestrator(_orchestrator);
-    }
-
-    function _setEscrowContract(address _escrow) internal {
         require(_escrow != address(0), "ProtocolViewer: invalid escrow");
-        address previousEscrow = address(escrowContract);
-        escrowContract = IEscrow(_escrow);
-        emit EscrowContractUpdated(previousEscrow, _escrow);
-    }
-
-    function _setOrchestrator(address _orchestrator) internal {
         require(_orchestrator != address(0), "ProtocolViewer: invalid orchestrator");
-        address previousOrchestrator = address(orchestrator);
+        escrowContract = IEscrow(_escrow);
         orchestrator = IOrchestrator(_orchestrator);
-        emit OrchestratorUpdated(previousOrchestrator, _orchestrator);
     }
 
     /* ============ View Functions ============ */
