@@ -173,6 +173,32 @@ describe("EscrowV2 -- Branch Coverage", () => {
         await expect(subject()).to.be.revertedWithCustomError(escrow, "ZeroMinValue");
       });
     });
+
+    describe("when delegate is the depositor (self-delegation)", () => {
+      async function subject() {
+        return escrow.connect(depositor.wallet).createDeposit({
+          token: usdcToken.address,
+          amount: usdc(50),
+          intentAmountRange: { min: usdc(10), max: usdc(100) },
+          paymentMethods: [paypalPaymentMethod],
+          paymentMethodData: [
+            {
+              intentGatingService: ADDRESS_ZERO,
+              payeeDetails,
+              data: "0x",
+            },
+          ],
+          currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+          delegate: depositor.address,
+          intentGuardian: ADDRESS_ZERO,
+          retainOnEmpty: false,
+        });
+      }
+
+      it("reverts with CannotDelegateToSelf", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(escrow, "CannotDelegateToSelf");
+      });
+    });
   });
 
   describe("#depositTo", () => {
@@ -199,6 +225,32 @@ describe("EscrowV2 -- Branch Coverage", () => {
 
       it("reverts with ZeroAddress", async () => {
         await expect(subject()).to.be.revertedWithCustomError(escrow, "ZeroAddress");
+      });
+    });
+
+    describe("when delegate is the target depositor (self-delegation)", () => {
+      async function subject() {
+        return escrow.connect(other.wallet).depositTo(depositor.address, {
+          token: usdcToken.address,
+          amount: usdc(50),
+          intentAmountRange: { min: usdc(10), max: usdc(100) },
+          paymentMethods: [paypalPaymentMethod],
+          paymentMethodData: [
+            {
+              intentGatingService: ADDRESS_ZERO,
+              payeeDetails,
+              data: "0x",
+            },
+          ],
+          currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+          delegate: depositor.address,
+          intentGuardian: ADDRESS_ZERO,
+          retainOnEmpty: false,
+        });
+      }
+
+      it("reverts with CannotDelegateToSelf", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(escrow, "CannotDelegateToSelf");
       });
     });
   });
@@ -918,6 +970,16 @@ describe("EscrowV2 -- Branch Coverage", () => {
 
       it("reverts with ZeroAddress", async () => {
         await expect(subject()).to.be.revertedWithCustomError(escrow, "ZeroAddress");
+      });
+    });
+
+    describe("when delegate is the depositor (self-delegation)", () => {
+      async function subject() {
+        return escrow.connect(depositor.wallet).setDelegate(depositId, depositor.address);
+      }
+
+      it("reverts with CannotDelegateToSelf", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(escrow, "CannotDelegateToSelf");
       });
     });
   });

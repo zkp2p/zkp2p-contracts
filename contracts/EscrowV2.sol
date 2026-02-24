@@ -271,7 +271,8 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         Deposit storage deposit = deposits[_depositId];
         if (deposit.depositor != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.depositor);
         if (_delegate == address(0)) revert ZeroAddress();
-        
+        if (_delegate == msg.sender) revert CannotDelegateToSelf(msg.sender);
+
         deposit.delegate = _delegate;
         
         emit DepositDelegateSet(_depositId, msg.sender, _delegate);
@@ -1080,6 +1081,9 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         if (_params.amount < _params.intentAmountRange.min) {
             revert AmountBelowMin(_params.amount, _params.intentAmountRange.min);
         }
+        if (_params.delegate != address(0) && _params.delegate == _depositor) {
+            revert CannotDelegateToSelf(_depositor);
+        }
 
         // Effects
         uint256 depositId = depositCounter++;
@@ -1191,7 +1195,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
     }
 
     /**
-      * @notice Calls the orchestrator to clean up intents. 
+      * @notice Calls the orchestrator to clean up intents.
       * Note: If the orchestrator reverts, it is caught and ignored to allow the function to continue execution.
       */
     function _tryOrchestratorPruneIntents(bytes32[] memory _intents) internal {

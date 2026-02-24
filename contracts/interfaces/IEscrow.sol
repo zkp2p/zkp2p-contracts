@@ -114,6 +114,7 @@ interface IEscrow {
     // Authorization errors
     error UnauthorizedCaller(address caller, address authorized);
     error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);
+    error CannotDelegateToSelf(address depositor);
 
     // Range and amount errors
     error InvalidRange(uint256 min, uint256 max);
