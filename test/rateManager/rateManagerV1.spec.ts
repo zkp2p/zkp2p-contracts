@@ -1475,14 +1475,22 @@ describe("RateManagerV1", () => {
   });
 
   describe("#onDepositOptIn with minLiquidity", () => {
+    let escrowSigner: any;
+
     beforeEach(async () => {
-      // Whitelist the test caller (owner) so direct calls to onDepositOptIn pass access control
-      await escrowRegistry.addEscrow(owner.address);
+      // Impersonate the escrow contract so msg.sender == escrow in the callback
+      await ethers.provider.send("hardhat_impersonateAccount", [escrow.address]);
+      escrowSigner = await ethers.getSigner(escrow.address);
+      await ethers.provider.send("hardhat_setBalance", [escrow.address, "0xDE0B6B3A7640000"]);
+    });
+
+    afterEach(async () => {
+      await ethers.provider.send("hardhat_stopImpersonatingAccount", [escrow.address]);
     });
 
     it("passes when no min liquidity set (0 = disabled)", async () => {
       await expect(
-        rateManagerV1.onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
+        rateManagerV1.connect(escrowSigner).onDepositOptIn(ZERO, rateManagerId)
       ).to.not.be.reverted;
     });
 
@@ -1491,7 +1499,7 @@ describe("RateManagerV1", () => {
       await rateManagerV1.connect(manager.wallet).setMinLiquidity(rateManagerId, usdc(100));
 
       await expect(
-        rateManagerV1.onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
+        rateManagerV1.connect(escrowSigner).onDepositOptIn(ZERO, rateManagerId)
       ).to.not.be.reverted;
     });
 
@@ -1500,7 +1508,7 @@ describe("RateManagerV1", () => {
       await rateManagerV1.connect(manager.wallet).setMinLiquidity(rateManagerId, usdc(1000));
 
       await expect(
-        rateManagerV1.onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
+        rateManagerV1.connect(escrowSigner).onDepositOptIn(ZERO, rateManagerId)
       ).to.be.revertedWithCustomError(rateManagerV1, "BelowMinLiquidity");
     });
 
@@ -1509,7 +1517,7 @@ describe("RateManagerV1", () => {
       await rateManagerV1.connect(manager.wallet).setMinLiquidity(rateManagerId, ZERO);
 
       await expect(
-        rateManagerV1.onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
+        rateManagerV1.connect(escrowSigner).onDepositOptIn(ZERO, rateManagerId)
       ).to.not.be.reverted;
     });
   });
@@ -1517,7 +1525,7 @@ describe("RateManagerV1", () => {
   describe("#onDepositOptIn access control", () => {
     it("reverts when caller is not a whitelisted escrow", async () => {
       await expect(
-        rateManagerV1.connect(other.wallet).onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
+        rateManagerV1.connect(other.wallet).onDepositOptIn(ZERO, rateManagerId)
       ).to.be.revertedWithCustomError(rateManagerV1, "UnauthorizedEscrow");
     });
 
@@ -1525,7 +1533,7 @@ describe("RateManagerV1", () => {
       await escrowRegistry.addEscrow(owner.address);
 
       await expect(
-        rateManagerV1.onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
+        rateManagerV1.onDepositOptIn(ZERO, rateManagerId)
       ).to.not.be.reverted;
     });
 
@@ -1533,7 +1541,7 @@ describe("RateManagerV1", () => {
       await escrowRegistry.setAcceptAllEscrows(true);
 
       await expect(
-        rateManagerV1.connect(other.wallet).onDepositOptIn(depositor.address, escrow.address, ZERO, rateManagerId)
+        rateManagerV1.connect(other.wallet).onDepositOptIn(ZERO, rateManagerId)
       ).to.not.be.reverted;
     });
   });

@@ -12,6 +12,7 @@ contract RateManagerMock is IRateManager {
     error OptInRejected();
     error GetRateRejected();
     error GetFeeRejected();
+    error RateManagerNotFound(bytes32 rateManagerId);
     struct FeeConfig {
         address recipient;
         uint256 fee;
@@ -25,7 +26,7 @@ contract RateManagerMock is IRateManager {
     bool public shouldRevertOnGetRate;
     bool public shouldRevertOnGetFee;
 
-    event OptedIn(address indexed depositor, address indexed escrow, uint256 indexed depositId, bytes32 rateManagerId);
+    event OptedIn(address indexed escrow, uint256 indexed depositId, bytes32 rateManagerId);
 
     function setManager(bytes32 _rateManagerId, bool _exists) external {
         managers[_rateManagerId] = _exists;
@@ -80,13 +81,12 @@ contract RateManagerMock is IRateManager {
     }
 
     function onDepositOptIn(
-        address _depositor,
-        address _escrow,
         uint256 _depositId,
         bytes32 _rateManagerId
     ) external override {
+        if (!managers[_rateManagerId]) revert RateManagerNotFound(_rateManagerId);
         if (shouldRevertOnOptIn) revert OptInRejected();
-        emit OptedIn(_depositor, _escrow, _depositId, _rateManagerId);
+        emit OptedIn(msg.sender, _depositId, _rateManagerId);
     }
 
     function _tupleKey(

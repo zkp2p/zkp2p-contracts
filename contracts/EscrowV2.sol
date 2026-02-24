@@ -428,10 +428,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         RateManagerConfig memory existing = depositRateManagerConfig[_depositId];
         if (existing.rateManager != address(0)) revert RateManagerAlreadySet(existing.rateManagerId);
 
-        IRateManager rateManager = IRateManager(_rateManager);
-        if (!rateManager.isRateManager(_rateManagerId)) revert RateManagerNotFound(_rateManagerId);
-
-        rateManager.onDepositOptIn(msg.sender, address(this), _depositId, _rateManagerId);
+        IRateManager(_rateManager).onDepositOptIn(_depositId, _rateManagerId);
 
         depositRateManagerConfig[_depositId] = RateManagerConfig({
             rateManager: _rateManager,

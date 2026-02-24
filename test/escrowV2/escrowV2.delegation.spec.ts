@@ -126,7 +126,7 @@ describe("EscrowV2", () => {
     it("calls onDepositOptIn on manager", async () => {
       await expect(subject())
         .to.emit(rateManagerMock, "OptedIn")
-        .withArgs(depositor.address, escrow.address, ZERO, rateManagerId);
+        .withArgs(escrow.address, ZERO, rateManagerId);
     });
 
     describe("when manager already set", () => {

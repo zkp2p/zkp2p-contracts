@@ -42,15 +42,12 @@ interface IRateManager {
 
     /**
      * @notice Called by EscrowV2 when a depositor opts into delegation.
-     * @dev Implementations may revert to reject opt-in.
-     * @param _depositor Depositor account that owns the escrow deposit.
-     * @param _escrow Escrow contract address.
+     * @dev Only callable by whitlisted escrow contracts. Implementations should use msg.sender as the
+     *      escrow address. May revert to reject opt-in.
      * @param _depositId Deposit identifier.
      * @param _rateManagerId Manager identifier being opted into.
      */
     function onDepositOptIn(
-        address _depositor,
-        address _escrow,
         uint256 _depositId,
         bytes32 _rateManagerId
     ) external;

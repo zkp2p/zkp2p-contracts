@@ -915,7 +915,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
       });
 
       it("reverts with RateManagerNotFound", async () => {
-        await expect(subject()).to.be.revertedWithCustomError(escrow, "RateManagerNotFound");
+        await expect(subject()).to.be.revertedWithCustomError(rateManagerMock, "RateManagerNotFound");
       });
     });
   });

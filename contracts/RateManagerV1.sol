@@ -438,15 +438,13 @@ contract RateManagerV1 is Ownable, IRateManager {
 
     /**
      * @notice Callback invoked by EscrowV2 when a deposit opts into this manager.
-     * @dev Only callable by whitelisted escrows. Deposit existence, depositor ownership, and
-     *      rate manager existence are validated by the calling escrow before this callback.
-     * @param _escrow Escrow address.
+     * @dev NOTE: Only callable by whitelisted escrows. Deposit existence and depositor ownership
+     * are validated by the calling escrow before this callback. This function reverts if the deposit
+     * opt-in fails.
      * @param _depositId Deposit id.
      * @param _rateManagerId Manager id.
      */
     function onDepositOptIn(
-        address,
-        address _escrow,
         uint256 _depositId,
         bytes32 _rateManagerId
     )
@@ -454,13 +452,16 @@ contract RateManagerV1 is Ownable, IRateManager {
         view
         override
     {
-        if (!escrowRegistry.isWhitelistedEscrow(msg.sender) && !escrowRegistry.isAcceptingAllEscrows()) {
-            revert UnauthorizedEscrow(msg.sender);
+        address callingEscrow = msg.sender;
+        if (!escrowRegistry.isWhitelistedEscrow(callingEscrow) && !escrowRegistry.isAcceptingAllEscrows()) {
+            revert UnauthorizedEscrow(callingEscrow);
         }
+
+        if (!isRateManager(_rateManagerId)) revert RateManagerNotFound(_rateManagerId);
 
         uint256 required = minLiquidity[_rateManagerId];
         if (required > 0) {
-            IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
+            IEscrow.Deposit memory deposit = IEscrow(callingEscrow).getDeposit(_depositId);
             uint256 totalLiquidity = deposit.remainingDeposits + deposit.outstandingIntentAmount;
             if (totalLiquidity < required) {
                 revert BelowMinLiquidity(totalLiquidity, required);
