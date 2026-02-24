@@ -59,6 +59,7 @@ contract WhitelistPreIntentHook is IPreIntentHook {
         _validateDepositorOrDelegate(_escrow, _depositId);
 
         for (uint256 i = 0; i < _takers.length; i++) {
+            if (_takers[i] == address(0)) revert ZeroAddress();
             whitelist[_escrow][_depositId][_takers[i]] = true;
             emit TakerWhitelisted(_escrow, _depositId, _takers[i]);
         }

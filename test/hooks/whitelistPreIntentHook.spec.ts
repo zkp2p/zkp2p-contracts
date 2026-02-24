@@ -207,6 +207,16 @@ describe("WhitelistPreIntentHook", () => {
         await expect(subject()).to.be.revertedWithCustomError(whitelistHook, "EmptyArray");
       });
     });
+
+    describe("when a taker is zero address", () => {
+      beforeEach(async () => {
+        subjectTakers = [taker.address, ADDRESS_ZERO];
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(whitelistHook, "ZeroAddress");
+      });
+    });
   });
 
   describe("#removeFromWhitelist", () => {
