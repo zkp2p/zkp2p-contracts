@@ -78,6 +78,9 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
     mapping(uint256 => mapping(bytes32 => Intent)) internal depositIntents; // Mapping of depositId to intentHash to intent
     mapping(bytes32 => address) internal intentOrchestrator;                // Intent hash to owning orchestrator
     mapping(uint256 => RateManagerConfig) internal depositRateManagerConfig; // Per-deposit delegated rate manager config
+    // Tracks accepting-intents auto-disables caused by insufficient free liquidity.
+    // Used to allow controlled auto-reenable only for liquidity-driven disables.
+    mapping(uint256 => bool) internal depositAutoDisabledForLiquidity;
 
     uint256 public depositCounter;          // Counter for depositIds
     
@@ -179,6 +182,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         
         // Effects
         deposit.remainingDeposits += _amount;
+        _tryAutoReEnableAcceptingIntents(_depositId, deposit);
         
         emit DepositFundsAdded(_depositId, msg.sender, _amount);
         
@@ -244,6 +248,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         IERC20 token = deposit.token;
         delete deposit.remainingDeposits;
         delete deposit.acceptingIntents;
+        delete depositAutoDisabledForLiquidity[_depositId];
 
         emit DepositWithdrawn(_depositId, deposit.depositor, returnAmount);
 
@@ -613,6 +618,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
             deposit.remainingDeposits < deposit.intentAmountRange.min
         ) revert InsufficientDepositLiquidity(_depositId, deposit.remainingDeposits, deposit.intentAmountRange.min);
         
+        delete depositAutoDisabledForLiquidity[_depositId];
         
         deposit.acceptingIntents = _acceptingIntents;
         emit DepositAcceptingIntentsUpdated(_depositId, _acceptingIntents);
@@ -655,6 +661,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
             _depositId, 
             PRUNE_ALL_EXPIRED_INTENTS     // Prune all expired intents
         );
+        _tryAutoReEnableAcceptingIntents(_depositId, deposits[_depositId]);
 
         // Interactions
         if (expiredIntents.length > 0) {
@@ -754,6 +761,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         // Effects
         deposit.remainingDeposits += intent.amount;
         deposit.outstandingIntentAmount -= intent.amount;
+        _tryAutoReEnableAcceptingIntents(_depositId, deposit);
 
         _pruneIntent(_depositId, _intentHash, true);
 
@@ -798,6 +806,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         if (_transferAmount < intent.amount) {
             deposit.remainingDeposits += (intent.amount - _transferAmount);
         }
+        _tryAutoReEnableAcceptingIntents(_depositId, deposit);
 
         _pruneIntent(_depositId, _intentHash, true);
         
@@ -1213,16 +1222,32 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
     }
 
     /**
-     * @notice Updates acceptingIntents based on remaining liquidity. One-way demotion only: if remainingDeposits 
-     * falls below min and acceptingIntents is true, set it to false. If acceptingIntents is false, it will remain 
-     * false even if remainingDeposits is increased above min. The depositor has to manually re-enable accepting 
-     * intents by calling setDepositAcceptingIntents.
+     * @notice Updates acceptingIntents based on free liquidity (`remainingDeposits`). One-way demotion only:
+     * if free liquidity falls below min and acceptingIntents is true, set it to false and mark this deposit as
+     * auto-disabled due to liquidity. Auto-reenable is handled in unlock/prune flows once free liquidity recovers.
      */
     function _handleAcceptingIntentsState(uint256 _depositId) internal {
         Deposit storage deposit = deposits[_depositId];
         if (deposit.acceptingIntents && deposit.remainingDeposits < deposit.intentAmountRange.min) {
             deposit.acceptingIntents = false;
+            depositAutoDisabledForLiquidity[_depositId] = true;
             emit DepositAcceptingIntentsUpdated(_depositId, false);
+        }
+    }
+
+    /**
+     * @notice Re-enables acceptingIntents only when this deposit was auto-disabled for liquidity and free liquidity recovered.
+     * @dev Manual disables are preserved because `setAcceptingIntents` clears the auto-disable marker.
+     */
+    function _tryAutoReEnableAcceptingIntents(uint256 _depositId, Deposit storage _deposit) internal {
+        if (
+            !_deposit.acceptingIntents &&
+            depositAutoDisabledForLiquidity[_depositId] &&
+            _deposit.remainingDeposits >= _deposit.intentAmountRange.min
+        ) {
+            _deposit.acceptingIntents = true;
+            delete depositAutoDisabledForLiquidity[_depositId];
+            emit DepositAcceptingIntentsUpdated(_depositId, true);
         }
     }
 
@@ -1257,6 +1282,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         
         delete deposits[_depositId];
         delete _deposit.acceptingIntents;  // Might have been set to false, but delete it to be safe
+        delete depositAutoDisabledForLiquidity[_depositId];
         
         emit DepositClosed(_depositId, depositor);
     }

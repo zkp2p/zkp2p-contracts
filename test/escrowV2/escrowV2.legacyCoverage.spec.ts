@@ -316,6 +316,23 @@ describe("EscrowV2", () => {
       expect(afterDeposit.remainingDeposits.sub(beforeDeposit.remainingDeposits)).to.eq(subjectAmount);
     });
 
+    it("auto-reenables accepting intents when added funds restore free liquidity for an auto-disabled deposit", async () => {
+      await createIntentWith(orchestratorMock, usdc(60));
+      await escrow.connect(depositor.wallet).removeFunds(depositId, usdc(435));
+
+      subjectCaller = depositor;
+      subjectAmount = usdc(10);
+
+      await expect(subject())
+        .to.emit(escrow, "DepositAcceptingIntentsUpdated")
+        .withArgs(depositId, true);
+
+      const updatedDeposit = await escrow.getDeposit(depositId);
+      expect(updatedDeposit.remainingDeposits).to.eq(usdc(15));
+      expect(updatedDeposit.outstandingIntentAmount).to.eq(usdc(60));
+      expect(updatedDeposit.acceptingIntents).to.eq(true);
+    });
+
     describe("when deposit does not exist", () => {
       beforeEach(async () => {
         subjectDepositId = BigNumber.from(999);
@@ -374,6 +391,18 @@ describe("EscrowV2", () => {
       subjectAmount = usdc(495);
       await expect(subject()).to.emit(escrow, "DepositAcceptingIntentsUpdated").withArgs(depositId, false);
       const deposit = await escrow.getDeposit(depositId);
+      expect(deposit.acceptingIntents).to.eq(false);
+    });
+
+    it("auto-disables based on free liquidity even when outstanding intents keep total tracked liquidity above min", async () => {
+      await createIntentWith(orchestratorMock, usdc(60));
+      subjectAmount = usdc(435); // remaining becomes 5 while outstanding remains 60
+
+      await expect(subject()).to.emit(escrow, "DepositAcceptingIntentsUpdated").withArgs(depositId, false);
+
+      const deposit = await escrow.getDeposit(depositId);
+      expect(deposit.remainingDeposits).to.eq(usdc(5));
+      expect(deposit.outstandingIntentAmount).to.eq(usdc(60));
       expect(deposit.acceptingIntents).to.eq(false);
     });
 
@@ -700,6 +729,20 @@ describe("EscrowV2", () => {
       expect(await secondaryOrchestratorMock.getLastPrunedIntents()).to.deep.eq([secondaryIntent]);
       expect(orchestratorIntentA).to.not.eq(orchestratorIntentB);
     });
+
+    it("auto-reenables accepting intents after prune restores free liquidity for auto-disabled deposits", async () => {
+      await createIntentWith(orchestratorMock, usdc(60));
+      await escrow.connect(depositor.wallet).removeFunds(depositId, usdc(435));
+      await increaseTime(3601);
+
+      await expect(escrow.connect(other.wallet).pruneExpiredIntents(depositId))
+        .to.emit(escrow, "DepositAcceptingIntentsUpdated")
+        .withArgs(depositId, true);
+
+      const deposit = await escrow.getDeposit(depositId);
+      expect(deposit.remainingDeposits).to.eq(usdc(65));
+      expect(deposit.acceptingIntents).to.eq(true);
+    });
   });
 
   describe("#lockFunds", () => {
@@ -761,6 +804,33 @@ describe("EscrowV2", () => {
         .withArgs(depositId, intentHash, usdc(20));
     });
 
+    it("auto-reenables accepting intents when cancellation restores free liquidity after auto-disable", async () => {
+      const intentHash = await createIntentWith(orchestratorMock, usdc(60));
+      await escrow.connect(depositor.wallet).removeFunds(depositId, usdc(435));
+
+      await expect(orchestratorMock.connect(owner.wallet).unlockFunds(depositId, intentHash))
+        .to.emit(escrow, "DepositAcceptingIntentsUpdated")
+        .withArgs(depositId, true);
+
+      const deposit = await escrow.getDeposit(depositId);
+      expect(deposit.remainingDeposits).to.eq(usdc(65));
+      expect(deposit.outstandingIntentAmount).to.eq(ZERO);
+      expect(deposit.acceptingIntents).to.eq(true);
+    });
+
+    it("does not auto-reenable after cancellation when depositor manually disabled intents", async () => {
+      const intentHash = await createIntentWith(orchestratorMock, usdc(60));
+      await escrow.connect(depositor.wallet).setAcceptingIntents(depositId, false);
+
+      await expect(orchestratorMock.connect(owner.wallet).unlockFunds(depositId, intentHash))
+        .to.not.emit(escrow, "DepositAcceptingIntentsUpdated");
+
+      const deposit = await escrow.getDeposit(depositId);
+      expect(deposit.remainingDeposits).to.eq(usdc(500));
+      expect(deposit.outstandingIntentAmount).to.eq(ZERO);
+      expect(deposit.acceptingIntents).to.eq(false);
+    });
+
     it("reverts when a different allowlisted orchestrator attempts to unlock", async () => {
       const intentHash = await createIntentWith(orchestratorMock, usdc(20));
 
@@ -785,6 +855,22 @@ describe("EscrowV2", () => {
 
       const afterDeposit = await escrow.getDeposit(depositId);
       expect(afterDeposit.remainingDeposits.sub(beforeDeposit.remainingDeposits)).to.eq(usdc(10));
+    });
+
+    it("auto-reenables accepting intents on partial release when free liquidity recovers after auto-disable", async () => {
+      const intentHash = await createIntentWith(orchestratorMock, usdc(60));
+      await escrow.connect(depositor.wallet).removeFunds(depositId, usdc(435));
+
+      await expect(
+        orchestratorMock.connect(owner.wallet).unlockAndTransferFunds(depositId, intentHash, usdc(10), other.address)
+      )
+        .to.emit(escrow, "DepositAcceptingIntentsUpdated")
+        .withArgs(depositId, true);
+
+      const deposit = await escrow.getDeposit(depositId);
+      expect(deposit.remainingDeposits).to.eq(usdc(55));
+      expect(deposit.outstandingIntentAmount).to.eq(ZERO);
+      expect(deposit.acceptingIntents).to.eq(true);
     });
 
     it("collects dust when a partial transfer closes deposit near zero", async () => {
