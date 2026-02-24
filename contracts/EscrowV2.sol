@@ -14,7 +14,6 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { AddressArrayUtils } from "./external/AddressArrayUtils.sol";
 import { Bytes32ArrayUtils } from "./external/Bytes32ArrayUtils.sol";
 import { StringArrayUtils } from "./external/StringArrayUtils.sol";
-import { Uint256ArrayUtils } from "./external/Uint256ArrayUtils.sol";
 
 import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
@@ -37,7 +36,6 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
     using SafeERC20 for IERC20;
     using SignatureChecker for address;
     using StringArrayUtils for string[];
-    using Uint256ArrayUtils for uint256[];
 
     /* ============ Constants ============ */
     uint256 internal constant PRECISE_UNIT = 1e18;
@@ -52,8 +50,6 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
     IOrchestratorRegistry public orchestratorRegistry;               // Registry of authorized orchestrator contracts
     IPaymentVerifierRegistry public paymentVerifierRegistry;         // Address of the payment verifier registry contract
     uint256 immutable public chainId;                                // chainId of the chain the escrow is deployed on
-
-    mapping(address => uint256[]) internal accountDeposits;          // Mapping of address to depositIds
 
     // Mapping of depositId to verifier address to deposit's verification data. A single deposit can support multiple payment 
     // services. Each payment service has it's own verification data which includes the payee details hash and the data used for 
@@ -1063,10 +1059,6 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         return depositPaymentMethodData[_depositId][_paymentMethod].intentGatingService;
     }
 
-    function getAccountDeposits(address _account) external view returns (uint256[] memory) {
-        return accountDeposits[_account];
-    }
-    
     function getExpiredIntents(uint256 _depositId) external view returns (bytes32[] memory expiredIntents, uint256 reclaimableAmount) {
         return _getExpiredIntents(_depositId);
     }
@@ -1091,7 +1083,6 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
 
         // Effects
         uint256 depositId = depositCounter++;
-        accountDeposits[_depositor].push(depositId);
         deposits[depositId] = Deposit({
             depositor: _depositor,
             delegate: _params.delegate,
@@ -1254,12 +1245,11 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
     }
 
     /**
-     * @notice Closes a deposit. Deleting a deposit deletes it from the deposits mapping and removes tracking
-     * it in the user's accountDeposits mapping. Also deletes the verification and currency data for the deposit.
+     * @notice Closes a deposit. Deleting a deposit clears it from storage and removes
+     * related verification and currency data.
      */
     function _closeDeposit(uint256 _depositId, Deposit storage _deposit) internal {
         address depositor = _deposit.depositor;
-        accountDeposits[depositor].removeStorage(_depositId);
         delete depositRateManagerConfig[_depositId];
         
         _deleteDepositPaymentMethodAndCurrencyData(_depositId);

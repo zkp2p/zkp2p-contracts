@@ -170,37 +170,6 @@ describe("ProtocolViewerV2", () => {
     });
   });
 
-  describe("#getAccountDeposits", () => {
-    beforeEach(async () => {
-      await escrow.connect(depositor.wallet).createDeposit({
-        token: usdcToken.address,
-        amount: usdc(250),
-        intentAmountRange: { min: usdc(10), max: usdc(200) },
-        paymentMethods: [paymentMethod],
-        paymentMethodData: [
-          {
-            intentGatingService: ADDRESS_ZERO,
-            payeeDetails,
-            data: "0x",
-          },
-        ],
-        currencies: [[{ code: Currency.USD, minConversionRate: ether(1.01) }]],
-        delegate: ADDRESS_ZERO,
-        intentGuardian: ADDRESS_ZERO,
-        retainOnEmpty: false,
-      });
-    });
-
-    it("returns deposits for an account from the provided escrow", async () => {
-      const deposits = await protocolViewerV2.getAccountDeposits(escrow.address, depositor.address);
-
-      expect(deposits.length).to.eq(2);
-      expect(deposits[0].depositId).to.eq(ZERO);
-      expect(deposits[1].depositId).to.eq(ONE);
-      expect(deposits[1].deposit.remainingDeposits).to.eq(usdc(250));
-    });
-  });
-
   describe("#getIntent, #getIntents and #getAccountIntents", () => {
     let intentHash: string;
 

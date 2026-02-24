@@ -77,21 +77,6 @@ contract ProtocolViewer is IProtocolViewer {
     }
 
     /**
-     * @notice Gets all deposits for a specific account.
-     * @param _account The account address.
-     * @return depositArray Array of DepositView structs.
-     */
-    function getAccountDeposits(address _account) external view returns (IProtocolViewer.DepositView[] memory depositArray) {
-        uint256[] memory accountDepositIds = escrowContract.getAccountDeposits(_account);
-        depositArray = new DepositView[](accountDepositIds.length);
-        
-        for (uint256 i = 0; i < accountDepositIds.length; ++i) {
-            uint256 depositId = accountDepositIds[i];
-            depositArray[i] = getDeposit(depositId);
-        }
-    }
-
-    /**
      * @notice Gets details for a single intent.
      * @param _intentHash The hash of the intent.
      * @return intentView The IntentView struct.

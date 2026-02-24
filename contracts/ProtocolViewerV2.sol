@@ -28,19 +28,6 @@ contract ProtocolViewerV2 is IProtocolViewerV2 {
         }
     }
 
-    function getAccountDeposits(
-        address _escrow,
-        address _account
-    ) external view returns (IProtocolViewerV2.DepositView[] memory depositArray) {
-        IEscrow escrowContract = _escrowContract(_escrow);
-        uint256[] memory accountDepositIds = escrowContract.getAccountDeposits(_account);
-        depositArray = new DepositView[](accountDepositIds.length);
-
-        for (uint256 i = 0; i < accountDepositIds.length; ++i) {
-            depositArray[i] = _getDeposit(_escrow, accountDepositIds[i]);
-        }
-    }
-
     function getIntent(
         address _orchestrator,
         bytes32 _intentHash

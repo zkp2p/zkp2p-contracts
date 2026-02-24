@@ -68,7 +68,7 @@ describe("EscrowV2", () => {
   }
 
   async function clearIntentOrchestrator(intentHash: BytesLike) {
-    const mappingSlot = 16;
+    const mappingSlot = 15;
     const storageSlot = ethers.utils.solidityKeccak256(
       ["bytes32", "uint256"],
       [intentHash, mappingSlot]
@@ -81,7 +81,7 @@ describe("EscrowV2", () => {
   }
 
   async function getIntentOrchestrator(intentHash: BytesLike): Promise<string> {
-    const mappingSlot = 16;
+    const mappingSlot = 15;
     const storageSlot = ethers.utils.solidityKeccak256(
       ["bytes32", "uint256"],
       [intentHash, mappingSlot]
@@ -282,11 +282,6 @@ describe("EscrowV2", () => {
       const createdDeposit = await escrow.getDeposit(newDepositId);
       expect(createdDeposit.depositor).to.eq(depositor.address);
       expect(createdDeposit.remainingDeposits).to.eq(subjectAmount);
-
-      const ownerDeposits = await escrow.getAccountDeposits(depositor.address);
-      expect(ownerDeposits).to.deep.eq([depositId, newDepositId]);
-      const callerDeposits = await escrow.getAccountDeposits(other.address);
-      expect(callerDeposits).to.deep.eq([]);
 
       const callerBalanceAfter = await usdcToken.balanceOf(other.address);
       const ownerBalanceAfter = await usdcToken.balanceOf(depositor.address);
@@ -1137,9 +1132,6 @@ describe("EscrowV2", () => {
       expect((await escrow.getDepositPaymentMethodData(depositId, venmoPaymentMethod)).payeeDetails).to.eq(payeeDetails);
       expect(await escrow.getDepositPaymentMethodActive(depositId, venmoPaymentMethod)).to.eq(true);
       expect(await escrow.getDepositGatingService(depositId, venmoPaymentMethod)).to.eq(ADDRESS_ZERO);
-
-      const accountDeposits = await escrow.getAccountDeposits(depositor.address);
-      expect(accountDeposits).to.deep.eq([depositId]);
 
       await increaseTime(3601);
       const expired = await escrow.getExpiredIntents(depositId);

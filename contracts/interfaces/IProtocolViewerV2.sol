@@ -38,11 +38,6 @@ interface IProtocolViewerV2 {
         uint256[] calldata _depositIds
     ) external view returns (DepositView[] memory depositArray);
 
-    function getAccountDeposits(
-        address _escrow,
-        address _account
-    ) external view returns (DepositView[] memory depositArray);
-
     function getIntent(address _orchestrator, bytes32 _intentHash) external view returns (IntentView memory intentView);
 
     function getIntents(
