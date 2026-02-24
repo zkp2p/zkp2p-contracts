@@ -296,6 +296,16 @@ describe("WhitelistPreIntentHook", () => {
         await expect(subject()).to.be.revertedWithCustomError(whitelistHook, "EmptyArray");
       });
     });
+
+    describe("when taker is not in whitelist", () => {
+      beforeEach(async () => {
+        subjectTakers = [unauthorizedCaller.address];
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(whitelistHook, "TakerNotInWhitelist");
+      });
+    });
   });
 
   describe("#setDepositWhitelistHook", () => {

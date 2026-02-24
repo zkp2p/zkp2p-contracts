@@ -26,6 +26,7 @@ contract WhitelistPreIntentHook is IPreIntentHook {
     error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);
     error UnauthorizedOrchestratorCaller(address caller);
     error TakerNotWhitelisted(address taker, address escrow, uint256 depositId);
+    error TakerNotInWhitelist(address taker, address escrow, uint256 depositId);
 
     /* ============ State Variables ============ */
 
@@ -80,6 +81,9 @@ contract WhitelistPreIntentHook is IPreIntentHook {
         _validateDepositorOrDelegate(_escrow, _depositId);
 
         for (uint256 i = 0; i < _takers.length; i++) {
+            if (!whitelist[_escrow][_depositId][_takers[i]]) {
+                revert TakerNotInWhitelist(_takers[i], _escrow, _depositId);
+            }
             whitelist[_escrow][_depositId][_takers[i]] = false;
             emit TakerRemovedFromWhitelist(_escrow, _depositId, _takers[i]);
         }
