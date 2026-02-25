@@ -2,6 +2,7 @@
 pragma solidity ^0.8.18;
 
 import { IEscrow } from "./interfaces/IEscrow.sol";
+import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IProtocolViewerV2 } from "./interfaces/IProtocolViewerV2.sol";
 import { IOrchestratorV2 } from "./interfaces/IOrchestratorV2.sol";
 
@@ -97,7 +98,7 @@ contract ProtocolViewerV2 is IProtocolViewerV2 {
                 bytes32 code = currencyCodes[j];
                 currencies[j] = IEscrow.Currency({
                     code: code,
-                    minConversionRate: escrowContract.getDepositCurrencyMinRate(_depositId, paymentMethod, code)
+                    minConversionRate: IEscrowV2(address(escrowContract)).getEffectiveRate(_depositId, paymentMethod, code)
                 });
             }
 

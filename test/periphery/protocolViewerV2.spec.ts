@@ -12,6 +12,7 @@ import {
   OrchestratorV2,
   PaymentVerifierMock,
   PaymentVerifierRegistry,
+  RateManagerMock,
   RelayerRegistry,
   USDCMock,
 } from "@utils/contracts";
@@ -122,6 +123,53 @@ describe("ProtocolViewerV2", () => {
       expect(depositView.availableLiquidity).to.eq(usdc(500));
       expect(depositView.paymentMethods[0].paymentMethod).to.eq(paymentMethod);
       expect(depositView.paymentMethods[0].currencies[0].code).to.eq(Currency.USD);
+    });
+
+    it("returns native min rate when no rate manager is set", async () => {
+      const depositView = await protocolViewerV2.getDeposit(escrow.address, ZERO);
+
+      expect(depositView.paymentMethods[0].currencies[0].minConversionRate).to.eq(ether(1));
+    });
+
+    describe("when rate manager is delegated", () => {
+      let rateManagerMock: RateManagerMock;
+      let rateManagerId: string;
+
+      beforeEach(async () => {
+        rateManagerMock = await deployer.deployRateManagerMock();
+        rateManagerId = ethers.utils.formatBytes32String("manager-1");
+
+        await rateManagerMock.connect(owner.wallet).setManager(rateManagerId, true);
+        await rateManagerMock
+          .connect(owner.wallet)
+          .setRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, ether(1.5));
+
+        await escrow.connect(depositor.wallet).setRateManager(ZERO, rateManagerMock.address, rateManagerId);
+      });
+
+      it("returns delegated rate from rate manager", async () => {
+        const depositView = await protocolViewerV2.getDeposit(escrow.address, ZERO);
+
+        expect(depositView.paymentMethods[0].currencies[0].minConversionRate).to.eq(ether(1.5));
+      });
+
+      it("falls back to native rate when rate manager reverts", async () => {
+        await rateManagerMock.connect(owner.wallet).setShouldRevertOnGetRate(true);
+
+        const depositView = await protocolViewerV2.getDeposit(escrow.address, ZERO);
+
+        expect(depositView.paymentMethods[0].currencies[0].minConversionRate).to.eq(ether(1));
+      });
+
+      it("returns zero when rate manager returns zero (disabled pair)", async () => {
+        await rateManagerMock
+          .connect(owner.wallet)
+          .setRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, ZERO);
+
+        const depositView = await protocolViewerV2.getDeposit(escrow.address, ZERO);
+
+        expect(depositView.paymentMethods[0].currencies[0].minConversionRate).to.eq(ZERO);
+      });
     });
 
     it("reverts when escrow address is zero", async () => {
