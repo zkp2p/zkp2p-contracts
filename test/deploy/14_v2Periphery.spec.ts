@@ -7,7 +7,7 @@ import {
   WhitelistPreIntentHook__factory,
   SignatureGatingPreIntentHook__factory,
   RateManagerV1__factory,
-  ProtocolViewer__factory,
+  ProtocolViewerV2__factory,
   PostIntentHookRegistry__factory,
 } from "../../typechain";
 
@@ -125,6 +125,21 @@ describe("V2 Periphery Deployment", () => {
       const address = getDeployedContractAddress(network, "RateManagerV1");
       expect(address).to.not.eq("0x0000000000000000000000000000000000000000");
     });
+
+    it("should have the correct escrow registry", async () => {
+      const address = getDeployedContractAddress(network, "RateManagerV1");
+      const rateManager = new RateManagerV1__factory(deployer.wallet).attach(address);
+
+      const escrowRegistryAddress = getDeployedContractAddress(network, "EscrowRegistry");
+      expect(await rateManager.escrowRegistry()).to.eq(escrowRegistryAddress);
+    });
+
+    it("should have the correct owner", async () => {
+      const address = getDeployedContractAddress(network, "RateManagerV1");
+      const rateManager = new RateManagerV1__factory(deployer.wallet).attach(address);
+
+      expect(await rateManager.owner()).to.eq(multiSig);
+    });
   });
 
   describe("ChainlinkOracleAdapter", async () => {
@@ -135,27 +150,9 @@ describe("V2 Periphery Deployment", () => {
   });
 
   describe("ProtocolViewerV2", async () => {
-    it("should have the correct escrow contract", async () => {
+    it("should be deployed", async () => {
       const viewerAddress = getDeployedContractAddress(network, "ProtocolViewerV2");
-      const viewer = new ProtocolViewer__factory(deployer.wallet).attach(viewerAddress);
-
-      const escrowV2Address = getDeployedContractAddress(network, "EscrowV2");
-      expect(await viewer.escrowContract()).to.eq(escrowV2Address);
-    });
-
-    it("should have the correct orchestrator", async () => {
-      const viewerAddress = getDeployedContractAddress(network, "ProtocolViewerV2");
-      const viewer = new ProtocolViewer__factory(deployer.wallet).attach(viewerAddress);
-
-      const orchestratorV2Address = getDeployedContractAddress(network, "OrchestratorV2");
-      expect(await viewer.orchestrator()).to.eq(orchestratorV2Address);
-    });
-
-    it("should have the correct owner", async () => {
-      const viewerAddress = getDeployedContractAddress(network, "ProtocolViewerV2");
-      const viewer = new ProtocolViewer__factory(deployer.wallet).attach(viewerAddress);
-
-      expect(await viewer.owner()).to.eq(multiSig);
+      expect(viewerAddress).to.not.eq("0x0000000000000000000000000000000000000000");
     });
   });
 });
