@@ -461,7 +461,7 @@ export default {
       ]
     },
     "AcrossBridgeHookV2": {
-      "address": "0x048C214aC2382E982AEB810696AAC20b082e2b70",
+      "address": "0x2284b8f3C902E1dda251D482e0722c6919C68771",
       "abi": [
         {
           "inputs": [
@@ -932,7 +932,7 @@ export default {
       ]
     },
     "ChainlinkOracleAdapter": {
-      "address": "0xfc81D1b5841e697973AF3072fc8E03Af76cb39EF",
+      "address": "0xA3dBea0fCc742bF2eF32BB38E0D94e6AF0A6eDD6",
       "abi": [
         {
           "inputs": [
@@ -3415,7 +3415,7 @@ export default {
       ]
     },
     "EscrowV2": {
-      "address": "0x07Cc97c254A5Fb0957553E9F58E4040699357f28",
+      "address": "0x18EAcBf3FF19528ABe8035CF5cA266F31A2e3f14",
       "abi": [
         {
           "inputs": [
@@ -3541,6 +3541,17 @@ export default {
             }
           ],
           "name": "ArrayLengthMismatch",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "depositor",
+              "type": "address"
+            }
+          ],
+          "name": "CannotDelegateToSelf",
           "type": "error"
         },
         {
@@ -4963,6 +4974,112 @@ export default {
           "type": "function"
         },
         {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_depositor",
+              "type": "address"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "contract IERC20",
+                  "name": "token",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "amount",
+                  "type": "uint256"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "uint256",
+                      "name": "min",
+                      "type": "uint256"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "max",
+                      "type": "uint256"
+                    }
+                  ],
+                  "internalType": "struct IEscrow.Range",
+                  "name": "intentAmountRange",
+                  "type": "tuple"
+                },
+                {
+                  "internalType": "bytes32[]",
+                  "name": "paymentMethods",
+                  "type": "bytes32[]"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "intentGatingService",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "bytes32",
+                      "name": "payeeDetails",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "bytes",
+                      "name": "data",
+                      "type": "bytes"
+                    }
+                  ],
+                  "internalType": "struct IEscrow.DepositPaymentMethodData[]",
+                  "name": "paymentMethodData",
+                  "type": "tuple[]"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "bytes32",
+                      "name": "code",
+                      "type": "bytes32"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "minConversionRate",
+                      "type": "uint256"
+                    }
+                  ],
+                  "internalType": "struct IEscrow.Currency[][]",
+                  "name": "currencies",
+                  "type": "tuple[][]"
+                },
+                {
+                  "internalType": "address",
+                  "name": "delegate",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "intentGuardian",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bool",
+                  "name": "retainOnEmpty",
+                  "type": "bool"
+                }
+              ],
+              "internalType": "struct IEscrow.CreateDepositParams",
+              "name": "_params",
+              "type": "tuple"
+            }
+          ],
+          "name": "depositTo",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
           "inputs": [],
           "name": "dustRecipient",
           "outputs": [
@@ -5009,25 +5126,6 @@ export default {
           "name": "extendIntentExpiry",
           "outputs": [],
           "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_account",
-              "type": "address"
-            }
-          ],
-          "name": "getAccountDeposits",
-          "outputs": [
-            {
-              "internalType": "uint256[]",
-              "name": "",
-              "type": "uint256[]"
-            }
-          ],
-          "stateMutability": "view",
           "type": "function"
         },
         {
@@ -7503,7 +7601,7 @@ export default {
       ]
     },
     "OrchestratorRegistry": {
-      "address": "0xb6F9BF66928C915CB9a0eAFc33146B89f683280e",
+      "address": "0xfA6384EB6176cfEC049540526A3d2126C3666d8A",
       "abi": [
         {
           "inputs": [
@@ -7658,7 +7756,7 @@ export default {
       ]
     },
     "OrchestratorV2": {
-      "address": "0xF5BCD3f3106DE021c1AA35D44a12a18d4fb4f45f",
+      "address": "0xC0389b3d7A4E6B823e361e562C4a29F04B6C4fB5",
       "abi": [
         {
           "inputs": [
@@ -10716,247 +10814,37 @@ export default {
       ]
     },
     "ProtocolViewerV2": {
-      "address": "0x6ee5ff5cAFFa655d94f76a9654e1151f6E735aaF",
+      "address": "0xA4d0f8729EE91e676cCFCC3a0041605c604A7605",
       "abi": [
         {
           "inputs": [
             {
               "internalType": "address",
-              "name": "_escrow",
+              "name": "escrow",
               "type": "address"
-            },
+            }
+          ],
+          "name": "InvalidEscrow",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "orchestrator",
+              "type": "address"
+            }
+          ],
+          "name": "InvalidOrchestrator",
+          "type": "error"
+        },
+        {
+          "inputs": [
             {
               "internalType": "address",
               "name": "_orchestrator",
               "type": "address"
-            }
-          ],
-          "stateMutability": "nonpayable",
-          "type": "constructor"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "previousEscrow",
-              "type": "address"
             },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "newEscrow",
-              "type": "address"
-            }
-          ],
-          "name": "EscrowContractUpdated",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "previousOrchestrator",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "newOrchestrator",
-              "type": "address"
-            }
-          ],
-          "name": "OrchestratorUpdated",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "previousOwner",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "newOwner",
-              "type": "address"
-            }
-          ],
-          "name": "OwnershipTransferred",
-          "type": "event"
-        },
-        {
-          "inputs": [],
-          "name": "escrowContract",
-          "outputs": [
-            {
-              "internalType": "contract IEscrow",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_account",
-              "type": "address"
-            }
-          ],
-          "name": "getAccountDeposits",
-          "outputs": [
-            {
-              "components": [
-                {
-                  "internalType": "uint256",
-                  "name": "depositId",
-                  "type": "uint256"
-                },
-                {
-                  "components": [
-                    {
-                      "internalType": "address",
-                      "name": "depositor",
-                      "type": "address"
-                    },
-                    {
-                      "internalType": "address",
-                      "name": "delegate",
-                      "type": "address"
-                    },
-                    {
-                      "internalType": "contract IERC20",
-                      "name": "token",
-                      "type": "address"
-                    },
-                    {
-                      "components": [
-                        {
-                          "internalType": "uint256",
-                          "name": "min",
-                          "type": "uint256"
-                        },
-                        {
-                          "internalType": "uint256",
-                          "name": "max",
-                          "type": "uint256"
-                        }
-                      ],
-                      "internalType": "struct IEscrow.Range",
-                      "name": "intentAmountRange",
-                      "type": "tuple"
-                    },
-                    {
-                      "internalType": "bool",
-                      "name": "acceptingIntents",
-                      "type": "bool"
-                    },
-                    {
-                      "internalType": "uint256",
-                      "name": "remainingDeposits",
-                      "type": "uint256"
-                    },
-                    {
-                      "internalType": "uint256",
-                      "name": "outstandingIntentAmount",
-                      "type": "uint256"
-                    },
-                    {
-                      "internalType": "address",
-                      "name": "intentGuardian",
-                      "type": "address"
-                    },
-                    {
-                      "internalType": "bool",
-                      "name": "retainOnEmpty",
-                      "type": "bool"
-                    }
-                  ],
-                  "internalType": "struct IEscrow.Deposit",
-                  "name": "deposit",
-                  "type": "tuple"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "availableLiquidity",
-                  "type": "uint256"
-                },
-                {
-                  "components": [
-                    {
-                      "internalType": "bytes32",
-                      "name": "paymentMethod",
-                      "type": "bytes32"
-                    },
-                    {
-                      "components": [
-                        {
-                          "internalType": "address",
-                          "name": "intentGatingService",
-                          "type": "address"
-                        },
-                        {
-                          "internalType": "bytes32",
-                          "name": "payeeDetails",
-                          "type": "bytes32"
-                        },
-                        {
-                          "internalType": "bytes",
-                          "name": "data",
-                          "type": "bytes"
-                        }
-                      ],
-                      "internalType": "struct IEscrow.DepositPaymentMethodData",
-                      "name": "verificationData",
-                      "type": "tuple"
-                    },
-                    {
-                      "components": [
-                        {
-                          "internalType": "bytes32",
-                          "name": "code",
-                          "type": "bytes32"
-                        },
-                        {
-                          "internalType": "uint256",
-                          "name": "minConversionRate",
-                          "type": "uint256"
-                        }
-                      ],
-                      "internalType": "struct IEscrow.Currency[]",
-                      "name": "currencies",
-                      "type": "tuple[]"
-                    }
-                  ],
-                  "internalType": "struct IProtocolViewer.PaymentMethodDataView[]",
-                  "name": "paymentMethods",
-                  "type": "tuple[]"
-                },
-                {
-                  "internalType": "bytes32[]",
-                  "name": "intentHashes",
-                  "type": "bytes32[]"
-                }
-              ],
-              "internalType": "struct IProtocolViewer.DepositView[]",
-              "name": "depositArray",
-              "type": "tuple[]"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
             {
               "internalType": "address",
               "name": "_account",
@@ -11035,7 +10923,7 @@ export default {
                       "type": "uint256"
                     },
                     {
-                      "internalType": "contract IPostIntentHook",
+                      "internalType": "contract IPostIntentHookV2",
                       "name": "postIntentHook",
                       "type": "address"
                     },
@@ -11045,7 +10933,7 @@ export default {
                       "type": "bytes"
                     }
                   ],
-                  "internalType": "struct IOrchestrator.Intent",
+                  "internalType": "struct IOrchestratorV2.Intent",
                   "name": "intent",
                   "type": "tuple"
                 },
@@ -11172,7 +11060,7 @@ export default {
                           "type": "tuple[]"
                         }
                       ],
-                      "internalType": "struct IProtocolViewer.PaymentMethodDataView[]",
+                      "internalType": "struct IProtocolViewerV2.PaymentMethodDataView[]",
                       "name": "paymentMethods",
                       "type": "tuple[]"
                     },
@@ -11182,12 +11070,12 @@ export default {
                       "type": "bytes32[]"
                     }
                   ],
-                  "internalType": "struct IProtocolViewer.DepositView",
+                  "internalType": "struct IProtocolViewerV2.DepositView",
                   "name": "deposit",
                   "type": "tuple"
                 }
               ],
-              "internalType": "struct IProtocolViewer.IntentView[]",
+              "internalType": "struct IProtocolViewerV2.IntentView[]",
               "name": "intentViews",
               "type": "tuple[]"
             }
@@ -11197,6 +11085,11 @@ export default {
         },
         {
           "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
             {
               "internalType": "uint256",
               "name": "_depositId",
@@ -11328,7 +11221,7 @@ export default {
                       "type": "tuple[]"
                     }
                   ],
-                  "internalType": "struct IProtocolViewer.PaymentMethodDataView[]",
+                  "internalType": "struct IProtocolViewerV2.PaymentMethodDataView[]",
                   "name": "paymentMethods",
                   "type": "tuple[]"
                 },
@@ -11338,7 +11231,7 @@ export default {
                   "type": "bytes32[]"
                 }
               ],
-              "internalType": "struct IProtocolViewer.DepositView",
+              "internalType": "struct IProtocolViewerV2.DepositView",
               "name": "depositView",
               "type": "tuple"
             }
@@ -11348,6 +11241,11 @@ export default {
         },
         {
           "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
             {
               "internalType": "uint256[]",
               "name": "_depositIds",
@@ -11479,7 +11377,7 @@ export default {
                       "type": "tuple[]"
                     }
                   ],
-                  "internalType": "struct IProtocolViewer.PaymentMethodDataView[]",
+                  "internalType": "struct IProtocolViewerV2.PaymentMethodDataView[]",
                   "name": "paymentMethods",
                   "type": "tuple[]"
                 },
@@ -11489,7 +11387,7 @@ export default {
                   "type": "bytes32[]"
                 }
               ],
-              "internalType": "struct IProtocolViewer.DepositView[]",
+              "internalType": "struct IProtocolViewerV2.DepositView[]",
               "name": "depositArray",
               "type": "tuple[]"
             }
@@ -11499,6 +11397,11 @@ export default {
         },
         {
           "inputs": [
+            {
+              "internalType": "address",
+              "name": "_orchestrator",
+              "type": "address"
+            },
             {
               "internalType": "bytes32",
               "name": "_intentHash",
@@ -11577,7 +11480,7 @@ export default {
                       "type": "uint256"
                     },
                     {
-                      "internalType": "contract IPostIntentHook",
+                      "internalType": "contract IPostIntentHookV2",
                       "name": "postIntentHook",
                       "type": "address"
                     },
@@ -11587,7 +11490,7 @@ export default {
                       "type": "bytes"
                     }
                   ],
-                  "internalType": "struct IOrchestrator.Intent",
+                  "internalType": "struct IOrchestratorV2.Intent",
                   "name": "intent",
                   "type": "tuple"
                 },
@@ -11714,7 +11617,7 @@ export default {
                           "type": "tuple[]"
                         }
                       ],
-                      "internalType": "struct IProtocolViewer.PaymentMethodDataView[]",
+                      "internalType": "struct IProtocolViewerV2.PaymentMethodDataView[]",
                       "name": "paymentMethods",
                       "type": "tuple[]"
                     },
@@ -11724,12 +11627,12 @@ export default {
                       "type": "bytes32[]"
                     }
                   ],
-                  "internalType": "struct IProtocolViewer.DepositView",
+                  "internalType": "struct IProtocolViewerV2.DepositView",
                   "name": "deposit",
                   "type": "tuple"
                 }
               ],
-              "internalType": "struct IProtocolViewer.IntentView",
+              "internalType": "struct IProtocolViewerV2.IntentView",
               "name": "intentView",
               "type": "tuple"
             }
@@ -11739,6 +11642,11 @@ export default {
         },
         {
           "inputs": [
+            {
+              "internalType": "address",
+              "name": "_orchestrator",
+              "type": "address"
+            },
             {
               "internalType": "bytes32[]",
               "name": "_intentHashes",
@@ -11817,7 +11725,7 @@ export default {
                       "type": "uint256"
                     },
                     {
-                      "internalType": "contract IPostIntentHook",
+                      "internalType": "contract IPostIntentHookV2",
                       "name": "postIntentHook",
                       "type": "address"
                     },
@@ -11827,7 +11735,7 @@ export default {
                       "type": "bytes"
                     }
                   ],
-                  "internalType": "struct IOrchestrator.Intent",
+                  "internalType": "struct IOrchestratorV2.Intent",
                   "name": "intent",
                   "type": "tuple"
                 },
@@ -11954,7 +11862,7 @@ export default {
                           "type": "tuple[]"
                         }
                       ],
-                      "internalType": "struct IProtocolViewer.PaymentMethodDataView[]",
+                      "internalType": "struct IProtocolViewerV2.PaymentMethodDataView[]",
                       "name": "paymentMethods",
                       "type": "tuple[]"
                     },
@@ -11964,96 +11872,35 @@ export default {
                       "type": "bytes32[]"
                     }
                   ],
-                  "internalType": "struct IProtocolViewer.DepositView",
+                  "internalType": "struct IProtocolViewerV2.DepositView",
                   "name": "deposit",
                   "type": "tuple"
                 }
               ],
-              "internalType": "struct IProtocolViewer.IntentView[]",
+              "internalType": "struct IProtocolViewerV2.IntentView[]",
               "name": "intentArray",
               "type": "tuple[]"
             }
           ],
           "stateMutability": "view",
           "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "orchestrator",
-          "outputs": [
-            {
-              "internalType": "contract IOrchestrator",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "owner",
-          "outputs": [
-            {
-              "internalType": "address",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "renounceOwnership",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            }
-          ],
-          "name": "setEscrowContract",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_orchestrator",
-              "type": "address"
-            }
-          ],
-          "name": "setOrchestrator",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "newOwner",
-              "type": "address"
-            }
-          ],
-          "name": "transferOwnership",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
         }
       ]
     },
     "RateManagerV1": {
-      "address": "0x77775A861041343E9e4AF46df34E475091F547C7",
+      "address": "0x6627adC2981CF01Dcb76C793c90D8666b76AcaB6",
       "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrowRegistry",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
         {
           "inputs": [
             {
@@ -12176,6 +12023,17 @@ export default {
             }
           ],
           "name": "UnauthorizedCaller",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedEscrow",
           "type": "error"
         },
         {
@@ -12303,6 +12161,19 @@ export default {
           "inputs": [
             {
               "indexed": true,
+              "internalType": "address",
+              "name": "escrowRegistry",
+              "type": "address"
+            }
+          ],
+          "name": "EscrowRegistryUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
               "internalType": "bytes32",
               "name": "rateManagerId",
               "type": "bytes32"
@@ -12315,6 +12186,25 @@ export default {
             }
           ],
           "name": "MinLiquidityUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferred",
           "type": "event"
         },
         {
@@ -12534,6 +12424,19 @@ export default {
             }
           ],
           "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "escrowRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IEscrowRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
           "type": "function"
         },
         {
@@ -12825,16 +12728,6 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "address",
-              "name": "_depositor",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
               "internalType": "uint256",
               "name": "_depositId",
               "type": "uint256"
@@ -12848,6 +12741,26 @@ export default {
           "name": "onDepositOptIn",
           "outputs": [],
           "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "owner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "renounceOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
           "type": "function"
         },
         {
@@ -13059,6 +12972,19 @@ export default {
         {
           "inputs": [
             {
+              "internalType": "address",
+              "name": "_escrowRegistry",
+              "type": "address"
+            }
+          ],
+          "name": "setEscrowRegistry",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
               "internalType": "bytes32",
               "name": "_rateManagerId",
               "type": "bytes32"
@@ -13177,6 +13103,19 @@ export default {
             }
           ],
           "name": "setRateManagerConfig",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "transferOwnership",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
@@ -13349,7 +13288,7 @@ export default {
       ]
     },
     "SignatureGatingPreIntentHook": {
-      "address": "0xF5Abf597C11b3fa827446990E29E4A2C5a1e1302",
+      "address": "0xa014404736A5e9A45422e0519Ef91bc8c59F8Ade",
       "abi": [
         {
           "inputs": [
@@ -14164,7 +14103,7 @@ export default {
       ]
     },
     "UnifiedPaymentVerifierV2": {
-      "address": "0x03b4D3bF7B8274323022c8b6CC1D85fF2bDF815E",
+      "address": "0xb9C46A988D4C616Bd4d43042954dF3cC0750726B",
       "abi": [
         {
           "inputs": [
@@ -14531,7 +14470,7 @@ export default {
       ]
     },
     "WhitelistPreIntentHook": {
-      "address": "0x179853915d4878e8D480D7484bbDfFAa965aBA4d",
+      "address": "0x1F27426836F2436276B99723a1be484Cb2FBF181",
       "abi": [
         {
           "inputs": [
@@ -14547,6 +14486,27 @@ export default {
         {
           "inputs": [],
           "name": "EmptyArray",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "TakerNotInWhitelist",
           "type": "error"
         },
         {
