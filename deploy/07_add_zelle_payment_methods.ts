@@ -18,6 +18,7 @@ import {
   ZELLE_CITI_PROVIDER_CONFIG,
   ZELLE_CHASE_PROVIDER_CONFIG,
   ZELLE_BOFA_PROVIDER_CONFIG,
+  ZELLE_TDBANK_PROVIDER_CONFIG,
 } from "../deployments/verifiers/zelle";
 
 // Deployment Scripts
@@ -111,6 +112,29 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     ZELLE_BOFA_PROVIDER_CONFIG.timestampBuffer
   );
   console.log("Zelle BofA added to unified verifier...");
+
+  // Add Zelle TD Bank
+  await addPaymentMethodToRegistry(
+    hre,
+    paymentVerifierRegistryContract,
+    ZELLE_TDBANK_PROVIDER_CONFIG.paymentMethodHash,
+    unifiedVerifierAddress,
+    ZELLE_TDBANK_PROVIDER_CONFIG.currencies
+  );
+  console.log("Zelle TD Bank added to payment method registry...");
+
+  // Snapshot Zelle TD Bank
+  savePaymentMethodSnapshot(network, 'zelle-tdbank', {
+    paymentMethodHash: ZELLE_TDBANK_PROVIDER_CONFIG.paymentMethodHash,
+    currencies: ZELLE_TDBANK_PROVIDER_CONFIG.currencies,
+  });
+
+  await addPaymentMethodToUnifiedVerifier(
+    hre,
+    unifiedVerifierContract,
+    ZELLE_TDBANK_PROVIDER_CONFIG.paymentMethodHash,
+  );
+  console.log("Zelle TD Bank added to unified verifier...");
 
   await waitForDeploymentDelay(hre);
 };

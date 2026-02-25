@@ -25,11 +25,13 @@ import {
   ZELLE_CITI_PROVIDER_CONFIG,
   ZELLE_CHASE_PROVIDER_CONFIG,
   ZELLE_BOFA_PROVIDER_CONFIG,
+  ZELLE_TDBANK_PROVIDER_CONFIG,
 } from "../../deployments/verifiers/zelle";
 import {
   ZELLE_CITI_PAYMENT_METHOD_HASH,
   ZELLE_CHASE_PAYMENT_METHOD_HASH,
   ZELLE_BOFA_PAYMENT_METHOD_HASH,
+  ZELLE_TDBANK_PAYMENT_METHOD_HASH,
 } from "../../deployments/verifiers/zelle";
 
 const expect = getWaffleExpect();
@@ -122,6 +124,27 @@ describe("Zelle Payment Methods Configuration", () => {
       it("should add Zelle BofA payment method to unified verifier", async () => {
         const paymentMethods = await unifiedPaymentVerifier.getPaymentMethods();
         expect(paymentMethods).to.include(ZELLE_BOFA_PAYMENT_METHOD_HASH);
+      });
+    });
+  });
+
+  describe("Zelle TD Bank Payment Method", () => {
+    describe("Payment Method Registry", () => {
+      it("should add Zelle TD Bank payment method to the registry", async () => {
+        const isPaymentMethod = await paymentVerifierRegistry.isPaymentMethod(ZELLE_TDBANK_PAYMENT_METHOD_HASH);
+        expect(isPaymentMethod).to.be.true;
+      });
+
+      it("should add Zelle TD Bank currencies to the registry", async () => {
+        const currencies = await paymentVerifierRegistry.getCurrencies(ZELLE_TDBANK_PAYMENT_METHOD_HASH);
+        expect(currencies).to.deep.eq(ZELLE_TDBANK_PROVIDER_CONFIG.currencies);
+      });
+    });
+
+    describe("Unified Verifier Configuration", () => {
+      it("should add Zelle TD Bank payment method to unified verifier", async () => {
+        const paymentMethods = await unifiedPaymentVerifier.getPaymentMethods();
+        expect(paymentMethods).to.include(ZELLE_TDBANK_PAYMENT_METHOD_HASH);
       });
     });
   });
