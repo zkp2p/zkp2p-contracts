@@ -112,13 +112,6 @@
         "0x90832e2dc3221e4d56977c1aa8f6a6706b9ad6542fbbdaac13097d0fa5e42e67"
       ],
       "updatedAt": "2025-09-30T05:04:43.104Z"
-    },
-    "zelle-tdbank": {
-      "paymentMethodHash": "0xc3f8ac7bf257061ecb2cf570bebe67940be7025639178a109e44c99c41ada739",
-      "currencies": [
-        "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e"
-      ],
-      "updatedAt": "2026-02-25T14:31:04.874Z"
     }
   }
 }
