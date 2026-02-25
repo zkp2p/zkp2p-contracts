@@ -7,25 +7,16 @@ import { SignatureChecker } from "@openzeppelin/contracts/utils/cryptography/Sig
 
 import { IEscrow } from "../interfaces/IEscrow.sol";
 import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
-import { IPreIntentHook } from "../interfaces/IPreIntentHook.sol";
+import { ISignatureGatingPreIntentHook } from "../interfaces/ISignatureGatingPreIntentHook.sol";
 
 /**
  * @title SignatureGatingPreIntentHook
  * @notice Pre-intent hook that validates taker eligibility using an off-chain signature.
  * @dev Uses the built-in gating payload fields and additionally binds the caller taker address.
  */
-contract SignatureGatingPreIntentHook is IPreIntentHook {
+contract SignatureGatingPreIntentHook is ISignatureGatingPreIntentHook {
     using ECDSA for bytes32;
     using SignatureChecker for address;
-
-    /* ============ Events ============ */
-
-    event DepositSignerSet(
-        address indexed escrow,
-        uint256 indexed depositId,
-        address indexed signer,
-        address setter
-    );
 
     /* ============ Errors ============ */
 
@@ -63,7 +54,7 @@ contract SignatureGatingPreIntentHook is IPreIntentHook {
      * @param _depositId   Deposit id.
      * @param _signer      Authorized signer (address(0) to clear).
      */
-    function setDepositSigner(address _escrow, uint256 _depositId, address _signer) external {
+    function setDepositSigner(address _escrow, uint256 _depositId, address _signer) external override {
         if (_escrow == address(0)) revert ZeroAddress();
 
         IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
@@ -78,12 +69,12 @@ contract SignatureGatingPreIntentHook is IPreIntentHook {
         emit DepositSignerSet(_escrow, _depositId, _signer, msg.sender);
     }
 
-    function getDepositSigner(address _escrow, uint256 _depositId) external view returns (address) {
+    function getDepositSigner(address _escrow, uint256 _depositId) external view override returns (address) {
         return depositSigner[_escrow][_depositId];
     }
 
     /**
-     * @inheritdoc IPreIntentHook
+     * @notice Validates an incoming intent against the configured signer for the deposit.
      */
     function validateSignalIntent(PreIntentContext calldata _ctx) external view override {
         if (!orchestratorRegistry.isOrchestrator(msg.sender)) revert UnauthorizedOrchestratorCaller(msg.sender);
