@@ -689,20 +689,20 @@ describe("EscrowV2", () => {
         .withArgs(depositId, intentHash, usdc(20));
     });
 
-    it("swallows orchestrator prune reverts", async () => {
+    it("reverts when orchestrator prune reverts", async () => {
       const intentHash = await createIntentWith(revertingPruneOrchestrator, usdc(20));
       await increaseTime(3601);
 
-      await expect(escrow.connect(other.wallet).pruneExpiredIntents(depositId)).to.not.be.reverted;
-      const prunedIntent = await escrow.getDepositIntent(depositId, intentHash);
-      expect(prunedIntent.intentHash).to.eq(ethers.constants.HashZero);
+      await expect(escrow.connect(other.wallet).pruneExpiredIntents(depositId)).to.be.revertedWith("prune failed");
+      const persistedIntent = await escrow.getDepositIntent(depositId, intentHash);
+      expect(persistedIntent.intentHash).to.eq(intentHash);
     });
 
     it("keeps intent orchestrator mapping when orchestrator prune reverts", async () => {
       const intentHash = await createIntentWith(revertingPruneOrchestrator, usdc(20));
       await increaseTime(3601);
 
-      await expect(escrow.connect(other.wallet).pruneExpiredIntents(depositId)).to.not.be.reverted;
+      await expect(escrow.connect(other.wallet).pruneExpiredIntents(depositId)).to.be.revertedWith("prune failed");
       const persistedOrchestrator = await getIntentOrchestrator(intentHash);
 
       expect(persistedOrchestrator).to.eq(revertingPruneOrchestrator.address);

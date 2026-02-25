@@ -220,7 +220,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
 
         // Prune intents on the orchestrator
         if (expiredIntents.length > 0) {
-            _tryOrchestratorPruneIntents(expiredIntents);
+            _pruneIntentsOnOrchestrator(expiredIntents);
         }
     }
 
@@ -258,7 +258,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
 
         // Prune intents on the orchestrator
         if (expiredIntents.length > 0) {
-            _tryOrchestratorPruneIntents(expiredIntents);
+            _pruneIntentsOnOrchestrator(expiredIntents);
         }
     }
 
@@ -659,7 +659,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
 
         // Interactions
         if (expiredIntents.length > 0) {
-            _tryOrchestratorPruneIntents(expiredIntents);
+            _pruneIntentsOnOrchestrator(expiredIntents);
         }
     }
 
@@ -726,7 +726,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
 
         // Interactions
         if (expiredIntents.length > 0) {
-            _tryOrchestratorPruneIntents(expiredIntents);
+            _pruneIntentsOnOrchestrator(expiredIntents);
         }
     }
 
@@ -1193,10 +1193,10 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
     }
 
     /**
-      * @notice Calls the orchestrator to clean up intents.
-      * Note: If the orchestrator reverts, it is caught and ignored to allow the function to continue execution.
+      * @notice Calls orchestrators to prune intents and keep cross-contract state synchronized.
+      * @dev Reverts when orchestrator pruning fails to prevent escrow/orchestrator divergence.
       */
-    function _tryOrchestratorPruneIntents(bytes32[] memory _intents) internal {
+    function _pruneIntentsOnOrchestrator(bytes32[] memory _intents) internal {
         for (uint256 i = 0; i < _intents.length; i++) {
             bytes32 intentHash = _intents[i];
             address orchestratorAddress = intentOrchestrator[intentHash];
@@ -1207,9 +1207,8 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
             bytes32[] memory singleIntent = new bytes32[](1);
             singleIntent[0] = intentHash;
 
-            try IOrchestrator(orchestratorAddress).pruneIntents(singleIntent) {
-                delete intentOrchestrator[intentHash];
-            } catch {}
+            IOrchestrator(orchestratorAddress).pruneIntents(singleIntent);
+            delete intentOrchestrator[intentHash];
         }
     }
 

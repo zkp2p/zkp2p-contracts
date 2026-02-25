@@ -6,7 +6,7 @@ import { IEscrow } from "../interfaces/IEscrow.sol";
 
 /**
  * @title RevertingPruneOrchestratorMock
- * @notice Mock orchestrator for exercising EscrowV2 prune-intent catch paths.
+ * @notice Mock orchestrator for exercising EscrowV2 prune-intent failure paths.
  */
 contract RevertingPruneOrchestratorMock {
     IEscrow public immutable escrow;
