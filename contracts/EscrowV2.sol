@@ -242,10 +242,14 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
 
         uint256 returnAmount = deposit.remainingDeposits;
         IERC20 token = deposit.token;
+        
         delete deposit.remainingDeposits;
-        delete deposit.acceptingIntents;
-
         emit DepositWithdrawn(_depositId, deposit.depositor, returnAmount);
+
+        if (deposit.acceptingIntents) {
+            delete deposit.acceptingIntents;
+            emit DepositAcceptingIntentsUpdated(_depositId, false);
+        }
 
         _closeDepositIfNecessary(_depositId, deposit);
         

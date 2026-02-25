@@ -431,6 +431,21 @@ describe("EscrowV2", () => {
       expect(deposit.depositor).to.eq(ADDRESS_ZERO);
       expect(await escrow.getDepositPaymentMethods(depositId)).to.deep.eq([]);
     });
+
+    it("emits DepositAcceptingIntentsUpdated(false) when transitioning from accepting", async () => {
+      await createIntentWith(orchestratorMock, usdc(20));
+
+      await expect(subject())
+        .to.emit(escrow, "DepositAcceptingIntentsUpdated")
+        .withArgs(depositId, false);
+    });
+
+    it("does not emit DepositAcceptingIntentsUpdated when already not accepting", async () => {
+      await escrow.connect(depositor.wallet).setAcceptingIntents(depositId, false);
+
+      await expect(subject())
+        .to.not.emit(escrow, "DepositAcceptingIntentsUpdated");
+    });
   });
 
   describe("#setDelegate", () => {
