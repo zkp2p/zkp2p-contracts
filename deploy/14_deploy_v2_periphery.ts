@@ -79,10 +79,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("AcrossBridgeHookV2 deployed at", acrossBridgeHookV2.address);
   await waitForDeploymentDelay(hre);
 
-  // Deploy RateManagerV1 (NOT Ownable)
+  // Deploy RateManagerV1 (Ownable, needs escrowRegistry)
+  const escrowRegistryAddress = getDeployedContractAddress(network, "EscrowRegistry");
   const rateManagerV1 = await deploy("RateManagerV1", {
     from: deployer,
-    args: [],
+    args: [escrowRegistryAddress],
   });
   console.log("RateManagerV1 deployed at", rateManagerV1.address);
   await waitForDeploymentDelay(hre);
@@ -95,11 +96,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("ChainlinkOracleAdapter deployed at", chainlinkOracleAdapter.address);
   await waitForDeploymentDelay(hre);
 
-  // Deploy ProtocolViewerV2 (same contract, new deployment name with V2 addresses)
+  // Deploy ProtocolViewerV2 (stateless, NOT Ownable)
   const protocolViewerV2 = await deploy("ProtocolViewerV2", {
-    contract: "ProtocolViewer",
     from: deployer,
-    args: [escrowV2Address, orchestratorV2Address],
+    args: [],
   });
   console.log("ProtocolViewerV2 deployed at", protocolViewerV2.address);
   await waitForDeploymentDelay(hre);
@@ -112,13 +112,13 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   // Transfer ownership to multiSig (only for Ownable contracts)
   console.log("Transferring ownership of V2 periphery contracts...");
 
+  const rateManagerV1Contract = await ethers.getContractAt("RateManagerV1", rateManagerV1.address);
+  await setNewOwner(hre, rateManagerV1Contract, multiSig);
+  console.log("RateManagerV1 ownership transferred to", multiSig);
+
   const acrossBridgeHookV2Contract = await ethers.getContractAt("AcrossBridgeHookV2", acrossBridgeHookV2.address);
   await setNewOwner(hre, acrossBridgeHookV2Contract, multiSig);
   console.log("AcrossBridgeHookV2 ownership transferred to", multiSig);
-
-  const protocolViewerV2Contract = await ethers.getContractAt("ProtocolViewer", protocolViewerV2.address);
-  await setNewOwner(hre, protocolViewerV2Contract, multiSig);
-  console.log("ProtocolViewerV2 ownership transferred to", multiSig);
 
   console.log("V2 periphery deploy finished...");
   await waitForDeploymentDelay(hre);
@@ -128,7 +128,7 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.network.name;
   if (network !== "localhost") {
     try {
-      getDeployedContractAddress(hre.network.name, "ChainlinkOracleAdapter");
+      getDeployedContractAddress(hre.network.name, "ProtocolViewerV2");
       return true;
     } catch (e) {
       return false;
