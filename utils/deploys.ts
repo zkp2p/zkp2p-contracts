@@ -34,6 +34,7 @@ import {
   PushPostIntentHookV2Mock,
   ReentrantPostIntentHookV2,
   RateManagerMock,
+  ReentrantRateManagerMock,
   ReentrantSignalIntentCallerV2Mock,
   PostIntentHookRegistry,
   PostIntentHookV2Mock
@@ -52,7 +53,8 @@ import {
   PushPostIntentHookMock__factory,
   PushPostIntentHookV2Mock__factory,
   ReentrantPostIntentHookV2__factory,
-  PostIntentHookV2Mock__factory
+  PostIntentHookV2Mock__factory,
+  ReentrantRateManagerMock__factory
 } from "../typechain/factories/contracts/mocks";
 import { ReentrantSignalIntentCallerV2Mock__factory } from "../typechain/factories/contracts/mocks/ReentrantSignalIntentCallerV2Mock__factory";
 import { ReentrantPreIntentHookMock__factory } from "../typechain/factories/contracts/mocks/ReentrantPreIntentHookMock.sol/ReentrantPreIntentHookMock__factory";
@@ -253,6 +255,10 @@ export default class DeployHelper {
 
   public async deployRateManagerMock(): Promise<RateManagerMock> {
     return await new RateManagerMock__factory(this._deployerSigner).deploy();
+  }
+
+  public async deployReentrantRateManagerMock(escrow: Address): Promise<ReentrantRateManagerMock> {
+    return await new ReentrantRateManagerMock__factory(this._deployerSigner).deploy(escrow);
   }
 
   public async deploySignatureGatingPreIntentHook(

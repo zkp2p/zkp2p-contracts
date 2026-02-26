@@ -33,6 +33,7 @@ export {
   PushPostIntentHookV2Mock,
   ReentrantPostIntentHookV2,
   ReentrantOrchestratorMock,
+  ReentrantRateManagerMock,
   PostIntentHookRegistry,
   SignatureGatingPreIntentHook,
   WhitelistPreIntentHook,

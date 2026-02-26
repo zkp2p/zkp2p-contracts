@@ -14,6 +14,7 @@ import {
   PaymentVerifierMock,
   PaymentVerifierRegistry,
   RateManagerMock,
+  ReentrantRateManagerMock,
   USDCMock,
 } from "@utils/contracts";
 
@@ -156,6 +157,31 @@ describe("EscrowV2", () => {
 
       it("reverts", async () => {
         await expect(subject()).to.be.revertedWithCustomError(rateManagerMock, "OptInRejected");
+      });
+    });
+
+    describe("when malicious manager attempts reentrancy during onDepositOptIn", () => {
+      let reentrantManager: ReentrantRateManagerMock;
+      let attackManagerId: BytesLike;
+
+      beforeEach(async () => {
+        reentrantManager = await deployer.deployReentrantRateManagerMock(escrow.address);
+        attackManagerId = ethers.utils.formatBytes32String("attack-manager");
+        await reentrantManager.setAttackParams(attackManagerId);
+
+        subjectRateManagerAddress = reentrantManager.address;
+        subjectRateManagerId = rateManagerId;
+      });
+
+      it("reentry is blocked by RateManagerAlreadySet since state is written before external call", async () => {
+        await subject();
+
+        expect(await reentrantManager.reentryAttempted()).to.be.true;
+        expect(await reentrantManager.reentrySucceeded()).to.be.false;
+
+        const config = await escrow.getDepositRateManager(ZERO);
+        expect(config.rateManager).to.eq(reentrantManager.address);
+        expect(config.rateManagerId).to.eq(rateManagerId);
       });
     });
   });
