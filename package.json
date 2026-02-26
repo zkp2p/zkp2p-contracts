@@ -19,7 +19,7 @@
     "chain": "npx hardhat node --no-deploy",
     "clean": "rm -f coverage.json; rm -rf .coverage_cache; rm -rf .coverage_contracts; rm -rf cache; rm -rf coverage; rm -rf typechain; rm -rf artifacts; rm -rf dist",
     "compile": "hardhat compile",
-    "coverage": "yarn clean && yarn build && npx hardhat coverage --testfiles 'test/{libs,hooks,periphery,unifiedVerifier,registries,escrow,escrowV2,orchestrator,orchestratorV2,rateManager}/*.ts'",
+    "coverage": "yarn clean && yarn build && npx hardhat coverage --testfiles 'test/{libs,hooks,periphery,unifiedVerifier,registries,escrow,escrowV2,orchestrator,orchestratorV2,rateManager,patchCoverage}/*.ts'",
     "deploy:localhost": "npx hardhat deploy --network localhost",
     "deploy:sepolia": "npx hardhat deploy --network sepolia",
     "deploy:base": "npx hardhat deploy --network base  && npx hardhat export --network base --export ./deployments/outputs/baseContracts.ts",
