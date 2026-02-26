@@ -151,6 +151,21 @@ describe("RateManagerV1", () => {
       await expect(subject()).to.emit(rateManagerV1, "RateManagerCreated");
     });
 
+    it("emits MinLiquidityUpdated when minLiquidity is non-zero", async () => {
+      const tx = await rateManagerV1.createRateManager({
+        manager: subjectManager,
+        feeRecipient: subjectFeeRecipient,
+        maxFee: subjectMaxFee,
+        fee: subjectFee,
+        minLiquidity: usdc(50),
+        name: "RM",
+        uri: "ipfs://rm",
+      });
+
+      await expect(tx).to.emit(rateManagerV1, "RateManagerCreated");
+      await expect(tx).to.emit(rateManagerV1, "MinLiquidityUpdated");
+    });
+
     describe("when maxFee exceeds global cap", () => {
       beforeEach(async () => {
         subjectMaxFee = ether(0.06);

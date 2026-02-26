@@ -653,6 +653,37 @@ describe("EscrowV2", () => {
         )
       ).to.be.revertedWithCustomError(escrow, "ZeroConversionRate");
     });
+
+    it("sets inline oracle config via addCurrencies", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1.1), BigNumber.from(currentTimestamp)]
+      );
+
+      const tx = await escrow.connect(depositor.wallet).addCurrencies(
+        depositId,
+        venmoPaymentMethod,
+        [{
+          code: Currency.EUR,
+          minConversionRate: ether(0.9),
+          oracleRateConfig: {
+            adapter: staticOracleAdapter.address,
+            adapterConfig,
+            spreadBps: 100,
+            maxStaleness: 3600,
+          },
+        }]
+      );
+
+      await expect(tx).to.emit(escrow, "DepositCurrencyAdded");
+      await expect(tx).to.emit(escrow, "DepositOracleRateConfigSet");
+
+      const config = await escrow.getDepositOracleRateConfig(depositId, venmoPaymentMethod, Currency.EUR);
+      expect(config.adapter).to.eq(staticOracleAdapter.address);
+      expect(config.spreadBps).to.eq(100);
+      expect(config.maxStaleness).to.eq(3600);
+    });
   });
 
   describe("#setAcceptingIntents", () => {
