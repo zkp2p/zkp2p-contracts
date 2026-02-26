@@ -92,7 +92,8 @@ contract RateManagerV1 is Ownable, IRateManager {
         uint16 floorSpreadBps,
         address oracleAdapter,
         bytes adapterConfig,
-        uint32 maxStaleness
+        uint32 maxStaleness,
+        bool enabled
     );
 
     event MinLiquidityUpdated(bytes32 indexed rateManagerId, uint256 minLiquidity);
@@ -153,10 +154,6 @@ contract RateManagerV1 is Ownable, IRateManager {
         rateManagerId = keccak256(abi.encodePacked(address(this), nextRateManagerId++));
         rateManagers[rateManagerId] = _config;
 
-        if (_config.minLiquidity > 0) {
-            emit MinLiquidityUpdated(rateManagerId, _config.minLiquidity);
-        }
-
         emit RateManagerCreated(
             rateManagerId,
             _config.manager,
@@ -166,6 +163,10 @@ contract RateManagerV1 is Ownable, IRateManager {
             _config.name,
             _config.uri
         );
+
+        if (_config.minLiquidity > 0) {
+            emit MinLiquidityUpdated(rateManagerId, _config.minLiquidity);
+        }
     }
 
     /**
@@ -646,7 +647,8 @@ contract RateManagerV1 is Ownable, IRateManager {
             _config.floorSpreadBps,
             _config.oracleAdapter,
             normalizedAdapterConfig,
-            _config.maxStaleness
+            _config.maxStaleness,
+            _config.enabled
         );
     }
 
