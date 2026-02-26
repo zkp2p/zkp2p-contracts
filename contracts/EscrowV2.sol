@@ -15,7 +15,6 @@ import { AddressArrayUtils } from "./external/AddressArrayUtils.sol";
 import { Bytes32ArrayUtils } from "./external/Bytes32ArrayUtils.sol";
 import { StringArrayUtils } from "./external/StringArrayUtils.sol";
 
-import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IRateManager } from "./interfaces/IRateManager.sol";
 import { IOrchestrator } from "./interfaces/IOrchestrator.sol";
@@ -555,11 +554,20 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         
         for (uint256 i = 0; i < _currencies.length; i++) {
             _addCurrencyToDeposit(
-                _depositId, 
-                _paymentMethod, 
-                _currencies[i].code, 
+                _depositId,
+                _paymentMethod,
+                _currencies[i].code,
                 _currencies[i].minConversionRate
             );
+
+            if (_currencies[i].oracleRateConfig.adapter != address(0)) {
+                _setOracleRateConfig(
+                    _depositId,
+                    _paymentMethod,
+                    _currencies[i].code,
+                    _currencies[i].oracleRateConfig
+                );
+            }
         }
     }
 
@@ -1304,14 +1312,21 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
             emit DepositPaymentMethodAdded(_depositId, paymentMethod, _paymentMethodData[i].payeeDetails, _paymentMethodData[i].intentGatingService);
 
             for (uint256 j = 0; j < _currencies[i].length; j++) {
-                Currency memory currency = _currencies[i][j];
-
                 _addCurrencyToDeposit(
-                    _depositId, 
-                    paymentMethod, 
-                    currency.code, 
-                    currency.minConversionRate
+                    _depositId,
+                    paymentMethod,
+                    _currencies[i][j].code,
+                    _currencies[i][j].minConversionRate
                 );
+
+                if (_currencies[i][j].oracleRateConfig.adapter != address(0)) {
+                    _setOracleRateConfig(
+                        _depositId,
+                        paymentMethod,
+                        _currencies[i][j].code,
+                        _currencies[i][j].oracleRateConfig
+                    );
+                }
             }
         }
     }

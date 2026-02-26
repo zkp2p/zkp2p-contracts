@@ -5,7 +5,7 @@ import { BigNumber, BytesLike, Contract } from "ethers";
 
 import DeployHelper from "@utils/deploys";
 import { ether, usdc } from "@utils/common";
-import { ADDRESS_ZERO, ONE, ZERO } from "@utils/constants";
+import { ADDRESS_ZERO, EMPTY_ORACLE_RATE_CONFIG, ONE, ZERO } from "@utils/constants";
 import { Currency } from "@utils/protocolUtils";
 import { getAccounts, getWaffleExpect } from "@utils/test";
 import {
@@ -166,7 +166,7 @@ describe("EscrowV2", () => {
           data: "0x",
         },
       ],
-      currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+      currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
       delegate: delegate.address,
       intentGuardian: intentGuardian.address,
       retainOnEmpty: false,
@@ -179,7 +179,7 @@ describe("EscrowV2", () => {
     let subjectRangeMin: BigNumber;
     let subjectRangeMax: BigNumber;
     let subjectAmount: BigNumber;
-    let subjectCurrencies: Array<Array<{ code: BytesLike; minConversionRate: BigNumber }>>;
+    let subjectCurrencies: Array<Array<{ code: BytesLike; minConversionRate: BigNumber; oracleRateConfig: any }>>;
 
     async function subject() {
       return escrow.connect(depositor.wallet).createDeposit({
@@ -205,7 +205,7 @@ describe("EscrowV2", () => {
       subjectRangeMin = usdc(10);
       subjectRangeMax = usdc(100);
       subjectAmount = usdc(50);
-      subjectCurrencies = [[{ code: Currency.USD, minConversionRate: ether(1) }]];
+      subjectCurrencies = [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]];
     });
 
     it("reverts when min is greater than max", async () => {
@@ -222,7 +222,7 @@ describe("EscrowV2", () => {
     });
 
     it("reverts when currency min conversion rate is zero", async () => {
-      subjectCurrencies = [[{ code: Currency.USD, minConversionRate: ZERO }]];
+      subjectCurrencies = [[{ code: Currency.USD, minConversionRate: ZERO, oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]];
 
       await expect(subject()).to.be.revertedWithCustomError(escrow, "ZeroConversionRate");
     });
@@ -247,7 +247,7 @@ describe("EscrowV2", () => {
             data: "0x",
           },
         ],
-        currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+        currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
         delegate: delegate.address,
         intentGuardian: intentGuardian.address,
         retainOnEmpty: false,
@@ -567,7 +567,7 @@ describe("EscrowV2", () => {
         depositId,
         [paypalPaymentMethod],
         [{ intentGatingService: ADDRESS_ZERO, payeeDetails, data: "0x" }],
-        [[{ code: Currency.EUR, minConversionRate: ether(0.9) }]]
+        [[{ code: Currency.EUR, minConversionRate: ether(0.9), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]]
       );
     }
 
@@ -592,7 +592,7 @@ describe("EscrowV2", () => {
           depositId,
           [unknownPaymentMethod],
           [{ intentGatingService: ADDRESS_ZERO, payeeDetails, data: "0x" }],
-          [[{ code: Currency.USD, minConversionRate: ether(1) }]]
+          [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]]
         )
       ).to.be.revertedWithCustomError(escrow, "PaymentMethodNotWhitelisted");
     });
@@ -618,7 +618,7 @@ describe("EscrowV2", () => {
         escrow.connect(depositor.wallet).addCurrencies(
           depositId,
           venmoPaymentMethod,
-          [{ code: Currency.EUR, minConversionRate: ether(0.9) }]
+          [{ code: Currency.EUR, minConversionRate: ether(0.9), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]
         )
       ).to.emit(escrow, "DepositCurrencyAdded").withArgs(depositId, venmoPaymentMethod, Currency.EUR, ether(0.9));
     });
@@ -629,7 +629,7 @@ describe("EscrowV2", () => {
         escrow.connect(depositor.wallet).addCurrencies(
           depositId,
           venmoPaymentMethod,
-          [{ code: unsupported, minConversionRate: ether(1) }]
+          [{ code: unsupported, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]
         )
       ).to.be.revertedWithCustomError(escrow, "CurrencyNotSupported");
     });
@@ -639,7 +639,7 @@ describe("EscrowV2", () => {
         escrow.connect(depositor.wallet).addCurrencies(
           depositId,
           venmoPaymentMethod,
-          [{ code: Currency.USD, minConversionRate: ether(1) }]
+          [{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]
         )
       ).to.be.revertedWithCustomError(escrow, "CurrencyAlreadyExists");
     });
@@ -649,7 +649,7 @@ describe("EscrowV2", () => {
         escrow.connect(depositor.wallet).addCurrencies(
           depositId,
           venmoPaymentMethod,
-          [{ code: Currency.EUR, minConversionRate: ZERO }]
+          [{ code: Currency.EUR, minConversionRate: ZERO, oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]
         )
       ).to.be.revertedWithCustomError(escrow, "ZeroConversionRate");
     });
@@ -871,7 +871,7 @@ describe("EscrowV2", () => {
             data: "0x",
           },
         ],
-        currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+        currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
         delegate: delegate.address,
         intentGuardian: intentGuardian.address,
         retainOnEmpty: false,
@@ -961,7 +961,7 @@ describe("EscrowV2", () => {
       await escrow.connect(depositor.wallet).addCurrencies(
         depositId,
         venmoPaymentMethod,
-        [{ code: Currency.EUR, minConversionRate: ether(0.9) }]
+        [{ code: Currency.EUR, minConversionRate: ether(0.9), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]
       );
 
       const currentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);

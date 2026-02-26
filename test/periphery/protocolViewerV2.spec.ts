@@ -18,7 +18,7 @@ import {
 } from "@utils/contracts";
 import { getAccounts, getWaffleExpect } from "@utils/test";
 import { ether, usdc } from "@utils/common";
-import { ADDRESS_ZERO, ONE, ZERO, ONE_DAY_IN_SECONDS } from "@utils/constants";
+import { ADDRESS_ZERO, EMPTY_ORACLE_RATE_CONFIG, ONE, ZERO, ONE_DAY_IN_SECONDS } from "@utils/constants";
 import { Currency } from "@utils/protocolUtils";
 import { createSignalIntentParams } from "@utils/test/helpers";
 
@@ -103,7 +103,7 @@ describe("ProtocolViewerV2", () => {
           data: "0x",
         },
       ],
-      currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+      currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
       delegate: ADDRESS_ZERO,
       intentGuardian: ADDRESS_ZERO,
       retainOnEmpty: false,
@@ -194,7 +194,7 @@ describe("ProtocolViewerV2", () => {
             data: "0x",
           },
         ],
-        currencies: [[{ code: Currency.USD, minConversionRate: ether(1.01) }]],
+        currencies: [[{ code: Currency.USD, minConversionRate: ether(1.01), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
         delegate: ADDRESS_ZERO,
         intentGuardian: ADDRESS_ZERO,
         retainOnEmpty: false,

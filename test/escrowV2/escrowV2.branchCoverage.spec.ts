@@ -5,7 +5,7 @@ import { BigNumber, BytesLike, Contract } from "ethers";
 
 import DeployHelper from "@utils/deploys";
 import { ether, usdc } from "@utils/common";
-import { ADDRESS_ZERO, ONE, ZERO } from "@utils/constants";
+import { ADDRESS_ZERO, EMPTY_ORACLE_RATE_CONFIG, ONE, ZERO } from "@utils/constants";
 import { Currency } from "@utils/protocolUtils";
 import { getAccounts, getWaffleExpect } from "@utils/test";
 import {
@@ -135,7 +135,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
           data: "0x",
         },
       ],
-      currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+      currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
       delegate: delegate.address,
       intentGuardian: intentGuardian.address,
       retainOnEmpty: false,
@@ -162,7 +162,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
               data: "0x",
             },
           ],
-          currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+          currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
           delegate: delegate.address,
           intentGuardian: intentGuardian.address,
           retainOnEmpty: false,
@@ -188,7 +188,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
               data: "0x",
             },
           ],
-          currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+          currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
           delegate: depositor.address,
           intentGuardian: ADDRESS_ZERO,
           retainOnEmpty: false,
@@ -216,7 +216,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
               data: "0x",
             },
           ],
-          currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+          currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
           delegate: delegate.address,
           intentGuardian: intentGuardian.address,
           retainOnEmpty: false,
@@ -242,7 +242,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
               data: "0x",
             },
           ],
-          currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+          currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
           delegate: depositor.address,
           intentGuardian: ADDRESS_ZERO,
           retainOnEmpty: false,
@@ -393,7 +393,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
           depositId,
           [paypalPaymentMethod],
           [{ intentGatingService: ADDRESS_ZERO, payeeDetails, data: "0x" }],
-          [[{ code: Currency.USD, minConversionRate: ether(1) }]]
+          [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]]
         );
       }
 
@@ -417,7 +417,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
         return escrow.connect(other.wallet).addCurrencies(
           depositId,
           venmoPaymentMethod,
-          [{ code: Currency.EUR, minConversionRate: ether(0.9) }]
+          [{ code: Currency.EUR, minConversionRate: ether(0.9), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]
         );
       }
 
@@ -469,7 +469,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
           depositId,
           [ethers.constants.HashZero],
           [{ intentGatingService: ADDRESS_ZERO, payeeDetails, data: "0x" }],
-          [[{ code: Currency.USD, minConversionRate: ether(1) }]]
+          [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]]
         );
       }
 
@@ -490,7 +490,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
           depositId,
           [paypalPaymentMethod],
           [{ intentGatingService: ADDRESS_ZERO, payeeDetails: ethers.constants.HashZero, data: "0x" }],
-          [[{ code: Currency.USD, minConversionRate: ether(1) }]]
+          [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]]
         );
       }
 
@@ -511,7 +511,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
           depositId,
           [venmoPaymentMethod],
           [{ intentGatingService: ADDRESS_ZERO, payeeDetails, data: "0x" }],
-          [[{ code: Currency.EUR, minConversionRate: ether(0.9) }]]
+          [[{ code: Currency.EUR, minConversionRate: ether(0.9), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]]
         );
       }
 
@@ -532,7 +532,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
           depositId,
           [paypalPaymentMethod],
           [],
-          [[{ code: Currency.USD, minConversionRate: ether(1) }]]
+          [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]]
         );
       }
 
@@ -778,7 +778,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
         const tx = await escrow.connect(depositor.wallet).addCurrencies(
           depositId,
           venmoPaymentMethod,
-          [{ code: Currency.EUR, minConversionRate: ether(0.9) }]
+          [{ code: Currency.EUR, minConversionRate: ether(0.9), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]
         );
 
         // The subject already completed above. We check the original tx receipt for events.
@@ -804,7 +804,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
         return escrow.connect(subjectCaller.wallet).addCurrencies(
           depositId,
           venmoPaymentMethod,
-          [{ code: Currency.EUR, minConversionRate: ether(0.9) }]
+          [{ code: Currency.EUR, minConversionRate: ether(0.9), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]
         );
       }
 
@@ -1422,7 +1422,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
               data: "0x",
             },
           ],
-          currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+          currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
           delegate: delegate.address,
           intentGuardian: intentGuardian.address,
           retainOnEmpty: true,
@@ -1461,7 +1461,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
               data: "0x",
             },
           ],
-          currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+          currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
           delegate: delegate.address,
           intentGuardian: intentGuardian.address,
           retainOnEmpty: false,
@@ -1588,7 +1588,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
               data: "0x",
             },
           ],
-          currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+          currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
           delegate: delegate.address,
           intentGuardian: intentGuardian.address,
           retainOnEmpty: false,
@@ -1614,7 +1614,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
               data: "0x",
             },
           ],
-          currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+          currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
           delegate: delegate.address,
           intentGuardian: intentGuardian.address,
           retainOnEmpty: false,
@@ -1682,7 +1682,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
               data: "0x",
             },
           ],
-          currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+          currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
           delegate: ADDRESS_ZERO,
           intentGuardian: ADDRESS_ZERO,
           retainOnEmpty: false,
@@ -1753,7 +1753,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
           depositId,
           [paypalPaymentMethod],
           [{ intentGatingService: ADDRESS_ZERO, payeeDetails, data: "0x" }],
-          [[{ code: Currency.USD, minConversionRate: ether(1) }]]
+          [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]]
         );
       }
 
@@ -1767,7 +1767,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
         return escrow.connect(depositor.wallet).addCurrencies(
           depositId,
           venmoPaymentMethod,
-          [{ code: Currency.EUR, minConversionRate: ether(0.9) }]
+          [{ code: Currency.EUR, minConversionRate: ether(0.9), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]
         );
       }
 

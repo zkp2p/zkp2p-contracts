@@ -7,7 +7,7 @@ import DeployHelper from "@utils/deploys";
 import { ether, usdc } from "@utils/common";
 import { Currency } from "@utils/protocolUtils";
 import { Account } from "@utils/test/types";
-import { ADDRESS_ZERO, ONE, ZERO } from "@utils/constants";
+import { ADDRESS_ZERO, EMPTY_ORACLE_RATE_CONFIG, ONE, ZERO } from "@utils/constants";
 import { getAccounts, getWaffleExpect } from "@utils/test";
 import { createSignalIntentParams } from "@utils/test/helpers";
 import {
@@ -121,7 +121,7 @@ describe("OrchestratorV2 - PreIntentHook", () => {
           data: "0x",
         },
       ],
-      currencies: [[{ code: Currency.USD, minConversionRate: depositConversionRate }]],
+      currencies: [[{ code: Currency.USD, minConversionRate: depositConversionRate, oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
       delegate: delegate.address,
       intentGuardian: ADDRESS_ZERO,
       retainOnEmpty: false,

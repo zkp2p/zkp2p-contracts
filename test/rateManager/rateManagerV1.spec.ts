@@ -5,7 +5,7 @@ import { BigNumber, BytesLike } from "ethers";
 
 import DeployHelper from "@utils/deploys";
 import { ether, usdc } from "@utils/common";
-import { ADDRESS_ZERO, ONE, ZERO } from "@utils/constants";
+import { ADDRESS_ZERO, EMPTY_ORACLE_RATE_CONFIG, ONE, ZERO } from "@utils/constants";
 import { Currency } from "@utils/protocolUtils";
 import { getAccounts, getWaffleExpect } from "@utils/test";
 import {
@@ -112,7 +112,7 @@ describe("RateManagerV1", () => {
           data: "0x",
         },
       ],
-      currencies: [[{ code: Currency.USD, minConversionRate: ether(1) }]],
+      currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
       delegate: ADDRESS_ZERO,
       intentGuardian: ADDRESS_ZERO,
       retainOnEmpty: false,
