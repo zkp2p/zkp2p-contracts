@@ -773,4 +773,133 @@ describe("Patch Coverage", () => {
         .withArgs(depositId, depositor.address, usdc(10));
     });
   });
+
+  /* ================================================================
+   *  RateManagerV1 -- constructor with zero address escrowRegistry
+   *  Covers: BRDA line 125 branch 0 (true case of zero-address check)
+   * ================================================================ */
+  describe("RateManagerV1 -- constructor reverts with zero address", () => {
+    it("reverts when escrowRegistry is zero address", async () => {
+      const factory = await ethers.getContractFactory("RateManagerV1", owner.wallet);
+      await expect(factory.deploy(ADDRESS_ZERO)).to.be.reverted;
+    });
+  });
+
+  /* ================================================================
+   *  RateManagerV1 -- onDepositOptIn with non-existent rate manager
+   *  Covers: BRDA line 464 branch 0 (!isRateManager true path)
+   * ================================================================ */
+  describe("RateManagerV1 -- onDepositOptIn reverts for invalid rateManagerId", () => {
+    it("reverts when rateManagerId does not exist", async () => {
+      const nonExistentId = ethers.utils.formatBytes32String("nonexistent");
+      // EscrowV2.setRateManager calls rateManagerV1.onDepositOptIn which checks isRateManager
+      await expect(
+        escrow.connect(depositor.wallet).setRateManager(depositId, rateManagerV1.address, nonExistentId)
+      ).to.be.reverted;
+    });
+  });
+
+  /* ================================================================
+   *  EscrowV2 -- nonReentrant modifier on uncovered functions
+   *  Covers: BRDA lines 234, 660, 690, 751, 789 branch 1
+   *  Uses hardhat_setStorageAt to set ReentrancyGuard._status to
+   *  _ENTERED (2) so the call hits the revert branch.
+   * ================================================================ */
+  describe("EscrowV2 -- nonReentrant modifier branches", () => {
+    // ReentrancyGuard._status at slot 1 (Ownable._owner + Pausable._paused packed in slot 0)
+    const REENTRANCY_SLOT = "0x01";
+    const ENTERED = ethers.utils.hexZeroPad("0x02", 32);
+    const NOT_ENTERED = ethers.utils.hexZeroPad("0x01", 32);
+
+    afterEach(async () => {
+      await ethers.provider.send("hardhat_setStorageAt", [escrow.address, REENTRANCY_SLOT, NOT_ENTERED]);
+    });
+
+    describe("#withdrawDeposit when reentrancy guard is entered", () => {
+      beforeEach(async () => {
+        await ethers.provider.send("hardhat_setStorageAt", [escrow.address, REENTRANCY_SLOT, ENTERED]);
+      });
+
+      it("reverts with ReentrancyGuard: reentrant call", async () => {
+        await expect(
+          escrow.connect(depositor.wallet).withdrawDeposit(depositId)
+        ).to.be.revertedWith("ReentrancyGuard: reentrant call");
+      });
+    });
+
+    describe("#pruneExpiredIntents when reentrancy guard is entered", () => {
+      beforeEach(async () => {
+        await ethers.provider.send("hardhat_setStorageAt", [escrow.address, REENTRANCY_SLOT, ENTERED]);
+      });
+
+      it("reverts with ReentrancyGuard: reentrant call", async () => {
+        await expect(
+          escrow.connect(other.wallet).pruneExpiredIntents(depositId)
+        ).to.be.revertedWith("ReentrancyGuard: reentrant call");
+      });
+    });
+
+    describe("#lockFunds when reentrancy guard is entered", () => {
+      beforeEach(async () => {
+        await ethers.provider.send("hardhat_setStorageAt", [escrow.address, REENTRANCY_SLOT, ENTERED]);
+      });
+
+      it("reverts with ReentrancyGuard: reentrant call", async () => {
+        await expect(
+          orchestratorMock.lockFunds(depositId, ethers.utils.formatBytes32String("test"), usdc(10))
+        ).to.be.revertedWith("ReentrancyGuard: reentrant call");
+      });
+    });
+
+    describe("#unlockFunds when reentrancy guard is entered", () => {
+      beforeEach(async () => {
+        await ethers.provider.send("hardhat_setStorageAt", [escrow.address, REENTRANCY_SLOT, ENTERED]);
+      });
+
+      it("reverts with ReentrancyGuard: reentrant call", async () => {
+        await expect(
+          orchestratorMock.unlockFunds(depositId, ethers.utils.formatBytes32String("test"))
+        ).to.be.revertedWith("ReentrancyGuard: reentrant call");
+      });
+    });
+
+    describe("#unlockAndTransferFunds when reentrancy guard is entered", () => {
+      beforeEach(async () => {
+        await ethers.provider.send("hardhat_setStorageAt", [escrow.address, REENTRANCY_SLOT, ENTERED]);
+      });
+
+      it("reverts with ReentrancyGuard: reentrant call", async () => {
+        await expect(
+          orchestratorMock.unlockAndTransferFunds(
+            depositId,
+            ethers.utils.formatBytes32String("test"),
+            usdc(10),
+            taker.address
+          )
+        ).to.be.revertedWith("ReentrancyGuard: reentrant call");
+      });
+    });
+  });
+
+  /* ================================================================
+   *  OrchestratorV2 -- nonReentrant on setDepositWhitelistHook
+   *  Covers: BRDA line 222 branch 1
+   * ================================================================ */
+  describe("OrchestratorV2 -- nonReentrant on setDepositWhitelistHook", () => {
+    const REENTRANCY_SLOT = "0x01";
+    const ENTERED = ethers.utils.hexZeroPad("0x02", 32);
+    const NOT_ENTERED = ethers.utils.hexZeroPad("0x01", 32);
+
+    afterEach(async () => {
+      await ethers.provider.send("hardhat_setStorageAt", [orchestrator.address, REENTRANCY_SLOT, NOT_ENTERED]);
+    });
+
+    it("reverts with ReentrancyGuard: reentrant call", async () => {
+      await ethers.provider.send("hardhat_setStorageAt", [orchestrator.address, REENTRANCY_SLOT, ENTERED]);
+
+      await expect(
+        orchestrator.connect(depositor.wallet).setDepositWhitelistHook(escrow.address, depositId, ADDRESS_ZERO)
+      ).to.be.revertedWith("ReentrancyGuard: reentrant call");
+    });
+  });
 });
