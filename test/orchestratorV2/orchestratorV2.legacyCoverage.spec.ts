@@ -128,7 +128,8 @@ describe("OrchestratorV2", () => {
       subjectPostIntentHook,
       subjectData,
       subjectSignatureExpiration,
-      "0x"
+      "0x",
+      subjectGatingService ? subjectCaller.address : undefined
     );
 
     const tx = await orchestrator.connect(subjectCaller.wallet).signalIntent(params);
@@ -804,6 +805,61 @@ describe("OrchestratorV2", () => {
     it("reverts when signature signer is invalid", async () => {
       await expect(
         signalIntent({ subjectDepositId: gatedDepositId, subjectGatingService: owner })
+      ).to.be.revertedWithCustomError(orchestrator, "InvalidSignature");
+    });
+
+    it("reverts when a different sender replays a valid gating signature", async () => {
+      // Generate signature for taker
+      const params = await createSignalIntentParams(
+        orchestrator.address,
+        escrow.address,
+        gatedDepositId,
+        usdc(50),
+        taker.address,
+        paymentMethod,
+        Currency.USD,
+        ether(1),
+        ADDRESS_ZERO,
+        ZERO,
+        gatingService,
+        "1",
+        ADDRESS_ZERO,
+        "0x",
+        undefined,
+        "0x",
+        taker.address
+      );
+
+      // Taker's signature works for taker
+      await expect(
+        orchestrator.connect(taker.wallet).signalIntent(params)
+      ).to.not.be.reverted;
+
+      // Create a second gated deposit for second attempt
+      const gatedDepositId2 = await createDeposit(gatingService.address);
+      const params2 = await createSignalIntentParams(
+        orchestrator.address,
+        escrow.address,
+        gatedDepositId2,
+        usdc(50),
+        taker.address,
+        paymentMethod,
+        Currency.USD,
+        ether(1),
+        ADDRESS_ZERO,
+        ZERO,
+        gatingService,
+        "1",
+        ADDRESS_ZERO,
+        "0x",
+        undefined,
+        "0x",
+        taker.address
+      );
+
+      // Front-runner (other) tries to submit taker's signed params — reverts
+      await expect(
+        orchestrator.connect(other.wallet).signalIntent(params2)
       ).to.be.revertedWithCustomError(orchestrator, "InvalidSignature");
     });
   });

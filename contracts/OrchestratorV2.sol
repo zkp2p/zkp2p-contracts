@@ -525,7 +525,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
                 revert SignatureExpired(_intent.signatureExpiration, block.timestamp);
             }
 
-            if (!_isValidIntentGatingSignature(_intent, intentGatingService)) {
+            if (!_isValidIntentGatingSignature(_intent, intentGatingService, msg.sender)) {
                 revert InvalidSignature();
             }
         }
@@ -738,22 +738,24 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      * @notice Checks if a intent gating service signature is valid.
      */
     function _isValidIntentGatingSignature(
-        SignalIntentParams memory _intent, 
-        address _intentGatingService
-    ) 
-        internal 
-        view 
-        returns(bool) 
+        SignalIntentParams memory _intent,
+        address _intentGatingService,
+        address _caller
+    )
+        internal
+        view
+        returns(bool)
     {
         bytes memory message = abi.encodePacked(
             address(this),
-            _intent.escrow, 
-            _intent.depositId, 
-            _intent.amount, 
-            _intent.to, 
-            _intent.paymentMethod, 
-            _intent.fiatCurrency, 
-            _intent.conversionRate, 
+            _intent.escrow,
+            _intent.depositId,
+            _intent.amount,
+            _caller,
+            _intent.to,
+            _intent.paymentMethod,
+            _intent.fiatCurrency,
+            _intent.conversionRate,
             _intent.signatureExpiration,
             chainId
         );
