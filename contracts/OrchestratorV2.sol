@@ -756,6 +756,8 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
             _intent.paymentMethod,
             _intent.fiatCurrency,
             _intent.conversionRate,
+            _intent.referrer,
+            _intent.referrerFee,
             _intent.signatureExpiration,
             chainId
         );

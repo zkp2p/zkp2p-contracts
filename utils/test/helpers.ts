@@ -41,6 +41,8 @@ export const generateGatingServiceSignatureV2 = async (
   paymentMethod: BytesLike,
   fiatCurrency: string,
   conversionRate: BigNumber,
+  referrer: Address,
+  referrerFee: BigNumber,
   chainId: string,
   signatureExpiration?: BigNumber
 ) => {
@@ -52,8 +54,8 @@ export const generateGatingServiceSignatureV2 = async (
   }
 
   const messageHash = ethers.utils.solidityKeccak256(
-    ["address", "address", "uint256", "uint256", "address", "address", "bytes32", "bytes32", "uint256", "uint256", "uint256"],
-    [orchestrator, escrow, depositId, amount, caller, to, paymentMethod, fiatCurrency, conversionRate, signatureExpiration, chainId]
+    ["address", "address", "uint256", "uint256", "address", "address", "bytes32", "bytes32", "uint256", "address", "uint256", "uint256", "uint256"],
+    [orchestrator, escrow, depositId, amount, caller, to, paymentMethod, fiatCurrency, conversionRate, referrer, referrerFee, signatureExpiration, chainId]
   );
   return await gatingService.wallet.signMessage(ethers.utils.arrayify(messageHash));
 }
@@ -99,6 +101,8 @@ export const createSignalIntentParams = async (
         paymentMethod,
         fiatCurrency,
         conversionRate,
+        referrer,
+        referrerFee,
         chainId,
         signatureExpiration
       );
