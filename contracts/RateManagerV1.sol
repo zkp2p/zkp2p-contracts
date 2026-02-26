@@ -29,6 +29,7 @@ contract RateManagerV1 is Ownable, IRateManager {
         address feeRecipient;
         uint256 maxFee;
         uint256 fee;
+        uint256 minLiquidity;
         string name;
         string uri;
     }
@@ -116,7 +117,6 @@ contract RateManagerV1 is Ownable, IRateManager {
 
     mapping(bytes32 => mapping(address => mapping(uint256 => mapping(bytes32 => mapping(bytes32 => DepositorFloorConfig)))))
         internal depositorFloors;
-    mapping(bytes32 => uint256) public minLiquidity;
 
     /* ============ Constructor ============ */
 
@@ -152,6 +152,10 @@ contract RateManagerV1 is Ownable, IRateManager {
 
         rateManagerId = keccak256(abi.encodePacked(address(this), nextRateManagerId++));
         rateManagers[rateManagerId] = _config;
+
+        if (_config.minLiquidity > 0) {
+            emit MinLiquidityUpdated(rateManagerId, _config.minLiquidity);
+        }
 
         emit RateManagerCreated(
             rateManagerId,
@@ -212,7 +216,7 @@ contract RateManagerV1 is Ownable, IRateManager {
     }
 
     function setMinLiquidity(bytes32 _rateManagerId, uint256 _minLiquidity) external onlyManager(_rateManagerId) {
-        minLiquidity[_rateManagerId] = _minLiquidity;
+        rateManagers[_rateManagerId].minLiquidity = _minLiquidity;
         emit MinLiquidityUpdated(_rateManagerId, _minLiquidity);
     }
 
@@ -458,7 +462,7 @@ contract RateManagerV1 is Ownable, IRateManager {
 
         if (!isRateManager(_rateManagerId)) revert RateManagerNotFound(_rateManagerId);
 
-        uint256 required = minLiquidity[_rateManagerId];
+        uint256 required = rateManagers[_rateManagerId].minLiquidity;
         if (required > 0) {
             IEscrow.Deposit memory deposit = IEscrow(callingEscrow).getDeposit(_depositId);
             uint256 totalLiquidity = deposit.remainingDeposits + deposit.outstandingIntentAmount;

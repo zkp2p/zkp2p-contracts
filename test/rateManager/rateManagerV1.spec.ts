@@ -51,6 +51,7 @@ describe("RateManagerV1", () => {
       feeRecipient: feeRecipient.address,
       maxFee: ether(0.05),
       fee: ether(0.01),
+      minLiquidity: ZERO,
       name: "PeerOne",
       uri: "ipfs://peerone",
     });
@@ -133,6 +134,7 @@ describe("RateManagerV1", () => {
         feeRecipient: subjectFeeRecipient,
         maxFee: subjectMaxFee,
         fee: subjectFee,
+        minLiquidity: ZERO,
         name: "RM",
         uri: "ipfs://rm",
       });
@@ -1403,12 +1405,12 @@ describe("RateManagerV1", () => {
         .to.emit(rateManagerV1, "MinLiquidityUpdated")
         .withArgs(rateManagerId, subjectMinLiquidity);
 
-      expect(await rateManagerV1.minLiquidity(rateManagerId)).to.eq(subjectMinLiquidity);
+      expect((await rateManagerV1.getRateManager(rateManagerId)).minLiquidity).to.eq(subjectMinLiquidity);
     });
 
-    it("reads back via minLiquidity public getter", async () => {
+    it("reads back via getRateManager", async () => {
       await subject();
-      expect(await rateManagerV1.minLiquidity(rateManagerId)).to.eq(usdc(100));
+      expect((await rateManagerV1.getRateManager(rateManagerId)).minLiquidity).to.eq(usdc(100));
     });
 
     describe("when setting to 0 clears the requirement", () => {
@@ -1419,7 +1421,7 @@ describe("RateManagerV1", () => {
 
       it("clears min liquidity", async () => {
         await subject();
-        expect(await rateManagerV1.minLiquidity(rateManagerId)).to.eq(ZERO);
+        expect((await rateManagerV1.getRateManager(rateManagerId)).minLiquidity).to.eq(ZERO);
       });
     });
 
