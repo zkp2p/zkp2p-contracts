@@ -3415,7 +3415,7 @@ export default {
       ]
     },
     "EscrowV2": {
-      "address": "0x18EAcBf3FF19528ABe8035CF5cA266F31A2e3f14",
+      "address": "0x53A535b2CbEd0740FA834007bFEf8b1c6519306D",
       "abi": [
         {
           "inputs": [
@@ -4084,7 +4084,7 @@ export default {
                 }
               ],
               "indexed": false,
-              "internalType": "struct IEscrow.Range",
+              "internalType": "struct IEscrowV2.Range",
               "name": "intentAmountRange",
               "type": "tuple"
             }
@@ -4344,7 +4344,7 @@ export default {
                 }
               ],
               "indexed": false,
-              "internalType": "struct IEscrow.Range",
+              "internalType": "struct IEscrowV2.Range",
               "name": "intentAmountRange",
               "type": "tuple"
             },
@@ -4723,9 +4723,36 @@ export default {
                   "internalType": "uint256",
                   "name": "minConversionRate",
                   "type": "uint256"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "adapter",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "bytes",
+                      "name": "adapterConfig",
+                      "type": "bytes"
+                    },
+                    {
+                      "internalType": "uint16",
+                      "name": "spreadBps",
+                      "type": "uint16"
+                    },
+                    {
+                      "internalType": "uint32",
+                      "name": "maxStaleness",
+                      "type": "uint32"
+                    }
+                  ],
+                  "internalType": "struct IEscrowV2.OracleRateConfig",
+                  "name": "oracleRateConfig",
+                  "type": "tuple"
                 }
               ],
-              "internalType": "struct IEscrow.Currency[]",
+              "internalType": "struct IEscrowV2.Currency[]",
               "name": "_currencies",
               "type": "tuple[]"
             }
@@ -4783,7 +4810,7 @@ export default {
                   "type": "bytes"
                 }
               ],
-              "internalType": "struct IEscrow.DepositPaymentMethodData[]",
+              "internalType": "struct IEscrowV2.DepositPaymentMethodData[]",
               "name": "_paymentMethodData",
               "type": "tuple[]"
             },
@@ -4798,9 +4825,36 @@ export default {
                   "internalType": "uint256",
                   "name": "minConversionRate",
                   "type": "uint256"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "adapter",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "bytes",
+                      "name": "adapterConfig",
+                      "type": "bytes"
+                    },
+                    {
+                      "internalType": "uint16",
+                      "name": "spreadBps",
+                      "type": "uint16"
+                    },
+                    {
+                      "internalType": "uint32",
+                      "name": "maxStaleness",
+                      "type": "uint32"
+                    }
+                  ],
+                  "internalType": "struct IEscrowV2.OracleRateConfig",
+                  "name": "oracleRateConfig",
+                  "type": "tuple"
                 }
               ],
-              "internalType": "struct IEscrow.Currency[][]",
+              "internalType": "struct IEscrowV2.Currency[][]",
               "name": "_currencies",
               "type": "tuple[][]"
             }
@@ -4863,7 +4917,7 @@ export default {
                       "type": "uint256"
                     }
                   ],
-                  "internalType": "struct IEscrow.Range",
+                  "internalType": "struct IEscrowV2.Range",
                   "name": "intentAmountRange",
                   "type": "tuple"
                 },
@@ -4890,7 +4944,7 @@ export default {
                       "type": "bytes"
                     }
                   ],
-                  "internalType": "struct IEscrow.DepositPaymentMethodData[]",
+                  "internalType": "struct IEscrowV2.DepositPaymentMethodData[]",
                   "name": "paymentMethodData",
                   "type": "tuple[]"
                 },
@@ -4905,9 +4959,36 @@ export default {
                       "internalType": "uint256",
                       "name": "minConversionRate",
                       "type": "uint256"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "address",
+                          "name": "adapter",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "bytes",
+                          "name": "adapterConfig",
+                          "type": "bytes"
+                        },
+                        {
+                          "internalType": "uint16",
+                          "name": "spreadBps",
+                          "type": "uint16"
+                        },
+                        {
+                          "internalType": "uint32",
+                          "name": "maxStaleness",
+                          "type": "uint32"
+                        }
+                      ],
+                      "internalType": "struct IEscrowV2.OracleRateConfig",
+                      "name": "oracleRateConfig",
+                      "type": "tuple"
                     }
                   ],
-                  "internalType": "struct IEscrow.Currency[][]",
+                  "internalType": "struct IEscrowV2.Currency[][]",
                   "name": "currencies",
                   "type": "tuple[][]"
                 },
@@ -4927,7 +5008,7 @@ export default {
                   "type": "bool"
                 }
               ],
-              "internalType": "struct IEscrow.CreateDepositParams",
+              "internalType": "struct IEscrowV2.CreateDepositParams",
               "name": "_params",
               "type": "tuple"
             }
@@ -5005,7 +5086,7 @@ export default {
                       "type": "uint256"
                     }
                   ],
-                  "internalType": "struct IEscrow.Range",
+                  "internalType": "struct IEscrowV2.Range",
                   "name": "intentAmountRange",
                   "type": "tuple"
                 },
@@ -5032,7 +5113,7 @@ export default {
                       "type": "bytes"
                     }
                   ],
-                  "internalType": "struct IEscrow.DepositPaymentMethodData[]",
+                  "internalType": "struct IEscrowV2.DepositPaymentMethodData[]",
                   "name": "paymentMethodData",
                   "type": "tuple[]"
                 },
@@ -5047,9 +5128,36 @@ export default {
                       "internalType": "uint256",
                       "name": "minConversionRate",
                       "type": "uint256"
+                    },
+                    {
+                      "components": [
+                        {
+                          "internalType": "address",
+                          "name": "adapter",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "bytes",
+                          "name": "adapterConfig",
+                          "type": "bytes"
+                        },
+                        {
+                          "internalType": "uint16",
+                          "name": "spreadBps",
+                          "type": "uint16"
+                        },
+                        {
+                          "internalType": "uint32",
+                          "name": "maxStaleness",
+                          "type": "uint32"
+                        }
+                      ],
+                      "internalType": "struct IEscrowV2.OracleRateConfig",
+                      "name": "oracleRateConfig",
+                      "type": "tuple"
                     }
                   ],
-                  "internalType": "struct IEscrow.Currency[][]",
+                  "internalType": "struct IEscrowV2.Currency[][]",
                   "name": "currencies",
                   "type": "tuple[][]"
                 },
@@ -5069,7 +5177,7 @@ export default {
                   "type": "bool"
                 }
               ],
-              "internalType": "struct IEscrow.CreateDepositParams",
+              "internalType": "struct IEscrowV2.CreateDepositParams",
               "name": "_params",
               "type": "tuple"
             }
@@ -5168,7 +5276,7 @@ export default {
                       "type": "uint256"
                     }
                   ],
-                  "internalType": "struct IEscrow.Range",
+                  "internalType": "struct IEscrowV2.Range",
                   "name": "intentAmountRange",
                   "type": "tuple"
                 },
@@ -5198,7 +5306,7 @@ export default {
                   "type": "bool"
                 }
               ],
-              "internalType": "struct IEscrow.Deposit",
+              "internalType": "struct IEscrowV2.Deposit",
               "name": "",
               "type": "tuple"
             }
@@ -5350,7 +5458,7 @@ export default {
                   "type": "uint256"
                 }
               ],
-              "internalType": "struct IEscrow.Intent",
+              "internalType": "struct IEscrowV2.Intent",
               "name": "",
               "type": "tuple"
             }
@@ -5485,7 +5593,7 @@ export default {
                   "type": "bytes"
                 }
               ],
-              "internalType": "struct IEscrow.DepositPaymentMethodData",
+              "internalType": "struct IEscrowV2.DepositPaymentMethodData",
               "name": "",
               "type": "tuple"
             }
@@ -5942,7 +6050,7 @@ export default {
                   "type": "uint256"
                 }
               ],
-              "internalType": "struct IEscrow.Range",
+              "internalType": "struct IEscrowV2.Range",
               "name": "_intentAmountRange",
               "type": "tuple"
             }
@@ -11888,7 +11996,7 @@ export default {
       ]
     },
     "RateManagerV1": {
-      "address": "0x6627adC2981CF01Dcb76C793c90D8666b76AcaB6",
+      "address": "0x9401462CbF0E9Cf12D60C899339406b092B156C8",
       "abi": [
         {
           "inputs": [
@@ -12151,6 +12259,12 @@ export default {
               "internalType": "uint32",
               "name": "maxStaleness",
               "type": "uint32"
+            },
+            {
+              "indexed": false,
+              "internalType": "bool",
+              "name": "enabled",
+              "type": "bool"
             }
           ],
           "name": "DepositorFloorSet",
@@ -12400,6 +12514,11 @@ export default {
                   "type": "uint256"
                 },
                 {
+                  "internalType": "uint256",
+                  "name": "minLiquidity",
+                  "type": "uint256"
+                },
+                {
                   "internalType": "string",
                   "name": "name",
                   "type": "string"
@@ -12471,6 +12590,11 @@ export default {
           "outputs": [
             {
               "components": [
+                {
+                  "internalType": "bool",
+                  "name": "enabled",
+                  "type": "bool"
+                },
                 {
                   "internalType": "uint256",
                   "name": "floorFixed",
@@ -12630,6 +12754,11 @@ export default {
                   "type": "uint256"
                 },
                 {
+                  "internalType": "uint256",
+                  "name": "minLiquidity",
+                  "type": "uint256"
+                },
+                {
                   "internalType": "string",
                   "name": "name",
                   "type": "string"
@@ -12701,25 +12830,6 @@ export default {
               "internalType": "bool",
               "name": "exists",
               "type": "bool"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "",
-              "type": "bytes32"
-            }
-          ],
-          "name": "minLiquidity",
-          "outputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
             }
           ],
           "stateMutability": "view",
@@ -12869,6 +12979,11 @@ export default {
             {
               "components": [
                 {
+                  "internalType": "bool",
+                  "name": "enabled",
+                  "type": "bool"
+                },
+                {
                   "internalType": "uint256",
                   "name": "floorFixed",
                   "type": "uint256"
@@ -12933,6 +13048,11 @@ export default {
             },
             {
               "components": [
+                {
+                  "internalType": "bool",
+                  "name": "enabled",
+                  "type": "bool"
+                },
                 {
                   "internalType": "uint256",
                   "name": "floorFixed",
