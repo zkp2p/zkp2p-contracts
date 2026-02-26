@@ -106,6 +106,8 @@ contract SignatureGatingPreIntentHook is IPreIntentHook {
             _ctx.paymentMethod,
             _ctx.fiatCurrency,
             _ctx.conversionRate,
+            _ctx.referrer,
+            _ctx.referrerFee,
             signatureExpiration,
             chainId
         );

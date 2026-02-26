@@ -442,7 +442,9 @@ describe("OrchestratorV2 - PreIntentHook", () => {
 
       async function generateSignature(
         signer: Account,
-        signatureExpiration: BigNumber
+        signatureExpiration: BigNumber,
+        referrer: string = ADDRESS_ZERO,
+        referrerFee: BigNumber = ZERO
       ): Promise<string> {
         const messageHash = ethers.utils.solidityKeccak256(
           [
@@ -454,6 +456,8 @@ describe("OrchestratorV2 - PreIntentHook", () => {
             "address",
             "bytes32",
             "bytes32",
+            "uint256",
+            "address",
             "uint256",
             "uint256",
             "uint256",
@@ -468,6 +472,8 @@ describe("OrchestratorV2 - PreIntentHook", () => {
             venmoPaymentMethod,
             Currency.USD,
             subjectConversionRate,
+            referrer,
+            referrerFee,
             signatureExpiration,
             chainId,
           ]
