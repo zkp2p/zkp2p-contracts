@@ -542,6 +542,7 @@ describe("RateManagerV1", () => {
       subjectPaymentMethods = [paymentMethod];
       subjectCurrencyCodes = [[Currency.USD]];
       subjectConfigs = [[{
+        enabled: true,
         floorFixed: ether(1.05),
         floorSpreadBps: 0,
         oracleAdapter: ADDRESS_ZERO,
@@ -559,6 +560,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD
       );
+      expect(floorConfig.enabled).to.eq(true);
       expect(floorConfig.floorFixed).to.eq(ether(1.05));
     });
 
@@ -621,6 +623,7 @@ describe("RateManagerV1", () => {
       subjectPaymentMethod = paymentMethod;
       subjectCurrencyCode = Currency.USD;
       subjectConfig = {
+        enabled: true,
         floorFixed: ether(1),
         floorSpreadBps: 0,
         oracleAdapter: ADDRESS_ZERO,
@@ -639,12 +642,14 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD
       );
+      expect(floorConfig.enabled).to.eq(true);
       expect(floorConfig.floorFixed).to.eq(ether(1));
     });
 
     describe("when oracle adapter is zero but oracle fields are non-empty", () => {
       beforeEach(async () => {
         subjectConfig = {
+          enabled: true,
           floorFixed: ether(1),
           floorSpreadBps: 1,
           oracleAdapter: ADDRESS_ZERO,
@@ -661,6 +666,7 @@ describe("RateManagerV1", () => {
     describe("when oracle adapter is zero and only adapterConfig is set", () => {
       beforeEach(async () => {
         subjectConfig = {
+          enabled: true,
           floorFixed: ether(1),
           floorSpreadBps: 0,
           oracleAdapter: ADDRESS_ZERO,
@@ -677,6 +683,7 @@ describe("RateManagerV1", () => {
     describe("when oracle adapter is zero and only maxStaleness is set", () => {
       beforeEach(async () => {
         subjectConfig = {
+          enabled: true,
           floorFixed: ether(1),
           floorSpreadBps: 0,
           oracleAdapter: ADDRESS_ZERO,
@@ -693,6 +700,7 @@ describe("RateManagerV1", () => {
     describe("when normalized adapter config is too long", () => {
       beforeEach(async () => {
         subjectConfig = {
+          enabled: true,
           floorFixed: ether(1),
           floorSpreadBps: 50,
           oracleAdapter: staticOracleAdapter.address,
@@ -749,6 +757,7 @@ describe("RateManagerV1", () => {
     describe("when oracle adapter is an EOA", () => {
       beforeEach(async () => {
         subjectConfig = {
+          enabled: true,
           floorFixed: ether(1),
           floorSpreadBps: 100,
           oracleAdapter: other.address,
@@ -765,6 +774,7 @@ describe("RateManagerV1", () => {
     describe("when max staleness is zero for oracle floor", () => {
       beforeEach(async () => {
         subjectConfig = {
+          enabled: true,
           floorFixed: ether(1),
           floorSpreadBps: 100,
           oracleAdapter: staticOracleAdapter.address,
@@ -965,10 +975,6 @@ describe("RateManagerV1", () => {
     });
 
     it("returns max(floorFixed, managerRate)", async () => {
-      await rateManagerV1
-        .connect(depositor.wallet)
-        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
-
       await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
         rateManagerId,
         escrow.address,
@@ -976,6 +982,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD,
         {
+          enabled: true,
           floorFixed: ether(1.2),
           floorSpreadBps: 0,
           oracleAdapter: ADDRESS_ZERO,
@@ -995,10 +1002,6 @@ describe("RateManagerV1", () => {
         [true, ether(1.3), currentTimestamp]
       );
 
-      await rateManagerV1
-        .connect(depositor.wallet)
-        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
-
       await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
         rateManagerId,
         escrow.address,
@@ -1006,6 +1009,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD,
         {
+          enabled: true,
           floorFixed: ZERO,
           floorSpreadBps: 100,
           oracleAdapter: staticOracleAdapter.address,
@@ -1026,10 +1030,6 @@ describe("RateManagerV1", () => {
         [false, ether(1.3), currentTimestamp]
       );
 
-      await rateManagerV1
-        .connect(depositor.wallet)
-        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
-
       await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
         rateManagerId,
         escrow.address,
@@ -1037,6 +1037,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD,
         {
+          enabled: true,
           floorFixed: ZERO,
           floorSpreadBps: 200,
           oracleAdapter: staticOracleAdapter.address,
@@ -1056,10 +1057,6 @@ describe("RateManagerV1", () => {
         [false, ether(1.3), currentTimestamp]
       );
 
-      await rateManagerV1
-        .connect(depositor.wallet)
-        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
-
       await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
         rateManagerId,
         escrow.address,
@@ -1067,6 +1064,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD,
         {
+          enabled: true,
           floorFixed: ether(0.9),
           floorSpreadBps: 200,
           oracleAdapter: staticOracleAdapter.address,
@@ -1086,10 +1084,6 @@ describe("RateManagerV1", () => {
         [true, ether(1.3), currentTimestamp + 100]
       );
 
-      await rateManagerV1
-        .connect(depositor.wallet)
-        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
-
       await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
         rateManagerId,
         escrow.address,
@@ -1097,6 +1091,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD,
         {
+          enabled: true,
           floorFixed: ZERO,
           floorSpreadBps: 200,
           oracleAdapter: staticOracleAdapter.address,
@@ -1116,10 +1111,6 @@ describe("RateManagerV1", () => {
         [true, ether(1.3), currentTimestamp + 100]
       );
 
-      await rateManagerV1
-        .connect(depositor.wallet)
-        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
-
       await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
         rateManagerId,
         escrow.address,
@@ -1127,6 +1118,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD,
         {
+          enabled: true,
           floorFixed: ether(0.9),
           floorSpreadBps: 200,
           oracleAdapter: staticOracleAdapter.address,
@@ -1146,10 +1138,6 @@ describe("RateManagerV1", () => {
         [true, ether(1.3), currentTimestamp - 8_000]
       );
 
-      await rateManagerV1
-        .connect(depositor.wallet)
-        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
-
       await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
         rateManagerId,
         escrow.address,
@@ -1157,6 +1145,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD,
         {
+          enabled: true,
           floorFixed: ZERO,
           floorSpreadBps: 200,
           oracleAdapter: staticOracleAdapter.address,
@@ -1176,10 +1165,6 @@ describe("RateManagerV1", () => {
         [true, ether(1.3), currentTimestamp - 8_000]
       );
 
-      await rateManagerV1
-        .connect(depositor.wallet)
-        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
-
       await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
         rateManagerId,
         escrow.address,
@@ -1187,6 +1172,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD,
         {
+          enabled: true,
           floorFixed: ether(0.9),
           floorSpreadBps: 200,
           oracleAdapter: staticOracleAdapter.address,
@@ -1200,10 +1186,6 @@ describe("RateManagerV1", () => {
     });
 
     it("disables pair when oracle adapter reverts and no fixed floor", async () => {
-      await rateManagerV1
-        .connect(depositor.wallet)
-        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
-
       await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
         rateManagerId,
         escrow.address,
@@ -1211,6 +1193,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD,
         {
+          enabled: true,
           floorFixed: ZERO,
           floorSpreadBps: 200,
           oracleAdapter: revertingOracleAdapter.address,
@@ -1224,10 +1207,6 @@ describe("RateManagerV1", () => {
     });
 
     it("falls back to fixed floor when oracle adapter reverts", async () => {
-      await rateManagerV1
-        .connect(depositor.wallet)
-        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
-
       await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
         rateManagerId,
         escrow.address,
@@ -1235,6 +1214,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD,
         {
+          enabled: true,
           floorFixed: ether(0.9),
           floorSpreadBps: 200,
           oracleAdapter: revertingOracleAdapter.address,
@@ -1254,10 +1234,6 @@ describe("RateManagerV1", () => {
         [true, ZERO, currentTimestamp]
       );
 
-      await rateManagerV1
-        .connect(depositor.wallet)
-        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
-
       await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
         rateManagerId,
         escrow.address,
@@ -1265,6 +1241,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD,
         {
+          enabled: true,
           floorFixed: ZERO,
           floorSpreadBps: 200,
           oracleAdapter: staticOracleAdapter.address,
@@ -1284,10 +1261,6 @@ describe("RateManagerV1", () => {
         [true, ZERO, currentTimestamp]
       );
 
-      await rateManagerV1
-        .connect(depositor.wallet)
-        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
-
       await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
         rateManagerId,
         escrow.address,
@@ -1295,6 +1268,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD,
         {
+          enabled: true,
           floorFixed: ether(0.9),
           floorSpreadBps: 200,
           oracleAdapter: staticOracleAdapter.address,
@@ -1313,10 +1287,6 @@ describe("RateManagerV1", () => {
         [true, ether(1.3), ZERO]
       );
 
-      await rateManagerV1
-        .connect(depositor.wallet)
-        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
-
       await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
         rateManagerId,
         escrow.address,
@@ -1324,6 +1294,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD,
         {
+          enabled: true,
           floorFixed: ZERO,
           floorSpreadBps: 200,
           oracleAdapter: staticOracleAdapter.address,
@@ -1342,10 +1313,6 @@ describe("RateManagerV1", () => {
         [true, ether(1.3), ZERO]
       );
 
-      await rateManagerV1
-        .connect(depositor.wallet)
-        .setDepositorCurrencyEnabled(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, true);
-
       await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
         rateManagerId,
         escrow.address,
@@ -1353,6 +1320,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD,
         {
+          enabled: true,
           floorFixed: ether(0.9),
           floorSpreadBps: 200,
           oracleAdapter: staticOracleAdapter.address,
@@ -1381,6 +1349,7 @@ describe("RateManagerV1", () => {
         paymentMethod,
         Currency.USD,
         {
+          enabled: true,
           floorFixed: ether(1.07),
           floorSpreadBps: 0,
           oracleAdapter: ADDRESS_ZERO,
@@ -1397,6 +1366,7 @@ describe("RateManagerV1", () => {
         Currency.USD
       );
 
+      expect(floor.enabled).to.eq(true);
       expect(floor.floorFixed).to.eq(ether(1.07));
     });
 
@@ -1584,6 +1554,7 @@ describe("RateManagerV1", () => {
           paymentMethod,
           Currency.USD,
           {
+            enabled: true,
             floorFixed: ether(1),
             floorSpreadBps: 0,
             oracleAdapter: ADDRESS_ZERO,

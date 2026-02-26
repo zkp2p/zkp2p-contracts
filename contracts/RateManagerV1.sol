@@ -34,6 +34,7 @@ contract RateManagerV1 is Ownable, IRateManager {
     }
 
     struct DepositorFloorConfig {
+        bool enabled;
         uint256 floorFixed;
         uint16 floorSpreadBps;
         address oracleAdapter;
@@ -115,8 +116,6 @@ contract RateManagerV1 is Ownable, IRateManager {
 
     mapping(bytes32 => mapping(address => mapping(uint256 => mapping(bytes32 => mapping(bytes32 => DepositorFloorConfig)))))
         internal depositorFloors;
-    mapping(bytes32 => mapping(address => mapping(uint256 => mapping(bytes32 => mapping(bytes32 => bool)))))
-        internal depositorCurrencyEnabled;
     mapping(bytes32 => uint256) public minLiquidity;
 
     /* ============ Constructor ============ */
@@ -493,7 +492,7 @@ contract RateManagerV1 is Ownable, IRateManager {
         override
         returns (uint256 rate)
     {
-        if (!depositorCurrencyEnabled[_rateManagerId][_escrow][_depositId][_paymentMethod][_currencyCode]) {
+        if (!depositorFloors[_rateManagerId][_escrow][_depositId][_paymentMethod][_currencyCode].enabled) {
             return 0;
         }
 
@@ -606,7 +605,7 @@ contract RateManagerV1 is Ownable, IRateManager {
         view
         returns (bool enabled)
     {
-        return depositorCurrencyEnabled[_rateManagerId][_escrow][_depositId][_paymentMethod][_currencyCode];
+        return depositorFloors[_rateManagerId][_escrow][_depositId][_paymentMethod][_currencyCode].enabled;
     }
 
     /* ============ Internal Functions ============ */
@@ -625,6 +624,7 @@ contract RateManagerV1 is Ownable, IRateManager {
         bytes memory normalizedAdapterConfig = _validateAndNormalizeOracleConfig(_config);
 
         depositorFloors[_rateManagerId][_escrow][_depositId][_paymentMethod][_currencyCode] = DepositorFloorConfig({
+            enabled: _config.enabled,
             floorFixed: _config.floorFixed,
             floorSpreadBps: _config.floorSpreadBps,
             oracleAdapter: _config.oracleAdapter,
@@ -657,7 +657,7 @@ contract RateManagerV1 is Ownable, IRateManager {
         if (!isRateManager(_rateManagerId)) revert RateManagerNotFound(_rateManagerId);
         if (_paymentMethod == bytes32(0) || _currencyCode == bytes32(0)) revert ZeroValue();
 
-        depositorCurrencyEnabled[_rateManagerId][_escrow][_depositId][_paymentMethod][_currencyCode] = _enabled;
+        depositorFloors[_rateManagerId][_escrow][_depositId][_paymentMethod][_currencyCode].enabled = _enabled;
 
         emit DepositorCurrencyEnabledSet(
             _rateManagerId,
