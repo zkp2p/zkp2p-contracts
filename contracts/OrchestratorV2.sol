@@ -201,7 +201,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      * @param _depositId    Deposit id.
      * @param _hook         Hook address (address(0) to remove).
      */
-    function setDepositPreIntentHook(address _escrow, uint256 _depositId, IPreIntentHook _hook) external {
+    function setDepositPreIntentHook(address _escrow, uint256 _depositId, IPreIntentHook _hook) external nonReentrant {
         _validateAndAuthorizeHookSetter(_escrow, _depositId, _hook);
 
         depositPreIntentHooks[_escrow][_depositId] = _hook;
@@ -219,7 +219,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      * @param _depositId    Deposit id.
      * @param _hook         Hook address (address(0) to remove).
      */
-    function setDepositWhitelistHook(address _escrow, uint256 _depositId, IPreIntentHook _hook) external {
+    function setDepositWhitelistHook(address _escrow, uint256 _depositId, IPreIntentHook _hook) external nonReentrant {
         _validateAndAuthorizeHookSetter(_escrow, _depositId, _hook);
 
         depositWhitelistHooks[_escrow][_depositId] = _hook;

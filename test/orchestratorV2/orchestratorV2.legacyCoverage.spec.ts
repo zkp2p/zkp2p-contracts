@@ -20,6 +20,7 @@ import {
   PartialPullPostIntentHookV2Mock,
   ReentrantPostIntentHookV2,
   ReentrantPreIntentHookMock,
+  ReentrantHookSetterMock,
   ReentrantSignalIntentCallerV2Mock,
   PostIntentHookV2Mock,
   PreIntentHookMock,
@@ -301,6 +302,40 @@ describe("OrchestratorV2", () => {
 
       expect(await orchestrator.getDepositPreIntentHook(escrow.address, depositId)).to.eq(preIntentHookMock.address);
       expect(await orchestrator.getDepositWhitelistHook(escrow.address, depositId)).to.eq(whitelistHookMock.address);
+    });
+
+    it("blocks hook reentry into setDepositPreIntentHook via nonReentrant", async () => {
+      const reentrantHookSetter: ReentrantHookSetterMock = await deployer.deployReentrantHookSetterMock(orchestrator.address);
+      await reentrantHookSetter.setReplacementHook(preIntentHookMock.address);
+
+      // Create a deposit with the reentrant hook as delegate so it passes auth
+      const hookDepositId = await escrow.depositCounter();
+      await escrow.connect(depositor.wallet).createDeposit({
+        token: usdcToken.address,
+        amount: usdc(500),
+        intentAmountRange: { min: usdc(10), max: usdc(200) },
+        paymentMethods: [paymentMethod],
+        paymentMethodData: [{ intentGatingService: ADDRESS_ZERO, payeeDetails, data: "0x" }],
+        currencies: [[{ code: Currency.USD, minConversionRate: ether(1), oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
+        delegate: reentrantHookSetter.address,
+        intentGuardian: ADDRESS_ZERO,
+        retainOnEmpty: false,
+      });
+
+      // Depositor sets the reentrant hook as the pre-intent hook
+      await orchestrator.connect(depositor.wallet).setDepositPreIntentHook(
+        escrow.address, hookDepositId, reentrantHookSetter.address
+      );
+
+      // Taker signals intent — hook fires and tries to re-enter setDepositPreIntentHook
+      await signalIntent({ subjectDepositId: hookDepositId });
+
+      expect(await reentrantHookSetter.reentryAttempted()).to.be.true;
+      expect(await reentrantHookSetter.reentrySucceeded()).to.be.false;
+
+      // Original hook remains unchanged
+      expect(await orchestrator.getDepositPreIntentHook(escrow.address, hookDepositId))
+        .to.eq(reentrantHookSetter.address);
     });
   });
 
