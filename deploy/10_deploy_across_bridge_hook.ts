@@ -63,17 +63,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await waitForDeploymentDelay(hre);
 };
 
-func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
-  const network = hre.network.name;
-  if (network !== "localhost") {
-    try {
-      getDeployedContractAddress(hre.network.name, "AcrossBridgeHook");
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-  return false;
+func.skip = async (_hre: HardhatRuntimeEnvironment): Promise<boolean> => {
+  return true;
 };
 
 func.dependencies = ["00_deploy_system"];
