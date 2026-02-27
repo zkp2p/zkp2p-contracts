@@ -25,8 +25,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   // Resolve V2 addresses
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
-  const orchestratorV2Address = getDeployedContractAddress(network, "OrchestratorV2");
-  const escrowV2Address = getDeployedContractAddress(network, "EscrowV2");
   const postIntentHookRegistryAddress = getDeployedContractAddress(network, "PostIntentHookRegistry");
 
   const usdcAddress = USDC[network]
@@ -74,7 +72,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   // Deploy AcrossBridgeHookV2
   const acrossBridgeHookV2 = await deploy("AcrossBridgeHookV2", {
     from: deployer,
-    args: [usdcAddress, orchestratorV2Address, spokePoolAddress],
+    args: [usdcAddress, orchestratorRegistryAddress, spokePoolAddress],
   });
   console.log("AcrossBridgeHookV2 deployed at", acrossBridgeHookV2.address);
   await waitForDeploymentDelay(hre);

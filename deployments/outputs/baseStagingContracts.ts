@@ -461,7 +461,7 @@ export default {
       ]
     },
     "AcrossBridgeHookV2": {
-      "address": "0x82340E82d9b2145E1fC3EB61a9446978113B12aE",
+      "address": "0x73Bdc4cAc78ba4A9276328a33bB7433Da8C8e76a",
       "abi": [
         {
           "inputs": [
@@ -472,7 +472,7 @@ export default {
             },
             {
               "internalType": "address",
-              "name": "_orchestrator",
+              "name": "_orchestratorRegistry",
               "type": "address"
             },
             {
@@ -552,7 +552,7 @@ export default {
               "type": "address"
             }
           ],
-          "name": "UnauthorizedCaller",
+          "name": "UnauthorizedOrchestratorCaller",
           "type": "error"
         },
         {
@@ -827,10 +827,10 @@ export default {
         },
         {
           "inputs": [],
-          "name": "orchestrator",
+          "name": "orchestratorRegistry",
           "outputs": [
             {
-              "internalType": "address",
+              "internalType": "contract IOrchestratorRegistry",
               "name": "",
               "type": "address"
             }

@@ -75,12 +75,12 @@ describe("V2 Periphery Deployment", () => {
   });
 
   describe("AcrossBridgeHookV2", async () => {
-    it("should have the correct orchestrator", async () => {
+    it("should have the correct orchestrator registry", async () => {
       const hookAddress = getDeployedContractAddress(network, "AcrossBridgeHookV2");
       const hook = new AcrossBridgeHookV2__factory(deployer.wallet).attach(hookAddress);
 
-      const orchestratorV2Address = getDeployedContractAddress(network, "OrchestratorV2");
-      expect(await hook.orchestrator()).to.eq(orchestratorV2Address);
+      const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
+      expect(await hook.orchestratorRegistry()).to.eq(orchestratorRegistryAddress);
     });
 
     it("should have the correct input token", async () => {
