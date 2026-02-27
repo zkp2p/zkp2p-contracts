@@ -155,7 +155,7 @@ interface IEscrow {
     function lockFunds(uint256 _depositId, bytes32 _intentHash, uint256 _amount) external;
     function unlockFunds(uint256 _depositId, bytes32 _intentHash) external;
     function unlockAndTransferFunds(uint256 _depositId, bytes32 _intentHash, uint256 _transferAmount, address _to) external;
-    function extendIntentExpiry(uint256 _depositId, bytes32 _intentHash, uint256 _newExpiryTime) external;
+    function extendIntentExpiry(uint256 _depositId, bytes32 _intentHash, uint256 _additionalTime) external;
 
     /* ============ View Functions ============ */
 
