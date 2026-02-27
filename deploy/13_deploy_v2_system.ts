@@ -135,8 +135,13 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await waitForDeploymentDelay(hre);
 };
 
-func.skip = async (_hre: HardhatRuntimeEnvironment): Promise<boolean> => {
-  return true;
+func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
+  const network = hre.network.name;
+  if (network != "localhost") {
+    try { getDeployedContractAddress(hre.network.name, "OrchestratorV2"); } catch (e) { return false; }
+    return true;
+  }
+  return false;
 };
 
 func.dependencies = ["00_deploy_system"];
