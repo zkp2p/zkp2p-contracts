@@ -461,7 +461,7 @@ export default {
       ]
     },
     "AcrossBridgeHookV2": {
-      "address": "0x2284b8f3C902E1dda251D482e0722c6919C68771",
+      "address": "0x82340E82d9b2145E1fC3EB61a9446978113B12aE",
       "abi": [
         {
           "inputs": [
@@ -3415,7 +3415,7 @@ export default {
       ]
     },
     "EscrowV2": {
-      "address": "0x53A535b2CbEd0740FA834007bFEf8b1c6519306D",
+      "address": "0xA36Eab7cB39fCc874bEA5e7e0C934abcD253562f",
       "abi": [
         {
           "inputs": [
@@ -7864,7 +7864,7 @@ export default {
       ]
     },
     "OrchestratorV2": {
-      "address": "0xC0389b3d7A4E6B823e361e562C4a29F04B6C4fB5",
+      "address": "0xF806656fCc55c94f17bB9B5CB735C2fd000DE5DF",
       "abi": [
         {
           "inputs": [
@@ -13408,7 +13408,7 @@ export default {
       ]
     },
     "SignatureGatingPreIntentHook": {
-      "address": "0xa014404736A5e9A45422e0519Ef91bc8c59F8Ade",
+      "address": "0x22190E400b192229bBA776656ed034b45761E92c",
       "abi": [
         {
           "inputs": [
