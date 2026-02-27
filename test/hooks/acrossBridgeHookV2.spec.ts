@@ -20,6 +20,7 @@ describe("AcrossBridgeHookV2", () => {
   let deployer: DeployHelper;
   let usdcToken: Contract;
   let spokePool: Contract;
+  let orchestratorRegistry: Contract;
   let hook: Contract;
 
   // Helper to convert address to bytes32 (left-padded)
@@ -75,8 +76,11 @@ describe("AcrossBridgeHookV2", () => {
     const AcrossSpokePoolMock = await ethers.getContractFactory("AcrossSpokePoolMock", owner.wallet);
     spokePool = await AcrossSpokePoolMock.deploy();
 
+    orchestratorRegistry = await deployer.deployOrchestratorRegistry();
+    await orchestratorRegistry.addOrchestrator(orchestrator.address);
+
     const AcrossBridgeHookV2 = await ethers.getContractFactory("AcrossBridgeHookV2", owner.wallet);
-    hook = await AcrossBridgeHookV2.deploy(usdcToken.address, orchestrator.address, spokePool.address);
+    hook = await AcrossBridgeHookV2.deploy(usdcToken.address, orchestratorRegistry.address, spokePool.address);
 
     await usdcToken.transfer(orchestrator.address, usdc(1000));
   });
@@ -84,18 +88,18 @@ describe("AcrossBridgeHookV2", () => {
   describe("#constructor", () => {
     it("should set initial variables correctly", async () => {
       expect(await hook.inputToken()).to.eq(usdcToken.address);
-      expect(await hook.orchestrator()).to.eq(orchestrator.address);
+      expect(await hook.orchestratorRegistry()).to.eq(orchestratorRegistry.address);
       expect(await hook.spokePool()).to.eq(spokePool.address);
     });
 
     it("should revert when inputToken is zero address", async () => {
       const AcrossBridgeHookV2 = await ethers.getContractFactory("AcrossBridgeHookV2", owner.wallet);
       await expect(
-        AcrossBridgeHookV2.deploy(ADDRESS_ZERO, orchestrator.address, spokePool.address)
+        AcrossBridgeHookV2.deploy(ADDRESS_ZERO, orchestratorRegistry.address, spokePool.address)
       ).to.be.revertedWithCustomError(hook, "ZeroAddress");
     });
 
-    it("should revert when orchestrator is zero address", async () => {
+    it("should revert when orchestratorRegistry is zero address", async () => {
       const AcrossBridgeHookV2 = await ethers.getContractFactory("AcrossBridgeHookV2", owner.wallet);
       await expect(
         AcrossBridgeHookV2.deploy(usdcToken.address, ADDRESS_ZERO, spokePool.address)
@@ -173,11 +177,11 @@ describe("AcrossBridgeHookV2", () => {
       expect(await spokePool.lastExclusivityParameter()).to.eq(fulfillData.exclusivityParameter);
     });
 
-    it("should revert when caller is not orchestrator", async () => {
+    it("should revert when caller is not a registered orchestrator", async () => {
       subjectCaller = attacker;
 
       await expect(subject())
-        .to.be.revertedWithCustomError(hook, "UnauthorizedCaller");
+        .to.be.revertedWithCustomError(hook, "UnauthorizedOrchestratorCaller");
     });
 
     it("should revert when fulfillHookData length is not 128", async () => {

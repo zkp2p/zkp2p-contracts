@@ -7,6 +7,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import { IAcrossSpokePool } from "../external/Interfaces/IAcrossSpokePool.sol";
+import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
 import { IPostIntentHookV2 } from "../interfaces/IPostIntentHookV2.sol";
 
 /**
@@ -129,7 +130,7 @@ contract AcrossBridgeHookV2 is IPostIntentHookV2, Ownable {
     /* ============ Errors ============ */
 
     error ZeroAddress();
-    error UnauthorizedCaller(address caller);
+    error UnauthorizedOrchestratorCaller(address caller);
     error InvalidFulfillHookDataLength(uint256 dataLength);
     error InvalidDestinationChainId(uint256 destinationChainId);
     error InvalidRecipient(bytes32 recipient);
@@ -141,7 +142,7 @@ contract AcrossBridgeHookV2 is IPostIntentHookV2, Ownable {
     /* ============ State Variables ============ */
 
     IERC20 public immutable inputToken;
-    address public immutable orchestrator;
+    IOrchestratorRegistry public immutable orchestratorRegistry;
     IAcrossSpokePool public immutable spokePool;
     uint256 private constant ACROSS_FULFILL_DATA_LENGTH = 128;
 
@@ -150,16 +151,16 @@ contract AcrossBridgeHookV2 is IPostIntentHookV2, Ownable {
     /**
      * @notice Creates a new AcrossBridgeHookV2 instance.
      * @param _inputToken Token address to bridge (recommended: stablecoins like USDC)
-     * @param _orchestrator Orchestrator that invokes this hook
+     * @param _orchestratorRegistry Registry of authorized orchestrators that may invoke this hook
      * @param _spokePool Across SpokePool address on this chain
      */
-    constructor(address _inputToken, address _orchestrator, address _spokePool) Ownable() {
-        if (_inputToken == address(0) || _orchestrator == address(0) || _spokePool == address(0)) {
+    constructor(address _inputToken, address _orchestratorRegistry, address _spokePool) Ownable() {
+        if (_inputToken == address(0) || _orchestratorRegistry == address(0) || _spokePool == address(0)) {
             revert ZeroAddress();
         }
 
         inputToken = IERC20(_inputToken);
-        orchestrator = _orchestrator;
+        orchestratorRegistry = IOrchestratorRegistry(_orchestratorRegistry);
         spokePool = IAcrossSpokePool(_spokePool);
     }
 
@@ -182,8 +183,8 @@ contract AcrossBridgeHookV2 is IPostIntentHookV2, Ownable {
         HookExecutionContext calldata _ctx,
         bytes calldata _fulfillHookData
     ) external override {
-        address activeOrchestrator = orchestrator;
-        if (msg.sender != activeOrchestrator) revert UnauthorizedCaller(msg.sender);
+        address callingOrchestrator = msg.sender;
+        if (!orchestratorRegistry.isOrchestrator(callingOrchestrator)) revert UnauthorizedOrchestratorCaller(callingOrchestrator);
         if (_fulfillHookData.length != ACROSS_FULFILL_DATA_LENGTH) {
             revert InvalidFulfillHookDataLength(_fulfillHookData.length);
         }
@@ -194,8 +195,8 @@ contract AcrossBridgeHookV2 is IPostIntentHookV2, Ownable {
         // Validate non-price parameters (these should always revert if invalid)
         _validateNonPriceCommitment(commitment);
 
-        // Pull tokens from Orchestrator first (before any fallback logic)
-        inputToken.safeTransferFrom(activeOrchestrator, address(this), _ctx.executableAmount);
+        // Pull tokens from calling Orchestrator first (before any fallback logic)
+        inputToken.safeTransferFrom(callingOrchestrator, address(this), _ctx.executableAmount);
 
         // Check if bridge is viable based on price
         bool bridgeViable = _isBridgeViable(fulfillData, commitment.minOutputAmount);

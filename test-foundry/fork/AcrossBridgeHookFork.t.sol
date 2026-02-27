@@ -5,6 +5,7 @@ import { Test } from "forge-std/Test.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { AcrossBridgeHookV2 } from "contracts/hooks/AcrossBridgeHookV2.sol";
+import { OrchestratorRegistry } from "contracts/registries/OrchestratorRegistry.sol";
 import { IPostIntentHookV2 } from "contracts/interfaces/IPostIntentHookV2.sol";
 
 contract AcrossBridgeHookForkTest is Test {
@@ -45,12 +46,16 @@ contract AcrossBridgeHookForkTest is Test {
     uint256 internal constant MIN_OUTPUT = 9_900_000; // 9.9 USDC
 
     AcrossBridgeHookV2 internal hook;
+    OrchestratorRegistry internal orchestratorRegistry;
 
     function setUp() public {
         string memory rpcUrl = _getRpcUrl();
         vm.createSelectFork(rpcUrl);
 
-        hook = new AcrossBridgeHookV2(BASE_USDC, address(this), BASE_SPOKE_POOL);
+        orchestratorRegistry = new OrchestratorRegistry();
+        orchestratorRegistry.addOrchestrator(address(this));
+
+        hook = new AcrossBridgeHookV2(BASE_USDC, address(orchestratorRegistry), BASE_SPOKE_POOL);
         _fundUsdc(INPUT_AMOUNT);
         IERC20(BASE_USDC).approve(address(hook), INPUT_AMOUNT);
     }
