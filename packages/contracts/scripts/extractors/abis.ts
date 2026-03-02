@@ -38,7 +38,7 @@ export async function extractABIs(): Promise<void> {
 
   const files = fs
     .readdirSync(OUTPUTS_DIR)
-    .filter((f) => f.endsWith('Contracts.ts') && !f.startsWith('localhost')); // Exclude localhost
+    .filter((f) => f.endsWith('Contracts.ts') && !f.startsWith('localhost') && !f.startsWith('baseSepolia'));
 
   const topIndexExports: string[] = [];
 

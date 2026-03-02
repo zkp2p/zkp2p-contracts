@@ -184,11 +184,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
 func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.network.name;
-  if (network != "localhost") {
-    try { getDeployedContractAddress(hre.network.name, "ProtocolViewer") } catch (e) { return false; }
-    return true;
+  if (network === "localhost" || network === "hardhat") {
+    return false;
   }
-  return false;
+  return true; // Frozen: V1 system is fully deployed on all networks
 };
 
 export default func;

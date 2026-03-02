@@ -1,5 +1,5 @@
 import "module-alias/register";
-import { ONE_DAY_IN_SECONDS, THREE_MINUTES_IN_SECONDS, ZERO, ONE_HOUR_IN_SECONDS } from "../utils/constants";
+import { ONE_DAY_IN_SECONDS, THREE_MINUTES_IN_SECONDS, ZERO, ONE_HOUR_IN_SECONDS, SIX_HOURS_IN_SECONDS } from "../utils/constants";
 import { ether, usdc } from "../utils/common/units";
 
 export const INTENT_EXPIRATION_PERIOD: any = {
@@ -69,6 +69,49 @@ export const ACROSS_SPOKE_POOL: any = {
   "base_sepolia": "",
   "localhost": "", // Fake address for local testing
   "hardhat": "",
+};
+
+// V2 Parameters
+export const ESCROW_V2_INTENT_EXPIRATION_PERIOD: any = {
+  "localhost": ONE_DAY_IN_SECONDS,
+  "base": SIX_HOURS_IN_SECONDS,
+  "base_staging": ONE_HOUR_IN_SECONDS,
+  "base_sepolia": ONE_HOUR_IN_SECONDS,
+};
+
+export const ESCROW_V2_MAX_INTENTS_PER_DEPOSIT: any = {
+  "localhost": 100,
+  "base": 200,
+  "base_staging": 200,
+  "base_sepolia": 200,
+};
+
+export const ESCROW_V2_DUST_THRESHOLD: any = {
+  "localhost": usdc(0.1),
+  "base": usdc(0.1),
+  "base_staging": usdc(0.1),
+  "base_sepolia": usdc(0.1),
+};
+
+export const ESCROW_V2_DUST_RECIPIENT: any = {
+  "localhost": "",
+  "base": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+  "base_staging": "",
+  "base_sepolia": "",
+};
+
+export const ORCHESTRATOR_V2_PROTOCOL_FEE: any = {
+  "localhost": ether(.001),
+  "base": ZERO,
+  "base_staging": ZERO,
+  "base_sepolia": ZERO,
+};
+
+export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
+  "localhost": "",
+  "base": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+  "base_staging": "",
+  "base_sepolia": "",
 };
 
 // For Goerli and localhost
