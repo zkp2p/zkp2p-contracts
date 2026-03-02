@@ -7,7 +7,6 @@ import { ethers } from "hardhat";
 import {
   ACROSS_SPOKE_POOL,
   MULTI_SIG,
-  PYTH_CONTRACT,
   USDC,
 } from "../deployments/parameters";
 import {
@@ -93,29 +92,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     args: [],
   });
   console.log("ChainlinkOracleAdapter deployed at", chainlinkOracleAdapter.address);
-  await waitForDeploymentDelay(hre);
-
-  // Deploy PythOracleAdapter (NOT Ownable, has immutable pyth address)
-  let pythAddress = PYTH_CONTRACT[network] || "";
-  if (!pythAddress) {
-    if (network === "localhost" || network === "hardhat") {
-      const pythMock = await deploy("PythMock", {
-        from: deployer,
-        args: [],
-      });
-      pythAddress = pythMock.address;
-      console.log("PythMock deployed at", pythAddress);
-      await waitForDeploymentDelay(hre);
-    } else {
-      throw new Error(`Missing Pyth contract address for network ${network}`);
-    }
-  }
-
-  const pythOracleAdapter = await deploy("PythOracleAdapter", {
-    from: deployer,
-    args: [pythAddress],
-  });
-  console.log("PythOracleAdapter deployed at", pythOracleAdapter.address);
   await waitForDeploymentDelay(hre);
 
   // Deploy ProtocolViewerV2 (stateless, NOT Ownable)
