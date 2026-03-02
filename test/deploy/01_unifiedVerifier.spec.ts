@@ -87,9 +87,9 @@ describe("UnifiedPaymentVerifier Deployment", () => {
       expect(actualOwner).to.eq(multiSig);
     });
 
-    it("should have the correct orchestrator set", async () => {
-      const actualOrchestratorAddress = await unifiedPaymentVerifier.orchestrator();
-      expect(actualOrchestratorAddress).to.eq(orchestratorAddress);
+    it("should have the correct orchestrator registry set", async () => {
+      const actualOrchestratorRegistryAddress = await unifiedPaymentVerifier.orchestratorRegistry();
+      expect(actualOrchestratorRegistryAddress).to.eq(orchestratorAddress);
     });
 
     it("should have the correct nullifier registry set", async () => {

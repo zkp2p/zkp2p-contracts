@@ -12,21 +12,21 @@ import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
  * @dev Used for testing reentrancy protection in Orchestrator contract
  */
 contract ReentrantPostIntentHook is IPostIntentHook {
-    
+
     /* ============ State Variables ============ */
 
     IOrchestrator public immutable orchestrator;
     IERC20 public immutable usdc;
-    
+
     // Attack configuration
     bool public attemptReentry = true;
     uint256 public reentrancyAttempts = 0;
-    
+
     // Stored params for reentrancy attempt
     IOrchestrator.FulfillIntentParams public storedFulfillParams;
-    
+
     /* ============ Events ============ */
-    
+
     event ReentrancyAttempted(bool success);
     event ExecutionCompleted(address recipient, uint256 amount);
 
@@ -75,12 +75,12 @@ contract ReentrantPostIntentHook is IPostIntentHook {
     ) external override {
         // Increment attempt counter
         reentrancyAttempts++;
-        
+
         // Attempt reentrancy attack if enabled
         if (attemptReentry && reentrancyAttempts == 1) {
             // Only attempt once to avoid infinite loop
             attemptReentry = false;
-            
+
             // Try to call fulfillIntent again (should fail with ReentrancyGuard)
             try orchestrator.fulfillIntent(storedFulfillParams) {
                 // This should never execute due to reentrancy guard
@@ -90,14 +90,14 @@ contract ReentrantPostIntentHook is IPostIntentHook {
                 emit ReentrancyAttempted(false);
             }
         }
-        
+
         // Normal execution - transfer funds to intended recipient
         // Pull USDC from orchestrator (which approved this amount)
         usdc.transferFrom(msg.sender, _intent.to, _amountNetFees);
-        
+
         emit ExecutionCompleted(_intent.to, _amountNetFees);
     }
-    
+
     /**
      * @notice Returns the number of reentrancy attempts made
      */

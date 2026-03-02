@@ -114,6 +114,7 @@ interface IEscrow {
     // Authorization errors
     error UnauthorizedCaller(address caller, address authorized);
     error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);
+    error CannotDelegateToSelf(address depositor);
 
     // Range and amount errors
     error InvalidRange(uint256 min, uint256 max);
@@ -154,7 +155,7 @@ interface IEscrow {
     function lockFunds(uint256 _depositId, bytes32 _intentHash, uint256 _amount) external;
     function unlockFunds(uint256 _depositId, bytes32 _intentHash) external;
     function unlockAndTransferFunds(uint256 _depositId, bytes32 _intentHash, uint256 _transferAmount, address _to) external;
-    function extendIntentExpiry(uint256 _depositId, bytes32 _intentHash, uint256 _newExpiryTime) external;
+    function extendIntentExpiry(uint256 _depositId, bytes32 _intentHash, uint256 _additionalTime) external;
 
     /* ============ View Functions ============ */
 
@@ -166,7 +167,6 @@ interface IEscrow {
     function getDepositPaymentMethodData(uint256 _depositId, bytes32 _paymentMethod) external view returns (DepositPaymentMethodData memory);
     function getDepositPaymentMethodActive(uint256 _depositId, bytes32 _paymentMethod) external view returns (bool);
     function getDepositGatingService(uint256 _depositId, bytes32 _paymentMethod) external view returns (address);
-    function getAccountDeposits(address _account) external view returns (uint256[] memory);
     function getDepositIntentHashes(uint256 _depositId) external view returns (bytes32[] memory);
     function getExpiredIntents(uint256 _depositId) external view returns (bytes32[] memory expiredIntents, uint256 reclaimableAmount);
 }

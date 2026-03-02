@@ -4,9 +4,9 @@ pragma solidity ^0.8.18;
 import { Test } from "forge-std/Test.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import { AcrossBridgeHook } from "contracts/hooks/AcrossBridgeHook.sol";
-import { IOrchestrator } from "contracts/interfaces/IOrchestrator.sol";
-import { IPostIntentHook } from "contracts/interfaces/IPostIntentHook.sol";
+import { AcrossBridgeHookV2 } from "contracts/hooks/AcrossBridgeHookV2.sol";
+import { OrchestratorRegistry } from "contracts/registries/OrchestratorRegistry.sol";
+import { IPostIntentHookV2 } from "contracts/interfaces/IPostIntentHookV2.sol";
 
 contract AcrossBridgeHookForkTest is Test {
     event AcrossBridgeInitiated(
@@ -45,13 +45,17 @@ contract AcrossBridgeHookForkTest is Test {
     uint256 internal constant OUTPUT_AMOUNT = 9_900_000; // 9.9 USDC (generous relay fee)
     uint256 internal constant MIN_OUTPUT = 9_900_000; // 9.9 USDC
 
-    AcrossBridgeHook internal hook;
+    AcrossBridgeHookV2 internal hook;
+    OrchestratorRegistry internal orchestratorRegistry;
 
     function setUp() public {
         string memory rpcUrl = _getRpcUrl();
         vm.createSelectFork(rpcUrl);
 
-        hook = new AcrossBridgeHook(BASE_USDC, address(this), BASE_SPOKE_POOL);
+        orchestratorRegistry = new OrchestratorRegistry();
+        orchestratorRegistry.addOrchestrator(address(this));
+
+        hook = new AcrossBridgeHookV2(BASE_USDC, address(orchestratorRegistry), BASE_SPOKE_POOL);
         _fundUsdc(INPUT_AMOUNT);
         IERC20(BASE_USDC).approve(address(hook), INPUT_AMOUNT);
     }
@@ -59,7 +63,7 @@ contract AcrossBridgeHookForkTest is Test {
     function testFork_DepositNow_BaseToMainnetUSDC() public {
         address recipient = makeAddr("destinationRecipient");
 
-        AcrossBridgeHook.BridgeCommitment memory commitment = AcrossBridgeHook.BridgeCommitment({
+        AcrossBridgeHookV2.BridgeCommitment memory commitment = AcrossBridgeHookV2.BridgeCommitment({
             destinationChainId: DEST_CHAIN_ID,
             outputToken: _toBytes32(DEST_USDC_MAINNET),
             recipient: _toBytes32(recipient),
@@ -67,25 +71,26 @@ contract AcrossBridgeHookForkTest is Test {
         });
         bytes memory commitmentData = abi.encode(commitment);
 
-        IOrchestrator.Intent memory intent = IOrchestrator.Intent({
-            owner: address(this),
-            to: recipient,
-            escrow: address(0),
-            depositId: 0,
-            amount: INPUT_AMOUNT,
-            timestamp: block.timestamp,
-            paymentMethod: bytes32(0),
-            fiatCurrency: bytes32(0),
-            conversionRate: 0,
-            payeeId: bytes32(0),
-            referrer: address(0),
-            referrerFee: 0,
-            postIntentHook: IPostIntentHook(address(hook)),
-            data: commitmentData
+        IPostIntentHookV2.HookExecutionContext memory ctx = IPostIntentHookV2.HookExecutionContext({
+            intentHash: keccak256("across-intent"),
+            token: BASE_USDC,
+            executableAmount: INPUT_AMOUNT,
+            intent: IPostIntentHookV2.HookIntentContext({
+                owner: address(this),
+                to: recipient,
+                escrow: address(0),
+                depositId: 0,
+                amount: INPUT_AMOUNT,
+                timestamp: block.timestamp,
+                paymentMethod: bytes32(0),
+                fiatCurrency: bytes32(0),
+                conversionRate: 0,
+                payeeId: bytes32(0),
+                signalHookData: commitmentData
+            })
         });
 
-        AcrossBridgeHook.AcrossFulfillData memory fulfill = AcrossBridgeHook.AcrossFulfillData({
-            intentHash: keccak256("across-intent"),
+        AcrossBridgeHookV2.AcrossFulfillData memory fulfill = AcrossBridgeHookV2.AcrossFulfillData({
             outputAmount: OUTPUT_AMOUNT,
             fillDeadlineOffset: 3600,
             exclusiveRelayer: bytes32(0),
@@ -96,7 +101,7 @@ contract AcrossBridgeHookForkTest is Test {
         uint256 spokeBalanceBefore = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
         uint256 recipientBalanceBefore = IERC20(BASE_USDC).balanceOf(recipient);
 
-        hook.execute(intent, INPUT_AMOUNT, fulfillData);
+        hook.execute(ctx, fulfillData);
 
         uint256 spokeBalanceAfter = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
         uint256 hookBalance = IERC20(BASE_USDC).balanceOf(address(hook));
@@ -110,7 +115,7 @@ contract AcrossBridgeHookForkTest is Test {
     function testFork_DepositNow_FallbackOnBridgeFailure() public {
         address recipient = makeAddr("fallbackRecipient");
 
-        AcrossBridgeHook.BridgeCommitment memory commitment = AcrossBridgeHook.BridgeCommitment({
+        AcrossBridgeHookV2.BridgeCommitment memory commitment = AcrossBridgeHookV2.BridgeCommitment({
             destinationChainId: DEST_CHAIN_ID,
             outputToken: _toBytes32(DEST_USDC_MAINNET),
             recipient: _toBytes32(recipient),
@@ -118,25 +123,27 @@ contract AcrossBridgeHookForkTest is Test {
         });
         bytes memory commitmentData = abi.encode(commitment);
 
-        IOrchestrator.Intent memory intent = IOrchestrator.Intent({
-            owner: address(this),
-            to: recipient,
-            escrow: address(0),
-            depositId: 0,
-            amount: INPUT_AMOUNT,
-            timestamp: block.timestamp,
-            paymentMethod: bytes32(0),
-            fiatCurrency: bytes32(0),
-            conversionRate: 0,
-            payeeId: bytes32(0),
-            referrer: address(0),
-            referrerFee: 0,
-            postIntentHook: IPostIntentHook(address(hook)),
-            data: commitmentData
+        bytes32 intentHash = keccak256("across-fallback-intent");
+        IPostIntentHookV2.HookExecutionContext memory ctx = IPostIntentHookV2.HookExecutionContext({
+            intentHash: intentHash,
+            token: BASE_USDC,
+            executableAmount: INPUT_AMOUNT,
+            intent: IPostIntentHookV2.HookIntentContext({
+                owner: address(this),
+                to: recipient,
+                escrow: address(0),
+                depositId: 0,
+                amount: INPUT_AMOUNT,
+                timestamp: block.timestamp,
+                paymentMethod: bytes32(0),
+                fiatCurrency: bytes32(0),
+                conversionRate: 0,
+                payeeId: bytes32(0),
+                signalHookData: commitmentData
+            })
         });
 
-        AcrossBridgeHook.AcrossFulfillData memory fulfill = AcrossBridgeHook.AcrossFulfillData({
-            intentHash: keccak256("across-fallback-intent"),
+        AcrossBridgeHookV2.AcrossFulfillData memory fulfill = AcrossBridgeHookV2.AcrossFulfillData({
             outputAmount: OUTPUT_AMOUNT,
             fillDeadlineOffset: 3600,
             exclusiveRelayer: bytes32(0),
@@ -148,9 +155,9 @@ contract AcrossBridgeHookForkTest is Test {
         uint256 recipientBalanceBefore = IERC20(BASE_USDC).balanceOf(recipient);
 
         vm.expectEmit(true, true, false, true, address(hook));
-        emit FallbackTransfer(fulfill.intentHash, recipient, INPUT_AMOUNT, 1);
+        emit FallbackTransfer(intentHash, recipient, INPUT_AMOUNT, 1);
 
-        hook.execute(intent, INPUT_AMOUNT, fulfillData);
+        hook.execute(ctx, fulfillData);
 
         uint256 spokeBalanceAfter = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
         uint256 hookBalance = IERC20(BASE_USDC).balanceOf(address(hook));
@@ -169,7 +176,7 @@ contract AcrossBridgeHookForkTest is Test {
         assertEq(solanaRecipient, SOLANA_RECIPIENT_BYTES32, "solana recipient decode mismatch");
         assertEq(solanaUsdc, SOLANA_USDC_MINT_BYTES32, "solana USDC mint decode mismatch");
 
-        AcrossBridgeHook.BridgeCommitment memory commitment = AcrossBridgeHook.BridgeCommitment({
+        AcrossBridgeHookV2.BridgeCommitment memory commitment = AcrossBridgeHookV2.BridgeCommitment({
             destinationChainId: SOLANA_CHAIN_ID,
             outputToken: solanaUsdc,
             recipient: solanaRecipient,
@@ -177,26 +184,27 @@ contract AcrossBridgeHookForkTest is Test {
         });
         bytes memory commitmentData = abi.encode(commitment);
 
-        IOrchestrator.Intent memory intent = IOrchestrator.Intent({
-            owner: address(this),
-            to: fallbackRecipient,
-            escrow: address(0),
-            depositId: 0,
-            amount: INPUT_AMOUNT,
-            timestamp: block.timestamp,
-            paymentMethod: bytes32(0),
-            fiatCurrency: bytes32(0),
-            conversionRate: 0,
-            payeeId: bytes32(0),
-            referrer: address(0),
-            referrerFee: 0,
-            postIntentHook: IPostIntentHook(address(hook)),
-            data: commitmentData
+        bytes32 intentHash = keccak256("across-solana-intent");
+        IPostIntentHookV2.HookExecutionContext memory ctx = IPostIntentHookV2.HookExecutionContext({
+            intentHash: intentHash,
+            token: BASE_USDC,
+            executableAmount: INPUT_AMOUNT,
+            intent: IPostIntentHookV2.HookIntentContext({
+                owner: address(this),
+                to: fallbackRecipient,
+                escrow: address(0),
+                depositId: 0,
+                amount: INPUT_AMOUNT,
+                timestamp: block.timestamp,
+                paymentMethod: bytes32(0),
+                fiatCurrency: bytes32(0),
+                conversionRate: 0,
+                payeeId: bytes32(0),
+                signalHookData: commitmentData
+            })
         });
 
-        bytes32 intentHash = keccak256("across-solana-intent");
-        AcrossBridgeHook.AcrossFulfillData memory fulfill = AcrossBridgeHook.AcrossFulfillData({
-            intentHash: intentHash,
+        AcrossBridgeHookV2.AcrossFulfillData memory fulfill = AcrossBridgeHookV2.AcrossFulfillData({
             outputAmount: OUTPUT_AMOUNT,
             fillDeadlineOffset: 3600,
             exclusiveRelayer: bytes32(0),
@@ -220,7 +228,7 @@ contract AcrossBridgeHookForkTest is Test {
             0
         );
 
-        hook.execute(intent, INPUT_AMOUNT, fulfillData);
+        hook.execute(ctx, fulfillData);
 
         uint256 spokeBalanceAfter = IERC20(BASE_USDC).balanceOf(BASE_SPOKE_POOL);
         uint256 hookBalance = IERC20(BASE_USDC).balanceOf(address(hook));

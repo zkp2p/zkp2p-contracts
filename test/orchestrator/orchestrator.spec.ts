@@ -772,7 +772,7 @@ describe("Orchestrator", () => {
     describe("when referrer fee exceeds maximum", async () => {
       beforeEach(async () => {
         subjectReferrer = receiver.address;
-        subjectReferrerFee = ether(0.06); // 6% exceeds 5% max
+        subjectReferrerFee = ether(0.51); // 51% > 50% max
       });
 
       it("should revert", async () => {
@@ -810,6 +810,17 @@ describe("Orchestrator", () => {
         const intent = await orchestrator.getIntent(intentHash);
         expect(intent.referrer).to.eq(subjectReferrer);
         expect(intent.referrerFee).to.eq(subjectReferrerFee);
+      });
+    });
+
+    describe("when referrer fee is at maximum", async () => {
+      beforeEach(async () => {
+        subjectReferrer = receiver.address;
+        subjectReferrerFee = ether(0.5); // 50% max
+      });
+
+      it("should create intent", async () => {
+        await expect(subject()).to.not.be.reverted;
       });
     });
   });
@@ -2659,11 +2670,21 @@ describe("Orchestrator", () => {
 
     describe("when protocol fee exceeds maximum", async () => {
       beforeEach(async () => {
-        subjectProtocolFee = ether(0.1); // 10% > 5% max
+        subjectProtocolFee = ether(0.11); // 11% > 10% max
       });
 
       it("should revert with ProtocolFeeExceedsMaximum", async () => {
         await expect(subject()).to.be.revertedWithCustomError(orchestrator, "FeeExceedsMaximum");
+      });
+    });
+
+    describe("when protocol fee is at maximum", async () => {
+      beforeEach(async () => {
+        subjectProtocolFee = ether(0.1); // 10% max
+      });
+
+      it("should not revert", async () => {
+        await expect(subject()).to.not.be.reverted;
       });
     });
   });

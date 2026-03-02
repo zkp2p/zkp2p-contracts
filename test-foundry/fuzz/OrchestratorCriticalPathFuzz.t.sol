@@ -30,8 +30,8 @@ import { INullifierRegistry } from "../../contracts/interfaces/INullifierRegistr
 contract OrchestratorCriticalPathFuzz is Test {
     // Constants
     uint256 constant PRECISE_UNIT = 1e18;
-    uint256 constant MAX_PROTOCOL_FEE = 5e16; // 5%
-    uint256 constant MAX_REFERRER_FEE = 5e16; // 5%
+    uint256 constant MAX_PROTOCOL_FEE = 1e17; // 10%
+    uint256 constant MAX_REFERRER_FEE = 5e17; // 50%
     uint256 constant INTENT_EXPIRATION_PERIOD = 7 days;
     uint256 constant CIRCOM_PRIME_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
     bytes32 constant VENMO = keccak256("VENMO");
@@ -248,7 +248,7 @@ contract OrchestratorCriticalPathFuzz is Test {
         uint256 protocolFeeOnly = (amount * protocolFeeRate) / PRECISE_UNIT;
         assertEq(expectedProtocolFee, protocolFeeOnly, "Protocol fee affected by referrer presence");
         
-        // Property: Combined fees never exceed 10% (MAX_PROTOCOL_FEE + MAX_REFERRER_FEE)
+        // Property: Combined fees never exceed 60% (MAX_PROTOCOL_FEE + MAX_REFERRER_FEE)
         uint256 totalFees = expectedProtocolFee + expectedReferrerFee;
         uint256 maxTotalFees = (amount * (MAX_PROTOCOL_FEE + MAX_REFERRER_FEE)) / PRECISE_UNIT;
         assertLe(totalFees, maxTotalFees, "Combined fees exceed maximum");
@@ -311,7 +311,7 @@ contract OrchestratorCriticalPathFuzz is Test {
     
     /**
      * @notice Test combined fee limits enforcement
-     * @dev Property: Total fees (protocol + referrer) never exceed 10%
+     * @dev Property: Total fees (protocol + referrer) never exceed 60%
      */
     function testFuzz_CombinedFeeLimits(
         uint256 amount,
@@ -358,13 +358,13 @@ contract OrchestratorCriticalPathFuzz is Test {
         uint256 referrerFee = (amount * referrerFeeRate) / PRECISE_UNIT;
         uint256 totalFees = protocolFee + referrerFee;
         
-        // Property: Combined fees never exceed 10% of amount
+        // Property: Combined fees never exceed 60% of amount
         uint256 maxCombinedFees = (amount * (MAX_PROTOCOL_FEE + MAX_REFERRER_FEE)) / PRECISE_UNIT;
-        assertLe(totalFees, maxCombinedFees, "Combined fees exceed 10% maximum");
+        assertLe(totalFees, maxCombinedFees, "Combined fees exceed 60% maximum");
         
         // Property: Individual fees respect their limits
-        assertLe(protocolFee, (amount * MAX_PROTOCOL_FEE) / PRECISE_UNIT, "Protocol fee exceeds 5%");
-        assertLe(referrerFee, (amount * MAX_REFERRER_FEE) / PRECISE_UNIT, "Referrer fee exceeds 5%");
+        assertLe(protocolFee, (amount * MAX_PROTOCOL_FEE) / PRECISE_UNIT, "Protocol fee exceeds 10%");
+        assertLe(referrerFee, (amount * MAX_REFERRER_FEE) / PRECISE_UNIT, "Referrer fee exceeds 50%");
     }
     
     // ============ Phase 2.2: Intent Lifecycle Management (P1 Priority) ============

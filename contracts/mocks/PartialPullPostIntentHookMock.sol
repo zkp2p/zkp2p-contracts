@@ -36,4 +36,3 @@ contract PartialPullPostIntentHookMock is IPostIntentHook {
         // Intentionally do NOT pull the remainder
     }
 }
-

@@ -14,6 +14,8 @@ contract ProtocolViewer is IProtocolViewer {
     /* ============ Constructor ============ */
 
     constructor(address _escrow, address _orchestrator) {
+        require(_escrow != address(0), "ProtocolViewer: invalid escrow");
+        require(_orchestrator != address(0), "ProtocolViewer: invalid orchestrator");
         escrowContract = IEscrow(_escrow);
         orchestrator = IOrchestrator(_orchestrator);
     }
@@ -70,21 +72,6 @@ contract ProtocolViewer is IProtocolViewer {
 
         for (uint256 i = 0; i < _depositIds.length; ++i) {
             uint256 depositId = _depositIds[i];
-            depositArray[i] = getDeposit(depositId);
-        }
-    }
-
-    /**
-     * @notice Gets all deposits for a specific account.
-     * @param _account The account address.
-     * @return depositArray Array of DepositView structs.
-     */
-    function getAccountDeposits(address _account) external view returns (IProtocolViewer.DepositView[] memory depositArray) {
-        uint256[] memory accountDepositIds = escrowContract.getAccountDeposits(_account);
-        depositArray = new DepositView[](accountDepositIds.length);
-        
-        for (uint256 i = 0; i < accountDepositIds.length; ++i) {
-            uint256 depositId = accountDepositIds[i];
             depositArray[i] = getDeposit(depositId);
         }
     }

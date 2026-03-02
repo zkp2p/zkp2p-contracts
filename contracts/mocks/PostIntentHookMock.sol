@@ -11,7 +11,7 @@ import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
  * @notice Mock implementation of IPostIntentHook that transfers funds to a target address
  */
 contract PostIntentHookMock is IPostIntentHook {
-    
+
     /* ============ State Variables ============ */
 
     IERC20 public immutable usdc;
@@ -39,8 +39,8 @@ contract PostIntentHookMock is IPostIntentHook {
 
         // Check if target address and token are not zero (use this to test failure of post-intent hook)
         require(targetAddress != address(0), "Target address cannot be zero");
-        
+
         // Pull usdc from escrow and transfer to target address
         usdc.transferFrom(orchestrator, targetAddress, _amountNetFees);
     }
-} 
+}

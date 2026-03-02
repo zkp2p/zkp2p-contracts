@@ -29,4 +29,3 @@ contract PushPostIntentHookMock is IPostIntentHook {
         token.transfer(orchestrator, 1);
     }
 }
-

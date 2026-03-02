@@ -29,8 +29,8 @@ import { INullifierRegistry } from "../../contracts/interfaces/INullifierRegistr
 contract OrchestratorHandler is Test {
     // Constants
     uint256 constant PRECISE_UNIT = 1e18;
-    uint256 constant MAX_PROTOCOL_FEE = 5e16; // 5%
-    uint256 constant MAX_REFERRER_FEE = 5e16; // 5%
+    uint256 constant MAX_PROTOCOL_FEE = 1e17; // 10%
+    uint256 constant MAX_REFERRER_FEE = 5e17; // 50%
     uint256 constant INTENT_EXPIRATION_PERIOD = 7 days;
     bytes32 constant PAYMENT_METHOD = keccak256("VENMO");
     bytes32 constant CURRENCY = keccak256("USD");
@@ -468,8 +468,8 @@ contract OrchestratorHandler is Test {
 contract OrchestratorInvariantTest is Test {
     // Constants
     uint256 constant PRECISE_UNIT = 1e18;
-    uint256 constant MAX_PROTOCOL_FEE = 5e16; // 5%
-    uint256 constant MAX_REFERRER_FEE = 5e16; // 5%
+    uint256 constant MAX_PROTOCOL_FEE = 1e17; // 10%
+    uint256 constant MAX_REFERRER_FEE = 5e17; // 50%
     uint256 constant INTENT_EXPIRATION_PERIOD = 7 days;
     bytes32 constant PAYMENT_METHOD = keccak256("VENMO");
     bytes32 constant CURRENCY = keccak256("USD");
@@ -635,12 +635,12 @@ contract OrchestratorInvariantTest is Test {
             "Referrer fee exceeded maximum allowed"
         );
         
-        // Total fees (protocol + referrer) should never exceed 10%
+        // Total fees (protocol + referrer) should never exceed 60%
         uint256 maxCombinedFee = MAX_PROTOCOL_FEE + MAX_REFERRER_FEE;
         assertLe(
             maxCombinedFee,
-            1e17, // 10%
-            "Combined fees exceed 10% maximum"
+            6e17, // 60%
+            "Combined fees exceed 60% maximum"
         );
     }
     

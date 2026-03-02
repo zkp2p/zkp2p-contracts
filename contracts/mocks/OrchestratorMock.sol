@@ -11,13 +11,13 @@ contract OrchestratorMock {
     
     IEscrow public escrow;
     bytes32[] public lastPrunedIntents;
+    uint256 public pruneCallCount;
     
     // Events for testing
     event IntentsPruned(bytes32 intent);
     
     constructor(address _escrow) {
         escrow = IEscrow(_escrow);
-        lastPrunedIntents = new bytes32[](1);
     }
     
     /**
@@ -25,8 +25,14 @@ contract OrchestratorMock {
      * @param _intents Array of intent hashes to prune
      */
     function pruneIntents(bytes32[] calldata _intents) external {
-        lastPrunedIntents[0] = _intents[0];
-        emit IntentsPruned(_intents[0]);
+        delete lastPrunedIntents;
+        for (uint256 i = 0; i < _intents.length; i++) {
+            lastPrunedIntents.push(_intents[i]);
+        }
+        pruneCallCount += 1;
+        if (_intents.length > 0) {
+            emit IntentsPruned(_intents[0]);
+        }
     }
     
     // Test helper functions to call orchestrator-only functions on escrow
@@ -55,5 +61,9 @@ contract OrchestratorMock {
     // Getter for testing
     function getLastPrunedIntents() external view returns (bytes32[] memory) {
         return lastPrunedIntents;
+    }
+
+    function getPruneCallCount() external view returns (uint256) {
+        return pruneCallCount;
     }
 }

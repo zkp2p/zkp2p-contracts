@@ -151,7 +151,8 @@ describe("AcrossBridgeHook", () => {
     });
 
     it("should fallback to direct transfer when outputAmount is below minimum", async () => {
-      const { encoded, data } = buildFulfillData({ outputAmount: commitment.minOutputAmount.sub(1) });
+      const intentHash = ethers.utils.hexlify(ethers.utils.randomBytes(32));
+      const { encoded } = buildFulfillData({ outputAmount: commitment.minOutputAmount.sub(1), intentHash });
 
       const orchestratorBalanceBefore = await usdcToken.balanceOf(orchestrator.address);
       const recipientBalanceBefore = await usdcToken.balanceOf(recipient.address);
@@ -159,7 +160,7 @@ describe("AcrossBridgeHook", () => {
       // Should emit FallbackTransfer with OUTPUT_BELOW_MINIMUM reason (enum value 0)
       await expect(subject(encoded))
         .to.emit(hook, "FallbackTransfer")
-        .withArgs(data.intentHash, recipient.address, amountNetFees, 0);
+        .withArgs(intentHash, recipient.address, amountNetFees, 0);
 
       // Verify funds went to recipient (intent.to), not spokePool
       const orchestratorBalanceAfter = await usdcToken.balanceOf(orchestrator.address);
@@ -174,7 +175,8 @@ describe("AcrossBridgeHook", () => {
     });
 
     it("should fallback to direct transfer when bridge call reverts", async () => {
-      const { encoded, data } = buildFulfillData({ outputAmount: BigNumber.from(700_000) });
+      const intentHash = ethers.utils.hexlify(ethers.utils.randomBytes(32));
+      const { encoded } = buildFulfillData({ outputAmount: BigNumber.from(700_000), intentHash });
 
       // Make the mock revert
       await spokePool.setShouldRevert(true);
@@ -184,7 +186,7 @@ describe("AcrossBridgeHook", () => {
       // Should emit FallbackTransfer with BRIDGE_CALL_FAILED reason (enum value 1)
       await expect(subject(encoded))
         .to.emit(hook, "FallbackTransfer")
-        .withArgs(data.intentHash, recipient.address, amountNetFees, 1);
+        .withArgs(intentHash, recipient.address, amountNetFees, 1);
 
       // Verify funds went to recipient, not spokePool
       const recipientBalanceAfter = await usdcToken.balanceOf(recipient.address);
@@ -245,7 +247,7 @@ describe("AcrossBridgeHook", () => {
       const customRelayer = toBytes32("0xDeadBeefDeadBeefDeadBeefDeadBeefDeadBeef");
       const customExclusivity = 10;  // 10 seconds
 
-      const { encoded, data } = buildFulfillData({
+      const { encoded } = buildFulfillData({
         outputAmount: BigNumber.from(700_000),
         exclusiveRelayer: customRelayer,
         exclusivityParameter: customExclusivity
@@ -283,7 +285,7 @@ describe("AcrossBridgeHook", () => {
   });
 
   describe("#constructor", () => {
-    it("should set immutable variables correctly", async () => {
+    it("should set initial variables correctly", async () => {
       expect(await hook.inputToken()).to.eq(usdcToken.address);
       expect(await hook.orchestrator()).to.eq(orchestrator.address);
       expect(await hook.spokePool()).to.eq(spokePool.address);

@@ -1087,8 +1087,8 @@ describe("Escrow", () => {
     });
 
     it("should remove the deposit from the user deposits mapping", async () => {
-      const preUserDeposits = await protocolViewer.getAccountDeposits(offRamper.address);
-      expect(preUserDeposits.some(deposit => deposit.depositId.eq(subjectDepositId))).to.be.true;
+      const preUserDeposits = await ramp.getAccountDeposits(offRamper.address);
+      expect(preUserDeposits.some(depositId => depositId.eq(subjectDepositId))).to.be.true;
 
       await subject();
 

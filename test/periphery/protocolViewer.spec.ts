@@ -139,6 +139,47 @@ describe("ProtocolViewer", () => {
     );
   });
 
+  describe("#constructor", async () => {
+    let subjectEscrow: Address;
+    let subjectOrchestrator: Address;
+
+    async function subject(): Promise<any> {
+      return deployer.deployProtocolViewer(subjectEscrow, subjectOrchestrator);
+    }
+
+    beforeEach(async () => {
+      subjectEscrow = escrow.address;
+      subjectOrchestrator = orchestrator.address;
+    });
+
+    it("should set the initial escrow and orchestrator", async () => {
+      const deployedProtocolViewer = await subject();
+
+      expect(await deployedProtocolViewer.escrowContract()).to.eq(subjectEscrow);
+      expect(await deployedProtocolViewer.orchestrator()).to.eq(subjectOrchestrator);
+    });
+
+    describe("when escrow is zero address", async () => {
+      beforeEach(async () => {
+        subjectEscrow = ADDRESS_ZERO;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("ProtocolViewer: invalid escrow");
+      });
+    });
+
+    describe("when orchestrator is zero address", async () => {
+      beforeEach(async () => {
+        subjectOrchestrator = ADDRESS_ZERO;
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("ProtocolViewer: invalid orchestrator");
+      });
+    });
+  });
+
   describe("#getDeposit", async () => {
     let subjectDepositId: BigNumber;
 
@@ -252,76 +293,6 @@ describe("ProtocolViewer", () => {
 
         expect(depositView.deposit.depositor).to.eq(ADDRESS_ZERO);
         expect(depositView.paymentMethods.length).to.eq(0);
-      });
-    });
-  });
-
-  describe("#getAccountDeposits", async () => {
-    let subjectAccount: string;
-
-    beforeEach(async () => {
-      // Create a few deposits for the test account
-      await usdcToken.connect(offRamper.wallet).approve(escrow.address, usdc(10000));
-
-      await escrow.connect(offRamper.wallet).createDeposit({
-        token: usdcToken.address,
-        amount: usdc(100),
-        intentAmountRange: { min: usdc(10), max: usdc(200) },
-        paymentMethods: [venmoPaymentMethodHash],
-        paymentMethodData: [{
-          intentGatingService: gatingService.address,
-          payeeDetails: ethers.utils.keccak256(ethers.utils.toUtf8Bytes("payeeDetails")),
-          data: "0x"
-        }],
-        currencies: [
-          [{ code: Currency.USD, minConversionRate: ether(1.08) }]
-        ],
-        delegate: ADDRESS_ZERO,
-        intentGuardian: ADDRESS_ZERO,
-        retainOnEmpty: false
-      });
-
-      await escrow.connect(offRamper.wallet).createDeposit({
-        token: usdcToken.address,
-        amount: usdc(200),
-        intentAmountRange: { min: usdc(10), max: usdc(200) },
-        paymentMethods: [venmoPaymentMethodHash],
-        paymentMethodData: [{
-          intentGatingService: gatingService.address,
-          payeeDetails: ethers.utils.keccak256(ethers.utils.toUtf8Bytes("payeeDetails")),
-          data: "0x"
-        }],
-        currencies: [
-          [{ code: Currency.USD, minConversionRate: ether(1.08) }]
-        ],
-        delegate: ADDRESS_ZERO,
-        intentGuardian: ADDRESS_ZERO,
-        retainOnEmpty: false
-      });
-
-      subjectAccount = offRamper.address;
-    });
-
-    async function subject(): Promise<any> {
-      return protocolViewer.getAccountDeposits(subjectAccount);
-    }
-
-    it("should return correct deposit IDs for account", async () => {
-      const deposits = await subject();
-
-      expect(deposits.length).to.eq(2);
-      expect(deposits[0].depositId).to.eq(ZERO);
-      expect(deposits[1].depositId).to.eq(ONE);
-    });
-
-    describe("when account has no deposits", async () => {
-      beforeEach(async () => {
-        subjectAccount = onRamper.address;
-      });
-
-      it("should return empty array", async () => {
-        const deposits = await subject();
-        expect(deposits.length).to.eq(0);
       });
     });
   });
