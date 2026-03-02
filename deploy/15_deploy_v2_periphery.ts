@@ -135,6 +135,6 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   return false;
 };
 
-func.dependencies = ["13_deploy_v2_system"];
+func.dependencies = ["14_deploy_v2_system"];
 
 export default func;
