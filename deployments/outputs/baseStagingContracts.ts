@@ -11996,7 +11996,7 @@ export default {
       ]
     },
     "PythOracleAdapter": {
-      "address": "0x51D46Dcbf57cE612E0Ff58a1eFb2cd15feC6F98B",
+      "address": "0xaa2bBDa3072bD37af76613846268Ec48bd0bB885",
       "abi": [
         {
           "inputs": [
