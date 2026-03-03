@@ -11995,6 +11995,83 @@ export default {
         }
       ]
     },
+    "PythOracleAdapter": {
+      "address": "0x51D46Dcbf57cE612E0Ff58a1eFb2cd15feC6F98B",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_pyth",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes",
+              "name": "normalizedConfig",
+              "type": "bytes"
+            }
+          ],
+          "name": "getRate",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "valid",
+              "type": "bool"
+            },
+            {
+              "internalType": "uint256",
+              "name": "rate",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "updatedAt",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "pyth",
+          "outputs": [
+            {
+              "internalType": "contract IPyth",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes",
+              "name": "rawConfig",
+              "type": "bytes"
+            }
+          ],
+          "name": "validateConfig",
+          "outputs": [
+            {
+              "internalType": "bytes",
+              "name": "normalizedConfig",
+              "type": "bytes"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        }
+      ]
+    },
     "RateManagerV1": {
       "address": "0x9401462CbF0E9Cf12D60C899339406b092B156C8",
       "abi": [
