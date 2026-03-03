@@ -77,8 +77,9 @@ contract PythOracleAdapterFuzz is Test {
 
         pythMock.setPrice(FEED_ID, price, 0, expo, block.timestamp);
 
-        // Manually construct normalized config (can't use validateConfig since expo is valid but price may be 0)
-        bytes memory norm = abi.encodePacked(FEED_ID, bytes1(uint8(0)));
+        // Manually construct 34-byte normalized config (can't use validateConfig since price may be 0)
+        uint8 absExpo = uint8(uint32(-expo));
+        bytes memory norm = abi.encodePacked(FEED_ID, absExpo, bytes1(uint8(0)));
 
         (bool valid,,) = adapter.getRate(norm);
 

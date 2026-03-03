@@ -15,9 +15,10 @@ import { IOracleAdapter } from "../interfaces/IOracleAdapter.sol";
  * Raw config format:
  * - abi.encode(bytes32 feedId, bool invert)
  *
- * Normalized config format (packed bytes, length = 33):
+ * Normalized config format (packed bytes, length = 34):
  * - [0..31]  feedId (bytes32)
- * - [32]     invert flag (uint8; 0 = false, 1 = true)
+ * - [32]     absExpo (uint8; abs(expo), i.e. number of decimals)
+ * - [33]     invert flag (uint8; 0 = false, 1 = true)
  */
 contract PythOracleAdapter is IOracleAdapter {
     using Math for uint256;
@@ -49,7 +50,8 @@ contract PythOracleAdapter is IOracleAdapter {
         IPyth.Price memory price = pyth.getPriceUnsafe(feedId);
         require(price.expo <= 0 && price.expo >= -18, "Unsupported exponent");
 
-        normalizedConfig = abi.encodePacked(feedId, invert ? bytes1(uint8(1)) : bytes1(uint8(0)));
+        uint8 absExpo = uint8(uint32(-price.expo));
+        normalizedConfig = abi.encodePacked(feedId, absExpo, invert ? bytes1(uint8(1)) : bytes1(uint8(0)));
     }
 
     /**
@@ -62,14 +64,12 @@ contract PythOracleAdapter is IOracleAdapter {
         view
         returns (bool valid, uint256 rate, uint256 updatedAt)
     {
-        (bytes32 feedId, bool invert) = _decodeNormalizedConfig(normalizedConfig);
+        (bytes32 feedId, uint8 absExpo, bool invert) = _decodeNormalizedConfig(normalizedConfig);
 
         int64 price;
-        int32 expo;
         uint publishTime;
         try pyth.getPriceUnsafe(feedId) returns (IPyth.Price memory p) {
             price = p.price;
-            expo = p.expo;
             publishTime = p.publishTime;
         } catch {
             return (false, 0, 0);
@@ -81,13 +81,9 @@ contract PythOracleAdapter is IOracleAdapter {
         if (publishTime == 0) {
             return (false, 0, 0);
         }
-        if (expo > 0 || expo < -18) {
-            return (false, 0, 0);
-        }
 
         uint256 priceUint = uint256(uint64(price));
-        uint256 absExpo = uint256(uint32(-expo));
-        uint256 decimalsScale = 10 ** absExpo;
+        uint256 decimalsScale = 10 ** uint256(absExpo);
 
         if (invert) {
             uint256 invertedRate = Math.mulDiv(PRECISE_UNIT, decimalsScale, priceUint, Math.Rounding.Up);
@@ -103,14 +99,15 @@ contract PythOracleAdapter is IOracleAdapter {
     function _decodeNormalizedConfig(bytes calldata normalizedConfig)
         internal
         pure
-        returns (bytes32 feedId, bool invert)
+        returns (bytes32 feedId, uint8 absExpo, bool invert)
     {
-        require(normalizedConfig.length == 33, "Invalid config");
+        require(normalizedConfig.length == 34, "Invalid config");
 
         uint8 invertByte;
         assembly {
             feedId := calldataload(normalizedConfig.offset)
-            invertByte := byte(0, calldataload(add(normalizedConfig.offset, 32)))
+            absExpo := byte(0, calldataload(add(normalizedConfig.offset, 32)))
+            invertByte := byte(0, calldataload(add(normalizedConfig.offset, 33)))
         }
 
         invert = invertByte != 0;

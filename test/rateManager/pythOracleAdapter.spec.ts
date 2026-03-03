@@ -48,14 +48,16 @@ describe("PythOracleAdapter", () => {
       subjectRawConfig = encodeRawConfig(FEED_ID, false);
     });
 
-    it("returns packed 33-byte normalized config", async () => {
+    it("returns packed 34-byte normalized config with absExpo", async () => {
       const cfg = await subject();
 
-      // normalizedConfig = abi.encodePacked(feedId(32B), invertFlag(1B))
-      expect(cfg).to.have.length(2 + 33 * 2); // 0x + 66 hex chars
+      // normalizedConfig = abi.encodePacked(feedId(32B), absExpo(1B), invertFlag(1B))
+      expect(cfg).to.have.length(2 + 34 * 2); // 0x + 68 hex chars
       const packedFeedId = "0x" + cfg.slice(2, 66);
-      const invertFlag = BigNumber.from("0x" + cfg.slice(66, 68)).toNumber();
+      const absExpo = BigNumber.from("0x" + cfg.slice(66, 68)).toNumber();
+      const invertFlag = BigNumber.from("0x" + cfg.slice(68, 70)).toNumber();
       expect(packedFeedId).to.eq(FEED_ID);
+      expect(absExpo).to.eq(5); // abs(-5) = 5
       expect(invertFlag).to.eq(0);
     });
 
@@ -63,8 +65,17 @@ describe("PythOracleAdapter", () => {
       subjectRawConfig = encodeRawConfig(FEED_ID, true);
       const cfg = await subject();
 
-      const invertFlag = BigNumber.from("0x" + cfg.slice(66, 68)).toNumber();
+      const invertFlag = BigNumber.from("0x" + cfg.slice(68, 70)).toNumber();
       expect(invertFlag).to.eq(1);
+    });
+
+    it("stores correct absExpo for expo=-8", async () => {
+      const now = (await ethers.provider.getBlock("latest")).timestamp;
+      await pythMock.setPrice(FEED_ID, 110000000, 100, -8, now);
+
+      const cfg = await subject();
+      const absExpo = BigNumber.from("0x" + cfg.slice(66, 68)).toNumber();
+      expect(absExpo).to.eq(8);
     });
 
     describe("when feedId is bytes32(0)", () => {
@@ -226,37 +237,6 @@ describe("PythOracleAdapter", () => {
       });
 
       it("returns invalid", async () => {
-        const res = await subject();
-        expect(res.valid).to.eq(false);
-        expect(res.rate).to.eq(0);
-        expect(res.updatedAt).to.eq(0);
-      });
-    });
-
-    describe("when expo out of range in stored data (defensive)", () => {
-      beforeEach(() => {
-        // Bypass validateConfig — construct a malformed normalized config pointing to
-        // a feed with expo=1 that was set after validation.
-        subjectNormalizedConfig = ethers.utils.solidityPack(
-          ["bytes32", "uint8"],
-          [FEED_ID, 0]
-        );
-      });
-
-      it("returns invalid when expo > 0", async () => {
-        const now = (await ethers.provider.getBlock("latest")).timestamp;
-        await pythMock.setPrice(FEED_ID, 100, 0, 1, now);
-
-        const res = await subject();
-        expect(res.valid).to.eq(false);
-        expect(res.rate).to.eq(0);
-        expect(res.updatedAt).to.eq(0);
-      });
-
-      it("returns invalid when expo < -18", async () => {
-        const now = (await ethers.provider.getBlock("latest")).timestamp;
-        await pythMock.setPrice(FEED_ID, 100, 0, -19, now);
-
         const res = await subject();
         expect(res.valid).to.eq(false);
         expect(res.rate).to.eq(0);

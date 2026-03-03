@@ -24,19 +24,22 @@ contract PythOracleAdapterTest is Test {
 
     /* ===== validateConfig ===== */
 
-    function test_validateConfig_returnsPacked33ByteConfig() public view {
+    function test_validateConfig_returnsPacked34ByteConfig() public view {
         bytes memory raw = abi.encode(FEED_ID, false);
         bytes memory norm = adapter.validateConfig(raw);
 
-        assertEq(norm.length, 33);
+        assertEq(norm.length, 34);
 
         bytes32 packedFeedId;
+        uint8 absExpo;
         uint8 invertFlag;
         assembly {
             packedFeedId := mload(add(norm, 32))
-            invertFlag := byte(0, mload(add(norm, 64)))
+            absExpo := byte(0, mload(add(norm, 64)))
+            invertFlag := byte(1, mload(add(norm, 64)))
         }
         assertEq(packedFeedId, FEED_ID);
+        assertEq(absExpo, 5); // abs(-5) = 5
         assertEq(invertFlag, 0);
     }
 
@@ -46,9 +49,21 @@ contract PythOracleAdapterTest is Test {
 
         uint8 invertFlag;
         assembly {
-            invertFlag := byte(0, mload(add(norm, 64)))
+            invertFlag := byte(1, mload(add(norm, 64)))
         }
         assertEq(invertFlag, 1);
+    }
+
+    function test_validateConfig_absExpoForExpo8() public {
+        pythMock.setPrice(FEED_ID, 110000000, 100, -8, block.timestamp);
+        bytes memory raw = abi.encode(FEED_ID, false);
+        bytes memory norm = adapter.validateConfig(raw);
+
+        uint8 absExpo;
+        assembly {
+            absExpo := byte(0, mload(add(norm, 64)))
+        }
+        assertEq(absExpo, 8);
     }
 
     function test_validateConfig_revertsOnZeroFeedId() public {
@@ -154,19 +169,6 @@ contract PythOracleAdapterTest is Test {
         bytes memory norm = adapter.validateConfig(abi.encode(FEED_ID, false));
 
         pythMock.removePrice(FEED_ID);
-
-        (bool valid, uint256 rate, uint256 updatedAt) = adapter.getRate(norm);
-
-        assertFalse(valid);
-        assertEq(rate, 0);
-        assertEq(updatedAt, 0);
-    }
-
-    function test_getRate_invalidWhenExpoOutOfRange() public {
-        // Bypass validateConfig with manually packed config
-        bytes memory norm = abi.encodePacked(FEED_ID, bytes1(uint8(0)));
-
-        pythMock.setPrice(FEED_ID, 100, 0, 1, block.timestamp);
 
         (bool valid, uint256 rate, uint256 updatedAt) = adapter.getRate(norm);
 
