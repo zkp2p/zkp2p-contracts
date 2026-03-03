@@ -252,6 +252,16 @@ describe("PythOracleAdapter", () => {
         expect(res.rate).to.eq(0);
         expect(res.updatedAt).to.eq(0);
       });
+
+      it("returns invalid when expo < -18", async () => {
+        const now = (await ethers.provider.getBlock("latest")).timestamp;
+        await pythMock.setPrice(FEED_ID, 100, 0, -19, now);
+
+        const res = await subject();
+        expect(res.valid).to.eq(false);
+        expect(res.rate).to.eq(0);
+        expect(res.updatedAt).to.eq(0);
+      });
     });
 
     describe("when config length is invalid", () => {
