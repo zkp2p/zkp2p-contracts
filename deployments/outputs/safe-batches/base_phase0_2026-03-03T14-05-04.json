@@ -1,0 +1,28 @@
+{
+  "version": "1.0",
+  "chainId": "8453",
+  "createdAt": 1772546704346,
+  "meta": {
+    "name": "ZKP2P V2 Vanity Deployment - base",
+    "description": "Phase 0: Registry wiring for vanity-deployed V2 contracts on base",
+    "txBuilderVersion": "1.16.5",
+    "createdFromSafeAddress": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+    "createdFromOwnerAddress": ""
+  },
+  "transactions": [
+    {
+      "to": "0xeD0e847B101abc96E796260AC358e12BAa2f5B21",
+      "value": "0",
+      "data": "0xcc224d440000000000000000000000000ff4bd09cdbc00cd5fb9d7d270aef6a6bcb87777",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0x8d8e1A0e5345a5cc9AA206c3ca76D6d28c514608",
+      "value": "0",
+      "data": "0xd6da032600000000000000000000000057833a85208b8e42db7368969662a6d7312b83d1",
+      "contractMethod": null,
+      "contractInputsValues": null
+    }
+  ]
+}
