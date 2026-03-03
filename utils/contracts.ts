@@ -43,7 +43,9 @@ export {
   IOrchestratorV2,
   IOrchestratorRegistry,
   StaticOracleAdapterMock,
-  RevertingOracleAdapterMock
+  RevertingOracleAdapterMock,
+  PythMock,
+  PythOracleAdapter
 } from "../typechain";
 export { IEscrow } from "../typechain/contracts/Escrow";
 export { IOrchestrator } from "../typechain/contracts/Orchestrator";

@@ -114,6 +114,14 @@ export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
   "base_sepolia": "",
 };
 
+// Pyth Network contract addresses
+export const PYTH_CONTRACT: any = {
+  "localhost": "",
+  "base": "0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a",
+  "base_staging": "0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a",
+  "base_sepolia": "0xA2aa501b19aff244D90cc15a4Cf739D2725B5729",
+};
+
 // For Goerli and localhost
 export const USDC_MINT_AMOUNT = usdc(1000000);
 export const USDC_RECIPIENT = "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929";
