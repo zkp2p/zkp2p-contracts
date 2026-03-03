@@ -127,9 +127,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await setNewOwner(hre, orchestratorV2Contract, multiSig);
   console.log("OrchestratorV2 ownership transferred to", multiSig);
 
-  const unifiedPaymentVerifierV2Contract = await ethers.getContractAt("UnifiedPaymentVerifier", unifiedPaymentVerifierV2.address);
-  await setNewOwner(hre, unifiedPaymentVerifierV2Contract, multiSig);
-  console.log("UnifiedPaymentVerifierV2 ownership transferred to", multiSig);
+  // NOTE: UnifiedPaymentVerifierV2 ownership transfer is deferred to
+  // 16_configure_v2_payment_methods so the deployer can add payment methods
+  // directly without requiring multisig calldata.
 
   console.log("V2 system deploy finished...");
   await waitForDeploymentDelay(hre);
