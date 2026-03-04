@@ -7864,7 +7864,7 @@ export default {
       ]
     },
     "OrchestratorV2": {
-      "address": "0xacEa7179a484C2A303339Dc2f4bcdF6918187777",
+      "address": "0xaCE45eaFf44a7f6BFff91f5a872f453507677777",
       "abi": [
         {
           "inputs": [
