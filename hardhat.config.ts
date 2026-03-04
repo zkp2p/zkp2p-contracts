@@ -4,7 +4,7 @@ import '@typechain/hardhat'
 import 'solidity-coverage'
 import '@nomiclabs/hardhat-ethers'
 import 'hardhat-deploy';
-import '@nomiclabs/hardhat-etherscan';
+import '@nomicfoundation/hardhat-verify';
 import '@nomicfoundation/hardhat-chai-matchers'
 import 'hardhat-gas-reporter';
 import '@nomicfoundation/hardhat-foundry';
@@ -107,38 +107,7 @@ const config: HardhatUserConfig = {
     showMethodSig: true,
   },
   etherscan: {
-    apiKey: {
-      sepolia: process.env.ETHERSCAN_KEY || "",
-      base: process.env.ETHERSCAN_KEY || "",
-      base_staging: process.env.ETHERSCAN_KEY || "",
-      base_sepolia: process.env.ETHERSCAN_KEY || "",
-    },
-    customChains: [
-      {
-        network: "base_sepolia",
-        chainId: 84532,
-        urls: {
-          apiURL: "https://api.etherscan.io/v2/api?chainid=84532",
-          browserURL: "https://sepolia.basescan.org"
-        }
-      },
-      {
-        network: "base_staging",
-        chainId: 8453,
-        urls: {
-          apiURL: "https://api.etherscan.io/v2/api?chainid=8453",
-          browserURL: "https://basescan.org"
-        }
-      },
-      {
-        network: "base",
-        chainId: 8453,
-        urls: {
-          apiURL: "https://api.etherscan.io/v2/api?chainid=8453",
-          browserURL: "https://basescan.org"
-        }
-      }
-    ]
+    apiKey: process.env.ETHERSCAN_KEY || "",
   },
   paths: {
     sources: "./contracts",

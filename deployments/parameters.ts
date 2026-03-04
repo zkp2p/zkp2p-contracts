@@ -4,7 +4,7 @@ import { ether, usdc } from "../utils/common/units";
 
 export const INTENT_EXPIRATION_PERIOD: any = {
   "localhost": ONE_DAY_IN_SECONDS,
-  "base": ONE_DAY_IN_SECONDS,
+  "base": SIX_HOURS_IN_SECONDS,
   "base_staging": ONE_HOUR_IN_SECONDS,
   "base_sepolia": ONE_HOUR_IN_SECONDS,
 };
