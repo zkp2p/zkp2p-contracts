@@ -9,6 +9,7 @@ import {
   USDC
 } from "../deployments/parameters";
 import { getDeployedContractAddress } from "../deployments/helpers";
+import { safeBatchCollector } from "../deployments/safeBatchCollector";
 
 function tryGetAddress(network: string, contractName: string): string {
   try { return getDeployedContractAddress(network, contractName); } catch (e) { return "NOT DEPLOYED"; }
@@ -18,6 +19,7 @@ function tryGetAddress(network: string, contractName: string): string {
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deploy } = await hre.deployments
   const network = hre.deployments.getNetworkName();
+  const chainId = (await ethers.provider.getNetwork()).chainId;
 
   const [deployer] = await hre.getUnnamedAccounts();
   const multiSig = MULTI_SIG[network] ? MULTI_SIG[network] : deployer;
@@ -57,6 +59,21 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     ProtocolViewerV2:                   ${tryGetAddress(network, "ProtocolViewerV2")}
     `
   );
+
+  // Write Safe Transaction Builder batch file if there are pending multisig transactions
+  const txCount = safeBatchCollector.count();
+  if (txCount > 0) {
+    const filePath = safeBatchCollector.writeBatchFile(
+      network,
+      chainId.toString(),
+      multiSig
+    );
+    console.log(`\n    ======================================================================`);
+    console.log(`    Safe Transaction Builder batch file written (${txCount} transactions):`);
+    console.log(`    ${filePath}`);
+    console.log(`    Upload this file to Safe UI > Transaction Builder to sign and execute.`);
+    console.log(`    ======================================================================\n`);
+  }
 };
 
 func.runAtTheEnd = true;

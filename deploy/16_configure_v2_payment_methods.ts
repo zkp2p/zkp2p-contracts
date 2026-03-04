@@ -10,8 +10,11 @@ import {
   addPaymentMethodToRegistry,
   removePaymentMethodFromRegistry,
   savePaymentMethodSnapshot,
+  setNewOwner,
   waitForDeploymentDelay,
 } from "../deployments/helpers";
+import { MULTI_SIG } from "../deployments/parameters";
+import { safeBatchCollector } from "../deployments/safeBatchCollector";
 import { VENMO_PROVIDER_CONFIG } from "../deployments/verifiers/venmo";
 import { REVOLUT_PROVIDER_CONFIG } from "../deployments/verifiers/revolut";
 import { CASHAPP_PROVIDER_CONFIG } from "../deployments/verifiers/cashapp";
@@ -27,6 +30,7 @@ import { MONZO_PROVIDER_CONFIG } from "../deployments/verifiers/monzo";
 import { N26_PROVIDER_CONFIG } from "../deployments/verifiers/n26";
 import { ALIPAY_PROVIDER_CONFIG } from "../deployments/verifiers/alipay";
 import { CHIME_PROVIDER_CONFIG } from "../deployments/verifiers/chime";
+import { LUXON_PROVIDER_CONFIG } from "../deployments/verifiers/luxon";
 
 const ALL_PAYMENT_METHODS = [
   { key: "venmo", config: VENMO_PROVIDER_CONFIG },
@@ -42,6 +46,7 @@ const ALL_PAYMENT_METHODS = [
   { key: "n26", config: N26_PROVIDER_CONFIG },
   { key: "alipay", config: ALIPAY_PROVIDER_CONFIG },
   { key: "chime", config: CHIME_PROVIDER_CONFIG },
+  { key: "luxon", config: LUXON_PROVIDER_CONFIG },
 ];
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
@@ -93,11 +98,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
         v2VerifierAddress,
         config.currencies
       ]);
-      console.log(
-        `Contract owner is not in the list of accounts, must be manually added with the following calldata:
-        ${addCalldata}
-        contract address: ${paymentVerifierRegistryContract.address}
-        `
+      safeBatchCollector.add(
+        paymentVerifierRegistryContract.address,
+        addCalldata,
+        `PaymentVerifierRegistry.addPaymentMethod(${key}, ${v2VerifierAddress})`
       );
     } else {
       await addPaymentMethodToRegistry(
@@ -118,6 +122,13 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   }
 
   console.log("\nV2 payment method configuration finished...");
+
+  // Transfer UPV2 ownership to multisig (deferred from script 14 so deployer
+  // can add payment methods directly without multisig calldata)
+  const multiSig = MULTI_SIG[network] ? MULTI_SIG[network] : deployer;
+  await setNewOwner(hre, v2VerifierContract, multiSig);
+  console.log("UnifiedPaymentVerifierV2 ownership transferred to", multiSig);
+
   await waitForDeploymentDelay(hre);
 };
 

@@ -4,6 +4,7 @@ import { BigNumber } from "ethers";
 import * as fs from "fs";
 import * as path from "path";
 import { DEPLOY_TX_DELAY_MS } from "./parameters";
+import { safeBatchCollector } from "./safeBatchCollector";
 
 const ENV_DELAY_OVERRIDE = process.env.DEPLOY_TX_DELAY_MS;
 
@@ -87,11 +88,8 @@ export async function setOrchestrator(
         data,
       });
     } else {
-      console.log(
-        `Contract owner is not in the list of accounts, must be manually added with the following calldata:
-        ${contract.interface.encodeFunctionData("setOrchestrator", [orchestrator])}
-        `
-      );
+      const data = contract.interface.encodeFunctionData("setOrchestrator", [orchestrator]);
+      safeBatchCollector.add(contract.address, data, `setOrchestrator(${orchestrator}) on ${contract.address}`);
     }
   }
 }
@@ -112,11 +110,8 @@ export async function addEscrowToRegistry(
         data,
       });
     } else {
-      console.log(
-        `Contract owner is not in the list of accounts, must be manually added with the following calldata:
-        ${contract.interface.encodeFunctionData("addEscrow", [escrow])}
-        `
-      );
+      const data = contract.interface.encodeFunctionData("addEscrow", [escrow]);
+      safeBatchCollector.add(contract.address, data, `EscrowRegistry.addEscrow(${escrow})`);
     }
   }
 }
@@ -137,11 +132,8 @@ export async function addWritePermission(
         data,
       });
     } else {
-      console.log(
-        `Contract owner is not in the list of accounts, must be manually added with the following calldata:
-        ${contract.interface.encodeFunctionData("addWritePermission", [newPermission])}
-        `
-      );
+      const data = contract.interface.encodeFunctionData("addWritePermission", [newPermission]);
+      safeBatchCollector.add(contract.address, data, `NullifierRegistry.addWritePermission(${newPermission})`);
     }
   }
 }
@@ -161,12 +153,8 @@ export async function addPostIntentHook(
         data,
       });
     } else {
-      console.log(
-        `Contract owner is not in the list of accounts, must be manually added with the following calldata:
-        ${contract.interface.encodeFunctionData("addPostIntentHook", [hook])}
-        contract address: ${contract.address}
-        `
-      );
+      const data = contract.interface.encodeFunctionData("addPostIntentHook", [hook]);
+      safeBatchCollector.add(contract.address, data, `PostIntentHookRegistry.addPostIntentHook(${hook})`);
     }
   }
 }
@@ -188,12 +176,8 @@ export async function addCurrency(
         data,
       });
     } else {
-      console.log(
-        `Contract owner is not in the list of accounts, must be manually added with the following calldata:
-        ${contract.interface.encodeFunctionData("addCurrency", [currency])}
-        contract address: ${contract.address}
-        `
-      );
+      const data = contract.interface.encodeFunctionData("addCurrency", [currency]);
+      safeBatchCollector.add(contract.address, data, `addCurrency(${currency}) on ${contract.address}`);
     }
   }
 }
@@ -225,15 +209,15 @@ export async function addPaymentMethodToRegistry(
         data,
       });
     } else {
-      console.log(
-        `Contract owner is not in the list of accounts, must be manually added with the following calldata:
-        ${paymentVerifierRegistryContract.interface.encodeFunctionData("addPaymentMethod", [
-          paymentMethodHash,
-          verifierAddress,
-          currencies
-        ])}
-        contract address: ${paymentVerifierRegistryContract.address}
-        `
+      const data = paymentVerifierRegistryContract.interface.encodeFunctionData("addPaymentMethod", [
+        paymentMethodHash,
+        verifierAddress,
+        currencies
+      ]);
+      safeBatchCollector.add(
+        paymentVerifierRegistryContract.address,
+        data,
+        `PaymentVerifierRegistry.addPaymentMethod(${paymentMethodHash.slice(0, 10)}..., ${verifierAddress})`
       );
     }
   } else {
@@ -261,13 +245,13 @@ export async function addPaymentMethodToUnifiedVerifier(
         data,
       });
     } else {
-      console.log(
-        `Contract owner is not in the list of accounts, must be manually added with the following calldata:
-        ${unifiedVerifierContract.interface.encodeFunctionData("addPaymentMethod", [
-          paymentMethodHash
-        ])}
-        contract address: ${unifiedVerifierContract.address}
-        `
+      const data = unifiedVerifierContract.interface.encodeFunctionData("addPaymentMethod", [
+        paymentMethodHash
+      ]);
+      safeBatchCollector.add(
+        unifiedVerifierContract.address,
+        data,
+        `UnifiedPaymentVerifier.addPaymentMethod(${paymentMethodHash.slice(0, 10)}...)`
       );
     }
   } else {
@@ -291,12 +275,8 @@ export async function addOrchestratorToRegistry(
         data,
       });
     } else {
-      console.log(
-        `Contract owner is not in the list of accounts, must be manually added with the following calldata:
-        ${contract.interface.encodeFunctionData("addOrchestrator", [orchestrator])}
-        contract address: ${contract.address}
-        `
-      );
+      const data = contract.interface.encodeFunctionData("addOrchestrator", [orchestrator]);
+      safeBatchCollector.add(contract.address, data, `OrchestratorRegistry.addOrchestrator(${orchestrator})`);
     }
   }
 }
@@ -318,11 +298,11 @@ export async function removePaymentMethodFromRegistry(
         data,
       });
     } else {
-      console.log(
-        `Contract owner is not in the list of accounts, must be manually removed with the following calldata:
-        ${contract.interface.encodeFunctionData("removePaymentMethod", [paymentMethodHash])}
-        contract address: ${contract.address}
-        `
+      const data = contract.interface.encodeFunctionData("removePaymentMethod", [paymentMethodHash]);
+      safeBatchCollector.add(
+        contract.address,
+        data,
+        `PaymentVerifierRegistry.removePaymentMethod(${paymentMethodHash.slice(0, 10)}...)`
       );
     }
   } else {
@@ -346,12 +326,8 @@ export async function removeWritePermission(
         data,
       });
     } else {
-      console.log(
-        `Contract owner is not in the list of accounts, must be manually removed with the following calldata:
-        ${contract.interface.encodeFunctionData("removeWritePermission", [writer])}
-        contract address: ${contract.address}
-        `
-      );
+      const data = contract.interface.encodeFunctionData("removeWritePermission", [writer]);
+      safeBatchCollector.add(contract.address, data, `removeWritePermission(${writer}) on ${contract.address}`);
     }
   }
 }
