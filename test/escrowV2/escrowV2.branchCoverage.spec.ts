@@ -1372,8 +1372,8 @@ describe("EscrowV2 -- Branch Coverage", () => {
         );
       });
 
-      it("falls back to fixed floor (spread returns 0)", async () => {
-        expect(await subject()).to.eq(ether(1));
+      it("returns zero (oracle halt)", async () => {
+        expect(await subject()).to.eq(ZERO);
       });
     });
 
@@ -1396,8 +1396,8 @@ describe("EscrowV2 -- Branch Coverage", () => {
         );
       });
 
-      it("falls back to fixed floor (spread returns 0)", async () => {
-        expect(await subject()).to.eq(ether(1));
+      it("returns zero (oracle halt)", async () => {
+        expect(await subject()).to.eq(ZERO);
       });
     });
   });

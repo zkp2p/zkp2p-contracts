@@ -159,7 +159,7 @@ describe("EscrowV2 - PythOracleAdapter Integration", () => {
       expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(100));
     });
 
-    it("falls back to fixed rate when Pyth price is stale", async () => {
+    it("returns zero when Pyth price is stale (oracle halt)", async () => {
       await escrow.connect(depositor.wallet).setOracleRateConfig(
         ZERO,
         paymentMethod,
@@ -175,8 +175,8 @@ describe("EscrowV2 - PythOracleAdapter Integration", () => {
       // Advance time past maxStaleness (3600s)
       await blockchain.increaseTimeAsync(7200);
 
-      // Stale price → oracle returns 0 → falls back to fixed rate
-      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
+      // Stale price → oracle returns 0 → oracle halt returns 0
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ZERO);
     });
 
     it("updates effective rate when mock price changes", async () => {

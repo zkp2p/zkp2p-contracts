@@ -1115,7 +1115,7 @@ describe("EscrowV2", () => {
       expect(clearedConfig.rateManagerId).to.eq(ethers.constants.HashZero);
     });
 
-    it("falls back to fixed floor when oracle adapter reverts", async () => {
+    it("returns zero when oracle adapter reverts (oracle halt)", async () => {
       const currentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
       await escrow.connect(depositor.wallet).setOracleRateConfig(
         depositId,
@@ -1129,10 +1129,10 @@ describe("EscrowV2", () => {
         }
       );
 
-      expect(await escrow.getDepositCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(ether(1));
+      expect(await escrow.getDepositCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(ZERO);
     });
 
-    it("falls back to fixed floor when oracle quote is invalid", async () => {
+    it("returns zero when oracle quote is invalid (oracle halt)", async () => {
       const currentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
       await escrow.connect(depositor.wallet).setOracleRateConfig(
         depositId,
@@ -1146,10 +1146,10 @@ describe("EscrowV2", () => {
         }
       );
 
-      expect(await escrow.getDepositCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(ether(1));
+      expect(await escrow.getDepositCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(ZERO);
     });
 
-    it("falls back to fixed floor when oracle timestamp is in the future", async () => {
+    it("returns zero when oracle timestamp is in the future (oracle halt)", async () => {
       const currentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
       await escrow.connect(depositor.wallet).setOracleRateConfig(
         depositId,
@@ -1163,10 +1163,10 @@ describe("EscrowV2", () => {
         }
       );
 
-      expect(await escrow.getDepositCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(ether(1));
+      expect(await escrow.getDepositCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(ZERO);
     });
 
-    it("falls back to fixed floor when oracle quote is stale", async () => {
+    it("returns zero when oracle quote is stale (oracle halt)", async () => {
       const currentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
       await escrow.connect(depositor.wallet).setOracleRateConfig(
         depositId,
@@ -1180,7 +1180,7 @@ describe("EscrowV2", () => {
         }
       );
 
-      expect(await escrow.getDepositCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(ether(1));
+      expect(await escrow.getDepositCurrencyMinRate(depositId, venmoPaymentMethod, Currency.USD)).to.eq(ZERO);
     });
   });
 

@@ -15,6 +15,7 @@ import {
   PaymentVerifierRegistry,
   RateManagerMock,
   ReentrantRateManagerMock,
+  StaticOracleAdapterMock,
   USDCMock,
 } from "@utils/contracts";
 
@@ -35,6 +36,7 @@ describe("EscrowV2", () => {
   let paymentVerifierRegistry: PaymentVerifierRegistry;
   let verifier: PaymentVerifierMock;
   let rateManagerMock: RateManagerMock;
+  let staticOracleAdapter: StaticOracleAdapterMock;
 
   let paymentMethod: BytesLike;
   let payeeDetails: BytesLike;
@@ -51,6 +53,9 @@ describe("EscrowV2", () => {
     orchestratorRegistry = await deployer.deployOrchestratorRegistry();
     verifier = await deployer.deployPaymentVerifierMock();
     rateManagerMock = await deployer.deployRateManagerMock();
+    staticOracleAdapter = (await (
+      await ethers.getContractFactory("StaticOracleAdapterMock", owner.wallet)
+    ).deploy()) as StaticOracleAdapterMock;
 
     paymentMethod = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
     payeeDetails = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("payee"));
@@ -237,9 +242,74 @@ describe("EscrowV2", () => {
       expect(await escrow.getEffectiveRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
     });
 
-    it("falls back to native rate when delegated manager reverts", async () => {
+    it("falls back to escrow floor when delegated manager reverts", async () => {
       await escrow.connect(depositor.wallet).setRateManager(ZERO, rateManagerMock.address, rateManagerId);
       await rateManagerMock.connect(owner.wallet).setShouldRevertOnGetRate(true);
+
+      expect(await escrow.getEffectiveRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
+    });
+
+    it("returns escrow floor when manager rate is below floor", async () => {
+      await rateManagerMock
+        .connect(owner.wallet)
+        .setRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, ether(0.9));
+      await escrow.connect(depositor.wallet).setRateManager(ZERO, rateManagerMock.address, rateManagerId);
+
+      expect(await escrow.getEffectiveRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
+    });
+
+    it("returns 0 when escrow floor is 0 (currency deactivated)", async () => {
+      await escrow.connect(depositor.wallet).setRateManager(ZERO, rateManagerMock.address, rateManagerId);
+      await escrow.connect(depositor.wallet).deactivateCurrency(ZERO, paymentMethod, Currency.USD);
+
+      expect(await escrow.getEffectiveRate(ZERO, paymentMethod, Currency.USD)).to.eq(ZERO);
+    });
+
+    it("returns 0 when delegated manager returns 0 (pair disabled)", async () => {
+      await rateManagerMock
+        .connect(owner.wallet)
+        .setRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, ZERO);
+      await escrow.connect(depositor.wallet).setRateManager(ZERO, rateManagerMock.address, rateManagerId);
+
+      expect(await escrow.getEffectiveRate(ZERO, paymentMethod, Currency.USD)).to.eq(ZERO);
+    });
+
+    it("returns 0 when oracle configured but stale, even with delegation", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1.3), currentTimestamp - 100]
+      );
+      await escrow.connect(depositor.wallet).setOracleRateConfig(
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          adapter: staticOracleAdapter.address,
+          adapterConfig,
+          spreadBps: 0,
+          maxStaleness: 5,
+        }
+      );
+      await escrow.connect(depositor.wallet).setRateManager(ZERO, rateManagerMock.address, rateManagerId);
+
+      expect(await escrow.getEffectiveRate(ZERO, paymentMethod, Currency.USD)).to.eq(ZERO);
+    });
+
+    it("returns max(managerRate, escrowFloor) when both are nonzero", async () => {
+      await rateManagerMock
+        .connect(owner.wallet)
+        .setRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, ether(1.5));
+      await escrow.connect(depositor.wallet).setRateManager(ZERO, rateManagerMock.address, rateManagerId);
+
+      expect(await escrow.getEffectiveRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1.5));
+    });
+
+    it("returns escrow floor when manager rate equals floor", async () => {
+      await rateManagerMock
+        .connect(owner.wallet)
+        .setRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD, ether(1));
+      await escrow.connect(depositor.wallet).setRateManager(ZERO, rateManagerMock.address, rateManagerId);
 
       expect(await escrow.getEffectiveRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
     });
