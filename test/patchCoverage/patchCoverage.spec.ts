@@ -238,9 +238,9 @@ describe("Patch Coverage", () => {
         }
       );
 
-      // Should fall back to fixed floor ether(1) since isValidQuote=false
+      // Oracle halt: isValidQuote=false, spreadRate == 0, adapter configured → return 0
       const rate = await escrow.getDepositCurrencyMinRate(depositId, paymentMethod, Currency.USD);
-      expect(rate).to.eq(ether(1));
+      expect(rate).to.eq(ZERO);
     });
   });
 
@@ -264,9 +264,9 @@ describe("Patch Coverage", () => {
         }
       );
 
-      // Should fall back to fixed floor ether(1) since rateUpdatedAt is in the future
+      // Oracle halt: rateUpdatedAt is in the future, spreadRate == 0, adapter configured → return 0
       const rate = await escrow.getDepositCurrencyMinRate(depositId, paymentMethod, Currency.USD);
-      expect(rate).to.eq(ether(1));
+      expect(rate).to.eq(ZERO);
     });
   });
 
@@ -275,7 +275,7 @@ describe("Patch Coverage", () => {
    *  Covers: line 1439 catch block
    * ================================================================ */
   describe("EscrowV2 -- _computeSpreadRate with reverting oracle adapter", () => {
-    it("returns fixed floor when oracle adapter reverts", async () => {
+    it("returns zero when oracle adapter reverts (oracle halt)", async () => {
       await escrow.connect(depositor.wallet).setOracleRateConfig(
         depositId,
         paymentMethod,
@@ -289,7 +289,7 @@ describe("Patch Coverage", () => {
       );
 
       const rate = await escrow.getDepositCurrencyMinRate(depositId, paymentMethod, Currency.USD);
-      expect(rate).to.eq(ether(1));
+      expect(rate).to.eq(ZERO);
     });
   });
 
@@ -506,15 +506,12 @@ describe("Patch Coverage", () => {
   });
 
   /* ================================================================
-   *  RateManagerV1 -- _computeSpreadRate: isValidQuote = false
-   *  with non-zero marketRate (independent branch test)
+   *  RateManagerV1 -- getRate: pure registry (no depositor floors)
    * ================================================================ */
-  describe("RateManagerV1 -- _computeSpreadRate invalid oracle quote", () => {
+  describe("RateManagerV1 -- getRate as pure registry", () => {
     let rateManagerId: BytesLike;
 
     beforeEach(async () => {
-      await escrowRegistry.connect(owner.wallet).addEscrow(depositor.address);
-
       const tx = await rateManagerV1.createRateManager({
         manager: manager.address,
         feeRecipient: feeRecipient.address,
@@ -536,106 +533,15 @@ describe("Patch Coverage", () => {
       );
     });
 
-    it("returns zero when isValidQuote is false but marketRate is non-zero", async () => {
-      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
-      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
-        ["bool", "uint256", "uint256"],
-        [false, ether(1.5), currentTimestamp]
-      );
-
-      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
-        rateManagerId,
-        escrow.address,
-        ZERO,
-        paymentMethod,
-        Currency.USD,
-        {
-          enabled: true,
-          floorFixed: ZERO,
-          floorSpreadBps: 200,
-          oracleAdapter: staticOracleAdapter.address,
-          adapterConfig,
-          maxStaleness: 3600,
-        }
-      );
-
-      // With oracle protection configured but isValidQuote=false and no fixed floor,
-      // the rate should be 0 (disabled)
+    it("returns manager rate directly without depositor state", async () => {
       const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
+      expect(rate).to.eq(ether(1.1));
+    });
+
+    it("returns zero when rate is not set for tuple", async () => {
+      const otherCurrency = ethers.utils.formatBytes32String("EUR");
+      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, otherCurrency);
       expect(rate).to.eq(ZERO);
-    });
-  });
-
-  /* ================================================================
-   *  RateManagerV1 -- _computeSpreadRate: oracle reverts (catch block)
-   * ================================================================ */
-  describe("RateManagerV1 -- _computeSpreadRate with reverting oracle", () => {
-    let rateManagerId: BytesLike;
-
-    beforeEach(async () => {
-      await escrowRegistry.connect(owner.wallet).addEscrow(depositor.address);
-
-      const tx = await rateManagerV1.createRateManager({
-        manager: manager.address,
-        feeRecipient: feeRecipient.address,
-        maxFee: ether(0.05),
-        fee: ether(0.01),
-        minLiquidity: ZERO,
-        name: "RM",
-        uri: "ipfs://rm",
-      });
-      const receipt = await tx.wait();
-      const event = receipt.events?.find((e: any) => e.event === "RateManagerCreated");
-      rateManagerId = event?.args?.rateManagerId;
-
-      await rateManagerV1.connect(manager.wallet).setRate(
-        rateManagerId,
-        paymentMethod,
-        Currency.USD,
-        ether(1.1)
-      );
-    });
-
-    it("returns zero when oracle adapter reverts", async () => {
-      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
-        rateManagerId,
-        escrow.address,
-        ZERO,
-        paymentMethod,
-        Currency.USD,
-        {
-          enabled: true,
-          floorFixed: ZERO,
-          floorSpreadBps: 200,
-          oracleAdapter: revertingOracleAdapter.address,
-          adapterConfig: "0x",
-          maxStaleness: 3600,
-        }
-      );
-
-      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
-      expect(rate).to.eq(ZERO);
-    });
-
-    it("falls back to fixed floor when oracle adapter reverts", async () => {
-      await rateManagerV1.connect(depositor.wallet).setDepositorFloor(
-        rateManagerId,
-        escrow.address,
-        ZERO,
-        paymentMethod,
-        Currency.USD,
-        {
-          enabled: true,
-          floorFixed: ether(0.9),
-          floorSpreadBps: 200,
-          oracleAdapter: revertingOracleAdapter.address,
-          adapterConfig: "0x",
-          maxStaleness: 3600,
-        }
-      );
-
-      const rate = await rateManagerV1.getRate(rateManagerId, escrow.address, ZERO, paymentMethod, Currency.USD);
-      expect(rate).to.eq(ether(1.1)); // Manager rate > floor, so returns manager rate
     });
   });
 
