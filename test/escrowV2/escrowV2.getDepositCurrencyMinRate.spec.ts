@@ -128,11 +128,17 @@ describe("EscrowV2", () => {
       expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1.2));
     });
 
-    it("returns fixed when oracle source is stale", async () => {
+    it("returns zero when oracle configured but stale (halt behavior)", async () => {
       const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
       await setOracleRate(ether(1.3), 0, 5, currentTimestamp - 100);
 
-      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ZERO);
+    });
+
+    it("returns fixed floor when no oracle configured and fixed floor is nonzero", async () => {
+      await escrow.connect(depositor.wallet).setCurrencyMinRate(ZERO, paymentMethod, Currency.USD, ether(1.15));
+
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1.15));
     });
 
     it("returns zero when currency is deactivated", async () => {

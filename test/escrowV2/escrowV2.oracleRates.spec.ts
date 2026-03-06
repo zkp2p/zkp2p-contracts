@@ -237,32 +237,32 @@ describe("EscrowV2", () => {
       expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1.02));
     });
 
-    it("falls back to fixed floor when oracle is stale", async () => {
+    it("returns zero when oracle is stale (oracle halt)", async () => {
       const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
       subjectUpdatedAt = BigNumber.from(currentTimestamp - 10_000);
       subjectMaxStaleness = 10;
 
       await subject();
 
-      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ZERO);
     });
 
-    it("falls back to fixed floor when oracle quote is invalid", async () => {
+    it("returns zero when oracle quote is invalid (oracle halt)", async () => {
       subjectRate = ZERO;
       await subject();
 
-      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ZERO);
     });
 
-    it("falls back to fixed floor when oracle timestamp is in the future", async () => {
+    it("returns zero when oracle timestamp is in the future (oracle halt)", async () => {
       const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
       subjectUpdatedAt = BigNumber.from(currentTimestamp + 300);
       await subject();
 
-      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ZERO);
     });
 
-    it("falls back to fixed floor when oracle adapter reverts", async () => {
+    it("returns zero when oracle adapter reverts (oracle halt)", async () => {
       const adapterConfig = ethers.utils.defaultAbiCoder.encode(
         ["bool", "uint256", "uint256"],
         [true, ether(1), subjectUpdatedAt]
@@ -280,7 +280,7 @@ describe("EscrowV2", () => {
         }
       );
 
-      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1));
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ZERO);
     });
 
     it("allows delegate to set config", async () => {

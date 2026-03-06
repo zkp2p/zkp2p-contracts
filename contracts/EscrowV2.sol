@@ -984,6 +984,17 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         return _getDepositCurrencyMinRate(_depositId, _paymentMethod, _currencyCode);
     }
 
+    /**
+     * @notice Resolves the effective minimum rate for a tuple, including delegated management.
+     * @dev Resolution order:
+     * 1) Compute escrow floor (fixed and/or oracle spread floor).
+     * 2) If escrow floor is zero, halt and return zero.
+     * 3) If not delegated, return escrow floor.
+     * 4) If delegated, ask manager for a rate.
+     *    - manager returns zero: pair disabled, return zero
+     *    - manager call reverts: fail safe to escrow floor
+     *    - otherwise: return max(managerRate, escrowFloor)
+     */
     function getEffectiveRate(
         uint256 _depositId,
         bytes32 _paymentMethod,
@@ -993,6 +1004,10 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         view
         returns (uint256)
     {
+        uint256 escrowFloor = _getDepositCurrencyMinRate(_depositId, _paymentMethod, _currencyCode);
+
+        if (escrowFloor == 0) return 0;
+
         RateManagerConfig memory config = depositRateManagerConfig[_depositId];
         if (config.rateManager != address(0)) {
             try IRateManager(config.rateManager).getRate(
@@ -1002,12 +1017,13 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
                 _paymentMethod,
                 _currencyCode
             ) returns (uint256 delegatedRate) {
-                return delegatedRate;
+                if (delegatedRate == 0) return 0;
+                return delegatedRate > escrowFloor ? delegatedRate : escrowFloor;
             } catch {
-                return _getDepositCurrencyMinRate(_depositId, _paymentMethod, _currencyCode);
+                return escrowFloor;
             }
         }
-        return _getDepositCurrencyMinRate(_depositId, _paymentMethod, _currencyCode);
+        return escrowFloor;
     }
 
     function getManagerFee(uint256 _depositId) external view returns (address recipient, uint256 fee) {
@@ -1403,10 +1419,15 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         view
         returns (uint256)
     {
-        uint256 fixedRate = depositCurrencyMinRate[_depositId][_paymentMethod][_currencyCode];
         OracleRateConfig memory oracleConfig = depositOracleRateConfig[_depositId][_paymentMethod][_currencyCode];
         uint256 spreadRate = _computeSpreadRate(oracleConfig);
 
+        // Oracle-halt semantics: configured oracle must yield a usable spread rate.
+        if (oracleConfig.adapter != address(0) && spreadRate == 0) {
+            return 0;
+        }
+
+        uint256 fixedRate = depositCurrencyMinRate[_depositId][_paymentMethod][_currencyCode];
         return fixedRate > spreadRate ? fixedRate : spreadRate;
     }
 
@@ -1420,6 +1441,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
             uint256 marketRate,
             uint256 rateUpdatedAt
         ) {
+            // Any invalid/stale/unsafe quote maps to zero; caller decides halt vs fallback.
             if (!isValidQuote || marketRate == 0) {
                 return 0;
             }
