@@ -21,7 +21,7 @@ import {
 
 // Old addresses being replaced (deployed by script 14/15, before rate-floor refactor)
 const OLD_ESCROW_V2: any = {
-  "base": "0x0ff4Bd09CDbc00cD5Fb9D7D270AeF6a6BCB87777",
+  // "base" handled by script 19 (vanity deployer)
   "base_staging": "0xA36Eab7cB39fCc874bEA5e7e0C934abcD253562f",
 };
 
