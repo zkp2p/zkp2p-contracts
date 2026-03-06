@@ -3415,7 +3415,7 @@ export default {
       ]
     },
     "EscrowV2": {
-      "address": "0xA36Eab7cB39fCc874bEA5e7e0C934abcD253562f",
+      "address": "0xEf77c802C9Ab4923ca4f5FD499ACD2f5C551Af58",
       "abi": [
         {
           "inputs": [
@@ -12073,7 +12073,7 @@ export default {
       ]
     },
     "RateManagerV1": {
-      "address": "0x9401462CbF0E9Cf12D60C899339406b092B156C8",
+      "address": "0x9d773Af159538369b4842e40510562016E3eD3d7",
       "abi": [
         {
           "inputs": [
@@ -12085,22 +12085,6 @@ export default {
           ],
           "stateMutability": "nonpayable",
           "type": "constructor"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint256",
-              "name": "length",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "maxLength",
-              "type": "uint256"
-            }
-          ],
-          "name": "AdapterConfigTooLong",
-          "type": "error"
         },
         {
           "inputs": [
@@ -12138,17 +12122,6 @@ export default {
           "inputs": [
             {
               "internalType": "uint256",
-              "name": "depositId",
-              "type": "uint256"
-            }
-          ],
-          "name": "DepositNotFound",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint256",
               "name": "fee",
               "type": "uint256"
             },
@@ -12159,28 +12132,6 @@ export default {
             }
           ],
           "name": "FeeExceedsMaximum",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "adapter",
-              "type": "address"
-            }
-          ],
-          "name": "InvalidOracleAdapter",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint256",
-              "name": "spreadBps",
-              "type": "uint256"
-            }
-          ],
-          "name": "InvalidSpread",
           "type": "error"
         },
         {
@@ -12230,122 +12181,6 @@ export default {
           "inputs": [],
           "name": "ZeroValue",
           "type": "error"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "rateManagerId",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "escrow",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "uint256",
-              "name": "depositId",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "bytes32",
-              "name": "paymentMethod",
-              "type": "bytes32"
-            },
-            {
-              "indexed": false,
-              "internalType": "bytes32",
-              "name": "currencyCode",
-              "type": "bytes32"
-            },
-            {
-              "indexed": false,
-              "internalType": "bool",
-              "name": "enabled",
-              "type": "bool"
-            }
-          ],
-          "name": "DepositorCurrencyEnabledSet",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "rateManagerId",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "escrow",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "uint256",
-              "name": "depositId",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "bytes32",
-              "name": "paymentMethod",
-              "type": "bytes32"
-            },
-            {
-              "indexed": false,
-              "internalType": "bytes32",
-              "name": "currencyCode",
-              "type": "bytes32"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "floorFixed",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint16",
-              "name": "floorSpreadBps",
-              "type": "uint16"
-            },
-            {
-              "indexed": false,
-              "internalType": "address",
-              "name": "oracleAdapter",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "bytes",
-              "name": "adapterConfig",
-              "type": "bytes"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint32",
-              "name": "maxStaleness",
-              "type": "uint32"
-            },
-            {
-              "indexed": false,
-              "internalType": "bool",
-              "name": "enabled",
-              "type": "bool"
-            }
-          ],
-          "name": "DepositorFloorSet",
-          "type": "event"
         },
         {
           "anonymous": false,
@@ -12641,77 +12476,6 @@ export default {
               "internalType": "bytes32",
               "name": "_rateManagerId",
               "type": "bytes32"
-            },
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_depositId",
-              "type": "uint256"
-            },
-            {
-              "internalType": "bytes32",
-              "name": "_paymentMethod",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "bytes32",
-              "name": "_currencyCode",
-              "type": "bytes32"
-            }
-          ],
-          "name": "getDepositorFloor",
-          "outputs": [
-            {
-              "components": [
-                {
-                  "internalType": "bool",
-                  "name": "enabled",
-                  "type": "bool"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "floorFixed",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint16",
-                  "name": "floorSpreadBps",
-                  "type": "uint16"
-                },
-                {
-                  "internalType": "address",
-                  "name": "oracleAdapter",
-                  "type": "address"
-                },
-                {
-                  "internalType": "bytes",
-                  "name": "adapterConfig",
-                  "type": "bytes"
-                },
-                {
-                  "internalType": "uint32",
-                  "name": "maxStaleness",
-                  "type": "uint32"
-                }
-              ],
-              "internalType": "struct RateManagerV1.DepositorFloorConfig",
-              "name": "config",
-              "type": "tuple"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_rateManagerId",
-              "type": "bytes32"
             }
           ],
           "name": "getFee",
@@ -12768,12 +12532,12 @@ export default {
             },
             {
               "internalType": "address",
-              "name": "_escrow",
+              "name": "",
               "type": "address"
             },
             {
               "internalType": "uint256",
-              "name": "_depositId",
+              "name": "",
               "type": "uint256"
             },
             {
@@ -12860,45 +12624,6 @@ export default {
               "internalType": "bytes32",
               "name": "_rateManagerId",
               "type": "bytes32"
-            },
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_depositId",
-              "type": "uint256"
-            },
-            {
-              "internalType": "bytes32",
-              "name": "_paymentMethod",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "bytes32",
-              "name": "_currencyCode",
-              "type": "bytes32"
-            }
-          ],
-          "name": "isDepositorCurrencyEnabled",
-          "outputs": [
-            {
-              "internalType": "bool",
-              "name": "enabled",
-              "type": "bool"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_rateManagerId",
-              "type": "bytes32"
             }
           ],
           "name": "isRateManager",
@@ -12946,222 +12671,6 @@ export default {
         {
           "inputs": [],
           "name": "renounceOwnership",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_rateManagerId",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_depositId",
-              "type": "uint256"
-            },
-            {
-              "internalType": "bytes32",
-              "name": "_paymentMethod",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "bytes32",
-              "name": "_currencyCode",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "bool",
-              "name": "_enabled",
-              "type": "bool"
-            }
-          ],
-          "name": "setDepositorCurrencyEnabled",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_rateManagerId",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_depositId",
-              "type": "uint256"
-            },
-            {
-              "internalType": "bytes32[]",
-              "name": "_paymentMethods",
-              "type": "bytes32[]"
-            },
-            {
-              "internalType": "bytes32[][]",
-              "name": "_currencyCodes",
-              "type": "bytes32[][]"
-            },
-            {
-              "internalType": "bool[][]",
-              "name": "_enabled",
-              "type": "bool[][]"
-            }
-          ],
-          "name": "setDepositorCurrencyEnabledBatch",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_rateManagerId",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_depositId",
-              "type": "uint256"
-            },
-            {
-              "internalType": "bytes32",
-              "name": "_paymentMethod",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "bytes32",
-              "name": "_currencyCode",
-              "type": "bytes32"
-            },
-            {
-              "components": [
-                {
-                  "internalType": "bool",
-                  "name": "enabled",
-                  "type": "bool"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "floorFixed",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint16",
-                  "name": "floorSpreadBps",
-                  "type": "uint16"
-                },
-                {
-                  "internalType": "address",
-                  "name": "oracleAdapter",
-                  "type": "address"
-                },
-                {
-                  "internalType": "bytes",
-                  "name": "adapterConfig",
-                  "type": "bytes"
-                },
-                {
-                  "internalType": "uint32",
-                  "name": "maxStaleness",
-                  "type": "uint32"
-                }
-              ],
-              "internalType": "struct RateManagerV1.DepositorFloorConfig",
-              "name": "_config",
-              "type": "tuple"
-            }
-          ],
-          "name": "setDepositorFloor",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_rateManagerId",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_depositId",
-              "type": "uint256"
-            },
-            {
-              "internalType": "bytes32[]",
-              "name": "_paymentMethods",
-              "type": "bytes32[]"
-            },
-            {
-              "internalType": "bytes32[][]",
-              "name": "_currencyCodes",
-              "type": "bytes32[][]"
-            },
-            {
-              "components": [
-                {
-                  "internalType": "bool",
-                  "name": "enabled",
-                  "type": "bool"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "floorFixed",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint16",
-                  "name": "floorSpreadBps",
-                  "type": "uint16"
-                },
-                {
-                  "internalType": "address",
-                  "name": "oracleAdapter",
-                  "type": "address"
-                },
-                {
-                  "internalType": "bytes",
-                  "name": "adapterConfig",
-                  "type": "bytes"
-                },
-                {
-                  "internalType": "uint32",
-                  "name": "maxStaleness",
-                  "type": "uint32"
-                }
-              ],
-              "internalType": "struct RateManagerV1.DepositorFloorConfig[][]",
-              "name": "_configs",
-              "type": "tuple[][]"
-            }
-          ],
-          "name": "setDepositorFloorBatch",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"

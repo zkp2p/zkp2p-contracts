@@ -117,6 +117,28 @@ export async function addEscrowToRegistry(
 }
 
 
+export async function removeEscrowFromRegistry(
+  hre: HardhatRuntimeEnvironment,
+  contract: any,
+  escrow: Address
+): Promise<void> {
+  const currentOwner = await contract.owner();
+
+  if (await contract.isWhitelistedEscrow(escrow)) {
+    if ((await hre.getUnnamedAccounts()).includes(currentOwner)) {
+      const data = contract.interface.encodeFunctionData("removeEscrow", [escrow]);
+      await sendDeploymentTransaction(hre, {
+        from: currentOwner,
+        to: contract.address,
+        data,
+      });
+    } else {
+      const data = contract.interface.encodeFunctionData("removeEscrow", [escrow]);
+      safeBatchCollector.add(contract.address, data, `EscrowRegistry.removeEscrow(${escrow})`);
+    }
+  }
+}
+
 export async function addWritePermission(
   hre: HardhatRuntimeEnvironment,
   contract: any,
