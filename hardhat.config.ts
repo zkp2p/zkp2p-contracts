@@ -93,6 +93,9 @@ const config: HardhatUserConfig = {
       // @ts-ignore
       accounts: [
         `0x${process.env.BASE_DEPLOY_PRIVATE_KEY}`,
+        ...(process.env.VANITY_ESCROW_V2_PROD_PRIVATE_KEY
+          ? [`0x${process.env.VANITY_ESCROW_V2_PROD_PRIVATE_KEY}`]
+          : []),
       ]
     },
   },
