@@ -151,6 +151,49 @@ describe("EscrowV2", () => {
       expect(await escrow.getDepositCurrencyMinRate(depositId, paymentMethod, Currency.USD)).to.eq(expectedSpread);
     });
 
+    it("allows a zero fixed floor when inline oracle config is provided", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1.05), BigNumber.from(currentTimestamp)]
+      );
+
+      await escrow.connect(depositor.wallet).createDeposit({
+        token: usdcToken.address,
+        amount: usdc(200),
+        intentAmountRange: { min: usdc(10), max: usdc(200) },
+        paymentMethods: [paymentMethod],
+        paymentMethodData: [
+          {
+            intentGatingService: ADDRESS_ZERO,
+            payeeDetails,
+            data: "0x",
+          },
+        ],
+        currencies: [
+          [
+            {
+              code: Currency.USD,
+              minConversionRate: ZERO,
+              oracleRateConfig: {
+                adapter: staticOracleAdapter.address,
+                adapterConfig,
+                spreadBps: 50,
+                maxStaleness: 3600,
+              },
+            },
+          ],
+        ],
+        delegate: ADDRESS_ZERO,
+        intentGuardian: ADDRESS_ZERO,
+        retainOnEmpty: false,
+      });
+
+      const depositId = ONE;
+      const expectedSpread = ether(1.05).mul(10_050).add(9_999).div(10_000);
+      expect(await escrow.getDepositCurrencyMinRate(depositId, paymentMethod, Currency.USD)).to.eq(expectedSpread);
+    });
+
     it("skips oracle config when adapter is zero address", async () => {
       const tx = await escrow.connect(depositor.wallet).createDeposit({
         token: usdcToken.address,
