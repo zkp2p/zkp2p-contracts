@@ -5,6 +5,7 @@ pragma solidity ^0.8.18;
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IPostIntentHookV2 } from "./IPostIntentHookV2.sol";
 import { IPreIntentHook } from "./IPreIntentHook.sol";
+import { IReferralFee } from "./IReferralFee.sol";
 
 /**
  * @title IOrchestratorV2
@@ -26,8 +27,7 @@ interface IOrchestratorV2 {
         bytes32 fiatCurrency;                       // Currency code that the owner is paying in offchain (keccak256 hash of the currency code)
         uint256 conversionRate;                     // Conversion rate of deposit token to fiat currency at the time of intent
         bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain
-        address referrer;                           // Address of the referrer who brought this intent (if any)
-        uint256 referrerFee;                        // Fee to be paid to the referrer in preciseUnits (1e16 = 1%)
+        IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
         IPostIntentHookV2 postIntentHook;            // Address of the post-intent hook that will execute any post-intent actions
         bytes data;                                 // Additional data to be passed to the post-intent hook contract
     }
@@ -40,8 +40,7 @@ interface IOrchestratorV2 {
         bytes32 paymentMethod;                      // The payment method to be used for the offchain payment
         bytes32 fiatCurrency;                       // The currency code for offchain payment
         uint256 conversionRate;                     // The conversion rate agreed offchain
-        address referrer;                           // Address of the referrer (address(0) if no referrer)
-        uint256 referrerFee;                        // Fee to be paid to the referrer
+        IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
         bytes gatingServiceSignature;               // Signature from the deposit's gating service
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
         IPostIntentHookV2 postIntentHook;           // Optional post-intent hook (address(0) for no hook)
@@ -82,6 +81,12 @@ interface IOrchestratorV2 {
         bool isManualRelease
     );
 
+    event IntentReferralFeeSnapshotted(
+        bytes32 indexed intentHash,
+        address indexed feeRecipient,
+        uint256 indexed feeIndex,
+        uint256 fee
+    );
     event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
     event DepositPreIntentHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
     event DepositWhitelistHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
@@ -122,11 +127,13 @@ interface IOrchestratorV2 {
     error AmountAboveMax(uint256 amount, uint256 max);
     error AmountExceedsLimit(uint256 amount, uint256 limit);
     error FeeExceedsMaximum(uint256 fee, uint256 maximum);
+    error ReferralFeeCountExceedsMaximum(uint256 count, uint256 maximum);
     error RateBelowMinimum(uint256 rate, uint256 minRate);
 
     // Validation errors
     error AccountHasActiveIntent(address account, bytes32 existingIntent);
-    error InvalidReferrerFeeConfiguration();
+    error DuplicateReferralFeeRecipient(address recipient);
+    error InvalidReferralFeeConfiguration();
     error InvalidPostIntentHook(address hook);
     error InvalidPreIntentHook(address hook);
     error InvalidSignature();

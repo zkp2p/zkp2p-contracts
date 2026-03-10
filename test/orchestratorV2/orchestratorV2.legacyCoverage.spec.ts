@@ -8,7 +8,7 @@ import { ether, usdc } from "@utils/common";
 import { ADDRESS_ZERO, EMPTY_ORACLE_RATE_CONFIG, ONE, ZERO } from "@utils/constants";
 import { Currency } from "@utils/protocolUtils";
 import { getAccounts, getWaffleExpect } from "@utils/test";
-import { createSignalIntentParams } from "@utils/test/helpers";
+import { createSignalIntentParams, hashReferralFees, type ReferralFeeParam } from "@utils/test/helpers";
 import {
   EscrowRegistry,
   EscrowV2,
@@ -99,6 +99,7 @@ describe("OrchestratorV2", () => {
     subjectSignatureExpiration?: BigNumber;
     subjectPostIntentHook?: string;
     subjectData?: string;
+    subjectReferralFees?: ReferralFeeParam[];
   }) {
     const subjectCaller = args?.subjectCaller ?? taker;
     const subjectDepositId = args?.subjectDepositId ?? depositId;
@@ -111,6 +112,7 @@ describe("OrchestratorV2", () => {
     const subjectSignatureExpiration = args?.subjectSignatureExpiration;
     const subjectPostIntentHook = args?.subjectPostIntentHook ?? ADDRESS_ZERO;
     const subjectData = args?.subjectData ?? "0x";
+    const subjectReferralFees = args?.subjectReferralFees;
 
     const params = await createSignalIntentParams(
       orchestrator.address,
@@ -129,7 +131,8 @@ describe("OrchestratorV2", () => {
       subjectData,
       subjectSignatureExpiration,
       "0x",
-      subjectGatingService ? subjectCaller.address : undefined
+      subjectGatingService ? subjectCaller.address : undefined,
+      subjectReferralFees
     );
 
     const tx = await orchestrator.connect(subjectCaller.wallet).signalIntent(params);
@@ -291,10 +294,19 @@ describe("OrchestratorV2", () => {
       await orchestrator.connect(depositor.wallet).setDepositPreIntentHook(escrow.address, depositId, preIntentHookMock.address);
       await orchestrator.connect(depositor.wallet).setDepositWhitelistHook(escrow.address, depositId, whitelistHookMock.address);
 
-      await signalIntent();
+      const referralFees: ReferralFeeParam[] = [
+        { recipient: referrer.address, fee: ether(0.003) },
+        { recipient: other.address, fee: ether(0.002) },
+      ];
+
+      await signalIntent({ subjectReferralFees: referralFees });
 
       expect(await preIntentHookMock.callCount()).to.eq(1);
       expect(await whitelistHookMock.callCount()).to.eq(1);
+      expect(await preIntentHookMock.lastReferralFeesCount()).to.eq(2);
+      expect(await whitelistHookMock.lastReferralFeesCount()).to.eq(2);
+      expect(await preIntentHookMock.lastReferralFeesHash()).to.eq(hashReferralFees(referralFees));
+      expect(await whitelistHookMock.lastReferralFeesHash()).to.eq(hashReferralFees(referralFees));
     });
 
     it("exposes configured hooks via getters", async () => {
@@ -364,6 +376,25 @@ describe("OrchestratorV2", () => {
       const referrerAfter = await usdcToken.balanceOf(referrer.address);
       expect(protocolAfter).to.be.gt(protocolBefore);
       expect(referrerAfter).to.be.gt(referrerBefore);
+    });
+
+    it("splits referral fees across multiple recipients on manual release", async () => {
+      const referralFees: ReferralFeeParam[] = [
+        { recipient: referrer.address, fee: ether(0.003) },
+        { recipient: other.address, fee: ether(0.002) },
+      ];
+      const intentHash = await signalIntent({ subjectReferralFees: referralFees });
+
+      const referrerBefore = await usdcToken.balanceOf(referrer.address);
+      const otherBefore = await usdcToken.balanceOf(other.address);
+
+      await orchestrator.connect(depositor.wallet).releaseFundsToPayer(intentHash);
+
+      const referrerAfter = await usdcToken.balanceOf(referrer.address);
+      const otherAfter = await usdcToken.balanceOf(other.address);
+
+      expect(referrerAfter.sub(referrerBefore)).to.eq(usdc(50).mul(ether(0.003)).div(ether(1)));
+      expect(otherAfter.sub(otherBefore)).to.eq(usdc(50).mul(ether(0.002)).div(ether(1)));
     });
 
     it("reverts when intent does not exist", async () => {
@@ -638,7 +669,72 @@ describe("OrchestratorV2", () => {
     it("reverts when referrer is zero and fee is non-zero", async () => {
       await expect(
         signalIntent({ subjectReferrer: ADDRESS_ZERO, subjectReferrerFee: ether(0.001) })
-      ).to.be.revertedWithCustomError(orchestrator, "InvalidReferrerFeeConfiguration");
+      ).to.be.revertedWithCustomError(orchestrator, "InvalidReferralFeeConfiguration");
+    });
+
+    it("reverts when referral fee recipients contain duplicates", async () => {
+      await expect(
+        signalIntent({
+          subjectReferralFees: [
+            { recipient: referrer.address, fee: ether(0.002) },
+            { recipient: referrer.address, fee: ether(0.001) },
+          ],
+        })
+      ).to.be.revertedWithCustomError(orchestrator, "DuplicateReferralFeeRecipient");
+    });
+
+    it("reverts when referral fee recipient count exceeds max", async () => {
+      await expect(
+        signalIntent({
+          subjectReferralFees: [
+            { recipient: referrer.address, fee: ether(0.001) },
+            { recipient: other.address, fee: ether(0.001) },
+            { recipient: delegate.address, fee: ether(0.001) },
+            { recipient: depositor.address, fee: ether(0.001) },
+            { recipient: protocolFeeRecipient.address, fee: ether(0.001) },
+          ],
+        })
+      ).to.be.revertedWithCustomError(orchestrator, "ReferralFeeCountExceedsMaximum");
+    });
+
+    it("emits referral fee snapshot events for each recipient", async () => {
+      const referralFees: ReferralFeeParam[] = [
+        { recipient: referrer.address, fee: ether(0.003) },
+        { recipient: other.address, fee: ether(0.002) },
+      ];
+
+      const tx = await orchestrator.connect(taker.wallet).signalIntent(
+        await createSignalIntentParams(
+          orchestrator.address,
+          escrow.address,
+          depositId,
+          usdc(50),
+          taker.address,
+          paymentMethod,
+          Currency.USD,
+          ether(1),
+          ADDRESS_ZERO,
+          ZERO,
+          null,
+          "1",
+          ADDRESS_ZERO,
+          "0x",
+          undefined,
+          "0x",
+          undefined,
+          referralFees
+        )
+      );
+      const receipt = await tx.wait();
+      const snapshotEvents = receipt.events?.filter((event: any) => event.event === "IntentReferralFeeSnapshotted") ?? [];
+
+      expect(snapshotEvents).to.have.length(2);
+      expect(snapshotEvents[0].args?.feeRecipient).to.eq(referrer.address);
+      expect(snapshotEvents[0].args?.feeIndex).to.eq(0);
+      expect(snapshotEvents[0].args?.fee).to.eq(ether(0.003));
+      expect(snapshotEvents[1].args?.feeRecipient).to.eq(other.address);
+      expect(snapshotEvents[1].args?.feeIndex).to.eq(1);
+      expect(snapshotEvents[1].args?.fee).to.eq(ether(0.002));
     });
 
     it("reverts when payment method is removed from registry", async () => {

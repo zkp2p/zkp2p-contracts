@@ -10,13 +10,16 @@ import { Currency } from "@utils/protocolUtils";
 import { getAccounts, getWaffleExpect } from "@utils/test";
 import { createSignalIntentParams } from "@utils/test/helpers";
 import {
+  Escrow,
   EscrowRegistry,
   EscrowV2,
+  Orchestrator,
   OrchestratorMock,
   OrchestratorRegistry,
   OrchestratorV2,
   PaymentVerifierMock,
   PaymentVerifierRegistry,
+  PostIntentHookRegistry,
   RateManagerMock,
   RateManagerV1,
   RelayerRegistry,
@@ -49,12 +52,16 @@ describe("Patch Coverage", () => {
   let usdcToken: USDCMock;
   let escrow: EscrowV2;
   let orchestrator: OrchestratorV2;
+  let legacyEscrow: Escrow;
+  let legacyOrchestrator: Orchestrator;
   let escrowRegistry: EscrowRegistry;
   let orchestratorRegistry: OrchestratorRegistry;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
+  let postIntentHookRegistry: PostIntentHookRegistry;
   let relayerRegistry: RelayerRegistry;
   let verifier: PaymentVerifierMock;
   let orchestratorMock: OrchestratorMock;
+  let legacyOrchestratorMock: OrchestratorMock;
   let staticOracleAdapter: StaticOracleAdapterMock;
   let revertingOracleAdapter: RevertingOracleAdapterMock;
   let rateManagerMock: RateManagerMock;
@@ -82,6 +89,7 @@ describe("Patch Coverage", () => {
     relayerRegistry = await deployer.deployRelayerRegistry();
     escrowRegistry = await deployer.deployEscrowRegistry();
     orchestratorRegistry = await deployer.deployOrchestratorRegistry();
+    postIntentHookRegistry = await deployer.deployPostIntentHookRegistry();
     staticOracleAdapter = (await (
       await ethers.getContractFactory("StaticOracleAdapterMock", owner.wallet)
     ).deploy()) as StaticOracleAdapterMock;
@@ -120,6 +128,27 @@ describe("Patch Coverage", () => {
       protocolFeeRecipient.address
     );
     orchestratorMock = await deployer.deployOrchestratorMock(escrow.address);
+
+    legacyEscrow = await deployer.deployEscrow(
+      owner.address,
+      ONE,
+      paymentVerifierRegistry.address,
+      owner.address,
+      ZERO,
+      BigNumber.from(20),
+      BigNumber.from(60 * 60)
+    );
+    legacyOrchestrator = await deployer.deployOrchestrator(
+      owner.address,
+      ONE,
+      escrowRegistry.address,
+      paymentVerifierRegistry.address,
+      postIntentHookRegistry.address,
+      relayerRegistry.address,
+      ZERO,
+      protocolFeeRecipient.address
+    );
+    legacyOrchestratorMock = await deployer.deployOrchestratorMock(legacyEscrow.address);
 
     await escrowRegistry.connect(owner.wallet).addEscrow(escrow.address);
     await orchestratorRegistry.connect(owner.wallet).addOrchestrator(orchestrator.address);
@@ -806,6 +835,103 @@ describe("Patch Coverage", () => {
       await expect(
         orchestrator.connect(depositor.wallet).setDepositWhitelistHook(escrow.address, depositId, ADDRESS_ZERO)
       ).to.be.revertedWith("ReentrancyGuard: reentrant call");
+    });
+  });
+
+  describe("Escrow -- nonReentrant modifier branches", () => {
+    const REENTRANCY_SLOT = "0x01";
+    const ENTERED = ethers.utils.hexZeroPad("0x02", 32);
+    const NOT_ENTERED = ethers.utils.hexZeroPad("0x01", 32);
+
+    afterEach(async () => {
+      await ethers.provider.send("hardhat_setStorageAt", [legacyEscrow.address, REENTRANCY_SLOT, NOT_ENTERED]);
+    });
+
+    it("reverts on removeFunds when reentrancy guard is entered", async () => {
+      await ethers.provider.send("hardhat_setStorageAt", [legacyEscrow.address, REENTRANCY_SLOT, ENTERED]);
+      await expect(legacyEscrow.connect(depositor.wallet).removeFunds(ZERO, usdc(1))).to.be.revertedWith(
+        "ReentrancyGuard: reentrant call"
+      );
+    });
+
+    it("reverts on withdrawDeposit when reentrancy guard is entered", async () => {
+      await ethers.provider.send("hardhat_setStorageAt", [legacyEscrow.address, REENTRANCY_SLOT, ENTERED]);
+      await expect(legacyEscrow.connect(depositor.wallet).withdrawDeposit(ZERO)).to.be.revertedWith(
+        "ReentrancyGuard: reentrant call"
+      );
+    });
+
+    it("reverts on pruneExpiredIntents when reentrancy guard is entered", async () => {
+      await ethers.provider.send("hardhat_setStorageAt", [legacyEscrow.address, REENTRANCY_SLOT, ENTERED]);
+      await expect(legacyEscrow.connect(other.wallet).pruneExpiredIntents(ZERO)).to.be.revertedWith(
+        "ReentrancyGuard: reentrant call"
+      );
+    });
+
+    it("reverts on unlockFunds when reentrancy guard is entered", async () => {
+      await ethers.provider.send("hardhat_setStorageAt", [legacyEscrow.address, REENTRANCY_SLOT, ENTERED]);
+      await expect(
+        legacyOrchestratorMock.unlockFunds(ZERO, ethers.utils.formatBytes32String("legacy-unlock"))
+      ).to.be.revertedWith("ReentrancyGuard: reentrant call");
+    });
+
+    it("reverts on unlockAndTransferFunds when reentrancy guard is entered", async () => {
+      await ethers.provider.send("hardhat_setStorageAt", [legacyEscrow.address, REENTRANCY_SLOT, ENTERED]);
+      await expect(
+        legacyOrchestratorMock.unlockAndTransferFunds(
+          ZERO,
+          ethers.utils.formatBytes32String("legacy-transfer"),
+          usdc(1),
+          taker.address
+        )
+      ).to.be.revertedWith("ReentrancyGuard: reentrant call");
+    });
+  });
+
+  describe("Orchestrator -- nonReentrant modifier branches", () => {
+    const REENTRANCY_SLOT = "0x01";
+    const ENTERED = ethers.utils.hexZeroPad("0x02", 32);
+    const NOT_ENTERED = ethers.utils.hexZeroPad("0x01", 32);
+
+    afterEach(async () => {
+      await ethers.provider.send("hardhat_setStorageAt", [legacyOrchestrator.address, REENTRANCY_SLOT, NOT_ENTERED]);
+    });
+
+    it("reverts on releaseFundsToPayer when reentrancy guard is entered", async () => {
+      await ethers.provider.send("hardhat_setStorageAt", [legacyOrchestrator.address, REENTRANCY_SLOT, ENTERED]);
+      await expect(
+        legacyOrchestrator.connect(depositor.wallet).releaseFundsToPayer(ethers.utils.formatBytes32String("legacy"))
+      ).to.be.revertedWith("ReentrancyGuard: reentrant call");
+    });
+  });
+
+  describe("OrchestratorV2 -- referral fee validation uncovered branch", () => {
+    it("reverts when a referral fee recipient has a zero fee", async () => {
+      const params = await createSignalIntentParams(
+        orchestrator.address,
+        escrow.address,
+        depositId,
+        usdc(50),
+        taker.address,
+        paymentMethod,
+        Currency.USD,
+        ether(1),
+        ADDRESS_ZERO,
+        ZERO,
+        null,
+        "1",
+        ADDRESS_ZERO,
+        "0x",
+        undefined,
+        "0x",
+        taker.address,
+        [{ recipient: feeRecipient.address, fee: ZERO }]
+      );
+
+      await expect(orchestrator.connect(taker.wallet).signalIntent(params)).to.be.revertedWithCustomError(
+        orchestrator,
+        "InvalidReferralFeeConfiguration"
+      );
     });
   });
 });

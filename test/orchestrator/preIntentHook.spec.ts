@@ -9,7 +9,7 @@ import { Currency } from "@utils/protocolUtils";
 import { Account } from "@utils/test/types";
 import { ADDRESS_ZERO, EMPTY_ORACLE_RATE_CONFIG, ONE, ZERO } from "@utils/constants";
 import { getAccounts, getWaffleExpect } from "@utils/test";
-import { createSignalIntentParams } from "@utils/test/helpers";
+import { createSignalIntentParams, hashReferralFees } from "@utils/test/helpers";
 import {
   EscrowV2,
   OrchestratorV2,
@@ -442,9 +442,7 @@ describe("OrchestratorV2 - PreIntentHook", () => {
 
       async function generateSignature(
         signer: Account,
-        signatureExpiration: BigNumber,
-        referrer: string = ADDRESS_ZERO,
-        referrerFee: BigNumber = ZERO
+        signatureExpiration: BigNumber
       ): Promise<string> {
         const messageHash = ethers.utils.solidityKeccak256(
           [
@@ -457,8 +455,7 @@ describe("OrchestratorV2 - PreIntentHook", () => {
             "bytes32",
             "bytes32",
             "uint256",
-            "address",
-            "uint256",
+            "bytes32",
             "uint256",
             "uint256",
           ],
@@ -472,8 +469,7 @@ describe("OrchestratorV2 - PreIntentHook", () => {
             venmoPaymentMethod,
             Currency.USD,
             subjectConversionRate,
-            referrer,
-            referrerFee,
+            hashReferralFees([]),
             signatureExpiration,
             chainId,
           ]
@@ -560,8 +556,7 @@ describe("OrchestratorV2 - PreIntentHook", () => {
             paymentMethod: venmoPaymentMethod,
             fiatCurrency: Currency.USD,
             conversionRate: subjectConversionRate,
-            referrer: ADDRESS_ZERO,
-            referrerFee: ZERO,
+            referralFees: [],
             preIntentHookData: "0x",
           };
 

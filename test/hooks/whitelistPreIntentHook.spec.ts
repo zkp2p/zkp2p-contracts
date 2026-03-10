@@ -480,8 +480,7 @@ describe("WhitelistPreIntentHook", () => {
           paymentMethod: venmoPaymentMethod,
           fiatCurrency: Currency.USD,
           conversionRate: subjectConversionRate,
-          referrer: ADDRESS_ZERO,
-          referrerFee: ZERO,
+          referralFees: [],
           preIntentHookData: "0x",
         };
 
