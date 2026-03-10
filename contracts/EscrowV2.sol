@@ -43,6 +43,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
     uint256 internal constant MAX_TOTAL_INTENT_EXPIRATION_PERIOD = 86400 * 5; // 5 days
     uint256 internal constant PRUNE_ALL_EXPIRED_INTENTS = type(uint256).max;
     uint256 internal constant MAX_ADAPTER_CONFIG_BYTES = 256;
+    int256 internal constant MAX_SPREAD_BPS = 10_000;
     
     /* ============ State Variables ============ */
 
@@ -1442,7 +1443,9 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         }
         if (_config.adapter == address(0)) revert ZeroAddress();
         if (_config.adapter.code.length == 0) revert InvalidOracleAdapter(_config.adapter);
-        if (_config.spreadBps > BPS) revert InvalidSpread(_config.spreadBps);
+        if (int256(_config.spreadBps) > MAX_SPREAD_BPS || int256(_config.spreadBps) <= -MAX_SPREAD_BPS) {
+            revert InvalidSpread(_config.spreadBps);
+        }
         if (_config.maxStaleness == 0) revert ZeroValue();
 
         bytes memory normalizedConfig = IOracleAdapter(_config.adapter).validateConfig(_config.adapterConfig);
@@ -1544,9 +1547,10 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
                 return 0;
             }
 
+            uint256 spreadMultiplierBps = uint256(int256(BPS) + int256(_config.spreadBps));
             return Math.mulDiv(
                 marketRate,
-                BPS + uint256(_config.spreadBps),
+                spreadMultiplierBps,
                 BPS,
                 Math.Rounding.Up
             );
