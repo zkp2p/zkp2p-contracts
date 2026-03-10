@@ -128,6 +128,15 @@ describe("EscrowV2", () => {
       expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1.2));
     });
 
+    it("returns a below-market oracle floor for negative spreads", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      await setOracleRate(ether(1.1), -300, 3600, currentTimestamp);
+      await escrow.connect(depositor.wallet).setCurrencyMinRate(ZERO, paymentMethod, Currency.USD, ZERO);
+
+      const expectedSpread = ether(1.1).mul(9_700).add(9_999).div(10_000);
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(expectedSpread);
+    });
+
     it("returns zero when oracle configured but stale (halt behavior)", async () => {
       const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
       await setOracleRate(ether(1.3), 0, 5, currentTimestamp - 100);

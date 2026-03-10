@@ -664,6 +664,33 @@ describe("EscrowV2 -- Branch Coverage", () => {
       });
     });
 
+    describe("when spreadBps is -10000", () => {
+      let subjectCaller: any;
+
+      async function subject() {
+        const currentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
+        return escrow.connect(subjectCaller.wallet).setOracleRateConfig(
+          depositId,
+          venmoPaymentMethod,
+          Currency.USD,
+          {
+            adapter: staticOracleAdapter.address,
+            adapterConfig: buildOracleAdapterConfig(true, ether(1.2), currentTimestamp),
+            spreadBps: -10000,
+            maxStaleness: 3600,
+          }
+        );
+      }
+
+      beforeEach(async () => {
+        subjectCaller = depositor;
+      });
+
+      it("reverts with InvalidSpread", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(escrow, "InvalidSpread");
+      });
+    });
+
     describe("when maxStaleness is zero", () => {
       let subjectCaller: any;
 

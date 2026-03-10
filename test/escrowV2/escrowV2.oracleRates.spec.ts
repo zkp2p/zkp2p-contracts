@@ -230,6 +230,16 @@ describe("EscrowV2", () => {
       expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(expectedSpread);
     });
 
+    it("supports negative spreads below market", async () => {
+      subjectSpreadBps = -250;
+
+      await expect(subject()).to.emit(escrow, "DepositOracleRateConfigSet");
+      await escrow.connect(depositor.wallet).setCurrencyMinRate(ZERO, paymentMethod, Currency.USD, ZERO);
+
+      const expectedSpread = ether(1).mul(10_000 + subjectSpreadBps).add(9_999).div(10_000);
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(expectedSpread);
+    });
+
     it("returns max(fixed, spread)", async () => {
       await escrow.connect(depositor.wallet).setCurrencyMinRate(ZERO, paymentMethod, Currency.USD, ether(1.02));
       await subject();
@@ -315,6 +325,16 @@ describe("EscrowV2", () => {
             }
           )
         ).to.be.revertedWithCustomError(escrow, "AdapterConfigTooLong");
+      });
+    });
+
+    describe("when spreadBps is below -10000", () => {
+      beforeEach(async () => {
+        subjectSpreadBps = -10000;
+      });
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(escrow, "InvalidSpread");
       });
     });
   });

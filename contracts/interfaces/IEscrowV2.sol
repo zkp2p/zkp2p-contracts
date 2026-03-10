@@ -14,7 +14,7 @@ interface IEscrowV2 {
     struct OracleRateConfig {
         address adapter;
         bytes adapterConfig;
-        uint16 spreadBps;
+        int16 spreadBps;
         uint32 maxStaleness;
     }
 
@@ -131,7 +131,7 @@ interface IEscrowV2 {
         bytes32 indexed currencyCode,
         address adapter,
         bytes adapterConfig,
-        uint16 spreadBps,
+        int16 spreadBps,
         uint32 maxStaleness
     );
 
@@ -205,7 +205,7 @@ interface IEscrowV2 {
     error InvalidOracleAdapter(address adapter);
     error AdapterConfigTooLong(uint256 length, uint256 maxLength);
     error InvalidRateManager(address rateManager);
-    error InvalidSpread(uint256 spreadBps);
+    error InvalidSpread(int256 spreadBps);
     error RateManagerAlreadySet(bytes32 rateManagerId);
     error RateManagerNotFound(bytes32 rateManagerId);
     error RateManagerNotSet(uint256 depositId);
