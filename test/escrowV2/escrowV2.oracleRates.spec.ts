@@ -578,6 +578,32 @@ describe("EscrowV2", () => {
       expect((await escrow.getDepositOracleRateConfig(ZERO, paymentMethod, Currency.USD)).adapter).to.eq(ADDRESS_ZERO);
     });
 
+    it("does not emit oracle removal when no oracle config exists", async () => {
+      const tx = await escrow.connect(subjectCaller.wallet).updateCurrencyConfigBatch(
+        ZERO,
+        [paymentMethod],
+        [[
+          {
+            code: Currency.EUR,
+            minConversionRate: ether(0.95),
+            updateOracle: true,
+            oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG,
+          },
+        ]]
+      );
+
+      await expect(tx)
+        .to.emit(escrow, "DepositMinConversionRateUpdated")
+        .withArgs(ZERO, paymentMethod, Currency.EUR, ether(0.95));
+
+      const receipt = await tx.wait();
+      const removedEvents = (receipt.events || []).filter((event) => event.event === "DepositOracleRateConfigRemoved");
+      expect(removedEvents).to.have.length(0);
+
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.EUR)).to.eq(ether(0.95));
+      expect((await escrow.getDepositOracleRateConfig(ZERO, paymentMethod, Currency.EUR)).adapter).to.eq(ADDRESS_ZERO);
+    });
+
     it("reverts when paymentMethods and updates length mismatch", async () => {
       await expect(
         escrow.connect(subjectCaller.wallet).updateCurrencyConfigBatch(

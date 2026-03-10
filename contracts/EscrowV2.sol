@@ -1476,6 +1476,9 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         if (!depositCurrencyListed[_depositId][_paymentMethod][_currencyCode]) {
             revert CurrencyNotSupported(_paymentMethod, _currencyCode);
         }
+        if (depositOracleRateConfig[_depositId][_paymentMethod][_currencyCode].adapter == address(0)) {
+            return;
+        }
 
         delete depositOracleRateConfig[_depositId][_paymentMethod][_currencyCode];
         emit DepositOracleRateConfigRemoved(_depositId, _paymentMethod, _currencyCode);
