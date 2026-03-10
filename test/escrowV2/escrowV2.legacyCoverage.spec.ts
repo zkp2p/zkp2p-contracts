@@ -221,10 +221,11 @@ describe("EscrowV2", () => {
       await expect(subject()).to.be.revertedWithCustomError(escrow, "AmountBelowMin");
     });
 
-    it("reverts when currency min conversion rate is zero", async () => {
+    it("allows currency min conversion rate to be zero", async () => {
       subjectCurrencies = [[{ code: Currency.USD, minConversionRate: ZERO, oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]];
 
-      await expect(subject()).to.be.revertedWithCustomError(escrow, "ZeroConversionRate");
+      await expect(subject()).to.emit(escrow, "DepositCurrencyAdded").withArgs(ONE, venmoPaymentMethod, Currency.USD, ZERO);
+      expect(await escrow.getDepositCurrencyMinRate(ONE, venmoPaymentMethod, Currency.USD)).to.eq(ZERO);
     });
   });
 
@@ -644,14 +645,16 @@ describe("EscrowV2", () => {
       ).to.be.revertedWithCustomError(escrow, "CurrencyAlreadyExists");
     });
 
-    it("reverts when min conversion rate is zero", async () => {
+    it("allows min conversion rate to be zero", async () => {
       await expect(
         escrow.connect(depositor.wallet).addCurrencies(
           depositId,
           venmoPaymentMethod,
           [{ code: Currency.EUR, minConversionRate: ZERO, oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]
         )
-      ).to.be.revertedWithCustomError(escrow, "ZeroConversionRate");
+      ).to.emit(escrow, "DepositCurrencyAdded").withArgs(depositId, venmoPaymentMethod, Currency.EUR, ZERO);
+
+      expect(await escrow.getDepositCurrencyMinRate(depositId, venmoPaymentMethod, Currency.EUR)).to.eq(ZERO);
     });
 
     it("sets inline oracle config via addCurrencies", async () => {

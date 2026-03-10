@@ -1404,7 +1404,6 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         if (!paymentVerifierRegistry.isCurrency(_paymentMethod, _currencyCode)) {
             revert CurrencyNotSupported(_paymentMethod, _currencyCode);
         }
-        if (_minConversionRate == 0) revert ZeroConversionRate();
         if (depositCurrencyListed[_depositId][_paymentMethod][_currencyCode]) {
             revert CurrencyAlreadyExists(_paymentMethod, _currencyCode);
         }
