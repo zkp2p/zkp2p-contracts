@@ -41,6 +41,13 @@ interface IEscrowV2 {
         OracleRateConfig oracleRateConfig;          // Oracle rate config for this currency (adapter == address(0) means disabled)
     }
 
+    struct CurrencyRateUpdate {
+        bytes32 code;                               // Currency code to update
+        uint256 minConversionRate;                  // New fixed floor in preciseUnits
+        bool updateOracle;                          // True to set/remove oracle config, false to leave oracle config unchanged
+        OracleRateConfig oracleRateConfig;          // Oracle rate config to apply; adapter == address(0) removes config when updateOracle is true
+    }
+
     struct Deposit {
         address depositor;                          // Address of depositor
         address delegate;                           // Address that can manage this deposit (address(0) if no delegate)
@@ -228,10 +235,22 @@ interface IEscrowV2 {
         OracleRateConfig[][] calldata _configs
     ) external;
 
+    function updateCurrencyConfigBatch(
+        uint256 _depositId,
+        bytes32[] calldata _paymentMethods,
+        CurrencyRateUpdate[][] calldata _updates
+    ) external;
+
     function removeOracleRateConfig(
         uint256 _depositId,
         bytes32 _paymentMethod,
         bytes32 _currencyCode
+    ) external;
+
+    function deactivateCurrenciesBatch(
+        uint256 _depositId,
+        bytes32[] calldata _paymentMethods,
+        bytes32[][] calldata _currencyCodes
     ) external;
 
     function setRateManager(

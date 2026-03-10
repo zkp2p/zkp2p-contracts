@@ -367,6 +367,31 @@ describe("EscrowV2 -- Branch Coverage", () => {
       });
     });
 
+    describe("#updateCurrencyConfigBatch", () => {
+      async function subject() {
+        const currentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
+        return escrow.connect(other.wallet).updateCurrencyConfigBatch(
+          depositId,
+          [venmoPaymentMethod],
+          [[{
+            code: Currency.USD,
+            minConversionRate: ether(1.1),
+            updateOracle: true,
+            oracleRateConfig: {
+              adapter: staticOracleAdapter.address,
+              adapterConfig: buildOracleAdapterConfig(true, ether(1.2), currentTimestamp),
+              spreadBps: 100,
+              maxStaleness: 3600,
+            },
+          }]]
+        );
+      }
+
+      it("reverts with UnauthorizedCallerOrDelegate", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(escrow, "UnauthorizedCallerOrDelegate");
+      });
+    });
+
     describe("#removeOracleRateConfig", () => {
       async function subject() {
         return escrow.connect(other.wallet).removeOracleRateConfig(depositId, venmoPaymentMethod, Currency.USD);
@@ -429,6 +454,20 @@ describe("EscrowV2 -- Branch Coverage", () => {
     describe("#deactivateCurrency", () => {
       async function subject() {
         return escrow.connect(other.wallet).deactivateCurrency(depositId, venmoPaymentMethod, Currency.USD);
+      }
+
+      it("reverts with UnauthorizedCallerOrDelegate", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(escrow, "UnauthorizedCallerOrDelegate");
+      });
+    });
+
+    describe("#deactivateCurrenciesBatch", () => {
+      async function subject() {
+        return escrow.connect(other.wallet).deactivateCurrenciesBatch(
+          depositId,
+          [venmoPaymentMethod],
+          [[Currency.USD]]
+        );
       }
 
       it("reverts with UnauthorizedCallerOrDelegate", async () => {
@@ -1905,6 +1944,45 @@ describe("EscrowV2 -- Branch Coverage", () => {
             spreadBps: 100,
             maxStaleness: 3600,
           }]]
+        );
+      }
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWith("Pausable: paused");
+      });
+    });
+
+    describe("#updateCurrencyConfigBatch when paused", () => {
+      async function subject() {
+        const currentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
+        return escrow.connect(depositor.wallet).updateCurrencyConfigBatch(
+          depositId,
+          [venmoPaymentMethod],
+          [[{
+            code: Currency.USD,
+            minConversionRate: ether(1.1),
+            updateOracle: true,
+            oracleRateConfig: {
+              adapter: staticOracleAdapter.address,
+              adapterConfig: buildOracleAdapterConfig(true, ether(1.2), currentTimestamp),
+              spreadBps: 100,
+              maxStaleness: 3600,
+            },
+          }]]
+        );
+      }
+
+      it("reverts", async () => {
+        await expect(subject()).to.be.revertedWith("Pausable: paused");
+      });
+    });
+
+    describe("#deactivateCurrenciesBatch when paused", () => {
+      async function subject() {
+        return escrow.connect(depositor.wallet).deactivateCurrenciesBatch(
+          depositId,
+          [venmoPaymentMethod],
+          [[Currency.USD]]
         );
       }
 
