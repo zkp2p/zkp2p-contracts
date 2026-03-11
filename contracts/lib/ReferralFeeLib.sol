@@ -3,11 +3,10 @@
 pragma solidity ^0.8.18;
 
 import { IReferralFee } from "../interfaces/IReferralFee.sol";
-import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
 
 library ReferralFeeLib {
-    uint256 internal constant MAX_REFERRER_FEE = 5e16;
-    uint256 internal constant MAX_REFERRAL_FEE_RECIPIENTS = 4;
+    uint256 internal constant MAX_REFERRER_FEE = 5e17;      // 50% max total referral fee
+    uint256 internal constant MAX_REFERRAL_FEE_RECIPIENTS = 5;
 
     function hashReferralFees(IReferralFee.ReferralFee[] calldata _referralFees) internal pure returns (bytes32) {
         bytes32[] memory feeHashes = new bytes32[](_referralFees.length);
@@ -21,7 +20,7 @@ library ReferralFeeLib {
 
     function validateReferralFees(IReferralFee.ReferralFee[] calldata _referralFees) internal pure {
         if (_referralFees.length > MAX_REFERRAL_FEE_RECIPIENTS) {
-            revert IOrchestratorV2.ReferralFeeCountExceedsMaximum(_referralFees.length, MAX_REFERRAL_FEE_RECIPIENTS);
+            revert IReferralFee.ReferralFeeCountExceedsMaximum(_referralFees.length, MAX_REFERRAL_FEE_RECIPIENTS);
         }
 
         uint256 totalReferralFee;
@@ -29,12 +28,12 @@ library ReferralFeeLib {
             IReferralFee.ReferralFee calldata referralFee = _referralFees[i];
 
             if (referralFee.recipient == address(0) || referralFee.fee == 0) {
-                revert IOrchestratorV2.InvalidReferralFeeConfiguration();
+                revert IReferralFee.InvalidReferralFeeConfiguration();
             }
 
             for (uint256 j = i + 1; j < _referralFees.length; ++j) {
                 if (_referralFees[j].recipient == referralFee.recipient) {
-                    revert IOrchestratorV2.DuplicateReferralFeeRecipient(referralFee.recipient);
+                    revert IReferralFee.DuplicateReferralFeeRecipient(referralFee.recipient);
                 }
             }
 
@@ -42,7 +41,7 @@ library ReferralFeeLib {
         }
 
         if (totalReferralFee > MAX_REFERRER_FEE) {
-            revert IOrchestratorV2.FeeExceedsMaximum(totalReferralFee, MAX_REFERRER_FEE);
+            revert IReferralFee.ReferralFeeExceedsMaximum(totalReferralFee, MAX_REFERRER_FEE);
         }
     }
 }

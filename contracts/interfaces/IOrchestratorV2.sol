@@ -126,13 +126,10 @@ interface IOrchestratorV2 {
     error AmountAboveMax(uint256 amount, uint256 max);
     error AmountExceedsLimit(uint256 amount, uint256 limit);
     error FeeExceedsMaximum(uint256 fee, uint256 maximum);
-    error ReferralFeeCountExceedsMaximum(uint256 count, uint256 maximum);
     error RateBelowMinimum(uint256 rate, uint256 minRate);
 
     // Validation errors
     error AccountHasActiveIntent(address account, bytes32 existingIntent);
-    error DuplicateReferralFeeRecipient(address recipient);
-    error InvalidReferralFeeConfiguration();
     error InvalidPostIntentHook(address hook);
     error InvalidPreIntentHook(address hook);
     error InvalidSignature();
