@@ -14,7 +14,11 @@ interface IEscrowV2 {
     struct OracleRateConfig {
         address adapter;
         bytes adapterConfig;
-        uint16 spreadBps;
+        // Signed spread in basis points applied to the oracle market rate.
+        // Product decision: keep spreads user-facing rather than storing a multiplier directly.
+        // Protocol invariant: (10_000 + spreadBps) must stay strictly positive.
+        // Practical limit: int16 caps the positive side at 32_767 bps (~4.2767x market).
+        int16 spreadBps;
         uint32 maxStaleness;
     }
 
@@ -131,7 +135,7 @@ interface IEscrowV2 {
         bytes32 indexed currencyCode,
         address adapter,
         bytes adapterConfig,
-        uint16 spreadBps,
+        int16 spreadBps,
         uint32 maxStaleness
     );
 
@@ -205,7 +209,7 @@ interface IEscrowV2 {
     error InvalidOracleAdapter(address adapter);
     error AdapterConfigTooLong(uint256 length, uint256 maxLength);
     error InvalidRateManager(address rateManager);
-    error InvalidSpread(uint256 spreadBps);
+    error InvalidSpread(int16 spreadBps);
     error RateManagerAlreadySet(bytes32 rateManagerId);
     error RateManagerNotFound(bytes32 rateManagerId);
     error RateManagerNotSet(uint256 depositId);
