@@ -133,7 +133,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 };
 
 func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
-  return false;
+  const network = hre.network.name;
+  if (network === "localhost" || network === "hardhat") {
+    return false;
+  }
+  return true; // Frozen: V2 payment methods are fully configured on all production networks
 };
 
 func.dependencies = ["15_deploy_v2_periphery"];
