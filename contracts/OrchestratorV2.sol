@@ -174,11 +174,6 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
             block.timestamp
         );
 
-        for (uint256 i = 0; i < _params.referralFees.length; ++i) {
-            IReferralFee.ReferralFee calldata referralFee = _params.referralFees[i];
-            emit IntentReferralFeeSnapshotted(intentHash, referralFee.recipient, i, referralFee.fee);
-        }
-
         // Emit manager fee snapshot last for easier indexing
         emit IntentManagerFeeSnapshotted(intentHash, managerFeeRecipient, managerFee);
 
@@ -622,6 +617,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      */
     function _calculateAndTransferFees(
         IERC20 _token,
+        bytes32 _intentHash,
         Intent memory _intent, 
         uint256 _releaseAmount,
         address _managerFeeRecipient,
@@ -643,6 +639,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
             uint256 feeAmount = (_releaseAmount * referralFee.fee) / PRECISE_UNIT;
             referralFeeAmount += feeAmount;
             _token.safeTransfer(referralFee.recipient, feeAmount);
+            emit IntentReferralFeeDistributed(_intentHash, referralFee.recipient, feeAmount);
         }
 
         // Calculate manager fee (taken from taker) - based on release amount
@@ -665,7 +662,14 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         address _managerFeeRecipient,
         uint256 _managerFee
     ) internal {
-        uint256 netFees = _calculateAndTransferFees(_token, _intent, _releaseAmount, _managerFeeRecipient, _managerFee);
+        uint256 netFees = _calculateAndTransferFees(
+            _token,
+            _intentHash,
+            _intent,
+            _releaseAmount,
+            _managerFeeRecipient,
+            _managerFee
+        );
         uint256 netAmount = _releaseAmount - netFees;
 
         _token.safeTransfer(_intent.to, netAmount);
@@ -690,7 +694,14 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         address _managerFeeRecipient,
         uint256 _managerFee
     ) internal {
-        uint256 netFees = _calculateAndTransferFees(_token, _intent, _releaseAmount, _managerFeeRecipient, _managerFee);
+        uint256 netFees = _calculateAndTransferFees(
+            _token,
+            _intentHash,
+            _intent,
+            _releaseAmount,
+            _managerFeeRecipient,
+            _managerFee
+        );
         uint256 netAmount = _releaseAmount - netFees;
 
         address fundsTransferredTo = _intent.to;

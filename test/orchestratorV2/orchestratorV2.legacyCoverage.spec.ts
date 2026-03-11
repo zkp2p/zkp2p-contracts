@@ -708,13 +708,13 @@ describe("OrchestratorV2", () => {
       ).to.be.revertedWithCustomError(orchestrator, "ReferralFeeCountExceedsMaximum");
     });
 
-    it("emits referral fee snapshot events for each recipient", async () => {
+    it("emits referral fee distribution events for each recipient on manual release", async () => {
       const referralFees: ReferralFeeParam[] = [
         { recipient: referrer.address, fee: ether(0.003) },
         { recipient: other.address, fee: ether(0.002) },
       ];
 
-      const tx = await orchestrator.connect(taker.wallet).signalIntent(
+      const signalTx = await orchestrator.connect(taker.wallet).signalIntent(
         await createSignalIntentParams(
           orchestrator.address,
           escrow.address,
@@ -736,16 +736,21 @@ describe("OrchestratorV2", () => {
           referralFees
         )
       );
-      const receipt = await tx.wait();
-      const snapshotEvents = receipt.events?.filter((event: any) => event.event === "IntentReferralFeeSnapshotted") ?? [];
+      const signalReceipt = await signalTx.wait();
+      const signaledEvent = signalReceipt.events?.find((event: any) => event.event === "IntentSignaled");
+      const intentHash = signaledEvent?.args?.intentHash;
 
-      expect(snapshotEvents).to.have.length(2);
-      expect(snapshotEvents[0].args?.feeRecipient).to.eq(referrer.address);
-      expect(snapshotEvents[0].args?.feeIndex).to.eq(0);
-      expect(snapshotEvents[0].args?.fee).to.eq(ether(0.003));
-      expect(snapshotEvents[1].args?.feeRecipient).to.eq(other.address);
-      expect(snapshotEvents[1].args?.feeIndex).to.eq(1);
-      expect(snapshotEvents[1].args?.fee).to.eq(ether(0.002));
+      const expectedFirstFee = usdc(50).mul(ether(0.003)).div(ether(1));
+      const expectedSecondFee = usdc(50).mul(ether(0.002)).div(ether(1));
+
+      const releaseTx = orchestrator.connect(depositor.wallet).releaseFundsToPayer(intentHash);
+
+      await expect(releaseTx)
+        .to.emit(orchestrator, "IntentReferralFeeDistributed")
+        .withArgs(intentHash, referrer.address, expectedFirstFee);
+      await expect(releaseTx)
+        .to.emit(orchestrator, "IntentReferralFeeDistributed")
+        .withArgs(intentHash, other.address, expectedSecondFee);
     });
 
     it("reverts when payment method is removed from registry", async () => {
