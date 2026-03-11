@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "chainId": "8453",
+  "createdAt": 1773238657664,
+  "meta": {
+    "name": "ZKP2P V2 Deployment - base",
+    "description": "Registry wiring and payment method migration for V2 deployment on base",
+    "txBuilderVersion": "1.16.5",
+    "createdFromSafeAddress": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+    "createdFromOwnerAddress": ""
+  },
+  "transactions": [
+    {
+      "to": "0xeD0e847B101abc96E796260AC358e12BAa2f5B21",
+      "value": "0",
+      "data": "0xcc224d44000000000000000000000000777777779d229cdf3110e9de47943791c26300ef",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0xeD0e847B101abc96E796260AC358e12BAa2f5B21",
+      "value": "0",
+      "data": "0x93e467440000000000000000000000000ffdc232e735f9c009efd8e1129772157a06d777",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0xBe9fED15ED7A4B915C03EFcEcb9662739C3382A9",
+      "value": "0",
+      "data": "0xea535e80000000000000000000000000888888359e981b5225ca48fbcdceff702fc3b888",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0xBe9fED15ED7A4B915C03EFcEcb9662739C3382A9",
+      "value": "0",
+      "data": "0x19c28b20000000000000000000000000ace45eaff44a7f6bfff91f5a872f453507677777",
+      "contractMethod": null,
+      "contractInputsValues": null
+    }
+  ]
+}
