@@ -659,8 +659,11 @@ describe("EscrowV2 -- Branch Coverage", () => {
         subjectCaller = depositor;
       });
 
-      it("reverts with InvalidSpread", async () => {
-        await expect(subject()).to.be.revertedWithCustomError(escrow, "InvalidSpread");
+      it("accepts the higher spread and stores the config", async () => {
+        await expect(subject()).to.emit(escrow, "DepositOracleRateConfigSet");
+
+        const config = await escrow.getDepositOracleRateConfig(depositId, venmoPaymentMethod, Currency.USD);
+        expect(config.spreadBps).to.eq(10001);
       });
     });
 

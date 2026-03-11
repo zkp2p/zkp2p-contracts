@@ -39,11 +39,11 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
     /* ============ Constants ============ */
     uint256 internal constant PRECISE_UNIT = 1e18;
     uint256 internal constant BPS = 10_000;
+    int256 internal constant SIGNED_BPS = 10_000;
     uint256 internal constant MAX_DUST_THRESHOLD = 1e6;            // 1 USDC
     uint256 internal constant MAX_TOTAL_INTENT_EXPIRATION_PERIOD = 86400 * 5; // 5 days
     uint256 internal constant PRUNE_ALL_EXPIRED_INTENTS = type(uint256).max;
     uint256 internal constant MAX_ADAPTER_CONFIG_BYTES = 256;
-    int256 internal constant MAX_SPREAD_BPS = 10_000;
     
     /* ============ State Variables ============ */
 
@@ -1442,7 +1442,10 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         }
         if (_config.adapter == address(0)) revert ZeroAddress();
         if (_config.adapter.code.length == 0) revert InvalidOracleAdapter(_config.adapter);
-        if (int256(_config.spreadBps) > MAX_SPREAD_BPS || int256(_config.spreadBps) <= -MAX_SPREAD_BPS) {
+        // Product decision: keep spread semantics in the API and let int16 define the positive ceiling.
+        // Safety only requires a strictly positive multiplier, so -10_000 bps and below are rejected.
+        int256 spreadMultiplierBps = SIGNED_BPS + int256(_config.spreadBps);
+        if (spreadMultiplierBps <= 0) {
             revert InvalidSpread(_config.spreadBps);
         }
         if (_config.maxStaleness == 0) revert ZeroValue();
@@ -1546,10 +1549,12 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
                 return 0;
             }
 
-            uint256 spreadMultiplierBps = uint256(int256(BPS) + int256(_config.spreadBps));
+            // Rates remain unsigned, so we keep spreadBps signed for UX and cross the type boundary once here.
+            // Stored configs already reject non-positive multipliers; int16 naturally caps positive spread at 32_767 bps.
+            int256 spreadMultiplierBps = SIGNED_BPS + int256(_config.spreadBps);
             return Math.mulDiv(
                 marketRate,
-                spreadMultiplierBps,
+                uint256(spreadMultiplierBps),
                 BPS,
                 Math.Rounding.Up
             );

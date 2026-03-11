@@ -283,6 +283,16 @@ describe("EscrowV2", () => {
       expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(expectedSpread);
     });
 
+    it("allows positive spreads above 10000 bps up to the int16 ceiling", async () => {
+      subjectSpreadBps = 32_767;
+
+      await expect(subject()).to.emit(escrow, "DepositOracleRateConfigSet");
+      await escrow.connect(depositor.wallet).setCurrencyMinRate(ZERO, paymentMethod, Currency.USD, ZERO);
+
+      const expectedSpread = ether(1).mul(10_000 + subjectSpreadBps).add(9_999).div(10_000);
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(expectedSpread);
+    });
+
     it("returns max(fixed, spread)", async () => {
       await escrow.connect(depositor.wallet).setCurrencyMinRate(ZERO, paymentMethod, Currency.USD, ether(1.02));
       await subject();
@@ -371,7 +381,7 @@ describe("EscrowV2", () => {
       });
     });
 
-    describe("when spreadBps is below -10000", () => {
+    describe("when spreadBps is at or below -10000", () => {
       beforeEach(async () => {
         subjectSpreadBps = -10000;
       });
