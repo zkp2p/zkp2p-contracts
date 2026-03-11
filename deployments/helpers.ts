@@ -303,6 +303,28 @@ export async function addOrchestratorToRegistry(
   }
 }
 
+export async function removeOrchestratorFromRegistry(
+  hre: HardhatRuntimeEnvironment,
+  contract: any,
+  orchestrator: Address
+): Promise<void> {
+  const currentOwner = await contract.owner();
+
+  if (await contract.isOrchestrator(orchestrator)) {
+    if ((await hre.getUnnamedAccounts()).includes(currentOwner)) {
+      const data = contract.interface.encodeFunctionData("removeOrchestrator", [orchestrator]);
+      await sendDeploymentTransaction(hre, {
+        from: currentOwner,
+        to: contract.address,
+        data,
+      });
+    } else {
+      const data = contract.interface.encodeFunctionData("removeOrchestrator", [orchestrator]);
+      safeBatchCollector.add(contract.address, data, `OrchestratorRegistry.removeOrchestrator(${orchestrator})`);
+    }
+  }
+}
+
 export async function removePaymentMethodFromRegistry(
   hre: HardhatRuntimeEnvironment,
   contract: any,

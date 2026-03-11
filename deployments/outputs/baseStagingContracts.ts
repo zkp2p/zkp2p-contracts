@@ -3415,7 +3415,7 @@ export default {
       ]
     },
     "EscrowV2": {
-      "address": "0xEf77c802C9Ab4923ca4f5FD499ACD2f5C551Af58",
+      "address": "0x77e8f808FE201075e0bD651CD46fdF239fc83265",
       "abi": [
         {
           "inputs": [
@@ -3745,9 +3745,9 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "uint256",
+              "internalType": "int16",
               "name": "spreadBps",
-              "type": "uint256"
+              "type": "int16"
             }
           ],
           "name": "InvalidSpread",
@@ -4183,9 +4183,9 @@ export default {
             },
             {
               "indexed": false,
-              "internalType": "uint16",
+              "internalType": "int16",
               "name": "spreadBps",
-              "type": "uint16"
+              "type": "int16"
             },
             {
               "indexed": false,
@@ -4737,9 +4737,9 @@ export default {
                       "type": "bytes"
                     },
                     {
-                      "internalType": "uint16",
+                      "internalType": "int16",
                       "name": "spreadBps",
-                      "type": "uint16"
+                      "type": "int16"
                     },
                     {
                       "internalType": "uint32",
@@ -4839,9 +4839,9 @@ export default {
                       "type": "bytes"
                     },
                     {
-                      "internalType": "uint16",
+                      "internalType": "int16",
                       "name": "spreadBps",
-                      "type": "uint16"
+                      "type": "int16"
                     },
                     {
                       "internalType": "uint32",
@@ -4973,9 +4973,9 @@ export default {
                           "type": "bytes"
                         },
                         {
-                          "internalType": "uint16",
+                          "internalType": "int16",
                           "name": "spreadBps",
-                          "type": "uint16"
+                          "type": "int16"
                         },
                         {
                           "internalType": "uint32",
@@ -5014,6 +5014,29 @@ export default {
             }
           ],
           "name": "createDeposit",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32[]",
+              "name": "_paymentMethods",
+              "type": "bytes32[]"
+            },
+            {
+              "internalType": "bytes32[][]",
+              "name": "_currencyCodes",
+              "type": "bytes32[][]"
+            }
+          ],
+          "name": "deactivateCurrenciesBatch",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
@@ -5142,9 +5165,9 @@ export default {
                           "type": "bytes"
                         },
                         {
-                          "internalType": "uint16",
+                          "internalType": "int16",
                           "name": "spreadBps",
-                          "type": "uint16"
+                          "type": "int16"
                         },
                         {
                           "internalType": "uint32",
@@ -5518,9 +5541,9 @@ export default {
                   "type": "bytes"
                 },
                 {
-                  "internalType": "uint16",
+                  "internalType": "int16",
                   "name": "spreadBps",
-                  "type": "uint16"
+                  "type": "int16"
                 },
                 {
                   "internalType": "uint32",
@@ -6103,9 +6126,9 @@ export default {
                   "type": "bytes"
                 },
                 {
-                  "internalType": "uint16",
+                  "internalType": "int16",
                   "name": "spreadBps",
-                  "type": "uint16"
+                  "type": "int16"
                 },
                 {
                   "internalType": "uint32",
@@ -6153,9 +6176,9 @@ export default {
                   "type": "bytes"
                 },
                 {
-                  "internalType": "uint16",
+                  "internalType": "int16",
                   "name": "spreadBps",
-                  "type": "uint16"
+                  "type": "int16"
                 },
                 {
                   "internalType": "uint32",
@@ -6325,6 +6348,73 @@ export default {
         {
           "inputs": [],
           "name": "unpauseEscrow",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32[]",
+              "name": "_paymentMethods",
+              "type": "bytes32[]"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "bytes32",
+                  "name": "code",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "minConversionRate",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "bool",
+                  "name": "updateOracle",
+                  "type": "bool"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "adapter",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "bytes",
+                      "name": "adapterConfig",
+                      "type": "bytes"
+                    },
+                    {
+                      "internalType": "int16",
+                      "name": "spreadBps",
+                      "type": "int16"
+                    },
+                    {
+                      "internalType": "uint32",
+                      "name": "maxStaleness",
+                      "type": "uint32"
+                    }
+                  ],
+                  "internalType": "struct IEscrowV2.OracleRateConfig",
+                  "name": "oracleRateConfig",
+                  "type": "tuple"
+                }
+              ],
+              "internalType": "struct IEscrowV2.CurrencyRateUpdate[][]",
+              "name": "_updates",
+              "type": "tuple[][]"
+            }
+          ],
+          "name": "updateCurrencyConfigBatch",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
@@ -7864,7 +7954,7 @@ export default {
       ]
     },
     "OrchestratorV2": {
-      "address": "0xF806656fCc55c94f17bB9B5CB735C2fd000DE5DF",
+      "address": "0xc17a59227B136c45fAa153086a15EF87ED14bE00",
       "abi": [
         {
           "inputs": [
@@ -7988,6 +8078,17 @@ export default {
           "type": "error"
         },
         {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "recipient",
+              "type": "address"
+            }
+          ],
+          "name": "DuplicateReferralFeeRecipient",
+          "type": "error"
+        },
+        {
           "inputs": [],
           "name": "EscrowLockFailed",
           "type": "error"
@@ -8070,7 +8171,7 @@ export default {
         },
         {
           "inputs": [],
-          "name": "InvalidReferrerFeeConfiguration",
+          "name": "InvalidReferralFeeConfiguration",
           "type": "error"
         },
         {
@@ -8130,6 +8231,38 @@ export default {
             }
           ],
           "name": "RateBelowMinimum",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "count",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "maximum",
+              "type": "uint256"
+            }
+          ],
+          "name": "ReferralFeeCountExceedsMaximum",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "totalFee",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "maximum",
+              "type": "uint256"
+            }
+          ],
+          "name": "ReferralFeeExceedsMaximum",
           "type": "error"
         },
         {
@@ -8377,6 +8510,31 @@ export default {
             }
           ],
           "name": "IntentPruned",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "feeRecipient",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "feeAmount",
+              "type": "uint256"
+            }
+          ],
+          "name": "IntentReferralFeeDistributed",
           "type": "event"
         },
         {
@@ -8786,14 +8944,21 @@ export default {
                   "type": "bytes32"
                 },
                 {
-                  "internalType": "address",
-                  "name": "referrer",
-                  "type": "address"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "referrerFee",
-                  "type": "uint256"
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "recipient",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "fee",
+                      "type": "uint256"
+                    }
+                  ],
+                  "internalType": "struct IReferralFee.ReferralFee[]",
+                  "name": "referralFees",
+                  "type": "tuple[]"
                 },
                 {
                   "internalType": "contract IPostIntentHookV2",
@@ -9115,14 +9280,21 @@ export default {
                   "type": "uint256"
                 },
                 {
-                  "internalType": "address",
-                  "name": "referrer",
-                  "type": "address"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "referrerFee",
-                  "type": "uint256"
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "recipient",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "fee",
+                      "type": "uint256"
+                    }
+                  ],
+                  "internalType": "struct IReferralFee.ReferralFee[]",
+                  "name": "referralFees",
+                  "type": "tuple[]"
                 },
                 {
                   "internalType": "bytes",
@@ -12994,7 +13166,7 @@ export default {
       ]
     },
     "SignatureGatingPreIntentHook": {
-      "address": "0x22190E400b192229bBA776656ed034b45761E92c",
+      "address": "0x6c5144D1710fb152cFa582b9592D8935c0Bd0261",
       "abi": [
         {
           "inputs": [
@@ -13259,14 +13431,21 @@ export default {
                   "type": "uint256"
                 },
                 {
-                  "internalType": "address",
-                  "name": "referrer",
-                  "type": "address"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "referrerFee",
-                  "type": "uint256"
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "recipient",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "fee",
+                      "type": "uint256"
+                    }
+                  ],
+                  "internalType": "struct IReferralFee.ReferralFee[]",
+                  "name": "referralFees",
+                  "type": "tuple[]"
                 },
                 {
                   "internalType": "bytes",
