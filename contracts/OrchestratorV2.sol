@@ -40,10 +40,8 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     /* ============ Constants ============ */
     uint256 internal constant PRECISE_UNIT = 1e18;
     uint256 constant CIRCOM_PRIME_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
-    uint256 constant MAX_REFERRER_FEE = 5e16;      // 5% max referrer fee
     uint256 constant MAX_PROTOCOL_FEE = 5e16;      // 5% max protocol fee
     uint256 constant MAX_MANAGER_FEE = 5e16;       // 5% max manager fee
-    uint256 constant MAX_REFERRAL_FEE_RECIPIENTS = 4;
 
     /* ============ State Variables ============ */
 
@@ -493,7 +491,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     /**
      * @notice Validates an intent before it is signaled.
      */
-    function _validateSignalIntent(SignalIntentParams memory _intent) internal view {
+    function _validateSignalIntent(SignalIntentParams calldata _intent) internal view {
         // Check if account can have multiple intents
         bool canHaveMultipleIntents = relayerRegistry.isWhitelistedRelayer(msg.sender) || allowMultipleIntents;
         if (!canHaveMultipleIntents && accountIntents[msg.sender].length > 0) {
@@ -502,7 +500,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
 
         if (_intent.to == address(0)) revert ZeroAddress();
         
-        _validateReferralFees(_intent.referralFees);
+        ReferralFeeLib.validateReferralFees(_intent.referralFees);
 
         if (address(_intent.postIntentHook) != address(0)) {
             if (address(_intent.postIntentHook).code.length == 0) {
@@ -746,36 +744,11 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         );
     }
 
-    function _validateReferralFees(IReferralFee.ReferralFee[] memory _referralFees) internal pure {
-        if (_referralFees.length > MAX_REFERRAL_FEE_RECIPIENTS) {
-            revert ReferralFeeCountExceedsMaximum(_referralFees.length, MAX_REFERRAL_FEE_RECIPIENTS);
-        }
-
-        uint256 totalReferralFee;
-        for (uint256 i = 0; i < _referralFees.length; ++i) {
-            IReferralFee.ReferralFee memory referralFee = _referralFees[i];
-
-            if (referralFee.recipient == address(0)) revert InvalidReferralFeeConfiguration();
-            if (referralFee.fee == 0) revert InvalidReferralFeeConfiguration();
-
-            for (uint256 j = i + 1; j < _referralFees.length; ++j) {
-                if (_referralFees[j].recipient == referralFee.recipient) {
-                    revert DuplicateReferralFeeRecipient(referralFee.recipient);
-                }
-            }
-
-            totalReferralFee += referralFee.fee;
-        }
-
-        if (totalReferralFee > MAX_REFERRER_FEE) revert FeeExceedsMaximum(totalReferralFee, MAX_REFERRER_FEE);
-    }
-
-
     /**
      * @notice Checks if a intent gating service signature is valid.
      */
     function _isValidIntentGatingSignature(
-        SignalIntentParams memory _intent,
+        SignalIntentParams calldata _intent,
         address _intentGatingService,
         address _caller
     )

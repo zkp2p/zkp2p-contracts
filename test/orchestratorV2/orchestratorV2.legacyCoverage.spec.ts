@@ -666,6 +666,17 @@ describe("OrchestratorV2", () => {
       ).to.be.revertedWithCustomError(orchestrator, "FeeExceedsMaximum");
     });
 
+    it("reverts when total referral fees exceed max", async () => {
+      await expect(
+        signalIntent({
+          subjectReferralFees: [
+            { recipient: referrer.address, fee: ether(0.03) },
+            { recipient: other.address, fee: ether(0.021) },
+          ],
+        })
+      ).to.be.revertedWithCustomError(orchestrator, "FeeExceedsMaximum");
+    });
+
     it("reverts when referrer is zero and fee is non-zero", async () => {
       await expect(
         signalIntent({ subjectReferrer: ADDRESS_ZERO, subjectReferrerFee: ether(0.001) })
