@@ -316,14 +316,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         whenNotPaused
         onlyDepositorOrDelegate(_depositId)
     {
-        // Allow reactivation from 0 if currency was previously listed
-        if (!depositCurrencyListed[_depositId][_paymentMethod][_fiatCurrency]) {
-            revert CurrencyNotSupported(_paymentMethod, _fiatCurrency);
-        }
-
-        depositCurrencyMinRate[_depositId][_paymentMethod][_fiatCurrency] = _newMinConversionRate;
-
-        emit DepositMinConversionRateUpdated(_depositId, _paymentMethod, _fiatCurrency, _newMinConversionRate);
+        _setCurrencyMinRate(_depositId, _paymentMethod, _fiatCurrency, _newMinConversionRate);
     }
 
     /**
@@ -383,6 +376,44 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
     }
 
     /**
+     * @notice Batch updates fixed floors and optional oracle configs for listed tuples.
+     * @dev For each payment-method index, `_updates[i]` contains the currency-level mutations.
+     * If `updateOracle` is true and `oracleRateConfig.adapter == address(0)`, the oracle config is removed.
+     * @param _depositId Deposit ID.
+     * @param _paymentMethods Payment method keys.
+     * @param _updates Currency updates grouped by payment method index.
+     */
+    function updateCurrencyConfigBatch(
+        uint256 _depositId,
+        bytes32[] calldata _paymentMethods,
+        CurrencyRateUpdate[][] calldata _updates
+    )
+        external
+        whenNotPaused
+        onlyDepositorOrDelegate(_depositId)
+    {
+        if (_paymentMethods.length != _updates.length) {
+            revert ArrayLengthMismatch(_paymentMethods.length, _updates.length);
+        }
+
+        for (uint256 i = 0; i < _paymentMethods.length; i++) {
+            for (uint256 j = 0; j < _updates[i].length; j++) {
+                CurrencyRateUpdate calldata update = _updates[i][j];
+
+                _setCurrencyMinRate(_depositId, _paymentMethods[i], update.code, update.minConversionRate);
+
+                if (update.updateOracle) {
+                    if (update.oracleRateConfig.adapter == address(0)) {
+                        _removeOracleRateConfig(_depositId, _paymentMethods[i], update.code);
+                    } else {
+                        _setOracleRateConfig(_depositId, _paymentMethods[i], update.code, update.oracleRateConfig);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * @notice Removes oracle spread configuration for a listed tuple.
      * @dev Caller must be depositor or delegate.
      * @param _depositId Deposit ID.
@@ -398,12 +429,7 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         whenNotPaused
         onlyDepositorOrDelegate(_depositId)
     {
-        if (!depositCurrencyListed[_depositId][_paymentMethod][_currencyCode]) {
-            revert CurrencyNotSupported(_paymentMethod, _currencyCode);
-        }
-
-        delete depositOracleRateConfig[_depositId][_paymentMethod][_currencyCode];
-        emit DepositOracleRateConfigRemoved(_depositId, _paymentMethod, _currencyCode);
+        _removeOracleRateConfig(_depositId, _paymentMethod, _currencyCode);
     }
 
     /**
@@ -587,17 +613,34 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         whenNotPaused
         onlyDepositorOrDelegate(_depositId)
     {
-        if (!depositPaymentMethodActive[_depositId][_paymentMethod]) revert PaymentMethodNotActive(_depositId, _paymentMethod);
-        if (!depositCurrencyListed[_depositId][_paymentMethod][_currencyCode]) revert CurrencyNotFound(_paymentMethod, _currencyCode);
+        _deactivateCurrency(_depositId, _paymentMethod, _currencyCode);
+    }
 
-        delete depositCurrencyMinRate[_depositId][_paymentMethod][_currencyCode];
-        bool hadOracleConfig = depositOracleRateConfig[_depositId][_paymentMethod][_currencyCode].adapter != address(0);
-        if (hadOracleConfig) {
-            delete depositOracleRateConfig[_depositId][_paymentMethod][_currencyCode];
-            emit DepositOracleRateConfigRemoved(_depositId, _paymentMethod, _currencyCode);
+    /**
+     * @notice Batch deactivates listed currencies for multiple payment methods on a deposit.
+     * @dev For each payment-method index, `_currencyCodes[i]` contains the currencies to deactivate.
+     * @param _depositId Deposit ID.
+     * @param _paymentMethods Payment method keys.
+     * @param _currencyCodes Currency keys grouped by payment method index.
+     */
+    function deactivateCurrenciesBatch(
+        uint256 _depositId,
+        bytes32[] calldata _paymentMethods,
+        bytes32[][] calldata _currencyCodes
+    )
+        external
+        whenNotPaused
+        onlyDepositorOrDelegate(_depositId)
+    {
+        if (_paymentMethods.length != _currencyCodes.length) {
+            revert ArrayLengthMismatch(_paymentMethods.length, _currencyCodes.length);
         }
 
-        emit DepositMinConversionRateUpdated(_depositId, _paymentMethod, _currencyCode, 0);
+        for (uint256 i = 0; i < _paymentMethods.length; i++) {
+            for (uint256 j = 0; j < _currencyCodes[i].length; j++) {
+                _deactivateCurrency(_depositId, _paymentMethods[i], _currencyCodes[i][j]);
+            }
+        }
     }
 
     /**
@@ -1373,6 +1416,21 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         emit DepositCurrencyAdded(_depositId, _paymentMethod, _currencyCode, _minConversionRate);
     }
 
+    function _setCurrencyMinRate(
+        uint256 _depositId,
+        bytes32 _paymentMethod,
+        bytes32 _currencyCode,
+        uint256 _newMinConversionRate
+    ) internal {
+        if (!depositCurrencyListed[_depositId][_paymentMethod][_currencyCode]) {
+            revert CurrencyNotSupported(_paymentMethod, _currencyCode);
+        }
+
+        depositCurrencyMinRate[_depositId][_paymentMethod][_currencyCode] = _newMinConversionRate;
+
+        emit DepositMinConversionRateUpdated(_depositId, _paymentMethod, _currencyCode, _newMinConversionRate);
+    }
+
     function _setOracleRateConfig(
         uint256 _depositId,
         bytes32 _paymentMethod,
@@ -1408,6 +1466,40 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
             _config.spreadBps,
             _config.maxStaleness
         );
+    }
+
+    function _removeOracleRateConfig(
+        uint256 _depositId,
+        bytes32 _paymentMethod,
+        bytes32 _currencyCode
+    ) internal {
+        if (!depositCurrencyListed[_depositId][_paymentMethod][_currencyCode]) {
+            revert CurrencyNotSupported(_paymentMethod, _currencyCode);
+        }
+        if (depositOracleRateConfig[_depositId][_paymentMethod][_currencyCode].adapter == address(0)) {
+            return;
+        }
+
+        delete depositOracleRateConfig[_depositId][_paymentMethod][_currencyCode];
+        emit DepositOracleRateConfigRemoved(_depositId, _paymentMethod, _currencyCode);
+    }
+
+    function _deactivateCurrency(
+        uint256 _depositId,
+        bytes32 _paymentMethod,
+        bytes32 _currencyCode
+    ) internal {
+        if (!depositPaymentMethodActive[_depositId][_paymentMethod]) revert PaymentMethodNotActive(_depositId, _paymentMethod);
+        if (!depositCurrencyListed[_depositId][_paymentMethod][_currencyCode]) revert CurrencyNotFound(_paymentMethod, _currencyCode);
+
+        delete depositCurrencyMinRate[_depositId][_paymentMethod][_currencyCode];
+        bool hadOracleConfig = depositOracleRateConfig[_depositId][_paymentMethod][_currencyCode].adapter != address(0);
+        if (hadOracleConfig) {
+            delete depositOracleRateConfig[_depositId][_paymentMethod][_currencyCode];
+            emit DepositOracleRateConfigRemoved(_depositId, _paymentMethod, _currencyCode);
+        }
+
+        emit DepositMinConversionRateUpdated(_depositId, _paymentMethod, _currencyCode, 0);
     }
 
     function _getDepositCurrencyMinRate(

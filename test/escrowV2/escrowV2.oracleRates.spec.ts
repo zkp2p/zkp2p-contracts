@@ -477,6 +477,215 @@ describe("EscrowV2", () => {
     });
   });
 
+  describe("#updateCurrencyConfigBatch", () => {
+    let subjectCaller: any;
+
+    beforeEach(async () => {
+      subjectCaller = depositor;
+    });
+
+    it("updates fixed floors and optionally applies oracle config changes", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const usdAdapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1.04), currentTimestamp]
+      );
+
+      await expect(
+        escrow.connect(subjectCaller.wallet).updateCurrencyConfigBatch(
+          ZERO,
+          [paymentMethod],
+          [[
+            {
+              code: Currency.USD,
+              minConversionRate: ether(1.01),
+              updateOracle: true,
+              oracleRateConfig: {
+                adapter: staticOracleAdapter.address,
+                adapterConfig: usdAdapterConfig,
+                spreadBps: 50,
+                maxStaleness: 3600,
+              },
+            },
+            {
+              code: Currency.EUR,
+              minConversionRate: ether(0.97),
+              updateOracle: false,
+              oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG,
+            },
+          ]]
+        )
+      )
+        .to.emit(escrow, "DepositMinConversionRateUpdated")
+        .withArgs(ZERO, paymentMethod, Currency.USD, ether(1.01))
+        .and.to.emit(escrow, "DepositOracleRateConfigSet")
+        .withArgs(
+          ZERO,
+          paymentMethod,
+          Currency.USD,
+          staticOracleAdapter.address,
+          usdAdapterConfig,
+          50,
+          3600
+        )
+        .and.to.emit(escrow, "DepositMinConversionRateUpdated")
+        .withArgs(ZERO, paymentMethod, Currency.EUR, ether(0.97));
+
+      const usdExpected = ether(1.04).mul(10_050).add(9_999).div(10_000);
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(usdExpected);
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.EUR)).to.eq(ether(0.97));
+    });
+
+    it("removes oracle config when updateOracle is true and adapter is zero", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1.2), BigNumber.from(currentTimestamp)]
+      );
+
+      await escrow.connect(depositor.wallet).setOracleRateConfig(
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          adapter: staticOracleAdapter.address,
+          adapterConfig,
+          spreadBps: 0,
+          maxStaleness: 3600,
+        }
+      );
+
+      await expect(
+        escrow.connect(subjectCaller.wallet).updateCurrencyConfigBatch(
+          ZERO,
+          [paymentMethod],
+          [[
+            {
+              code: Currency.USD,
+              minConversionRate: ether(1.15),
+              updateOracle: true,
+              oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG,
+            },
+          ]]
+        )
+      )
+        .to.emit(escrow, "DepositMinConversionRateUpdated")
+        .withArgs(ZERO, paymentMethod, Currency.USD, ether(1.15))
+        .and.to.emit(escrow, "DepositOracleRateConfigRemoved")
+        .withArgs(ZERO, paymentMethod, Currency.USD);
+
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ether(1.15));
+      expect((await escrow.getDepositOracleRateConfig(ZERO, paymentMethod, Currency.USD)).adapter).to.eq(ADDRESS_ZERO);
+    });
+
+    it("does not emit oracle removal when no oracle config exists", async () => {
+      const tx = await escrow.connect(subjectCaller.wallet).updateCurrencyConfigBatch(
+        ZERO,
+        [paymentMethod],
+        [[
+          {
+            code: Currency.EUR,
+            minConversionRate: ether(0.95),
+            updateOracle: true,
+            oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG,
+          },
+        ]]
+      );
+
+      await expect(tx)
+        .to.emit(escrow, "DepositMinConversionRateUpdated")
+        .withArgs(ZERO, paymentMethod, Currency.EUR, ether(0.95));
+
+      const receipt = await tx.wait();
+      const removedEvents = (receipt.events || []).filter((event) => event.event === "DepositOracleRateConfigRemoved");
+      expect(removedEvents).to.have.length(0);
+
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.EUR)).to.eq(ether(0.95));
+      expect((await escrow.getDepositOracleRateConfig(ZERO, paymentMethod, Currency.EUR)).adapter).to.eq(ADDRESS_ZERO);
+    });
+
+    it("reverts when paymentMethods and updates length mismatch", async () => {
+      await expect(
+        escrow.connect(subjectCaller.wallet).updateCurrencyConfigBatch(
+          ZERO,
+          [paymentMethod],
+          []
+        )
+      ).to.be.revertedWithCustomError(escrow, "ArrayLengthMismatch");
+    });
+  });
+
+  describe("#deactivateCurrenciesBatch", () => {
+    let subjectCaller: any;
+
+    beforeEach(async () => {
+      subjectCaller = depositor;
+    });
+
+    it("deactivates multiple currencies and removes oracle config when present", async () => {
+      const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+      const adapterConfig = ethers.utils.defaultAbiCoder.encode(
+        ["bool", "uint256", "uint256"],
+        [true, ether(1.2), BigNumber.from(currentTimestamp)]
+      );
+
+      await escrow.connect(depositor.wallet).setOracleRateConfig(
+        ZERO,
+        paymentMethod,
+        Currency.USD,
+        {
+          adapter: staticOracleAdapter.address,
+          adapterConfig,
+          spreadBps: 0,
+          maxStaleness: 3600,
+        }
+      );
+
+      const tx = await escrow.connect(subjectCaller.wallet).deactivateCurrenciesBatch(
+        ZERO,
+        [paymentMethod],
+        [[Currency.USD, Currency.EUR]]
+      );
+
+      await expect(tx)
+        .to.emit(escrow, "DepositMinConversionRateUpdated")
+        .withArgs(ZERO, paymentMethod, Currency.USD, ZERO)
+        .and.to.emit(escrow, "DepositMinConversionRateUpdated")
+        .withArgs(ZERO, paymentMethod, Currency.EUR, ZERO);
+
+      const receipt = await tx.wait();
+      const removedEvents = (receipt.events || []).filter((event) => event.event === "DepositOracleRateConfigRemoved");
+      expect(removedEvents).to.have.length(1);
+      expect(removedEvents[0].args?.currencyCode).to.eq(Currency.USD);
+
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.USD)).to.eq(ZERO);
+      expect(await escrow.getDepositCurrencyMinRate(ZERO, paymentMethod, Currency.EUR)).to.eq(ZERO);
+      expect((await escrow.getDepositOracleRateConfig(ZERO, paymentMethod, Currency.USD)).adapter).to.eq(ADDRESS_ZERO);
+    });
+
+    it("reverts when payment method is not active", async () => {
+      await escrow.connect(depositor.wallet).setPaymentMethodActive(ZERO, paymentMethod, false);
+
+      await expect(
+        escrow.connect(subjectCaller.wallet).deactivateCurrenciesBatch(
+          ZERO,
+          [paymentMethod],
+          [[Currency.USD]]
+        )
+      ).to.be.revertedWithCustomError(escrow, "PaymentMethodNotActive");
+    });
+
+    it("reverts when paymentMethods and currencyCodes length mismatch", async () => {
+      await expect(
+        escrow.connect(subjectCaller.wallet).deactivateCurrenciesBatch(
+          ZERO,
+          [paymentMethod],
+          []
+        )
+      ).to.be.revertedWithCustomError(escrow, "ArrayLengthMismatch");
+    });
+  });
+
   describe("#setOracleRateConfig unsupported tuple", () => {
     it("reverts when currency is not listed for the payment method", async () => {
       const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
