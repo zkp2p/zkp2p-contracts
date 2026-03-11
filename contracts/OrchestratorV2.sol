@@ -12,6 +12,7 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuar
 import { AddressArrayUtils } from "./external/AddressArrayUtils.sol";
 import { Bytes32ArrayUtils } from "./external/Bytes32ArrayUtils.sol";
 import { IOrchestratorV2 } from "./interfaces/IOrchestratorV2.sol";
+import { IReferralFee } from "./interfaces/IReferralFee.sol";
 import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
@@ -20,6 +21,7 @@ import { IPreIntentHook } from "./interfaces/IPreIntentHook.sol";
 import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
 import { IRelayerRegistry } from "./interfaces/IRelayerRegistry.sol";
+import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
 
 /**
  * @title OrchestratorV2
@@ -38,7 +40,6 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     /* ============ Constants ============ */
     uint256 internal constant PRECISE_UNIT = 1e18;
     uint256 constant CIRCOM_PRIME_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
-    uint256 constant MAX_REFERRER_FEE = 5e16;      // 5% max referrer fee
     uint256 constant MAX_PROTOCOL_FEE = 5e16;      // 5% max protocol fee
     uint256 constant MAX_MANAGER_FEE = 5e16;       // 5% max manager fee
 
@@ -133,22 +134,29 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         intentManagerFee[intentHash] = managerFee;
         
         intentMinAtSignal[intentHash] = dep.intentAmountRange.min;
-        intents[intentHash] = Intent({
-            owner: msg.sender,
-            to: _params.to,
-            escrow: _params.escrow,
-            depositId: _params.depositId,
-            amount: _params.amount,
-            paymentMethod: _params.paymentMethod,
-            fiatCurrency: _params.fiatCurrency,
-            conversionRate: _params.conversionRate,
-            payeeId: depData.payeeDetails, 
-            timestamp: block.timestamp,
-            referrer: _params.referrer,
-            referrerFee: _params.referrerFee,
-            postIntentHook: _params.postIntentHook,
-            data: _params.data
-        });
+        Intent storage storedIntent = intents[intentHash];
+        storedIntent.owner = msg.sender;
+        storedIntent.to = _params.to;
+        storedIntent.escrow = _params.escrow;
+        storedIntent.depositId = _params.depositId;
+        storedIntent.amount = _params.amount;
+        storedIntent.paymentMethod = _params.paymentMethod;
+        storedIntent.fiatCurrency = _params.fiatCurrency;
+        storedIntent.conversionRate = _params.conversionRate;
+        storedIntent.payeeId = depData.payeeDetails;
+        storedIntent.timestamp = block.timestamp;
+        storedIntent.postIntentHook = _params.postIntentHook;
+        storedIntent.data = _params.data;
+
+        for (uint256 i = 0; i < _params.referralFees.length; ++i) {
+            IReferralFee.ReferralFee calldata referralFee = _params.referralFees[i];
+            storedIntent.referralFees.push(
+                IReferralFee.ReferralFee({
+                    recipient: referralFee.recipient,
+                    fee: referralFee.fee
+                })
+            );
+        }
 
         accountIntents[msg.sender].push(intentHash);
         intentCounter++;
@@ -478,7 +486,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     /**
      * @notice Validates an intent before it is signaled.
      */
-    function _validateSignalIntent(SignalIntentParams memory _intent) internal view {
+    function _validateSignalIntent(SignalIntentParams calldata _intent) internal view {
         // Check if account can have multiple intents
         bool canHaveMultipleIntents = relayerRegistry.isWhitelistedRelayer(msg.sender) || allowMultipleIntents;
         if (!canHaveMultipleIntents && accountIntents[msg.sender].length > 0) {
@@ -487,10 +495,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
 
         if (_intent.to == address(0)) revert ZeroAddress();
         
-        if (_intent.referrerFee > MAX_REFERRER_FEE) revert FeeExceedsMaximum(_intent.referrerFee, MAX_REFERRER_FEE);
-        if (_intent.referrer == address(0)) {
-            if (_intent.referrerFee != 0) revert InvalidReferrerFeeConfiguration();
-        }
+        ReferralFeeLib.validateReferralFees(_intent.referralFees);
 
         if (address(_intent.postIntentHook) != address(0)) {
             if (address(_intent.postIntentHook).code.length == 0) {
@@ -568,8 +573,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
                 paymentMethod: _params.paymentMethod,
                 fiatCurrency: _params.fiatCurrency,
                 conversionRate: _params.conversionRate,
-                referrer: _params.referrer,
-                referrerFee: _params.referrerFee,
+                referralFees: _params.referralFees,
                 preIntentHookData: _params.preIntentHookData
             })
         );
@@ -613,13 +617,14 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      */
     function _calculateAndTransferFees(
         IERC20 _token,
+        bytes32 _intentHash,
         Intent memory _intent, 
         uint256 _releaseAmount,
         address _managerFeeRecipient,
         uint256 _managerFee
     ) internal returns (uint256 netFees) {
         uint256 protocolFeeAmount;
-        uint256 referrerFeeAmount; 
+        uint256 referralFeeAmount;
         uint256 managerFeeAmount;
 
         // Calculate protocol fee (taken from taker) - based on release amount
@@ -628,10 +633,13 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
             _token.safeTransfer(protocolFeeRecipient, protocolFeeAmount);
         }
         
-        // Calculate referrer fee (taken from taker) - based on release amount
-        if (_intent.referrer != address(0) && _intent.referrerFee > 0) {
-            referrerFeeAmount = (_releaseAmount * _intent.referrerFee) / PRECISE_UNIT;
-            _token.safeTransfer(_intent.referrer, referrerFeeAmount);
+        // Calculate referral fees (taken from taker) - based on release amount
+        for (uint256 i = 0; i < _intent.referralFees.length; ++i) {
+            IReferralFee.ReferralFee memory referralFee = _intent.referralFees[i];
+            uint256 feeAmount = (_releaseAmount * referralFee.fee) / PRECISE_UNIT;
+            referralFeeAmount += feeAmount;
+            _token.safeTransfer(referralFee.recipient, feeAmount);
+            emit IntentReferralFeeDistributed(_intentHash, referralFee.recipient, feeAmount);
         }
 
         // Calculate manager fee (taken from taker) - based on release amount
@@ -640,7 +648,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
             _token.safeTransfer(_managerFeeRecipient, managerFeeAmount);
         }
 
-        netFees = protocolFeeAmount + referrerFeeAmount + managerFeeAmount;
+        netFees = protocolFeeAmount + referralFeeAmount + managerFeeAmount;
     }
 
     /**
@@ -654,7 +662,14 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         address _managerFeeRecipient,
         uint256 _managerFee
     ) internal {
-        uint256 netFees = _calculateAndTransferFees(_token, _intent, _releaseAmount, _managerFeeRecipient, _managerFee);
+        uint256 netFees = _calculateAndTransferFees(
+            _token,
+            _intentHash,
+            _intent,
+            _releaseAmount,
+            _managerFeeRecipient,
+            _managerFee
+        );
         uint256 netAmount = _releaseAmount - netFees;
 
         _token.safeTransfer(_intent.to, netAmount);
@@ -679,7 +694,14 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         address _managerFeeRecipient,
         uint256 _managerFee
     ) internal {
-        uint256 netFees = _calculateAndTransferFees(_token, _intent, _releaseAmount, _managerFeeRecipient, _managerFee);
+        uint256 netFees = _calculateAndTransferFees(
+            _token,
+            _intentHash,
+            _intent,
+            _releaseAmount,
+            _managerFeeRecipient,
+            _managerFee
+        );
         uint256 netAmount = _releaseAmount - netFees;
 
         address fundsTransferredTo = _intent.to;
@@ -733,12 +755,11 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         );
     }
 
-
     /**
      * @notice Checks if a intent gating service signature is valid.
      */
     function _isValidIntentGatingSignature(
-        SignalIntentParams memory _intent,
+        SignalIntentParams calldata _intent,
         address _intentGatingService,
         address _caller
     )
@@ -756,8 +777,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
             _intent.paymentMethod,
             _intent.fiatCurrency,
             _intent.conversionRate,
-            _intent.referrer,
-            _intent.referrerFee,
+            ReferralFeeLib.hashReferralFees(_intent.referralFees),
             _intent.signatureExpiration,
             chainId
         );

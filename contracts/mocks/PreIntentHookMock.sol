@@ -3,6 +3,8 @@
 pragma solidity ^0.8.18;
 
 import { IPreIntentHook } from "../interfaces/IPreIntentHook.sol";
+import { IReferralFee } from "../interfaces/IReferralFee.sol";
+import { ReferralFeeLib } from "../lib/ReferralFeeLib.sol";
 
 contract PreIntentHookMock is IPreIntentHook {
     bool public shouldRevert;
@@ -16,8 +18,8 @@ contract PreIntentHookMock is IPreIntentHook {
     bytes32 public lastPaymentMethod;
     bytes32 public lastFiatCurrency;
     uint256 public lastConversionRate;
-    address public lastReferrer;
-    uint256 public lastReferrerFee;
+    bytes32 public lastReferralFeesHash;
+    uint256 public lastReferralFeesCount;
     bytes public lastPreIntentHookData;
 
     function setShouldRevert(bool _shouldRevert) external {
@@ -38,8 +40,8 @@ contract PreIntentHookMock is IPreIntentHook {
         lastPaymentMethod = _ctx.paymentMethod;
         lastFiatCurrency = _ctx.fiatCurrency;
         lastConversionRate = _ctx.conversionRate;
-        lastReferrer = _ctx.referrer;
-        lastReferrerFee = _ctx.referrerFee;
+        lastReferralFeesHash = ReferralFeeLib.hashReferralFees(_ctx.referralFees);
+        lastReferralFeesCount = _ctx.referralFees.length;
         lastPreIntentHookData = _ctx.preIntentHookData;
     }
 }

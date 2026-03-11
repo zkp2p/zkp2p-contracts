@@ -2,6 +2,8 @@
 
 pragma solidity ^0.8.18;
 
+import { IReferralFee } from "./IReferralFee.sol";
+
 /**
  * @title IPreIntentHook
  * @notice Interface for pre-intent hooks that run during signalIntent.
@@ -16,8 +18,7 @@ interface IPreIntentHook {
         bytes32 paymentMethod;
         bytes32 fiatCurrency;
         uint256 conversionRate;
-        address referrer;
-        uint256 referrerFee;
+        IReferralFee.ReferralFee[] referralFees;
         bytes preIntentHookData; // Ephemeral hook-specific data from SignalIntentParams.preIntentHookData
     }
 

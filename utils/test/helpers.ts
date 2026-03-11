@@ -3,6 +3,43 @@ import { ethers } from "hardhat";
 import { Account } from "@utils/test/types";
 import { Address } from "@utils/types";
 
+export type ReferralFeeParam = {
+  recipient: Address;
+  fee: BigNumber;
+};
+
+export const hashReferralFees = (referralFees: ReferralFeeParam[]): string => {
+  const feeHashes = referralFees.map(({ recipient, fee }) =>
+    ethers.utils.keccak256(
+      ethers.utils.defaultAbiCoder.encode(["address", "uint256"], [recipient, fee])
+    )
+  );
+
+  return ethers.utils.keccak256(
+    ethers.utils.defaultAbiCoder.encode(["bytes32[]"], [feeHashes])
+  );
+};
+
+const normalizeReferralFees = (
+  referrer: Address,
+  referrerFee: BigNumber,
+  referralFees?: ReferralFeeParam[]
+): ReferralFeeParam[] => {
+  if (referralFees) {
+    return referralFees;
+  }
+
+  if (referrer === ethers.constants.AddressZero && referrerFee.eq(0)) {
+    return [];
+  }
+
+  if (referrer !== ethers.constants.AddressZero && referrerFee.eq(0)) {
+    return [];
+  }
+
+  return [{ recipient: referrer, fee: referrerFee }];
+};
+
 export const generateGatingServiceSignature = async (
   gatingService: Account,
   orchestrator: Address,
@@ -41,8 +78,7 @@ export const generateGatingServiceSignatureV2 = async (
   paymentMethod: BytesLike,
   fiatCurrency: string,
   conversionRate: BigNumber,
-  referrer: Address,
-  referrerFee: BigNumber,
+  referralFees: ReferralFeeParam[],
   chainId: string,
   signatureExpiration?: BigNumber
 ) => {
@@ -54,8 +90,21 @@ export const generateGatingServiceSignatureV2 = async (
   }
 
   const messageHash = ethers.utils.solidityKeccak256(
-    ["address", "address", "uint256", "uint256", "address", "address", "bytes32", "bytes32", "uint256", "address", "uint256", "uint256", "uint256"],
-    [orchestrator, escrow, depositId, amount, caller, to, paymentMethod, fiatCurrency, conversionRate, referrer, referrerFee, signatureExpiration, chainId]
+    ["address", "address", "uint256", "uint256", "address", "address", "bytes32", "bytes32", "uint256", "bytes32", "uint256", "uint256"],
+    [
+      orchestrator,
+      escrow,
+      depositId,
+      amount,
+      caller,
+      to,
+      paymentMethod,
+      fiatCurrency,
+      conversionRate,
+      hashReferralFees(referralFees),
+      signatureExpiration,
+      chainId,
+    ]
   );
   return await gatingService.wallet.signMessage(ethers.utils.arrayify(messageHash));
 }
@@ -77,7 +126,8 @@ export const createSignalIntentParams = async (
   data: string = "0x",
   signatureExpiration?: BigNumber,
   preIntentHookData?: string,
-  caller?: Address
+  caller?: Address,
+  referralFees?: ReferralFeeParam[]
 ) => {
   // If no expiration provided, use current block timestamp + 1 day
   if (!signatureExpiration) {
@@ -87,6 +137,7 @@ export const createSignalIntentParams = async (
   }
 
   let gatingServiceSignature = "0x";
+  const normalizedReferralFees = normalizeReferralFees(referrer, referrerFee, referralFees);
 
   if (gatingService) {
     if (caller) {
@@ -101,8 +152,7 @@ export const createSignalIntentParams = async (
         paymentMethod,
         fiatCurrency,
         conversionRate,
-        referrer,
-        referrerFee,
+        normalizedReferralFees,
         chainId,
         signatureExpiration
       );
@@ -123,6 +173,19 @@ export const createSignalIntentParams = async (
     }
   }
 
+  const legacyReferrer =
+    referrer !== ethers.constants.AddressZero || !referrerFee.eq(0)
+      ? referrer
+      : normalizedReferralFees.length === 1
+        ? normalizedReferralFees[0].recipient
+        : ethers.constants.AddressZero;
+  const legacyReferrerFee =
+    referrer !== ethers.constants.AddressZero || !referrerFee.eq(0)
+      ? referrerFee
+      : normalizedReferralFees.length === 1
+        ? normalizedReferralFees[0].fee
+        : BigNumber.from(0);
+
   const params: any = {
     escrow,
     depositId,
@@ -131,8 +194,9 @@ export const createSignalIntentParams = async (
     paymentMethod,
     fiatCurrency,
     conversionRate,
-    referrer,
-    referrerFee,
+    referrer: legacyReferrer,
+    referrerFee: legacyReferrerFee,
+    referralFees: normalizedReferralFees,
     gatingServiceSignature,
     signatureExpiration,
     postIntentHook,

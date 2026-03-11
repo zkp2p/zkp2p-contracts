@@ -3,6 +3,7 @@ pragma solidity ^0.8.18;
 
 import { IPaymentVerifier } from "../interfaces/IPaymentVerifier.sol";
 import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
+import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
 import { IEscrow } from "../interfaces/IEscrow.sol";
 
 contract PaymentVerifierMock is IPaymentVerifier {
@@ -95,6 +96,28 @@ contract PaymentVerifierMock is IPaymentVerifier {
             return snapshot;
         }
 
+        (bool isV2Orchestrator, ) = orchestratorAddress.staticcall(
+            abi.encodeWithSelector(bytes4(keccak256("getDepositPreIntentHook(address,uint256)")), escrowAddress, 0)
+        );
+
+        if (isV2Orchestrator) {
+            IOrchestratorV2.Intent memory intentDataV2 = IOrchestratorV2(orchestratorAddress).getIntent(intentHash);
+            if (intentDataV2.owner == address(0)) {
+                return snapshot;
+            }
+
+            IEscrow.DepositPaymentMethodData memory methodDataV2 = IEscrow(escrowAddress)
+                .getDepositPaymentMethodData(intentDataV2.depositId, intentDataV2.paymentMethod);
+
+            return Snapshot({
+                amount: intentDataV2.amount,
+                conversionRate: intentDataV2.conversionRate,
+                signalTimestamp: intentDataV2.timestamp,
+                payeeDetails: methodDataV2.payeeDetails,
+                found: true
+            });
+        }
+
         IOrchestrator.Intent memory intentData = IOrchestrator(orchestratorAddress).getIntent(intentHash);
         if (intentData.owner == address(0)) {
             return snapshot;
@@ -103,7 +126,7 @@ contract PaymentVerifierMock is IPaymentVerifier {
         IEscrow.DepositPaymentMethodData memory methodData = IEscrow(escrowAddress)
             .getDepositPaymentMethodData(intentData.depositId, intentData.paymentMethod);
 
-        snapshot = Snapshot({
+        return Snapshot({
             amount: intentData.amount,
             conversionRate: intentData.conversionRate,
             signalTimestamp: intentData.timestamp,

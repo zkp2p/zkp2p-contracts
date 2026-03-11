@@ -8,6 +8,7 @@ import { SignatureChecker } from "@openzeppelin/contracts/utils/cryptography/Sig
 import { IEscrow } from "../interfaces/IEscrow.sol";
 import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
 import { IPreIntentHook } from "../interfaces/IPreIntentHook.sol";
+import { ReferralFeeLib } from "../lib/ReferralFeeLib.sol";
 
 /**
  * @title SignatureGatingPreIntentHook
@@ -106,8 +107,7 @@ contract SignatureGatingPreIntentHook is IPreIntentHook {
             _ctx.paymentMethod,
             _ctx.fiatCurrency,
             _ctx.conversionRate,
-            _ctx.referrer,
-            _ctx.referrerFee,
+            ReferralFeeLib.hashReferralFees(_ctx.referralFees),
             signatureExpiration,
             chainId
         );
