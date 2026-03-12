@@ -71,7 +71,7 @@ Current baseline:
 | orchestratorV2 | `test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts` | `test-foundry/integration/OrchestratorV2LegacyCoverage.t.sol` | Mapped |  |
 | orchestratorV2 | `test/orchestratorV2/orchestratorV2.spec.ts` | `test-foundry/integration/OrchestratorV2.t.sol` | Mapped |  |
 | deploy | `test/deploy/00_system.spec.ts` | `test-foundry/integration/deploy/SystemV1Deployment.t.sol` | Ported | 7 Foundry tests preserve V1 deployment wiring, ownership transfer modes, viewer wiring, and existing-USDC vs mock-USDC branches |
-| deploy | `test/deploy/01_unifiedVerifier.spec.ts` | `test-foundry/integration/deploy/UnifiedVerifierDeployment.t.sol` | Mapped |  |
+| deploy | `test/deploy/01_unifiedVerifier.spec.ts` | `test-foundry/integration/deploy/UnifiedVerifierDeployment.t.sol` | Ported | 5 Foundry tests preserve witness wiring, multisig ownership transfer, unified verifier dependency wiring, nullifier writer permissions, and the optional no-transfer/no-writer branch |
 | deploy | `test/deploy/02_venmoPaymentMethod.spec.ts` | `test-foundry/integration/deploy/VenmoPaymentMethodDeployment.t.sol` | Mapped |  |
 | deploy | `test/deploy/03_revolutPaymentMethod.spec.ts` | `test-foundry/integration/deploy/RevolutPaymentMethodDeployment.t.sol` | Mapped |  |
 | deploy | `test/deploy/04_cashappPaymentMethod.spec.ts` | `test-foundry/integration/deploy/CashappPaymentMethodDeployment.t.sol` | Mapped |  |

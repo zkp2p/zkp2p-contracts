@@ -14,6 +14,10 @@ They are intentionally environment-driven and small in surface area so they are 
   - Deploys `AcrossBridgeHook`
   - Optionally deploys `AcrossSpokePoolMock`
   - Optionally registers the hook in `PostIntentHookRegistry`
+- `script/foundry/DeployUnifiedVerifier.s.sol`
+  - Deploys `SimpleAttestationVerifier` and `UnifiedPaymentVerifier`
+  - Grants `UnifiedPaymentVerifier` write access on `NullifierRegistry`
+  - Optionally transfers both verifier contracts to `MULTISIG`
 
 ## Required Environment
 
@@ -49,6 +53,18 @@ Common:
 - `REGISTER_POST_INTENT_HOOK`
 - `TRANSFER_OWNERSHIP_TO_MULTISIG`
 
+`DeployUnifiedVerifier.s.sol` required inputs:
+
+- `WITNESS_ADDRESS`
+- `ORCHESTRATOR_ADDRESS`
+- `NULLIFIER_REGISTRY_ADDRESS`
+
+`DeployUnifiedVerifier.s.sol` optional overrides:
+
+- `MULTISIG`
+- `ADD_NULLIFIER_WRITE_PERMISSION`
+- `TRANSFER_OWNERSHIP_TO_MULTISIG`
+
 ## Example Commands
 
 Local core deployment:
@@ -67,6 +83,16 @@ ORCHESTRATOR_ADDRESS=<orchestrator-address> \
 POST_INTENT_HOOK_REGISTRY_ADDRESS=<registry-address> \
 DEPLOY_ACROSS_SPOKE_POOL_MOCK=true \
 forge script script/foundry/DeployAcrossBridgeHook.s.sol:DeployAcrossBridgeHook --rpc-url http://127.0.0.1:8545
+```
+
+Local unified verifier deployment:
+
+```bash
+PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
+WITNESS_ADDRESS=<witness-address> \
+ORCHESTRATOR_ADDRESS=<orchestrator-address> \
+NULLIFIER_REGISTRY_ADDRESS=<nullifier-registry-address> \
+forge script script/foundry/DeployUnifiedVerifier.s.sol:DeployUnifiedVerifier --rpc-url http://127.0.0.1:8545
 ```
 
 Add `--broadcast` once you are ready to submit transactions.
