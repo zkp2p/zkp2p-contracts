@@ -44,10 +44,10 @@ Current baseline:
 | libs | `test/libs/thresholdSigVerifierUtils.spec.ts` | `test-foundry/unit/ThresholdSigVerifierUtils.t.sol` | Mapped |  |
 | registries | `test/registries/escrowRegistry.spec.ts` | `test-foundry/unit/EscrowRegistry.t.sol` | Ported | 8 Foundry tests preserve constructor, whitelist management, accept-all toggles, and revert coverage |
 | registries | `test/registries/nullifierRegistry.spec.ts` | `test-foundry/unit/NullifierRegistry.t.sol` | Ported | 10 Foundry tests preserve constructor, writer permissions, nullifier insertion, and revert coverage |
-| registries | `test/registries/orchestratorRegistry.spec.ts` | `test-foundry/unit/OrchestratorRegistry.t.sol` | Mapped |  |
+| registries | `test/registries/orchestratorRegistry.spec.ts` | `test-foundry/unit/OrchestratorRegistry.t.sol` | Ported | 8 Foundry tests preserve owner gating, add/remove flows, and custom-error coverage |
 | registries | `test/registries/paymentVerifierRegistry.spec.ts` | `test-foundry/unit/PaymentVerifierRegistry.t.sol` | Ported | 21 Foundry tests preserve constructor, add/remove, currency management, views, and complex scenario coverage |
-| registries | `test/registries/postIntentHookRegistry.spec.ts` | `test-foundry/unit/PostIntentHookRegistry.t.sol` | Mapped |  |
-| registries | `test/registries/relayerRegistry.spec.ts` | `test-foundry/unit/RelayerRegistry.t.sol` | Mapped |  |
+| registries | `test/registries/postIntentHookRegistry.spec.ts` | `test-foundry/unit/PostIntentHookRegistry.t.sol` | Ported | 7 Foundry tests preserve hook allowlisting, list views, and revert coverage |
+| registries | `test/registries/relayerRegistry.spec.ts` | `test-foundry/unit/RelayerRegistry.t.sol` | Ported | 6 Foundry tests preserve relayer allowlisting and revert coverage |
 | unifiedVerifier | `test/unifiedVerifier/baseUnifiedPaymentVerifier.spec.ts` | `test-foundry/unit/BaseUnifiedPaymentVerifier.t.sol` | Mapped |  |
 | unifiedVerifier | `test/unifiedVerifier/simpleAttestationVerifier.spec.ts` | `test-foundry/unit/SimpleAttestationVerifier.t.sol` | Mapped |  |
 | unifiedVerifier | `test/unifiedVerifier/unifiedPaymentVerifier.spec.ts` | `test-foundry/integration/UnifiedPaymentVerifier.t.sol` | Mapped |  |
