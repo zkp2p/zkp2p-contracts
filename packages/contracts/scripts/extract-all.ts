@@ -8,6 +8,7 @@ import { extractConstants } from './extractors/constants';
 import { extractUtils } from './extractors/utils';
 import { extractPaymentMethods } from './extractors/paymentMethods';
 import { extractCurrencies } from './extractors/currencies';
+import { extractOracleFeeds } from './extractors/oracleFeeds';
 import { execSync } from 'child_process';
 import * as path from 'path';
 
@@ -35,6 +36,7 @@ export async function extractAll(): Promise<void> {
   await extractUtils();
   await extractPaymentMethods();
   await extractCurrencies();
+  await extractOracleFeeds();
 
   // Generate .d.ts files for all index.ts files
   await generateTypeDeclarations();

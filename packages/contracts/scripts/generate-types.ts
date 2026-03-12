@@ -13,6 +13,7 @@ const DIRECTORIES_TO_PROCESS = [
   'constants',
   'paymentMethods',
   'currencies',
+  'oracleFeeds',
   'utils',
   'abis',
   'types'
