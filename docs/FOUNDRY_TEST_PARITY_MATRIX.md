@@ -64,7 +64,7 @@ Current baseline:
 | orchestrator | `test/orchestrator/preIntentHook.spec.ts` | `test-foundry/integration/PreIntentHook.t.sol` | Mapped |  |
 | escrowV2 | `test/escrowV2/escrowV2.branchCoverage.spec.ts` | `test-foundry/integration/EscrowV2BranchCoverage.t.sol` | Mapped |  |
 | escrowV2 | `test/escrowV2/escrowV2.delegation.spec.ts` | `test-foundry/integration/EscrowV2Delegation.t.sol` | Ported | 20 Foundry tests preserve delegated manager set/clear flows, opt-in and reentrancy behavior, effective-rate fallback rules, stale-oracle handling, and delegated manager-fee lookup behavior |
-| escrowV2 | `test/escrowV2/escrowV2.getDepositCurrencyMinRate.spec.ts` | `test-foundry/integration/EscrowV2GetDepositCurrencyMinRate.t.sol` | Mapped |  |
+| escrowV2 | `test/escrowV2/escrowV2.getDepositCurrencyMinRate.spec.ts` | `test-foundry/integration/EscrowV2GetDepositCurrencyMinRate.t.sol` | Ported | 12 Foundry tests preserve fixed-floor vs oracle-floor selection, negative spreads, stale-oracle halts, deactivate/reactivate flows, and mixed fixed/oracle lifecycle edge cases |
 | escrowV2 | `test/escrowV2/escrowV2.legacyCoverage.spec.ts` | `test-foundry/integration/EscrowV2LegacyCoverage.t.sol` | Mapped |  |
 | escrowV2 | `test/escrowV2/escrowV2.oracleRates.spec.ts` | `test-foundry/integration/EscrowV2OracleRates.t.sol` | Mapped |  |
 | escrowV2 | `test/escrowV2/escrowV2.pythOracle.spec.ts` | `test-foundry/integration/EscrowV2PythOracle.t.sol` | Mapped |  |
