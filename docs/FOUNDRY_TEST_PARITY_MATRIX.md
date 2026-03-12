@@ -49,7 +49,7 @@ Current baseline:
 | registries | `test/registries/postIntentHookRegistry.spec.ts` | `test-foundry/unit/PostIntentHookRegistry.t.sol` | Ported | 7 Foundry tests preserve hook allowlisting, list views, and revert coverage |
 | registries | `test/registries/relayerRegistry.spec.ts` | `test-foundry/unit/RelayerRegistry.t.sol` | Ported | 6 Foundry tests preserve relayer allowlisting and revert coverage |
 | unifiedVerifier | `test/unifiedVerifier/baseUnifiedPaymentVerifier.spec.ts` | `test-foundry/unit/BaseUnifiedPaymentVerifier.t.sol` | Mapped |  |
-| unifiedVerifier | `test/unifiedVerifier/simpleAttestationVerifier.spec.ts` | `test-foundry/unit/SimpleAttestationVerifier.t.sol` | Mapped |  |
+| unifiedVerifier | `test/unifiedVerifier/simpleAttestationVerifier.spec.ts` | `test-foundry/unit/SimpleAttestationVerifier.t.sol` | Ported | 12 Foundry tests preserve constructor, witness rotation, valid verification, and malformed-signature coverage |
 | unifiedVerifier | `test/unifiedVerifier/unifiedPaymentVerifier.spec.ts` | `test-foundry/integration/UnifiedPaymentVerifier.t.sol` | Mapped |  |
 | hooks | `test/hooks/acrossBridgeHook.spec.ts` | `test-foundry/integration/AcrossBridgeHook.t.sol` | Mapped |  |
 | hooks | `test/hooks/acrossBridgeHookV2.spec.ts` | `test-foundry/integration/AcrossBridgeHookV2.t.sol` | Mapped |  |
