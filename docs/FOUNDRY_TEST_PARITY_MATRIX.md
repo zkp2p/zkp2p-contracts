@@ -58,7 +58,7 @@ Current baseline:
 | periphery | `test/periphery/protocolViewerV2.spec.ts` | `test-foundry/integration/ProtocolViewerV2.t.sol` | Mapped |  |
 | rateManager | `test/rateManager/chainlinkOracleAdapter.spec.ts` | `test-foundry/unit/ChainlinkOracleAdapter.t.sol` | Ported | 11 Foundry tests preserve config normalization, direct and inverted rates, constant-rate fallback, malformed config defense, and invalid oracle response handling |
 | rateManager | `test/rateManager/pythOracleAdapter.spec.ts` | `test-foundry/unit/PythOracleAdapter.t.sol` | Ported | 16 Foundry tests preserve config validation, direct and inverted rates across exponent ranges, and invalid oracle/config branches |
-| rateManager | `test/rateManager/rateManagerV1.spec.ts` | `test-foundry/integration/RateManagerV1.t.sol` | Mapped |  |
+| rateManager | `test/rateManager/rateManagerV1.spec.ts` | `test-foundry/integration/RateManagerV1.t.sol` | Ported | 24 Foundry tests preserve manager creation, fee and config mutation rules, batch and single rate writes, min-liquidity opt-in gating, escrow access control, and owner-only registry updates |
 | escrow | `test/escrow/escrow.spec.ts` | `test-foundry/integration/Escrow.t.sol` | Mapped | Large source suite; likely split into multiple Solidity test contracts |
 | orchestrator | `test/orchestrator/orchestrator.spec.ts` | `test-foundry/integration/Orchestrator.t.sol` | Mapped |  |
 | orchestrator | `test/orchestrator/preIntentHook.spec.ts` | `test-foundry/integration/PreIntentHook.t.sol` | Mapped |  |
