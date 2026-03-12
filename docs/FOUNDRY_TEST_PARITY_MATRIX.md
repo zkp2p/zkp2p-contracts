@@ -56,8 +56,8 @@ Current baseline:
 | hooks | `test/hooks/whitelistPreIntentHook.spec.ts` | `test-foundry/unit/WhitelistPreIntentHook.t.sol` | Ported | 18 Foundry tests preserve whitelist management, delegate authorization, hook-slot configuration, dual-hook coexistence, and `signalIntent` gating coverage |
 | periphery | `test/periphery/protocolViewer.spec.ts` | `test-foundry/integration/ProtocolViewer.t.sol` | Mapped |  |
 | periphery | `test/periphery/protocolViewerV2.spec.ts` | `test-foundry/integration/ProtocolViewerV2.t.sol` | Mapped |  |
-| rateManager | `test/rateManager/chainlinkOracleAdapter.spec.ts` | `test-foundry/unit/ChainlinkOracleAdapter.t.sol` | Mapped |  |
-| rateManager | `test/rateManager/pythOracleAdapter.spec.ts` | `test-foundry/unit/PythOracleAdapter.t.sol` | Mapped | Existing rushed Foundry suite can be replaced |
+| rateManager | `test/rateManager/chainlinkOracleAdapter.spec.ts` | `test-foundry/unit/ChainlinkOracleAdapter.t.sol` | Ported | 11 Foundry tests preserve config normalization, direct and inverted rates, constant-rate fallback, malformed config defense, and invalid oracle response handling |
+| rateManager | `test/rateManager/pythOracleAdapter.spec.ts` | `test-foundry/unit/PythOracleAdapter.t.sol` | Ported | 16 Foundry tests preserve config validation, direct and inverted rates across exponent ranges, and invalid oracle/config branches |
 | rateManager | `test/rateManager/rateManagerV1.spec.ts` | `test-foundry/integration/RateManagerV1.t.sol` | Mapped |  |
 | escrow | `test/escrow/escrow.spec.ts` | `test-foundry/integration/Escrow.t.sol` | Mapped | Large source suite; likely split into multiple Solidity test contracts |
 | orchestrator | `test/orchestrator/orchestrator.spec.ts` | `test-foundry/integration/Orchestrator.t.sol` | Mapped |  |

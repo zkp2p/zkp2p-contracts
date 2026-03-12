@@ -132,6 +132,16 @@ contract PythOracleAdapterTest is Test {
         assertEq(rate, 1.1e18);
     }
 
+    function test_getRate_expo18() public {
+        pythMock.setPrice(FEED_ID, int64(uint64(1e18)), 0, -18, block.timestamp);
+        bytes memory norm = adapter.validateConfig(abi.encode(FEED_ID, false));
+
+        (bool valid, uint256 rate,) = adapter.getRate(norm);
+
+        assertTrue(valid);
+        assertEq(rate, PRECISE_UNIT);
+    }
+
     function test_getRate_invalidWhenPriceZero() public {
         pythMock.setPrice(FEED_ID, 0, 0, -5, block.timestamp);
         bytes memory norm = adapter.validateConfig(abi.encode(FEED_ID, false));
