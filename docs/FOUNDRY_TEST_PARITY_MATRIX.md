@@ -86,10 +86,10 @@ Current baseline:
 | deploy | `test/deploy/11_alipayPaymentMethod.spec.ts` | `test-foundry/integration/deploy/AlipayPaymentMethodDeployment.t.sol` | Out of scope | Legacy V1 payment-method deployment; superseded by consolidated V2 payment-method deployment scope in `16_v2PaymentMethods` |
 | deploy | `test/deploy/12_chimePaymentMethod.spec.ts` | `test-foundry/integration/deploy/ChimePaymentMethodDeployment.t.sol` | Out of scope | Legacy V1 payment-method deployment; superseded by consolidated V2 payment-method deployment scope in `16_v2PaymentMethods` |
 | deploy | `test/deploy/13_luxonPaymentMethod.spec.ts` | `test-foundry/integration/deploy/LuxonPaymentMethodDeployment.t.sol` | Out of scope | Legacy V1 payment-method deployment; superseded by consolidated V2 payment-method deployment scope in `16_v2PaymentMethods` |
-| deploy | `test/deploy/14_v2System.spec.ts` | `test-foundry/integration/deploy/SystemV2Deployment.t.sol` | Mapped |  |
-| deploy | `test/deploy/15_v2Periphery.spec.ts` | `test-foundry/integration/deploy/V2PeripheryDeployment.t.sol` | Mapped |  |
-| deploy | `test/deploy/16_v2PaymentMethods.spec.ts` | `test-foundry/integration/deploy/V2PaymentMethodsDeployment.t.sol` | Mapped |  |
-| deploy | `test/deploy/17_pythOracle.spec.ts` | `test-foundry/integration/deploy/PythOracleDeployment.t.sol` | Mapped |  |
+| deploy | `test/deploy/14_v2System.spec.ts` | `test-foundry/integration/deploy/SystemV2Deployment.t.sol` | Ported | 4 Foundry tests preserve V2 system registry membership, escrow/orchestrator wiring, ownership transfer, unified verifier dependency wiring, and nullifier writer permissions after the payment-method step |
+| deploy | `test/deploy/15_v2Periphery.spec.ts` | `test-foundry/integration/deploy/V2PeripheryDeployment.t.sol` | Ported | 6 Foundry tests preserve pre-intent hook deployment, Across hook wiring and whitelisting, rate-manager ownership, and stateless periphery deployment |
+| deploy | `test/deploy/16_v2PaymentMethods.spec.ts` | `test-foundry/integration/deploy/V2PaymentMethodsDeployment.t.sol` | Ported | 2 Foundry tests preserve registry and verifier registration for the full V2 payment-method set, currency lists, and deferred unified-verifier ownership transfer |
+| deploy | `test/deploy/17_pythOracle.spec.ts` | `test-foundry/integration/deploy/PythOracleDeployment.t.sol` | Ported | 2 Foundry tests preserve both configured-Pyth and localhost-mock deployment branches and adapter wiring |
 | patchCoverage | `test/patchCoverage/patchCoverage.spec.ts` | `test-foundry/integration/PatchCoverage.t.sol` | Out of scope | Artificial Hardhat coverage scaffolding; not required for V2 migration completion |
 
 ## PR Checklist Template
