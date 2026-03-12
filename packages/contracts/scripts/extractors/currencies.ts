@@ -66,6 +66,7 @@ export { default as currencies } from './currencies.json';
 
   // Write index.d.ts
   const indexDts = `// Typed re-exports for currencies
+export type { CurrencyLookups } from './types';
 export { default as currencies } from './currencies';
 `;
   fs.writeFileSync(path.join(CURRENCIES_DIR, 'index.d.ts'), indexDts);

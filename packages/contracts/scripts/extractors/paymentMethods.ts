@@ -189,6 +189,9 @@ export type { PaymentMethodConfig, NetworkPaymentMethods };
 // Network-specific payment method exports
 ${networks.map(net => `export { default as ${net} } from './${net}.json';`).join('\n')}
 
+// Cross-network lookups (name<->hash mappings, Zelle helpers)
+export { default as lookups } from './lookups.json';
+
 // Helper function to get payment method config for a specific network and method
 export function getPaymentMethodConfig(network: string, paymentMethod: string): PaymentMethodConfig | undefined {
   try {
@@ -208,7 +211,7 @@ ${networks.map(net => `  ${net}: require('./${net}.json')`).join(',\n')}
   fs.writeFileSync(path.join(PAYMENT_METHODS_DIR, 'index.ts'), indexContent);
 
   // Also write an index.d.ts so exports can reference it
-  const indexDts = `// Typed re-exports for payment methods\n${networks.map(net => `export { default as ${net} } from './${net}';`).join('\n')}\n`;
+  const indexDts = `// Typed re-exports for payment methods\n${networks.map(net => `export { default as ${net} } from './${net}';`).join('\n')}\nexport { default as lookups } from './lookups';\n`;
   fs.writeFileSync(path.join(PAYMENT_METHODS_DIR, 'index.d.ts'), indexDts);
 
   // Step 7: Generate lookups.json with cross-network name<->hash mappings + Zelle helpers
