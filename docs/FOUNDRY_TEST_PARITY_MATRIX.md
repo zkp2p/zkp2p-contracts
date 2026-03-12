@@ -53,7 +53,7 @@ Current baseline:
 | unifiedVerifier | `test/unifiedVerifier/unifiedPaymentVerifier.spec.ts` | `test-foundry/integration/UnifiedPaymentVerifier.t.sol` | Mapped |  |
 | hooks | `test/hooks/acrossBridgeHook.spec.ts` | `test-foundry/integration/AcrossBridgeHook.t.sol` | Ported | 18 Foundry tests preserve constructor guards, bridge execution, fallback paths, relay parameters, rescue flows, and native receive handling |
 | hooks | `test/hooks/acrossBridgeHookV2.spec.ts` | `test-foundry/integration/AcrossBridgeHookV2.t.sol` | Ported | 19 Foundry tests preserve registry authorization, fulfill-hook length checks, bridge/fallback behavior, relay parameters, rescue flows, and native receive handling |
-| hooks | `test/hooks/whitelistPreIntentHook.spec.ts` | `test-foundry/unit/WhitelistPreIntentHook.t.sol` | Mapped |  |
+| hooks | `test/hooks/whitelistPreIntentHook.spec.ts` | `test-foundry/unit/WhitelistPreIntentHook.t.sol` | Ported | 18 Foundry tests preserve whitelist management, delegate authorization, hook-slot configuration, dual-hook coexistence, and `signalIntent` gating coverage |
 | periphery | `test/periphery/protocolViewer.spec.ts` | `test-foundry/integration/ProtocolViewer.t.sol` | Mapped |  |
 | periphery | `test/periphery/protocolViewerV2.spec.ts` | `test-foundry/integration/ProtocolViewerV2.t.sol` | Mapped |  |
 | rateManager | `test/rateManager/chainlinkOracleAdapter.spec.ts` | `test-foundry/unit/ChainlinkOracleAdapter.t.sol` | Mapped |  |
