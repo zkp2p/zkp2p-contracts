@@ -27,8 +27,16 @@ contract DeployAcrossBridgeHook is Script {
 
     function run() external returns (DeploymentResult memory result) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        DeploymentConfig memory config = _loadConfig(vm.addr(deployerPrivateKey));
+
+        return deployWithConfig(config, deployerPrivateKey);
+    }
+
+    function deployWithConfig(DeploymentConfig memory config, uint256 deployerPrivateKey)
+        public
+        returns (DeploymentResult memory result)
+    {
         address deployer = vm.addr(deployerPrivateKey);
-        DeploymentConfig memory config = _loadConfig(deployer);
 
         vm.startBroadcast(deployerPrivateKey);
 
