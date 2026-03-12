@@ -51,8 +51,8 @@ Current baseline:
 | unifiedVerifier | `test/unifiedVerifier/baseUnifiedPaymentVerifier.spec.ts` | `test-foundry/unit/BaseUnifiedPaymentVerifier.t.sol` | Ported | 13 Foundry tests preserve constructor wiring, attestation verifier rotation, payment-method add/remove flows, and view coverage |
 | unifiedVerifier | `test/unifiedVerifier/simpleAttestationVerifier.spec.ts` | `test-foundry/unit/SimpleAttestationVerifier.t.sol` | Ported | 12 Foundry tests preserve constructor, witness rotation, valid verification, and malformed-signature coverage |
 | unifiedVerifier | `test/unifiedVerifier/unifiedPaymentVerifier.spec.ts` | `test-foundry/integration/UnifiedPaymentVerifier.t.sol` | Mapped |  |
-| hooks | `test/hooks/acrossBridgeHook.spec.ts` | `test-foundry/integration/AcrossBridgeHook.t.sol` | Mapped |  |
-| hooks | `test/hooks/acrossBridgeHookV2.spec.ts` | `test-foundry/integration/AcrossBridgeHookV2.t.sol` | Mapped |  |
+| hooks | `test/hooks/acrossBridgeHook.spec.ts` | `test-foundry/integration/AcrossBridgeHook.t.sol` | Ported | 18 Foundry tests preserve constructor guards, bridge execution, fallback paths, relay parameters, rescue flows, and native receive handling |
+| hooks | `test/hooks/acrossBridgeHookV2.spec.ts` | `test-foundry/integration/AcrossBridgeHookV2.t.sol` | Ported | 19 Foundry tests preserve registry authorization, fulfill-hook length checks, bridge/fallback behavior, relay parameters, rescue flows, and native receive handling |
 | hooks | `test/hooks/whitelistPreIntentHook.spec.ts` | `test-foundry/unit/WhitelistPreIntentHook.t.sol` | Mapped |  |
 | periphery | `test/periphery/protocolViewer.spec.ts` | `test-foundry/integration/ProtocolViewer.t.sol` | Mapped |  |
 | periphery | `test/periphery/protocolViewerV2.spec.ts` | `test-foundry/integration/ProtocolViewerV2.t.sol` | Mapped |  |
