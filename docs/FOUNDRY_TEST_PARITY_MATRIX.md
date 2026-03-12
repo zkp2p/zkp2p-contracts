@@ -80,7 +80,7 @@ Current baseline:
 | deploy | `test/deploy/07_zellePaymentMethods.spec.ts` | `test-foundry/integration/deploy/ZellePaymentMethodsDeployment.t.sol` | Mapped |  |
 | deploy | `test/deploy/08_paypalPaymentMethod.spec.ts` | `test-foundry/integration/deploy/PaypalPaymentMethodDeployment.t.sol` | Mapped |  |
 | deploy | `test/deploy/09_monzoPaymentMethod.spec.ts` | `test-foundry/integration/deploy/MonzoPaymentMethodDeployment.t.sol` | Mapped |  |
-| deploy | `test/deploy/10_acrossBridgeHook.spec.ts` | `test-foundry/integration/deploy/AcrossBridgeHookDeployment.t.sol` | Ported | 5 Foundry tests preserve hook wiring, multisig ownership transfer, registry whitelisting, mock-vs-existing spoke pool selection, and optional registration/ownership branches |
+| deploy | `test/deploy/10_acrossBridgeHook.spec.ts` | `test-foundry/integration/deploy/AcrossBridgeHookDeployment.t.sol` | Ported | 7 Foundry tests preserve hook wiring, registry whitelisting, mock-vs-existing spoke pool selection, missing-spoke-pool reverts, and optional registration plus ownership-transfer branches |
 | deploy | `test/deploy/10_n26PaymentMethod.spec.ts` | `test-foundry/integration/deploy/N26PaymentMethodDeployment.t.sol` | Mapped |  |
 | deploy | `test/deploy/11_alipayPaymentMethod.spec.ts` | `test-foundry/integration/deploy/AlipayPaymentMethodDeployment.t.sol` | Mapped |  |
 | deploy | `test/deploy/12_chimePaymentMethod.spec.ts` | `test-foundry/integration/deploy/ChimePaymentMethodDeployment.t.sol` | Mapped |  |
