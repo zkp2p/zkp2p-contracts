@@ -1,4 +1,4 @@
-name: Slow Coverage
+name: Foundry Coverage
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     - cron: '0 3 * * *'
 
 jobs:
-  hardhat-coverage:
+  foundry-coverage:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -26,11 +26,11 @@ jobs:
       - name: Prepare env
         run: cp .env.default .env
       - name: Run coverage
-        run: yarn coverage
+        run: yarn test:forge:coverage
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage/lcov.info
-          flags: hardhat
+          files: ./lcov.info
+          flags: foundry
           fail_ci_if_error: true
