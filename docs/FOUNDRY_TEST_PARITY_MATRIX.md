@@ -1,6 +1,6 @@
 # Foundry Test Parity Matrix
 
-**Status:** Draft  
+**Status:** Active - all revised-scope deterministic rows ported  
 **Created:** 2026-03-12  
 **Branch:** `foundry-main`
 
@@ -39,6 +39,7 @@ Current baseline:
 - 49 Hardhat rows remain tracked for bookkeeping.
 - V2 migration completion is measured only against in-scope V2/shared rows plus deploy `14-17`.
 - Legacy V1 rows and deploy `00-13` remain listed explicitly as `Out of scope`.
+- All revised-scope deterministic parity rows are now `Ported`; remaining migration work is CI/cutover and Hardhat retirement.
 
 | Domain | Hardhat Source | Recommended Foundry Target | Status | Notes |
 | --- | --- | --- | --- | --- |
@@ -63,7 +64,7 @@ Current baseline:
 | escrow | `test/escrow/escrow.spec.ts` | `test-foundry/integration/Escrow.t.sol` | Out of scope | Legacy V1 escrow suite; no further migration work required |
 | orchestrator | `test/orchestrator/orchestrator.spec.ts` | `test-foundry/integration/Orchestrator.t.sol` | Out of scope | Legacy V1 orchestrator suite; no further migration work required |
 | orchestrator | `test/orchestrator/preIntentHook.spec.ts` | `test-foundry/integration/PreIntentHook.t.sol` | Ported | 23 Foundry tests preserve hook set/remove authorization, `preIntentHookData` passthrough, reject and removal behavior, reentrant `signalIntent` defense, and signature-gated validation branches |
-| escrowV2 | `test/escrowV2/escrowV2.branchCoverage.spec.ts` | `test-foundry/integration/EscrowV2BranchCoverage.t.sol` | Mapped | Planned split: guard/auth branches, oracle and rate-manager validation, intent lifecycle failures, and pause/governance coverage |
+| escrowV2 | `test/escrowV2/escrowV2.branchCoverage.spec.ts` | `test-foundry/integration/EscrowV2BranchGuardsAndGovernance.t.sol` + `test-foundry/integration/EscrowV2BranchMutationValidation.t.sol` + `test-foundry/integration/EscrowV2BranchOracleAndLifecycle.t.sol` | Ported | 63 Foundry tests preserve deposit creation/depositTo guards, withdraw/prune and only-orchestrator branches, only-depositor-or-delegate enforcement, add-payment-method validation, oracle/rate-manager validation, paused/governance/reentrancy branches, intent lifecycle failures, oracle-halt behavior, and close-on-empty semantics |
 | escrowV2 | `test/escrowV2/escrowV2.delegation.spec.ts` | `test-foundry/integration/EscrowV2Delegation.t.sol` | Ported | 20 Foundry tests preserve delegated manager set/clear flows, opt-in and reentrancy behavior, effective-rate fallback rules, stale-oracle handling, and delegated manager-fee lookup behavior |
 | escrowV2 | `test/escrowV2/escrowV2.getDepositCurrencyMinRate.spec.ts` | `test-foundry/integration/EscrowV2GetDepositCurrencyMinRate.t.sol` | Ported | 12 Foundry tests preserve fixed-floor vs oracle-floor selection, negative spreads, stale-oracle halts, deactivate/reactivate flows, and mixed fixed/oracle lifecycle edge cases |
 | escrowV2 | `test/escrowV2/escrowV2.legacyCoverage.spec.ts` | `test-foundry/integration/EscrowV2LegacyStateManagement.t.sol` + `test-foundry/integration/EscrowV2LegacyIntentLifecycle.t.sol` | Ported | 60 new Foundry tests preserve deposit management, governance/view helpers, and intent lifecycle paths; the suite's oracle/rate-manager behaviors are represented across these files plus `EscrowV2OracleRates.t.sol`, `EscrowV2Delegation.t.sol`, and `EscrowV2GetDepositCurrencyMinRate.t.sol` |
