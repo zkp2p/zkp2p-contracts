@@ -39,15 +39,20 @@ jobs:
           echo "Running unit tests..."
           forge test --match-path "test-foundry/unit/*.t.sol" -vv
 
+      - name: Run Foundry integration tests
+        run: |
+          echo "Running integration tests..."
+          forge test --match-path "test-foundry/integration/*.t.sol" -vv
+
       - name: Run Foundry fuzz tests
         run: |
           echo "Running fuzz tests..."
-          FOUNDRY_FUZZ_RUNS=100 forge test --match-contract "Fuzz" -vv
+          FOUNDRY_FUZZ_RUNS=100 forge test --match-path "test-foundry/fuzz/*.t.sol" -vv
 
       - name: Run Foundry invariant tests
         run: |
           echo "Running invariant tests..."
-          forge test --match-contract "Invariant" -vv
+          forge test --match-path "test-foundry/invariant/*.t.sol" -vv
 
   foundry-fork:
     if: github.event_name != 'pull_request'
