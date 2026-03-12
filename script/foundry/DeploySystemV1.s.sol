@@ -43,8 +43,17 @@ contract DeploySystemV1 is Script {
 
     function run() external returns (DeploymentResult memory result) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        DeploymentConfig memory config = _loadConfig(vm.addr(deployerPrivateKey));
+
+        return deployWithConfig(config, deployerPrivateKey);
+    }
+
+    function deployWithConfig(DeploymentConfig memory config, uint256 deployerPrivateKey)
+        public
+        returns (DeploymentResult memory result)
+    {
         address deployer = vm.addr(deployerPrivateKey);
-        DeploymentConfig memory config = _loadConfig(deployer);
+        address finalCoreOwner = config.transferOwnershipToMultiSig ? config.multiSig : config.owner;
 
         vm.startBroadcast(deployerPrivateKey);
 
@@ -62,7 +71,7 @@ contract DeploySystemV1 is Script {
         EscrowRegistry escrowRegistry = new EscrowRegistry();
 
         Escrow escrow = new Escrow(
-            config.owner,
+            deployer,
             block.chainid,
             address(paymentVerifierRegistry),
             config.dustRecipient,
@@ -72,7 +81,7 @@ contract DeploySystemV1 is Script {
         );
 
         Orchestrator orchestrator = new Orchestrator(
-            config.owner,
+            deployer,
             block.chainid,
             address(escrowRegistry),
             address(paymentVerifierRegistry),
@@ -87,19 +96,19 @@ contract DeploySystemV1 is Script {
 
         ProtocolViewer protocolViewer = new ProtocolViewer(address(escrow), address(orchestrator));
 
+        if (escrow.owner() != finalCoreOwner) {
+            escrow.transferOwnership(finalCoreOwner);
+        }
+        if (orchestrator.owner() != finalCoreOwner) {
+            orchestrator.transferOwnership(finalCoreOwner);
+        }
+
         if (config.transferOwnershipToMultiSig && config.multiSig != deployer) {
             paymentVerifierRegistry.transferOwnership(config.multiSig);
             postIntentHookRegistry.transferOwnership(config.multiSig);
             relayerRegistry.transferOwnership(config.multiSig);
             nullifierRegistry.transferOwnership(config.multiSig);
             escrowRegistry.transferOwnership(config.multiSig);
-
-            if (escrow.owner() != config.multiSig) {
-                escrow.transferOwnership(config.multiSig);
-            }
-            if (orchestrator.owner() != config.multiSig) {
-                orchestrator.transferOwnership(config.multiSig);
-            }
         }
 
         vm.stopBroadcast();

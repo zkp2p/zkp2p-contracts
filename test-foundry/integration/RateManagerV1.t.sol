@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import { EscrowRegistry } from "../../contracts/registries/EscrowRegistry.sol";
-import { RateManagerV1 } from "../../contracts/RateManagerV1.sol";
-import { ProtocolV2TestBase } from "../helpers/ProtocolV2TestBase.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+import {EscrowRegistry} from "../../contracts/registries/EscrowRegistry.sol";
+import {RateManagerV1} from "../../contracts/RateManagerV1.sol";
+import {IEscrowV2} from "../../contracts/interfaces/IEscrowV2.sol";
+import {ProtocolV2TestBase} from "../helpers/ProtocolV2TestBase.sol";
 
 contract RateManagerV1Test is ProtocolV2TestBase {
     event RateManagerCreated(
@@ -16,14 +19,12 @@ contract RateManagerV1Test is ProtocolV2TestBase {
         string uri
     );
     event RateManagerConfigUpdated(
-        bytes32 indexed rateManagerId,
-        address indexed manager,
-        address indexed feeRecipient,
-        string name,
-        string uri
+        bytes32 indexed rateManagerId, address indexed manager, address indexed feeRecipient, string name, string uri
     );
     event RateManagerFeeUpdated(bytes32 indexed rateManagerId, uint256 fee);
-    event RateManagerRateUpdated(bytes32 indexed rateManagerId, bytes32 indexed paymentMethod, bytes32 indexed currencyCode, uint256 rate);
+    event RateManagerRateUpdated(
+        bytes32 indexed rateManagerId, bytes32 indexed paymentMethod, bytes32 indexed currencyCode, uint256 rate
+    );
     event RateManagerRatesBatchUpdated(bytes32 indexed rateManagerId, uint256 totalUpdated);
     event MinLiquidityUpdated(bytes32 indexed rateManagerId, uint256 minLiquidity);
     event EscrowRegistryUpdated(address indexed escrowRegistry);
@@ -47,7 +48,7 @@ contract RateManagerV1Test is ProtocolV2TestBase {
         vm.prank(owner);
         rateManager = new RateManagerV1(address(escrowRegistry));
 
-        depositId = _createDeposit();
+        depositId = _createHardhatParityDeposit();
         rateManagerId = _createRateManager(manager, feeRecipient, 0.05e18, 0.01e18, 0, NAME, URI);
     }
 
@@ -350,7 +351,7 @@ contract RateManagerV1Test is ProtocolV2TestBase {
         vm.prank(manager);
         rateManager.setMinLiquidity(rateManagerId, 1_000e6);
         vm.prank(address(escrow));
-        vm.expectRevert(abi.encodeWithSelector(RateManagerV1.BelowMinLiquidity.selector, 100e6, 1_000e6));
+        vm.expectRevert(abi.encodeWithSelector(RateManagerV1.BelowMinLiquidity.selector, 500e6, 1_000e6));
         rateManager.onDepositOptIn(depositId, rateManagerId);
 
         vm.prank(manager);
@@ -374,6 +375,14 @@ contract RateManagerV1Test is ProtocolV2TestBase {
         escrowRegistry.setAcceptAllEscrows(true);
 
         vm.prank(other);
+        rateManager.onDepositOptIn(depositId, rateManagerId);
+    }
+
+    function test_onDepositOptInAllowsExplicitlyWhitelistedEscrowCaller() public {
+        vm.prank(owner);
+        escrowRegistry.addEscrow(owner);
+
+        vm.prank(owner);
         rateManager.onDepositOptIn(depositId, rateManagerId);
     }
 
@@ -425,6 +434,24 @@ contract RateManagerV1Test is ProtocolV2TestBase {
 
     function _expectedRateManagerId(uint256 serial) internal view returns (bytes32 expectedId) {
         expectedId = keccak256(abi.encodePacked(address(rateManager), serial));
+    }
+
+    function _createHardhatParityDeposit() internal returns (uint256 createdDepositId) {
+        IEscrowV2.CreateDepositParams memory params = IEscrowV2.CreateDepositParams({
+            token: IERC20(address(usdc)),
+            amount: 500e6,
+            intentAmountRange: IEscrowV2.Range({min: 10e6, max: 200e6}),
+            paymentMethods: _singlePaymentMethods(VENMO),
+            paymentMethodData: _singlePaymentMethodData(address(0), keccak256("payee"), ""),
+            currencies: _singleDepositCurrencies(USD, 1e18),
+            delegate: address(0),
+            intentGuardian: address(0),
+            retainOnEmpty: false
+        });
+
+        vm.prank(depositor);
+        escrow.createDeposit(params);
+        createdDepositId = escrow.depositCounter() - 1;
     }
 
     function _currencyArray(bytes32 value) internal pure returns (bytes32[] memory values) {
