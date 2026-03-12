@@ -96,6 +96,9 @@ const config: HardhatUserConfig = {
         ...(process.env.VANITY_ESCROW_V2_PROD_PRIVATE_KEY
           ? [`0x${process.env.VANITY_ESCROW_V2_PROD_PRIVATE_KEY}`]
           : []),
+        ...(process.env.VANITY_ORCHESTRATOR_V2_PROD_PRIVATE_KEY
+          ? [`0x${process.env.VANITY_ORCHESTRATOR_V2_PROD_PRIVATE_KEY}`]
+          : []),
       ]
     },
   },
