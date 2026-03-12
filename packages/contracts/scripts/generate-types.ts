@@ -10,8 +10,9 @@ const PACKAGE_ROOT = path.resolve(__dirname, '..', 'dist');
 // Directories to process
 const DIRECTORIES_TO_PROCESS = [
   'addresses',
-  'constants', 
+  'constants',
   'paymentMethods',
+  'currencies',
   'utils',
   'abis',
   'types'

@@ -211,5 +211,64 @@ ${networks.map(net => `  ${net}: require('./${net}.json')`).join(',\n')}
   const indexDts = `// Typed re-exports for payment methods\n${networks.map(net => `export { default as ${net} } from './${net}';`).join('\n')}\n`;
   fs.writeFileSync(path.join(PAYMENT_METHODS_DIR, 'index.d.ts'), indexDts);
 
+  // Step 7: Generate lookups.json with cross-network name<->hash mappings + Zelle helpers
+  const nameToHash: Record<string, string> = {};
+  const hashToName: Record<string, string> = {};
+  const zelleVariantHashes: string[] = [];
+
+  // Read back all per-network JSON files and merge method entries
+  for (const net of networks) {
+    try {
+      const netData = JSON.parse(
+        fs.readFileSync(path.join(PAYMENT_METHODS_DIR, `${net}.json`), 'utf8')
+      );
+      for (const [methodName, config] of Object.entries<any>(netData.methods)) {
+        const hash = config.paymentMethodHash?.toLowerCase();
+        if (hash && !nameToHash[methodName]) {
+          nameToHash[methodName] = hash;
+          hashToName[hash] = methodName;
+
+          // Detect Zelle variants (names starting with "zelle-")
+          if (methodName.startsWith('zelle-')) {
+            zelleVariantHashes.push(hash);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`⚠️  Failed to read back ${net}.json for lookups:`, e);
+    }
+  }
+
+  // bytes32 encoding of "zelle" (ethers.utils.formatBytes32String("zelle"))
+  // This is a fixed constant — it never changes
+  const zelleUnspecifiedHash = '0x7a656c6c65000000000000000000000000000000000000000000000000000000';
+
+  const lookupsJson = {
+    generatedAt: new Date().toISOString(),
+    nameToHash,
+    hashToName,
+    zelleVariantHashes,
+    zelleUnspecifiedHash
+  };
+
+  fs.writeFileSync(
+    path.join(PAYMENT_METHODS_DIR, 'lookups.json'),
+    JSON.stringify(lookupsJson, null, 2)
+  );
+
+  // Write lookups.d.ts for the JSON file
+  const lookupsDts = `// Typed lookups file for payment methods
+export type PaymentMethodLookups = {
+  generatedAt: string;
+  nameToHash: Record<string, string>;
+  hashToName: Record<string, string>;
+  zelleVariantHashes: string[];
+  zelleUnspecifiedHash: string;
+};
+declare const value: PaymentMethodLookups;
+export default value;
+`;
+  fs.writeFileSync(path.join(PAYMENT_METHODS_DIR, 'lookups.d.ts'), lookupsDts);
+
   console.log(`✅ Unified payment method configs written to ${PAYMENT_METHODS_DIR}`);
 }

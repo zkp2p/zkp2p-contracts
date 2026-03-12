@@ -13,6 +13,7 @@
     "abis",
     "constants",
     "paymentMethods",
+    "currencies",
     "networks",
     "types",
     "utils"
@@ -20,7 +21,7 @@
   "scripts": {
     "build": "yarn clean && yarn extract && yarn generate:wrappers && yarn generate:networks && yarn bundle",
     "build:full": "yarn build",
-    "clean": "rimraf _cjs _esm _types addresses abis constants paymentMethods networks types utils",
+    "clean": "rimraf _cjs _esm _types addresses abis constants paymentMethods currencies networks types utils",
     "extract": "ts-node --transpile-only scripts/extract-all.ts",
     "generate:wrappers": "ts-node --transpile-only scripts/generate-abi-wrappers.ts",
     "generate:networks": "ts-node --transpile-only scripts/generate-network-entries.ts",
@@ -81,6 +82,21 @@
       "default": "./_esm/paymentMethods/*.js"
     },
     "./paymentMethods/*.json": "./paymentMethods/*.json",
+    "./currencies": {
+      "types": "./currencies/index.d.ts",
+      "import": "./_esm/currencies/index.js",
+      "react-native": "./_esm/currencies/index.js",
+      "require": "./_cjs/currencies/index.js",
+      "default": "./_esm/currencies/index.js"
+    },
+    "./currencies/*": {
+      "types": "./currencies/*.d.ts",
+      "import": "./_esm/currencies/*.js",
+      "react-native": "./_esm/currencies/*.js",
+      "require": "./_cjs/currencies/*.js",
+      "default": "./_esm/currencies/*.js"
+    },
+    "./currencies/*.json": "./currencies/*.json",
     "./types": {
       "types": "./types/index.ts"
     },
