@@ -65,6 +65,7 @@ export const PYTH_FEEDS: PythFeed[] = [
   { pair: 'USD/UGX', feedId: '0x1f946ee84ce82dbbaa0fec69cdd4cb9e911076788c77c6f36d42a3491a284ce1', decimals: 8 },
   { pair: 'USD/ILS', feedId: '0x158666978da811cac711193ff8bbb6f3a19c0da582fae820d933c6b9ceec6998', decimals: 8 },
   { pair: 'USD/PHP', feedId: '0x2bda7f268b52bfbc3f2e124c31445247647350db313caadc6771e6299e0a68c9', decimals: 8 },
+  { pair: 'USD/BRL', feedId: '0xd2db4dbf1aea74e0f666b0e8f73b9580d407f5e5cf931940b06dc633d7a95906', decimals: 8 },
 ];
 
 // ── Keeper bot feed IDs (18 feeds actively pushed to Pyth on-chain) ──
@@ -80,7 +81,7 @@ export const PYTH_KEEPER_FEED_IDS: string[] = [
   '0x235ddea9f40e9af5814dbcc83a418b98e3ee8df1e34e1ae4d45cf5de596023a3', // USD/NOK
   '0x92eea8ba1b00078cdc2ef6f64f091f262e8c7d0576ee4677572f314ebfafa4c7', // NZD/USD
   '0x8ccb376aa871517e807358d4e3cf0bc7fe4950474dbe6c9ffc21ef64e43fc676', // USD/SEK
-  '0xd2db4dbf1aea74e0f666b0e8f73b9580d407f5e5cf931940b06dc633d7a95906', // BRL/USD
+  '0xd2db4dbf1aea74e0f666b0e8f73b9580d407f5e5cf931940b06dc633d7a95906', // USD/BRL
   '0xe13b1c1ffb32f34e1be9545583f01ef385fde7f42ee66049d30570dc866b77ca', // USD/MXN
   '0x032a2eba1c2635bf973e95fb62b2c0705c1be2603b9572cc8d5edeaf8744e058', // USD/TRY
   '0x0ac0f9a2886fc2dd708bc66cc2cea359052ce89d324f45d95fadbc6c4fcf1809', // USD/INR
