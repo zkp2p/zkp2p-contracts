@@ -1,8 +1,18 @@
-name: Foundry Tests
-on: [push]
+name: Foundry Fast Lane
+
+on:
+  push:
+    branches:
+      - main
+      - codex/foundry-main
+  pull_request:
+    branches:
+      - main
+      - codex/foundry-main
+  workflow_dispatch:
 
 jobs:
-  foundry-tests:
+  foundry-core:
     runs-on: ubuntu-latest
     
     steps:
@@ -38,6 +48,28 @@ jobs:
         run: |
           echo "Running invariant tests..."
           forge test --match-contract "Invariant" -vv
+
+  foundry-fork:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18.15.0'
+
+      - name: Install dependencies
+        run: |
+          yarn install
+          forge --version
 
       - name: Run Foundry fork tests
         env:

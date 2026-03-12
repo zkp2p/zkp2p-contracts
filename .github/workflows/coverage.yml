@@ -1,0 +1,36 @@
+name: Slow Coverage
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * *'
+
+jobs:
+  hardhat-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.17.0'
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install dependencies
+        run: yarn install
+      - name: Prepare env
+        run: cp .env.default .env
+      - name: Run coverage
+        run: yarn coverage
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          flags: hardhat
+          fail_ci_if_error: true
