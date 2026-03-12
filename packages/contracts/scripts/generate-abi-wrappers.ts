@@ -90,6 +90,12 @@ function updatePackageExports(networks: string[]): void {
     './paymentMethods': packageJson.exports['./paymentMethods'],
     './paymentMethods/*': packageJson.exports['./paymentMethods/*'],
     './paymentMethods/*.json': packageJson.exports['./paymentMethods/*.json'],
+    './currencies': packageJson.exports['./currencies'],
+    './currencies/*': packageJson.exports['./currencies/*'],
+    './currencies/*.json': packageJson.exports['./currencies/*.json'],
+    './oracleFeeds': packageJson.exports['./oracleFeeds'],
+    './oracleFeeds/*': packageJson.exports['./oracleFeeds/*'],
+    './oracleFeeds/*.json': packageJson.exports['./oracleFeeds/*.json'],
     './types': packageJson.exports['./types'],
     './utils': packageJson.exports['./utils'],
     './utils/protocolUtils': packageJson.exports['./utils/protocolUtils']

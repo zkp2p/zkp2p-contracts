@@ -1,6 +1,6 @@
 {
   "name": "@zkp2p/contracts-v2",
-  "version": "0.2.0-rc.7",
+  "version": "0.2.0-rc.8",
   "description": "ZKP2P V2 smart contract interfaces and utilities",
   "main": "./_cjs/index.js",
   "module": "./_esm/index.js",
@@ -13,6 +13,8 @@
     "abis",
     "constants",
     "paymentMethods",
+    "currencies",
+    "oracleFeeds",
     "networks",
     "types",
     "utils"
@@ -20,7 +22,7 @@
   "scripts": {
     "build": "yarn clean && yarn extract && yarn generate:wrappers && yarn generate:networks && yarn bundle",
     "build:full": "yarn build",
-    "clean": "rimraf _cjs _esm _types addresses abis constants paymentMethods networks types utils",
+    "clean": "rimraf _cjs _esm _types addresses abis constants paymentMethods currencies oracleFeeds networks types utils",
     "extract": "ts-node --transpile-only scripts/extract-all.ts",
     "generate:wrappers": "ts-node --transpile-only scripts/generate-abi-wrappers.ts",
     "generate:networks": "ts-node --transpile-only scripts/generate-network-entries.ts",
@@ -81,6 +83,36 @@
       "default": "./_esm/paymentMethods/*.js"
     },
     "./paymentMethods/*.json": "./paymentMethods/*.json",
+    "./currencies": {
+      "types": "./currencies/index.d.ts",
+      "import": "./_esm/currencies/index.js",
+      "react-native": "./_esm/currencies/index.js",
+      "require": "./_cjs/currencies/index.js",
+      "default": "./_esm/currencies/index.js"
+    },
+    "./currencies/*": {
+      "types": "./currencies/*.d.ts",
+      "import": "./_esm/currencies/*.js",
+      "react-native": "./_esm/currencies/*.js",
+      "require": "./_cjs/currencies/*.js",
+      "default": "./_esm/currencies/*.js"
+    },
+    "./currencies/*.json": "./currencies/*.json",
+    "./oracleFeeds": {
+      "types": "./oracleFeeds/index.d.ts",
+      "import": "./_esm/oracleFeeds/index.js",
+      "react-native": "./_esm/oracleFeeds/index.js",
+      "require": "./_cjs/oracleFeeds/index.js",
+      "default": "./_esm/oracleFeeds/index.js"
+    },
+    "./oracleFeeds/*": {
+      "types": "./oracleFeeds/*.d.ts",
+      "import": "./_esm/oracleFeeds/*.js",
+      "react-native": "./_esm/oracleFeeds/*.js",
+      "require": "./_cjs/oracleFeeds/*.js",
+      "default": "./_esm/oracleFeeds/*.js"
+    },
+    "./oracleFeeds/*.json": "./oracleFeeds/*.json",
     "./types": {
       "types": "./types/index.ts"
     },

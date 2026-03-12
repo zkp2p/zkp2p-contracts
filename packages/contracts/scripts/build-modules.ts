@@ -7,7 +7,7 @@ import * as ts from 'typescript';
 const PKG_ROOT = path.resolve(__dirname, '..');
 
 // Modules to build
-const MODULES = ['addresses', 'abis', 'constants', 'paymentMethods', 'networks', 'types', 'utils'];
+const MODULES = ['addresses', 'abis', 'constants', 'paymentMethods', 'currencies', 'oracleFeeds', 'networks', 'types', 'utils'];
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
