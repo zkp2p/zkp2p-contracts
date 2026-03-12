@@ -41,7 +41,7 @@ Current baseline:
 
 | Domain | Hardhat Source | Recommended Foundry Target | Status | Notes |
 | --- | --- | --- | --- | --- |
-| libs | `test/libs/thresholdSigVerifierUtils.spec.ts` | `test-foundry/unit/ThresholdSigVerifierUtils.t.sol` | Mapped |  |
+| libs | `test/libs/thresholdSigVerifierUtils.spec.ts` | `test-foundry/unit/ThresholdSigVerifierUtils.t.sol` | Ported | 22 Foundry tests preserve signature ordering, threshold edges, malformed signatures, and duplicate-witness cases |
 | registries | `test/registries/escrowRegistry.spec.ts` | `test-foundry/unit/EscrowRegistry.t.sol` | Ported | 8 Foundry tests preserve constructor, whitelist management, accept-all toggles, and revert coverage |
 | registries | `test/registries/nullifierRegistry.spec.ts` | `test-foundry/unit/NullifierRegistry.t.sol` | Ported | 10 Foundry tests preserve constructor, writer permissions, nullifier insertion, and revert coverage |
 | registries | `test/registries/orchestratorRegistry.spec.ts` | `test-foundry/unit/OrchestratorRegistry.t.sol` | Ported | 8 Foundry tests preserve owner gating, add/remove flows, and custom-error coverage |
