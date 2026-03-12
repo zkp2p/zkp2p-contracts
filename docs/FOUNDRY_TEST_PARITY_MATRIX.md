@@ -69,7 +69,7 @@ Current baseline:
 | escrowV2 | `test/escrowV2/escrowV2.oracleRates.spec.ts` | `test-foundry/integration/EscrowV2OracleRates.t.sol` | Mapped |  |
 | escrowV2 | `test/escrowV2/escrowV2.pythOracle.spec.ts` | `test-foundry/integration/EscrowV2PythOracle.t.sol` | Mapped |  |
 | orchestratorV2 | `test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts` | `test-foundry/integration/OrchestratorV2LegacyCoverage.t.sol` | Mapped |  |
-| orchestratorV2 | `test/orchestratorV2/orchestratorV2.spec.ts` | `test-foundry/integration/OrchestratorV2.t.sol` | Mapped |  |
+| orchestratorV2 | `test/orchestratorV2/orchestratorV2.spec.ts` | `test-foundry/integration/OrchestratorV2.t.sol` | Ported | 4 Foundry tests preserve delegated effective-rate enforcement, manager-fee snapshotting, max-fee rejection, and manager-fee deduction on fulfill |
 | deploy | `test/deploy/00_system.spec.ts` | `test-foundry/integration/deploy/SystemV1Deployment.t.sol` | Ported | 7 Foundry tests preserve V1 deployment wiring, ownership transfer modes, viewer wiring, and existing-USDC vs mock-USDC branches |
 | deploy | `test/deploy/01_unifiedVerifier.spec.ts` | `test-foundry/integration/deploy/UnifiedVerifierDeployment.t.sol` | Ported | 5 Foundry tests preserve witness wiring, multisig ownership transfer, unified verifier dependency wiring, nullifier writer permissions, and the optional no-transfer/no-writer branch |
 | deploy | `test/deploy/02_venmoPaymentMethod.spec.ts` | `test-foundry/integration/deploy/VenmoPaymentMethodDeployment.t.sol` | Mapped |  |
