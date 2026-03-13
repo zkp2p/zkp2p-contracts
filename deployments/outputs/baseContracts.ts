@@ -11094,7 +11094,7 @@ export default {
       ]
     },
     "ProtocolViewerV2": {
-      "address": "0x19E4AA000839836568c0BBEF7804724DE0a0f5a0",
+      "address": "0xC8A622e1614BB58141E72e1D6023B16f08677d6c",
       "abi": [
         {
           "inputs": [
@@ -11193,14 +11193,21 @@ export default {
                       "type": "bytes32"
                     },
                     {
-                      "internalType": "address",
-                      "name": "referrer",
-                      "type": "address"
-                    },
-                    {
-                      "internalType": "uint256",
-                      "name": "referrerFee",
-                      "type": "uint256"
+                      "components": [
+                        {
+                          "internalType": "address",
+                          "name": "recipient",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "uint256",
+                          "name": "fee",
+                          "type": "uint256"
+                        }
+                      ],
+                      "internalType": "struct IReferralFee.ReferralFee[]",
+                      "name": "referralFees",
+                      "type": "tuple[]"
                     },
                     {
                       "internalType": "contract IPostIntentHookV2",
@@ -11750,14 +11757,21 @@ export default {
                       "type": "bytes32"
                     },
                     {
-                      "internalType": "address",
-                      "name": "referrer",
-                      "type": "address"
-                    },
-                    {
-                      "internalType": "uint256",
-                      "name": "referrerFee",
-                      "type": "uint256"
+                      "components": [
+                        {
+                          "internalType": "address",
+                          "name": "recipient",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "uint256",
+                          "name": "fee",
+                          "type": "uint256"
+                        }
+                      ],
+                      "internalType": "struct IReferralFee.ReferralFee[]",
+                      "name": "referralFees",
+                      "type": "tuple[]"
                     },
                     {
                       "internalType": "contract IPostIntentHookV2",
@@ -11995,14 +12009,21 @@ export default {
                       "type": "bytes32"
                     },
                     {
-                      "internalType": "address",
-                      "name": "referrer",
-                      "type": "address"
-                    },
-                    {
-                      "internalType": "uint256",
-                      "name": "referrerFee",
-                      "type": "uint256"
+                      "components": [
+                        {
+                          "internalType": "address",
+                          "name": "recipient",
+                          "type": "address"
+                        },
+                        {
+                          "internalType": "uint256",
+                          "name": "fee",
+                          "type": "uint256"
+                        }
+                      ],
+                      "internalType": "struct IReferralFee.ReferralFee[]",
+                      "name": "referralFees",
+                      "type": "tuple[]"
                     },
                     {
                       "internalType": "contract IPostIntentHookV2",
