@@ -1,7 +1,5 @@
 # zkp2p-v2-contracts
 
-[![Coverage](https://codecov.io/gh/zkp2p/zkp2p-v2-contracts/branch/main/graph/badge.svg?precision=2)](https://codecov.io/gh/zkp2p/zkp2p-v2-contracts)
-
 Smart contracts for the ZKP2P fiat on/off-ramp, with the current repository centered on the v2 system:
 
 - `EscrowV2`: maker liquidity, per-deposit payment configuration, oracle-backed pricing, delegated rate managers.
@@ -544,6 +542,7 @@ For wallet-based local testing, import Hardhat account `#0` into your wallet.
 
 ### Test Commands
 
+- `foundry-main` migration rule: new contract tests should be written in Foundry under `test-foundry/`; existing Hardhat suites under `test/` are being preserved only until their parity ports are verified
 - `yarn test`: run the main Hardhat suite across libs, hooks, periphery, unified verifier, registries, escrow, escrowV2, orchestrator, orchestratorV2, and rate manager
 - `yarn test:fast`: run the same Hardhat suite without recompiling
 - `yarn test:deploy`: run deployment-script tests
@@ -558,7 +557,7 @@ For wallet-based local testing, import Hardhat account `#0` into your wallet.
 - `yarn coverage`
 - `yarn test:forge:coverage`
 
-Coverage is intentionally heavy in this repo. For normal iteration, use focused unit/integration suites instead.
+Coverage is intentionally heavy in this repo. On `foundry-main`, it should not sit on the every-push critical path; use focused unit/integration suites for normal iteration and run coverage in the slower dedicated lane.
 
 ### Packaging Commands
 
@@ -683,7 +682,7 @@ Payment-method specific provider configuration lives under `deployments/verifier
 
 ## Testing Strategy
 
-The repo uses both Hardhat tests and Foundry tests.
+The repo uses both Hardhat tests and Foundry tests today, but `foundry-main` is the active migration branch toward a Foundry-only end state.
 
 ### Hardhat Test Areas
 
@@ -700,18 +699,20 @@ The repo uses both Hardhat tests and Foundry tests.
 
 Foundry suites live in `test-foundry/` and are intended for:
 
+- deterministic replacements for the current Hardhat suites as parity ports land
 - fuzzing
 - invariants
 - fork-based testing where needed
 
 ### Recommended Verification Loop During Development
 
-For most contract changes:
+For work on `foundry-main`:
 
 1. `yarn compile`
-2. run the focused Hardhat suite for the touched area
-3. run `yarn test:forge` only when the Solidity-native suite is relevant
-4. avoid coverage unless explicitly needed
+2. add or update the relevant Foundry suite under `test-foundry/`
+3. run the focused Foundry suite for the touched area
+4. run the corresponding legacy Hardhat suite only when checking parity during migration
+5. avoid coverage unless explicitly needed
 
 ## Networks and Deployment Artifacts
 
