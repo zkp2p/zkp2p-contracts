@@ -1,5 +1,7 @@
 # zkp2p-v2-contracts
 
+[![Coverage](https://codecov.io/gh/zkp2p/zkp2p-contracts/branch/main/graph/badge.svg?precision=2)](https://codecov.io/gh/zkp2p/zkp2p-contracts)
+
 Smart contracts for the ZKP2P fiat on/off-ramp, with the current repository centered on the v2 system:
 
 - `EscrowV2`: maker liquidity, per-deposit payment configuration, oracle-backed pricing, delegated rate managers.
