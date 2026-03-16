@@ -1,4 +1,4 @@
-name: Legacy Hardhat Tests
+name: Hardhat Full Suite
 
 on:
   push:

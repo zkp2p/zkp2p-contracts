@@ -1,6 +1,14 @@
-name: Slow Coverage
+name: Hardhat Coverage
 
 on:
+  push:
+    branches:
+      - main
+      - codex/foundry-main
+  pull_request:
+    branches:
+      - main
+      - codex/foundry-main
   workflow_dispatch:
   schedule:
     - cron: '0 3 * * *'
@@ -28,6 +36,7 @@ jobs:
       - name: Run coverage
         run: yarn coverage
       - name: Upload coverage to Codecov
+        if: ${{ secrets.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
