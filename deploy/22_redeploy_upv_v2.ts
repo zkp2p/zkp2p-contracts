@@ -16,6 +16,7 @@ import {
   waitForDeploymentDelay,
 } from "../deployments/helpers";
 import { MULTI_SIG } from "../deployments/parameters";
+import { safeBatchCollector } from "../deployments/safeBatchCollector";
 import { VENMO_PROVIDER_CONFIG } from "../deployments/verifiers/venmo";
 import { REVOLUT_PROVIDER_CONFIG } from "../deployments/verifiers/revolut";
 import { CASHAPP_PROVIDER_CONFIG } from "../deployments/verifiers/cashapp";
@@ -36,6 +37,7 @@ import { LUXON_PROVIDER_CONFIG } from "../deployments/verifiers/luxon";
 // Old UPV V2 addresses being replaced (deployed by script 14, before PR #148 OrchestratorV2 intent compat fix)
 const OLD_UPV_V2: any = {
   "base_staging": "0xb9C46A988D4C616Bd4d43042954dF3cC0750726B",
+  "base": "0x57833A85208b8E42db7368969662A6D7312b83D1",
 };
 
 const ALL_PAYMENT_METHODS = [
@@ -102,23 +104,46 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const paymentVerifierRegistryContract = await ethers.getContractAt("PaymentVerifierRegistry", paymentVerifierRegistryAddress);
   const v2VerifierContract = await ethers.getContractAt("UnifiedPaymentVerifier", upv.address);
 
+  // Detect whether deployer can execute registry transactions directly
+  const registryOwner = await paymentVerifierRegistryContract.owner();
+  const deployerIsRegistryOwner = (await hre.getUnnamedAccounts()).includes(registryOwner);
+
   for (const { key, config } of ALL_PAYMENT_METHODS) {
     console.log(`\nConfiguring payment method: ${key}`);
 
-    // Add payment method to new UPV
+    // Add payment method to new UPV (deployer owns new UPV, always direct)
     await addPaymentMethodToUnifiedVerifier(hre, v2VerifierContract, config.paymentMethodHash);
+
+    const isPaymentMethod = await paymentVerifierRegistryContract.isPaymentMethod(config.paymentMethodHash);
 
     // Remove from registry (currently points to old UPV)
     await removePaymentMethodFromRegistry(hre, paymentVerifierRegistryContract, config.paymentMethodHash);
 
     // Re-add with new UPV address
-    await addPaymentMethodToRegistry(
-      hre,
-      paymentVerifierRegistryContract,
-      config.paymentMethodHash,
-      upv.address,
-      config.currencies
-    );
+    // On production (deployer != registry owner), the removal above only logged Safe
+    // batch calldata without executing, so isPaymentMethod() still returns true.
+    // addPaymentMethodToRegistry would skip due to its idempotency check. Bypass it
+    // by encoding the calldata directly into the Safe batch.
+    if (!deployerIsRegistryOwner && isPaymentMethod) {
+      const addCalldata = paymentVerifierRegistryContract.interface.encodeFunctionData("addPaymentMethod", [
+        config.paymentMethodHash,
+        upv.address,
+        config.currencies,
+      ]);
+      safeBatchCollector.add(
+        paymentVerifierRegistryContract.address,
+        addCalldata,
+        `PaymentVerifierRegistry.addPaymentMethod(${key}, ${upv.address})`
+      );
+    } else {
+      await addPaymentMethodToRegistry(
+        hre,
+        paymentVerifierRegistryContract,
+        config.paymentMethodHash,
+        upv.address,
+        config.currencies
+      );
+    }
     console.log(`${key} wired to new UPV in PaymentVerifierRegistry`);
 
     // Save snapshot
@@ -131,6 +156,14 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   // 5. Transfer ownership
   await setNewOwner(hre, v2VerifierContract, multiSig);
   console.log("UnifiedPaymentVerifierV2 ownership transferred to", multiSig);
+
+  // 6. Write Safe batch file if any multisig transactions were collected
+  const chainId = (await ethers.provider.getNetwork()).chainId;
+  const batchCount = safeBatchCollector.count();
+  if (batchCount > 0) {
+    const batchFile = safeBatchCollector.writeBatchFile(network, String(chainId), multiSig);
+    console.log(`\nSafe batch file written with ${batchCount} transactions: ${batchFile}`);
+  }
 
   console.log("=== UnifiedPaymentVerifierV2 redeployment finished ===");
   await waitForDeploymentDelay(hre);
