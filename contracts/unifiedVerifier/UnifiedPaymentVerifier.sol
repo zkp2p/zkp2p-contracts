@@ -6,6 +6,7 @@ import { INullifierRegistry } from "../interfaces/INullifierRegistry.sol";
 import { IPaymentVerifier } from "../interfaces/IPaymentVerifier.sol";
 import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
 import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
+import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
 import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
 import { IEscrow } from "../interfaces/IEscrow.sol";
 
@@ -39,6 +40,10 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
     bytes32 private constant PAYMENT_ATTESTATION_TYPEHASH = keccak256(
         "PaymentAttestation(bytes32 intentHash,uint256 releaseAmount,bytes32 dataHash)"
     );
+
+    // Used to detect V2 orchestrators that expose getDepositPreIntentHook(address,uint256).
+    bytes4 private constant GET_DEPOSIT_PRE_INTENT_HOOK_SELECTOR =
+        bytes4(keccak256("getDepositPreIntentHook(address,uint256)"));
 
     /* ============ State Variables ============ */
 
@@ -223,14 +228,58 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
     ) internal view {
         require(snapshot.intentHash == intentHash, "UPV: Snapshot hash mismatch");
 
-        IOrchestrator.Intent memory intent = IOrchestrator(msg.sender).getIntent(intentHash);
-        require(snapshot.payeeDetails == intent.payeeId, "UPV: Snapshot payee mismatch");
-        require(snapshot.amount == intent.amount, "UPV: Snapshot amount mismatch");
-        require(snapshot.paymentMethod == intent.paymentMethod, "UPV: Snapshot method mismatch");
-        require(snapshot.fiatCurrency == intent.fiatCurrency, "UPV: Snapshot currency mismatch");
-        require(snapshot.conversionRate == intent.conversionRate, "UPV: Snapshot rate mismatch");
-        require(snapshot.signalTimestamp == intent.timestamp, "UPV: Snapshot timestamp mismatch");
+        if (_isV2Orchestrator(msg.sender)) {
+            IOrchestratorV2.Intent memory intentV2 = IOrchestratorV2(msg.sender).getIntent(intentHash);
+            _validateSnapshotAgainstIntent(
+                snapshot,
+                intentV2.payeeId,
+                intentV2.amount,
+                intentV2.paymentMethod,
+                intentV2.fiatCurrency,
+                intentV2.conversionRate,
+                intentV2.timestamp
+            );
+        } else {
+            IOrchestrator.Intent memory intent = IOrchestrator(msg.sender).getIntent(intentHash);
+            _validateSnapshotAgainstIntent(
+                snapshot,
+                intent.payeeId,
+                intent.amount,
+                intent.paymentMethod,
+                intent.fiatCurrency,
+                intent.conversionRate,
+                intent.timestamp
+            );
+        }
+
         require(snapshot.timestampBuffer <= MAX_TIMESTAMP_BUFFER, "UPV: Snapshot timestamp buffer exceeds maximum");
+    }
+
+    function _validateSnapshotAgainstIntent(
+        IntentSnapshot memory snapshot,
+        bytes32 payeeId,
+        uint256 amount,
+        bytes32 paymentMethod,
+        bytes32 fiatCurrency,
+        uint256 conversionRate,
+        uint256 signalTimestamp
+    ) internal pure {
+        require(snapshot.payeeDetails == payeeId, "UPV: Snapshot payee mismatch");
+        require(snapshot.amount == amount, "UPV: Snapshot amount mismatch");
+        require(snapshot.paymentMethod == paymentMethod, "UPV: Snapshot method mismatch");
+        require(snapshot.fiatCurrency == fiatCurrency, "UPV: Snapshot currency mismatch");
+        require(snapshot.conversionRate == conversionRate, "UPV: Snapshot rate mismatch");
+        require(snapshot.signalTimestamp == signalTimestamp, "UPV: Snapshot timestamp mismatch");
+    }
+
+    function _isV2Orchestrator(address orchestrator) internal view returns (bool isV2Orchestrator) {
+        (isV2Orchestrator, ) = orchestrator.staticcall(
+            abi.encodeWithSelector(
+                GET_DEPOSIT_PRE_INTENT_HOOK_SELECTOR,
+                address(0),
+                0
+            )
+        );
     }
 
     /**
