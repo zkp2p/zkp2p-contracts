@@ -14009,7 +14009,7 @@ export default {
       ]
     },
     "UnifiedPaymentVerifierV2": {
-      "address": "0xb9C46A988D4C616Bd4d43042954dF3cC0750726B",
+      "address": "0x7750f8Cc276f21B7Db1477FA044Bf3FD4951Bf20",
       "abi": [
         {
           "inputs": [
