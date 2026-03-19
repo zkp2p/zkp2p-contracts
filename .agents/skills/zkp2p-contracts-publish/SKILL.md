@@ -253,14 +253,6 @@ git add packages/contracts/package.json
 git commit -m "chore(contracts): release $(node -p "require('./packages/contracts/package.json').version")"
 ```
 
-## Downstream Consumers
-
-After publishing, update the dependency in:
-
-- `zkp2p-clients` — `packages/core/package.json` (`@zkp2p/contracts-v2`)
-- `zkp2p-indexer` — root `package.json` (`@zkp2p/contracts-v2`)
-- `curator` — `package.json` (`@zkp2p/contracts-v2`)
-
 ## Notes
 
 - `--no-provenance` is required when publishing from a private repo or local machine
