@@ -57,6 +57,12 @@ Orchestrator ── net ──▶ Recipient OR PostIntentHook (then executes)
 - Use Conventional Commits where possible: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`.
 - PRs: describe scope and rationale, link issues, include test updates, and note deployment impacts (network, addresses). Update `deployments/outputs/*.ts` when applicable.
 
+## Agent Skills
+
+| Skill | Location | Description |
+|-------|----------|-------------|
+| `zkp2p-contracts-publish` | `.agents/skills/zkp2p-contracts-publish/SKILL.md` | Bump, build, test, verify addresses, and publish `@zkp2p/contracts-v2` to npm |
+
 ## Security & Configuration Tips
 - Never commit secrets. Configure `.env` (`ALCHEMY_API_KEY`, `BASE_DEPLOY_PRIVATE_KEY`, `BASESCAN_API_KEY`, etc.).
 - For local dev: import Hardhat Account #0 into your wallet, then `yarn deploy:localhost`.
