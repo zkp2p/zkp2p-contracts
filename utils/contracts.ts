@@ -16,6 +16,7 @@ export {
   Orchestrator,
   OrchestratorV2,
   RateManagerV1,
+  RateManagerV2,
   OrchestratorRegistry,
   RateManagerMock,
   PaymentVerifierRegistry,

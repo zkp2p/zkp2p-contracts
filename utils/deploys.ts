@@ -12,6 +12,7 @@ import {
   Orchestrator,
   OrchestratorV2,
   RateManagerV1,
+  RateManagerV2,
   OrchestratorRegistry,
   PaymentVerifierMock,
   PreIntentHookMock,
@@ -75,6 +76,7 @@ import { ProtocolViewer__factory } from "../typechain/factories/contracts/index"
 import { Orchestrator__factory } from "../typechain/factories/contracts/index";
 import { OrchestratorV2__factory } from "../typechain/factories/contracts/OrchestratorV2__factory";
 import { RateManagerV1__factory } from "../typechain/factories/contracts/RateManagerV1__factory";
+import { RateManagerV2__factory } from "../typechain/factories/contracts/RateManagerV2__factory";
 import { UnifiedPaymentVerifier__factory } from "../typechain/factories/contracts/unifiedVerifier";
 import { SimpleAttestationVerifier__factory } from "../typechain/factories/contracts/unifiedVerifier";
 import { SignatureGatingPreIntentHook__factory } from "../typechain/factories/contracts/hooks/SignatureGatingPreIntentHook__factory";
@@ -253,6 +255,10 @@ export default class DeployHelper {
 
   public async deployRateManagerV1(escrowRegistry: Address): Promise<RateManagerV1> {
     return await new RateManagerV1__factory(this._deployerSigner).deploy(escrowRegistry);
+  }
+
+  public async deployRateManagerV2(escrowRegistry: Address): Promise<RateManagerV2> {
+    return await new RateManagerV2__factory(this._deployerSigner).deploy(escrowRegistry);
   }
 
   public async deployRateManagerMock(): Promise<RateManagerMock> {
