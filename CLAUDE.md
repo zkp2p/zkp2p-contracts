@@ -45,33 +45,33 @@ Two contract generations coexist. V1 is legacy; V2 is active development.
 ### Contract Flow (V2)
 
 ```
-Maker ── createDeposit ──> EscrowV2
-Taker ── signalIntent ──> OrchestratorV2 ── lockFunds ──> EscrowV2
-                                          ── preIntentHook (optional)
+Maker -- createDeposit --> EscrowV2
+Taker -- signalIntent --> OrchestratorV2 -- lockFunds --> EscrowV2
+                                         -- preIntentHook (optional)
 Off-chain: taker pays fiat, gets zkTLS proof, submits to attestation-service
 Attestation service signs EIP-712 typed data with payment details
-Anyone ── fulfillIntent ──> OrchestratorV2 ── verifyPayment ──> UnifiedPaymentVerifier
-                                           ── nullify(paymentId) ──> NullifierRegistry
-                                           ── unlockAndTransfer ──> EscrowV2 ──> USDC to buyer
+Anyone -- fulfillIntent --> OrchestratorV2 -- verifyPayment --> UnifiedPaymentVerifier
+                                           -- nullify(paymentId) --> NullifierRegistry
+                                           -- unlockAndTransfer --> EscrowV2 --> USDC to buyer
 ```
 
 ### Core Contracts
 
 | Contract | Purpose |
 |----------|---------|
-| `EscrowV2.sol` | Deposit management, fund locking/release, oracle rate support, delegated rate managers |
-| `OrchestratorV2.sol` | Intent lifecycle, fee collection (protocol + referrer + manager), pre-intent hooks, whitelist hooks |
-| `RateManagerV1.sol` | Delegated rate management for deposits (managers can set rates on behalf of depositors) |
+| `EscrowV2.sol` (1565 lines) | Deposit management, fund locking/release, oracle rate support, delegated rate managers |
+| `OrchestratorV2.sol` (788 lines) | Intent lifecycle, fee collection (protocol + referrer + manager), pre-intent hooks, whitelist hooks |
+| `RateManagerV1.sol` (366 lines) | Delegated rate management for deposits (managers can set rates on behalf of depositors) |
 | `ProtocolViewerV2.sol` | Read-only aggregated state queries |
 | `UnifiedPaymentVerifier.sol` | Single verifier for all payment methods via EIP-712 attestation signatures |
-| `SimpleAttestationVerifier.sol` | Validates zkTLS attestation signatures |
+| `SimpleAttestationVerifier.sol` | Validates zkTLS attestation signatures from authorized witnesses |
 
 ### V1 Contracts (Legacy, still deployed)
 
 | Contract | Purpose |
 |----------|---------|
-| `Escrow.sol` | Original escrow (V1 deposits still active) |
-| `Orchestrator.sol` | Original orchestrator |
+| `Escrow.sol` (1113 lines) | Original escrow (V1 deposits still active) |
+| `Orchestrator.sol` (594 lines) | Original orchestrator |
 | `ProtocolViewer.sol` | V1 viewer |
 
 ### Registry System
@@ -100,6 +100,13 @@ Anyone ── fulfillIntent ──> OrchestratorV2 ── verifyPayment ──> 
 | `ChainlinkOracleAdapter` | Wraps Chainlink price feeds for deposit rate floors |
 | `PythOracleAdapter` | Wraps Pyth price feeds for deposit rate floors |
 
+### Libraries
+
+| Library | Purpose |
+|---------|---------|
+| `ThresholdSigVerifierUtils` | Threshold signature verification utilities |
+| `ReferralFeeLib` | Referral fee validation and hashing (max 50% total, max 5 recipients) |
+
 ## Code Layout
 
 ```
@@ -110,11 +117,11 @@ contracts/
   ProtocolViewer.sol, ProtocolViewerV2.sol  # Read-only viewers
   registries/                         # 6 registry contracts
   unifiedVerifier/                    # EIP-712 payment verification
-  hooks/                              # Pre/post intent hooks
+  hooks/                              # Pre/post intent hooks (4 contracts)
   oracles/                            # Chainlink + Pyth adapters
-  interfaces/                         # All interfaces (IEscrowV2, IOrchestratorV2, etc.)
-  lib/                                # ThresholdSigVerifierUtils
-  external/                           # Array utils, Across interface
+  interfaces/                         # All interfaces (23 files)
+  lib/                                # ThresholdSigVerifierUtils, ReferralFeeLib
+  external/                           # Array utils (Address, Bytes32, String, Uint256), Across interface
   mocks/                              # 30 mock contracts for testing
 
 test/                                 # Hardhat tests (*.spec.ts)
@@ -125,6 +132,7 @@ test/                                 # Hardhat tests (*.spec.ts)
   hooks/                              # Hook tests
   rateManager/                        # Rate manager + oracle adapter tests
   periphery/                          # ProtocolViewer tests
+  libs/                               # ThresholdSigVerifierUtils tests
   deploy/                             # Deployment script validation tests
   patchCoverage/                      # Targeted coverage gap tests
 
@@ -140,16 +148,19 @@ deploy/                               # Hardhat Deploy scripts (NN_description.t
   15: V2 periphery (ProtocolViewerV2, hooks)
   16: V2 payment method configuration
   17: Pyth oracle deployment
-  18: EscrowV2 + RateManagerV1 redeployment
+  18-22: Redeployments (EscrowV2, RateManagerV1, OrchestratorV2, ProtocolViewerV2, UPV V2)
+  deploy_summary.ts: Post-deploy address summary
 
 deployments/                          # Network artifacts
-  base/                               # Production (chain 8453)
+  base/                               # Production (chain 8453, 22 contracts)
   base_staging/                       # Staging (chain 8453, separate deployer)
   base_sepolia/                       # Testnet (chain 84532)
   localhost/                          # Local dev (chain 31337)
   parameters.ts                       # Network-specific config values
   helpers.ts                          # Deployment helper functions
-  verifiers/                          # Payment method provider hashes
+  safeBatchCollector.ts               # Safe multisig batch transaction builder
+  verifiers/                          # Payment method provider hashes (12 platforms)
+  outputs/                            # Exported contract addresses (JSON/TS)
 
 utils/                                # TypeScript utilities
   deploys.ts                          # DeployHelper class
@@ -161,8 +172,15 @@ utils/                                # TypeScript utilities
   common/                             # Blockchain, units (ether, usdc)
   test/                               # Account helpers, snapshot mgmt
 
-packages/contracts/                   # @zkp2p/contracts-v2 NPM package
+scripts/                              # Operational scripts
+  keeper/                             # Pyth price keeper (Railway cron)
+  pyth_price_keeper.ts                # Pyth price update script (standalone)
+  create-test-deposits.js             # Test deposit creation
+  ns-test-runner*.js                  # Negative spread test runners
+
+packages/contracts/                   # @zkp2p/contracts-v2 NPM package (v0.2.0)
 archive/                              # Legacy verifier contracts (pre-unified)
+tasks/                                # Hardhat custom tasks (etherscan verify with delay)
 ```
 
 ## Testing Patterns
@@ -244,7 +262,7 @@ import { getAccounts } from "@utils/test";
 ## Configuration
 
 - `hardhat.config.ts`: Solidity 0.8.18, optimizer 200 runs, viaIR enabled, ethers v5
-- `foundry.toml`: Solidity 0.8.18, optimizer 800 runs, viaIR enabled, fuzz 256 runs
+- `foundry.toml`: Solidity 0.8.18, optimizer 800 runs, viaIR enabled, fuzz 256 runs, invariant depth 15
 - `.env`: `BASE_DEPLOY_PRIVATE_KEY`, `TESTNET_DEPLOY_PRIVATE_KEY`, `ALCHEMY_API_KEY`, `BASESCAN_API_KEY`
 - `tsconfig.json`: CommonJS, strict mode, path aliases
 

@@ -34,3 +34,6 @@ docs/
 
 # Solidity compiler inputs (large, reproducible from source)
 deployments/*/solcInputs/
+
+# Vanity address outputs
+vanity-addresses*.json
