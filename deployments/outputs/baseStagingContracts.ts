@@ -14376,7 +14376,7 @@ export default {
       ]
     },
     "WhitelistPreIntentHook": {
-      "address": "0x1F27426836F2436276B99723a1be484Cb2FBF181",
+      "address": "0xABE7AFC4C7bE9c4Eed5F465a98e124ee7860C005",
       "abi": [
         {
           "inputs": [
@@ -14656,14 +14656,21 @@ export default {
                   "type": "uint256"
                 },
                 {
-                  "internalType": "address",
-                  "name": "referrer",
-                  "type": "address"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "referrerFee",
-                  "type": "uint256"
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "recipient",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "fee",
+                      "type": "uint256"
+                    }
+                  ],
+                  "internalType": "struct IReferralFee.ReferralFee[]",
+                  "name": "referralFees",
+                  "type": "tuple[]"
                 },
                 {
                   "internalType": "bytes",
