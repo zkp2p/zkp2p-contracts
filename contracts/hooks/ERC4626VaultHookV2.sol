@@ -18,14 +18,20 @@ import { IPostIntentHookV2 } from "../interfaces/IPostIntentHookV2.sol";
  *         Aave wrappers, Yearn v3, Spark, Euler wrappers, etc. without deploying new contracts.
  *
  * @dev Slippage protection comes from `minSharesOut`, committed at signalIntent time and signed
- *      over by the gating service. The hook performs an upper-bound preview check before
- *      depositing (per ERC-4626 spec, `previewDeposit` MUST NOT exceed actual shares minted),
- *      then verifies the actual shares delta after the deposit against both `minSharesOut` and
- *      a deploy-time `maxSlippageBps` guardrail to catch non-compliant vaults.
+ *      over by the gating service. Per ERC-4626 spec, `previewDeposit` MUST return no more than
+ *      the shares that would actually be minted in the same transaction, so it is a sound lower
+ *      bound on the actual mint. The hook uses `previewDeposit` as a pre-gate: if the preview
+ *      already clears `minSharesOut`, the deposit is guaranteed to clear it for spec-compliant
+ *      vaults and we proceed; otherwise we fall back to a direct transfer of the underlying to
+ *      `intent.to`. There is no post-deposit revert on the share count: once the vault has the
+ *      assets we cannot safely undo, and hard-reverting would leave the intent stuck (the
+ *      vault is committed in `signalHookData`, so relayers cannot retry against a different
+ *      vault). The trade-off is that a vault whose `previewDeposit` lies relative to its
+ *      `deposit` is not caught by this hook; integrators should only expose reputable vaults.
  *
- *      FALLBACK BEHAVIOR: If the deposit cannot be completed (preview below minimum, vault call
- *      reverts, vault non-compliant on preview), the net amount is transferred to `intent.to`
- *      on the source chain. The user always receives their funds, matching the UX guarantee of
+ *      FALLBACK BEHAVIOR: If the deposit cannot be completed (preview below minimum, preview
+ *      reverts, or vault.deposit reverts), the net amount is transferred to `intent.to` on the
+ *      source chain. The user always receives their funds, matching the UX guarantee of
  *      AcrossBridgeHookV2.
  */
 contract ERC4626VaultHookV2 is IPostIntentHookV2, Ownable {
@@ -101,11 +107,7 @@ contract ERC4626VaultHookV2 is IPostIntentHookV2, Ownable {
     error InvalidFulfillHookDataLength(uint256 dataLength);
     error InvalidVault(address vault);
     error InvalidSharesReceiver(address sharesReceiver);
-    error InvalidMaxSlippageBps(uint256 maxSlippageBps);
     error UnsupportedToken(address token);
-    /// @dev Reverts fulfillIntent if the vault minted fewer shares than the floor implied by
-    ///      `minSharesOut` and the `maxSlippageBps` guardrail. Indicates a non-compliant vault.
-    error VaultActualBelowMinimum(uint256 actualShares, uint256 minimumShares);
     /// @dev Reverts fulfillIntent if the vault did not pull exactly `executableAmount` of the
     ///      underlying during `deposit()`. Without this check, a non-compliant vault could mint
     ///      shares while leaving funds stranded in the hook (the Orchestrator's exact-spend
@@ -114,14 +116,8 @@ contract ERC4626VaultHookV2 is IPostIntentHookV2, Ownable {
 
     /* ============ State Variables ============ */
 
-    uint256 private constant BPS_DENOMINATOR = 10_000;
-
     IERC20 public immutable inputToken;
     IOrchestratorRegistry public immutable orchestratorRegistry;
-    /// @notice Maximum permitted deviation between previewDeposit and actual minted shares, in
-    ///         basis points. If the actual shares fall below `previewShares * (10000 - maxSlippageBps) / 10000`
-    ///         the call reverts as a vault non-compliance signal. Default deployment uses 500 (5%).
-    uint256 public immutable maxSlippageBps;
 
     /* ============ Constructor ============ */
 
@@ -129,24 +125,17 @@ contract ERC4626VaultHookV2 is IPostIntentHookV2, Ownable {
      * @notice Creates a new ERC4626VaultHookV2 instance.
      * @param _inputToken           Underlying asset accepted by target vaults (e.g. USDC)
      * @param _orchestratorRegistry Registry of authorized orchestrators that may invoke this hook
-     * @param _maxSlippageBps       Maximum allowed deviation between previewDeposit and actual
-     *                              minted shares, in basis points (must be <= 10000). Recommended: 500.
      */
     constructor(
         address _inputToken,
-        address _orchestratorRegistry,
-        uint256 _maxSlippageBps
+        address _orchestratorRegistry
     ) Ownable() {
         if (_inputToken == address(0) || _orchestratorRegistry == address(0)) {
             revert ZeroAddress();
         }
-        if (_maxSlippageBps > BPS_DENOMINATOR) {
-            revert InvalidMaxSlippageBps(_maxSlippageBps);
-        }
 
         inputToken = IERC20(_inputToken);
         orchestratorRegistry = IOrchestratorRegistry(_orchestratorRegistry);
-        maxSlippageBps = _maxSlippageBps;
     }
 
     /* ============ External Functions ============ */
@@ -189,8 +178,11 @@ contract ERC4626VaultHookV2 is IPostIntentHookV2, Ownable {
         // below to consume exactly `_ctx.executableAmount`.
         inputToken.safeTransferFrom(callingOrchestrator, address(this), _ctx.executableAmount);
 
-        // Probe the vault preview as an upper bound on actual shares (per ERC-4626 spec).
-        // A revert here means the vault is non-compliant or unreachable; treat as DEPOSIT_CALL_FAILED.
+        // Probe the vault preview as a spec-compliant lower bound on actual shares. Per EIP-4626,
+        // `previewDeposit` MUST return no more than the shares that `deposit` would mint in the
+        // same block, so `previewShares >= minSharesOut` guarantees the user's floor is honored
+        // for compliant vaults. A revert here means the vault is non-compliant or unreachable;
+        // we divert to the fallback path rather than reverting the whole fulfillIntent.
         (bool previewOk, uint256 previewShares) = _previewDeposit(commitment.vault, _ctx.executableAmount);
         bool priceMeetsMinimum = previewOk && previewShares >= commitment.minSharesOut;
 
@@ -218,20 +210,12 @@ contract ERC4626VaultHookV2 is IPostIntentHookV2, Ownable {
                     revert VaultDidNotConsumeAssets(hookAssetsBefore, hookAssetsAfter, _ctx.executableAmount);
                 }
 
-                uint256 sharesAfter = IERC20(commitment.vault).balanceOf(commitment.sharesReceiver);
-                uint256 actualShares = sharesAfter - sharesBefore;
-
-                // Compute the effective minimum: the higher of the maker's commitment floor and
-                // the deploy-time guardrail derived from the vault's own preview. The guardrail
-                // catches vaults that previewed honestly but minted dishonestly.
-                uint256 guardrailMinimum = (previewShares * (BPS_DENOMINATOR - maxSlippageBps)) / BPS_DENOMINATOR;
-                uint256 effectiveMinimum = guardrailMinimum > commitment.minSharesOut
-                    ? guardrailMinimum
-                    : commitment.minSharesOut;
-
-                if (actualShares < effectiveMinimum) {
-                    revert VaultActualBelowMinimum(actualShares, effectiveMinimum);
-                }
+                // Use the balance delta as the authoritative mint amount. We intentionally do
+                // NOT re-check `actualShares >= minSharesOut` here: the preview gate above
+                // already guarantees this for spec-compliant vaults, and reverting post-deposit
+                // on a non-compliant vault would leave the intent stuck (the vault is committed
+                // in signalHookData, so relayers cannot retry against a different vault).
+                uint256 actualShares = IERC20(commitment.vault).balanceOf(commitment.sharesReceiver) - sharesBefore;
 
                 emit VaultDepositExecuted(
                     _ctx.intentHash,
