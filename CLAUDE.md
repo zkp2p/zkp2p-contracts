@@ -294,5 +294,5 @@ import { Orchestrator } from "@zkp2p/contracts-v2/typechain";
 | Skill | Description |
 |-------|-------------|
 | [zkp2p-contracts-publish](.agents/skills/zkp2p-contracts-publish/SKILL.md) | Bump, build, test, and publish @zkp2p/contracts-v2 to npm |
-| [ship-contracts-and-indexer](.claude/skills/ship-contracts-and-indexer/SKILL.md) | Full deployment pipeline for contracts and indexer updates |
+| [ship-contracts](.claude/skills/ship-contracts/SKILL.md) | Full deployment pipeline: script + tests, local, staging, prod, publish |
 | [audit](.claude/skills/audit/SKILL.md) | Security audits: full, differential, or single checks |
