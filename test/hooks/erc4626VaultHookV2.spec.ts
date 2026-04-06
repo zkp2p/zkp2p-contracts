@@ -303,6 +303,17 @@ describe("ERC4626VaultHookV2", () => {
       });
     });
 
+    describe("when the vault mints shares without pulling the underlying", () => {
+      beforeEach(async () => {
+        // Non-compliant vault: mints shares but never calls transferFrom on the hook.
+        await vault.setSkipAssetPull(true);
+      });
+
+      it("should hard revert with VaultDidNotConsumeAssets", async () => {
+        await expect(subject()).to.be.revertedWithCustomError(hook, "VaultDidNotConsumeAssets");
+      });
+    });
+
     describe("when actual minted shares exceed minSharesOut and the guardrail", () => {
       beforeEach(async () => {
         // Vault gives a bonus: 11/10 ratio. Preview = 55, actual = 55, minSharesOut = 50.

@@ -106,6 +106,11 @@ contract ERC4626VaultHookV2 is IPostIntentHookV2, Ownable {
     /// @dev Reverts fulfillIntent if the vault minted fewer shares than the floor implied by
     ///      `minSharesOut` and the `maxSlippageBps` guardrail. Indicates a non-compliant vault.
     error VaultActualBelowMinimum(uint256 actualShares, uint256 minimumShares);
+    /// @dev Reverts fulfillIntent if the vault did not pull exactly `executableAmount` of the
+    ///      underlying during `deposit()`. Without this check, a non-compliant vault could mint
+    ///      shares while leaving funds stranded in the hook (the Orchestrator's exact-spend
+    ///      invariant would still pass because the orch-to-hook transfer already counts as spent).
+    error VaultDidNotConsumeAssets(uint256 hookAssetsBefore, uint256 hookAssetsAfter, uint256 expectedConsumed);
 
     /* ============ State Variables ============ */
 
@@ -197,11 +202,21 @@ contract ERC4626VaultHookV2 is IPostIntentHookV2, Ownable {
             // Snapshot recipient share balance to compute the authoritative shares delta.
             // We trust this delta over the value returned by deposit() in case the vault is buggy.
             uint256 sharesBefore = IERC20(commitment.vault).balanceOf(commitment.sharesReceiver);
+            // Snapshot hook's underlying balance so we can verify the vault actually pulled
+            // exactly `executableAmount`. Without this, a non-compliant vault could mint shares
+            // while leaving funds stranded in the hook (the Orchestrator's exact-spend invariant
+            // would still pass because the orch-to-hook transfer already counts as spent).
+            uint256 hookAssetsBefore = inputToken.balanceOf(address(this));
 
             // Try the deposit; on revert fall through to the safeTransfer fallback below.
             try IERC4626(commitment.vault).deposit(_ctx.executableAmount, commitment.sharesReceiver) returns (uint256) {
                 // Reset allowance even on success in case the vault under-pulled (defensive).
                 inputToken.safeApprove(commitment.vault, 0);
+
+                uint256 hookAssetsAfter = inputToken.balanceOf(address(this));
+                if (hookAssetsAfter + _ctx.executableAmount != hookAssetsBefore) {
+                    revert VaultDidNotConsumeAssets(hookAssetsBefore, hookAssetsAfter, _ctx.executableAmount);
+                }
 
                 uint256 sharesAfter = IERC20(commitment.vault).balanceOf(commitment.sharesReceiver);
                 uint256 actualShares = sharesAfter - sharesBefore;
