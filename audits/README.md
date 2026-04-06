@@ -12,6 +12,22 @@ audits/
   _scratch/          # Working space (gitignored)
 ```
 
+## Prerequisites
+
+The security-auditor agent requires [Trail of Bits Claude Code plugins](https://github.com/trailofbits/claude-code-plugins) installed globally:
+
+```bash
+claude plugins install @trailofbits/building-secure-contracts
+claude plugins install @trailofbits/audit-context-building
+claude plugins install @trailofbits/static-analysis
+claude plugins install @trailofbits/variant-analysis
+claude plugins install @trailofbits/differential-review
+claude plugins install @trailofbits/entry-point-analyzer
+claude plugins install @trailofbits/sharp-edges
+claude plugins install @trailofbits/property-based-testing
+claude plugins install @trailofbits/semgrep-rule-creator
+```
+
 ## Running Audits
 
 ```
