@@ -172,12 +172,6 @@ utils/                                # TypeScript utilities
   common/                             # Blockchain, units (ether, usdc)
   test/                               # Account helpers, snapshot mgmt
 
-scripts/                              # Operational scripts
-  keeper/                             # Pyth price keeper (Railway cron)
-  pyth_price_keeper.ts                # Pyth price update script (standalone)
-  create-test-deposits.js             # Test deposit creation
-  ns-test-runner*.js                  # Negative spread test runners
-
 packages/contracts/                   # @zkp2p/contracts-v2 NPM package (v0.2.0)
 archive/                              # Legacy verifier contracts (pre-unified)
 tasks/                                # Hardhat custom tasks (etherscan verify with delay)
