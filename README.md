@@ -62,32 +62,11 @@ The v2 system is built around four layers:
 
 ### High-Level Flow
 
-```text
-Maker -> EscrowV2.createDeposit/depositTo
-Taker -> OrchestratorV2.signalIntent
-OrchestratorV2 -> EscrowV2.lockFunds
-OrchestratorV2 -> optional pre-intent hook + optional whitelist hook
-Taker/off-chain agent -> makes fiat payment
-Fulfiller -> OrchestratorV2.fulfillIntent
-OrchestratorV2 -> PaymentVerifierRegistry -> UnifiedPaymentVerifierV2
-UnifiedPaymentVerifierV2 -> attestation verification + nullifier write
-OrchestratorV2 -> EscrowV2.unlockAndTransferFunds
-OrchestratorV2 -> protocol fee / referral fees / manager fee distribution
-OrchestratorV2 -> recipient or post-intent hook
-```
+![ZKP2P V2 Settlement Flow](diagrams/high-level-flow.png)
 
-### Minimal Architecture Diagram
+### Contract Architecture
 
-```text
-Maker ── createDeposit ──> EscrowV2
-Taker/Relayer ── signalIntent ──> OrchestratorV2 ── lockFunds ──> EscrowV2
-OrchestratorV2 ── getVerifier(paymentMethod) ──> PaymentVerifierRegistry ──> UnifiedPaymentVerifierV2
-UnifiedPaymentVerifierV2 ── verify(EIP-712 attestation) ──> AttestationVerifier
-UnifiedPaymentVerifierV2 ── addNullifier(paymentMethod,paymentId) ──> NullifierRegistry
-OrchestratorV2 ── unlockAndTransferFunds ──> EscrowV2
-OrchestratorV2 ── fees ──> protocol / referrers / manager
-OrchestratorV2 ── net funds ──> taker recipient or post-intent hook
-```
+![ZKP2P V2 Contract Architecture](diagrams/architecture.png)
 
 ## V2 Contract Inventory
 
