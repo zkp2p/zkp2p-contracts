@@ -37,3 +37,7 @@ deployments/*/solcInputs/
 
 # Vanity address outputs
 vanity-addresses*.json
+
+# Semgrep / audit tool outputs
+semgrep-results*/
+audits/_scratch/

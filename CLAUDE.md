@@ -288,8 +288,17 @@ import addresses from "@zkp2p/contracts-v2/addresses";
 import { Orchestrator } from "@zkp2p/contracts-v2/typechain";
 ```
 
-## Agent Skills
+## Agents
+
+| Agent | Description |
+|-------|-------------|
+| [contracts-developer](.claude/agents/contracts-developer.md) | ZKP2P contracts expert for EscrowV2, payment verifiers, registry system, hook system |
+| [security-auditor](.claude/agents/security-auditor.md) | Security auditor using Trail of Bits skills for structured audit workflows |
+
+## Skills
 
 | Skill | Description |
 |-------|-------------|
 | [zkp2p-contracts-publish](.agents/skills/zkp2p-contracts-publish/SKILL.md) | Bump, build, test, and publish @zkp2p/contracts-v2 to npm |
+| [ship-contracts-and-indexer](.claude/skills/ship-contracts-and-indexer/SKILL.md) | Full deployment pipeline for contracts and indexer updates |
+| [audit](.claude/skills/audit/SKILL.md) | Security audits: full, differential, or single checks |
