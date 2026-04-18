@@ -58,6 +58,20 @@ export const WITNESS_ADDRESS: any = {
   "base_sepolia": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
 };
 
+export const MULTI_WITNESS_ADDRESSES: Record<string, string[]> = {
+  base: ["0x5106A86819ED6Bb82c77CcBfC151250E1d369DbA"],
+  base_staging: ["0x4ab950AE1e3326578Bf7e643a2031E858aBa2927"],
+  base_sepolia: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"],
+  localhost: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"],
+};
+
+export const MULTI_WITNESS_THRESHOLD: Record<string, number> = {
+  base: 1,
+  base_staging: 1,
+  base_sepolia: 1,
+  localhost: 1,
+};
+
 export const USDC: any = {
   "base": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   "base_staging": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
