@@ -59,8 +59,8 @@ export const WITNESS_ADDRESS: any = {
 };
 
 export const MULTI_WITNESS_ADDRESSES: Record<string, string[]> = {
-  base: ["0x5106A86819ED6Bb82c77CcBfC151250E1d369DbA"],
-  base_staging: ["0x4ab950AE1e3326578Bf7e643a2031E858aBa2927"],
+  base: ["0xDB4Ed7FAF170F0f6493E3adaaCaaFaF47092c754"], // current AWS KMS signer
+  base_staging: ["0x66649F896521b0fb487fE2077b4FBDA283d7f19a"], // current AWS TEE Signer, todo add Railway AWS KSM Signer, and private key signer
   base_sepolia: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"],
   localhost: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"],
 };
