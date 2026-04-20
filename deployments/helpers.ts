@@ -72,6 +72,36 @@ export async function setNewOwner(
   }
 }
 
+export async function setAttestationVerifier(
+  hre: HardhatRuntimeEnvironment,
+  unifiedPaymentVerifierContract: any,
+  newVerifier: Address
+): Promise<void> {
+  const currentOwner = await unifiedPaymentVerifierContract.owner();
+  const currentVerifier = await unifiedPaymentVerifierContract.attestationVerifier();
+
+  if (currentVerifier.toLowerCase() === newVerifier.toLowerCase()) {
+    return;
+  }
+
+  if ((await hre.getUnnamedAccounts()).includes(currentOwner)) {
+    console.log(`Setting attestationVerifier on ${unifiedPaymentVerifierContract.address} to ${newVerifier}`);
+    const data = unifiedPaymentVerifierContract.interface.encodeFunctionData("setAttestationVerifier", [newVerifier]);
+    await sendDeploymentTransaction(hre, {
+      from: currentOwner,
+      to: unifiedPaymentVerifierContract.address,
+      data,
+    });
+  } else {
+    const data = unifiedPaymentVerifierContract.interface.encodeFunctionData("setAttestationVerifier", [newVerifier]);
+    safeBatchCollector.add(
+      unifiedPaymentVerifierContract.address,
+      data,
+      `UnifiedPaymentVerifierV2.setAttestationVerifier(${newVerifier})`
+    );
+  }
+}
+
 export async function setOrchestrator(
   hre: HardhatRuntimeEnvironment,
   contract: any,
