@@ -212,11 +212,9 @@ describe("V2 System Deployment", () => {
       expect(actualAddress).to.eq(expectedAddress);
     });
 
-    it("should have the correct attestation verifier", async () => {
-      const expectedAddress = getDeployedContractAddress(network, "SimpleAttestationVerifier");
-      const actualAddress = await unifiedPaymentVerifierV2.attestationVerifier();
-      expect(actualAddress).to.eq(expectedAddress);
-    });
+    // Attestation verifier on UPV-V2 has moved from SimpleAttestationVerifier to
+    // MultiAttestationVerifier (localhost/base_staging: wired in deploy script 24; base:
+    // wired via multisig Safe batch). Coverage lives in test/deploy/24_multiAttestationVerifier.spec.ts.
 
     it("should have write permission on NullifierRegistry", async () => {
       const hasPermission = await nullifierRegistry.isWriter(unifiedPaymentVerifierV2.address);

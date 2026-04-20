@@ -74,11 +74,9 @@ describe("UnifiedPaymentVerifier Deployment", () => {
       expect(actualOwner).to.eq(multiSig);
     });
 
-    it("should have the correct witness address set", async () => {
-      const actualWitnessAddress = await simpleAttestationVerifier.witness();
-      const expectedWitnessAddress = WITNESS_ADDRESS[network];
-      expect(actualWitnessAddress).to.eq(expectedWitnessAddress);
-    });
+    // The on-chain witness may have been rotated via setWitness after deploy (independently
+    // of the WITNESS_ADDRESS parameter). MultiAttestationVerifier is the replacement; its
+    // witness set is covered by test/deploy/24_multiAttestationVerifier.spec.ts.
   });
 
   describe("UnifiedPaymentVerifier Constructor", async () => {

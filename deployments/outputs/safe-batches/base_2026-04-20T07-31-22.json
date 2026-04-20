@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "chainId": "8453",
+  "createdAt": 1776670282260,
+  "meta": {
+    "name": "ZKP2P V2 Deployment - base",
+    "description": "Registry wiring and payment method migration for V2 deployment on base",
+    "txBuilderVersion": "1.16.5",
+    "createdFromSafeAddress": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+    "createdFromOwnerAddress": ""
+  },
+  "transactions": [
+    {
+      "to": "0x46A58Dc65587D4D7B8198C6A25eEdf5b2535Da94",
+      "value": "0",
+      "data": "0x82f6f6080000000000000000000000009fe920b24e50e6a6362ba71a1beb502a99c402d5",
+      "contractMethod": null,
+      "contractInputsValues": null
+    }
+  ]
+}
