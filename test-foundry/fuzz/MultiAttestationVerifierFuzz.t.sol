@@ -8,38 +8,10 @@ import { MultiAttestationVerifier } from "../../contracts/unifiedVerifier/MultiA
 contract MultiAttestationVerifierFuzz is Test {
     uint256 internal constant MAX_WITNESSES = 5;
 
-    address public owner;
+    MultiAttestationVerifier public verifier;
 
     function setUp() public {
-        owner = makeAddr("owner");
-    }
-
-    function testFuzz_addRemoveAddRoundTripPreservesWitnessCount(uint256 newWitnessPrivateKey) public {
-        address[] memory initialWitnesses = new address[](2);
-        initialWitnesses[0] = vm.addr(1);
-        initialWitnesses[1] = vm.addr(2);
-
-        MultiAttestationVerifier verifier = _deployVerifier(initialWitnesses, 1);
-
-        newWitnessPrivateKey = bound(newWitnessPrivateKey, 3, type(uint128).max);
-        address newWitness = vm.addr(newWitnessPrivateKey);
-
-        uint256 initialCount = verifier.witnessCount();
-
-        vm.prank(owner);
-        verifier.addWitness(newWitness);
-        uint256 countAfterFirstAdd = verifier.witnessCount();
-
-        vm.prank(owner);
-        verifier.removeWitness(newWitness);
-        uint256 countAfterRemove = verifier.witnessCount();
-
-        vm.prank(owner);
-        verifier.addWitness(newWitness);
-
-        assertEq(countAfterFirstAdd, initialCount + 1);
-        assertEq(countAfterRemove, initialCount);
-        assertEq(verifier.witnessCount(), countAfterFirstAdd);
+        verifier = new MultiAttestationVerifier();
     }
 
     function testFuzz_verifyMatchesRandomSubset(
@@ -52,7 +24,7 @@ contract MultiAttestationVerifierFuzz is Test {
         uint256 requiredSignatures = bound(uint256(thresholdSeed), 1, witnessCount);
 
         (address[] memory witnesses, uint256[] memory privateKeys) = _buildWitnessSet(witnessCount);
-        MultiAttestationVerifier verifier = _deployVerifier(witnesses, requiredSignatures);
+        bytes memory witnessConfig = abi.encode(witnesses, requiredSignatures);
 
         bytes32 messageHash = keccak256(
             abi.encodePacked("multi-attestation-verifier-fuzz", messageSeed, witnessCount, requiredSignatures)
@@ -78,20 +50,12 @@ contract MultiAttestationVerifierFuzz is Test {
         bool shouldVerify = selectedCount >= requiredSignatures;
 
         if (shouldVerify) {
-            bool isValid = verifier.verify(digest, signatures, "");
+            bool isValid = verifier.verify(digest, signatures, witnessConfig);
             assertTrue(isValid);
         } else {
             vm.expectRevert();
-            verifier.verify(digest, signatures, "");
+            verifier.verify(digest, signatures, witnessConfig);
         }
-    }
-
-    function _deployVerifier(
-        address[] memory initialWitnesses,
-        uint256 initialThreshold
-    ) internal returns (MultiAttestationVerifier deployedVerifier) {
-        vm.prank(owner);
-        deployedVerifier = new MultiAttestationVerifier(initialWitnesses, initialThreshold);
     }
 
     function _buildWitnessSet(

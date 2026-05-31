@@ -5,14 +5,8 @@ import { DeployFunction } from "hardhat-deploy/types";
 import { ethers } from "hardhat";
 
 import {
-  MULTI_SIG,
-  MULTI_WITNESS_ADDRESSES,
-  MULTI_WITNESS_THRESHOLD,
-} from "../deployments/parameters";
-import {
   getDeployedContractAddress,
   setAttestationVerifier,
-  setNewOwner,
 } from "../deployments/helpers";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
@@ -20,23 +14,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const network = hre.deployments.getNetworkName();
 
   const [deployer] = await hre.getUnnamedAccounts();
-  const multiSig = MULTI_SIG[network] ? MULTI_SIG[network] : deployer;
-
-  const initialWitnesses = MULTI_WITNESS_ADDRESSES[network];
-  const initialThreshold = MULTI_WITNESS_THRESHOLD[network];
-
-  if (!initialWitnesses || initialWitnesses.length === 0) {
-    throw new Error(`No MultiAttestationVerifier witnesses configured for ${network}`);
-  }
-
-  if (!initialThreshold) {
-    throw new Error(`No MultiAttestationVerifier threshold configured for ${network}`);
-  }
 
   // 1. Deploy MultiAttestationVerifier.
   const multiAttestationVerifier = await deploy("MultiAttestationVerifier", {
     from: deployer,
-    args: [initialWitnesses, initialThreshold],
+    args: [],
   });
   console.log("MultiAttestationVerifier deployed at", multiAttestationVerifier.address);
 
@@ -51,15 +33,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const upvV2Address = getDeployedContractAddress(network, "UnifiedPaymentVerifierV2");
   const upvV2 = await ethers.getContractAt("UnifiedPaymentVerifier", upvV2Address);
   await setAttestationVerifier(hre, upvV2, multiAttestationVerifier.address);
-
-  // 3. Transfer MultiAttestationVerifier ownership to the multisig. On networks where the
-  //    multisig is the deployer (localhost, base_staging, base_sepolia) this is a no-op.
-  const multiAttestationVerifierContract = await ethers.getContractAt(
-    "MultiAttestationVerifier",
-    multiAttestationVerifier.address
-  );
-  await setNewOwner(hre, multiAttestationVerifierContract, multiSig);
-  console.log("MultiAttestationVerifier ownership transferred to", multiSig);
 };
 
 func.tags = ["MultiAttestationVerifier"];

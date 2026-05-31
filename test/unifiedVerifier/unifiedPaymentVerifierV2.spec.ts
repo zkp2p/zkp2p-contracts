@@ -14,13 +14,13 @@ import {
   OrchestratorV2,
   PaymentVerifierRegistry,
   RelayerRegistry,
-  SimpleAttestationVerifier,
   UnifiedPaymentVerifier,
   USDCMock,
 } from "@utils/contracts";
 import { buildUnifiedPaymentProof } from "@utils/unifiedVerifierUtils";
 import { Currency } from "@utils/protocolUtils";
 import { ADDRESS_ZERO, EMPTY_ORACLE_RATE_CONFIG, ONE, ZERO } from "@utils/constants";
+import { MultiAttestationVerifier } from "../../typechain";
 
 const expect = getWaffleExpect();
 const ZERO_BYTES = "0x";
@@ -42,7 +42,7 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
   let nullifierRegistry: NullifierRegistry;
   let escrow: EscrowV2;
   let orchestrator: OrchestratorV2;
-  let attestationVerifier: SimpleAttestationVerifier;
+  let attestationVerifier: MultiAttestationVerifier;
   let verifier: UnifiedPaymentVerifier;
 
   let chainId: number;
@@ -52,6 +52,7 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
   let intentAmount: BigNumber;
   let conversionRate: BigNumber;
   let currency: BytesLike;
+  let witnessConfig: string;
 
   beforeEach(async () => {
     [owner, attacker, maker, taker, witness] = await getAccounts();
@@ -87,7 +88,7 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
       owner.address,
     );
 
-    attestationVerifier = await deployer.deploySimpleAttestationVerifier(witness.address);
+    attestationVerifier = await deployMultiAttestationVerifier();
     verifier = await deployer.deployUnifiedPaymentVerifier(
       orchestratorRegistry.address,
       nullifierRegistry.address,
@@ -103,6 +104,7 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
     payeeId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("payee-v2"));
     conversionRate = ethers.utils.parseEther("1");
     intentAmount = ethers.utils.parseUnits("50", 6);
+    witnessConfig = encodeWitnessConfig([witness.address], 1);
 
     await verifier.addPaymentMethod(paymentMethod);
     await paymentVerifierRegistry.addPaymentMethod(paymentMethod, verifier.address, [currency]);
@@ -118,7 +120,7 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
       paymentMethodData: [{
         intentGatingService: ADDRESS_ZERO,
         payeeDetails: payeeId,
-        data: ZERO_BYTES,
+        data: witnessConfig,
       }],
       currencies: [[{ code: currency, minConversionRate: conversionRate, oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
       delegate: ADDRESS_ZERO,
@@ -126,11 +128,18 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
       retainOnEmpty: false,
     });
 
-    const signalTx = await orchestrator.connect(taker.wallet).signalIntent({
+    intentHash = await signalIntent(ZERO);
+  });
+
+  async function signalIntent(
+    depositId: BigNumber,
+    intentOwner: Account = taker
+  ): Promise<BytesLike> {
+    const signalTx = await orchestrator.connect(intentOwner.wallet).signalIntent({
       escrow: escrow.address,
-      depositId: ZERO,
+      depositId,
       amount: intentAmount,
-      to: taker.address,
+      to: intentOwner.address,
       paymentMethod,
       fiatCurrency: currency,
       conversionRate,
@@ -144,17 +153,41 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
 
     const signalReceipt = await signalTx.wait();
     const intentSignaledEvent = signalReceipt.events?.find((event: any) => event.event === "IntentSignaled");
-    intentHash = intentSignaledEvent?.args?.intentHash;
-  });
+    return intentSignaledEvent?.args?.intentHash;
+  }
 
-  it("fulfills a V2 intent using UnifiedPaymentVerifier", async () => {
-    const intent = await orchestrator.getIntent(intentHash);
+  async function deployMultiAttestationVerifier(): Promise<MultiAttestationVerifier> {
+    const verifierFactory = await ethers.getContractFactory(
+      "MultiAttestationVerifier",
+      owner.wallet
+    );
+
+    const deployedVerifier = await verifierFactory.deploy();
+    await deployedVerifier.deployed();
+
+    return deployedVerifier as MultiAttestationVerifier;
+  }
+
+  function encodeWitnessConfig(witnesses: string[], requiredSignatures: number): string {
+    return ethers.utils.defaultAbiCoder.encode(
+      ["address[]", "uint256"],
+      [witnesses, requiredSignatures],
+    );
+  }
+
+  async function buildProofForIntent(
+    targetIntentHash: BytesLike,
+    paymentIdLabel: string,
+    attestationSigner: Account = witness
+  ) {
+    const intent = await orchestrator.getIntent(targetIntentHash);
     const paymentTimestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp).mul(1000);
-    const paymentId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("payment-v2"));
+    const paymentId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(paymentIdLabel));
 
-    const builtProof = await buildUnifiedPaymentProof({
+    return buildUnifiedPaymentProof({
       verifier: verifier.address,
       witness,
+      attestationSigner,
       chainId,
       paymentPaymentMethod: paymentMethod,
       paymentPayeeId: payeeId,
@@ -162,9 +195,9 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
       paymentCurrency: currency,
       paymentTimestamp,
       paymentPaymentId: paymentId,
-      attestationIntentHash: intentHash,
+      attestationIntentHash: targetIntentHash,
       attestationReleaseAmount: intent.amount,
-      snapshotIntentHash: intentHash,
+      snapshotIntentHash: targetIntentHash,
       snapshotIntentAmount: intent.amount,
       snapshotIntentPaymentMethod: paymentMethod,
       snapshotIntentFiatCurrency: currency,
@@ -172,10 +205,14 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
       snapshotIntentConversionRate: intent.conversionRate,
       snapshotIntentSignalTimestamp: intent.timestamp,
       snapshotIntentTimestampBuffer: ZERO,
-      intentDepositId: ZERO,
-      intentEscrow: escrow.address,
-      intentTo: taker.address,
+      intentDepositId: intent.depositId,
+      intentEscrow: intent.escrow,
+      intentTo: intent.to,
     });
+  }
+
+  it("fulfills a V2 intent using UnifiedPaymentVerifier", async () => {
+    const builtProof = await buildProofForIntent(intentHash, "payment-v2");
 
     const takerBalanceBefore = await usdcToken.balanceOf(taker.address);
 
@@ -183,7 +220,7 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
       orchestrator.connect(attacker.wallet).fulfillIntent({
         paymentProof: builtProof.paymentProof,
         intentHash,
-        verificationData: ZERO_BYTES,
+        verificationData: encodeWitnessConfig([attacker.address], 1),
         postIntentHookData: ZERO_BYTES,
       }),
     )
@@ -200,5 +237,68 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
 
     const takerBalanceAfter = await usdcToken.balanceOf(taker.address);
     expect(takerBalanceAfter.sub(takerBalanceBefore)).to.eq(intentAmount);
+  });
+
+  it("rejects signatures outside the depositor-selected witness config even when verificationData is tampered", async () => {
+    const builtProof = await buildProofForIntent(
+      intentHash,
+      "tampered-witness-payment-v2",
+      attacker
+    );
+
+    await expect(
+      orchestrator.connect(attacker.wallet).fulfillIntent({
+        paymentProof: builtProof.paymentProof,
+        intentHash,
+        verificationData: encodeWitnessConfig([attacker.address], 1),
+        postIntentHookData: ZERO_BYTES,
+      }),
+    ).to.be.revertedWith(
+      "ThresholdSigVerifierUtils: Not enough valid witness signatures"
+    );
+  });
+
+  it("uses the witness config from each deposit for the same payment method", async () => {
+    await escrow.connect(maker.wallet).createDeposit({
+      token: usdcToken.address,
+      amount: ethers.utils.parseUnits("100", 6),
+      intentAmountRange: { min: ethers.utils.parseUnits("10", 6), max: ethers.utils.parseUnits("200", 6) },
+      paymentMethods: [paymentMethod],
+      paymentMethodData: [{
+        intentGatingService: ADDRESS_ZERO,
+        payeeDetails: payeeId,
+        data: encodeWitnessConfig([attacker.address], 1),
+      }],
+      currencies: [[{ code: currency, minConversionRate: conversionRate, oracleRateConfig: EMPTY_ORACLE_RATE_CONFIG }]],
+      delegate: ADDRESS_ZERO,
+      intentGuardian: ADDRESS_ZERO,
+      retainOnEmpty: false,
+    });
+
+    const secondIntentHash = await signalIntent(ONE, attacker);
+    const builtProof = await buildProofForIntent(
+      secondIntentHash,
+      "second-deposit-witness-payment-v2",
+      attacker
+    );
+
+    await expect(
+      orchestrator.connect(witness.wallet).fulfillIntent({
+        paymentProof: builtProof.paymentProof,
+        intentHash: secondIntentHash,
+        verificationData: encodeWitnessConfig([witness.address], 1),
+        postIntentHookData: ZERO_BYTES,
+      }),
+    )
+      .to.emit(verifier, "PaymentVerified")
+      .withArgs(
+        secondIntentHash,
+        paymentMethod,
+        currency,
+        builtProof.paymentDetails.amount,
+        builtProof.paymentDetails.timestamp,
+        builtProof.paymentDetails.paymentId,
+        builtProof.paymentDetails.payeeId,
+      );
   });
 });

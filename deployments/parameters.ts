@@ -58,23 +58,6 @@ export const WITNESS_ADDRESS: any = {
   "base_sepolia": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
 };
 
-export const MULTI_WITNESS_ADDRESSES: Record<string, string[]> = {
-  base: ["0xDB4Ed7FAF170F0f6493E3adaaCaaFaF47092c754"], // current AWS KMS signer
-  base_staging: [
-    "0x66649F896521b0fb487fE2077b4FBDA283d7f19a", // current AWS Nitro TEE signer
-    "0x4ab950AE1e3326578Bf7e643a2031E858aBa2927", // current Railway staging signer (SIGNER_MODE=local)
-  ],
-  base_sepolia: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"],
-  localhost: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"],
-};
-
-export const MULTI_WITNESS_THRESHOLD: Record<string, number> = {
-  base: 1,
-  base_staging: 1,
-  base_sepolia: 1,
-  localhost: 1,
-};
-
 export const USDC: any = {
   "base": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   "base_staging": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
