@@ -112,6 +112,144 @@ contract MultiAttestationVerifierUnit is Test {
         verifier.setRequiredSignatures(3);
     }
 
+    /* ============ resolveAttestors ============ */
+
+    function test_resolveAttestors_emptyDataReturnsProtocolSet() public {
+        (address[] memory attestors, uint256 threshold) = verifier.resolveAttestors("");
+
+        assertEq(attestors.length, 2);
+        assertEq(attestors[0], witnessA);
+        assertEq(attestors[1], witnessB);
+        assertEq(threshold, 1);
+    }
+
+    function test_resolveAttestors_untaggedDataReturnsProtocolSet() public {
+        // Legacy deposit data format: bare abi-encoded address array
+        bytes memory legacyData = abi.encode(_singleWitness(witnessC));
+
+        (address[] memory attestors, uint256 threshold) = verifier.resolveAttestors(legacyData);
+
+        assertEq(attestors.length, 2);
+        assertEq(attestors[0], witnessA);
+        assertEq(attestors[1], witnessB);
+        assertEq(threshold, 1);
+    }
+
+    function test_resolveAttestors_taggedDataReturnsOverrideSet() public {
+        address customAttestor = makeAddr("customAttestor");
+        bytes memory overrideData = _encodeOverride(_singleWitness(customAttestor), 1);
+
+        (address[] memory attestors, uint256 threshold) = verifier.resolveAttestors(overrideData);
+
+        assertEq(attestors.length, 1);
+        assertEq(attestors[0], customAttestor);
+        assertEq(threshold, 1);
+    }
+
+    function test_resolveAttestors_revertsOnEmptyOverrideAttestors() public {
+        bytes memory overrideData = _encodeOverride(new address[](0), 1);
+
+        vm.expectRevert("MAV: empty override attestors");
+        verifier.resolveAttestors(overrideData);
+    }
+
+    function test_resolveAttestors_revertsWhenOverrideExceedsMaxAttestors() public {
+        uint256 attestorCount = verifier.MAX_OVERRIDE_ATTESTORS() + 1;
+        address[] memory attestors = new address[](attestorCount);
+        for (uint256 i = 0; i < attestorCount; i++) {
+            attestors[i] = vm.addr(i + 1);
+        }
+        bytes memory overrideData = _encodeOverride(attestors, 1);
+
+        vm.expectRevert("MAV: too many override attestors");
+        verifier.resolveAttestors(overrideData);
+    }
+
+    function test_resolveAttestors_revertsOnZeroOverrideThreshold() public {
+        bytes memory overrideData = _encodeOverride(_singleWitness(witnessC), 0);
+
+        vm.expectRevert("MAV: override threshold must be > 0");
+        verifier.resolveAttestors(overrideData);
+    }
+
+    function test_resolveAttestors_revertsWhenOverrideThresholdExceedsCount() public {
+        bytes memory overrideData = _encodeOverride(_singleWitness(witnessC), 2);
+
+        vm.expectRevert("MAV: override threshold exceeds count");
+        verifier.resolveAttestors(overrideData);
+    }
+
+    function test_resolveAttestors_revertsOnZeroOverrideAttestor() public {
+        address[] memory attestors = new address[](2);
+        attestors[0] = witnessC;
+        attestors[1] = address(0);
+        bytes memory overrideData = _encodeOverride(attestors, 1);
+
+        vm.expectRevert("MAV: zero override attestor");
+        verifier.resolveAttestors(overrideData);
+    }
+
+    function test_resolveAttestors_revertsOnDuplicateOverrideAttestor() public {
+        address[] memory attestors = new address[](2);
+        attestors[0] = witnessC;
+        attestors[1] = witnessC;
+        bytes memory overrideData = _encodeOverride(attestors, 1);
+
+        vm.expectRevert("MAV: duplicate override attestor");
+        verifier.resolveAttestors(overrideData);
+    }
+
+    function test_resolveAttestors_revertsOnTaggedButMalformedData() public {
+        bytes memory malformedData = abi.encodePacked(verifier.ATTESTOR_OVERRIDE_TAG());
+
+        vm.expectRevert();
+        verifier.resolveAttestors(malformedData);
+    }
+
+    /* ============ verify with override ============ */
+
+    function test_verify_overrideAcceptsCustomAttestorSignature() public {
+        (address customAttestor, uint256 customAttestorKey) = makeAddrAndKey("customAttestor");
+        bytes32 digest = keccak256("attestation digest");
+
+        bytes[] memory signatures = new bytes[](1);
+        signatures[0] = _signDigest(customAttestorKey, digest);
+
+        bool isValid = verifier.verify(digest, signatures, _encodeOverride(_singleWitness(customAttestor), 1));
+
+        assertTrue(isValid);
+    }
+
+    function test_verify_overrideRejectsProtocolWitnessSignature() public {
+        (address protocolWitness, uint256 protocolWitnessKey) = makeAddrAndKey("protocolWitness");
+        address customAttestor = makeAddr("customAttestor");
+
+        MultiAttestationVerifier signingVerifier = _deployVerifier(_singleWitness(protocolWitness), 1);
+
+        bytes32 digest = keccak256("attestation digest");
+        bytes[] memory signatures = new bytes[](1);
+        signatures[0] = _signDigest(protocolWitnessKey, digest);
+        bytes memory overrideData = _encodeOverride(_singleWitness(customAttestor), 1);
+
+        // Sanity: the protocol witness signature verifies without an override
+        assertTrue(signingVerifier.verify(digest, signatures, ""));
+
+        vm.expectRevert("ThresholdSigVerifierUtils: Not enough valid witness signatures");
+        signingVerifier.verify(digest, signatures, overrideData);
+    }
+
+    function _encodeOverride(
+        address[] memory attestors,
+        uint256 threshold
+    ) internal view returns (bytes memory overrideData) {
+        overrideData = abi.encode(verifier.ATTESTOR_OVERRIDE_TAG(), attestors, threshold);
+    }
+
+    function _signDigest(uint256 privateKey, bytes32 digest) internal pure returns (bytes memory signature) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
+        signature = abi.encodePacked(r, s, v);
+    }
+
     function _deployVerifier(
         address[] memory initialWitnesses,
         uint256 initialThreshold

@@ -100,6 +100,26 @@ export async function createAttestation(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Depositor attestor override helpers                                        */
+/* -------------------------------------------------------------------------- */
+
+// keccak256("zkp2p.attestorOverride.v1"); must match MultiAttestationVerifier.ATTESTOR_OVERRIDE_TAG
+export const ATTESTOR_OVERRIDE_TAG = ethers.utils.keccak256(
+  ethers.utils.toUtf8Bytes("zkp2p.attestorOverride.v1")
+);
+
+// Encodes a depositor attestor override for DepositPaymentMethodData.data
+export function encodeAttestorOverride(
+  attestors: Address[],
+  threshold: BigNumber | number
+): string {
+  return ethers.utils.defaultAbiCoder.encode(
+    ["bytes32", "address[]", "uint256"],
+    [ATTESTOR_OVERRIDE_TAG, attestors, threshold]
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* New Unified Payment Verifier helpers                                       */
 /* -------------------------------------------------------------------------- */
 
@@ -164,6 +184,7 @@ export interface BuildPaymentProofOverrides {
   attestationData?: BytesLike;
   attestationMetadata?: BytesLike;
   attestationSigner?: Account;
+  attestationSigners?: Account[];
   snapshotIntentHash?: BytesLike;
   snapshotIntentAmount?: BigNumber;
   snapshotIntentPaymentMethod?: BytesLike;
@@ -250,6 +271,7 @@ export async function buildUnifiedPaymentProof({
   paymentTimestamp,
   paymentPaymentId,
   attestationSigner,
+  attestationSigners,
   attestationIntentHash,
   attestationReleaseAmount,
   attestationDataHash,
@@ -299,17 +321,19 @@ export async function buildUnifiedPaymentProof({
   const attReleaseAmount = attestationReleaseAmount ?? paymentDetails.amount;
   const attDataHash = attestationDataHash ?? dataHash;
   const attMetadata = attestationMetadata ?? ZERO_BYTES;
-  const signerAccount = attestationSigner ?? witness;
+  const signerAccounts = attestationSigners ?? [attestationSigner ?? witness];
   const attData = attestationData ?? encodedPaymentDetails;
 
-  const signature = await signUnifiedPaymentAttestation(signerAccount, verifier, {
-    intentHash: attIntentHash,
-    releaseAmount: attReleaseAmount,
-    dataHash: attDataHash,
-    chainId,
-  });
-
-  const signatures = [signature];
+  const signatures = await Promise.all(
+    signerAccounts.map((signerAccount) =>
+      signUnifiedPaymentAttestation(signerAccount, verifier, {
+        intentHash: attIntentHash,
+        releaseAmount: attReleaseAmount,
+        dataHash: attDataHash,
+        chainId,
+      })
+    )
+  );
 
   const paymentProof = ethers.utils.defaultAbiCoder.encode(
     ["tuple(bytes32,uint256,bytes32,bytes[],bytes,bytes)"],

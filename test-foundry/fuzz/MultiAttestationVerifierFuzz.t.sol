@@ -86,6 +86,88 @@ contract MultiAttestationVerifierFuzz is Test {
         }
     }
 
+    function testFuzz_overrideVerifyMatchesRandomSubset(
+        uint8 attestorCountSeed,
+        uint8 thresholdSeed,
+        uint256 signatureMaskSeed,
+        uint256 messageSeed
+    ) public {
+        // Protocol witness set is disjoint from the custom attestor set by construction
+        address[] memory protocolWitnesses = new address[](2);
+        protocolWitnesses[0] = vm.addr(1);
+        protocolWitnesses[1] = vm.addr(2);
+
+        MultiAttestationVerifier verifier = _deployVerifier(protocolWitnesses, 1);
+
+        uint256 attestorCount = bound(uint256(attestorCountSeed), 1, MAX_WITNESSES);
+        uint256 overrideThreshold = bound(uint256(thresholdSeed), 1, attestorCount);
+
+        (address[] memory attestors, uint256[] memory privateKeys) = _buildWitnessSet(attestorCount);
+        bytes memory overrideData = abi.encode(verifier.ATTESTOR_OVERRIDE_TAG(), attestors, overrideThreshold);
+
+        bytes32 digest = keccak256(
+            abi.encodePacked("attestor-override-fuzz", messageSeed, attestorCount, overrideThreshold)
+        );
+
+        uint256 selectionSpace = uint256(1) << attestorCount;
+        uint256 signatureMask = signatureMaskSeed % selectionSpace;
+        uint256 selectedCount = _countSelectedWitnesses(signatureMask, attestorCount);
+
+        bytes[] memory signatures = new bytes[](selectedCount);
+        uint256 signatureIndex = 0;
+
+        for (uint256 attestorIndex = 0; attestorIndex < attestorCount; attestorIndex++) {
+            if ((signatureMask & (uint256(1) << attestorIndex)) != 0) {
+                signatures[signatureIndex] = _signDigest(privateKeys[attestorIndex], digest);
+                signatureIndex++;
+            }
+        }
+
+        bool shouldVerify = selectedCount >= overrideThreshold;
+
+        if (shouldVerify) {
+            assertTrue(verifier.verify(digest, signatures, overrideData));
+        } else {
+            vm.expectRevert();
+            verifier.verify(digest, signatures, overrideData);
+        }
+
+        // A protocol witness signature alone never satisfies an override; with an override
+        // threshold above one the library rejects the undersized signature array first
+        bytes[] memory protocolSignatures = new bytes[](1);
+        protocolSignatures[0] = _signDigest(1, digest);
+
+        if (overrideThreshold > 1) {
+            vm.expectRevert("ThresholdSigVerifierUtils: req threshold exceeds signatures");
+        } else {
+            vm.expectRevert("ThresholdSigVerifierUtils: Not enough valid witness signatures");
+        }
+        verifier.verify(digest, protocolSignatures, overrideData);
+    }
+
+    function testFuzz_untaggedDataResolvesToProtocolSet(bytes memory data) public {
+        address[] memory protocolWitnesses = new address[](2);
+        protocolWitnesses[0] = vm.addr(1);
+        protocolWitnesses[1] = vm.addr(2);
+
+        MultiAttestationVerifier verifier = _deployVerifier(protocolWitnesses, 2);
+
+        if (data.length >= 32) {
+            bytes32 firstWord;
+            assembly {
+                firstWord := mload(add(data, 32))
+            }
+            vm.assume(firstWord != verifier.ATTESTOR_OVERRIDE_TAG());
+        }
+
+        (address[] memory attestors, uint256 threshold) = verifier.resolveAttestors(data);
+
+        assertEq(attestors.length, 2);
+        assertEq(attestors[0], protocolWitnesses[0]);
+        assertEq(attestors[1], protocolWitnesses[1]);
+        assertEq(threshold, 2);
+    }
+
     function _deployVerifier(
         address[] memory initialWitnesses,
         uint256 initialThreshold

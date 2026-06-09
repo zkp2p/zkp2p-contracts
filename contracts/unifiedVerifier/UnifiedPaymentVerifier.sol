@@ -141,14 +141,14 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
         PaymentAttestation memory attestation = _decodeAttestation(_verifyPaymentData.paymentProof);
         
         (
-            PaymentDetails memory paymentDetails, 
+            PaymentDetails memory paymentDetails,
             IntentSnapshot memory intentSnapshot
         ) = _decodeAttestationPayload(attestation.data);
         require(isPaymentMethod[paymentDetails.method], "UPV: Invalid payment method");
-        
-        _validateIntentSnapshot(_verifyPaymentData.intentHash, intentSnapshot);
 
-        bool isValid = _verifyAttestation(attestation);
+        bytes memory depositData = _validateIntentSnapshotAndGetDepositData(_verifyPaymentData.intentHash, intentSnapshot);
+
+        bool isValid = _verifyAttestation(attestation, depositData);
         require(isValid, "UPV: Invalid attestation");
                 
         // Nullify the payment to prevent double-spending
@@ -182,10 +182,15 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
     }
 
     /**
-     * Verifies the EIP-712 attestation using the attestation verifier. Also verifies the integrity of the 
-     * verify payment data using the data hash attached to the attestation.
+     * Verifies the EIP-712 attestation using the attestation verifier. Also verifies the integrity of the
+     * verify payment data using the data hash attached to the attestation. The deposit's verification data
+     * is forwarded to the attestation verifier so it can resolve the attestor set the depositor trusts
+     * (e.g. a depositor attestor override on MultiAttestationVerifier).
      */
-    function _verifyAttestation(PaymentAttestation memory attestation) internal view returns (bool) {
+    function _verifyAttestation(
+        PaymentAttestation memory attestation,
+        bytes memory depositData
+    ) internal view returns (bool) {
         bytes32 structHash = keccak256(
             abi.encode(
                 PAYMENT_ATTESTATION_TYPEHASH,
@@ -210,23 +215,29 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
         );
 
         bool isValid = attestationVerifier.verify(
-            digest, 
+            digest,
             attestation.signatures,
-            attestation.data
+            depositData
         );
 
         return isValid;
     }
 
     /**
-     * Reads intent data from the Orchestrator and checks them against the intent data provided by the 
-     * attestation verifier.
+     * Reads intent data from the Orchestrator and checks them against the intent data provided by the
+     * attestation verifier. Returns the deposit's payment method verification data, read from the escrow
+     * the intent points to, so the attestation can be verified against the attestor set the depositor
+     * trusts. Reverts if the escrow doesn't expose the deposit data rather than falling back, so a
+     * depositor's custom trust policy can never be silently downgraded to the protocol witness set.
      */
-    function _validateIntentSnapshot(
+    function _validateIntentSnapshotAndGetDepositData(
         bytes32 intentHash,
         IntentSnapshot memory snapshot
-    ) internal view {
+    ) internal view returns (bytes memory depositData) {
         require(snapshot.intentHash == intentHash, "UPV: Snapshot hash mismatch");
+
+        address escrow;
+        uint256 depositId;
 
         if (_isV2Orchestrator(msg.sender)) {
             IOrchestratorV2.Intent memory intentV2 = IOrchestratorV2(msg.sender).getIntent(intentHash);
@@ -239,6 +250,8 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
                 intentV2.conversionRate,
                 intentV2.timestamp
             );
+            escrow = intentV2.escrow;
+            depositId = intentV2.depositId;
         } else {
             IOrchestrator.Intent memory intent = IOrchestrator(msg.sender).getIntent(intentHash);
             _validateSnapshotAgainstIntent(
@@ -250,9 +263,13 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
                 intent.conversionRate,
                 intent.timestamp
             );
+            escrow = intent.escrow;
+            depositId = intent.depositId;
         }
 
         require(snapshot.timestampBuffer <= MAX_TIMESTAMP_BUFFER, "UPV: Snapshot timestamp buffer exceeds maximum");
+
+        depositData = IEscrow(escrow).getDepositPaymentMethodData(depositId, snapshot.paymentMethod).data;
     }
 
     function _validateSnapshotAgainstIntent(
