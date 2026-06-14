@@ -24,6 +24,26 @@ function createJsonModule(content: string, format: 'esm' | 'cjs'): string {
   return `const data = ${serialized};\nmodule.exports = data;\nmodule.exports.default = data;\n`;
 }
 
+function rewriteEsmSpecifier(specifier: string): string {
+  if (specifier.endsWith('.json')) {
+    return specifier.replace(/\.json$/, '.js');
+  }
+  if (/\.(js|mjs|cjs)$/.test(specifier)) {
+    return specifier;
+  }
+  return `${specifier}.js`;
+}
+
+function rewriteEsmRelativeImports(source: string): string {
+  return source
+    .replace(/(from\s+["'])(\.{1,2}\/[^"']+)(["'])/g, (_match, prefix, specifier, suffix) => {
+      return `${prefix}${rewriteEsmSpecifier(specifier)}${suffix}`;
+    })
+    .replace(/(import\s+["'])(\.{1,2}\/[^"']+)(["'])/g, (_match, prefix, specifier, suffix) => {
+      return `${prefix}${rewriteEsmSpecifier(specifier)}${suffix}`;
+    });
+}
+
 function compileModule(moduleName: string, format: 'esm' | 'cjs') {
   const inputDir = path.join(PKG_ROOT, moduleName);
   const outputDir = path.join(PKG_ROOT, format === 'esm' ? '_esm' : '_cjs', moduleName);
@@ -53,24 +73,19 @@ function compileModule(moduleName: string, format: 'esm' | 'cjs') {
         // Compile TypeScript files
         const source = fs.readFileSync(inputPath, 'utf8');
 
-        // Simple transformation for imports/exports
-        let transformed = source;
+        let transformed = ts.transpileModule(source, {
+          compilerOptions: {
+            esModuleInterop: true,
+            module: format === 'esm' ? ts.ModuleKind.ES2020 : ts.ModuleKind.CommonJS,
+            moduleResolution: ts.ModuleResolutionKind.NodeJs,
+            resolveJsonModule: true,
+            target: ts.ScriptTarget.ES2020,
+          },
+          fileName: inputPath,
+        }).outputText;
 
-        if (format === 'cjs') {
-          // Convert ES modules to CommonJS
-          transformed = transformed
-            .replace(/export \{ default as (\w+) \} from '\.\/(.+)\.json'/g, 
-                    "exports.$1 = require('./$2.json')")
-            .replace(/export \* as (\w+) from '\.\/(.+)'/g, 
-                    "exports.$1 = require('./$2')")
-            .replace(/export \{([^}]+)\} from '\.\/(.+)'/g, 
-                    "Object.assign(exports, require('./$2'))")
-            .replace(/import type \{([^}]+)\} from '\.\/(.+)'/g, '')
-            .replace(/export type \{([^}]+)\}/g, '');
-        } else {
-          transformed = transformed
-            .replace(/from "\.\/(.+)\.json"/g, "from './$1.js'")
-            .replace(/from '\.\/(.+)\.json'/g, "from './$1.js'");
+        if (format === 'esm') {
+          transformed = rewriteEsmRelativeImports(transformed);
         }
 
         // Write the output file with .js extension
@@ -92,13 +107,16 @@ function compileModule(moduleName: string, format: 'esm' | 'cjs') {
 }
 
 function buildMainIndex() {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8'));
+  const version = JSON.stringify(packageJson.version);
+
   // Build simple main index files
   const esmIndex = `// Auto-generated main entry point
-export const version = require('../package.json').version;
+export const version = ${version};
 `;
   
   const cjsIndex = `// Auto-generated main entry point
-exports.version = require('../package.json').version;
+exports.version = ${version};
 `;
   
   ensureDir(path.join(PKG_ROOT, '_esm'));

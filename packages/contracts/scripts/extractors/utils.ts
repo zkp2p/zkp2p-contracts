@@ -33,10 +33,13 @@ export * from './protocolUtils';
 
 // Re-export commonly used items for convenience
 export { 
+  DEPOSIT_ATTESTORS_TAG,
+  MAX_DEPOSIT_ATTESTORS,
   Currency, 
   getKeccak256Hash, 
   getCurrencyCodeFromHash,
-  calculateIntentHash
+  calculateIntentHash,
+  encodeDepositAttestors
 } from './protocolUtils';
 `;
   
