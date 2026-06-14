@@ -11,6 +11,23 @@ export const getKeccak256Hash = (value: string): string => {
   return ethers.utils.keccak256(bytes);
 }
 
+export const DEPOSIT_ATTESTORS_TAG = ethers.utils.keccak256(
+  ethers.utils.toUtf8Bytes("zkp2p.depositAttestors.v1")
+);
+
+export const MAX_DEPOSIT_ATTESTORS = 3;
+
+// Encodes additional attestors appended to the default witness set.
+export const encodeDepositAttestors = (
+  attestors: string[],
+  threshold: BigNumber | number | string,
+): string => {
+  return ethers.utils.defaultAbiCoder.encode(
+    ["bytes32", "address[]", "uint256"],
+    [DEPOSIT_ATTESTORS_TAG, attestors, threshold]
+  );
+}
+
 export const Currency = {
   AED: getKeccak256Hash("AED"),
   ARS: getKeccak256Hash("ARS"),

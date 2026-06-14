@@ -9,6 +9,7 @@ import {
 } from "@utils/test";
 import { ADDRESS_ZERO } from "@utils/constants";
 import { Account } from "@utils/test/types";
+import { DEPOSIT_ATTESTORS_TAG, encodeDepositAttestors } from "@utils/unifiedVerifierUtils";
 import { MultiAttestationVerifier } from "../../typechain";
 
 const expect = getWaffleExpect();
@@ -68,7 +69,7 @@ describe("MultiAttestationVerifier", () => {
     return verifier as MultiAttestationVerifier;
   }
 
-  async function signWitness(
+  async function signAttestor(
     signer: Account,
     hashToSign?: string
   ): Promise<string> {
@@ -99,7 +100,7 @@ describe("MultiAttestationVerifier", () => {
     describe("when deployed with one witness and threshold 1", () => {
       beforeEach(async () => {
         multiAttestationVerifier = baseMultiAttestationVerifier;
-        subjectSignatures = [await signWitness(witnessA)];
+        subjectSignatures = [await signAttestor(witnessA)];
       });
 
       it("should return true with a valid signature from that witness", async () => {
@@ -119,7 +120,7 @@ describe("MultiAttestationVerifier", () => {
 
       describe("when witness A signs the digest", () => {
         beforeEach(async () => {
-          subjectSignatures = [await signWitness(witnessA)];
+          subjectSignatures = [await signAttestor(witnessA)];
         });
 
         it("should return true", async () => {
@@ -131,7 +132,7 @@ describe("MultiAttestationVerifier", () => {
 
       describe("when witness B signs the digest", () => {
         beforeEach(async () => {
-          subjectSignatures = [await signWitness(witnessB)];
+          subjectSignatures = [await signAttestor(witnessB)];
         });
 
         it("should return true", async () => {
@@ -143,7 +144,7 @@ describe("MultiAttestationVerifier", () => {
 
       describe("when a non-witness signs the digest", () => {
         beforeEach(async () => {
-          subjectSignatures = [await signWitness(otherAccount)];
+          subjectSignatures = [await signAttestor(otherAccount)];
         });
 
         it("should revert", async () => {
@@ -153,9 +154,9 @@ describe("MultiAttestationVerifier", () => {
         });
       });
 
-      describe("when the same witness signature is passed twice", () => {
+      describe("when the witness signature is passed twice", () => {
         beforeEach(async () => {
-          const duplicateSignature = await signWitness(witnessA);
+          const duplicateSignature = await signAttestor(witnessA);
           subjectSignatures = [duplicateSignature, duplicateSignature];
         });
 
@@ -178,8 +179,8 @@ describe("MultiAttestationVerifier", () => {
       describe("when witness A and witness B sign the digest", () => {
         beforeEach(async () => {
           subjectSignatures = [
-            await signWitness(witnessA),
-            await signWitness(witnessB),
+            await signAttestor(witnessA),
+            await signAttestor(witnessB),
           ];
         });
 
@@ -190,9 +191,9 @@ describe("MultiAttestationVerifier", () => {
         });
       });
 
-      describe("when the same witness signs twice", () => {
+      describe("when the witness signs twice", () => {
         beforeEach(async () => {
-          const duplicateSignature = await signWitness(witnessA);
+          const duplicateSignature = await signAttestor(witnessA);
           subjectSignatures = [duplicateSignature, duplicateSignature];
         });
 
@@ -211,7 +212,7 @@ describe("MultiAttestationVerifier", () => {
           3
         );
 
-        const duplicateSignature = await signWitness(witnessA);
+        const duplicateSignature = await signAttestor(witnessA);
         subjectSignatures = [
           duplicateSignature,
           duplicateSignature,
@@ -223,6 +224,308 @@ describe("MultiAttestationVerifier", () => {
         await expect(subject()).to.be.revertedWith(
           "ThresholdSigVerifierUtils: Not enough valid witness signatures"
         );
+      });
+    });
+
+    describe("when the data carries deposit attestors", () => {
+      let customAttestorA: Account;
+      let customAttestorB: Account;
+
+      beforeEach(async () => {
+        customAttestorA = otherAccount;
+        customAttestorB = nonOwner;
+
+        multiAttestationVerifier = await deployVerifier(
+          [witnessA.address, witnessB.address],
+          1
+        );
+        subjectData = encodeDepositAttestors([customAttestorA.address], 1);
+      });
+
+      describe("when the custom attestor signs the digest", () => {
+        beforeEach(async () => {
+          subjectSignatures = [await signAttestor(customAttestorA)];
+        });
+
+        it("should return true even though the signer is not a witness", async () => {
+          const result = await subject();
+
+          expect(result).to.equal(true);
+        });
+      });
+
+      describe("when only a witness signs the digest", () => {
+        beforeEach(async () => {
+          subjectSignatures = [await signAttestor(witnessA)];
+        });
+
+        it("should return true because deposit attestors append to the witness set", async () => {
+          const result = await subject();
+
+          expect(result).to.equal(true);
+        });
+      });
+
+      describe("when deposit data requires 2-of-4 combined attestors", () => {
+        beforeEach(() => {
+          subjectData = encodeDepositAttestors(
+            [customAttestorA.address, customAttestorB.address],
+            2
+          );
+        });
+
+        describe("when both custom attestors sign", () => {
+          beforeEach(async () => {
+            subjectSignatures = [
+              await signAttestor(customAttestorA),
+              await signAttestor(customAttestorB),
+            ];
+          });
+
+          it("should return true", async () => {
+            const result = await subject();
+
+            expect(result).to.equal(true);
+          });
+        });
+
+        describe("when a witness and one custom attestor sign", () => {
+          beforeEach(async () => {
+            subjectSignatures = [
+              await signAttestor(customAttestorA),
+              await signAttestor(witnessA),
+            ];
+          });
+
+          it("should return true", async () => {
+            const result = await subject();
+
+            expect(result).to.equal(true);
+          });
+        });
+
+        describe("when only one custom attestor signs", () => {
+          beforeEach(async () => {
+            subjectSignatures = [await signAttestor(customAttestorA)];
+          });
+
+          it("should revert", async () => {
+            await expect(subject()).to.be.revertedWith(
+              "ThresholdSigVerifierUtils: req threshold exceeds signatures"
+            );
+          });
+        });
+      });
+
+      describe("when deposit data includes a witness explicitly", () => {
+        beforeEach(async () => {
+          subjectData = encodeDepositAttestors(
+            [customAttestorA.address, witnessA.address],
+            1
+          );
+          subjectSignatures = [await signAttestor(witnessA)];
+        });
+
+        it("should revert because witnesses are already included by default", async () => {
+          await expect(subject()).to.be.revertedWith("MAV: duplicate deposit attestor");
+        });
+      });
+
+      describe("when deposit data has no attestors", () => {
+        beforeEach(async () => {
+          subjectData = encodeDepositAttestors([], 1);
+          subjectSignatures = [await signAttestor(witnessA)];
+        });
+
+        it("should revert", async () => {
+          await expect(subject()).to.be.revertedWith("MAV: empty deposit attestors");
+        });
+      });
+
+      describe("when deposit data exceeds the max attestor count", () => {
+        beforeEach(async () => {
+          const maxDepositAttestors = await multiAttestationVerifier.MAX_DEPOSIT_ATTESTORS();
+          const attestors = Array.from({ length: maxDepositAttestors.toNumber() + 1 }, (_, index) =>
+            ethers.utils.getAddress(
+              ethers.utils.hexZeroPad(ethers.utils.hexlify(index + 1), 20)
+            )
+          );
+          subjectData = encodeDepositAttestors(attestors, 1);
+          subjectSignatures = [await signAttestor(customAttestorA)];
+        });
+
+        it("should revert", async () => {
+          await expect(subject()).to.be.revertedWith("MAV: too many deposit attestors");
+        });
+      });
+
+      describe("when deposit data threshold is zero", () => {
+        beforeEach(async () => {
+          subjectData = encodeDepositAttestors([customAttestorA.address], 0);
+          subjectSignatures = [await signAttestor(customAttestorA)];
+        });
+
+        it("should revert", async () => {
+          await expect(subject()).to.be.revertedWith("MAV: deposit threshold must be > 0");
+        });
+      });
+
+      describe("when deposit data threshold exceeds the attestor count", () => {
+        beforeEach(async () => {
+          subjectData = encodeDepositAttestors([customAttestorA.address], 4);
+          subjectSignatures = [await signAttestor(customAttestorA)];
+        });
+
+        it("should revert", async () => {
+          await expect(subject()).to.be.revertedWith("MAV: deposit threshold exceeds count");
+        });
+      });
+
+      describe("when deposit data contains the zero address", () => {
+        beforeEach(async () => {
+          subjectData = encodeDepositAttestors([customAttestorA.address, ADDRESS_ZERO], 1);
+          subjectSignatures = [await signAttestor(customAttestorA)];
+        });
+
+        it("should revert", async () => {
+          await expect(subject()).to.be.revertedWith("MAV: zero deposit attestor");
+        });
+      });
+
+      describe("when deposit data contains a duplicate attestor", () => {
+        beforeEach(async () => {
+          subjectData = encodeDepositAttestors(
+            [customAttestorA.address, customAttestorA.address],
+            1
+          );
+          subjectSignatures = [await signAttestor(customAttestorA)];
+        });
+
+        it("should revert", async () => {
+          await expect(subject()).to.be.revertedWith("MAV: duplicate deposit attestor");
+        });
+      });
+
+      describe("when the data is tagged but malformed", () => {
+        beforeEach(async () => {
+          subjectData = DEPOSIT_ATTESTORS_TAG; // tag only, no attestor payload
+          subjectSignatures = [await signAttestor(witnessA)];
+        });
+
+        it("should revert instead of falling back to the witness set", async () => {
+          await expect(subject()).to.be.reverted;
+        });
+      });
+    });
+
+    describe("when the data is non-empty and untagged", () => {
+      beforeEach(async () => {
+        multiAttestationVerifier = await deployVerifier(
+          [witnessA.address, witnessB.address],
+          1
+        );
+        subjectSignatures = [await signAttestor(witnessA)];
+      });
+
+      describe("when the data is a legacy bare address array", () => {
+        beforeEach(() => {
+          subjectData = ethers.utils.defaultAbiCoder.encode(
+            ["address[]"],
+            [[otherAccount.address]]
+          );
+        });
+
+        it("should revert instead of falling back to the witness set", async () => {
+          await expect(subject()).to.be.revertedWith("MAV: invalid deposit attestors tag");
+        });
+      });
+
+      describe("when the data is shorter than 32 bytes", () => {
+        beforeEach(() => {
+          subjectData = "0x1234";
+        });
+
+        it("should revert instead of falling back to the witness set", async () => {
+          await expect(subject()).to.be.revertedWith("MAV: invalid deposit attestors tag");
+        });
+      });
+
+      describe("when the data is 32+ bytes of non-tag content", () => {
+        beforeEach(() => {
+          subjectData = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("unrelated"));
+        });
+
+        it("should revert instead of falling back to the witness set", async () => {
+          await expect(subject()).to.be.revertedWith("MAV: invalid deposit attestors tag");
+        });
+      });
+    });
+  });
+
+  describe("#resolveAttestors", () => {
+    let subjectData: string;
+
+    beforeEach(async () => {
+      multiAttestationVerifier = await deployVerifier(
+        [witnessA.address, witnessB.address],
+        2
+      );
+      subjectData = "0x";
+    });
+
+    async function subject(): Promise<[string[], any]> {
+      return multiAttestationVerifier.resolveAttestors(subjectData);
+    }
+
+    it("should expose the tag constant used by integrators", async () => {
+      expect(await multiAttestationVerifier.DEPOSIT_ATTESTORS_TAG()).to.equal(
+        DEPOSIT_ATTESTORS_TAG
+      );
+    });
+
+    describe("when the data is empty", () => {
+      it("should return the witness set and threshold", async () => {
+        const [attestors, threshold] = await subject();
+
+        expect(attestors).to.have.deep.members([witnessA.address, witnessB.address]);
+        expect(threshold).to.equal(2);
+      });
+    });
+
+    describe("when the data carries deposit attestors", () => {
+      beforeEach(() => {
+        subjectData = encodeDepositAttestors([otherAccount.address], 2);
+      });
+
+      it("should return the witness set plus deposit attestors and threshold", async () => {
+        const [attestors, threshold] = await subject();
+
+        expect(attestors).to.deep.equal([
+          witnessA.address,
+          witnessB.address,
+          otherAccount.address,
+        ]);
+        expect(threshold).to.equal(2);
+      });
+    });
+
+    describe("when the deposit threshold is below the default threshold", () => {
+      beforeEach(() => {
+        subjectData = encodeDepositAttestors([otherAccount.address], 1);
+      });
+
+      it("should revert", async () => {
+        await expect(subject()).to.be.revertedWith("MAV: deposit threshold below default");
+      });
+    });
+
+    describe("when the data is non-empty and untagged", () => {
+      beforeEach(() => {
+        subjectData = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("unrelated"));
+      });
+
+      it("should revert instead of returning the witness set", async () => {
+        await expect(subject()).to.be.revertedWith("MAV: invalid deposit attestors tag");
       });
     });
   });

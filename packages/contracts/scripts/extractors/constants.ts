@@ -76,6 +76,14 @@ export async function extractConstants(): Promise<void> {
       networkConstants.WITNESS_ADDRESS = params.WITNESS_ADDRESS[network];
     }
 
+    if (params.MULTI_WITNESS_ADDRESSES?.[network] !== undefined) {
+      networkConstants.MULTI_WITNESS_ADDRESSES = params.MULTI_WITNESS_ADDRESSES[network];
+    }
+
+    if (params.MULTI_WITNESS_THRESHOLD?.[network] !== undefined) {
+      networkConstants.MULTI_WITNESS_THRESHOLD = params.MULTI_WITNESS_THRESHOLD[network];
+    }
+
     if (params.ZKTLS_ATTESTOR_ADDRESS?.[network] !== undefined) {
       networkConstants.ZKTLS_ATTESTOR_ADDRESS = params.ZKTLS_ATTESTOR_ADDRESS[network];
     }

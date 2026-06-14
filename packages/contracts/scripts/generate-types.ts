@@ -4,8 +4,9 @@ import * as ts from 'typescript';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Generate declarations inside the built package directory
-const PACKAGE_ROOT = path.resolve(__dirname, '..', 'dist');
+// Generate declarations beside the extracted package source files so build-modules
+// can copy them into _types.
+const PACKAGE_ROOT = path.resolve(__dirname, '..');
 
 // Directories to process
 const DIRECTORIES_TO_PROCESS = [

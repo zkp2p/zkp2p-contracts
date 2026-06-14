@@ -31,7 +31,7 @@ import { baseSepolia as paymentMethods } from "@zkp2p/contracts-v2/paymentMethod
 import type { Escrow, Orchestrator } from "@zkp2p/contracts-v2/types"
 
 // Import utility functions
-import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils/protocolUtils"
+import { getKeccak256Hash, calculateIntentHash, encodeDepositAttestors } from "@zkp2p/contracts-v2/utils/protocolUtils"
 
 // Example: Create contract instance with ethers
 import { ethers } from 'ethers';
@@ -124,17 +124,16 @@ Protocol utility functions:
 
 ```typescript
 // Import protocol utilities
-import { getKeccak256Hash, calculateIntentHash, getCurrencyInfo } from "@zkp2p/contracts-v2/utils/protocolUtils"
-import { Currency } from "@zkp2p/contracts-v2/utils/types"
+import { getKeccak256Hash, calculateIntentHash, encodeDepositAttestors } from "@zkp2p/contracts-v2/utils/protocolUtils"
 
 // Use utility functions
 const paymentMethodHash = getKeccak256Hash("venmo");
 const intentHash = calculateIntentHash(depositor, depositId, signalIntentParams);
 
-// Get currency information
-const usdInfo = getCurrencyInfo(Currency.USD);
-console.log('Currency code:', usdInfo.code);
-console.log('Decimals:', usdInfo.decimals);
+// Encode additional deposit attestors for DepositPaymentMethodData.data.
+// MultiAttestationVerifier appends these to the default witness set, so either
+// defaults or added attestors can satisfy the combined threshold.
+const verificationData = encodeDepositAttestors([attestorAddress], 1);
 ```
 
 

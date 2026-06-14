@@ -118,11 +118,17 @@
     },
     "./utils": {
       "types": "./utils/index.d.ts",
-      "default": "./utils/index.ts"
+      "import": "./_esm/utils/index.js",
+      "react-native": "./_esm/utils/index.js",
+      "require": "./_cjs/utils/index.js",
+      "default": "./_esm/utils/index.js"
     },
     "./utils/protocolUtils": {
       "types": "./utils/protocolUtils.d.ts",
-      "default": "./utils/protocolUtils.ts"
+      "import": "./_esm/utils/protocolUtils.js",
+      "react-native": "./_esm/utils/protocolUtils.js",
+      "require": "./_cjs/utils/protocolUtils.js",
+      "default": "./_esm/utils/protocolUtils.js"
     },
     "./abis/base": {
       "types": "./abis/base.d.ts",

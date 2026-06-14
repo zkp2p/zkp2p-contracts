@@ -5,9 +5,9 @@ import { DeployFunction } from "hardhat-deploy/types";
 import { ethers } from "hardhat";
 
 import {
-  MULTI_SIG,
   MULTI_WITNESS_ADDRESSES,
   MULTI_WITNESS_THRESHOLD,
+  MULTI_SIG,
 } from "../deployments/parameters";
 import {
   getDeployedContractAddress,
@@ -60,6 +60,18 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   );
   await setNewOwner(hre, multiAttestationVerifierContract, multiSig);
   console.log("MultiAttestationVerifier ownership transferred to", multiSig);
+};
+
+// Skip on live networks once the MultiAttestationVerifier has been deployed; later
+// redeployments (e.g. script 25 for deposit attestor data) manage their own
+// rollout. Localhost always runs to bootstrap a fresh chain.
+func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
+  const network = hre.network.name;
+  if (network != "localhost") {
+    try { getDeployedContractAddress(network, "MultiAttestationVerifier"); } catch (e) { return false; }
+    return true;
+  }
+  return false;
 };
 
 func.tags = ["MultiAttestationVerifier"];
