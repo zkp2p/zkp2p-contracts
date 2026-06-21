@@ -311,6 +311,40 @@ export async function addPaymentMethodToUnifiedVerifier(
   }
 }
 
+export async function removePaymentMethodFromUnifiedVerifier(
+  hre: HardhatRuntimeEnvironment,
+  unifiedVerifierContract: any,
+  paymentMethodHash: string
+): Promise<void> {
+  const currentOwner = await unifiedVerifierContract.owner();
+  const paymentMethods = await unifiedVerifierContract.getPaymentMethods();
+
+  if (paymentMethods.includes(paymentMethodHash)) {
+    if ((await hre.getUnnamedAccounts()).includes(currentOwner)) {
+      console.log(`Removing payment method ${paymentMethodHash} from unified verifier`);
+      const data = unifiedVerifierContract.interface.encodeFunctionData("removePaymentMethod", [
+        paymentMethodHash
+      ]);
+      await sendDeploymentTransaction(hre, {
+        from: currentOwner,
+        to: unifiedVerifierContract.address,
+        data,
+      });
+    } else {
+      const data = unifiedVerifierContract.interface.encodeFunctionData("removePaymentMethod", [
+        paymentMethodHash
+      ]);
+      safeBatchCollector.add(
+        unifiedVerifierContract.address,
+        data,
+        `UnifiedPaymentVerifier.removePaymentMethod(${paymentMethodHash.slice(0, 10)}...)`
+      );
+    }
+  } else {
+    console.log(`Payment method ${paymentMethodHash} not found in unified verifier`);
+  }
+}
+
 export async function addOrchestratorToRegistry(
   hre: HardhatRuntimeEnvironment,
   contract: any,
@@ -459,5 +493,26 @@ export function savePaymentMethodSnapshot(
 
     current.methods[methodKey] = snapshotData;
     fs.writeFileSync(filePath, JSON.stringify(current, null, 2));
+  }
+}
+
+export function removePaymentMethodSnapshot(
+  network: string,
+  methodKey: string
+): void {
+  const providersDir = path.join(__dirname, "outputs", "platforms");
+  const filePath = path.join(providersDir, `${network}.json`);
+
+  let current: any = { methods: {} };
+  try {
+    if (fs.existsSync(filePath)) {
+      current = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    }
+  } catch { }
+
+  if (current.methods?.[methodKey]) {
+    delete current.methods[methodKey];
+    fs.writeFileSync(filePath, JSON.stringify(current, null, 2));
+    console.log(`Removed payment method snapshot from: ${filePath}`);
   }
 }
