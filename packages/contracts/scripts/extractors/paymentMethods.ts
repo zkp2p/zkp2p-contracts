@@ -242,6 +242,24 @@ ${networks.map(net => `  ${net}: require('./${net}.json')`).join(',\n')}
     }
   }
 
+  // Retired on-chain payment methods (removed from the active PaymentVerifierRegistry
+  // via governance, e.g. n26 / luxon). Their payment-method hashes are immutable
+  // on-chain history, so we keep them resolvable for LABELING ONLY: historical
+  // deposits / intents / stats must still render the correct platform name long after
+  // the method leaves the active registry. They are added to hashToName but NOT
+  // nameToHash — offering/eligibility is gated at the product layer (curator), and
+  // leaving them out of nameToHash keeps them unselectable for new liquidity.
+  const RETIRED_METHOD_HASH_TO_NAME: Record<string, string> = {
+    '0xd9ff4fd6b39a3e3dd43c41d05662a5547de4a878bc97a65bcb352ade493cdc6b': 'n26',
+    '0xaea63ef983458674f54ee50cdaa7b09d80a5c6c03ed505f51c90b0f2b54abb01': 'luxon',
+  };
+  for (const [hash, name] of Object.entries(RETIRED_METHOD_HASH_TO_NAME)) {
+    const normalized = hash.toLowerCase();
+    if (!hashToName[normalized]) {
+      hashToName[normalized] = name;
+    }
+  }
+
   // bytes32 encoding of "zelle" (ethers.utils.formatBytes32String("zelle"))
   // This is a fixed constant — it never changes
   const zelleUnspecifiedHash = '0x7a656c6c65000000000000000000000000000000000000000000000000000000';
