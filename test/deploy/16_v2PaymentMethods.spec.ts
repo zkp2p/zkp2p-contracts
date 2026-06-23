@@ -31,7 +31,6 @@ import {
 } from "../../deployments/verifiers/zelle";
 import { PAYPAL_PROVIDER_CONFIG } from "../../deployments/verifiers/paypal";
 import { MONZO_PROVIDER_CONFIG } from "../../deployments/verifiers/monzo";
-import { N26_PROVIDER_CONFIG } from "../../deployments/verifiers/n26";
 import { ALIPAY_PROVIDER_CONFIG } from "../../deployments/verifiers/alipay";
 import { CHIME_PROVIDER_CONFIG } from "../../deployments/verifiers/chime";
 
@@ -48,7 +47,6 @@ const ALL_PAYMENT_METHODS = [
   { name: "Zelle BofA", config: ZELLE_BOFA_PROVIDER_CONFIG },
   { name: "PayPal", config: PAYPAL_PROVIDER_CONFIG },
   { name: "Monzo", config: MONZO_PROVIDER_CONFIG },
-  { name: "N26", config: N26_PROVIDER_CONFIG },
   { name: "Alipay", config: ALIPAY_PROVIDER_CONFIG },
   { name: "Chime", config: CHIME_PROVIDER_CONFIG },
 ];

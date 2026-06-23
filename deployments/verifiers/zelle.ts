@@ -6,9 +6,15 @@ export const ZELLE_CURRENCIES: any = [
 ];
 
 // Payment method hashes
+export const ZELLE_PAYMENT_METHOD_HASH = calculatePaymentMethodHash("zelle");
 export const ZELLE_CITI_PAYMENT_METHOD_HASH = calculatePaymentMethodHash("zelle-citi");
 export const ZELLE_CHASE_PAYMENT_METHOD_HASH = calculatePaymentMethodHash("zelle-chase");
 export const ZELLE_BOFA_PAYMENT_METHOD_HASH = calculatePaymentMethodHash("zelle-bofa");
+
+export const ZELLE_PROVIDER_CONFIG = {
+  paymentMethodHash: ZELLE_PAYMENT_METHOD_HASH,
+  currencies: ZELLE_CURRENCIES
+};
 
 export const ZELLE_CITI_PROVIDER_CONFIG = {
   paymentMethodHash: ZELLE_CITI_PAYMENT_METHOD_HASH,

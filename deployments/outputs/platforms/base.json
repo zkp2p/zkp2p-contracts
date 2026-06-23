@@ -88,6 +88,13 @@
       ],
       "updatedAt": "2026-03-16T12:46:01.355Z"
     },
+    "zelle": {
+      "paymentMethodHash": "0xf752c7d19698ecb0bb8988abf9b9a53a4c3657f3bc8850a6fb59fdf3e3ce8cd3",
+      "currencies": [
+        "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e"
+      ],
+      "updatedAt": "2026-06-22T02:11:08.890Z"
+    },
     "zelle-citi": {
       "paymentMethodHash": "0x817260692b75e93c7fbc51c71637d4075a975e221e1ebc1abeddfabd731fd90d",
       "currencies": [
@@ -129,13 +136,6 @@
       ],
       "updatedAt": "2026-03-16T12:47:05.353Z"
     },
-    "n26": {
-      "paymentMethodHash": "0xd9ff4fd6b39a3e3dd43c41d05662a5547de4a878bc97a65bcb352ade493cdc6b",
-      "currencies": [
-        "0xfff16d60be267153303bbfa66e593fb8d06e24ea5ef24b6acca5224c2ca6b907"
-      ],
-      "updatedAt": "2026-03-16T12:47:17.300Z"
-    },
     "alipay": {
       "paymentMethodHash": "0xcac9daea62d7b89d75ac73af4ee14dcf25721012ae82b568c2ea5c808eaa04ff",
       "currencies": [
@@ -149,15 +149,6 @@
         "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e"
       ],
       "updatedAt": "2026-03-16T12:47:45.525Z"
-    },
-    "luxon": {
-      "paymentMethodHash": "0xaea63ef983458674f54ee50cdaa7b09d80a5c6c03ed505f51c90b0f2b54abb01",
-      "currencies": [
-        "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e",
-        "0xfff16d60be267153303bbfa66e593fb8d06e24ea5ef24b6acca5224c2ca6b907",
-        "0x90832e2dc3221e4d56977c1aa8f6a6706b9ad6542fbbdaac13097d0fa5e42e67"
-      ],
-      "updatedAt": "2026-03-16T12:48:02.216Z"
     }
   }
 }

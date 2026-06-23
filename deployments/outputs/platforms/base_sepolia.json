@@ -72,6 +72,13 @@
       ],
       "updatedAt": "2025-09-30T05:02:59.721Z"
     },
+    "zelle": {
+      "paymentMethodHash": "0xf752c7d19698ecb0bb8988abf9b9a53a4c3657f3bc8850a6fb59fdf3e3ce8cd3",
+      "currencies": [
+        "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e"
+      ],
+      "updatedAt": "2026-06-22T00:31:56.103Z"
+    },
     "zelle-citi": {
       "paymentMethodHash": "0x817260692b75e93c7fbc51c71637d4075a975e221e1ebc1abeddfabd731fd90d",
       "currencies": [
