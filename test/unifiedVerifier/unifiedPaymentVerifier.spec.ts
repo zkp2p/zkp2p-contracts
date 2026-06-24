@@ -34,6 +34,7 @@ const expect = getWaffleExpect();
 
 const ZERO_BYTES = "0x";
 const MAX_TIMESTAMP_BUFFER_MS = 48 * 60 * 60 * 1000;
+const SAR_MARKER = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("zkp2p.sar.v1"));
 
 
 describe("UnifiedPaymentVerifier", () => {
@@ -349,6 +350,23 @@ describe("UnifiedPaymentVerifier", () => {
           builtProof.paymentDetails.paymentId,
           builtProof.paymentDetails.payeeId,
         );
+    });
+
+    it("emits PaymentReleaseClassified true for SAR metadata", async () => {
+      builtProof = await buildProof({
+        attestationMetadata: ethers.utils.defaultAbiCoder.encode(["bytes32"], [SAR_MARKER]),
+      });
+      subjectProof = builtProof.paymentProof;
+
+      await expect(subject())
+        .to.emit(verifier, "PaymentReleaseClassified")
+        .withArgs(intentHash, true);
+    });
+
+    it("emits PaymentReleaseClassified false for empty metadata", async () => {
+      await expect(subject())
+        .to.emit(verifier, "PaymentReleaseClassified")
+        .withArgs(intentHash, false);
     });
 
     it("should nullify the payment with correct collision-resistant nullifier", async () => {
