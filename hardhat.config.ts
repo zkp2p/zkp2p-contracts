@@ -75,7 +75,7 @@ const config: HardhatUserConfig = {
       },
     },
     base_sepolia: {
-      url: "https://base-sepolia.g.alchemy.com/v2/" + process.env.ALCHEMY_API_KEY,
+      url: process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org",
       // @ts-ignore
       accounts: [
         `0x${process.env.TESTNET_DEPLOY_PRIVATE_KEY}`,
@@ -89,7 +89,7 @@ const config: HardhatUserConfig = {
       ]
     },
     base: {
-      url: "https://base-mainnet.g.alchemy.com/v2/" + process.env.ALCHEMY_API_KEY,
+      url: process.env.BASE_RPC_URL || "https://api.zkp2p.xyz/v2/rpc/base",
       // @ts-ignore
       accounts: [
         `0x${process.env.BASE_DEPLOY_PRIVATE_KEY}`,

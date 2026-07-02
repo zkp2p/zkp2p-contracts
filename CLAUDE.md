@@ -257,7 +257,7 @@ import { getAccounts } from "@utils/test";
 
 - `hardhat.config.ts`: Solidity 0.8.18, optimizer 200 runs, viaIR enabled, ethers v5
 - `foundry.toml`: Solidity 0.8.18, optimizer 800 runs, viaIR enabled, fuzz 256 runs, invariant depth 15
-- `.env`: `BASE_DEPLOY_PRIVATE_KEY`, `TESTNET_DEPLOY_PRIVATE_KEY`, `ALCHEMY_API_KEY`, `BASESCAN_API_KEY`
+- `.env`: `BASE_DEPLOY_PRIVATE_KEY`, `TESTNET_DEPLOY_PRIVATE_KEY`, `BASESCAN_API_KEY` (Base RPC defaults to the Curator proxy `https://api.zkp2p.xyz/v2/rpc/base`; override with `BASE_RPC_URL` / `BASE_SEPOLIA_RPC_URL`)
 - `tsconfig.json`: CommonJS, strict mode, path aliases
 
 ## Style

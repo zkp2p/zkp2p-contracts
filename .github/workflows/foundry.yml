@@ -73,7 +73,7 @@ jobs:
 
       - name: Run Foundry fork tests
         env:
-          ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
+          BASE_RPC_URL: https://api.zkp2p.xyz/v2/rpc/base
         run: |
           echo "Running fork tests..."
           yarn test:forge:fork

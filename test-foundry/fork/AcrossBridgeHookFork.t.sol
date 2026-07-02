@@ -252,13 +252,16 @@ contract AcrossBridgeHookForkTest is Test {
     }
 
     function _getRpcUrl() internal view returns (string memory) {
+        // Prefer an explicit override, then legacy Alchemy key, then the Curator Base RPC proxy default.
+        (string memory rpcUrl, bool hasUrl) = _tryEnvString("BASE_RPC_URL");
+        if (hasUrl && bytes(rpcUrl).length > 0) {
+            return rpcUrl;
+        }
         (string memory apiKey, bool ok) = _tryEnvString("ALCHEMY_API_KEY");
         if (ok && bytes(apiKey).length > 0) {
             return string(abi.encodePacked("https://base-mainnet.g.alchemy.com/v2/", apiKey));
         }
-        (string memory rpcUrl, bool hasUrl) = _tryEnvString("BASE_RPC_URL");
-        require(hasUrl && bytes(rpcUrl).length > 0, "Set ALCHEMY_API_KEY or BASE_RPC_URL");
-        return rpcUrl;
+        return "https://api.zkp2p.xyz/v2/rpc/base";
     }
 
     function _tryEnvString(string memory key) internal view returns (string memory, bool) {
