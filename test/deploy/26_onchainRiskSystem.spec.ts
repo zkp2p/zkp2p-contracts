@@ -114,10 +114,11 @@ describe("Onchain risk system dark deployment", () => {
   });
 
   it("does not queue or execute a pause when rerun after multisig cutover", async () => {
+    const [deployer] = await getUnnamedAccounts();
     const openDeployment = await deployments.get("OpenOrchestratorV2");
     const orchestrator = await ethers.getContractAt("OrchestratorV2", openDeployment.address);
-    const multisigSigner = await ethers.getSigner(MULTI_SIG[network]);
-    await orchestrator.connect(multisigSigner).unpauseOrchestrator();
+    const ownerSigner = await ethers.getSigner(MULTI_SIG[network] || deployer);
+    await orchestrator.connect(ownerSigner).unpauseOrchestrator();
 
     await deployOnchainRiskSystem(hre);
     expect(await orchestrator.paused()).to.equal(false);
