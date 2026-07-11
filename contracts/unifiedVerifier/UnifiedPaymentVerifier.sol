@@ -45,6 +45,9 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
     bytes4 private constant GET_DEPOSIT_PRE_INTENT_HOOK_SELECTOR =
         bytes4(keccak256("getDepositPreIntentHook(address,uint256)"));
 
+    // Marker for seller-automated-release attestations in unsigned metadata.
+    bytes32 private constant SAR_MARKER = keccak256("zkp2p.sar.v1");
+
     /* ============ State Variables ============ */
 
     // EIP-712 Domain Separator (computed once at deployment)
@@ -64,6 +67,11 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
         bytes32 paymentId,
         bytes32 payeeId
     );
+
+    /**
+     * @notice Classifies the release path used for a verified payment.
+     */
+    event PaymentReleaseClassified(bytes32 indexed intentHash, bool sellerAutomatedRelease);
 
     /* ============ Structs ============ */
 
@@ -155,6 +163,10 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
         _nullifyPayment(paymentDetails.method, paymentDetails.paymentId);
         
         _emitPaymentDetails(attestation.intentHash, paymentDetails);
+        emit PaymentReleaseClassified(
+            attestation.intentHash,
+            _isSellerAutomatedRelease(attestation.metadata)
+        );
     
         uint256 releaseAmount = _calculateReleaseAmount(attestation.releaseAmount, intentSnapshot.amount);
 
@@ -179,6 +191,14 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
         returns (PaymentDetails memory paymentDetails, IntentSnapshot memory intentSnapshot)
     {
         (paymentDetails, intentSnapshot) = abi.decode(paymentData, (PaymentDetails, IntentSnapshot));
+    }
+
+    function _isSellerAutomatedRelease(bytes memory metadata) internal pure returns (bool) {
+        if (metadata.length != 32) {
+            return false;
+        }
+
+        return abi.decode(metadata, (bytes32)) == SAR_MARKER;
     }
 
     /**
