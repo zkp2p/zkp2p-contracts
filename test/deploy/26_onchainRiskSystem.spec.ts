@@ -14,6 +14,7 @@ import { WISE_PAYMENT_METHOD_HASH } from "../../deployments/verifiers/wise";
 
 describe("Onchain risk system dark deployment", () => {
   const network = deployments.getNetworkName();
+  const configuredMultiSig = MULTI_SIG[network];
   const deploymentNames = [
     "OrchestratorRegistry",
     "EscrowRegistry",
@@ -29,6 +30,8 @@ describe("Onchain risk system dark deployment", () => {
 
   before(async () => {
     process.env.DEPLOY_ONCHAIN_RISK = "true";
+    const [, localMultiSig] = await getUnnamedAccounts();
+    MULTI_SIG[network] ||= localMultiSig;
     for (const name of deploymentNames) await deployments.delete(name);
     const saveDependency = async (name: string, args: any[] = []): Promise<void> => {
       const factory = await ethers.getContractFactory(name);
@@ -49,6 +52,7 @@ describe("Onchain risk system dark deployment", () => {
 
   after(async () => {
     delete process.env.DEPLOY_ONCHAIN_RISK;
+    MULTI_SIG[network] = configuredMultiSig;
     for (const name of deploymentNames) await deployments.delete(name);
   });
 
