@@ -16,16 +16,16 @@ pnpm add @zkp2p/contracts-v2
 
 ```typescript
 // Import addresses for specific networks
-import { base, baseSepolia } from "@zkp2p/contracts-v2/addresses"
+import { base, baseStaging } from "@zkp2p/contracts-v2/addresses"
 
 // Import specific contract ABIs from a network
-import { Escrow, Orchestrator } from "@zkp2p/contracts-v2/abis/baseSepolia"
+import { Escrow, Orchestrator } from "@zkp2p/contracts-v2/abis/baseStaging"
 
 // Import constants
 import { USDC, INTENT_EXPIRATION_PERIOD } from "@zkp2p/contracts-v2/constants/base"
 
 // Import payment method configurations
-import { baseSepolia as paymentMethods } from "@zkp2p/contracts-v2/paymentMethods"
+import { baseStaging as paymentMethods } from "@zkp2p/contracts-v2/paymentMethods"
 
 // Import TypeScript types
 import type { Escrow, Orchestrator } from "@zkp2p/contracts-v2/types"
@@ -54,16 +54,16 @@ console.log('Venmo config:', paymentMethods.venmo);
 Pre-configured addresses for all deployed networks:
 
 ```typescript
-import { base, baseSepolia } from "@zkp2p/contracts-v2/addresses"
+import { base, baseStaging } from "@zkp2p/contracts-v2/addresses"
 
 console.log(base.Orchestrator);
 console.log(base.Escrow);
-console.log(baseSepolia.UnifiedPaymentVerifier);
+console.log(baseStaging.UnifiedPaymentVerifier);
 ```
 
 Supported networks:
 - Base (`base`)
-- Base Sepolia (`baseSepolia`)
+- Base staging (`baseStaging`)
 
 ### 📜 Network-Specific Contract ABIs
 
@@ -71,18 +71,18 @@ Minimal ABIs extracted from on-chain deployments:
 
 ```typescript
 // Import specific contracts from a network
-import { Orchestrator, Escrow } from "@zkp2p/contracts-v2/abis/baseSepolia"
+import { Orchestrator, Escrow } from "@zkp2p/contracts-v2/abis/baseStaging"
 
 // Use the ABIs directly with ethers or viem
 const orchestratorABI = Orchestrator;
 const escrowABI = Escrow;
 
 // Alternative: Import all ABIs for a network
-import * as baseSepoliaAbis from "@zkp2p/contracts-v2/abis/baseSepolia"
-const unifiedVerifierABI = baseSepoliaAbis.UnifiedPaymentVerifier;
+import * as baseStagingAbis from "@zkp2p/contracts-v2/abis/baseStaging"
+const unifiedVerifierABI = baseStagingAbis.UnifiedPaymentVerifier;
 
 // Also supports direct JSON imports for bundle optimization
-import EscrowABI from "@zkp2p/contracts-v2/abis/baseSepolia/Escrow.json"
+import EscrowABI from "@zkp2p/contracts-v2/abis/baseStaging/Escrow.json"
 ```
 
 ### 🔧 Network-Specific Protocol Constants
@@ -91,14 +91,14 @@ All protocol parameters and configurations per network:
 
 ```typescript
 import { INTENT_EXPIRATION_PERIOD, MAX_INTENTS_PER_DEPOSIT, DUST_THRESHOLD } from "@zkp2p/contracts-v2/constants/base"
-import * as baseSepoliaConstants from "@zkp2p/contracts-v2/constants/baseSepolia"
+import * as baseStagingConstants from "@zkp2p/contracts-v2/constants/baseStaging"
 
 // Use specific constants
 console.log('Intent expiration:', INTENT_EXPIRATION_PERIOD);
 console.log('Max intents:', MAX_INTENTS_PER_DEPOSIT);
 
 // Or access all constants for a network
-console.log('USDC address:', baseSepoliaConstants.USDC);
+console.log('USDC address:', baseStagingConstants.USDC);
 ```
 
 ### 💳 Payment Methods with Provider Hashes
@@ -106,16 +106,16 @@ console.log('USDC address:', baseSepoliaConstants.USDC);
 Unified payment method configurations including provider hashes from deployment:
 
 ```typescript
-import { base, baseSepolia } from "@zkp2p/contracts-v2/paymentMethods"
+import { base, baseStaging } from "@zkp2p/contracts-v2/paymentMethods"
 
 // Access payment method configurations
 const venmoConfig = base.venmo;
 console.log('Payment Method Hash:', venmoConfig.paymentMethodHash);
 console.log('Currencies:', venmoConfig.currencies);
 
-// Or use testnet configurations
-const testnetPaymentMethods = baseSepolia;
-console.log('Available methods:', Object.keys(testnetPaymentMethods));
+// Or use staging configurations
+const stagingPaymentMethods = baseStaging;
+console.log('Available methods:', Object.keys(stagingPaymentMethods));
 ```
 
 ### 🛠️ Utility Functions
@@ -159,7 +159,7 @@ The package follows modern ESM/CJS patterns with clean subpath exports:
 All modules are directly accessible via subpath exports:
 
 - `@zkp2p/contracts-v2/addresses` - Contract addresses for all networks
-- `@zkp2p/contracts-v2/abis/<network>` - Contract ABIs per network (e.g., `/abis/baseSepolia`)
+- `@zkp2p/contracts-v2/abis/<network>` - Contract ABIs per network (e.g., `/abis/baseStaging`)
 - `@zkp2p/contracts-v2/abis/<network>/<contract>.json` - Direct JSON import for specific contracts
 - `@zkp2p/contracts-v2/constants/<network>` - Constants per network
 - `@zkp2p/contracts-v2/paymentMethods` - Payment method configs
@@ -172,13 +172,13 @@ The package now uses explicit wrapper modules for each network to ensure reliabl
 
 ```typescript
 // Recommended: Import from network-specific wrappers
-import { Escrow, Orchestrator } from "@zkp2p/contracts-v2/abis/baseSepolia"
+import { Escrow, Orchestrator } from "@zkp2p/contracts-v2/abis/baseStaging"
 
 // Alternative: Direct JSON imports for bundle size optimization
-import EscrowABI from "@zkp2p/contracts-v2/abis/baseSepolia/Escrow.json"
+import EscrowABI from "@zkp2p/contracts-v2/abis/baseStaging/Escrow.json"
 
 // CommonJS compatibility
-const { Escrow } = require("@zkp2p/contracts-v2/abis/baseSepolia")
+const { Escrow } = require("@zkp2p/contracts-v2/abis/baseStaging")
 ```
 
 Each network export provides:

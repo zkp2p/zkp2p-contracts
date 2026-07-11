@@ -631,13 +631,11 @@ This script currently covers:
 - `yarn deploy:localhost`
 - `yarn deploy:base`
 - `yarn deploy:base_staging`
-- `yarn deploy:base_sepolia`
 
 ### Verification Commands
 
 - `yarn etherscan:base`
 - `yarn etherscan:base_staging`
-- `yarn etherscan:base_sepolia`
 
 ## Supported Payment Methods
 
@@ -700,7 +698,6 @@ For work on `foundry-main`:
 The repo is configured primarily for:
 
 - Base
-- Base Sepolia
 - Base staging
 - localhost / hardhat
 

@@ -68,7 +68,7 @@ yarn test                          # Core Hardhat suite
 npx hardhat test test/escrowV2/*   # Specific suite
 
 # Deploy
-yarn deploy:base_sepolia           # Base testnet
+yarn deploy:base_staging           # Base mainnet staging contracts
 yarn deploy:base                   # Base mainnet production
 ```
 
@@ -89,7 +89,6 @@ The attestation-service verifies zkTLS proofs off-chain, then signs EIP-712 type
 |-------|---------|------|
 | Base Mainnet | 8453 | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
 | Scroll Mainnet | 534352 | Contract addresses in deployment configs |
-| Base Sepolia | 84532 | Testnet USDC |
 
 ## Available Skills
 - `/ship-contracts-and-indexer` — Full deployment pipeline for contracts and indexer updates

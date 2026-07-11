@@ -32,7 +32,7 @@ export async function extractConstants(): Promise<void> {
   const params = require(path.join(ROOT, 'deployments', 'parameters.ts'));
 
   // Network names based on what's actually in parameters.ts (excluding localhost)
-  const networks = ['base', 'base_sepolia', 'base_staging'];
+  const networks = ['base', 'base_staging'];
   const indexExports: string[] = [];
   const dtsExports: string[] = [];
   const networksList: string[] = [];
@@ -82,7 +82,7 @@ export async function extractConstants(): Promise<void> {
 
     // Only write file if we have constants for this network
     if (Object.keys(networkConstants).length > 0) {
-      // Normalize network name for file (base_sepolia -> baseSepolia)
+      // Normalize network name for file (base_staging -> baseStaging)
       const fileName = network.replace(/_([a-z])/g, (_, char) => char.toUpperCase());
       const outPath = path.join(CONSTANTS_DIR, `${fileName}.json`);
       fs.writeFileSync(outPath, JSON.stringify(networkConstants, null, 2));

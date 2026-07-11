@@ -6,56 +6,48 @@ export const INTENT_EXPIRATION_PERIOD: any = {
   "localhost": ONE_DAY_IN_SECONDS,
   "base": SIX_HOURS_IN_SECONDS,
   "base_staging": ONE_HOUR_IN_SECONDS,
-  "base_sepolia": ONE_HOUR_IN_SECONDS,
 };
 
 export const PROTOCOL_TAKER_FEE: any = {
   "localhost": ether(.001),
   "base": ZERO,
   "base_staging": ZERO,
-  "base_sepolia": ZERO,
 };
 
 export const PROTOCOL_TAKER_FEE_RECIPIENT: any = {
   "localhost": "",
   "base": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
   "base_staging": "",
-  "base_sepolia": "",
 };
 
 export const ESCROW_DUST_RECIPIENT: any = {
   "localhost": "",
   "base": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
   "base_staging": "",
-  "base_sepolia": "",
 };
 
 export const ESCROW_DUST_THRESHOLD: any = {
   "localhost": usdc(0.1),
   "base": usdc(0.1),
   "base_staging": usdc(0.1),
-  "base_sepolia": usdc(0.1),
 };
 
 export const MAX_INTENTS_PER_DEPOSIT: any = {
   "localhost": 100,
   "base": 200,
   "base_staging": 200,
-  "base_sepolia": 200,
 };
 
 export const MULTI_SIG: any = {
   "localhost": "",
   "base": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
   "base_staging": "",
-  "base_sepolia": "",
 };
 
 export const WITNESS_ADDRESS: any = {
   "localhost": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
   "base": "0x5106A86819ED6Bb82c77CcBfC151250E1d369DbA",
   "base_staging": "0x4ab950AE1e3326578Bf7e643a2031E858aBa2927",
-  "base_sepolia": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
 };
 
 export const MULTI_WITNESS_ADDRESSES: Record<string, string[]> = {
@@ -64,14 +56,12 @@ export const MULTI_WITNESS_ADDRESSES: Record<string, string[]> = {
     "0x66649F896521b0fb487fE2077b4FBDA283d7f19a", // current AWS Nitro TEE signer
     "0x4ab950AE1e3326578Bf7e643a2031E858aBa2927", // current Railway staging signer (SIGNER_MODE=local)
   ],
-  base_sepolia: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"],
   localhost: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"],
 };
 
 export const MULTI_WITNESS_THRESHOLD: Record<string, number> = {
   base: 1,
   base_staging: 1,
-  base_sepolia: 1,
   localhost: 1,
 };
 
@@ -83,7 +73,6 @@ export const USDC: any = {
 export const ACROSS_SPOKE_POOL: any = {
   "base": "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64",
   "base_staging": "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64",
-  "base_sepolia": "",
   "localhost": "", // Fake address for local testing
   "hardhat": "",
 };
@@ -93,42 +82,36 @@ export const ESCROW_V2_INTENT_EXPIRATION_PERIOD: any = {
   "localhost": ONE_DAY_IN_SECONDS,
   "base": SIX_HOURS_IN_SECONDS,
   "base_staging": ONE_HOUR_IN_SECONDS,
-  "base_sepolia": ONE_HOUR_IN_SECONDS,
 };
 
 export const ESCROW_V2_MAX_INTENTS_PER_DEPOSIT: any = {
   "localhost": 100,
   "base": 200,
   "base_staging": 200,
-  "base_sepolia": 200,
 };
 
 export const ESCROW_V2_DUST_THRESHOLD: any = {
   "localhost": usdc(0.1),
   "base": usdc(0.1),
   "base_staging": usdc(0.1),
-  "base_sepolia": usdc(0.1),
 };
 
 export const ESCROW_V2_DUST_RECIPIENT: any = {
   "localhost": "",
   "base": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
   "base_staging": "",
-  "base_sepolia": "",
 };
 
 export const ORCHESTRATOR_V2_PROTOCOL_FEE: any = {
   "localhost": ether(.001),
   "base": ZERO,
   "base_staging": ZERO,
-  "base_sepolia": ZERO,
 };
 
 export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
   "localhost": "",
   "base": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
   "base_staging": "",
-  "base_sepolia": "",
 };
 
 // Pyth Network contract addresses
@@ -136,7 +119,6 @@ export const PYTH_CONTRACT: any = {
   "localhost": "",
   "base": "0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a",
   "base_staging": "0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a",
-  "base_sepolia": "0xA2aa501b19aff244D90cc15a4Cf739D2725B5729",
 };
 
 // For Goerli and localhost
@@ -147,5 +129,4 @@ export const DEPLOY_TX_DELAY_MS: any = {
   localhost: 0,
   base: 8000,
   base_staging: 5000,
-  base_sepolia: 5000,
 };

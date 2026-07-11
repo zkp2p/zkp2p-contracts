@@ -460,8 +460,8 @@ export function savePaymentMethodSnapshot(
     updatedAt: new Date().toISOString()
   };
 
-  // For production networks (base_sepolia, base_staging, base), save with timestamp and maintain latest
-  const productionNetworks = ['base_sepolia', 'base_staging', 'base'];
+  // For production networks (base_staging, base), save with timestamp and maintain latest
+  const productionNetworks = ['base_staging', 'base'];
 
   if (productionNetworks.includes(network)) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
