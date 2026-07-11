@@ -28,14 +28,12 @@ yarn test:forge:coverage          # Foundry coverage
 
 # Deploy
 yarn deploy:localhost             # Local hardhat node
-yarn deploy:base_sepolia          # Base testnet
 yarn deploy:base_staging          # Base mainnet (staging deployer)
 yarn deploy:base                  # Base mainnet (production)
 
 # Verify
 yarn etherscan:base               # Verify on Basescan
 yarn etherscan:base_staging
-yarn etherscan:base_sepolia
 ```
 
 ## Architecture
@@ -154,7 +152,6 @@ deploy/                               # Hardhat Deploy scripts (NN_description.t
 deployments/                          # Network artifacts
   base/                               # Production (chain 8453, 22 contracts)
   base_staging/                       # Staging (chain 8453, separate deployer)
-  base_sepolia/                       # Testnet (chain 84532)
   localhost/                          # Local dev (chain 31337)
   parameters.ts                       # Network-specific config values
   helpers.ts                          # Deployment helper functions
@@ -242,7 +239,6 @@ import { getAccounts } from "@utils/test";
 |---------|----------|------|---------------|-------------|
 | Base | 8453 | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | 6 hours | 200 |
 | Base Staging | 8453 | same | 1 hour | 200 |
-| Base Sepolia | 84532 | mock | 1 hour | 200 |
 | Localhost | 31337 | mock | 24 hours | 100 |
 
 ## Key Addresses
@@ -257,7 +253,7 @@ import { getAccounts } from "@utils/test";
 
 - `hardhat.config.ts`: Solidity 0.8.18, optimizer 200 runs, viaIR enabled, ethers v5
 - `foundry.toml`: Solidity 0.8.18, optimizer 800 runs, viaIR enabled, fuzz 256 runs, invariant depth 15
-- `.env`: `BASE_DEPLOY_PRIVATE_KEY`, `TESTNET_DEPLOY_PRIVATE_KEY`, `ALCHEMY_API_KEY`, `BASESCAN_API_KEY`
+- `.env`: `BASE_DEPLOY_PRIVATE_KEY`, `ALCHEMY_API_KEY`, `BASESCAN_API_KEY`
 - `tsconfig.json`: CommonJS, strict mode, path aliases
 
 ## Style

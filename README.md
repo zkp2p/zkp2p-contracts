@@ -490,10 +490,8 @@ Fill the relevant environment variables, including the ones used by deployment a
 
 - `ALCHEMY_API_KEY`
 - `BASE_DEPLOY_PRIVATE_KEY`
-- `TESTNET_DEPLOY_PRIVATE_KEY`
 - `BASESCAN_API_KEY`
 - `ETHERSCAN_KEY`
-- `INFURA_TOKEN`
 
 ### Local Development
 
@@ -631,13 +629,11 @@ This script currently covers:
 - `yarn deploy:localhost`
 - `yarn deploy:base`
 - `yarn deploy:base_staging`
-- `yarn deploy:base_sepolia`
 
 ### Verification Commands
 
 - `yarn etherscan:base`
 - `yarn etherscan:base_staging`
-- `yarn etherscan:base_sepolia`
 
 ## Supported Payment Methods
 
@@ -700,7 +696,6 @@ For work on `foundry-main`:
 The repo is configured primarily for:
 
 - Base
-- Base Sepolia
 - Base staging
 - localhost / hardhat
 

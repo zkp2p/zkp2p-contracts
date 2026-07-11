@@ -23,7 +23,7 @@ function ensureDir(dir: string) {
 }
 
 function normalizeNetworkName(fileName: string): string {
-  // e.g. baseContracts.ts => base; baseSepoliaContracts.ts => baseSepolia
+  // e.g. baseContracts.ts => base; baseStagingContracts.ts => baseStaging
   return fileName.replace(/Contracts\.ts$/, '');
 }
 
@@ -34,7 +34,7 @@ export async function extractAddresses(): Promise<void> {
 
   const files = fs
     .readdirSync(OUTPUTS_DIR)
-    .filter((f) => f.endsWith('Contracts.ts') && !f.startsWith('localhost') && !f.startsWith('baseSepolia'));
+    .filter((f) => f.endsWith('Contracts.ts') && !f.startsWith('localhost'));
 
   // First pass: load all networks and collect the union of all contract names
   const networksData: { file: string; network: string; data: OutputsFileShape }[] = [];

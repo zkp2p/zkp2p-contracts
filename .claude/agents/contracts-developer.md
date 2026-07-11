@@ -68,7 +68,7 @@ yarn test                          # Core Hardhat suite
 npx hardhat test test/escrowV2/*   # Specific suite
 
 # Deploy
-yarn deploy:base_sepolia           # Base testnet
+yarn deploy:base_staging           # Base mainnet staging contracts
 yarn deploy:base                   # Base mainnet production
 ```
 
@@ -83,14 +83,14 @@ Domain: { name: "UnifiedPaymentVerifier", version: "1", chainId, verifyingContra
 
 The attestation-service verifies zkTLS proofs off-chain, then signs EIP-712 typed data. On-chain, `UnifiedPaymentVerifier` recovers the signer and checks it against the registered witness address.
 
-## Multi-Chain
+## Deployment Targets
 
 | Chain | ChainId | USDC |
 |-------|---------|------|
-| Base Mainnet | 8453 | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
-| Scroll Mainnet | 534352 | Contract addresses in deployment configs |
-| Base Sepolia | 84532 | Testnet USDC |
+| Base production | 8453 | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| Base staging | 8453 | same |
+| Local Hardhat | 31337 | mock |
 
 ## Available Skills
-- `/ship-contracts-and-indexer` — Full deployment pipeline for contracts and indexer updates
+- `/ship-contracts` — Full deployment pipeline for contracts
 - `/query-indexer` — Query indexed on-chain data
