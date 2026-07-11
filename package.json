@@ -28,7 +28,7 @@
     "etherscan:base": "yarn hardhat --network base etherscan-verify-with-delay --delay 600",
     "etherscan:base_staging": "yarn hardhat --network base_staging etherscan-verify-with-delay --delay 600",
     "etherscan:base_sepolia": "yarn hardhat --network base_sepolia etherscan-verify-with-delay --delay 600",
-    "test": "npx hardhat test test/libs/*.ts test/hooks/*.ts test/periphery/*.ts test/unifiedVerifier/*.ts test/registries/*.ts test/escrow/*.ts test/escrowV2/*.ts test/orchestrator/*.ts test/orchestratorV2/*.ts test/rateManager/*.ts",
+    "test": "npx hardhat test test/libs/*.ts test/hooks/*.ts test/periphery/*.ts test/unifiedVerifier/*.ts test/registries/*.ts test/escrow/*.ts test/escrowV2/*.ts test/orchestrator/*.ts test/orchestratorV2/*.ts test/rateManager/*.ts test/risk/*.ts",
     "test:all": "yarn test && yarn test:forge",
     "test:integration": "npx hardhat test test/integration/*.ts",
     "test:clean": "yarn build && yarn test",

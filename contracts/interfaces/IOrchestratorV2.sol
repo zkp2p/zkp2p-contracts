@@ -6,11 +6,12 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IPostIntentHookV2 } from "./IPostIntentHookV2.sol";
 import { IPreIntentHook } from "./IPreIntentHook.sol";
 import { IReferralFee } from "./IReferralFee.sol";
+import { IProtocolRiskManager } from "./IProtocolRiskManager.sol";
 
 /**
  * @title IOrchestratorV2
- * @notice Interface for the V2 orchestrator with pre-intent hooks, whitelist hooks,
- *         manager fee support, and cleanupOrphanedIntents.
+ * @notice Interface for the open V2 orchestrator with onchain risk policy, manager fees,
+ *         compatibility-only pre-intent hook fields, and cleanupOrphanedIntents.
  */
 interface IOrchestratorV2 {
 
@@ -41,10 +42,10 @@ interface IOrchestratorV2 {
         bytes32 fiatCurrency;                       // The currency code for offchain payment
         uint256 conversionRate;                     // The conversion rate agreed offchain
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
-        bytes gatingServiceSignature;               // Signature from the deposit's gating service
-        uint256 signatureExpiration;                // Timestamp when the gating service signature expires
+        bytes gatingServiceSignature;               // Deprecated compatibility field; ignored by the open orchestrator
+        uint256 signatureExpiration;                // Deprecated compatibility field; ignored by the open orchestrator
         IPostIntentHookV2 postIntentHook;           // Optional post-intent hook (address(0) for no hook)
-        bytes preIntentHookData;                    // Ephemeral data passed only to the pre-intent hook during signalIntent
+        bytes preIntentHookData;                    // Deprecated compatibility field; ignored by the open orchestrator
         bytes data;                                 // Signal data persisted in Intent and forwarded as post-intent hook signalHookData
     }
 
@@ -90,6 +91,15 @@ interface IOrchestratorV2 {
     event DepositPreIntentHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
     event DepositWhitelistHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
 
+    event RiskManagerUpdated(address indexed riskManager);
+    event IntentRiskPolicySnapshotted(
+        bytes32 indexed intentHash,
+        address indexed riskManager,
+        uint256 effectiveProtocolFee,
+        uint16 feeDiscountBps
+    );
+    event IntentRiskCallbackFailed(bytes32 indexed intentHash, address indexed riskManager, bytes reason);
+
     event AllowMultipleIntentsUpdated(bool allowMultiple);
 
     event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);
@@ -132,6 +142,8 @@ interface IOrchestratorV2 {
     error AccountHasActiveIntent(address account, bytes32 existingIntent);
     error InvalidPostIntentHook(address hook);
     error InvalidPreIntentHook(address hook);
+    error InvalidRiskManager(address riskManager);
+    error LegacyEligibilityHookDisabled();
     error InvalidSignature();
     error SignatureExpired(uint256 expiration, uint256 currentTime);
 
@@ -149,12 +161,17 @@ interface IOrchestratorV2 {
     function getAccountIntents(address account) external view returns (bytes32[] memory);
     function getDepositPreIntentHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
     function getDepositWhitelistHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
+    function getIntentRiskManager(bytes32 intentHash) external view returns (IProtocolRiskManager);
+    function getIntentProtocolFee(bytes32 intentHash) external view returns (uint256);
+    function hasActiveIntent(bytes32 intentHash) external view returns (bool);
 
     /* ============ External Functions for Users ============ */
 
     function signalIntent(SignalIntentParams calldata params) external;
     function setDepositPreIntentHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
     function setDepositWhitelistHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
+
+    function setRiskManager(IProtocolRiskManager riskManager) external;
 
     function cancelIntent(bytes32 intentHash) external;
 

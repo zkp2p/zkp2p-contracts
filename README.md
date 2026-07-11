@@ -11,6 +11,21 @@ Smart contracts for the ZKP2P fiat on/off-ramp, with the current repository cent
 
 The repository still contains legacy v1 contracts and deploy scripts because v2 is deployed on top of shared protocol infrastructure, but the active development work over the last month has been concentrated in the v2 contracts, periphery, and deployment pipeline.
 
+## Open onchain risk candidate
+
+The additive open-protocol candidate moves identity, reputation, platform risk,
+stake maturity, and chargeback compensation into contracts while reusing every
+existing EscrowV2 deposit. Its design, rollout boundaries, and threat model are
+documented in:
+
+- [`../docs/onchain-risk/01-design-principles.md`](../docs/onchain-risk/01-design-principles.md)
+- [`../docs/onchain-risk/02-architecture.md`](../docs/onchain-risk/02-architecture.md)
+- [`../docs/onchain-risk/03-migration-and-stack-impact.md`](../docs/onchain-risk/03-migration-and-stack-impact.md)
+- [`../docs/onchain-risk/04-threat-model.md`](../docs/onchain-risk/04-threat-model.md)
+
+The deployment script is opt-in and does not modify any live environment unless
+an operator explicitly sets `DEPLOY_ONCHAIN_RISK=true`.
+
 ## Table of Contents
 
 - [What Landed Recently](#what-landed-recently)
@@ -299,8 +314,8 @@ For each `(paymentMethod, currency)` pair, the deposit can use:
 
 - validates the escrow and deposit
 - verifies payment-method and currency support
-- runs the generic pre-intent hook, if present
-- runs the dedicated whitelist hook, if present
+- asks the public risk manager to validate identity, reputation, and stake
+- ignores legacy gating signatures and maker eligibility hooks
 - snapshots deposit min amount and manager fee terms
 - stores the intent
 - locks funds on `EscrowV2`
@@ -367,14 +382,14 @@ This split keeps settlement safety inside escrow while letting pricing move quic
 
 v2 introduces a clearer extension model around the intent lifecycle.
 
-### Pre-Intent Hooks
+### Pre-Intent Hook Compatibility
 
-Executed during `signalIntent`, before funds are locked:
-
-- generic hook slot: arbitrary eligibility or policy checks
-- whitelist hook slot: dedicated private-liquidity control
-
-These hooks are configured per deposit by the depositor or delegate.
+The generic and whitelist hook setters/getters remain in the ABI so existing
+clients and deposit tooling do not break. A legacy deployment with no risk
+manager preserves hook execution. Once an onchain risk manager is selected,
+`OrchestratorV2.signalIntent` does not execute either hook and rejects new
+non-zero hook configuration: maker-controlled eligibility would reintroduce a
+private gate into the open protocol. `preIntentHookData` is ignored in that mode.
 
 ### Post-Intent Hooks
 
@@ -386,7 +401,10 @@ Executed during `fulfillIntent`, after verification and escrow release:
 
 ### Registries as Safety Gates
 
-The hook and orchestrator registry model prevents arbitrary external contracts from being inserted into the settlement path without explicit whitelisting.
+The orchestrator and payment-verifier registries remain settlement safety
+gates. Post-intent hooks are selected by the taker and must be deployed contract
+addresses; maker pre-intent hooks are legacy-only controls and cannot be newly
+configured on the open deployment.
 
 ## Payment Verification Model
 

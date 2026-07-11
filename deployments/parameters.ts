@@ -46,6 +46,7 @@ export const MAX_INTENTS_PER_DEPOSIT: any = {
 
 export const MULTI_SIG: any = {
   "localhost": "",
+  "hardhat": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
   "base": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
   "base_staging": "",
   "base_sepolia": "",
@@ -66,6 +67,25 @@ export const MULTI_WITNESS_ADDRESSES: Record<string, string[]> = {
   ],
   base_sepolia: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"],
   localhost: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"],
+};
+
+// These roles are intentionally separate from payment proof witnesses and from
+// each other. Production values stay empty until reviewed, role-specific
+// ERC-1271/threshold signers are provisioned in the cutover Safe batch.
+export const IDENTITY_ATTESTOR_ADDRESSES: Record<string, string[]> = {
+  base: [],
+  base_staging: [],
+  base_sepolia: [],
+  localhost: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"],
+  hardhat: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"],
+};
+
+export const CHARGEBACK_ATTESTOR_ADDRESSES: Record<string, string[]> = {
+  base: [],
+  base_staging: [],
+  base_sepolia: [],
+  localhost: ["0x70997970C51812dc3A010C7d01b50e0d17dc79C8"],
+  hardhat: ["0x70997970C51812dc3A010C7d01b50e0d17dc79C8"],
 };
 
 export const MULTI_WITNESS_THRESHOLD: Record<string, number> = {
@@ -129,6 +149,15 @@ export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
   "base": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
   "base_staging": "",
   "base_sepolia": "",
+};
+
+// Open orchestrator charges every successful take. Reputation tiers discount
+// this base fee but never alter the maker's quoted conversion rate.
+export const OPEN_ORCHESTRATOR_PROTOCOL_FEE: any = {
+  "localhost": ether(.003),
+  "base": ether(.003),
+  "base_staging": ether(.003),
+  "base_sepolia": ether(.003),
 };
 
 // Pyth Network contract addresses

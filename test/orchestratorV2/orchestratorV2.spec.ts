@@ -162,6 +162,71 @@ describe("OrchestratorV2", () => {
       expect(feeEvent?.args?.fee).to.eq(ether(0.01));
     });
 
+    it("snapshots the onchain risk module and discounted protocol fee", async () => {
+      const riskManagerMock = await (
+        await ethers.getContractFactory("ProtocolRiskManagerMock", owner.wallet)
+      ).deploy();
+      await riskManagerMock.setFeeDiscountBps(5_000);
+      await orchestrator.connect(owner.wallet).setProtocolFee(ether(0.01));
+      await orchestrator.connect(owner.wallet).setRiskManager(riskManagerMock.address);
+
+      const tx = await subject();
+      const receipt = await tx.wait();
+      const signalEvent = receipt.events?.find((event: any) => event.event === "IntentSignaled");
+      const intentHash = signalEvent?.args?.intentHash;
+
+      expect(await orchestrator.getIntentRiskManager(intentHash)).to.eq(riskManagerMock.address);
+      expect(await orchestrator.getIntentProtocolFee(intentHash)).to.eq(ether(0.005));
+      const context = await riskManagerMock.getSignalContext(intentHash);
+      expect(context.taker).to.eq(taker.address);
+      expect(context.maker).to.eq(depositor.address);
+      expect(context.amount).to.eq(usdc(50));
+
+      await orchestrator.connect(depositor.wallet).releaseFundsToPayer(intentHash);
+      expect(await riskManagerMock.fulfilledAmounts(intentHash)).to.eq(usdc(50));
+      expect(await riskManagerMock.paymentProofVerified(intentHash)).to.eq(false);
+    });
+
+    it("opens taking, rejects dead maker gates, and removes active intents in O(1)", async () => {
+      const riskManagerMock = await (
+        await ethers.getContractFactory("ProtocolRiskManagerMock", owner.wallet)
+      ).deploy();
+      await orchestrator.connect(owner.wallet).setRiskManager(riskManagerMock.address);
+
+      await expect(
+        orchestrator
+          .connect(depositor.wallet)
+          .setDepositPreIntentHook(escrow.address, ZERO, rateManagerMock.address),
+      ).to.be.revertedWithCustomError(orchestrator, "LegacyEligibilityHookDisabled");
+
+      const hashes: string[] = [];
+      for (let i = 0; i < 3; i += 1) {
+        const receipt = await (await subject()).wait();
+        hashes.push(receipt.events?.find((event: any) => event.event === "IntentSignaled")?.args?.intentHash);
+      }
+      await orchestrator.connect(taker.wallet).cancelIntent(hashes[1]);
+
+      const active = await orchestrator.getAccountIntents(taker.address);
+      expect(active.length).to.eq(2);
+      expect(active).to.include(hashes[0]);
+      expect(active).to.include(hashes[2]);
+    });
+
+    it("prunes and unlocks when an abandonment callback fails", async () => {
+      const riskManagerMock = await (
+        await ethers.getContractFactory("ProtocolRiskManagerMock", owner.wallet)
+      ).deploy();
+      await orchestrator.connect(owner.wallet).setRiskManager(riskManagerMock.address);
+      const receipt = await (await subject()).wait();
+      const intentHash = receipt.events?.find((event: any) => event.event === "IntentSignaled")?.args?.intentHash;
+      await riskManagerMock.setRevertOnAbandon(true);
+
+      await expect(orchestrator.connect(taker.wallet).cancelIntent(intentHash))
+        .to.emit(orchestrator, "IntentRiskCallbackFailed")
+        .and.to.emit(orchestrator, "IntentPruned");
+      expect(await orchestrator.hasActiveIntent(intentHash)).to.equal(false);
+    });
+
     describe("when conversion rate is below delegated manager rate", () => {
       beforeEach(async () => {
         subjectConversionRate = ether(1.1);
