@@ -88,12 +88,14 @@ describe("Generic Zelle Payment Method Configuration", () => {
   });
 
   for (const { name, config } of LEGACY_ZELLE_METHODS) {
-    it(`keeps ${name} registered for drain support`, async () => {
+    it(`removes ${name} from every active payment method surface`, async () => {
       const isPaymentMethod = await paymentVerifierRegistry.isPaymentMethod(config.paymentMethodHash);
+      const legacyPaymentMethods = await legacyUnifiedPaymentVerifier.getPaymentMethods();
       const paymentMethods = await unifiedPaymentVerifierV2.getPaymentMethods();
 
-      expect(isPaymentMethod).to.be.true;
-      expect(paymentMethods).to.include(config.paymentMethodHash);
+      expect(isPaymentMethod).to.be.false;
+      expect(legacyPaymentMethods).to.not.include(config.paymentMethodHash);
+      expect(paymentMethods).to.not.include(config.paymentMethodHash);
     });
   }
 
