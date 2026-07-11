@@ -599,16 +599,16 @@ Configures the v2 verifier and registry for all supported methods:
 - save payment method snapshots
 - emit Safe batch calldata when the deployer is not the registry owner
 
-This script currently covers:
+This historical script configured:
 
 - Venmo
 - Revolut
 - Cash App
 - Wise
 - Mercado Pago
-- Zelle Citi
-- Zelle Chase
-- Zelle Bank of America
+- Zelle Citi (retired by `deploy/26_retire_legacy_zelle_payment_methods.ts`)
+- Zelle Chase (retired by `deploy/26_retire_legacy_zelle_payment_methods.ts`)
+- Zelle Bank of America (retired by `deploy/26_retire_legacy_zelle_payment_methods.ts`)
 - PayPal
 - Monzo
 - N26
@@ -641,17 +641,14 @@ This script currently covers:
 
 ## Supported Payment Methods
 
-The repository contains deployment coverage for the following payment rails in the current v2 configuration flow:
+The current v2 configuration supports the following payment rails:
 
 - Venmo
 - Revolut
 - Cash App
 - Wise
 - Mercado Pago
-- Zelle:
-  - Citi
-  - Chase
-  - Bank of America
+- Zelle
 - PayPal
 - Monzo
 - N26

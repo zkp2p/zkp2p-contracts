@@ -30,40 +30,6 @@ function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-// Helper to convert BigNumber values to decimal numbers
-function convertToNumber(value: any): number {
-  if (!value) return 30; // Default
-
-  // Handle BigNumber objects
-  if (typeof value === 'object') {
-    if (value._isBigNumber || value.type === 'BigNumber') {
-      // Convert hex to decimal
-      const hex = value.hex || value._hex || '0x1e';
-      return parseInt(hex, 16);
-    }
-    // Handle nested objects (like Zelle with per-bank buffers)
-    if (typeof value === 'object' && !Array.isArray(value)) {
-      // Take the first value if it's an object with multiple entries
-      const firstKey = Object.keys(value)[0];
-      if (firstKey) {
-        return convertToNumber(value[firstKey]);
-      }
-    }
-  }
-
-  // Handle string numbers
-  if (typeof value === 'string') {
-    return parseInt(value);
-  }
-
-  // Already a number
-  if (typeof value === 'number') {
-    return value;
-  }
-
-  return 30; // Default fallback
-}
-
 export async function extractPaymentMethods(): Promise<void> {
   ensureDir(PAYMENT_METHODS_DIR);
 
@@ -252,6 +218,9 @@ ${networks.map(net => `  ${net}: require('./${net}.json')`).join(',\n')}
   const RETIRED_METHOD_HASH_TO_NAME: Record<string, string> = {
     '0xd9ff4fd6b39a3e3dd43c41d05662a5547de4a878bc97a65bcb352ade493cdc6b': 'n26',
     '0xaea63ef983458674f54ee50cdaa7b09d80a5c6c03ed505f51c90b0f2b54abb01': 'luxon',
+    '0x817260692b75e93c7fbc51c71637d4075a975e221e1ebc1abeddfabd731fd90d': 'zelle-citi',
+    '0x6aa1d1401e79ad0549dced8b1b96fb72c41cd02b32a7d9ea1fed54ba9e17152e': 'zelle-chase',
+    '0x4bc42b322a3ad413b91b2fde30549ca70d6ee900eded1681de91aaf32ffd7ab5': 'zelle-bofa',
   };
   for (const [hash, name] of Object.entries(RETIRED_METHOD_HASH_TO_NAME)) {
     const normalized = hash.toLowerCase();
