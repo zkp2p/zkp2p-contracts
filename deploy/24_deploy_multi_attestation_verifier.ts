@@ -53,7 +53,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await setAttestationVerifier(hre, upvV2, multiAttestationVerifier.address);
 
   // 3. Transfer MultiAttestationVerifier ownership to the multisig. On networks where the
-  //    multisig is the deployer (localhost, base_staging, base_sepolia) this is a no-op.
+  //    multisig is the deployer (localhost, base_staging) this is a no-op.
   const multiAttestationVerifierContract = await ethers.getContractAt(
     "MultiAttestationVerifier",
     multiAttestationVerifier.address

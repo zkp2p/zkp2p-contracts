@@ -23,7 +23,7 @@ function ensureDir(dir: string) {
 }
 
 function normalizeNetworkName(fileName: string): string {
-  // e.g. baseContracts.ts => base; baseSepoliaContracts.ts => baseSepolia
+  // e.g. baseContracts.ts => base; baseStagingContracts.ts => baseStaging
   return fileName.replace(/Contracts\.ts$/, '');
 }
 
@@ -38,7 +38,7 @@ export async function extractABIs(): Promise<void> {
 
   const files = fs
     .readdirSync(OUTPUTS_DIR)
-    .filter((f) => f.endsWith('Contracts.ts') && !f.startsWith('localhost') && !f.startsWith('baseSepolia'));
+    .filter((f) => f.endsWith('Contracts.ts') && !f.startsWith('localhost'));
 
   const topIndexExports: string[] = [];
 

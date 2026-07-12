@@ -38,8 +38,8 @@ Orchestrator ── net ──▶ Recipient OR PostIntentHook (then executes)
 - `yarn test:fast`: Skip compile for faster iteration.
 - `yarn test:forge`: Run Foundry tests in `test-foundry/` (see `foundry.toml`).
 - `yarn coverage`: Solidity coverage via `solidity-coverage`.
-- Deploy: `yarn deploy:localhost`, `yarn deploy:base`, `yarn deploy:base_sepolia`.
-- Verify: `yarn etherscan:base` (and `:base_staging`, `:base_sepolia`).
+- Deploy: `yarn deploy:localhost`, `yarn deploy:base`, `yarn deploy:base_staging`.
+- Verify: `yarn etherscan:base` and `yarn etherscan:base_staging`.
 
 ## Coding Style & Naming Conventions
 - Solidity: 4-space indent, explicit visibility, NatSpec for externals. Contracts/Libs `PascalCase`, interfaces `IName`, constants `UPPER_CASE`.
