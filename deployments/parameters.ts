@@ -4,48 +4,56 @@ import { ether, usdc } from "../utils/common/units";
 
 export const INTENT_EXPIRATION_PERIOD: any = {
   "localhost": ONE_DAY_IN_SECONDS,
+  "hardhat": ONE_DAY_IN_SECONDS,
   "base": SIX_HOURS_IN_SECONDS,
   "base_staging": ONE_HOUR_IN_SECONDS,
 };
 
 export const PROTOCOL_TAKER_FEE: any = {
   "localhost": ether(.001),
+  "hardhat": ether(.001),
   "base": ZERO,
   "base_staging": ZERO,
 };
 
 export const PROTOCOL_TAKER_FEE_RECIPIENT: any = {
   "localhost": "",
+  "hardhat": "",
   "base": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
   "base_staging": "",
 };
 
 export const ESCROW_DUST_RECIPIENT: any = {
   "localhost": "",
+  "hardhat": "",
   "base": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
   "base_staging": "",
 };
 
 export const ESCROW_DUST_THRESHOLD: any = {
   "localhost": usdc(0.1),
+  "hardhat": usdc(0.1),
   "base": usdc(0.1),
   "base_staging": usdc(0.1),
 };
 
 export const MAX_INTENTS_PER_DEPOSIT: any = {
   "localhost": 100,
+  "hardhat": 100,
   "base": 200,
   "base_staging": 200,
 };
 
 export const MULTI_SIG: any = {
   "localhost": "",
+  "hardhat": "",
   "base": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
   "base_staging": "",
 };
 
 export const WITNESS_ADDRESS: any = {
   "localhost": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "hardhat": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
   "base": "0x5106A86819ED6Bb82c77CcBfC151250E1d369DbA",
   "base_staging": "0x4ab950AE1e3326578Bf7e643a2031E858aBa2927",
 };
@@ -57,12 +65,14 @@ export const MULTI_WITNESS_ADDRESSES: Record<string, string[]> = {
     "0x4ab950AE1e3326578Bf7e643a2031E858aBa2927", // current Railway staging signer (SIGNER_MODE=local)
   ],
   localhost: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"],
+  hardhat: ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"],
 };
 
 export const MULTI_WITNESS_THRESHOLD: Record<string, number> = {
   base: 1,
   base_staging: 1,
   localhost: 1,
+  hardhat: 1,
 };
 
 export const USDC: any = {
@@ -80,39 +90,65 @@ export const ACROSS_SPOKE_POOL: any = {
 // V2 Parameters
 export const ESCROW_V2_INTENT_EXPIRATION_PERIOD: any = {
   "localhost": ONE_DAY_IN_SECONDS,
+  "hardhat": ONE_DAY_IN_SECONDS,
   "base": SIX_HOURS_IN_SECONDS,
   "base_staging": ONE_HOUR_IN_SECONDS,
 };
 
 export const ESCROW_V2_MAX_INTENTS_PER_DEPOSIT: any = {
   "localhost": 100,
+  "hardhat": 100,
   "base": 200,
   "base_staging": 200,
 };
 
 export const ESCROW_V2_DUST_THRESHOLD: any = {
   "localhost": usdc(0.1),
+  "hardhat": usdc(0.1),
   "base": usdc(0.1),
   "base_staging": usdc(0.1),
 };
 
 export const ESCROW_V2_DUST_RECIPIENT: any = {
   "localhost": "",
+  "hardhat": "",
   "base": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
   "base_staging": "",
 };
 
 export const ORCHESTRATOR_V2_PROTOCOL_FEE: any = {
   "localhost": ether(.001),
+  "hardhat": ether(.001),
   "base": ZERO,
   "base_staging": ZERO,
 };
 
 export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
   "localhost": "",
+  "hardhat": "",
   "base": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
   "base_staging": "",
 };
+
+// Stake-based risk system parameters. Production thresholds remain an explicit governance
+// decision; the values below are local-development defaults used by deployment tests.
+export const STAKE_RISK_TIER_THRESHOLDS: Record<string, any[]> = {
+  localhost: [usdc(100), usdc(500), usdc(1_000), usdc(5_000)],
+  hardhat: [usdc(100), usdc(500), usdc(1_000), usdc(5_000)],
+};
+
+export const STAKE_RISK_CONCURRENCY_LIMITS: Record<string, number[]> = {
+  localhost: [1, 5, 20, 50, 1_000],
+  hardhat: [1, 5, 20, 50, 1_000],
+};
+
+export const STAKE_VAULT_BASE_EXIT_DELAY = ONE_DAY_IN_SECONDS.mul(30);
+export const STAKE_VAULT_CONTROLLER_CHANGE_DELAY = ONE_DAY_IN_SECONDS.mul(2);
+export const RISK_MAX_INTENT_LIFETIME = ONE_DAY_IN_SECONDS.mul(5);
+export const RISK_SETTLEMENT_BUFFER = ONE_DAY_IN_SECONDS;
+export const RISK_CALLBACK_GAS_LIMIT = 2_000_000;
+export const REVERSIBLE_PLATFORM_RISK_WINDOW = ONE_DAY_IN_SECONDS.mul(30);
+export const REVERSIBLE_PLATFORM_RESERVE_BPS = 10_000;
 
 // Pyth Network contract addresses
 export const PYTH_CONTRACT: any = {
@@ -127,6 +163,7 @@ export const USDC_RECIPIENT = "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929";
 
 export const DEPLOY_TX_DELAY_MS: any = {
   localhost: 0,
+  hardhat: 0,
   base: 8000,
   base_staging: 5000,
 };

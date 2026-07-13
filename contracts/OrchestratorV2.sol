@@ -110,7 +110,8 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      * @param _params                   Struct containing all the intent parameters
      */
     function signalIntent(SignalIntentParams calldata _params)
-        external
+        public
+        virtual
         nonReentrant
         whenNotPaused
     {
@@ -187,7 +188,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      *
      * @param _intentHash    Hash of intent being cancelled
      */
-    function cancelIntent(bytes32 _intentHash) external {
+    function cancelIntent(bytes32 _intentHash) public virtual {
         // Checks
         Intent memory intent = intents[_intentHash];
         
@@ -244,7 +245,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      *
      * @param _params               Struct containing all the fulfill intent parameters
      */
-    function fulfillIntent(FulfillIntentParams calldata _params) external nonReentrant whenNotPaused {
+    function fulfillIntent(FulfillIntentParams calldata _params) public virtual nonReentrant whenNotPaused {
         // Checks
         Intent memory intent = intents[_params.intentHash];
         if (intent.paymentMethod == bytes32(0)) revert IntentNotFound(_params.intentHash);
@@ -298,7 +299,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
      */
-    function releaseFundsToPayer(bytes32 _intentHash) external nonReentrant {
+    function releaseFundsToPayer(bytes32 _intentHash) public virtual nonReentrant {
         // Checks
         Intent memory intent = intents[_intentHash];
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
@@ -327,7 +328,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      * 
      * @param _intents   Array of intent hashes to prune
      */
-    function pruneIntents(bytes32[] calldata _intents) external {
+    function pruneIntents(bytes32[] calldata _intents) public virtual {
         for (uint256 i = 0; i < _intents.length; i++) {
             bytes32 intentHash = _intents[i];
             if (intentHash != bytes32(0)) {
@@ -351,7 +352,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      *
      * @param _intentHashes    Array of intent hashes to check and clean up
      */
-    function cleanupOrphanedIntents(bytes32[] calldata _intentHashes) external {
+    function cleanupOrphanedIntents(bytes32[] calldata _intentHashes) public virtual {
         for (uint256 i = 0; i < _intentHashes.length; i++) {
             bytes32 intentHash = _intentHashes[i];
             Intent memory intent = intents[intentHash];

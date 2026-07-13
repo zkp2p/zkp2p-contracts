@@ -144,6 +144,7 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   return false;
 };
 
+func.tags = ["14_deploy_v2_system", "V2System"];
 func.dependencies = ["00_deploy_system"];
 
 export default func;

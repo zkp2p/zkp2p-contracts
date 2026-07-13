@@ -182,6 +182,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await waitForDeploymentDelay(hre);
 };
 
+func.tags = ["00_deploy_system", "LegacySystem"];
+
 func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.network.name;
   if (network === "localhost" || network === "hardhat") {

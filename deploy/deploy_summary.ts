@@ -57,6 +57,12 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     ChainlinkOracleAdapter:             ${tryGetAddress(network, "ChainlinkOracleAdapter")}
     PythOracleAdapter:                  ${tryGetAddress(network, "PythOracleAdapter")}
     ProtocolViewerV2:                   ${tryGetAddress(network, "ProtocolViewerV2")}
+    ----------------------------------------------------------------------
+    Stake Risk Contracts:
+    OrchestratorV3:                     ${tryGetAddress(network, "OrchestratorV3")}
+    StakeVault:                         ${tryGetAddress(network, "StakeVault")}
+    RiskTierManager:                    ${tryGetAddress(network, "RiskTierManager")}
+    DeferredPayoutHook:                 ${tryGetAddress(network, "DeferredPayoutHook")}
     `
   );
 
