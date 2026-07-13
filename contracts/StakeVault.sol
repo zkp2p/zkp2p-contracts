@@ -52,6 +52,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     error ZeroAddress();
     error ZeroAmount();
     error UnauthorizedController(address caller);
+    error UnauthorizedPositionController(address caller, address expectedController);
     error CustodyActionPaused();
     error AlreadyExiting(address staker);
     error NotExiting(address staker);
@@ -63,6 +64,8 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     error InvalidReservationAmount(uint256 amount, uint256 reservedAmount);
     error DeferredPayoutAlreadyExists(bytes32 intentHash);
     error DeferredPayoutNotFound(bytes32 intentHash);
+    error DeferredPayoutAlreadyFunded(bytes32 intentHash, uint256 amount);
+    error DeferredPayoutBeneficiaryMismatch(address expected, address actual);
     error DeferredPayoutNotMature(uint64 releaseTime, uint64 currentTime);
     error UnauthorizedBeneficiary(address caller, address beneficiary);
     error InsufficientUnaccountedTokens(uint256 available, uint256 required);
@@ -244,13 +247,14 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
 
         reservations[_intentHash] = Reservation({
             staker: _staker,
+            controller: msg.sender,
             amount: _amount,
             releaseTime: _releaseTime,
             active: true
         });
         reservedStake[_staker] += _amount;
 
-        emit StakeReserved(_intentHash, _staker, _amount, reservedStake[_staker], _releaseTime);
+        emit StakeReserved(_intentHash, _staker, msg.sender, _amount, reservedStake[_staker], _releaseTime);
     }
 
     /**
@@ -260,9 +264,10 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         bytes32 _intentHash,
         uint256 _newAmount,
         uint64 _releaseTime
-    ) external override onlyController {
+    ) external override {
         Reservation storage reservation = reservations[_intentHash];
         if (!reservation.active) revert ReservationNotFound(_intentHash);
+        _requirePositionController(reservation.controller);
         if (_newAmount == 0) revert ZeroAmount();
 
         uint256 previousAmount = reservation.amount;
@@ -291,9 +296,10 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     /**
      * @notice Releases an active reservation without slashing stake.
      */
-    function releaseReservation(bytes32 _intentHash) external override onlyController {
+    function releaseReservation(bytes32 _intentHash) external override {
         Reservation memory reservation = reservations[_intentHash];
         if (!reservation.active) revert ReservationNotFound(_intentHash);
+        _requirePositionController(reservation.controller);
 
         delete reservations[_intentHash];
         reservedStake[reservation.staker] -= reservation.amount;
@@ -307,34 +313,80 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Slashes part of a reservation, releases any excess, and credits maker compensation.
+     * @notice Slashes part of a reservation, retains remaining coverage, and credits maker compensation.
      */
     function slashReservation(
         bytes32 _intentHash,
         address _maker,
         uint256 _amount
-    ) external override onlyController {
+    ) external override {
         if (_maker == address(0)) revert ZeroAddress();
         if (_amount == 0) revert ZeroAmount();
 
-        Reservation memory reservation = reservations[_intentHash];
+        Reservation storage reservation = reservations[_intentHash];
         if (!reservation.active) revert ReservationNotFound(_intentHash);
+        _requirePositionController(reservation.controller);
         if (_amount > reservation.amount) revert InvalidReservationAmount(_amount, reservation.amount);
 
-        delete reservations[_intentHash];
-        reservedStake[reservation.staker] -= reservation.amount;
-        stakeBalance[reservation.staker] -= _amount;
+        address staker = reservation.staker;
+        uint256 remainingReservation = reservation.amount - _amount;
+        if (remainingReservation == 0) {
+            delete reservations[_intentHash];
+        } else {
+            reservation.amount = remainingReservation;
+        }
+
+        reservedStake[staker] -= _amount;
+        stakeBalance[staker] -= _amount;
         totalStaked -= _amount;
 
         _creditCompensation(_intentHash, _maker, _amount);
 
         emit StakeSlashed(
             _intentHash,
-            reservation.staker,
+            staker,
             _maker,
             _amount,
-            stakeBalance[reservation.staker]
+            stakeBalance[staker],
+            remainingReservation
         );
+    }
+
+    /**
+     * @notice Snapshots the current controller for a deferred position before any proceeds exist.
+     * @dev Admission is blocked while reservations are paused. Later terminal accounting remains
+     *      available to the snapshotted controller even after a pause or controller handover.
+     */
+    function authorizeDeferredPayout(
+        bytes32 _intentHash,
+        address _beneficiary,
+        uint64 _releaseTime
+    ) external override onlyController {
+        if (reservationsPaused) revert CustodyActionPaused();
+        if (_beneficiary == address(0)) revert ZeroAddress();
+        if (deferredPayouts[_intentHash].beneficiary != address(0)) revert DeferredPayoutAlreadyExists(_intentHash);
+
+        deferredPayouts[_intentHash] = DeferredPayout({
+            beneficiary: _beneficiary,
+            controller: msg.sender,
+            amount: 0,
+            releaseTime: _releaseTime
+        });
+
+        emit DeferredPayoutAuthorized(_intentHash, _beneficiary, msg.sender, _releaseTime);
+    }
+
+    /**
+     * @notice Removes an unfunded deferred-position authorization after cancellation.
+     */
+    function releaseDeferredPayoutAuthorization(bytes32 _intentHash) external override {
+        DeferredPayout memory payout = deferredPayouts[_intentHash];
+        if (payout.beneficiary == address(0)) revert DeferredPayoutNotFound(_intentHash);
+        _requirePositionController(payout.controller);
+        if (payout.amount != 0) revert DeferredPayoutAlreadyFunded(_intentHash, payout.amount);
+
+        delete deferredPayouts[_intentHash];
+        emit DeferredPayoutAuthorizationReleased(_intentHash, payout.beneficiary, payout.controller);
     }
 
     /**
@@ -345,22 +397,25 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         address _beneficiary,
         uint256 _amount,
         uint64 _releaseTime
-    ) external override onlyController {
-        if (reservationsPaused) revert CustodyActionPaused();
+    ) external override {
         if (_beneficiary == address(0)) revert ZeroAddress();
         if (_amount == 0) revert ZeroAmount();
-        if (deferredPayouts[_intentHash].beneficiary != address(0)) revert DeferredPayoutAlreadyExists(_intentHash);
+
+        DeferredPayout storage payout = deferredPayouts[_intentHash];
+        if (payout.beneficiary == address(0)) revert DeferredPayoutNotFound(_intentHash);
+        _requirePositionController(payout.controller);
+        if (payout.amount != 0) revert DeferredPayoutAlreadyFunded(_intentHash, payout.amount);
+        if (_beneficiary != payout.beneficiary) {
+            revert DeferredPayoutBeneficiaryMismatch(payout.beneficiary, _beneficiary);
+        }
 
         uint256 accountedBefore = totalLiabilities();
         uint256 vaultBalance = stakeToken.balanceOf(address(this));
         uint256 unaccounted = vaultBalance > accountedBefore ? vaultBalance - accountedBefore : 0;
         if (_amount > unaccounted) revert InsufficientUnaccountedTokens(unaccounted, _amount);
 
-        deferredPayouts[_intentHash] = DeferredPayout({
-            beneficiary: _beneficiary,
-            amount: _amount,
-            releaseTime: _releaseTime
-        });
+        payout.amount = _amount;
+        payout.releaseTime = _releaseTime;
         totalDeferredPayouts += _amount;
 
         emit DeferredPayoutRecorded(_intentHash, _beneficiary, _amount, _releaseTime);
@@ -373,24 +428,28 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         bytes32 _intentHash,
         address _maker,
         uint256 _amount
-    ) external override onlyController {
+    ) external override {
         if (_maker == address(0)) revert ZeroAddress();
         if (_amount == 0) revert ZeroAmount();
 
         DeferredPayout storage payout = deferredPayouts[_intentHash];
         if (payout.beneficiary == address(0) || payout.amount == 0) revert DeferredPayoutNotFound(_intentHash);
+        _requirePositionController(payout.controller);
         if (_amount > payout.amount) revert InvalidReservationAmount(_amount, payout.amount);
 
+        address beneficiary = payout.beneficiary;
         payout.amount -= _amount;
+        uint256 remainingAmount = payout.amount;
+        if (remainingAmount == 0) delete deferredPayouts[_intentHash];
         totalDeferredPayouts -= _amount;
         _creditCompensation(_intentHash, _maker, _amount);
 
         emit DeferredPayoutSlashed(
             _intentHash,
-            payout.beneficiary,
+            beneficiary,
             _maker,
             _amount,
-            payout.amount
+            remainingAmount
         );
     }
 
@@ -503,5 +562,11 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
             _amount,
             claimableCompensation[_maker]
         );
+    }
+
+    function _requirePositionController(address _expectedController) internal view {
+        if (msg.sender != _expectedController) {
+            revert UnauthorizedPositionController(msg.sender, _expectedController);
+        }
     }
 }

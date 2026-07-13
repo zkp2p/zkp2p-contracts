@@ -337,31 +337,31 @@ describe("RiskTierManager and OrchestratorV3", () => {
       expect((await orchestrator.getIntent(intentHash)).owner).to.eq(ZERO);
     });
 
-    it("reconciles durable settlement after the risk manager terminal callback fails", async () => {
+    it("completes risk accounting with the minimum bounded callback gas", async () => {
+      const { taker, escrow, orchestrator, vault, manager } = await deployFixture();
+      await vault.connect(taker).depositStake(usdc(1_000));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
+      await orchestrator.setRiskCallbackGasLimit(100_000);
+
+      await fulfillIntent(orchestrator, intentHash, usdc(300));
+
+      expect((await manager.getRiskPosition(intentHash)).releasedAmount).to.eq(usdc(300));
+      expect((await vault.getReservation(intentHash)).amount).to.eq(usdc(300));
+      expect((await orchestrator.getIntentSettlement(intentHash)).releasedAmount).to.eq(usdc(300));
+    });
+
+    it("settles a snapshotted reservation after the vault controller rotates", async () => {
       const { owner, taker, escrow, orchestrator, vault, manager } = await deployFixture();
       await vault.connect(taker).depositStake(usdc(1_000));
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
-
       await vault.proposeController(owner.address);
       await time.increase(DAY);
       await vault.acceptController();
 
-      await expect(fulfillIntent(orchestrator, intentHash, usdc(300)))
-        .to.emit(orchestrator, "RiskHookCallbackFailed");
+      await fulfillIntent(orchestrator, intentHash, usdc(300));
 
-      expect((await manager.getRiskPosition(intentHash)).releasedAmount).to.eq(0);
-      expect((await vault.getReservation(intentHash)).amount).to.eq(usdc(500));
-      expect((await orchestrator.getIntentSettlement(intentHash)).releasedAmount).to.eq(usdc(300));
-
-      await vault.proposeController(manager.address);
-      await time.increase(DAY);
-      await manager.acceptVaultController();
-      await manager.reconcileSettlement(intentHash);
-
-      const position = await manager.getRiskPosition(intentHash);
-      expect(position.releasedAmount).to.eq(usdc(300));
-      expect(position.reservedAmount).to.eq(usdc(300));
-      expect(position.settledAt).to.not.eq(0);
+      expect((await manager.getRiskPosition(intentHash)).releasedAmount).to.eq(usdc(300));
+      expect((await vault.getReservation(intentHash)).amount).to.eq(usdc(300));
     });
   });
 
@@ -474,6 +474,38 @@ describe("RiskTierManager and OrchestratorV3", () => {
       expect(await vault.reservedStake(taker.address)).to.eq(0);
       expect((await manager.getRiskPosition(intentHash)).status).to.eq(3);
     });
+
+    it("rejects fallback release while the underlying intent remains live", async () => {
+      const { taker, escrow, orchestrator, vault, manager } = await deployFixture();
+      await vault.connect(taker).depositStake(usdc(1_000));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
+      const fallbackReleaseTime = (await manager.getRiskPosition(intentHash)).releaseTime;
+      await time.increaseTo(fallbackReleaseTime.toNumber());
+
+      await expect(manager.releaseMaturedPosition(intentHash)).to.be.revertedWithCustomError(
+        manager,
+        "PositionNotSettled",
+      );
+
+      await fulfillIntent(orchestrator, intentHash, usdc(500));
+      const settledPosition = await manager.getRiskPosition(intentHash);
+      expect(settledPosition.status).to.eq(1);
+      expect(settledPosition.releaseTime).to.be.gt(fallbackReleaseTime);
+      expect(await vault.reservedStake(taker.address)).to.eq(usdc(500));
+    });
+
+    it("uses the settlement buffer snapshotted when the position was admitted", async () => {
+      const { taker, escrow, orchestrator, vault, manager } = await deployFixture();
+      await vault.connect(taker).depositStake(usdc(1_000));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
+      await manager.setTimingConfig(DAY, 3 * DAY);
+
+      await fulfillIntent(orchestrator, intentHash, usdc(500));
+
+      const position = await manager.getRiskPosition(intentHash);
+      expect(position.settlementBuffer).to.eq(DAY);
+      expect(position.releaseTime.sub(position.slashDeadline)).to.eq(DAY);
+    });
   });
 
   describe("deferred payout mode", () => {
@@ -503,6 +535,73 @@ describe("RiskTierManager and OrchestratorV3", () => {
       expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(usdc(700));
       expect(await vault.stakeBalance(taker.address)).to.eq(usdc(500));
       expect((await manager.getRiskPosition(intentHash)).reservedAmount).to.eq(usdc(700));
+    });
+
+    it("rejects new deferred intents while vault reservations are paused", async () => {
+      const { owner, taker, escrow, orchestrator, vault, deferredHook } = await deployFixture();
+      await vault.connect(taker).depositStake(usdc(500));
+      await vault.connect(owner).setCustodyPaused(false, true);
+
+      await expect(
+        orchestrator.connect(taker).signalIntent(
+          signalParams(escrow, taker.address, usdc(700), PAYPAL, deferredHook.address),
+        ),
+      ).to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+    });
+
+    it("settles an admitted deferred intent after reservations are paused", async () => {
+      const { owner, taker, escrow, orchestrator, vault, deferredHook } = await deployFixture();
+      await vault.connect(taker).depositStake(usdc(500));
+      const intentHash = await signalIntent(
+        orchestrator,
+        escrow,
+        taker,
+        usdc(700),
+        PAYPAL,
+        deferredHook.address,
+      );
+      await vault.connect(owner).setCustodyPaused(false, true);
+
+      await fulfillIntent(orchestrator, intentHash, usdc(700));
+
+      expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(usdc(700));
+    });
+
+    it("settles a deferred authorization after the vault controller rotates", async () => {
+      const { owner, taker, escrow, orchestrator, vault, deferredHook } = await deployFixture();
+      await vault.connect(taker).depositStake(usdc(500));
+      const intentHash = await signalIntent(
+        orchestrator,
+        escrow,
+        taker,
+        usdc(700),
+        PAYPAL,
+        deferredHook.address,
+      );
+      await vault.proposeController(owner.address);
+      await time.increase(DAY);
+      await vault.acceptController();
+
+      await fulfillIntent(orchestrator, intentHash, usdc(700));
+
+      expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(usdc(700));
+    });
+
+    it("removes the unfunded deferred authorization when the intent is cancelled", async () => {
+      const { taker, escrow, orchestrator, vault, deferredHook } = await deployFixture();
+      await vault.connect(taker).depositStake(usdc(500));
+      const intentHash = await signalIntent(
+        orchestrator,
+        escrow,
+        taker,
+        usdc(700),
+        PAYPAL,
+        deferredHook.address,
+      );
+
+      await orchestrator.connect(taker).cancelIntent(intentHash);
+
+      expect((await vault.getDeferredPayout(intentHash)).beneficiary).to.eq(ZERO);
     });
 
     it("assigns deferred proceeds to the intent recipient when it differs from the taker", async () => {
@@ -642,7 +741,7 @@ describe("RiskTierManager and OrchestratorV3", () => {
       expect(await vault.stakeBalance(taker.address)).to.eq(usdc(1_000));
     });
 
-    it("slashes the minimum of attested loss, released amount, and reserved collateral", async () => {
+    it("slashes the claim while retaining remaining coverage for later claims", async () => {
       const { maker, taker, orchestrator, vault, manager, intentHash } = await fulfilledStakeBackedPosition();
       const claim = await attestation(manager, orchestrator, intentHash, usdc(200));
 
@@ -650,7 +749,38 @@ describe("RiskTierManager and OrchestratorV3", () => {
 
       expect(await vault.stakeBalance(taker.address)).to.eq(usdc(800));
       expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(200));
-      expect((await manager.getRiskPosition(intentHash)).status).to.eq(4);
+      expect(await vault.reservedStake(taker.address)).to.eq(usdc(300));
+      const position = await manager.getRiskPosition(intentHash);
+      expect(position.status).to.eq(1);
+      expect(position.slashedAmount).to.eq(usdc(200));
+      expect(position.reservedAmount).to.eq(usdc(300));
+    });
+
+    it("supports cumulative chargeback claims up to the remaining coverage", async () => {
+      const { maker, taker, orchestrator, vault, manager, intentHash } = await fulfilledStakeBackedPosition();
+      const firstClaim = await attestation(manager, orchestrator, intentHash, usdc(200), 1);
+      const finalClaim = await attestation(manager, orchestrator, intentHash, usdc(300), 2);
+
+      await manager.submitChargeback(firstClaim, [], "0x");
+      await manager.submitChargeback(finalClaim, [], "0x");
+
+      expect(await vault.stakeBalance(taker.address)).to.eq(usdc(500));
+      expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(500));
+      const position = await manager.getRiskPosition(intentHash);
+      expect(position.status).to.eq(4);
+      expect(position.slashedAmount).to.eq(usdc(500));
+      expect(position.reservedAmount).to.eq(0);
+    });
+
+    it("rejects replaying a nonce after a partial chargeback", async () => {
+      const { orchestrator, manager, intentHash } = await fulfilledStakeBackedPosition();
+      const claim = await attestation(manager, orchestrator, intentHash, usdc(200), 7);
+      await manager.submitChargeback(claim, [], "0x");
+
+      await expect(manager.submitChargeback(claim, [], "0x")).to.be.revertedWithCustomError(
+        manager,
+        "AttestationNonceUsed",
+      );
     });
 
     it("caps an oversized attested loss at reserved collateral", async () => {

@@ -52,7 +52,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
   const relayerRegistryAddress = getDeployedContractAddress(network, "RelayerRegistry");
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
-  const attestationVerifierAddress = getDeployedContractAddress(network, "SimpleAttestationVerifier");
+  const attestationVerifierAddress = getDeployedContractAddress(network, "MultiAttestationVerifier");
   const stakeTokenAddress = USDC[network]
     ? USDC[network]
     : getDeployedContractAddress(network, "USDCMock");
@@ -150,7 +150,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 };
 
 func.tags = ["StakeRiskSystem"];
-func.dependencies = ["V2System"];
+func.dependencies = ["V2System", "MultiAttestationVerifier"];
 func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.deployments.getNetworkName();
   if (network === "localhost" || network === "hardhat") return false;

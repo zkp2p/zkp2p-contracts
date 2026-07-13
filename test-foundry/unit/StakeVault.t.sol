@@ -58,7 +58,7 @@ contract StakeVaultTest is Test {
         assertEq(vault.stakeBalance(staker), 1_000e6);
     }
 
-    function test_SlashCreditsMakerAndReleasesExcessReservation() public {
+    function test_SlashCreditsMakerAndRetainsRemainingReservation() public {
         bytes32 intentHash = keccak256("intent");
         vm.prank(staker);
         vault.depositStake(1_000e6);
@@ -69,7 +69,8 @@ contract StakeVaultTest is Test {
         vault.slashReservation(intentHash, maker, 200e6);
 
         assertEq(vault.stakeBalance(staker), 800e6);
-        assertEq(vault.reservedStake(staker), 0);
+        assertEq(vault.reservedStake(staker), 300e6);
+        assertEq(vault.getReservation(intentHash).amount, 300e6);
         assertEq(vault.claimableCompensation(maker), 200e6);
         assertEq(vault.totalLiabilities(), 1_000e6);
     }
@@ -113,6 +114,8 @@ contract StakeVaultTest is Test {
         deal(address(token), address(vault), 100e6);
 
         vm.prank(controller);
+        vault.authorizeDeferredPayout(intentHash, staker, uint64(block.timestamp + DAY));
+        vm.prank(controller);
         vault.recordDeferredPayout(intentHash, staker, 100e6, uint64(block.timestamp + DAY));
         vm.prank(controller);
         vault.slashDeferredPayout(intentHash, maker, 40e6);
@@ -127,6 +130,8 @@ contract StakeVaultTest is Test {
         bytes32 intentHash = keccak256("deferred");
         deal(address(token), address(vault), 100e6);
         uint64 releaseTime = uint64(block.timestamp + DAY);
+        vm.prank(controller);
+        vault.authorizeDeferredPayout(intentHash, staker, releaseTime);
         vm.prank(controller);
         vault.recordDeferredPayout(intentHash, staker, 100e6, releaseTime);
 
@@ -155,6 +160,56 @@ contract StakeVaultTest is Test {
         vm.prank(nextController);
         vault.acceptController();
         assertEq(vault.controller(), nextController);
+    }
+
+    function test_PreviousControllerSettlesOnlyItsSnapshottedPositionAfterHandover() public {
+        address nextController = makeAddr("nextController");
+        bytes32 oldIntent = keccak256("oldIntent");
+        bytes32 newIntent = keccak256("newIntent");
+        vm.prank(staker);
+        vault.depositStake(1_000e6);
+        vm.prank(controller);
+        vault.reserveStake(staker, oldIntent, 400e6, 0);
+
+        vm.prank(owner);
+        vault.proposeController(nextController);
+        vm.warp(block.timestamp + DAY);
+        vm.prank(nextController);
+        vault.acceptController();
+        vm.prank(nextController);
+        vault.reserveStake(staker, newIntent, 200e6, 0);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(StakeVault.UnauthorizedPositionController.selector, nextController, controller)
+        );
+        vm.prank(nextController);
+        vault.releaseReservation(oldIntent);
+
+        vm.prank(controller);
+        vault.releaseReservation(oldIntent);
+        vm.prank(nextController);
+        vault.releaseReservation(newIntent);
+        assertEq(vault.reservedStake(staker), 0);
+    }
+
+    function test_PreviousControllerFundsDeferredPositionAfterHandoverAndPause() public {
+        address nextController = makeAddr("nextController");
+        bytes32 intentHash = keccak256("deferred");
+        vm.prank(controller);
+        vault.authorizeDeferredPayout(intentHash, staker, uint64(block.timestamp + DAY));
+
+        vm.prank(owner);
+        vault.proposeController(nextController);
+        vm.warp(block.timestamp + DAY);
+        vm.prank(nextController);
+        vault.acceptController();
+        vm.prank(owner);
+        vault.setCustodyPaused(false, true);
+        deal(address(token), address(vault), 100e6);
+
+        vm.prank(controller);
+        vault.recordDeferredPayout(intentHash, staker, 100e6, uint64(block.timestamp + 2 * DAY));
+        assertEq(vault.getDeferredPayout(intentHash).amount, 100e6);
     }
 
     function testFuzz_ReservationNeverExceedsStake(uint96 rawStake, uint96 rawReservation) public {

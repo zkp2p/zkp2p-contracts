@@ -55,11 +55,13 @@ interface IRiskTierManager is IIntentRiskHook {
         address payoutRecipient;
         uint16 reserveBps;
         uint64 riskWindow;
+        uint64 settlementBuffer;
         uint64 settledAt;
         uint64 slashDeadline;
         uint64 releaseTime;
         uint256 reservedAmount;
         uint256 releasedAmount;
+        uint256 slashedAmount;
     }
 
     struct ChargebackAttestation {
@@ -101,6 +103,7 @@ interface IRiskTierManager is IIntentRiskHook {
         address deferredPayoutHook,
         address payoutRecipient,
         uint256 reservedAmount,
+        uint64 settlementBuffer,
         uint64 fallbackReleaseTime
     );
     event RiskPositionCancelled(bytes32 indexed intentHash, address indexed taker, uint256 releasedReservation);
@@ -128,6 +131,8 @@ interface IRiskTierManager is IIntentRiskHook {
         RiskMode mode,
         uint256 attestedAmount,
         uint256 slashedAmount,
+        uint256 totalSlashed,
+        uint256 remainingCoverage,
         bytes32 evidenceId
     );
     event AttestationVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);

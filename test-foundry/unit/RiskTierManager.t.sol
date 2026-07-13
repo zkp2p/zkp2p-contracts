@@ -107,6 +107,12 @@ contract RiskOrchestratorHarness {
         settlementTimestamps[_intentHash] = uint64(block.timestamp);
         _manager.onIntentFulfilled(_intentHash, _amount);
     }
+
+    function recordSettlementWithoutCallback(bytes32 _intentHash, uint256 _amount) external {
+        settlementAmounts[_intentHash] = _amount;
+        settlementTimestamps[_intentHash] = uint64(block.timestamp);
+        delete intents[_intentHash];
+    }
 }
 
 contract RiskTierManagerTest is Test {
@@ -228,6 +234,20 @@ contract RiskTierManagerTest is Test {
         assertEq(vault.reservedStake(taker), 200e6);
     }
 
+    function test_ReconcileSettlementRecoversMissedTerminalCallback() public {
+        _stake(1_000e6);
+        bytes32 intentHash = keccak256("intent");
+        _createPosition(intentHash, 500e6);
+        orchestrator.recordSettlementWithoutCallback(intentHash, 300e6);
+
+        manager.reconcileSettlement(intentHash);
+
+        IRiskTierManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        assertEq(position.releasedAmount, 300e6);
+        assertEq(position.reservedAmount, 300e6);
+        assertEq(vault.getReservation(intentHash).amount, 300e6);
+    }
+
     function test_ChargebackSlashesBoundedAmount() public {
         _stake(1_000e6);
         bytes32 intentHash = keccak256("intent");
@@ -252,7 +272,117 @@ contract RiskTierManagerTest is Test {
 
         assertEq(vault.stakeBalance(taker), 800e6);
         assertEq(vault.claimableCompensation(maker), 200e6);
-        assertEq(uint256(manager.getRiskPosition(intentHash).status), uint256(IRiskTierManager.PositionStatus.SLASHED));
+        assertEq(vault.reservedStake(taker), 300e6);
+        assertEq(uint256(manager.getRiskPosition(intentHash).status), uint256(IRiskTierManager.PositionStatus.ACTIVE));
+        assertEq(manager.getRiskPosition(intentHash).slashedAmount, 200e6);
+    }
+
+    function test_CumulativeChargebacksConsumeOnlyRemainingCoverage() public {
+        _stake(1_000e6);
+        bytes32 intentHash = keccak256("intent");
+        _createPosition(intentHash, 500e6);
+        orchestrator.fulfillPosition(manager, intentHash, 500e6);
+        bytes[] memory signatures = new bytes[](0);
+
+        IRiskTierManager.ChargebackAttestation memory firstClaim = IRiskTierManager.ChargebackAttestation({
+            chainId: block.chainid,
+            riskTierManager: address(manager),
+            orchestrator: address(orchestrator),
+            intentHash: intentHash,
+            paymentMethod: PAYPAL,
+            chargebackAmount: 200e6,
+            evidenceId: keccak256("evidence-1"),
+            nonce: 10,
+            validAfter: uint64(block.timestamp - 1),
+            validUntil: uint64(block.timestamp + DAY)
+        });
+        manager.submitChargeback(firstClaim, signatures, "");
+        firstClaim.chargebackAmount = 300e6;
+        firstClaim.evidenceId = keccak256("evidence-2");
+        firstClaim.nonce = 11;
+        manager.submitChargeback(firstClaim, signatures, "");
+
+        IRiskTierManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        assertEq(position.slashedAmount, 500e6);
+        assertEq(position.reservedAmount, 0);
+        assertEq(uint256(position.status), uint256(IRiskTierManager.PositionStatus.SLASHED));
+        assertEq(vault.claimableCompensation(maker), 500e6);
+    }
+
+    function test_FallbackReleaseRejectsLiveIntentAndLateSettlementRemainsCovered() public {
+        _stake(1_000e6);
+        bytes32 intentHash = keccak256("intent");
+        _createPosition(intentHash, 500e6);
+        uint64 fallbackReleaseTime = manager.getRiskPosition(intentHash).releaseTime;
+        vm.warp(fallbackReleaseTime);
+
+        vm.expectRevert(abi.encodeWithSelector(RiskTierManager.PositionNotSettled.selector, intentHash));
+        manager.releaseMaturedPosition(intentHash);
+
+        orchestrator.fulfillPosition(manager, intentHash, 500e6);
+        IRiskTierManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        assertGt(position.releaseTime, fallbackReleaseTime);
+        assertEq(vault.reservedStake(taker), 500e6);
+    }
+
+    function test_FallbackReleaseRechecksMaturityAfterReconcilingLateSettlement() public {
+        _stake(1_000e6);
+        bytes32 intentHash = keccak256("intent");
+        _createPosition(intentHash, 500e6);
+        uint64 fallbackReleaseTime = manager.getRiskPosition(intentHash).releaseTime;
+        vm.warp(fallbackReleaseTime);
+        orchestrator.recordSettlementWithoutCallback(intentHash, 500e6);
+        uint64 exactReleaseTime = uint64(block.timestamp + 31 days);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RiskTierManager.PositionNotMature.selector,
+                exactReleaseTime,
+                uint64(block.timestamp)
+            )
+        );
+        manager.releaseMaturedPosition(intentHash);
+
+        assertEq(vault.reservedStake(taker), 500e6);
+    }
+
+    function test_FallbackReleaseAllowsPrunedCancellationOnlyAfterMaturity() public {
+        _stake(1_000e6);
+        bytes32 intentHash = keccak256("intent");
+        _createPosition(intentHash, 500e6);
+        uint64 fallbackReleaseTime = manager.getRiskPosition(intentHash).releaseTime;
+        orchestrator.clearIntent(intentHash);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RiskTierManager.PositionNotMature.selector,
+                fallbackReleaseTime,
+                uint64(block.timestamp)
+            )
+        );
+        manager.releaseMaturedPosition(intentHash);
+
+        vm.warp(fallbackReleaseTime);
+        manager.releaseMaturedPosition(intentHash);
+        assertEq(vault.reservedStake(taker), 0);
+        assertEq(
+            uint256(manager.getRiskPosition(intentHash).status),
+            uint256(IRiskTierManager.PositionStatus.RELEASED)
+        );
+    }
+
+    function test_SettlementUsesSnapshottedBuffer() public {
+        _stake(1_000e6);
+        bytes32 intentHash = keccak256("intent");
+        _createPosition(intentHash, 500e6);
+        vm.prank(owner);
+        manager.setTimingConfig(DAY, 3 * DAY);
+
+        orchestrator.fulfillPosition(manager, intentHash, 500e6);
+
+        IRiskTierManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        assertEq(position.settlementBuffer, DAY);
+        assertEq(position.releaseTime - position.slashDeadline, DAY);
     }
 
     function test_ChargebackRejectedBeforeSettlement() public {

@@ -19,6 +19,7 @@ interface IStakeVault {
 
     struct Reservation {
         address staker;
+        address controller;
         uint256 amount;
         uint64 releaseTime;
         bool active;
@@ -26,6 +27,7 @@ interface IStakeVault {
 
     struct DeferredPayout {
         address beneficiary;
+        address controller;
         uint256 amount;
         uint64 releaseTime;
     }
@@ -36,6 +38,7 @@ interface IStakeVault {
     event StakeReserved(
         bytes32 indexed intentHash,
         address indexed staker,
+        address indexed controller,
         uint256 amount,
         uint256 totalReserved,
         uint64 releaseTime
@@ -59,7 +62,8 @@ interface IStakeVault {
         address indexed staker,
         address indexed maker,
         uint256 amount,
-        uint256 remainingStake
+        uint256 remainingStake,
+        uint256 remainingReservation
     );
     event ExitRequested(address indexed staker, uint64 requestedAt, uint64 availableAt);
     event ExitCancelled(address indexed staker);
@@ -71,6 +75,17 @@ interface IStakeVault {
         uint256 newClaimableBalance
     );
     event CompensationWithdrawn(address indexed maker, address indexed recipient, uint256 amount);
+    event DeferredPayoutAuthorized(
+        bytes32 indexed intentHash,
+        address indexed beneficiary,
+        address indexed controller,
+        uint64 releaseTime
+    );
+    event DeferredPayoutAuthorizationReleased(
+        bytes32 indexed intentHash,
+        address indexed beneficiary,
+        address indexed controller
+    );
     event DeferredPayoutRecorded(
         bytes32 indexed intentHash,
         address indexed beneficiary,
@@ -110,6 +125,8 @@ interface IStakeVault {
     function updateReservation(bytes32 _intentHash, uint256 _newAmount, uint64 _releaseTime) external;
     function releaseReservation(bytes32 _intentHash) external;
     function slashReservation(bytes32 _intentHash, address _maker, uint256 _amount) external;
+    function authorizeDeferredPayout(bytes32 _intentHash, address _beneficiary, uint64 _releaseTime) external;
+    function releaseDeferredPayoutAuthorization(bytes32 _intentHash) external;
     function recordDeferredPayout(bytes32 _intentHash, address _beneficiary, uint256 _amount, uint64 _releaseTime) external;
     function slashDeferredPayout(bytes32 _intentHash, address _maker, uint256 _amount) external;
 

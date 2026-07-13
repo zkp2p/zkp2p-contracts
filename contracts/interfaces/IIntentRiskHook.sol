@@ -5,8 +5,9 @@ pragma solidity ^0.8.18;
 /**
  * @title IIntentRiskHook
  * @notice Lifecycle callbacks used by OrchestratorV3 for depositor-selected risk policy.
- * @dev Admission is fail-closed. Terminal callbacks are invoked before the intent is deleted
- *      and may be handled fail-open by the orchestrator.
+ * @dev Admission is fail-closed. Terminal callbacks are invoked after the active intent body is
+ *      pruned and may be handled fail-open by the orchestrator. Hooks must use durable terminal
+ *      data exposed by the orchestrator rather than reading the pruned intent body.
  */
 interface IIntentRiskHook {
     /**

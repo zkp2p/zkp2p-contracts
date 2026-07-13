@@ -206,15 +206,19 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
             payoutRecipient: intent.to,
             reserveBps: config.reserveBps,
             riskWindow: config.riskWindow,
+            settlementBuffer: settlementBuffer,
             settledAt: 0,
             slashDeadline: fallbackSlashDeadline,
             releaseTime: fallbackReleaseTime,
             reservedAmount: reservedAmount,
-            releasedAmount: 0
+            releasedAmount: 0,
+            slashedAmount: 0
         });
 
         if (mode == RiskMode.STAKE_BACKED) {
             stakeVault.reserveStake(intent.owner, _intentHash, reservedAmount, fallbackReleaseTime);
+        } else if (mode == RiskMode.DEFERRED_PAYOUT) {
+            stakeVault.authorizeDeferredPayout(_intentHash, intent.to, fallbackReleaseTime);
         }
 
         emit RiskPositionCreated(
@@ -226,6 +230,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
             positionDeferredPayoutHook,
             intent.to,
             reservedAmount,
+            settlementBuffer,
             fallbackReleaseTime
         );
     }
@@ -243,6 +248,8 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
 
         if (position.mode == RiskMode.STAKE_BACKED) {
             stakeVault.releaseReservation(_intentHash);
+        } else if (position.mode == RiskMode.DEFERRED_PAYOUT) {
+            stakeVault.releaseDeferredPayoutAuthorization(_intentHash);
         }
 
         emit RiskPositionCancelled(_intentHash, position.taker, releasedReservation);
@@ -305,6 +312,17 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
     function releaseMaturedPosition(bytes32 _intentHash) external override nonReentrant {
         RiskPosition storage position = riskPositions[_intentHash];
         if (position.status != PositionStatus.ACTIVE) revert PositionNotActive(_intentHash, position.status);
+
+        if (position.settledAt == 0) {
+            (uint256 settlementAmount, uint64 settledAt) = orchestrator.getIntentSettlement(_intentHash);
+            if (settlementAmount != 0 && settledAt != 0) {
+                _applySettlement(_intentHash, position, settlementAmount, settledAt);
+                if (position.status != PositionStatus.ACTIVE) return;
+            } else if (orchestrator.getRiskIntent(_intentHash).owner != address(0)) {
+                revert PositionNotSettled(_intentHash);
+            }
+        }
+
         if (position.releaseTime == 0 || block.timestamp < position.releaseTime) {
             revert PositionNotMature(position.releaseTime, uint64(block.timestamp));
         }
@@ -315,6 +333,8 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
 
         if (position.mode == RiskMode.STAKE_BACKED) {
             stakeVault.releaseReservation(_intentHash);
+        } else if (position.mode == RiskMode.DEFERRED_PAYOUT && position.settledAt == 0) {
+            stakeVault.releaseDeferredPayoutAuthorization(_intentHash);
         }
 
         emit RiskPositionReleased(_intentHash, position.taker, position.mode, releasedAmount);
@@ -350,15 +370,14 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
         bool isValid = attestationVerifier.verify(digest, _signatures, _verificationData);
         if (!isValid) revert AttestationVerificationFailed();
 
-        uint256 slashAmount = _min(
-            _attestation.chargebackAmount,
-            _min(position.releasedAmount, position.reservedAmount)
-        );
+        uint256 remainingReleasedAmount = position.releasedAmount - position.slashedAmount;
+        uint256 slashAmount = _min(_attestation.chargebackAmount, _min(remainingReleasedAmount, position.reservedAmount));
         if (slashAmount == 0) revert ZeroAmount();
 
         usedAttestationNonces[_attestation.nonce] = true;
-        position.status = PositionStatus.SLASHED;
-        position.reservedAmount = 0;
+        position.slashedAmount += slashAmount;
+        position.reservedAmount -= slashAmount;
+        if (position.reservedAmount == 0) position.status = PositionStatus.SLASHED;
 
         if (position.mode == RiskMode.STAKE_BACKED) {
             stakeVault.slashReservation(_attestation.intentHash, position.maker, slashAmount);
@@ -373,6 +392,8 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
             position.mode,
             _attestation.chargebackAmount,
             slashAmount,
+            position.slashedAmount,
+            position.reservedAmount,
             _attestation.evidenceId
         );
     }
@@ -583,7 +604,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
         }
 
         uint64 slashDeadline = _toTimestamp(uint256(_settledAt) + _position.riskWindow);
-        uint64 releaseTime = _toTimestamp(uint256(slashDeadline) + settlementBuffer);
+        uint64 releaseTime = _toTimestamp(uint256(slashDeadline) + _position.settlementBuffer);
         _position.slashDeadline = slashDeadline;
         _position.releaseTime = releaseTime;
 

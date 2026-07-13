@@ -5,6 +5,8 @@ import { deployments, ethers } from "hardhat";
 
 import {
   MULTI_SIG,
+  MULTI_WITNESS_ADDRESSES,
+  MULTI_WITNESS_THRESHOLD,
   REVERSIBLE_PLATFORM_RESERVE_BPS,
   REVERSIBLE_PLATFORM_RISK_WINDOW,
   RISK_CALLBACK_GAS_LIMIT,
@@ -134,7 +136,59 @@ describe("Stake risk system deployment", () => {
   });
 
   it("uses the deployed modular attestation verifier for chargebacks", async () => {
-    const { manager } = await contracts();
-    expect(await manager.attestationVerifier()).to.eq(deployedAddress("SimpleAttestationVerifier"));
+    const { deployer, manager } = await contracts();
+    const verifier = await ethers.getContractAt(
+      "MultiAttestationVerifier",
+      deployedAddress("MultiAttestationVerifier"),
+    );
+
+    expect(await manager.attestationVerifier()).to.eq(verifier.address);
+    expect((await verifier.requiredSignatures()).toNumber()).to.eq(MULTI_WITNESS_THRESHOLD[network]);
+    expect((await verifier.witnesses()).map((w) => w.toLowerCase())).to.have.members(
+      MULTI_WITNESS_ADDRESSES[network].map((w) => w.toLowerCase()),
+    );
+
+    const { chainId } = await ethers.provider.getNetwork();
+    const chargeback = {
+      chainId,
+      riskTierManager: manager.address,
+      orchestrator: await manager.orchestrator(),
+      intentHash: ethers.utils.id("stake-risk-deployment-test"),
+      paymentMethod: PAYPAL,
+      chargebackAmount: 1,
+      evidenceId: ethers.utils.id("deployment-evidence"),
+      nonce: 1,
+      validAfter: 1,
+      validUntil: 2,
+    };
+    const domain = {
+      name: "ZKP2P RiskTierManager",
+      version: "1",
+      chainId,
+      verifyingContract: manager.address,
+    };
+    const types = {
+      ChargebackAttestation: [
+        { name: "chainId", type: "uint256" },
+        { name: "riskTierManager", type: "address" },
+        { name: "orchestrator", type: "address" },
+        { name: "intentHash", type: "bytes32" },
+        { name: "paymentMethod", type: "bytes32" },
+        { name: "chargebackAmount", type: "uint256" },
+        { name: "evidenceId", type: "bytes32" },
+        { name: "nonce", type: "uint256" },
+        { name: "validAfter", type: "uint64" },
+        { name: "validUntil", type: "uint64" },
+      ],
+    };
+    const digest = await manager.hashChargebackAttestation(chargeback);
+    const signature = await deployer._signTypedData(domain, types, chargeback);
+    expect(await verifier.verify(digest, [signature], "0x")).to.eq(true);
+
+    const [, nonWitness] = await ethers.getSigners();
+    const invalidSignature = await nonWitness._signTypedData(domain, types, chargeback);
+    await expect(verifier.verify(digest, [invalidSignature], "0x")).to.be.revertedWith(
+      "ThresholdSigVerifierUtils: Not enough valid witness signatures",
+    );
   });
 });

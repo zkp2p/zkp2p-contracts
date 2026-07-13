@@ -63,7 +63,7 @@ describe("StakeVault", () => {
 
       await expect(vault.connect(controller).reserveStake(staker.address, intentHash, usdc(400), releaseTime))
         .to.emit(vault, "StakeReserved")
-        .withArgs(intentHash, staker.address, usdc(400), usdc(400), releaseTime);
+        .withArgs(intentHash, staker.address, controller.address, usdc(400), usdc(400), releaseTime);
 
       expect(await vault.reservedStake(staker.address)).to.eq(usdc(400));
       expect(await vault.freeStake(staker.address)).to.eq(usdc(600));
@@ -125,7 +125,7 @@ describe("StakeVault", () => {
   });
 
   describe("slashing and compensation", () => {
-    it("slashes no more than the reservation and releases its excess", async () => {
+    it("slashes no more than requested and retains the remaining reservation", async () => {
       const { controller, staker, maker, vault } = await deployFixture();
       const intentHash = ethers.utils.id("intent");
       await vault.connect(staker).depositStake(usdc(1_000));
@@ -133,9 +133,9 @@ describe("StakeVault", () => {
 
       await expect(vault.connect(controller).slashReservation(intentHash, maker.address, usdc(200)))
         .to.emit(vault, "StakeSlashed")
-        .withArgs(intentHash, staker.address, maker.address, usdc(200), usdc(800));
+        .withArgs(intentHash, staker.address, maker.address, usdc(200), usdc(800), usdc(300));
 
-      expect(await vault.reservedStake(staker.address)).to.eq(0);
+      expect(await vault.reservedStake(staker.address)).to.eq(usdc(300));
       expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(200));
       expect(await vault.totalLiabilities()).to.eq(usdc(1_000));
     });
@@ -224,10 +224,11 @@ describe("StakeVault", () => {
   });
 
   describe("deferred payouts", () => {
-    it("accounts for tokens transferred into the vault before controller registration", async () => {
+    it("accounts for tokens transferred into the vault after deferred admission authorization", async () => {
       const { controller, staker, token, vault } = await deployFixture();
       const intentHash = ethers.utils.id("deferred");
       const releaseTime = (await time.latest()) + DAY;
+      await vault.connect(controller).authorizeDeferredPayout(intentHash, staker.address, releaseTime);
       await token.transfer(vault.address, usdc(100));
 
       await expect(
@@ -240,9 +241,11 @@ describe("StakeVault", () => {
 
     it("rejects deferred accounting without unaccounted backing tokens", async () => {
       const { controller, staker, vault } = await deployFixture();
+      const intentHash = ethers.utils.id("deferred");
+      await vault.connect(controller).authorizeDeferredPayout(intentHash, staker.address, 0);
 
       await expect(
-        vault.connect(controller).recordDeferredPayout(ethers.utils.id("deferred"), staker.address, usdc(1), 0),
+        vault.connect(controller).recordDeferredPayout(intentHash, staker.address, usdc(1), 0),
       ).to.be.revertedWithCustomError(vault, "InsufficientUnaccountedTokens");
     });
 
@@ -250,6 +253,7 @@ describe("StakeVault", () => {
       const { controller, staker, recipient, token, vault } = await deployFixture();
       const intentHash = ethers.utils.id("deferred");
       const releaseTime = (await time.latest()) + DAY;
+      await vault.connect(controller).authorizeDeferredPayout(intentHash, staker.address, releaseTime);
       await token.transfer(vault.address, usdc(100));
       await vault.connect(controller).recordDeferredPayout(intentHash, staker.address, usdc(100), releaseTime);
       await time.increase(DAY);
@@ -262,6 +266,7 @@ describe("StakeVault", () => {
     it("credits a partial deferred slash and leaves the remainder for the taker", async () => {
       const { controller, staker, maker, token, vault } = await deployFixture();
       const intentHash = ethers.utils.id("deferred");
+      await vault.connect(controller).authorizeDeferredPayout(intentHash, staker.address, 0);
       await token.transfer(vault.address, usdc(100));
       await vault.connect(controller).recordDeferredPayout(intentHash, staker.address, usdc(100), 0);
 
@@ -269,6 +274,27 @@ describe("StakeVault", () => {
 
       expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(usdc(60));
       expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(40));
+    });
+
+    it("rejects new deferred authorizations while reservations are paused", async () => {
+      const { owner, controller, staker, vault } = await deployFixture();
+      await vault.connect(owner).setCustodyPaused(false, true);
+
+      await expect(
+        vault.connect(controller).authorizeDeferredPayout(ethers.utils.id("deferred"), staker.address, 0),
+      ).to.be.revertedWithCustomError(vault, "CustodyActionPaused");
+    });
+
+    it("records an already-authorized deferred payout while new reservations are paused", async () => {
+      const { owner, controller, staker, token, vault } = await deployFixture();
+      const intentHash = ethers.utils.id("deferred");
+      await vault.connect(controller).authorizeDeferredPayout(intentHash, staker.address, DAY);
+      await vault.connect(owner).setCustodyPaused(false, true);
+      await token.transfer(vault.address, usdc(100));
+
+      await vault.connect(controller).recordDeferredPayout(intentHash, staker.address, usdc(100), 2 * DAY);
+
+      expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(usdc(100));
     });
   });
 
@@ -285,6 +311,44 @@ describe("StakeVault", () => {
       await time.increase(DAY);
       await vault.connect(nextController).acceptController();
       expect(await vault.controller()).to.eq(nextController.address);
+    });
+
+    it("lets the previous controller settle only its snapshotted stake reservations", async () => {
+      const { owner, controller, nextController, staker, vault } = await deployFixture();
+      const oldIntent = ethers.utils.id("old-intent");
+      const newIntent = ethers.utils.id("new-intent");
+      await vault.connect(staker).depositStake(usdc(1_000));
+      await vault.connect(controller).reserveStake(staker.address, oldIntent, usdc(400), 0);
+      await vault.connect(owner).proposeController(nextController.address);
+      await time.increase(DAY);
+      await vault.connect(nextController).acceptController();
+      await vault.connect(nextController).reserveStake(staker.address, newIntent, usdc(200), 0);
+
+      await expect(vault.connect(nextController).releaseReservation(oldIntent))
+        .to.be.revertedWithCustomError(vault, "UnauthorizedPositionController");
+      await expect(vault.connect(controller).releaseReservation(newIntent))
+        .to.be.revertedWithCustomError(vault, "UnauthorizedPositionController");
+
+      await vault.connect(controller).releaseReservation(oldIntent);
+      await vault.connect(nextController).releaseReservation(newIntent);
+      expect(await vault.reservedStake(staker.address)).to.eq(0);
+    });
+
+    it("lets the previous controller fund its deferred authorization after handover", async () => {
+      const { owner, controller, nextController, staker, token, vault } = await deployFixture();
+      const intentHash = ethers.utils.id("old-deferred-intent");
+      await vault.connect(controller).authorizeDeferredPayout(intentHash, staker.address, DAY);
+      await vault.connect(owner).proposeController(nextController.address);
+      await time.increase(DAY);
+      await vault.connect(nextController).acceptController();
+      await token.transfer(vault.address, usdc(100));
+
+      await expect(
+        vault.connect(nextController).recordDeferredPayout(intentHash, staker.address, usdc(100), 2 * DAY),
+      ).to.be.revertedWithCustomError(vault, "UnauthorizedPositionController");
+      await vault.connect(controller).recordDeferredPayout(intentHash, staker.address, usdc(100), 2 * DAY);
+
+      expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(usdc(100));
     });
   });
 });
