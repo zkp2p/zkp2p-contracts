@@ -1,7 +1,9 @@
 import "module-alias/register";
 
 import { expect } from "chai";
-import { deployments, ethers } from "hardhat";
+import hre, { deployments, ethers } from "hardhat";
+
+import deployStakeRiskSystem from "../../deploy/26_deploy_stake_risk_system";
 
 import {
   MULTI_SIG,
@@ -192,5 +194,17 @@ describe("Stake risk system deployment", () => {
     await expect(verifier.verify(digest, [invalidSignature], "0x")).to.be.revertedWith(
       "ThresholdSigVerifierUtils: Not enough valid witness signatures",
     );
+  });
+
+  it("can rerun the stake risk deployment without changing initialized state", async () => {
+    const before = await contracts();
+    const controller = await before.vault.controller();
+    const deferredHook = await before.manager.deferredPayoutHook();
+
+    await deployStakeRiskSystem(hre);
+
+    expect(await before.vault.controller()).to.eq(controller);
+    expect(await before.manager.deferredPayoutHook()).to.eq(deferredHook);
+    expect(await before.orchestratorRegistry.isOrchestrator(before.orchestrator.address)).to.eq(true);
   });
 });

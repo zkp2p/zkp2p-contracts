@@ -29,6 +29,16 @@ import {
 const PAYPAL = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("paypal"));
 const VENMO = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
 
+function platformRiskConfigMatches(actual: any, expected: any): boolean {
+  return actual.enabled === expected.enabled
+    && actual.chargebackable === expected.chargebackable
+    && actual.deferredPayoutEnabled === expected.deferredPayoutEnabled
+    && actual.reserveBps.eq(expected.reserveBps)
+    && actual.riskWindow.eq(expected.riskWindow)
+    && actual.tierCaps.length === expected.tierCaps.length
+    && actual.tierCaps.every((cap: any, index: number) => cap.eq(expected.tierCaps[index]));
+}
+
 /**
  * Deploys the stake-based taker risk system against the existing EscrowV2 and registries.
  * Production execution is opt-in because positive stake thresholds require governance approval.
@@ -137,26 +147,49 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const orchestratorV3Contract = await ethers.getContractAt("OrchestratorV3", orchestratorV3.address);
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
 
-  await (await stakeVaultContract.initializeController(riskTierManager.address)).wait();
-  await (await riskTierManagerContract.setDeferredPayoutHook(deferredPayoutHook.address)).wait();
-  await (await orchestratorV3Contract.setAllowMultipleIntents(true)).wait();
+  const currentController = await stakeVaultContract.controller();
+  if (currentController === ethers.constants.AddressZero) {
+    await (await stakeVaultContract.initializeController(riskTierManager.address)).wait();
+    await waitForDeploymentDelay(hre);
+  } else if (currentController.toLowerCase() !== riskTierManager.address.toLowerCase()) {
+    throw new Error(`StakeVault controller mismatch: expected ${riskTierManager.address}, found ${currentController}`);
+  }
 
-  await (await riskTierManagerContract.setPlatformRiskConfig(PAYPAL, {
+  if ((await riskTierManagerContract.deferredPayoutHook()).toLowerCase() !== deferredPayoutHook.address.toLowerCase()) {
+    await (await riskTierManagerContract.setDeferredPayoutHook(deferredPayoutHook.address)).wait();
+    await waitForDeploymentDelay(hre);
+  }
+
+  if (!(await orchestratorV3Contract.allowMultipleIntents())) {
+    await (await orchestratorV3Contract.setAllowMultipleIntents(true)).wait();
+    await waitForDeploymentDelay(hre);
+  }
+
+  const paypalConfig = {
     enabled: true,
     chargebackable: true,
     deferredPayoutEnabled: true,
     reserveBps: REVERSIBLE_PLATFORM_RESERVE_BPS,
     riskWindow: REVERSIBLE_PLATFORM_RISK_WINDOW,
-    tierCaps: [0, 0, 750e6, 1_875e6, 3_750e6],
-  })).wait();
-  await (await riskTierManagerContract.setPlatformRiskConfig(VENMO, {
+    tierCaps: [0, 0, 750e6, 1_875e6, 3_750e6] as [number, number, number, number, number],
+  };
+  if (!platformRiskConfigMatches(await riskTierManagerContract.getPlatformRiskConfig(PAYPAL), paypalConfig)) {
+    await (await riskTierManagerContract.setPlatformRiskConfig(PAYPAL, paypalConfig)).wait();
+    await waitForDeploymentDelay(hre);
+  }
+
+  const venmoConfig = {
     enabled: true,
     chargebackable: true,
     deferredPayoutEnabled: true,
     reserveBps: REVERSIBLE_PLATFORM_RESERVE_BPS,
     riskWindow: REVERSIBLE_PLATFORM_RISK_WINDOW,
-    tierCaps: [0, 0, 1_000e6, 2_500e6, 5_000e6],
-  })).wait();
+    tierCaps: [0, 0, 1_000e6, 2_500e6, 5_000e6] as [number, number, number, number, number],
+  };
+  if (!platformRiskConfigMatches(await riskTierManagerContract.getPlatformRiskConfig(VENMO), venmoConfig)) {
+    await (await riskTierManagerContract.setPlatformRiskConfig(VENMO, venmoConfig)).wait();
+    await waitForDeploymentDelay(hre);
+  }
 
   await addOrchestratorToRegistry(hre, orchestratorRegistry, orchestratorV3.address);
   console.log("OrchestratorV3 added to OrchestratorRegistry");
