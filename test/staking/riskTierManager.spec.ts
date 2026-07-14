@@ -573,6 +573,17 @@ describe("RiskTierManager and OrchestratorV3", () => {
       expect((await manager.getRiskPosition(intentHash)).mode).to.eq(1);
     });
 
+    it("rejects the deferred payout hook when stake already covers the intent", async () => {
+      const { taker, escrow, orchestrator, vault, deferredHook } = await deployFixture();
+      await vault.connect(taker).depositStake(usdc(1_000));
+
+      await expect(
+        orchestrator.connect(taker).signalIntent(
+          signalParams(escrow, taker.address, usdc(500), PAYPAL, deferredHook.address),
+        ),
+      ).to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+    });
+
     it("enforces the Peasant one-active-intent ceiling", async () => {
       const { taker, escrow, orchestrator } = await deployFixture();
       await signalIntent(orchestrator, escrow, taker, usdc(50), ZELLE);

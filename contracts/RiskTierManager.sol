@@ -67,6 +67,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
     error ConcurrentIntentLimitReached(address stakeOwner, uint256 activeIntents, uint256 limit);
     error InsufficientCollateral(address stakeOwner, uint256 available, uint256 required);
     error DeferredPayoutHookRequired(address expectedHook, address actualHook);
+    error DeferredPayoutHookNotAllowed(address hook);
     error PositionAlreadyExists(bytes32 intentHash);
     error PositionNotActive(bytes32 intentHash, PositionStatus status);
     error PositionModeMismatch(bytes32 intentHash, RiskMode mode);
@@ -183,6 +184,9 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
 
             uint256 available = stakeVault.freeStake(stakeOwner);
             if (available >= requiredReserve) {
+                if (deferredPayoutHook != address(0) && intent.postIntentHook == deferredPayoutHook) {
+                    revert DeferredPayoutHookNotAllowed(deferredPayoutHook);
+                }
                 mode = RiskMode.STAKE_BACKED;
                 reservedAmount = requiredReserve;
             } else if (config.deferredPayoutEnabled) {
