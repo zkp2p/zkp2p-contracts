@@ -57,8 +57,26 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     ? USDC[network]
     : getDeployedContractAddress(network, "USDCMock");
 
+  const boundedCall = await deploy("BoundedCall", {
+    from: deployer,
+    args: [],
+  });
+  console.log("BoundedCall deployed at", boundedCall.address);
+  await waitForDeploymentDelay(hre);
+
+  const postIntentHookExecutor = await deploy("PostIntentHookExecutor", {
+    from: deployer,
+    args: [],
+  });
+  console.log("PostIntentHookExecutor deployed at", postIntentHookExecutor.address);
+  await waitForDeploymentDelay(hre);
+
   const orchestratorV3 = await deploy("OrchestratorV3", {
     from: deployer,
+    libraries: {
+      BoundedCall: boundedCall.address,
+      PostIntentHookExecutor: postIntentHookExecutor.address,
+    },
     args: [
       deployer,
       chainId,

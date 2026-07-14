@@ -39,7 +39,15 @@ describe("RiskTierManager and OrchestratorV3", () => {
       100,
       DAY,
     );
-    const orchestrator = await (await ethers.getContractFactory("OrchestratorV3")).deploy(
+    const boundedCall = await (await ethers.getContractFactory("BoundedCall")).deploy();
+    const postIntentHookExecutor = await (await ethers.getContractFactory("PostIntentHookExecutor")).deploy();
+    const orchestratorFactory = await ethers.getContractFactory("OrchestratorV3", {
+      libraries: {
+        BoundedCall: boundedCall.address,
+        PostIntentHookExecutor: postIntentHookExecutor.address,
+      },
+    });
+    const orchestrator = await orchestratorFactory.deploy(
       owner.address,
       network.chainId,
       escrowRegistry.address,
@@ -331,10 +339,17 @@ describe("RiskTierManager and OrchestratorV3", () => {
       await hook.setRevertOnTerminal(true);
       const balanceBefore = await token.balanceOf(taker.address);
 
-      await fulfillIntent(orchestrator, intentHash, usdc(50));
+      const receipt: ContractReceipt = await (await fulfillIntent(orchestrator, intentHash, usdc(50))).wait();
+      const settlementEvent = receipt.events?.find(({ event }) => event === "IntentSettlementRecorded");
+      const recoverySettlement = await orchestrator.getIntentSettlement(intentHash);
 
       expect((await token.balanceOf(taker.address)).sub(balanceBefore)).to.eq(usdc(50));
       expect((await orchestrator.getIntent(intentHash)).owner).to.eq(ZERO);
+      expect(settlementEvent?.args?.intentHash).to.eq(intentHash);
+      expect(settlementEvent?.args?.releasedAmount).to.eq(usdc(50));
+      expect(settlementEvent?.args?.settledAt).to.be.gt(0);
+      expect(recoverySettlement.releasedAmount).to.eq(usdc(50));
+      expect(recoverySettlement.settledAt).to.be.gt(0);
     });
 
     it("completes risk accounting with the minimum bounded callback gas", async () => {
@@ -343,11 +358,16 @@ describe("RiskTierManager and OrchestratorV3", () => {
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
       await orchestrator.setRiskCallbackGasLimit(100_000);
 
-      await fulfillIntent(orchestrator, intentHash, usdc(300));
+      const receipt: ContractReceipt = await (await fulfillIntent(orchestrator, intentHash, usdc(300))).wait();
+      const settlementEvent = receipt.events?.find(({ event }) => event === "IntentSettlementRecorded");
+      const recoverySettlement = await orchestrator.getIntentSettlement(intentHash);
 
       expect((await manager.getRiskPosition(intentHash)).releasedAmount).to.eq(usdc(300));
       expect((await vault.getReservation(intentHash)).amount).to.eq(usdc(300));
-      expect((await orchestrator.getIntentSettlement(intentHash)).releasedAmount).to.eq(usdc(300));
+      expect(settlementEvent?.args?.releasedAmount).to.eq(usdc(300));
+      expect(settlementEvent?.args?.settledAt).to.be.gt(0);
+      expect(recoverySettlement.releasedAmount).to.eq(0);
+      expect(recoverySettlement.settledAt).to.eq(0);
     });
 
     it("settles a snapshotted reservation after the vault controller rotates", async () => {

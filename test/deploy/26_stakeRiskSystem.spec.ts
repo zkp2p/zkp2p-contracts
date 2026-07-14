@@ -41,7 +41,9 @@ describe("Stake risk system deployment", () => {
     };
   }
 
-  it("deploys all four stake risk components", async () => {
+  it("deploys all stake risk components and linked libraries", async () => {
+    expect(deployedAddress("BoundedCall")).to.properAddress;
+    expect(deployedAddress("PostIntentHookExecutor")).to.properAddress;
     expect(deployedAddress("OrchestratorV3")).to.properAddress;
     expect(deployedAddress("StakeVault")).to.properAddress;
     expect(deployedAddress("RiskTierManager")).to.properAddress;

@@ -22,6 +22,11 @@ interface IOrchestratorV3 is IOrchestratorV2 {
         address postIntentHook;
     }
 
+    struct IntentSettlement {
+        uint256 releasedAmount;
+        uint64 settledAt;
+    }
+
     /* ============ Events ============ */
 
     event DepositRiskHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
@@ -55,5 +60,9 @@ interface IOrchestratorV3 is IOrchestratorV2 {
     function intentRequiresPostIntentHook(bytes32 _intentHash) external view returns (bool);
     function getRiskIntent(bytes32 _intentHash) external view returns (RiskIntentData memory);
     function getAccountIntentCount(address _account) external view returns (uint256);
+    /**
+     * @notice Returns recovery data when a settlement callback failed open.
+     * @dev Successful settlement callbacks leave this record empty.
+     */
     function getIntentSettlement(bytes32 _intentHash) external view returns (uint256 releasedAmount, uint64 settledAt);
 }

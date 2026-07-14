@@ -73,7 +73,6 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
     error DeferredPayoutExceedsReleasedAmount(uint256 payoutAmount, uint256 releasedAmount);
     error PositionNotMature(uint64 releaseTime, uint64 currentTime);
     error PositionNotSettled(bytes32 intentHash);
-    error SettlementAmountMismatch(uint256 expected, uint256 actual);
     error InvalidAttestation();
     error AttestationNotYetValid(uint64 validAfter, uint64 currentTime);
     error AttestationExpired(uint64 validUntil, uint64 currentTime);
@@ -563,11 +562,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
         RiskPosition storage position = riskPositions[_intentHash];
         if (position.status != PositionStatus.ACTIVE) revert PositionNotActive(_intentHash, position.status);
 
-        (uint256 recordedAmount, uint64 settledAt) = orchestrator.getIntentSettlement(_intentHash);
-        if (recordedAmount != _releasedAmount) revert SettlementAmountMismatch(_releasedAmount, recordedAmount);
-        if (settledAt == 0) revert PositionNotSettled(_intentHash);
-
-        _applySettlement(_intentHash, position, recordedAmount, settledAt);
+        _applySettlement(_intentHash, position, _releasedAmount, uint64(block.timestamp));
     }
 
     function _synchronizeSettlement(bytes32 _intentHash, RiskPosition storage _position) internal {

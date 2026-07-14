@@ -103,8 +103,6 @@ contract RiskOrchestratorHarness {
     }
 
     function fulfillPosition(IIntentRiskHook _manager, bytes32 _intentHash, uint256 _amount) external {
-        settlementAmounts[_intentHash] = _amount;
-        settlementTimestamps[_intentHash] = uint64(block.timestamp);
         _manager.onIntentFulfilled(_intentHash, _amount);
     }
 
