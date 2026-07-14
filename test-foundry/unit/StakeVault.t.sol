@@ -108,6 +108,43 @@ contract StakeVaultTest is Test {
         vault.setTakerAuthorization(maker, true);
     }
 
+    function test_TakerCanPreapproveOneExactStakeOwner() public {
+        address squatter = address(0xCAFE);
+        vm.prank(maker);
+        vault.setAllowedStakeOwner(staker);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(StakeVault.StakeOwnerNotAllowed.selector, maker, squatter, staker)
+        );
+        vm.prank(squatter);
+        vault.setTakerAuthorization(maker, true);
+
+        vm.prank(staker);
+        vault.depositStakeFor(maker, 100e6);
+        assertEq(vault.stakeOwnerOf(maker), staker);
+    }
+
+    function test_TakerAtomicallyReplacesSquatterWithAllowedStakeOwner() public {
+        address squatter = address(0xCAFE);
+        vm.prank(squatter);
+        vault.setTakerAuthorization(maker, true);
+
+        vm.prank(maker);
+        vault.setAllowedStakeOwner(staker);
+
+        assertEq(vault.stakeOwnerOf(maker), maker);
+        assertEq(vault.allowedStakeOwner(maker), staker);
+        vm.expectRevert(
+            abi.encodeWithSelector(StakeVault.StakeOwnerNotAllowed.selector, maker, squatter, staker)
+        );
+        vm.prank(squatter);
+        vault.setTakerAuthorization(maker, true);
+
+        vm.prank(staker);
+        vault.setTakerAuthorization(maker, true);
+        assertEq(vault.stakeOwnerOf(maker), staker);
+    }
+
     function test_BatchTakerAuthorizationUpdatesEveryTaker() public {
         address secondTaker = makeAddr("secondTaker");
         address[] memory takers = new address[](2);

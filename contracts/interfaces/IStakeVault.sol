@@ -120,6 +120,7 @@ interface IStakeVault {
     );
     event TakerAuthorizationUpdated(address indexed stakeOwner, address indexed taker, bool authorized);
     event StakeDelegationEnabledUpdated(address indexed taker, bool enabled);
+    event AllowedStakeOwnerUpdated(address indexed taker, address indexed allowedStakeOwner);
     event ControllerProposed(address indexed currentController, address indexed pendingController, uint64 validAt);
     event ControllerInitialized(address indexed controller);
     event ControllerAccepted(address indexed previousController, address indexed newController);
@@ -133,6 +134,7 @@ interface IStakeVault {
     function setTakerAuthorizations(address[] calldata _takers, bool _authorized) external;
     function clearStakeOwner() external;
     function setStakeDelegationEnabled(bool _enabled) external;
+    function setAllowedStakeOwner(address _stakeOwner) external;
     function requestStakeWithdrawal(uint256 _amount) external;
     function cancelStakeWithdrawal() external;
     function withdrawRequestedStake(address _recipient) external;
@@ -174,6 +176,7 @@ interface IStakeVault {
     function freeStake(address _staker) external view returns (uint256);
     function stakeOwnerOf(address _taker) external view returns (address);
     function stakeDelegationEnabled(address _taker) external view returns (bool);
+    function allowedStakeOwner(address _taker) external view returns (address);
     function isExiting(address _staker) external view returns (bool);
     function getExitRequest(address _staker) external view returns (ExitRequest memory);
     function getStakeWithdrawalRequest(address _staker) external view returns (StakeWithdrawalRequest memory);

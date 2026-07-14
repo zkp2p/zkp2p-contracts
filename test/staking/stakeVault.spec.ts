@@ -135,6 +135,37 @@ describe("StakeVault", () => {
       ).to.be.revertedWithCustomError(vault, "StakeDelegationDisabled");
     });
 
+    it("lets the taker pre-approve one exact stake owner", async () => {
+      const { nextController: otherStakeOwner, staker, maker: taker, vault } = await deployFixture();
+
+      await expect(vault.connect(taker).setAllowedStakeOwner(staker.address))
+        .to.emit(vault, "AllowedStakeOwnerUpdated")
+        .withArgs(taker.address, staker.address);
+      await expect(
+        vault.connect(otherStakeOwner).setTakerAuthorization(taker.address, true),
+      ).to.be.revertedWithCustomError(vault, "StakeOwnerNotAllowed");
+      await vault.connect(staker).depositStakeFor(taker.address, usdc(100));
+
+      expect(await vault.stakeOwnerOf(taker.address)).to.eq(staker.address);
+    });
+
+    it("atomically replaces a squatter with one allowed stake owner", async () => {
+      const { nextController: squatter, staker, maker: taker, vault } = await deployFixture();
+      await vault.connect(squatter).setTakerAuthorization(taker.address, true);
+
+      await expect(vault.connect(taker).setAllowedStakeOwner(staker.address))
+        .to.emit(vault, "TakerAuthorizationUpdated")
+        .withArgs(squatter.address, taker.address, false)
+        .and.to.emit(vault, "AllowedStakeOwnerUpdated")
+        .withArgs(taker.address, staker.address);
+      await expect(
+        vault.connect(squatter).setTakerAuthorization(taker.address, true),
+      ).to.be.revertedWithCustomError(vault, "StakeOwnerNotAllowed");
+      await vault.connect(staker).setTakerAuthorization(taker.address, true);
+
+      expect(await vault.stakeOwnerOf(taker.address)).to.eq(staker.address);
+    });
+
     it("does not give the taker stake withdrawal rights", async () => {
       const { staker, maker: taker, vault } = await deployFixture();
       await vault.connect(staker).depositStakeFor(taker.address, usdc(100));

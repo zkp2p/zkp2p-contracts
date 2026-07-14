@@ -40,6 +40,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     mapping(address => uint256) public override reservedStake;
     mapping(address => address) internal delegatedStakeOwners;
     mapping(address => bool) internal stakeDelegationDisabled;
+    mapping(address => address) internal allowedStakeOwners;
     mapping(address => ExitRequest) internal exitRequests;
     mapping(address => StakeWithdrawalRequest) internal stakeWithdrawalRequests;
     mapping(bytes32 => Reservation) internal reservations;
@@ -60,6 +61,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     error TakerAuthorizationNotFound(address taker, address stakeOwner);
     error NoDelegatedStakeOwner(address taker);
     error StakeDelegationDisabled(address taker);
+    error StakeOwnerNotAllowed(address taker, address stakeOwner, address allowedStakeOwner);
     error UnauthorizedController(address caller);
     error UnauthorizedPositionController(address caller, address expectedController);
     error StakeActionPaused();
@@ -182,8 +184,10 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
 
         delete delegatedStakeOwners[msg.sender];
         stakeDelegationDisabled[msg.sender] = true;
+        delete allowedStakeOwners[msg.sender];
         emit TakerAuthorizationUpdated(stakeOwner, msg.sender, false);
         emit StakeDelegationEnabledUpdated(msg.sender, false);
+        emit AllowedStakeOwnerUpdated(msg.sender, address(0));
     }
 
     /**
@@ -194,7 +198,32 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
      */
     function setStakeDelegationEnabled(bool _enabled) external override {
         stakeDelegationDisabled[msg.sender] = !_enabled;
+        if (_enabled && allowedStakeOwners[msg.sender] != address(0)) {
+            delete allowedStakeOwners[msg.sender];
+            emit AllowedStakeOwnerUpdated(msg.sender, address(0));
+        }
         emit StakeDelegationEnabledUpdated(msg.sender, _enabled);
+    }
+
+    /**
+     * @notice Restricts the caller's future stake assignment to one exact stake owner.
+     * @dev This atomically removes a different current assignment, so a taker can recover from
+     *      squatting without briefly reopening delegation to every address.
+     * @param _stakeOwner Only address allowed to authorize stake for the caller.
+     */
+    function setAllowedStakeOwner(address _stakeOwner) external override {
+        if (_stakeOwner == address(0) || _stakeOwner == msg.sender) revert InvalidTaker(_stakeOwner);
+
+        address currentStakeOwner = delegatedStakeOwners[msg.sender];
+        if (currentStakeOwner != address(0) && currentStakeOwner != _stakeOwner) {
+            delete delegatedStakeOwners[msg.sender];
+            emit TakerAuthorizationUpdated(currentStakeOwner, msg.sender, false);
+        }
+
+        allowedStakeOwners[msg.sender] = _stakeOwner;
+        stakeDelegationDisabled[msg.sender] = false;
+        emit AllowedStakeOwnerUpdated(msg.sender, _stakeOwner);
+        emit StakeDelegationEnabledUpdated(msg.sender, true);
     }
 
     /**
@@ -708,6 +737,13 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     }
 
     /**
+     * @notice Returns the only stake owner a taker currently accepts, or zero when assignments are open.
+     */
+    function allowedStakeOwner(address _taker) external view override returns (address) {
+        return allowedStakeOwners[_taker];
+    }
+
+    /**
      * @notice Returns whether a staker has requested full exit.
      */
     function isExiting(address _staker) external view override returns (bool) {
@@ -772,6 +808,10 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         if (_authorized) {
             if (currentStakeOwner == _stakeOwner) return;
             if (stakeDelegationDisabled[_taker]) revert StakeDelegationDisabled(_taker);
+            address requiredStakeOwner = allowedStakeOwners[_taker];
+            if (requiredStakeOwner != address(0) && requiredStakeOwner != _stakeOwner) {
+                revert StakeOwnerNotAllowed(_taker, _stakeOwner, requiredStakeOwner);
+            }
             if (currentStakeOwner != address(0) && currentStakeOwner != _stakeOwner) {
                 revert TakerAlreadyAuthorized(_taker, currentStakeOwner);
             }
