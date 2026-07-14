@@ -89,15 +89,50 @@ describe("StakeVault", () => {
       expect(await vault.stakeOwnerOf(taker.address)).to.eq(taker.address);
     });
 
-    it("lets the taker clear an unwanted stake owner", async () => {
+    it("lets the taker clear an unwanted stake owner and disables reassignment", async () => {
       const { staker, maker: taker, vault } = await deployFixture();
       await vault.connect(staker).setTakerAuthorization(taker.address, true);
 
       await expect(vault.connect(taker).clearStakeOwner())
         .to.emit(vault, "TakerAuthorizationUpdated")
-        .withArgs(staker.address, taker.address, false);
+        .withArgs(staker.address, taker.address, false)
+        .and.to.emit(vault, "StakeDelegationEnabledUpdated")
+        .withArgs(taker.address, false);
 
       expect(await vault.stakeOwnerOf(taker.address)).to.eq(taker.address);
+      expect(await vault.stakeDelegationEnabled(taker.address)).to.eq(false);
+    });
+
+    it("rejects forced reassignment after the taker clears its stake owner", async () => {
+      const { nextController: otherStakeOwner, staker, maker: taker, vault } = await deployFixture();
+      await vault.connect(staker).setTakerAuthorization(taker.address, true);
+      await vault.connect(taker).clearStakeOwner();
+
+      await expect(
+        vault.connect(otherStakeOwner).setTakerAuthorization(taker.address, true),
+      ).to.be.revertedWithCustomError(vault, "StakeDelegationDisabled");
+    });
+
+    it("lets the taker re-enable one-sided stake delegation", async () => {
+      const { nextController: otherStakeOwner, staker, maker: taker, vault } = await deployFixture();
+      await vault.connect(staker).setTakerAuthorization(taker.address, true);
+      await vault.connect(taker).clearStakeOwner();
+
+      await expect(vault.connect(taker).setStakeDelegationEnabled(true))
+        .to.emit(vault, "StakeDelegationEnabledUpdated")
+        .withArgs(taker.address, true);
+      await vault.connect(otherStakeOwner).setTakerAuthorization(taker.address, true);
+
+      expect(await vault.stakeOwnerOf(taker.address)).to.eq(otherStakeOwner.address);
+    });
+
+    it("lets the taker disable delegation before any stake owner is assigned", async () => {
+      const { staker, maker: taker, vault } = await deployFixture();
+      await vault.connect(taker).setStakeDelegationEnabled(false);
+
+      await expect(
+        vault.connect(staker).setTakerAuthorization(taker.address, true),
+      ).to.be.revertedWithCustomError(vault, "StakeDelegationDisabled");
     });
 
     it("does not give the taker stake withdrawal rights", async () => {

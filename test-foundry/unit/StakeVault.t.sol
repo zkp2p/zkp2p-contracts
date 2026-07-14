@@ -68,6 +68,44 @@ contract StakeVaultTest is Test {
         vault.clearStakeOwner();
 
         assertEq(vault.stakeOwnerOf(maker), maker);
+        assertFalse(vault.stakeDelegationEnabled(maker));
+    }
+
+    function test_ForcedReassignmentFailsAfterTakerClearsStakeOwner() public {
+        vm.prank(staker);
+        vault.setTakerAuthorization(maker, true);
+
+        vm.prank(maker);
+        vault.clearStakeOwner();
+
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.StakeDelegationDisabled.selector, maker));
+        vm.prank(address(0xCAFE));
+        vault.setTakerAuthorization(maker, true);
+    }
+
+    function test_TakerCanReenableOneSidedDelegation() public {
+        vm.prank(staker);
+        vault.setTakerAuthorization(maker, true);
+
+        vm.startPrank(maker);
+        vault.clearStakeOwner();
+        vault.setStakeDelegationEnabled(true);
+        vm.stopPrank();
+
+        address replacementOwner = address(0xCAFE);
+        vm.prank(replacementOwner);
+        vault.setTakerAuthorization(maker, true);
+
+        assertEq(vault.stakeOwnerOf(maker), replacementOwner);
+    }
+
+    function test_TakerCanDisableDelegationBeforeAssignment() public {
+        vm.prank(maker);
+        vault.setStakeDelegationEnabled(false);
+
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.StakeDelegationDisabled.selector, maker));
+        vm.prank(staker);
+        vault.setTakerAuthorization(maker, true);
     }
 
     function test_BatchTakerAuthorizationUpdatesEveryTaker() public {

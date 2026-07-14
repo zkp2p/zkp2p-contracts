@@ -39,6 +39,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     mapping(address => uint256) public override stakeBalance;
     mapping(address => uint256) public override reservedStake;
     mapping(address => address) internal delegatedStakeOwners;
+    mapping(address => bool) internal stakeDelegationDisabled;
     mapping(address => ExitRequest) internal exitRequests;
     mapping(address => StakeWithdrawalRequest) internal stakeWithdrawalRequests;
     mapping(bytes32 => Reservation) internal reservations;
@@ -58,6 +59,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     error TakerAlreadyAuthorized(address taker, address stakeOwner);
     error TakerAuthorizationNotFound(address taker, address stakeOwner);
     error NoDelegatedStakeOwner(address taker);
+    error StakeDelegationDisabled(address taker);
     error UnauthorizedController(address caller);
     error UnauthorizedPositionController(address caller, address expectedController);
     error StakeActionPaused();
@@ -171,14 +173,28 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
 
     /**
      * @notice Clears the caller's delegated stake owner for future intents.
-     * @dev Existing risk positions remain backed by their snapshotted stake owner.
+     * @dev Existing risk positions remain backed by their snapshotted stake owner. New delegations
+     *      stay disabled until the caller explicitly re-enables them, preventing forced reassignment.
      */
     function clearStakeOwner() external override {
         address stakeOwner = delegatedStakeOwners[msg.sender];
         if (stakeOwner == address(0)) revert NoDelegatedStakeOwner(msg.sender);
 
         delete delegatedStakeOwners[msg.sender];
+        stakeDelegationDisabled[msg.sender] = true;
         emit TakerAuthorizationUpdated(stakeOwner, msg.sender, false);
+        emit StakeDelegationEnabledUpdated(msg.sender, false);
+    }
+
+    /**
+     * @notice Enables or disables third-party stake delegation for the caller's future intents.
+     * @dev Delegation is enabled by default so a Safe may authorize its relayer in one transaction.
+     *      Disabling delegation does not alter an existing assignment; use clearStakeOwner for that.
+     * @param _enabled True to accept future assignments, false to reject them.
+     */
+    function setStakeDelegationEnabled(bool _enabled) external override {
+        stakeDelegationDisabled[msg.sender] = !_enabled;
+        emit StakeDelegationEnabledUpdated(msg.sender, _enabled);
     }
 
     /**
@@ -685,6 +701,13 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     }
 
     /**
+     * @notice Returns whether a taker accepts new third-party stake assignments.
+     */
+    function stakeDelegationEnabled(address _taker) external view override returns (bool) {
+        return !stakeDelegationDisabled[_taker];
+    }
+
+    /**
      * @notice Returns whether a staker has requested full exit.
      */
     function isExiting(address _staker) external view override returns (bool) {
@@ -747,10 +770,11 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
 
         address currentStakeOwner = delegatedStakeOwners[_taker];
         if (_authorized) {
+            if (currentStakeOwner == _stakeOwner) return;
+            if (stakeDelegationDisabled[_taker]) revert StakeDelegationDisabled(_taker);
             if (currentStakeOwner != address(0) && currentStakeOwner != _stakeOwner) {
                 revert TakerAlreadyAuthorized(_taker, currentStakeOwner);
             }
-            if (currentStakeOwner == _stakeOwner) return;
 
             delegatedStakeOwners[_taker] = _stakeOwner;
         } else {
