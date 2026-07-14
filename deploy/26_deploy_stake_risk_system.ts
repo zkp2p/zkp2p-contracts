@@ -168,7 +168,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 };
 
 func.tags = ["StakeRiskSystem"];
-func.dependencies = ["V2System", "MultiAttestationVerifier"];
+func.dependencies = ["16_configure_v2_payment_methods", "MultiAttestationVerifier"];
 func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.deployments.getNetworkName();
   if (network === "localhost" || network === "hardhat") return false;
