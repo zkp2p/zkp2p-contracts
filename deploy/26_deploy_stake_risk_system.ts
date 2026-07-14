@@ -33,10 +33,12 @@ function platformRiskConfigMatches(actual: any, expected: any): boolean {
   return actual.enabled === expected.enabled
     && actual.chargebackable === expected.chargebackable
     && actual.deferredPayoutEnabled === expected.deferredPayoutEnabled
-    && actual.reserveBps.eq(expected.reserveBps)
-    && actual.riskWindow.eq(expected.riskWindow)
+    && ethers.BigNumber.from(actual.reserveBps).eq(expected.reserveBps)
+    && ethers.BigNumber.from(actual.riskWindow).eq(expected.riskWindow)
     && actual.tierCaps.length === expected.tierCaps.length
-    && actual.tierCaps.every((cap: any, index: number) => cap.eq(expected.tierCaps[index]));
+    && actual.tierCaps.every(
+      (cap: any, index: number) => ethers.BigNumber.from(cap).eq(expected.tierCaps[index]),
+    );
 }
 
 /**
