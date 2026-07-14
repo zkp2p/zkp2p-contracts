@@ -505,7 +505,7 @@ describe("RiskTierManager and OrchestratorV3", () => {
       const { taker, escrow, orchestrator, vault, manager } = await deployFixture();
       await vault.connect(taker).depositStake(usdc(1_000));
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
-      await orchestrator.setRiskCallbackGasLimit(200_000);
+      await orchestrator.setRiskCallbackGasLimit(await orchestrator.MIN_RISK_CALLBACK_GAS_LIMIT());
 
       const receipt: ContractReceipt = await (await fulfillIntent(orchestrator, intentHash, usdc(300))).wait();
       const settlementEvent = receipt.events?.find(({ event }) => event === "IntentSettlementRecorded");
@@ -590,6 +590,45 @@ describe("RiskTierManager and OrchestratorV3", () => {
       await expect(
         orchestrator.connect(taker).signalIntent(signalParams(escrow, taker.address, usdc(50), ZELLE)),
       ).to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+    });
+
+    it("admits a non-chargebackable position with the minimum bounded callback gas", async () => {
+      const { taker, escrow, orchestrator, manager } = await deployFixture();
+      await orchestrator.setRiskCallbackGasLimit(await orchestrator.MIN_RISK_CALLBACK_GAS_LIMIT());
+
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(50), ZELLE);
+
+      expect((await manager.getRiskPosition(intentHash)).mode).to.eq(0);
+    });
+
+    it("admits a stake-backed position with the minimum bounded callback gas", async () => {
+      const { taker, escrow, orchestrator, vault, manager } = await deployFixture();
+      await vault.connect(taker).depositStake(usdc(1_000));
+      await orchestrator.setRiskCallbackGasLimit(await orchestrator.MIN_RISK_CALLBACK_GAS_LIMIT());
+
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
+
+      expect((await manager.getRiskPosition(intentHash)).mode).to.eq(1);
+      expect((await vault.getReservation(intentHash)).amount).to.eq(usdc(500));
+    });
+
+    it("admits a deferred-payout position with the minimum bounded callback gas", async () => {
+      const { taker, escrow, orchestrator, vault, manager, deferredHook } = await deployFixture();
+      await vault.connect(taker).depositStake(usdc(500));
+      await orchestrator.setRiskCallbackGasLimit(await orchestrator.MIN_RISK_CALLBACK_GAS_LIMIT());
+      await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
+
+      const intentHash = await signalIntent(
+        orchestrator,
+        escrow,
+        taker,
+        usdc(100),
+        PAYPAL,
+        deferredHook.address,
+      );
+
+      expect((await manager.getRiskPosition(intentHash)).mode).to.eq(2);
+      expect((await vault.getDeferredPayout(intentHash)).beneficiary).to.eq(taker.address);
     });
   });
 
