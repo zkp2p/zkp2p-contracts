@@ -204,7 +204,7 @@ contract StakeVaultTest is Test {
         vm.prank(nextController);
         vault.acceptController();
         vm.prank(owner);
-        vault.setCustodyPaused(false, true);
+        vault.setStakeOperationsPaused(false, true);
         deal(address(token), address(vault), 100e6);
 
         vm.prank(controller);

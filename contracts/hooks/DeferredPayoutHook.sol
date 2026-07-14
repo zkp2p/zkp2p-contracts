@@ -12,7 +12,7 @@ import { IStakeVault } from "../interfaces/IStakeVault.sol";
 
 /**
  * @title DeferredPayoutHook
- * @notice Moves fulfilled net proceeds directly from an authorized orchestrator into StakeVault custody.
+ * @notice Moves fulfilled net proceeds directly from an authorized orchestrator into StakeVault.
  * @dev Tokens never pass through RiskTierManager. The transfer and risk accounting are atomic: if the
  *      manager rejects registration, the complete hook execution reverts.
  */

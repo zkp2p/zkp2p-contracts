@@ -43,13 +43,13 @@ describe("StakeVault", () => {
       await expect(vault.connect(staker).depositStake(0)).to.be.revertedWithCustomError(vault, "ZeroAmount");
     });
 
-    it("rejects deposits while deposit custody is paused", async () => {
+    it("rejects deposits while stake deposits are paused", async () => {
       const { owner, staker, vault } = await deployFixture();
-      await vault.connect(owner).setCustodyPaused(true, false);
+      await vault.connect(owner).setStakeOperationsPaused(true, false);
 
       await expect(vault.connect(staker).depositStake(usdc(1))).to.be.revertedWithCustomError(
         vault,
-        "CustodyActionPaused",
+        "StakeActionPaused",
       );
     });
   });
@@ -278,18 +278,18 @@ describe("StakeVault", () => {
 
     it("rejects new deferred authorizations while reservations are paused", async () => {
       const { owner, controller, staker, vault } = await deployFixture();
-      await vault.connect(owner).setCustodyPaused(false, true);
+      await vault.connect(owner).setStakeOperationsPaused(false, true);
 
       await expect(
         vault.connect(controller).authorizeDeferredPayout(ethers.utils.id("deferred"), staker.address, 0),
-      ).to.be.revertedWithCustomError(vault, "CustodyActionPaused");
+      ).to.be.revertedWithCustomError(vault, "StakeActionPaused");
     });
 
     it("records an already-authorized deferred payout while new reservations are paused", async () => {
       const { owner, controller, staker, token, vault } = await deployFixture();
       const intentHash = ethers.utils.id("deferred");
       await vault.connect(controller).authorizeDeferredPayout(intentHash, staker.address, DAY);
-      await vault.connect(owner).setCustodyPaused(false, true);
+      await vault.connect(owner).setStakeOperationsPaused(false, true);
       await token.transfer(vault.address, usdc(100));
 
       await vault.connect(controller).recordDeferredPayout(intentHash, staker.address, usdc(100), 2 * DAY);

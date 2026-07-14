@@ -6,7 +6,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title IStakeVault
- * @notice Policy-agnostic custody interface for membership stake and deferred payouts.
+ * @notice Policy-agnostic interface for membership stake and deferred payouts.
  */
 interface IStakeVault {
     /* ============ Structs ============ */
@@ -108,7 +108,7 @@ interface IStakeVault {
     event ControllerProposed(address indexed currentController, address indexed pendingController, uint64 validAt);
     event ControllerInitialized(address indexed controller);
     event ControllerAccepted(address indexed previousController, address indexed newController);
-    event CustodyPausedUpdated(bool depositsPaused, bool reservationsPaused);
+    event StakeOperationsPausedUpdated(bool depositsPaused, bool reservationsPaused);
 
     /* ============ User Functions ============ */
 
@@ -135,7 +135,7 @@ interface IStakeVault {
     function initializeController(address _controller) external;
     function proposeController(address _controller) external;
     function acceptController() external;
-    function setCustodyPaused(bool _depositsPaused, bool _reservationsPaused) external;
+    function setStakeOperationsPaused(bool _depositsPaused, bool _reservationsPaused) external;
 
     /* ============ View Functions ============ */
 

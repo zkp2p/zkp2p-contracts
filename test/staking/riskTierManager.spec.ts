@@ -560,7 +560,7 @@ describe("RiskTierManager and OrchestratorV3", () => {
     it("rejects new deferred intents while vault reservations are paused", async () => {
       const { owner, taker, escrow, orchestrator, vault, deferredHook } = await deployFixture();
       await vault.connect(taker).depositStake(usdc(500));
-      await vault.connect(owner).setCustodyPaused(false, true);
+      await vault.connect(owner).setStakeOperationsPaused(false, true);
 
       await expect(
         orchestrator.connect(taker).signalIntent(
@@ -580,7 +580,7 @@ describe("RiskTierManager and OrchestratorV3", () => {
         PAYPAL,
         deferredHook.address,
       );
-      await vault.connect(owner).setCustodyPaused(false, true);
+      await vault.connect(owner).setStakeOperationsPaused(false, true);
 
       await fulfillIntent(orchestrator, intentHash, usdc(700));
 

@@ -17,7 +17,7 @@ import { IStakeVault } from "./interfaces/IStakeVault.sol";
 /**
  * @title RiskTierManager
  * @notice Replaceable policy and accounting layer for stake-derived taker access and chargeback coverage.
- * @dev This contract never takes token custody. It reads canonical intent state from OrchestratorV3 and
+ * @dev This contract never holds tokens. It reads canonical intent state from OrchestratorV3 and
  *      instructs StakeVault to reserve, release, or slash funds.
  */
 contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
@@ -94,7 +94,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
      * @notice Creates a risk manager for one orchestrator and one stable vault.
      * @param _owner Governance owner.
      * @param _orchestrator Canonical lifecycle source.
-     * @param _stakeVault Stable custody vault.
+     * @param _stakeVault Stable stake vault.
      * @param _attestationVerifier Initial chargeback attestation verifier.
      * @param _tierThresholds Positive Peer, Plus, Pro, and Platinum thresholds.
      * @param _concurrencyLimits Peasant through Platinum active-intent ceilings.

@@ -11,9 +11,9 @@ import { IStakeVault } from "./interfaces/IStakeVault.sol";
 
 /**
  * @title StakeVault
- * @notice Stable, policy-agnostic USDC custody for taker stake, reservations, and deferred payouts.
+ * @notice Stable, policy-agnostic USDC accounting for taker stake, reservations, and deferred payouts.
  * @dev The controller decides why funds are reserved or slashed. The vault only enforces accounting,
- *      exit, maturity, and solvency rules. User and maker withdrawals remain available while custody
+ *      exit, maturity, and solvency rules. User and maker withdrawals remain available while stake
  *      admission is paused.
  */
 contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
@@ -53,7 +53,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     error ZeroAmount();
     error UnauthorizedController(address caller);
     error UnauthorizedPositionController(address caller, address expectedController);
-    error CustodyActionPaused();
+    error StakeActionPaused();
     error AlreadyExiting(address staker);
     error NotExiting(address staker);
     error ExitNotReady(uint64 availableAt, uint64 currentTime);
@@ -121,7 +121,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
      * @param _amount Amount of stake token to deposit.
      */
     function depositStake(uint256 _amount) external override nonReentrant {
-        if (depositsPaused) revert CustodyActionPaused();
+        if (depositsPaused) revert StakeActionPaused();
         if (_amount == 0) revert ZeroAmount();
 
         uint256 balanceBefore = stakeToken.balanceOf(address(this));
@@ -236,7 +236,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         uint256 _amount,
         uint64 _releaseTime
     ) external override onlyController {
-        if (reservationsPaused) revert CustodyActionPaused();
+        if (reservationsPaused) revert StakeActionPaused();
         if (_staker == address(0)) revert ZeroAddress();
         if (_amount == 0) revert ZeroAmount();
         if (exitRequests[_staker].exiting) revert AlreadyExiting(_staker);
@@ -362,7 +362,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         address _beneficiary,
         uint64 _releaseTime
     ) external override onlyController {
-        if (reservationsPaused) revert CustodyActionPaused();
+        if (reservationsPaused) revert StakeActionPaused();
         if (_beneficiary == address(0)) revert ZeroAddress();
         if (deferredPayouts[_intentHash].beneficiary != address(0)) revert DeferredPayoutAlreadyExists(_intentHash);
 
@@ -498,12 +498,12 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Pauses new deposits and/or new custody reservations without blocking withdrawals.
+     * @notice Pauses new deposits and/or new stake reservations without blocking withdrawals.
      */
-    function setCustodyPaused(bool _depositsPaused, bool _reservationsPaused) external override onlyOwner {
+    function setStakeOperationsPaused(bool _depositsPaused, bool _reservationsPaused) external override onlyOwner {
         depositsPaused = _depositsPaused;
         reservationsPaused = _reservationsPaused;
-        emit CustodyPausedUpdated(_depositsPaused, _reservationsPaused);
+        emit StakeOperationsPausedUpdated(_depositsPaused, _reservationsPaused);
     }
 
     /* ============ View Functions ============ */
