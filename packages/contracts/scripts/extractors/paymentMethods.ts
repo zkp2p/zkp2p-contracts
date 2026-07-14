@@ -30,40 +30,6 @@ function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-// Helper to convert BigNumber values to decimal numbers
-function convertToNumber(value: any): number {
-  if (!value) return 30; // Default
-
-  // Handle BigNumber objects
-  if (typeof value === 'object') {
-    if (value._isBigNumber || value.type === 'BigNumber') {
-      // Convert hex to decimal
-      const hex = value.hex || value._hex || '0x1e';
-      return parseInt(hex, 16);
-    }
-    // Handle nested objects (like Zelle with per-bank buffers)
-    if (typeof value === 'object' && !Array.isArray(value)) {
-      // Take the first value if it's an object with multiple entries
-      const firstKey = Object.keys(value)[0];
-      if (firstKey) {
-        return convertToNumber(value[firstKey]);
-      }
-    }
-  }
-
-  // Handle string numbers
-  if (typeof value === 'string') {
-    return parseInt(value);
-  }
-
-  // Already a number
-  if (typeof value === 'number') {
-    return value;
-  }
-
-  return 30; // Default fallback
-}
-
 export async function extractPaymentMethods(): Promise<void> {
   ensureDir(PAYMENT_METHODS_DIR);
 
@@ -214,10 +180,9 @@ ${networks.map(net => `  ${net}: require('./${net}.json')`).join(',\n')}
   const indexDts = `// Typed re-exports for payment methods\n${networks.map(net => `export { default as ${net} } from './${net}';`).join('\n')}\nexport { default as lookups } from './lookups';\n`;
   fs.writeFileSync(path.join(PAYMENT_METHODS_DIR, 'index.d.ts'), indexDts);
 
-  // Step 7: Generate lookups.json with cross-network name<->hash mappings + Zelle helpers
+  // Step 7: Generate lookups.json with cross-network name<->hash mappings
   const nameToHash: Record<string, string> = {};
   const hashToName: Record<string, string> = {};
-  const zelleVariantHashes: string[] = [];
 
   // Read back all per-network JSON files and merge method entries
   for (const net of networks) {
@@ -231,10 +196,6 @@ ${networks.map(net => `  ${net}: require('./${net}.json')`).join(',\n')}
           nameToHash[methodName] = hash;
           hashToName[hash] = methodName;
 
-          // Detect Zelle variants (names starting with "zelle-")
-          if (methodName.startsWith('zelle-')) {
-            zelleVariantHashes.push(hash);
-          }
         }
       }
     } catch (e) {
@@ -260,16 +221,10 @@ ${networks.map(net => `  ${net}: require('./${net}.json')`).join(',\n')}
     }
   }
 
-  // bytes32 encoding of "zelle" (ethers.utils.formatBytes32String("zelle"))
-  // This is a fixed constant — it never changes
-  const zelleUnspecifiedHash = '0x7a656c6c65000000000000000000000000000000000000000000000000000000';
-
   const lookupsJson = {
     generatedAt: new Date().toISOString(),
     nameToHash,
-    hashToName,
-    zelleVariantHashes,
-    zelleUnspecifiedHash
+    hashToName
   };
 
   fs.writeFileSync(
@@ -283,8 +238,6 @@ export type PaymentMethodLookups = {
   generatedAt: string;
   nameToHash: Record<string, string>;
   hashToName: Record<string, string>;
-  zelleVariantHashes: string[];
-  zelleUnspecifiedHash: string;
 };
 declare const value: PaymentMethodLookups;
 export default value;

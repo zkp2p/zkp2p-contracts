@@ -95,27 +95,6 @@
       ],
       "updatedAt": "2026-06-22T02:11:08.890Z"
     },
-    "zelle-citi": {
-      "paymentMethodHash": "0x817260692b75e93c7fbc51c71637d4075a975e221e1ebc1abeddfabd731fd90d",
-      "currencies": [
-        "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e"
-      ],
-      "updatedAt": "2026-03-16T12:46:13.287Z"
-    },
-    "zelle-chase": {
-      "paymentMethodHash": "0x6aa1d1401e79ad0549dced8b1b96fb72c41cd02b32a7d9ea1fed54ba9e17152e",
-      "currencies": [
-        "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e"
-      ],
-      "updatedAt": "2026-03-16T12:46:25.382Z"
-    },
-    "zelle-bofa": {
-      "paymentMethodHash": "0x4bc42b322a3ad413b91b2fde30549ca70d6ee900eded1681de91aaf32ffd7ab5",
-      "currencies": [
-        "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e"
-      ],
-      "updatedAt": "2026-03-16T12:46:39.462Z"
-    },
     "paypal": {
       "paymentMethodHash": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f",
       "currencies": [

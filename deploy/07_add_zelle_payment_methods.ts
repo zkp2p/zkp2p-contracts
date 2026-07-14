@@ -15,9 +15,7 @@ import {
   waitForDeploymentDelay,
 } from "../deployments/helpers";
 import {
-  ZELLE_CITI_PROVIDER_CONFIG,
-  ZELLE_CHASE_PROVIDER_CONFIG,
-  ZELLE_BOFA_PROVIDER_CONFIG,
+  ZELLE_PROVIDER_CONFIG,
 } from "../deployments/verifiers/zelle";
 
 // Deployment Scripts
@@ -39,78 +37,27 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     "UnifiedPaymentVerifier", unifiedVerifierAddress
   );
 
-  // Add Zelle Citi
+  // Add generic Zelle
   await addPaymentMethodToRegistry(
     hre,
     paymentVerifierRegistryContract,
-    ZELLE_CITI_PROVIDER_CONFIG.paymentMethodHash,
+    ZELLE_PROVIDER_CONFIG.paymentMethodHash,
     unifiedVerifierAddress,
-    ZELLE_CITI_PROVIDER_CONFIG.currencies
+    ZELLE_PROVIDER_CONFIG.currencies
   );
-  console.log("Zelle Citi added to payment method registry...");
+  console.log("Zelle added to payment method registry...");
 
-  // Snapshot Zelle Citi
-  savePaymentMethodSnapshot(network, 'zelle-citi', {
-    paymentMethodHash: ZELLE_CITI_PROVIDER_CONFIG.paymentMethodHash,
-    currencies: ZELLE_CITI_PROVIDER_CONFIG.currencies
+  savePaymentMethodSnapshot(network, 'zelle', {
+    paymentMethodHash: ZELLE_PROVIDER_CONFIG.paymentMethodHash,
+    currencies: ZELLE_PROVIDER_CONFIG.currencies
   });
 
   await addPaymentMethodToUnifiedVerifier(
     hre,
     unifiedVerifierContract,
-    ZELLE_CITI_PROVIDER_CONFIG.paymentMethodHash
+    ZELLE_PROVIDER_CONFIG.paymentMethodHash
   );
-  console.log("Zelle Citi added to unified verifier...");
-
-  // Add Zelle Chase
-  await addPaymentMethodToRegistry(
-    hre,
-    paymentVerifierRegistryContract,
-    ZELLE_CHASE_PROVIDER_CONFIG.paymentMethodHash,
-    unifiedVerifierAddress,
-    ZELLE_CHASE_PROVIDER_CONFIG.currencies
-  );
-  console.log("Zelle Chase added to payment method registry...");
-
-  // Snapshot Zelle Chase
-  savePaymentMethodSnapshot(network, 'zelle-chase', {
-    paymentMethodHash: ZELLE_CHASE_PROVIDER_CONFIG.paymentMethodHash,
-    currencies: ZELLE_CHASE_PROVIDER_CONFIG.currencies,
-    timestampBuffer: ZELLE_CHASE_PROVIDER_CONFIG.timestampBuffer
-  });
-
-  await addPaymentMethodToUnifiedVerifier(
-    hre,
-    unifiedVerifierContract,
-    ZELLE_CHASE_PROVIDER_CONFIG.paymentMethodHash,
-    ZELLE_CHASE_PROVIDER_CONFIG.timestampBuffer
-  );
-  console.log("Zelle Chase added to unified verifier...");
-
-  // Add Zelle Bank of America
-  await addPaymentMethodToRegistry(
-    hre,
-    paymentVerifierRegistryContract,
-    ZELLE_BOFA_PROVIDER_CONFIG.paymentMethodHash,
-    unifiedVerifierAddress,
-    ZELLE_BOFA_PROVIDER_CONFIG.currencies
-  );
-  console.log("Zelle BofA added to payment method registry...");
-
-  // Snapshot Zelle BofA
-  savePaymentMethodSnapshot(network, 'zelle-bofa', {
-    paymentMethodHash: ZELLE_BOFA_PROVIDER_CONFIG.paymentMethodHash,
-    currencies: ZELLE_BOFA_PROVIDER_CONFIG.currencies,
-    timestampBuffer: ZELLE_BOFA_PROVIDER_CONFIG.timestampBuffer
-  });
-
-  await addPaymentMethodToUnifiedVerifier(
-    hre,
-    unifiedVerifierContract,
-    ZELLE_BOFA_PROVIDER_CONFIG.paymentMethodHash,
-    ZELLE_BOFA_PROVIDER_CONFIG.timestampBuffer
-  );
-  console.log("Zelle BofA added to unified verifier...");
+  console.log("Zelle added to unified verifier...");
 
   await waitForDeploymentDelay(hre);
 };
