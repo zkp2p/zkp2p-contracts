@@ -659,6 +659,26 @@ describe("StakeVault", () => {
       expect(await vault.reservedStake(staker.address)).to.eq(0);
     });
 
+    it("preserves shared intent capacity across controller handover", async () => {
+      const { owner, controller, nextController, staker, vault } = await deployFixture();
+      const oldIntent = ethers.utils.id("old-capacity-intent");
+      const newIntent = ethers.utils.id("new-capacity-intent");
+      await vault.connect(controller).reserveIntentCapacity(staker.address, oldIntent, 1);
+      await vault.connect(owner).proposeController(nextController.address);
+      await time.increase(DAY);
+      await vault.connect(nextController).acceptController();
+
+      await expect(
+        vault.connect(nextController).reserveIntentCapacity(staker.address, newIntent, 1),
+      ).to.be.revertedWithCustomError(vault, "ConcurrentIntentLimitReached");
+      await expect(vault.connect(nextController).releaseIntentCapacity(oldIntent))
+        .to.be.revertedWithCustomError(vault, "UnauthorizedPositionController");
+
+      await vault.connect(controller).releaseIntentCapacity(oldIntent);
+      await vault.connect(nextController).reserveIntentCapacity(staker.address, newIntent, 1);
+      expect(await vault.activeIntentCount(staker.address)).to.eq(1);
+    });
+
     it("lets the previous controller fund its deferred authorization after handover", async () => {
       const { owner, controller, nextController, staker, token, vault } = await deployFixture();
       const intentHash = ethers.utils.id("old-deferred-intent");

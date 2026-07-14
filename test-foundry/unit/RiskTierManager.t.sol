@@ -263,6 +263,53 @@ contract RiskTierManagerTest is Test {
         assertEq(manager.activeIntentCount(stakeOwner), 1);
     }
 
+    function test_ControllerRotationPreservesSharedConcurrency() public {
+        uint256[5] memory oneIntentPerTier = [uint256(1), uint256(1), uint256(1), uint256(1), uint256(1)];
+        vm.prank(owner);
+        manager.setConcurrencyLimits(oneIntentPerTier);
+        _stake(1_000e6);
+        _createPosition(keccak256("manager-a-intent"), 100e6);
+
+        uint256[4] memory thresholds = [uint256(100e6), uint256(500e6), uint256(1_000e6), uint256(5_000e6)];
+        RiskTierManager nextManager = new RiskTierManager(
+            owner,
+            IOrchestratorV3(address(orchestrator)),
+            IStakeVault(address(vault)),
+            verifier,
+            thresholds,
+            oneIntentPerTier,
+            DAY,
+            DAY
+        );
+        IRiskTierManager.PlatformRiskConfig memory config = manager.getPlatformRiskConfig(PAYPAL);
+        vm.prank(owner);
+        nextManager.setPlatformRiskConfig(PAYPAL, config);
+        vm.prank(owner);
+        vault.proposeController(address(nextManager));
+        vm.warp(block.timestamp + DAY);
+        vm.prank(owner);
+        nextManager.acceptVaultController();
+
+        bytes32 secondIntent = keccak256("manager-b-intent");
+        orchestrator.setIntent(
+            secondIntent,
+            taker,
+            address(escrow),
+            100e6,
+            PAYPAL,
+            IPostIntentHookV2(address(0))
+        );
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RiskTierManager.ConcurrentIntentLimitReached.selector,
+                taker,
+                1,
+                1
+            )
+        );
+        orchestrator.createPosition(nextManager, secondIntent);
+    }
+
     function test_DelegatedPositionKeepsSnapshottedOwnerAfterRevocationAndSlash() public {
         vm.prank(stakeOwner);
         vault.depositStakeFor(taker, 1_000e6);

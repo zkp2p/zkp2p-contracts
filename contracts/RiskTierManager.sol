@@ -47,7 +47,6 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
 
     mapping(bytes32 => PlatformRiskConfig) internal platformRiskConfigs;
     mapping(bytes32 => RiskPosition) internal riskPositions;
-    mapping(address => uint256) public override activeIntentCount;
     mapping(uint256 => bool) public usedAttestationNonces;
 
     /* ============ Errors ============ */
@@ -162,7 +161,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
         if (tierCap == 0) revert TierNotEligible(intent.owner, tier, intent.paymentMethod);
         if (intent.amount > tierCap) revert AmountExceedsTierCap(intent.amount, tierCap);
 
-        uint256 activeIntents = activeIntentCount[stakeOwner];
+        uint256 activeIntents = stakeVault.activeIntentCount(stakeOwner);
         uint256 concurrencyLimit = concurrencyLimits[uint256(tier)];
         if (activeIntents >= concurrencyLimit) {
             revert ConcurrentIntentLimitReached(stakeOwner, activeIntents, concurrencyLimit);
@@ -219,7 +218,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
             releasedAmount: 0,
             slashedAmount: 0
         });
-        activeIntentCount[stakeOwner] = activeIntents + 1;
+        stakeVault.reserveIntentCapacity(stakeOwner, _intentHash, concurrencyLimit);
 
         if (mode == RiskMode.STAKE_BACKED) {
             stakeVault.reserveStake(stakeOwner, _intentHash, reservedAmount, fallbackReleaseTime);
@@ -252,7 +251,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
         uint256 releasedReservation = position.reservedAmount;
         position.status = PositionStatus.CANCELLED;
         position.reservedAmount = 0;
-        _releaseConcurrency(position);
+        _releaseConcurrency(_intentHash, position);
 
         if (position.mode == RiskMode.STAKE_BACKED) {
             stakeVault.releaseReservation(_intentHash);
@@ -353,7 +352,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
         position.status = PositionStatus.RELEASED;
         uint256 releasedAmount = position.reservedAmount;
         position.reservedAmount = 0;
-        _releaseConcurrency(position);
+        _releaseConcurrency(_intentHash, position);
 
         if (position.mode == RiskMode.STAKE_BACKED) {
             stakeVault.releaseReservation(_intentHash);
@@ -583,8 +582,15 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
         reserved = stakeVault.reservedStake(stakeOwner);
         free = stakeVault.freeStake(stakeOwner);
         exiting = stakeVault.isExiting(stakeOwner);
-        activeIntents = activeIntentCount[stakeOwner];
+        activeIntents = stakeVault.activeIntentCount(stakeOwner);
         tier = getTierForStake(stakeVault.eligibleStake(stakeOwner));
+    }
+
+    /**
+     * @inheritdoc IRiskTierManager
+     */
+    function activeIntentCount(address _stakeOwner) external view override returns (uint256) {
+        return stakeVault.activeIntentCount(_stakeOwner);
     }
 
     /**
@@ -624,7 +630,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
     ) internal {
         _position.settledAt = _settledAt;
         _position.releasedAmount = _releasedAmount;
-        _releaseConcurrency(_position);
+        _releaseConcurrency(_intentHash, _position);
 
         if (_position.mode == RiskMode.NONE) {
             _position.status = PositionStatus.RELEASED;
@@ -757,10 +763,10 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
         return _left < _right ? _left : _right;
     }
 
-    function _releaseConcurrency(RiskPosition storage _position) internal {
+    function _releaseConcurrency(bytes32 _intentHash, RiskPosition storage _position) internal {
         if (!_position.countsTowardConcurrency) return;
 
         _position.countsTowardConcurrency = false;
-        activeIntentCount[_position.stakeOwner] -= 1;
+        stakeVault.releaseIntentCapacity(_intentHash);
     }
 }

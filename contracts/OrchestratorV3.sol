@@ -21,7 +21,7 @@ import { PostIntentHookExecutor } from "./lib/PostIntentHookExecutor.sol";
 contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
     /* ============ Constants ============ */
 
-    uint256 public constant MIN_RISK_CALLBACK_GAS_LIMIT = 100_000;
+    uint256 public constant MIN_RISK_CALLBACK_GAS_LIMIT = 200_000;
     uint256 public constant MAX_RISK_CALLBACK_RETURN_DATA = 2_048;
 
     /* ============ State Variables ============ */

@@ -295,6 +295,49 @@ describe("RiskTierManager and OrchestratorV3", () => {
       expect(await manager.activeIntentCount(safe.address)).to.eq(2);
     });
 
+    it("preserves a stake owner's concurrency count when the risk manager rotates", async () => {
+      const {
+        owner,
+        maker,
+        taker,
+        escrow,
+        orchestrator,
+        vault,
+        manager,
+        attestationVerifier,
+      } = await deployFixture();
+      await signalIntent(orchestrator, escrow, taker, usdc(50), ZELLE);
+
+      const nextManager = await (await ethers.getContractFactory("RiskTierManager")).deploy(
+        owner.address,
+        orchestrator.address,
+        vault.address,
+        attestationVerifier.address,
+        [usdc(100), usdc(500), usdc(1_000), usdc(5_000)],
+        [1, 2, 5, 10, 100],
+        DAY,
+        DAY,
+      );
+      await nextManager.setPlatformRiskConfig(ZELLE, {
+        enabled: true,
+        chargebackable: false,
+        deferredPayoutEnabled: false,
+        reserveBps: 0,
+        riskWindow: 0,
+        tierCaps: [usdc(100), usdc(250), usdc(500), usdc(1_000), usdc(5_000)],
+      });
+      await vault.connect(owner).proposeController(nextManager.address);
+      await time.increase(DAY);
+      await nextManager.acceptVaultController();
+      await orchestrator.connect(maker).setDepositRiskHook(escrow.address, 0, nextManager.address);
+
+      await expect(
+        orchestrator.connect(taker).signalIntent(signalParams(escrow, taker.address, usdc(50), ZELLE)),
+      ).to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+      expect(await nextManager.activeIntentCount(taker.address)).to.eq(1);
+      expect(await manager.activeIntentCount(taker.address)).to.eq(1);
+    });
+
     it("releases shared concurrency when a delegated intent is cancelled", async () => {
       const {
         owner: safe,
@@ -462,7 +505,7 @@ describe("RiskTierManager and OrchestratorV3", () => {
       const { taker, escrow, orchestrator, vault, manager } = await deployFixture();
       await vault.connect(taker).depositStake(usdc(1_000));
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
-      await orchestrator.setRiskCallbackGasLimit(100_000);
+      await orchestrator.setRiskCallbackGasLimit(200_000);
 
       const receipt: ContractReceipt = await (await fulfillIntent(orchestrator, intentHash, usdc(300))).wait();
       const settlementEvent = receipt.events?.find(({ event }) => event === "IntentSettlementRecorded");
