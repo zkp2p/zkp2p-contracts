@@ -508,7 +508,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
      */
     function getTier(address _taker) public view override returns (Tier) {
         address stakeOwner = stakeVault.stakeOwnerOf(_taker);
-        return getTierForStake(stakeVault.stakeBalance(stakeOwner));
+        return getTierForStake(stakeVault.eligibleStake(stakeOwner));
     }
 
     /**
@@ -550,10 +550,10 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
         address stakeOwner = stakeVault.stakeOwnerOf(_taker);
         totalStake = stakeVault.stakeBalance(stakeOwner);
         reserved = stakeVault.reservedStake(stakeOwner);
-        free = totalStake - reserved;
+        free = stakeVault.freeStake(stakeOwner);
         exiting = stakeVault.isExiting(stakeOwner);
         activeIntents = activeIntentCount[stakeOwner];
-        tier = getTierForStake(totalStake);
+        tier = getTierForStake(stakeVault.eligibleStake(stakeOwner));
     }
 
     /**

@@ -17,6 +17,12 @@ interface IStakeVault {
         uint64 availableAt;
     }
 
+    struct StakeWithdrawalRequest {
+        uint256 amount;
+        uint64 requestedAt;
+        uint64 availableAt;
+    }
+
     struct Reservation {
         address staker;
         address controller;
@@ -67,6 +73,13 @@ interface IStakeVault {
     );
     event ExitRequested(address indexed staker, uint64 requestedAt, uint64 availableAt);
     event ExitCancelled(address indexed staker);
+    event StakeWithdrawalRequested(
+        address indexed stakeOwner,
+        uint256 amount,
+        uint64 requestedAt,
+        uint64 availableAt
+    );
+    event StakeWithdrawalCancelled(address indexed stakeOwner, uint256 amount);
     event StakeWithdrawn(address indexed staker, address indexed recipient, uint256 amount);
     event CompensationCredited(
         bytes32 indexed intentHash,
@@ -117,6 +130,9 @@ interface IStakeVault {
     function depositStakeFor(address _taker, uint256 _amount) external;
     function setTakerAuthorization(address _taker, bool _authorized) external;
     function clearStakeOwner() external;
+    function requestStakeWithdrawal(uint256 _amount) external;
+    function cancelStakeWithdrawal() external;
+    function withdrawRequestedStake(address _recipient) external;
     function requestExit() external;
     function cancelExit() external;
     function withdrawStake(address _recipient) external;
@@ -147,10 +163,12 @@ interface IStakeVault {
     function controller() external view returns (address);
     function stakeBalance(address _staker) external view returns (uint256);
     function reservedStake(address _staker) external view returns (uint256);
+    function eligibleStake(address _staker) external view returns (uint256);
     function freeStake(address _staker) external view returns (uint256);
     function stakeOwnerOf(address _taker) external view returns (address);
     function isExiting(address _staker) external view returns (bool);
     function getExitRequest(address _staker) external view returns (ExitRequest memory);
+    function getStakeWithdrawalRequest(address _staker) external view returns (StakeWithdrawalRequest memory);
     function getReservation(bytes32 _intentHash) external view returns (Reservation memory);
     function getDeferredPayout(bytes32 _intentHash) external view returns (DeferredPayout memory);
     function claimableCompensation(address _maker) external view returns (uint256);

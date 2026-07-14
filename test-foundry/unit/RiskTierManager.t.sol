@@ -293,6 +293,29 @@ contract RiskTierManagerTest is Test {
         assertEq(vault.stakeBalance(taker), 0);
     }
 
+    function test_PendingStakeWithdrawalReducesDelegatedTakerTier() public {
+        vm.prank(stakeOwner);
+        vault.depositStakeFor(taker, 1_000e6);
+        vm.prank(stakeOwner);
+        vault.requestStakeWithdrawal(600e6);
+
+        assertEq(uint256(manager.getTier(taker)), uint256(IRiskTierManager.Tier.PEER));
+        (
+            IRiskTierManager.Tier tier,
+            uint256 totalStake,
+            uint256 reserved,
+            uint256 free,
+            bool exiting,
+            uint256 activeIntents
+        ) = manager.getTakerState(taker);
+        assertEq(uint256(tier), uint256(IRiskTierManager.Tier.PEER));
+        assertEq(totalStake, 1_000e6);
+        assertEq(reserved, 0);
+        assertEq(free, 400e6);
+        assertFalse(exiting);
+        assertEq(activeIntents, 0);
+    }
+
     function test_CancellationReleasesReservation() public {
         _stake(1_000e6);
         bytes32 intentHash = keccak256("intent");

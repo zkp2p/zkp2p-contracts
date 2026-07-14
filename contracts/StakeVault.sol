@@ -40,6 +40,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     mapping(address => uint256) public override reservedStake;
     mapping(address => address) internal delegatedStakeOwners;
     mapping(address => ExitRequest) internal exitRequests;
+    mapping(address => StakeWithdrawalRequest) internal stakeWithdrawalRequests;
     mapping(bytes32 => Reservation) internal reservations;
     mapping(bytes32 => DeferredPayout) internal deferredPayouts;
     mapping(address => uint256) public override claimableCompensation;
@@ -62,6 +63,10 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     error AlreadyExiting(address staker);
     error NotExiting(address staker);
     error ExitNotReady(uint64 availableAt, uint64 currentTime);
+    error StakeWithdrawalAlreadyRequested(address stakeOwner, uint256 amount);
+    error StakeWithdrawalNotFound(address stakeOwner);
+    error StakeWithdrawalNotReady(uint64 availableAt, uint64 currentTime);
+    error PendingStakeWithdrawal(address stakeOwner, uint256 amount);
     error ActiveReservations(address staker, uint256 reservedAmount);
     error InsufficientFreeStake(address staker, uint256 available, uint256 required);
     error ReservationAlreadyExists(bytes32 intentHash);
@@ -162,6 +167,66 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         emit TakerAuthorizationUpdated(stakeOwner, msg.sender, false);
     }
 
+    /**
+     * @notice Requests a delayed withdrawal of currently unreserved stake.
+     * @dev The requested amount immediately stops contributing to tier eligibility and free stake.
+     * @param _amount Amount of stake token to withdraw after the delay.
+     */
+    function requestStakeWithdrawal(uint256 _amount) external override {
+        if (_amount == 0) revert ZeroAmount();
+        if (exitRequests[msg.sender].exiting) revert AlreadyExiting(msg.sender);
+
+        StakeWithdrawalRequest memory existingRequest = stakeWithdrawalRequests[msg.sender];
+        if (existingRequest.amount != 0) {
+            revert StakeWithdrawalAlreadyRequested(msg.sender, existingRequest.amount);
+        }
+
+        uint256 available = freeStake(msg.sender);
+        if (_amount > available) revert InsufficientFreeStake(msg.sender, available, _amount);
+
+        uint64 requestedAt = uint64(block.timestamp);
+        uint64 availableAt = requestedAt + baseExitDelay;
+        stakeWithdrawalRequests[msg.sender] = StakeWithdrawalRequest({
+            amount: _amount,
+            requestedAt: requestedAt,
+            availableAt: availableAt
+        });
+
+        emit StakeWithdrawalRequested(msg.sender, _amount, requestedAt, availableAt);
+    }
+
+    /**
+     * @notice Cancels the caller's pending partial stake withdrawal.
+     */
+    function cancelStakeWithdrawal() external override {
+        StakeWithdrawalRequest memory withdrawalRequest = stakeWithdrawalRequests[msg.sender];
+        if (withdrawalRequest.amount == 0) revert StakeWithdrawalNotFound(msg.sender);
+
+        delete stakeWithdrawalRequests[msg.sender];
+        emit StakeWithdrawalCancelled(msg.sender, withdrawalRequest.amount);
+    }
+
+    /**
+     * @notice Withdraws the caller's requested stake after the delay.
+     * @param _recipient Address receiving the stake token.
+     */
+    function withdrawRequestedStake(address _recipient) external override nonReentrant {
+        if (_recipient == address(0)) revert ZeroAddress();
+
+        StakeWithdrawalRequest memory withdrawalRequest = stakeWithdrawalRequests[msg.sender];
+        if (withdrawalRequest.amount == 0) revert StakeWithdrawalNotFound(msg.sender);
+        if (block.timestamp < withdrawalRequest.availableAt) {
+            revert StakeWithdrawalNotReady(withdrawalRequest.availableAt, uint64(block.timestamp));
+        }
+
+        delete stakeWithdrawalRequests[msg.sender];
+        stakeBalance[msg.sender] -= withdrawalRequest.amount;
+        totalStaked -= withdrawalRequest.amount;
+
+        stakeToken.safeTransfer(_recipient, withdrawalRequest.amount);
+        emit StakeWithdrawn(msg.sender, _recipient, withdrawalRequest.amount);
+    }
+
     function _depositStake(address _stakeOwner, uint256 _amount) internal {
         if (depositsPaused) revert StakeActionPaused();
         if (_amount == 0) revert ZeroAmount();
@@ -183,6 +248,8 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     function requestExit() external override {
         if (stakeBalance[msg.sender] == 0) revert ZeroAmount();
         if (exitRequests[msg.sender].exiting) revert AlreadyExiting(msg.sender);
+        uint256 pendingWithdrawal = stakeWithdrawalRequests[msg.sender].amount;
+        if (pendingWithdrawal != 0) revert PendingStakeWithdrawal(msg.sender, pendingWithdrawal);
 
         uint64 requestedAt = uint64(block.timestamp);
         uint64 availableAt = requestedAt + baseExitDelay;
@@ -551,10 +618,17 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     /* ============ View Functions ============ */
 
     /**
-     * @notice Returns stake not currently committed to active reservations.
+     * @notice Returns stake contributing to tier eligibility after a pending withdrawal is excluded.
+     */
+    function eligibleStake(address _staker) public view override returns (uint256) {
+        return stakeBalance[_staker] - stakeWithdrawalRequests[_staker].amount;
+    }
+
+    /**
+     * @notice Returns eligible stake not currently committed to active reservations.
      */
     function freeStake(address _staker) public view override returns (uint256) {
-        return stakeBalance[_staker] - reservedStake[_staker];
+        return eligibleStake(_staker) - reservedStake[_staker];
     }
 
     /**
@@ -578,6 +652,15 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
      */
     function getExitRequest(address _staker) external view override returns (ExitRequest memory) {
         return exitRequests[_staker];
+    }
+
+    /**
+     * @notice Returns the pending partial withdrawal for a stake owner.
+     */
+    function getStakeWithdrawalRequest(
+        address _staker
+    ) external view override returns (StakeWithdrawalRequest memory) {
+        return stakeWithdrawalRequests[_staker];
     }
 
     /**

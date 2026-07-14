@@ -117,6 +117,81 @@ contract StakeVaultTest is Test {
         vault.reserveStake(staker, keccak256("intent"), 1e6, 0);
     }
 
+    function test_PartialWithdrawalImmediatelyReducesEligibleAndFreeStake() public {
+        vm.prank(staker);
+        vault.depositStake(1_000e6);
+
+        vm.prank(staker);
+        vault.requestStakeWithdrawal(400e6);
+
+        IStakeVault.StakeWithdrawalRequest memory withdrawalRequest = vault.getStakeWithdrawalRequest(staker);
+        assertEq(withdrawalRequest.amount, 400e6);
+        assertEq(vault.eligibleStake(staker), 600e6);
+        assertEq(vault.freeStake(staker), 600e6);
+    }
+
+    function test_PartialWithdrawalCannotConsumeReservedStake() public {
+        vm.prank(staker);
+        vault.depositStake(1_000e6);
+        vm.prank(controller);
+        vault.reserveStake(staker, keccak256("intent"), 700e6, 0);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(StakeVault.InsufficientFreeStake.selector, staker, 300e6, 301e6)
+        );
+        vm.prank(staker);
+        vault.requestStakeWithdrawal(301e6);
+    }
+
+    function test_MaturePartialWithdrawalExecutesWithActiveReservation() public {
+        vm.prank(staker);
+        vault.depositStake(1_000e6);
+        vm.prank(controller);
+        vault.reserveStake(staker, keccak256("intent"), 400e6, 0);
+        vm.prank(staker);
+        vault.requestStakeWithdrawal(600e6);
+        vm.warp(block.timestamp + EXIT_DELAY);
+
+        vm.prank(staker);
+        vault.withdrawRequestedStake(recipient);
+
+        assertEq(token.balanceOf(recipient), 600e6);
+        assertEq(vault.stakeBalance(staker), 400e6);
+        assertEq(vault.reservedStake(staker), 400e6);
+    }
+
+    function test_CancellingPartialWithdrawalRestoresEligibleStake() public {
+        vm.prank(staker);
+        vault.depositStake(1_000e6);
+        vm.prank(staker);
+        vault.requestStakeWithdrawal(400e6);
+
+        vm.prank(staker);
+        vault.cancelStakeWithdrawal();
+
+        assertEq(vault.eligibleStake(staker), 1_000e6);
+        assertEq(vault.freeStake(staker), 1_000e6);
+    }
+
+    function test_SlashingReservedStakePreservesPendingWithdrawal() public {
+        bytes32 intentHash = keccak256("intent");
+        vm.prank(staker);
+        vault.depositStake(1_000e6);
+        vm.prank(controller);
+        vault.reserveStake(staker, intentHash, 600e6, 0);
+        vm.prank(staker);
+        vault.requestStakeWithdrawal(400e6);
+
+        vm.prank(controller);
+        vault.slashReservation(intentHash, maker, 200e6);
+        vm.warp(block.timestamp + EXIT_DELAY);
+        vm.prank(staker);
+        vault.withdrawRequestedStake(recipient);
+
+        assertEq(vault.stakeBalance(staker), 400e6);
+        assertEq(vault.reservedStake(staker), 400e6);
+    }
+
     function test_WithdrawRequiresMatureExitAndNoReservation() public {
         bytes32 intentHash = keccak256("intent");
         vm.prank(staker);

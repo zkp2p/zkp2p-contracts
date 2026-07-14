@@ -219,6 +219,110 @@ describe("StakeVault", () => {
     });
   });
 
+  describe("partial stake withdrawals", () => {
+    it("immediately excludes a requested amount from eligible and free stake", async () => {
+      const { staker, vault } = await deployFixture();
+      await vault.connect(staker).depositStake(usdc(1_000));
+
+      await expect(vault.connect(staker).requestStakeWithdrawal(usdc(400))).to.emit(
+        vault,
+        "StakeWithdrawalRequested",
+      );
+
+      const withdrawalRequest = await vault.getStakeWithdrawalRequest(staker.address);
+      expect(withdrawalRequest.amount).to.eq(usdc(400));
+      expect(withdrawalRequest.availableAt.sub(withdrawalRequest.requestedAt)).to.eq(30 * DAY);
+      expect(await vault.eligibleStake(staker.address)).to.eq(usdc(600));
+      expect(await vault.freeStake(staker.address)).to.eq(usdc(600));
+    });
+
+    it("rejects a request larger than currently free stake", async () => {
+      const { controller, staker, vault } = await deployFixture();
+      await vault.connect(staker).depositStake(usdc(1_000));
+      await vault.connect(controller).reserveStake(staker.address, ethers.utils.id("intent"), usdc(700), 0);
+
+      await expect(
+        vault.connect(staker).requestStakeWithdrawal(usdc(301)),
+      ).to.be.revertedWithCustomError(vault, "InsufficientFreeStake");
+    });
+
+    it("rejects execution before the withdrawal delay", async () => {
+      const { staker, recipient, vault } = await deployFixture();
+      await vault.connect(staker).depositStake(usdc(100));
+      await vault.connect(staker).requestStakeWithdrawal(usdc(40));
+
+      await expect(
+        vault.connect(staker).withdrawRequestedStake(recipient.address),
+      ).to.be.revertedWithCustomError(vault, "StakeWithdrawalNotReady");
+    });
+
+    it("withdraws the isolated amount while another reservation remains active", async () => {
+      const { controller, staker, recipient, token, vault } = await deployFixture();
+      await vault.connect(staker).depositStake(usdc(1_000));
+      await vault.connect(controller).reserveStake(staker.address, ethers.utils.id("intent"), usdc(400), 0);
+      await vault.connect(staker).requestStakeWithdrawal(usdc(600));
+      await time.increase(30 * DAY);
+
+      await expect(vault.connect(staker).withdrawRequestedStake(recipient.address))
+        .to.emit(vault, "StakeWithdrawn")
+        .withArgs(staker.address, recipient.address, usdc(600));
+
+      expect(await token.balanceOf(recipient.address)).to.eq(usdc(600));
+      expect(await vault.stakeBalance(staker.address)).to.eq(usdc(400));
+      expect(await vault.reservedStake(staker.address)).to.eq(usdc(400));
+    });
+
+    it("restores eligibility when the stake owner cancels the request", async () => {
+      const { staker, vault } = await deployFixture();
+      await vault.connect(staker).depositStake(usdc(100));
+      await vault.connect(staker).requestStakeWithdrawal(usdc(40));
+
+      await expect(vault.connect(staker).cancelStakeWithdrawal())
+        .to.emit(vault, "StakeWithdrawalCancelled")
+        .withArgs(staker.address, usdc(40));
+
+      expect(await vault.eligibleStake(staker.address)).to.eq(usdc(100));
+      expect(await vault.freeStake(staker.address)).to.eq(usdc(100));
+    });
+
+    it("prevents a full exit while a partial withdrawal is pending", async () => {
+      const { staker, vault } = await deployFixture();
+      await vault.connect(staker).depositStake(usdc(100));
+      await vault.connect(staker).requestStakeWithdrawal(usdc(40));
+
+      await expect(vault.connect(staker).requestExit()).to.be.revertedWithCustomError(
+        vault,
+        "PendingStakeWithdrawal",
+      );
+    });
+
+    it("prevents a partial withdrawal while a full exit is pending", async () => {
+      const { staker, vault } = await deployFixture();
+      await vault.connect(staker).depositStake(usdc(100));
+      await vault.connect(staker).requestExit();
+
+      await expect(vault.connect(staker).requestStakeWithdrawal(usdc(40))).to.be.revertedWithCustomError(
+        vault,
+        "AlreadyExiting",
+      );
+    });
+
+    it("preserves a pending withdrawal when reserved stake is slashed", async () => {
+      const { controller, staker, maker, recipient, vault } = await deployFixture();
+      const intentHash = ethers.utils.id("intent");
+      await vault.connect(staker).depositStake(usdc(1_000));
+      await vault.connect(controller).reserveStake(staker.address, intentHash, usdc(600), 0);
+      await vault.connect(staker).requestStakeWithdrawal(usdc(400));
+
+      await vault.connect(controller).slashReservation(intentHash, maker.address, usdc(200));
+      await time.increase(30 * DAY);
+      await vault.connect(staker).withdrawRequestedStake(recipient.address);
+
+      expect(await vault.stakeBalance(staker.address)).to.eq(usdc(400));
+      expect(await vault.reservedStake(staker.address)).to.eq(usdc(400));
+    });
+  });
+
   describe("full exit", () => {
     it("marks the staker exiting immediately", async () => {
       const { staker, vault } = await deployFixture();

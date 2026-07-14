@@ -342,6 +342,21 @@ describe("RiskTierManager and OrchestratorV3", () => {
         orchestrator.connect(relayer).signalIntent(signalParams(escrow, relayer.address, usdc(50), ZELLE)),
       ).to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
     });
+
+    it("uses stake excluding a Safe's pending withdrawal for relayer admission", async () => {
+      const { owner: safe, taker: relayer, escrow, orchestrator, token, vault, manager } = await deployFixture();
+      await token.connect(safe).approve(vault.address, ethers.constants.MaxUint256);
+      await vault.connect(safe).depositStakeFor(relayer.address, usdc(1_000));
+      await vault.connect(safe).requestStakeWithdrawal(usdc(600));
+
+      const state = await manager.getTakerState(relayer.address);
+      expect(await manager.getTier(relayer.address)).to.eq(1);
+      expect(state.totalStake).to.eq(usdc(1_000));
+      expect(state.free).to.eq(usdc(400));
+      await expect(
+        orchestrator.connect(relayer).signalIntent(signalParams(escrow, relayer.address, usdc(100), PAYPAL)),
+      ).to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+    });
   });
 
   describe("deposit risk hook selection", () => {
