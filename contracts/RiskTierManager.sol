@@ -41,11 +41,13 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
     bool public admissionPaused;
 
     uint256[4] public tierThresholds;
-    // Concurrency counts unresolved Orchestrator intents. Settled chargeback windows remain bounded by collateral.
+    // Concurrency counts unsettled intents across every taker using the same stake owner.
+    // Settled chargeback windows remain bounded by collateral.
     uint256[5] public concurrencyLimits;
 
     mapping(bytes32 => PlatformRiskConfig) internal platformRiskConfigs;
     mapping(bytes32 => RiskPosition) internal riskPositions;
+    mapping(address => uint256) public override activeIntentCount;
     mapping(uint256 => bool) public usedAttestationNonces;
 
     /* ============ Errors ============ */
@@ -59,11 +61,11 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
     error InvalidConcurrencyLimit(Tier tier);
     error InvalidPlatformConfig(bytes32 paymentMethod);
     error PlatformDisabled(bytes32 paymentMethod);
-    error TakerExiting(address taker);
+    error StakeOwnerExiting(address taker, address stakeOwner);
     error TierNotEligible(address taker, Tier tier, bytes32 paymentMethod);
     error AmountExceedsTierCap(uint256 amount, uint256 cap);
-    error ConcurrentIntentLimitReached(address taker, uint256 activeIntents, uint256 limit);
-    error InsufficientCollateral(address taker, uint256 available, uint256 required);
+    error ConcurrentIntentLimitReached(address stakeOwner, uint256 activeIntents, uint256 limit);
+    error InsufficientCollateral(address stakeOwner, uint256 available, uint256 required);
     error DeferredPayoutHookRequired(address expectedHook, address actualHook);
     error PositionAlreadyExists(bytes32 intentHash);
     error PositionNotActive(bytes32 intentHash, PositionStatus status);
@@ -148,20 +150,21 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
 
         IOrchestratorV3.RiskIntentData memory intent = orchestrator.getRiskIntent(_intentHash);
         if (intent.owner == address(0)) revert IntentStateMismatch(_intentHash);
+        address stakeOwner = stakeVault.stakeOwnerOf(intent.owner);
 
         PlatformRiskConfig memory config = platformRiskConfigs[intent.paymentMethod];
         if (!config.enabled) revert PlatformDisabled(intent.paymentMethod);
-        if (stakeVault.isExiting(intent.owner)) revert TakerExiting(intent.owner);
+        if (stakeVault.isExiting(stakeOwner)) revert StakeOwnerExiting(intent.owner, stakeOwner);
 
         Tier tier = getTier(intent.owner);
         uint256 tierCap = config.tierCaps[uint256(tier)];
         if (tierCap == 0) revert TierNotEligible(intent.owner, tier, intent.paymentMethod);
         if (intent.amount > tierCap) revert AmountExceedsTierCap(intent.amount, tierCap);
 
-        uint256 activeIntents = orchestrator.getAccountIntentCount(intent.owner);
+        uint256 activeIntents = activeIntentCount[stakeOwner];
         uint256 concurrencyLimit = concurrencyLimits[uint256(tier)];
-        if (activeIntents > concurrencyLimit) {
-            revert ConcurrentIntentLimitReached(intent.owner, activeIntents, concurrencyLimit);
+        if (activeIntents >= concurrencyLimit) {
+            revert ConcurrentIntentLimitReached(stakeOwner, activeIntents, concurrencyLimit);
         }
 
         IEscrow.Deposit memory deposit = IEscrow(intent.escrow).getDeposit(intent.depositId);
@@ -178,7 +181,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
             );
             fallbackSlashDeadline = fallbackReleaseTime - settlementBuffer;
 
-            uint256 available = stakeVault.freeStake(intent.owner);
+            uint256 available = stakeVault.freeStake(stakeOwner);
             if (available >= requiredReserve) {
                 mode = RiskMode.STAKE_BACKED;
                 reservedAmount = requiredReserve;
@@ -191,16 +194,18 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
                 positionDeferredPayoutHook = deferredPayoutHook;
                 requiresPostIntentHook = true;
             } else {
-                revert InsufficientCollateral(intent.owner, available, requiredReserve);
+                revert InsufficientCollateral(stakeOwner, available, requiredReserve);
             }
         }
 
         riskPositions[_intentHash] = RiskPosition({
             taker: intent.owner,
+            stakeOwner: stakeOwner,
             maker: deposit.depositor,
             paymentMethod: intent.paymentMethod,
             mode: mode,
             status: PositionStatus.ACTIVE,
+            countsTowardConcurrency: true,
             deferredPayoutHook: positionDeferredPayoutHook,
             payoutRecipient: intent.to,
             reserveBps: config.reserveBps,
@@ -213,9 +218,10 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
             releasedAmount: 0,
             slashedAmount: 0
         });
+        activeIntentCount[stakeOwner] = activeIntents + 1;
 
         if (mode == RiskMode.STAKE_BACKED) {
-            stakeVault.reserveStake(intent.owner, _intentHash, reservedAmount, fallbackReleaseTime);
+            stakeVault.reserveStake(stakeOwner, _intentHash, reservedAmount, fallbackReleaseTime);
         } else if (mode == RiskMode.DEFERRED_PAYOUT) {
             stakeVault.authorizeDeferredPayout(_intentHash, intent.to, fallbackReleaseTime);
         }
@@ -224,6 +230,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
             _intentHash,
             intent.owner,
             deposit.depositor,
+            stakeOwner,
             intent.paymentMethod,
             mode,
             positionDeferredPayoutHook,
@@ -244,6 +251,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
         uint256 releasedReservation = position.reservedAmount;
         position.status = PositionStatus.CANCELLED;
         position.reservedAmount = 0;
+        _releaseConcurrency(position);
 
         if (position.mode == RiskMode.STAKE_BACKED) {
             stakeVault.releaseReservation(_intentHash);
@@ -329,6 +337,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
         position.status = PositionStatus.RELEASED;
         uint256 releasedAmount = position.reservedAmount;
         position.reservedAmount = 0;
+        _releaseConcurrency(position);
 
         if (position.mode == RiskMode.STAKE_BACKED) {
             stakeVault.releaseReservation(_intentHash);
@@ -498,7 +507,8 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
      * @inheritdoc IRiskTierManager
      */
     function getTier(address _taker) public view override returns (Tier) {
-        return getTierForStake(stakeVault.stakeBalance(_taker));
+        address stakeOwner = stakeVault.stakeOwnerOf(_taker);
+        return getTierForStake(stakeVault.stakeBalance(stakeOwner));
     }
 
     /**
@@ -537,11 +547,12 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
         override
         returns (Tier tier, uint256 totalStake, uint256 reserved, uint256 free, bool exiting, uint256 activeIntents)
     {
-        totalStake = stakeVault.stakeBalance(_taker);
-        reserved = stakeVault.reservedStake(_taker);
+        address stakeOwner = stakeVault.stakeOwnerOf(_taker);
+        totalStake = stakeVault.stakeBalance(stakeOwner);
+        reserved = stakeVault.reservedStake(stakeOwner);
         free = totalStake - reserved;
-        exiting = stakeVault.isExiting(_taker);
-        activeIntents = orchestrator.getAccountIntentCount(_taker);
+        exiting = stakeVault.isExiting(stakeOwner);
+        activeIntents = activeIntentCount[stakeOwner];
         tier = getTierForStake(totalStake);
     }
 
@@ -582,6 +593,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
     ) internal {
         _position.settledAt = _settledAt;
         _position.releasedAmount = _releasedAmount;
+        _releaseConcurrency(_position);
 
         if (_position.mode == RiskMode.NONE) {
             _position.status = PositionStatus.RELEASED;
@@ -712,5 +724,12 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
 
     function _min(uint256 _left, uint256 _right) internal pure returns (uint256) {
         return _left < _right ? _left : _right;
+    }
+
+    function _releaseConcurrency(RiskPosition storage _position) internal {
+        if (!_position.countsTowardConcurrency) return;
+
+        _position.countsTowardConcurrency = false;
+        activeIntentCount[_position.stakeOwner] -= 1;
     }
 }

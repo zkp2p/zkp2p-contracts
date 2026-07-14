@@ -47,10 +47,12 @@ interface IRiskTierManager is IIntentRiskHook {
 
     struct RiskPosition {
         address taker;
+        address stakeOwner;
         address maker;
         bytes32 paymentMethod;
         RiskMode mode;
         PositionStatus status;
+        bool countsTowardConcurrency;
         address deferredPayoutHook;
         address payoutRecipient;
         uint16 reserveBps;
@@ -98,6 +100,7 @@ interface IRiskTierManager is IIntentRiskHook {
         bytes32 indexed intentHash,
         address indexed taker,
         address indexed maker,
+        address stakeOwner,
         bytes32 paymentMethod,
         RiskMode mode,
         address deferredPayoutHook,
@@ -166,10 +169,11 @@ interface IRiskTierManager is IIntentRiskHook {
 
     function getTier(address _taker) external view returns (Tier);
     function getTierForStake(uint256 _stake) external view returns (Tier);
+    function activeIntentCount(address _stakeOwner) external view returns (uint256);
     function getPlatformRiskConfig(bytes32 _paymentMethod) external view returns (PlatformRiskConfig memory);
     function getRiskPosition(bytes32 _intentHash) external view returns (RiskPosition memory);
     /**
-     * @notice Returns stake state and the count of unresolved Orchestrator intents.
+     * @notice Returns resolved stake-owner state and its shared count of unsettled intents.
      * @dev Settled positions still inside a chargeback window are collateral-bounded and excluded from activeIntents.
      */
     function getTakerState(address _taker)

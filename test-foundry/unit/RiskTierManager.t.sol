@@ -119,6 +119,8 @@ contract RiskTierManagerTest is Test {
 
     address internal owner = makeAddr("owner");
     address internal taker = makeAddr("taker");
+    address internal secondTaker = makeAddr("secondTaker");
+    address internal stakeOwner = makeAddr("stakeOwner");
     address internal maker = makeAddr("maker");
 
     USDCMock internal token;
@@ -168,6 +170,9 @@ contract RiskTierManagerTest is Test {
         deal(address(token), taker, 10_000e6);
         vm.prank(taker);
         token.approve(address(vault), type(uint256).max);
+        deal(address(token), stakeOwner, 10_000e6);
+        vm.prank(stakeOwner);
+        token.approve(address(vault), type(uint256).max);
     }
 
     function _stake(uint256 _amount) internal {
@@ -176,9 +181,13 @@ contract RiskTierManagerTest is Test {
     }
 
     function _createPosition(bytes32 _intentHash, uint256 _amount) internal {
+        _createPositionFor(taker, _intentHash, _amount);
+    }
+
+    function _createPositionFor(address _taker, bytes32 _intentHash, uint256 _amount) internal {
         orchestrator.setIntent(
             _intentHash,
-            taker,
+            _taker,
             address(escrow),
             _amount,
             PAYPAL,
@@ -203,6 +212,85 @@ contract RiskTierManagerTest is Test {
 
         assertEq(vault.reservedStake(taker), 500e6);
         assertEq(uint256(manager.getRiskPosition(intentHash).mode), uint256(IRiskTierManager.RiskMode.STAKE_BACKED));
+    }
+
+    function test_DelegatedAdmissionUsesStakeOwnerBalance() public {
+        vm.prank(stakeOwner);
+        vault.depositStakeFor(taker, 1_000e6);
+        bytes32 intentHash = keccak256("delegated-intent");
+
+        _createPosition(intentHash, 500e6);
+
+        IRiskTierManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        assertEq(position.taker, taker);
+        assertEq(position.stakeOwner, stakeOwner);
+        assertEq(vault.reservedStake(stakeOwner), 500e6);
+        assertEq(vault.stakeBalance(taker), 0);
+    }
+
+    function test_DelegatedTakersShareStakeOwnerConcurrency() public {
+        vm.prank(stakeOwner);
+        vault.depositStakeFor(taker, 1_000e6);
+        vm.prank(stakeOwner);
+        vault.setTakerAuthorization(secondTaker, true);
+        uint256[5] memory oneIntentPerTier = [uint256(1), uint256(1), uint256(1), uint256(1), uint256(1)];
+        vm.prank(owner);
+        manager.setConcurrencyLimits(oneIntentPerTier);
+        bytes32 firstIntent = keccak256("first-delegated-intent");
+        bytes32 secondIntent = keccak256("second-delegated-intent");
+        _createPositionFor(taker, firstIntent, 100e6);
+        orchestrator.setIntent(
+            secondIntent,
+            secondTaker,
+            address(escrow),
+            100e6,
+            PAYPAL,
+            IPostIntentHookV2(address(0))
+        );
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RiskTierManager.ConcurrentIntentLimitReached.selector,
+                stakeOwner,
+                1,
+                1
+            )
+        );
+        orchestrator.createPosition(manager, secondIntent);
+
+        orchestrator.cancelPosition(manager, firstIntent);
+        orchestrator.createPosition(manager, secondIntent);
+        assertEq(manager.activeIntentCount(stakeOwner), 1);
+    }
+
+    function test_DelegatedPositionKeepsSnapshottedOwnerAfterRevocationAndSlash() public {
+        vm.prank(stakeOwner);
+        vault.depositStakeFor(taker, 1_000e6);
+        bytes32 intentHash = keccak256("revoked-delegated-intent");
+        _createPosition(intentHash, 500e6);
+        vm.prank(stakeOwner);
+        vault.setTakerAuthorization(taker, false);
+        orchestrator.fulfillPosition(manager, intentHash, 500e6);
+
+        IRiskTierManager.ChargebackAttestation memory attestation = IRiskTierManager.ChargebackAttestation({
+            chainId: block.chainid,
+            riskTierManager: address(manager),
+            orchestrator: address(orchestrator),
+            intentHash: intentHash,
+            paymentMethod: PAYPAL,
+            chargebackAmount: 200e6,
+            evidenceId: keccak256("delegated-evidence"),
+            nonce: 77,
+            validAfter: uint64(block.timestamp - 1),
+            validUntil: uint64(block.timestamp + DAY)
+        });
+        bytes[] memory signatures = new bytes[](0);
+
+        manager.submitChargeback(attestation, signatures, "");
+
+        assertEq(manager.getRiskPosition(intentHash).stakeOwner, stakeOwner);
+        assertEq(vault.stakeBalance(stakeOwner), 800e6);
+        assertEq(vault.stakeBalance(taker), 0);
     }
 
     function test_CancellationReleasesReservation() public {
@@ -454,7 +542,7 @@ contract RiskTierManagerTest is Test {
             IPostIntentHookV2(address(0))
         );
 
-        vm.expectRevert(abi.encodeWithSelector(RiskTierManager.TakerExiting.selector, taker));
+        vm.expectRevert(abi.encodeWithSelector(RiskTierManager.StakeOwnerExiting.selector, taker, taker));
         orchestrator.createPosition(manager, intentHash);
     }
 }

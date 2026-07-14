@@ -105,6 +105,7 @@ interface IStakeVault {
         address indexed recipient,
         uint256 amount
     );
+    event TakerAuthorizationUpdated(address indexed stakeOwner, address indexed taker, bool authorized);
     event ControllerProposed(address indexed currentController, address indexed pendingController, uint64 validAt);
     event ControllerInitialized(address indexed controller);
     event ControllerAccepted(address indexed previousController, address indexed newController);
@@ -113,6 +114,9 @@ interface IStakeVault {
     /* ============ User Functions ============ */
 
     function depositStake(uint256 _amount) external;
+    function depositStakeFor(address _taker, uint256 _amount) external;
+    function setTakerAuthorization(address _taker, bool _authorized) external;
+    function clearStakeOwner() external;
     function requestExit() external;
     function cancelExit() external;
     function withdrawStake(address _recipient) external;
@@ -144,6 +148,7 @@ interface IStakeVault {
     function stakeBalance(address _staker) external view returns (uint256);
     function reservedStake(address _staker) external view returns (uint256);
     function freeStake(address _staker) external view returns (uint256);
+    function stakeOwnerOf(address _taker) external view returns (address);
     function isExiting(address _staker) external view returns (bool);
     function getExitRequest(address _staker) external view returns (ExitRequest memory);
     function getReservation(bytes32 _intentHash) external view returns (Reservation memory);

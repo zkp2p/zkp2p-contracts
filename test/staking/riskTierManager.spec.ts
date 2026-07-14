@@ -253,6 +253,97 @@ describe("RiskTierManager and OrchestratorV3", () => {
     });
   });
 
+  describe("delegated stake ownership", () => {
+    it("uses the Safe stake for the relayer tier and reservation", async () => {
+      const { owner: safe, taker: relayer, escrow, orchestrator, token, vault, manager } = await deployFixture();
+      await token.connect(safe).approve(vault.address, ethers.constants.MaxUint256);
+      await vault.connect(safe).depositStakeFor(relayer.address, usdc(1_000));
+
+      const intentHash = await signalIntent(orchestrator, escrow, relayer, usdc(500), PAYPAL);
+      const position = await manager.getRiskPosition(intentHash);
+
+      expect(position.taker).to.eq(relayer.address);
+      expect(position.stakeOwner).to.eq(safe.address);
+      expect(await manager.getTier(relayer.address)).to.eq(3);
+      expect(await vault.reservedStake(safe.address)).to.eq(usdc(500));
+      expect(await vault.stakeBalance(relayer.address)).to.eq(0);
+    });
+
+    it("shares one concurrency allowance across a Safe's relayers", async () => {
+      const {
+        owner: safe,
+        taker: firstRelayer,
+        secondTaker: secondRelayer,
+        escrow,
+        orchestrator,
+        token,
+        vault,
+        manager,
+      } = await deployFixture();
+      await token.connect(safe).approve(vault.address, ethers.constants.MaxUint256);
+      await vault.connect(safe).depositStakeFor(firstRelayer.address, usdc(100));
+      await vault.connect(safe).setTakerAuthorization(secondRelayer.address, true);
+
+      await signalIntent(orchestrator, escrow, firstRelayer, usdc(50), ZELLE);
+      await signalIntent(orchestrator, escrow, secondRelayer, usdc(50), ZELLE);
+
+      await expect(
+        orchestrator
+          .connect(firstRelayer)
+          .signalIntent(signalParams(escrow, firstRelayer.address, usdc(50), ZELLE)),
+      ).to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+      expect(await manager.activeIntentCount(safe.address)).to.eq(2);
+    });
+
+    it("releases shared concurrency when a delegated intent is cancelled", async () => {
+      const {
+        owner: safe,
+        taker: firstRelayer,
+        secondTaker: secondRelayer,
+        escrow,
+        orchestrator,
+        token,
+        vault,
+        manager,
+      } = await deployFixture();
+      await token.connect(safe).approve(vault.address, ethers.constants.MaxUint256);
+      await vault.connect(safe).depositStakeFor(firstRelayer.address, usdc(100));
+      await vault.connect(safe).setTakerAuthorization(secondRelayer.address, true);
+      const firstIntent = await signalIntent(orchestrator, escrow, firstRelayer, usdc(50), ZELLE);
+      await signalIntent(orchestrator, escrow, secondRelayer, usdc(50), ZELLE);
+
+      await orchestrator.connect(firstRelayer).cancelIntent(firstIntent);
+
+      await signalIntent(orchestrator, escrow, firstRelayer, usdc(50), ZELLE);
+      expect(await manager.activeIntentCount(safe.address)).to.eq(2);
+    });
+
+    it("keeps an admitted position backed by its snapshotted stake owner after revocation", async () => {
+      const { owner: safe, taker: relayer, escrow, orchestrator, token, vault, manager } = await deployFixture();
+      await token.connect(safe).approve(vault.address, ethers.constants.MaxUint256);
+      await vault.connect(safe).depositStakeFor(relayer.address, usdc(1_000));
+      const intentHash = await signalIntent(orchestrator, escrow, relayer, usdc(500), PAYPAL);
+
+      await vault.connect(safe).setTakerAuthorization(relayer.address, false);
+      await orchestrator.connect(relayer).cancelIntent(intentHash);
+
+      expect((await manager.getRiskPosition(intentHash)).stakeOwner).to.eq(safe.address);
+      expect(await vault.reservedStake(safe.address)).to.eq(0);
+      expect(await manager.getTier(relayer.address)).to.eq(0);
+    });
+
+    it("blocks a relayer when its Safe has requested a full exit", async () => {
+      const { owner: safe, taker: relayer, escrow, orchestrator, token, vault } = await deployFixture();
+      await token.connect(safe).approve(vault.address, ethers.constants.MaxUint256);
+      await vault.connect(safe).depositStakeFor(relayer.address, usdc(500));
+      await vault.connect(safe).requestExit();
+
+      await expect(
+        orchestrator.connect(relayer).signalIntent(signalParams(escrow, relayer.address, usdc(50), ZELLE)),
+      ).to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+    });
+  });
+
   describe("deposit risk hook selection", () => {
     it("lets the deposit delegate update the hook for future intents", async () => {
       const { makerDelegate, escrow, orchestrator, manager } = await deployFixture();

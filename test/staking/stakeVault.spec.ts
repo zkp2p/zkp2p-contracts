@@ -54,6 +54,60 @@ describe("StakeVault", () => {
     });
   });
 
+  describe("delegated stake ownership", () => {
+    it("lets a stake owner deposit for a taker without transferring ownership", async () => {
+      const { staker, maker: taker, vault } = await deployFixture();
+
+      await expect(vault.connect(staker).depositStakeFor(taker.address, usdc(1_000)))
+        .to.emit(vault, "TakerAuthorizationUpdated")
+        .withArgs(staker.address, taker.address, true)
+        .and.to.emit(vault, "StakeDeposited")
+        .withArgs(staker.address, usdc(1_000), usdc(1_000));
+
+      expect(await vault.stakeOwnerOf(taker.address)).to.eq(staker.address);
+      expect(await vault.stakeBalance(staker.address)).to.eq(usdc(1_000));
+      expect(await vault.stakeBalance(taker.address)).to.eq(0);
+    });
+
+    it("prevents another stake owner from replacing an existing authorization", async () => {
+      const { nextController: otherStakeOwner, staker, maker: taker, vault } = await deployFixture();
+      await vault.connect(staker).setTakerAuthorization(taker.address, true);
+
+      await expect(
+        vault.connect(otherStakeOwner).setTakerAuthorization(taker.address, true),
+      ).to.be.revertedWithCustomError(vault, "TakerAlreadyAuthorized");
+    });
+
+    it("lets the stake owner revoke a taker for future intents", async () => {
+      const { staker, maker: taker, vault } = await deployFixture();
+      await vault.connect(staker).setTakerAuthorization(taker.address, true);
+
+      await expect(vault.connect(staker).setTakerAuthorization(taker.address, false))
+        .to.emit(vault, "TakerAuthorizationUpdated")
+        .withArgs(staker.address, taker.address, false);
+
+      expect(await vault.stakeOwnerOf(taker.address)).to.eq(taker.address);
+    });
+
+    it("lets the taker clear an unwanted stake owner", async () => {
+      const { staker, maker: taker, vault } = await deployFixture();
+      await vault.connect(staker).setTakerAuthorization(taker.address, true);
+
+      await expect(vault.connect(taker).clearStakeOwner())
+        .to.emit(vault, "TakerAuthorizationUpdated")
+        .withArgs(staker.address, taker.address, false);
+
+      expect(await vault.stakeOwnerOf(taker.address)).to.eq(taker.address);
+    });
+
+    it("does not give the taker stake withdrawal rights", async () => {
+      const { staker, maker: taker, vault } = await deployFixture();
+      await vault.connect(staker).depositStakeFor(taker.address, usdc(100));
+
+      await expect(vault.connect(taker).requestExit()).to.be.revertedWithCustomError(vault, "ZeroAmount");
+    });
+  });
+
   describe("reservations", () => {
     it("reserves free stake against a unique intent", async () => {
       const { controller, staker, vault } = await deployFixture();

@@ -39,6 +39,37 @@ contract StakeVaultTest is Test {
         assertEq(token.balanceOf(address(vault)), vault.totalLiabilities());
     }
 
+    function test_DepositStakeForKeepsStakeOwnedByDepositor() public {
+        vm.prank(staker);
+        vault.depositStakeFor(maker, 1_000e6);
+
+        assertEq(vault.stakeOwnerOf(maker), staker);
+        assertEq(vault.stakeBalance(staker), 1_000e6);
+        assertEq(vault.stakeBalance(maker), 0);
+    }
+
+    function test_SecondStakeOwnerCannotReplaceTakerAuthorization() public {
+        address otherStakeOwner = makeAddr("otherStakeOwner");
+        vm.prank(staker);
+        vault.setTakerAuthorization(maker, true);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(StakeVault.TakerAlreadyAuthorized.selector, maker, staker)
+        );
+        vm.prank(otherStakeOwner);
+        vault.setTakerAuthorization(maker, true);
+    }
+
+    function test_TakerCanClearDelegatedStakeOwner() public {
+        vm.prank(staker);
+        vault.setTakerAuthorization(maker, true);
+
+        vm.prank(maker);
+        vault.clearStakeOwner();
+
+        assertEq(vault.stakeOwnerOf(maker), maker);
+    }
+
     function test_ReserveUpdateAndReleasePreserveStake() public {
         bytes32 intentHash = keccak256("intent");
         vm.prank(staker);

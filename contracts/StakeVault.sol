@@ -38,6 +38,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
 
     mapping(address => uint256) public override stakeBalance;
     mapping(address => uint256) public override reservedStake;
+    mapping(address => address) internal delegatedStakeOwners;
     mapping(address => ExitRequest) internal exitRequests;
     mapping(bytes32 => Reservation) internal reservations;
     mapping(bytes32 => DeferredPayout) internal deferredPayouts;
@@ -51,6 +52,10 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
 
     error ZeroAddress();
     error ZeroAmount();
+    error InvalidTaker(address taker);
+    error TakerAlreadyAuthorized(address taker, address stakeOwner);
+    error TakerAuthorizationNotFound(address taker, address stakeOwner);
+    error NoDelegatedStakeOwner(address taker);
     error UnauthorizedController(address caller);
     error UnauthorizedPositionController(address caller, address expectedController);
     error StakeActionPaused();
@@ -121,6 +126,43 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
      * @param _amount Amount of stake token to deposit.
      */
     function depositStake(uint256 _amount) external override nonReentrant {
+        _depositStake(msg.sender, _amount);
+    }
+
+    /**
+     * @notice Deposits stake owned by the caller and authorizes a taker to use it.
+     * @dev The caller remains the stake owner and retains all withdrawal rights.
+     * @param _taker Address that may use the caller's stake for future intents.
+     * @param _amount Amount of stake token to deposit.
+     */
+    function depositStakeFor(address _taker, uint256 _amount) external override nonReentrant {
+        _setTakerAuthorization(msg.sender, _taker, true);
+        _depositStake(msg.sender, _amount);
+    }
+
+    /**
+     * @notice Authorizes or revokes a taker's use of the caller's stake for future intents.
+     * @dev Existing risk positions retain the stake owner snapshotted at admission.
+     * @param _taker Address whose authorization is being updated.
+     * @param _authorized True to authorize the taker, false to revoke it.
+     */
+    function setTakerAuthorization(address _taker, bool _authorized) external override {
+        _setTakerAuthorization(msg.sender, _taker, _authorized);
+    }
+
+    /**
+     * @notice Clears the caller's delegated stake owner for future intents.
+     * @dev Existing risk positions remain backed by their snapshotted stake owner.
+     */
+    function clearStakeOwner() external override {
+        address stakeOwner = delegatedStakeOwners[msg.sender];
+        if (stakeOwner == address(0)) revert NoDelegatedStakeOwner(msg.sender);
+
+        delete delegatedStakeOwners[msg.sender];
+        emit TakerAuthorizationUpdated(stakeOwner, msg.sender, false);
+    }
+
+    function _depositStake(address _stakeOwner, uint256 _amount) internal {
         if (depositsPaused) revert StakeActionPaused();
         if (_amount == 0) revert ZeroAmount();
 
@@ -129,10 +171,10 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         uint256 received = stakeToken.balanceOf(address(this)) - balanceBefore;
         if (received != _amount) revert UnexpectedTokenAmount(_amount, received);
 
-        stakeBalance[msg.sender] += _amount;
+        stakeBalance[_stakeOwner] += _amount;
         totalStaked += _amount;
 
-        emit StakeDeposited(msg.sender, _amount, stakeBalance[msg.sender]);
+        emit StakeDeposited(_stakeOwner, _amount, stakeBalance[_stakeOwner]);
     }
 
     /**
@@ -516,6 +558,15 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     }
 
     /**
+     * @notice Returns the stake owner used for a taker's future intents.
+     * @dev Takers without a delegation use their own stake.
+     */
+    function stakeOwnerOf(address _taker) external view override returns (address) {
+        address delegatedStakeOwner = delegatedStakeOwners[_taker];
+        return delegatedStakeOwner == address(0) ? _taker : delegatedStakeOwner;
+    }
+
+    /**
      * @notice Returns whether a staker has requested full exit.
      */
     function isExiting(address _staker) external view override returns (bool) {
@@ -562,6 +613,27 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
             _amount,
             claimableCompensation[_maker]
         );
+    }
+
+    function _setTakerAuthorization(address _stakeOwner, address _taker, bool _authorized) internal {
+        if (_taker == address(0) || _taker == _stakeOwner) revert InvalidTaker(_taker);
+
+        address currentStakeOwner = delegatedStakeOwners[_taker];
+        if (_authorized) {
+            if (currentStakeOwner != address(0) && currentStakeOwner != _stakeOwner) {
+                revert TakerAlreadyAuthorized(_taker, currentStakeOwner);
+            }
+            if (currentStakeOwner == _stakeOwner) return;
+
+            delegatedStakeOwners[_taker] = _stakeOwner;
+        } else {
+            if (currentStakeOwner != _stakeOwner) {
+                revert TakerAuthorizationNotFound(_taker, _stakeOwner);
+            }
+            delete delegatedStakeOwners[_taker];
+        }
+
+        emit TakerAuthorizationUpdated(_stakeOwner, _taker, _authorized);
     }
 
     function _requirePositionController(address _expectedController) internal view {
