@@ -70,6 +70,19 @@ contract StakeVaultTest is Test {
         assertEq(vault.stakeOwnerOf(maker), maker);
     }
 
+    function test_BatchTakerAuthorizationUpdatesEveryTaker() public {
+        address secondTaker = makeAddr("secondTaker");
+        address[] memory takers = new address[](2);
+        takers[0] = maker;
+        takers[1] = secondTaker;
+
+        vm.prank(staker);
+        vault.setTakerAuthorizations(takers, true);
+
+        assertEq(vault.stakeOwnerOf(maker), staker);
+        assertEq(vault.stakeOwnerOf(secondTaker), staker);
+    }
+
     function test_ReserveUpdateAndReleasePreserveStake() public {
         bytes32 intentHash = keccak256("intent");
         vm.prank(staker);
@@ -104,6 +117,27 @@ contract StakeVaultTest is Test {
         assertEq(vault.getReservation(intentHash).amount, 300e6);
         assertEq(vault.claimableCompensation(maker), 200e6);
         assertEq(vault.totalLiabilities(), 1_000e6);
+    }
+
+    function test_WithdrawCompensationAggregatesMultipleClaims() public {
+        bytes32 firstIntent = keccak256("first-intent");
+        bytes32 secondIntent = keccak256("second-intent");
+        vm.prank(staker);
+        vault.depositStake(200e6);
+        vm.prank(controller);
+        vault.reserveStake(staker, firstIntent, 50e6, 0);
+        vm.prank(controller);
+        vault.reserveStake(staker, secondIntent, 50e6, 0);
+        vm.prank(controller);
+        vault.slashReservation(firstIntent, maker, 10e6);
+        vm.prank(controller);
+        vault.slashReservation(secondIntent, maker, 20e6);
+
+        vm.prank(maker);
+        vault.withdrawCompensation(recipient);
+
+        assertEq(token.balanceOf(recipient), 30e6);
+        assertEq(vault.claimableCompensation(maker), 0);
     }
 
     function test_ExitingStakerCannotReceiveNewReservation() public {
@@ -251,6 +285,61 @@ contract StakeVaultTest is Test {
         vm.prank(staker);
         vault.withdrawDeferredPayout(intentHash, recipient);
         assertEq(token.balanceOf(recipient), 100e6);
+    }
+
+    function test_BatchWithdrawDeferredPayoutsTransfersAggregateAmount() public {
+        bytes32 firstIntent = keccak256("first-deferred");
+        bytes32 secondIntent = keccak256("second-deferred");
+        uint64 releaseTime = uint64(block.timestamp + DAY);
+        deal(address(token), address(vault), 300e6);
+        vm.startPrank(controller);
+        vault.authorizeDeferredPayout(firstIntent, staker, releaseTime);
+        vault.authorizeDeferredPayout(secondIntent, staker, releaseTime);
+        vault.recordDeferredPayout(firstIntent, staker, 100e6, releaseTime);
+        vault.recordDeferredPayout(secondIntent, staker, 200e6, releaseTime);
+        vm.stopPrank();
+        vm.warp(releaseTime);
+        bytes32[] memory intentHashes = new bytes32[](2);
+        intentHashes[0] = firstIntent;
+        intentHashes[1] = secondIntent;
+
+        vm.prank(staker);
+        uint256 totalAmount = vault.withdrawDeferredPayouts(intentHashes, recipient);
+
+        assertEq(totalAmount, 300e6);
+        assertEq(token.balanceOf(recipient), 300e6);
+        assertEq(vault.totalDeferredPayouts(), 0);
+    }
+
+    function test_ImmatureDeferredPayoutRollsBackEntireBatch() public {
+        bytes32 firstIntent = keccak256("first-deferred");
+        bytes32 secondIntent = keccak256("second-deferred");
+        uint64 firstReleaseTime = uint64(block.timestamp + DAY);
+        uint64 secondReleaseTime = uint64(block.timestamp + 2 * DAY);
+        deal(address(token), address(vault), 200e6);
+        vm.startPrank(controller);
+        vault.authorizeDeferredPayout(firstIntent, staker, firstReleaseTime);
+        vault.authorizeDeferredPayout(secondIntent, staker, secondReleaseTime);
+        vault.recordDeferredPayout(firstIntent, staker, 100e6, firstReleaseTime);
+        vault.recordDeferredPayout(secondIntent, staker, 100e6, secondReleaseTime);
+        vm.stopPrank();
+        vm.warp(firstReleaseTime);
+        bytes32[] memory intentHashes = new bytes32[](2);
+        intentHashes[0] = firstIntent;
+        intentHashes[1] = secondIntent;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                StakeVault.DeferredPayoutNotMature.selector,
+                secondReleaseTime,
+                uint64(block.timestamp)
+            )
+        );
+        vm.prank(staker);
+        vault.withdrawDeferredPayouts(intentHashes, recipient);
+
+        assertEq(vault.getDeferredPayout(firstIntent).amount, 100e6);
+        assertEq(vault.getDeferredPayout(secondIntent).amount, 100e6);
     }
 
     function test_ControllerHandoverIsDelayedAndTwoStep() public {

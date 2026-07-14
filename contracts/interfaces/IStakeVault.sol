@@ -129,6 +129,7 @@ interface IStakeVault {
     function depositStake(uint256 _amount) external;
     function depositStakeFor(address _taker, uint256 _amount) external;
     function setTakerAuthorization(address _taker, bool _authorized) external;
+    function setTakerAuthorizations(address[] calldata _takers, bool _authorized) external;
     function clearStakeOwner() external;
     function requestStakeWithdrawal(uint256 _amount) external;
     function cancelStakeWithdrawal() external;
@@ -138,6 +139,10 @@ interface IStakeVault {
     function withdrawStake(address _recipient) external;
     function withdrawCompensation(address _recipient) external;
     function withdrawDeferredPayout(bytes32 _intentHash, address _recipient) external;
+    function withdrawDeferredPayouts(
+        bytes32[] calldata _intentHashes,
+        address _recipient
+    ) external returns (uint256 totalAmount);
 
     /* ============ Controller Functions ============ */
 

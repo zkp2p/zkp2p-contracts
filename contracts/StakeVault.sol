@@ -53,6 +53,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
 
     error ZeroAddress();
     error ZeroAmount();
+    error EmptyBatch();
     error InvalidTaker(address taker);
     error TakerAlreadyAuthorized(address taker, address stakeOwner);
     error TakerAuthorizationNotFound(address taker, address stakeOwner);
@@ -153,6 +154,19 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
      */
     function setTakerAuthorization(address _taker, bool _authorized) external override {
         _setTakerAuthorization(msg.sender, _taker, _authorized);
+    }
+
+    /**
+     * @notice Authorizes or revokes multiple takers for the caller's stake.
+     * @param _takers Addresses whose authorizations are being updated.
+     * @param _authorized True to authorize every taker, false to revoke them.
+     */
+    function setTakerAuthorizations(address[] calldata _takers, bool _authorized) external override {
+        if (_takers.length == 0) revert EmptyBatch();
+
+        for (uint256 takerIndex = 0; takerIndex < _takers.length; takerIndex++) {
+            _setTakerAuthorization(msg.sender, _takers[takerIndex], _authorized);
+        }
     }
 
     /**
@@ -320,9 +334,39 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     function withdrawDeferredPayout(bytes32 _intentHash, address _recipient) external override nonReentrant {
         if (_recipient == address(0)) revert ZeroAddress();
 
+        uint256 amount = _consumeDeferredPayout(_intentHash, msg.sender, _recipient);
+        stakeToken.safeTransfer(_recipient, amount);
+    }
+
+    /**
+     * @notice Withdraws multiple matured deferred payouts owned by the caller.
+     * @dev The batch is atomic and transfers the aggregate amount once.
+     * @param _intentHashes Intents whose proceeds are being withdrawn.
+     * @param _recipient Address receiving the stake token.
+     * @return totalAmount Aggregate amount withdrawn.
+     */
+    function withdrawDeferredPayouts(
+        bytes32[] calldata _intentHashes,
+        address _recipient
+    ) external override nonReentrant returns (uint256 totalAmount) {
+        if (_recipient == address(0)) revert ZeroAddress();
+        if (_intentHashes.length == 0) revert EmptyBatch();
+
+        for (uint256 intentIndex = 0; intentIndex < _intentHashes.length; intentIndex++) {
+            totalAmount += _consumeDeferredPayout(_intentHashes[intentIndex], msg.sender, _recipient);
+        }
+
+        stakeToken.safeTransfer(_recipient, totalAmount);
+    }
+
+    function _consumeDeferredPayout(
+        bytes32 _intentHash,
+        address _beneficiary,
+        address _recipient
+    ) internal returns (uint256 amount) {
         DeferredPayout memory payout = deferredPayouts[_intentHash];
         if (payout.beneficiary == address(0) || payout.amount == 0) revert DeferredPayoutNotFound(_intentHash);
-        if (msg.sender != payout.beneficiary) revert UnauthorizedBeneficiary(msg.sender, payout.beneficiary);
+        if (_beneficiary != payout.beneficiary) revert UnauthorizedBeneficiary(_beneficiary, payout.beneficiary);
         if (block.timestamp < payout.releaseTime) {
             revert DeferredPayoutNotMature(payout.releaseTime, uint64(block.timestamp));
         }
@@ -330,8 +374,8 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         delete deferredPayouts[_intentHash];
         totalDeferredPayouts -= payout.amount;
 
-        stakeToken.safeTransfer(_recipient, payout.amount);
         emit DeferredPayoutWithdrawn(_intentHash, payout.beneficiary, _recipient, payout.amount);
+        return payout.amount;
     }
 
     /* ============ Controller Functions ============ */

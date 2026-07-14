@@ -357,6 +357,47 @@ contract RiskTierManagerTest is Test {
         assertEq(vault.getReservation(intentHash).amount, 300e6);
     }
 
+    function test_BatchReconcileSettlementsRecoversMultipleCallbacks() public {
+        _stake(1_000e6);
+        bytes32 firstIntent = keccak256("first-intent");
+        bytes32 secondIntent = keccak256("second-intent");
+        _createPosition(firstIntent, 300e6);
+        _createPosition(secondIntent, 300e6);
+        orchestrator.recordSettlementWithoutCallback(firstIntent, 200e6);
+        orchestrator.recordSettlementWithoutCallback(secondIntent, 250e6);
+        bytes32[] memory intentHashes = new bytes32[](2);
+        intentHashes[0] = firstIntent;
+        intentHashes[1] = secondIntent;
+
+        manager.reconcileSettlements(intentHashes);
+
+        assertEq(manager.getRiskPosition(firstIntent).releasedAmount, 200e6);
+        assertEq(manager.getRiskPosition(secondIntent).releasedAmount, 250e6);
+        assertEq(vault.reservedStake(taker), 450e6);
+        assertEq(manager.activeIntentCount(taker), 0);
+    }
+
+    function test_BatchReleaseMaturedPositionsReleasesEveryReservation() public {
+        _stake(1_000e6);
+        bytes32 firstIntent = keccak256("first-intent");
+        bytes32 secondIntent = keccak256("second-intent");
+        _createPosition(firstIntent, 200e6);
+        _createPosition(secondIntent, 200e6);
+        orchestrator.fulfillPosition(manager, firstIntent, 200e6);
+        orchestrator.fulfillPosition(manager, secondIntent, 200e6);
+        uint64 releaseTime = manager.getRiskPosition(firstIntent).releaseTime;
+        vm.warp(releaseTime);
+        bytes32[] memory intentHashes = new bytes32[](2);
+        intentHashes[0] = firstIntent;
+        intentHashes[1] = secondIntent;
+
+        manager.releaseMaturedPositions(intentHashes);
+
+        assertEq(uint256(manager.getRiskPosition(firstIntent).status), uint256(IRiskTierManager.PositionStatus.RELEASED));
+        assertEq(uint256(manager.getRiskPosition(secondIntent).status), uint256(IRiskTierManager.PositionStatus.RELEASED));
+        assertEq(vault.reservedStake(taker), 0);
+    }
+
     function test_ChargebackSlashesBoundedAmount() public {
         _stake(1_000e6);
         bytes32 intentHash = keccak256("intent");

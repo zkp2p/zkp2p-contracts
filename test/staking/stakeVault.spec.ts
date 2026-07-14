@@ -106,6 +106,36 @@ describe("StakeVault", () => {
 
       await expect(vault.connect(taker).requestExit()).to.be.revertedWithCustomError(vault, "ZeroAmount");
     });
+
+    it("updates several taker authorizations atomically", async () => {
+      const { staker, maker: firstTaker, recipient: secondTaker, vault } = await deployFixture();
+
+      await vault
+        .connect(staker)
+        .setTakerAuthorizations([firstTaker.address, secondTaker.address], true);
+
+      expect(await vault.stakeOwnerOf(firstTaker.address)).to.eq(staker.address);
+      expect(await vault.stakeOwnerOf(secondTaker.address)).to.eq(staker.address);
+    });
+
+    it("rolls back every taker authorization when one batch item is invalid", async () => {
+      const {
+        nextController: otherStakeOwner,
+        staker,
+        maker: existingTaker,
+        recipient: newTaker,
+        vault,
+      } = await deployFixture();
+      await vault.connect(otherStakeOwner).setTakerAuthorization(existingTaker.address, true);
+
+      await expect(
+        vault
+          .connect(staker)
+          .setTakerAuthorizations([newTaker.address, existingTaker.address], true),
+      ).to.be.revertedWithCustomError(vault, "TakerAlreadyAuthorized");
+
+      expect(await vault.stakeOwnerOf(newTaker.address)).to.eq(newTaker.address);
+    });
   });
 
   describe("reservations", () => {
@@ -215,6 +245,22 @@ describe("StakeVault", () => {
       await vault.connect(maker).withdrawCompensation(recipient.address);
 
       expect(await token.balanceOf(recipient.address)).to.eq(usdc(20));
+      expect(await vault.claimableCompensation(maker.address)).to.eq(0);
+    });
+
+    it("withdraws compensation aggregated across multiple intent claims", async () => {
+      const { controller, staker, maker, recipient, token, vault } = await deployFixture();
+      const firstIntent = ethers.utils.id("first-intent");
+      const secondIntent = ethers.utils.id("second-intent");
+      await vault.connect(staker).depositStake(usdc(200));
+      await vault.connect(controller).reserveStake(staker.address, firstIntent, usdc(50), 0);
+      await vault.connect(controller).reserveStake(staker.address, secondIntent, usdc(50), 0);
+      await vault.connect(controller).slashReservation(firstIntent, maker.address, usdc(10));
+      await vault.connect(controller).slashReservation(secondIntent, maker.address, usdc(20));
+
+      await vault.connect(maker).withdrawCompensation(recipient.address);
+
+      expect(await token.balanceOf(recipient.address)).to.eq(usdc(30));
       expect(await vault.claimableCompensation(maker.address)).to.eq(0);
     });
   });
@@ -453,6 +499,61 @@ describe("StakeVault", () => {
       await vault.connect(controller).recordDeferredPayout(intentHash, staker.address, usdc(100), 2 * DAY);
 
       expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(usdc(100));
+    });
+
+    it("withdraws several matured deferred payouts with one aggregate transfer", async () => {
+      const { controller, staker, recipient, token, vault } = await deployFixture();
+      const firstIntent = ethers.utils.id("first-deferred");
+      const secondIntent = ethers.utils.id("second-deferred");
+      const releaseTime = (await time.latest()) + DAY;
+      await vault.connect(controller).authorizeDeferredPayout(firstIntent, staker.address, releaseTime);
+      await vault.connect(controller).authorizeDeferredPayout(secondIntent, staker.address, releaseTime);
+      await token.transfer(vault.address, usdc(300));
+      await vault.connect(controller).recordDeferredPayout(firstIntent, staker.address, usdc(100), releaseTime);
+      await vault.connect(controller).recordDeferredPayout(secondIntent, staker.address, usdc(200), releaseTime);
+      await time.increase(DAY);
+
+      expect(
+        await vault
+          .connect(staker)
+          .callStatic.withdrawDeferredPayouts([firstIntent, secondIntent], recipient.address),
+      ).to.eq(usdc(300));
+      await expect(
+        vault.connect(staker).withdrawDeferredPayouts([firstIntent, secondIntent], recipient.address),
+      ).to.emit(vault, "DeferredPayoutWithdrawn");
+
+      expect(await token.balanceOf(recipient.address)).to.eq(usdc(300));
+      expect((await vault.getDeferredPayout(firstIntent)).amount).to.eq(0);
+      expect((await vault.getDeferredPayout(secondIntent)).amount).to.eq(0);
+    });
+
+    it("rolls back a deferred payout batch containing an immature payout", async () => {
+      const { controller, staker, recipient, token, vault } = await deployFixture();
+      const firstIntent = ethers.utils.id("first-deferred");
+      const secondIntent = ethers.utils.id("second-deferred");
+      const firstReleaseTime = (await time.latest()) + DAY;
+      const secondReleaseTime = firstReleaseTime + DAY;
+      await vault.connect(controller).authorizeDeferredPayout(firstIntent, staker.address, firstReleaseTime);
+      await vault.connect(controller).authorizeDeferredPayout(secondIntent, staker.address, secondReleaseTime);
+      await token.transfer(vault.address, usdc(200));
+      await vault.connect(controller).recordDeferredPayout(firstIntent, staker.address, usdc(100), firstReleaseTime);
+      await vault.connect(controller).recordDeferredPayout(secondIntent, staker.address, usdc(100), secondReleaseTime);
+      await time.increase(DAY);
+
+      await expect(
+        vault.connect(staker).withdrawDeferredPayouts([firstIntent, secondIntent], recipient.address),
+      ).to.be.revertedWithCustomError(vault, "DeferredPayoutNotMature");
+
+      expect((await vault.getDeferredPayout(firstIntent)).amount).to.eq(usdc(100));
+      expect((await vault.getDeferredPayout(secondIntent)).amount).to.eq(usdc(100));
+    });
+
+    it("rejects an empty deferred payout batch", async () => {
+      const { staker, recipient, vault } = await deployFixture();
+
+      await expect(
+        vault.connect(staker).withdrawDeferredPayouts([], recipient.address),
+      ).to.be.revertedWithCustomError(vault, "EmptyBatch");
     });
   });
 

@@ -632,6 +632,48 @@ describe("RiskTierManager and OrchestratorV3", () => {
       expect(position.settlementBuffer).to.eq(DAY);
       expect(position.releaseTime.sub(position.slashDeadline)).to.eq(DAY);
     });
+
+    it("releases several matured positions in one permissionless call", async () => {
+      const { taker, escrow, orchestrator, vault, manager } = await deployFixture();
+      await vault.connect(taker).depositStake(usdc(1_000));
+      const firstIntent = await signalIntent(orchestrator, escrow, taker, usdc(200), PAYPAL);
+      const secondIntent = await signalIntent(orchestrator, escrow, taker, usdc(200), PAYPAL);
+      await fulfillIntent(orchestrator, firstIntent, usdc(200));
+      await fulfillIntent(orchestrator, secondIntent, usdc(200));
+      const firstPosition = await manager.getRiskPosition(firstIntent);
+      const secondPosition = await manager.getRiskPosition(secondIntent);
+      await time.increaseTo(Math.max(firstPosition.releaseTime.toNumber(), secondPosition.releaseTime.toNumber()));
+
+      await manager.releaseMaturedPositions([firstIntent, secondIntent]);
+
+      expect((await manager.getRiskPosition(firstIntent)).status).to.eq(3);
+      expect((await manager.getRiskPosition(secondIntent)).status).to.eq(3);
+      expect(await vault.reservedStake(taker.address)).to.eq(0);
+    });
+
+    it("rolls back matured releases when one position is not settled", async () => {
+      const { taker, escrow, orchestrator, vault, manager } = await deployFixture();
+      await vault.connect(taker).depositStake(usdc(1_000));
+      const maturedIntent = await signalIntent(orchestrator, escrow, taker, usdc(200), PAYPAL);
+      await fulfillIntent(orchestrator, maturedIntent, usdc(200));
+      const liveIntent = await signalIntent(orchestrator, escrow, taker, usdc(100), PAYPAL);
+      const maturedPosition = await manager.getRiskPosition(maturedIntent);
+      await time.increaseTo(maturedPosition.releaseTime.toNumber());
+
+      await expect(
+        manager.releaseMaturedPositions([maturedIntent, liveIntent]),
+      ).to.be.revertedWithCustomError(manager, "PositionNotSettled");
+
+      expect((await manager.getRiskPosition(maturedIntent)).status).to.eq(1);
+      expect(await vault.reservedStake(taker.address)).to.eq(usdc(300));
+    });
+
+    it("rejects empty position maintenance batches", async () => {
+      const { manager } = await deployFixture();
+
+      await expect(manager.releaseMaturedPositions([])).to.be.revertedWithCustomError(manager, "EmptyBatch");
+      await expect(manager.reconcileSettlements([])).to.be.revertedWithCustomError(manager, "EmptyBatch");
+    });
   });
 
   describe("deferred payout mode", () => {

@@ -158,7 +158,9 @@ interface IRiskTierManager is IIntentRiskHook {
 
     function registerDeferredPayout(bytes32 _intentHash, address _beneficiary, uint256 _amount) external;
     function reconcileSettlement(bytes32 _intentHash) external;
+    function reconcileSettlements(bytes32[] calldata _intentHashes) external;
     function releaseMaturedPosition(bytes32 _intentHash) external;
+    function releaseMaturedPositions(bytes32[] calldata _intentHashes) external;
     function submitChargeback(
         ChargebackAttestation calldata _attestation,
         bytes[] calldata _signatures,

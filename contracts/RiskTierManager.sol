@@ -54,6 +54,7 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
 
     error ZeroAddress();
     error ZeroAmount();
+    error EmptyBatch();
     error UnauthorizedOrchestrator(address caller);
     error UnauthorizedDeferredPayoutHook(address caller);
     error AdmissionPaused();
@@ -317,6 +318,21 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
      * @inheritdoc IRiskTierManager
      */
     function releaseMaturedPosition(bytes32 _intentHash) external override nonReentrant {
+        _releaseMaturedPosition(_intentHash);
+    }
+
+    /**
+     * @inheritdoc IRiskTierManager
+     */
+    function releaseMaturedPositions(bytes32[] calldata _intentHashes) external override nonReentrant {
+        if (_intentHashes.length == 0) revert EmptyBatch();
+
+        for (uint256 intentIndex = 0; intentIndex < _intentHashes.length; intentIndex++) {
+            _releaseMaturedPosition(_intentHashes[intentIndex]);
+        }
+    }
+
+    function _releaseMaturedPosition(bytes32 _intentHash) internal {
         RiskPosition storage position = riskPositions[_intentHash];
         if (position.status != PositionStatus.ACTIVE) revert PositionNotActive(_intentHash, position.status);
 
@@ -352,6 +368,21 @@ contract RiskTierManager is IRiskTierManager, Ownable, ReentrancyGuard, EIP712 {
      * @inheritdoc IRiskTierManager
      */
     function reconcileSettlement(bytes32 _intentHash) external override nonReentrant {
+        _reconcileSettlement(_intentHash);
+    }
+
+    /**
+     * @inheritdoc IRiskTierManager
+     */
+    function reconcileSettlements(bytes32[] calldata _intentHashes) external override nonReentrant {
+        if (_intentHashes.length == 0) revert EmptyBatch();
+
+        for (uint256 intentIndex = 0; intentIndex < _intentHashes.length; intentIndex++) {
+            _reconcileSettlement(_intentHashes[intentIndex]);
+        }
+    }
+
+    function _reconcileSettlement(bytes32 _intentHash) internal {
         RiskPosition storage position = riskPositions[_intentHash];
         if (position.status != PositionStatus.ACTIVE) revert PositionNotActive(_intentHash, position.status);
         _synchronizeSettlement(_intentHash, position);
