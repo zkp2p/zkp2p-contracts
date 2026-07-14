@@ -130,16 +130,18 @@ export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
   "base_staging": "",
 };
 
-// Stake-based risk system parameters. Production thresholds remain an explicit governance
-// decision; the values below are local-development defaults used by deployment tests.
+// Stake-based risk system parameters. Base staging uses the initial rollout policy exercised
+// by deployment tests. Production thresholds remain an explicit governance decision.
 export const STAKE_RISK_TIER_THRESHOLDS: Record<string, any[]> = {
   localhost: [usdc(100), usdc(500), usdc(1_000), usdc(5_000)],
   hardhat: [usdc(100), usdc(500), usdc(1_000), usdc(5_000)],
+  base_staging: [usdc(100), usdc(500), usdc(1_000), usdc(5_000)],
 };
 
 export const STAKE_RISK_CONCURRENCY_LIMITS: Record<string, number[]> = {
   localhost: [1, 5, 20, 50, 1_000],
   hardhat: [1, 5, 20, 50, 1_000],
+  base_staging: [1, 5, 20, 50, 1_000],
 };
 
 export const STAKE_VAULT_BASE_EXIT_DELAY = ONE_DAY_IN_SECONDS.mul(30);
