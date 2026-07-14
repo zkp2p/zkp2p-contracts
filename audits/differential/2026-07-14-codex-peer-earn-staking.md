@@ -1,5 +1,8 @@
 # Differential Security Review
 
+> The findings and line references below record the original review snapshot at `363013c`.
+> See **Closure Review** for the disposition after the remediation commits and final PR review.
+
 | Field | Value |
 |-------|-------|
 | Date | 2026-07-14 |
@@ -19,10 +22,10 @@ This review used the repository audit skill in differential mode and examined `o
 |------|------|--------|
 | `contracts/OrchestratorV3.sol` | High | Adds fail-closed admission, fail-open terminal callbacks, persistent settlement state, required post-hooks, and new lifecycle ordering around escrow transfers. |
 | `contracts/RiskTierManager.sol` | Critical surface | Decides admission and collateral mode, owns position state, reconciles fail-open callbacks, computes deadlines, and authorizes slashing. |
-| `contracts/StakeVault.sol` | Critical surface | Custodies all membership stake, deferred proceeds, and maker compensation, and implements controller migration and exits. |
-| `contracts/hooks/DeferredPayoutHook.sol` | High | Atomically moves fulfilled proceeds into custody and registers the liability. |
+| `contracts/StakeVault.sol` | Critical surface | Holds all membership stake, deferred proceeds, and maker compensation, and implements controller migration and exits. |
+| `contracts/hooks/DeferredPayoutHook.sol` | High | Atomically moves fulfilled proceeds into StakeVault and registers the liability. |
 | `contracts/interfaces/*.sol` | Medium | Defines the lifecycle and event contract relied upon by hooks, clients, and the indexer. |
-| `deploy/26_deploy_stake_risk_system.ts` | High | Irreversibly wires custody, controller, risk verifier, platform policy, and ownership. |
+| `deploy/26_deploy_stake_risk_system.ts` | High | Irreversibly wires the vault, controller, risk verifier, platform policy, and ownership. |
 | `test/staking/*`, `test-foundry/unit/*`, `test/deploy/*` | Medium | Broad example coverage exists, but the adversarial transition and migration cases below are absent. |
 
 ## Findings
@@ -105,16 +108,16 @@ Either support cumulative claims until the deadline by tracking `totalSlashed`, 
 
 - `contracts/RiskTierManager.sol:175-197` admits deferred-payout positions without touching StakeVault or checking its reservation pause.
 - `contracts/StakeVault.sol:343-350` applies `reservationsPaused` when the already-admitted intent later records its deferred payout.
-- `contracts/hooks/DeferredPayoutHook.sol:83-84` makes token custody and registration mandatory and atomic, so this vault revert bubbles up through the required post-hook.
+- `contracts/hooks/DeferredPayoutHook.sol:83-84` makes the token transfer and registration mandatory and atomic, so this vault revert bubbles up through the required post-hook.
 
 **Exploit/failure scenario:**
 
 1. Governance pauses vault reservations during an incident but does not separately pause RiskTierManager admission (the controls are independent transactions/contracts).
 2. A taker with insufficient free stake signals a deferred-payout intent. No vault call occurs at admission, so signaling succeeds while reservations are paused.
-3. Fulfillment or maker manual release later reaches DeferredPayoutHook. Tokens are tentatively transferred, but `recordDeferredPayout` reverts with `CustodyActionPaused`; the entire settlement reverts.
+3. Fulfillment or maker manual release later reaches DeferredPayoutHook. Tokens are tentatively transferred, but `recordDeferredPayout` reverts with `StakeActionPaused`; the entire settlement reverts.
 4. The intent cannot settle until governance unpauses. The same behavior blocks terminal settlement of deferred intents admitted before the emergency pause.
 
-This makes a control described as pausing *new* custody actions freeze completion of existing economic obligations, and its split-brain admission behavior can create additional stuck intents during the pause.
+This makes a control described as pausing *new* stake reservations freeze completion of existing economic obligations, and its split-brain admission behavior can create additional stuck intents during the pause.
 
 **Recommendation:**
 
@@ -151,13 +154,13 @@ Wire the explicitly configured current `MultiAttestationVerifier` (or a dedicate
 
 - **Intent admission:** `OrchestratorV3.signalIntent`, `RiskTierManager.onIntentCreated`, tier caps, concurrency checks, stake/deferred mode selection, and emergency pause behavior.
 - **Terminal lifecycle:** `cancelIntent`, `fulfillIntent`, `releaseFundsToPayer`, Escrow-driven `pruneIntents`, orphan cleanup, callback gas failure, and settlement reconciliation.
-- **Custody and exits:** every stake reservation, full exit, deferred payout, compensation credit, and controller handover in StakeVault.
+- **Stake holdings and exits:** every stake reservation, full exit, deferred payout, compensation credit, and controller handover in StakeVault.
 - **Chargebacks:** EIP-712 digest binding, verifier selection, nonce use, deadline checks, one-shot/partial semantics, and maker compensation.
 - **Operations/indexing:** platform configuration and lifecycle events, deployment dependency/witness assumptions, and event consumers that infer reservation or tier state.
 
 ## Test Coverage
 
-The added Hardhat suite provides useful positive and revert coverage for tier derivation, caps, concurrency, immediate exit blocking, stake-backed reservation, cancellation, partial fulfillment, manual release, durable settlement reconciliation, deferred custody, deadline exclusivity, vault liability accounting, and basic controller delay. The Foundry tests duplicate several core unit paths and include limited fuzzing of stake amounts.
+The added Hardhat suite provides useful positive and revert coverage for tier derivation, caps, concurrency, immediate exit blocking, stake-backed reservation, cancellation, partial fulfillment, manual release, durable settlement reconciliation, deferred payout handling, deadline exclusivity, vault liability accounting, and basic controller delay. The Foundry tests duplicate several core unit paths and include limited fuzzing of stake amounts.
 
 The following security-critical cases are missing:
 
@@ -172,3 +175,22 @@ The following security-critical cases are missing:
 ## Recommendation
 
 **BLOCK** until H-01 and H-02 are fixed and covered by regression tests. M-01 must be resolved either in code or by making the signed one-shot-finality invariant explicit and enforceable. M-02 and M-03 should be corrected before any production deployment because they affect settlement liveness and the authority that can slash user funds.
+
+## Closure Review
+
+The complete PR was re-reviewed after the remediation series through code head `c4885ca`.
+
+| Original finding | Final disposition |
+|------------------|-------------------|
+| H-01 live-intent fallback release | Fixed. Fallback release now rejects while the Orchestrator intent remains live, then reconciles durable failed-callback settlement data before maturity decisions. Regression coverage includes late settlement. |
+| H-02 controller handover | Fixed. Intent capacity, stake reservations, and deferred authorizations snapshot their creating controller, allowing old positions to resolve without granting retired controllers authority over new positions. Rotation tests cover all three record types. |
+| M-01 partial chargeback finality | Fixed. Partial slashes retain remaining stake/deferred coverage and support cumulative uniquely-nonced claims up to the covered amount. |
+| M-02 pause split-brain | Fixed. Deferred authorization occurs at admission and respects the reservation pause; already-authorized terminal recording remains available while new reservations are paused. |
+| M-03 stale verifier wiring | Fixed. Deployment uses `MultiAttestationVerifier`, depends on its deployment, checks witness configuration, and exercises typed-data verification. |
+| L-01 timing mutation | Fixed. `settlementBuffer` is snapshotted per position and used for exact settlement timing. |
+| L-02 callback ordering documentation | Fixed. The interface documents prune-before-callback behavior and the Orchestrator exposes durable recovery data for failed settlement callbacks. |
+| Final PR review: canonical deferred hook on stake-backed mode | Fixed at `c4885ca`. Admission rejects the canonical deferred hook when free stake already selects stake-backed mode, preventing a guaranteed settlement revert; focused Hardhat regression coverage passes. |
+
+No event signature changed during final remediation. The only final ABI addition is the `DeferredPayoutHookNotAllowed(address)` custom error on `RiskTierManager`.
+
+**Final recommendation:** APPROVE for the explicitly opt-in staging rollout, subject to the deployment and post-deployment gates. Production deployment remains out of scope and requires separate governance parameter approval.
