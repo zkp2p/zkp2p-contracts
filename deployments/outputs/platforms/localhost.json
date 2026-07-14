@@ -88,6 +88,13 @@
       ],
       "updatedAt": "2026-02-20T09:59:06.372Z"
     },
+    "zelle": {
+      "paymentMethodHash": "0xf752c7d19698ecb0bb8988abf9b9a53a4c3657f3bc8850a6fb59fdf3e3ce8cd3",
+      "currencies": [
+        "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e"
+      ],
+      "updatedAt": "2026-07-14T22:59:51.673Z"
+    },
     "paypal": {
       "paymentMethodHash": "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f",
       "currencies": [

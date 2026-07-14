@@ -24,11 +24,7 @@ import { REVOLUT_PROVIDER_CONFIG } from "../../deployments/verifiers/revolut";
 import { CASHAPP_PROVIDER_CONFIG } from "../../deployments/verifiers/cashapp";
 import { WISE_PROVIDER_CONFIG } from "../../deployments/verifiers/wise";
 import { MERCADOPAGO_PROVIDER_CONFIG } from "../../deployments/verifiers/mercadopago";
-import {
-  ZELLE_CITI_PROVIDER_CONFIG,
-  ZELLE_CHASE_PROVIDER_CONFIG,
-  ZELLE_BOFA_PROVIDER_CONFIG,
-} from "../../deployments/verifiers/zelle";
+import { ZELLE_PROVIDER_CONFIG } from "../../deployments/verifiers/zelle";
 import { PAYPAL_PROVIDER_CONFIG } from "../../deployments/verifiers/paypal";
 import { MONZO_PROVIDER_CONFIG } from "../../deployments/verifiers/monzo";
 import { ALIPAY_PROVIDER_CONFIG } from "../../deployments/verifiers/alipay";
@@ -42,9 +38,7 @@ const ALL_PAYMENT_METHODS = [
   { name: "CashApp", config: CASHAPP_PROVIDER_CONFIG },
   { name: "Wise", config: WISE_PROVIDER_CONFIG },
   { name: "MercadoPago", config: MERCADOPAGO_PROVIDER_CONFIG },
-  { name: "Zelle Citi", config: ZELLE_CITI_PROVIDER_CONFIG },
-  { name: "Zelle Chase", config: ZELLE_CHASE_PROVIDER_CONFIG },
-  { name: "Zelle BofA", config: ZELLE_BOFA_PROVIDER_CONFIG },
+  { name: "Zelle", config: ZELLE_PROVIDER_CONFIG },
   { name: "PayPal", config: PAYPAL_PROVIDER_CONFIG },
   { name: "Monzo", config: MONZO_PROVIDER_CONFIG },
   { name: "Alipay", config: ALIPAY_PROVIDER_CONFIG },
