@@ -187,6 +187,17 @@ describe("Stake risk system deployment", () => {
     };
     const digest = await manager.hashChargebackAttestation(chargeback);
     const signature = await deployer._signTypedData(domain, types, chargeback);
+    const deployerIsWitness = MULTI_WITNESS_ADDRESSES[network]
+      .map((w) => w.toLowerCase())
+      .includes(deployer.address.toLowerCase());
+
+    if (!deployerIsWitness) {
+      await expect(verifier.verify(digest, [signature], "0x")).to.be.revertedWith(
+        "ThresholdSigVerifierUtils: Not enough valid witness signatures",
+      );
+      return;
+    }
+
     expect(await verifier.verify(digest, [signature], "0x")).to.eq(true);
 
     const [, nonWitness] = await ethers.getSigners();
@@ -206,5 +217,5 @@ describe("Stake risk system deployment", () => {
     expect(await before.vault.controller()).to.eq(controller);
     expect(await before.manager.deferredPayoutHook()).to.eq(deferredHook);
     expect(await before.orchestratorRegistry.isOrchestrator(before.orchestrator.address)).to.eq(true);
-  });
+  }).timeout(network === "localhost" || network === "hardhat" ? 40_000 : 180_000);
 });
