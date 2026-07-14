@@ -75,6 +75,7 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   return true; // Frozen: V2 unified verifier is deployed by 13_deploy_v2_system
 };
 
+func.tags = ["01_deploy_unified_verifier"];
 func.dependencies = ["00_deploy_system"];
 
 export default func;

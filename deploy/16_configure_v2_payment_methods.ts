@@ -140,6 +140,7 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   return true; // Frozen: V2 payment methods are fully configured on all production networks
 };
 
+func.tags = ["16_configure_v2_payment_methods"];
 func.dependencies = ["15_deploy_v2_periphery"];
 
 export default func;

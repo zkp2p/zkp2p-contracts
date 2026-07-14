@@ -43,6 +43,14 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     uint256 constant MAX_PROTOCOL_FEE = 5e16;      // 5% max protocol fee
     uint256 constant MAX_MANAGER_FEE = 5e16;       // 5% max manager fee
 
+    /* ============ Enums ============ */
+
+    enum IntentResolution {
+        CANCELLED,
+        FULFILLED,
+        RELEASED
+    }
+
     /* ============ State Variables ============ */
 
     uint256 immutable public chainId;              // chainId of the chain the orchestrator is deployed on
@@ -110,7 +118,8 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      * @param _params                   Struct containing all the intent parameters
      */
     function signalIntent(SignalIntentParams calldata _params)
-        external
+        public
+        virtual
         nonReentrant
         whenNotPaused
     {
@@ -177,6 +186,8 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         // Emit manager fee snapshot last for easier indexing
         emit IntentManagerFeeSnapshotted(intentHash, managerFeeRecipient, managerFee);
 
+        _afterIntentSignaled(intentHash);
+
         // Interactions
         IEscrow(_params.escrow).lockFunds(_params.depositId, intentHash, _params.amount);
     }
@@ -187,7 +198,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      *
      * @param _intentHash    Hash of intent being cancelled
      */
-    function cancelIntent(bytes32 _intentHash) external {
+    function cancelIntent(bytes32 _intentHash) public virtual {
         // Checks
         Intent memory intent = intents[_intentHash];
         
@@ -195,7 +206,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         if (intent.owner != msg.sender) revert UnauthorizedCaller(msg.sender, intent.owner);
 
         // Effects
-        _pruneIntent(_intentHash);
+        _resolveIntent(_intentHash, IntentResolution.CANCELLED, 0);
 
         // Interactions
         IEscrow(intent.escrow).unlockFunds(intent.depositId, _intentHash);
@@ -244,7 +255,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      *
      * @param _params               Struct containing all the fulfill intent parameters
      */
-    function fulfillIntent(FulfillIntentParams calldata _params) external nonReentrant whenNotPaused {
+    function fulfillIntent(FulfillIntentParams calldata _params) public virtual nonReentrant whenNotPaused {
         // Checks
         Intent memory intent = intents[_params.intentHash];
         if (intent.paymentMethod == bytes32(0)) revert IntentNotFound(_params.intentHash);
@@ -275,7 +286,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         }
 
         // Effects
-        _pruneIntent(_params.intentHash);
+        _resolveIntent(_params.intentHash, IntentResolution.FULFILLED, verificationResult.releaseAmount);
 
         // Interactions
         IEscrow(intent.escrow).unlockAndTransferFunds(intent.depositId, _params.intentHash, verificationResult.releaseAmount, address(this));
@@ -287,7 +298,8 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
             verificationResult.releaseAmount,
             _params.postIntentHookData,
             managerFeeRecipient,
-            managerFee
+            managerFee,
+            false
         );
     }
 
@@ -298,7 +310,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
      */
-    function releaseFundsToPayer(bytes32 _intentHash) external nonReentrant {
+    function releaseFundsToPayer(bytes32 _intentHash) public virtual nonReentrant {
         // Checks
         Intent memory intent = intents[_intentHash];
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
@@ -309,14 +321,35 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         // Snapshot manager fee terms before pruning (pruning deletes the mappings).
         address managerFeeRecipient = intentManagerFeeRecipient[_intentHash];
         uint256 managerFee = intentManagerFee[_intentHash];
+        bool executePostIntentHook = _shouldExecutePostIntentHookOnManualRelease(_intentHash);
         
         // Effects
-        _pruneIntent(_intentHash);
+        _resolveIntent(_intentHash, IntentResolution.RELEASED, intent.amount);
 
         // Interactions
         IEscrow(intent.escrow).unlockAndTransferFunds(intent.depositId, _intentHash, intent.amount, address(this));
 
-        _collectFeesAndTransferFunds(deposit.token, _intentHash, intent, intent.amount, managerFeeRecipient, managerFee);
+        if (executePostIntentHook) {
+            _collectFeesTransferFundsAndExecuteAction(
+                deposit.token,
+                _intentHash,
+                intent,
+                intent.amount,
+                "",
+                managerFeeRecipient,
+                managerFee,
+                true
+            );
+        } else {
+            _collectFeesAndTransferFunds(
+                deposit.token,
+                _intentHash,
+                intent,
+                intent.amount,
+                managerFeeRecipient,
+                managerFee
+            );
+        }
     }
 
     /* ============ Escrow Functions ============ */
@@ -327,7 +360,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      * 
      * @param _intents   Array of intent hashes to prune
      */
-    function pruneIntents(bytes32[] calldata _intents) external {
+    function pruneIntents(bytes32[] calldata _intents) public virtual {
         for (uint256 i = 0; i < _intents.length; i++) {
             bytes32 intentHash = _intents[i];
             if (intentHash != bytes32(0)) {
@@ -336,7 +369,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
                     intent.timestamp != 0 && // Only prune if intent exists on this contract; otherwise skip
                     intent.escrow == msg.sender // Ensure only the escrow that owns the intent can prune it; otherwise skip
                 ) {
-                    _pruneIntent(intentHash);
+                    _resolveIntent(intentHash, IntentResolution.CANCELLED, 0);
                 }
             }
         }
@@ -351,7 +384,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      *
      * @param _intentHashes    Array of intent hashes to check and clean up
      */
-    function cleanupOrphanedIntents(bytes32[] calldata _intentHashes) external {
+    function cleanupOrphanedIntents(bytes32[] calldata _intentHashes) public virtual {
         for (uint256 i = 0; i < _intentHashes.length; i++) {
             bytes32 intentHash = _intentHashes[i];
             Intent memory intent = intents[intentHash];
@@ -367,7 +400,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
 
             // If intent doesn't exist on escrow, it's orphaned — prune it
             if (escrowIntent.intentHash == bytes32(0)) {
-                _pruneIntent(intentHash);
+                _resolveIntent(intentHash, IntentResolution.CANCELLED, 0);
             }
         }
     }
@@ -482,6 +515,32 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     }
 
     /* ============ Internal Functions ============ */
+
+    /**
+     * @notice Extension point invoked after intent state is stored and before escrow funds are locked.
+     * @dev The default implementation intentionally does nothing.
+     */
+    function _afterIntentSignaled(bytes32) internal virtual {}
+
+    /**
+     * @notice Resolves an intent before its escrow interaction executes.
+     * @dev Derived orchestrators may add lifecycle accounting around the canonical V2 prune operation.
+     */
+    function _resolveIntent(
+        bytes32 _intentHash,
+        IntentResolution,
+        uint256
+    ) internal virtual {
+        _pruneIntent(_intentHash);
+    }
+
+    /**
+     * @notice Returns whether manual release should execute the intent's post-intent hook.
+     * @dev V2 manual releases transfer directly to the intent recipient.
+     */
+    function _shouldExecutePostIntentHookOnManualRelease(bytes32) internal view virtual returns (bool) {
+        return false;
+    }
 
     /**
      * @notice Validates an intent before it is signaled.
@@ -692,8 +751,9 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         uint256 _releaseAmount,
         bytes memory _postIntentHookData,
         address _managerFeeRecipient,
-        uint256 _managerFee
-    ) internal {
+        uint256 _managerFee,
+        bool _isManualRelease
+    ) internal virtual {
         uint256 netFees = _calculateAndTransferFees(
             _token,
             _intentHash,
@@ -751,7 +811,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
             _intentHash, 
             fundsTransferredTo, 
             netAmount, 
-            false
+            _isManualRelease
         );
     }
 
