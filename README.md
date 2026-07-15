@@ -606,9 +606,7 @@ This script currently covers:
 - Cash App
 - Wise
 - Mercado Pago
-- Zelle Citi
-- Zelle Chase
-- Zelle Bank of America
+- Zelle
 - PayPal
 - Monzo
 - N26
@@ -646,10 +644,7 @@ The repository contains deployment coverage for the following payment rails in t
 - Cash App
 - Wise
 - Mercado Pago
-- Zelle:
-  - Citi
-  - Chase
-  - Bank of America
+- Zelle
 - PayPal
 - Monzo
 - N26

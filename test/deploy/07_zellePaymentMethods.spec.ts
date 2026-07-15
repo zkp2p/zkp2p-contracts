@@ -1,128 +1,63 @@
 import "module-alias/register";
 
-import { deployments, ethers } from "hardhat";
+import { deployments } from "hardhat";
 
 import {
-  UnifiedPaymentVerifier,
   PaymentVerifierRegistry,
-  Escrow,
+  UnifiedPaymentVerifier,
 } from "../../utils/contracts";
 import {
-  UnifiedPaymentVerifier__factory,
-  Escrow__factory,
   PaymentVerifierRegistry__factory,
+  UnifiedPaymentVerifier__factory,
 } from "../../typechain";
-
-import {
-  getAccounts,
-  getWaffleExpect,
-} from "../../utils/test";
+import { getAccounts, getWaffleExpect } from "../../utils/test";
 import { Account } from "../../utils/test/types";
-import { Address } from "../../utils/types";
-
-import { MULTI_SIG } from "../../deployments/parameters";
-import {
-  ZELLE_CITI_PROVIDER_CONFIG,
-  ZELLE_CHASE_PROVIDER_CONFIG,
-  ZELLE_BOFA_PROVIDER_CONFIG,
-} from "../../deployments/verifiers/zelle";
-import {
-  ZELLE_CITI_PAYMENT_METHOD_HASH,
-  ZELLE_CHASE_PAYMENT_METHOD_HASH,
-  ZELLE_BOFA_PAYMENT_METHOD_HASH,
-} from "../../deployments/verifiers/zelle";
+import { ZELLE_PROVIDER_CONFIG } from "../../deployments/verifiers/zelle";
 
 const expect = getWaffleExpect();
+const EXPECTED_ZELLE_PAYMENT_METHOD_HASH =
+  "0xf752c7d19698ecb0bb8988abf9b9a53a4c3657f3bc8850a6fb59fdf3e3ce8cd3";
 
-describe("Zelle Payment Methods Configuration", () => {
+describe("Zelle Payment Method Configuration", () => {
   let deployer: Account;
-  let multiSig: Address;
-  let escrowAddress: string;
-
-  let escrow: Escrow;
-  let unifiedPaymentVerifier: UnifiedPaymentVerifier;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
+  let unifiedPaymentVerifierV2: UnifiedPaymentVerifier;
 
-  const network: string = deployments.getNetworkName();
+  const network = deployments.getNetworkName();
 
-  function getDeployedContractAddress(network: string, contractName: string): string {
+  function getDeployedContractAddress(contractName: string): string {
     return require(`../../deployments/${network}/${contractName}.json`).address;
   }
 
   before(async () => {
     [deployer] = await getAccounts();
-    multiSig = MULTI_SIG[network] ? MULTI_SIG[network] : deployer.address;
 
-    escrowAddress = getDeployedContractAddress(network, "Escrow");
-    escrow = new Escrow__factory(deployer.wallet).attach(escrowAddress);
-
-    const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
-    paymentVerifierRegistry = new PaymentVerifierRegistry__factory(deployer.wallet).attach(paymentVerifierRegistryAddress);
-
-    const unifiedPaymentVerifierAddress = getDeployedContractAddress(network, "UnifiedPaymentVerifier");
-    unifiedPaymentVerifier = new UnifiedPaymentVerifier__factory(deployer.wallet).attach(unifiedPaymentVerifierAddress);
+    paymentVerifierRegistry = new PaymentVerifierRegistry__factory(deployer.wallet).attach(
+      getDeployedContractAddress("PaymentVerifierRegistry")
+    );
+    unifiedPaymentVerifierV2 = new UnifiedPaymentVerifier__factory(deployer.wallet).attach(
+      getDeployedContractAddress("UnifiedPaymentVerifierV2")
+    );
   });
 
-  describe("Zelle Citi Payment Method", () => {
-    describe("Payment Method Registry", () => {
-      it("should add Zelle Citi payment method to the registry", async () => {
-        const isPaymentMethod = await paymentVerifierRegistry.isPaymentMethod(ZELLE_CITI_PAYMENT_METHOD_HASH);
-        expect(isPaymentMethod).to.be.true;
-      });
-
-      it("should add Zelle Citi currencies to the registry", async () => {
-        const currencies = await paymentVerifierRegistry.getCurrencies(ZELLE_CITI_PAYMENT_METHOD_HASH);
-        expect(currencies).to.deep.eq(ZELLE_CITI_PROVIDER_CONFIG.currencies);
-      });
-    });
-
-    describe("Unified Verifier Configuration", () => {
-      it("should add Zelle Citi payment method to unified verifier", async () => {
-        const paymentMethods = await unifiedPaymentVerifier.getPaymentMethods();
-        expect(paymentMethods).to.include(ZELLE_CITI_PAYMENT_METHOD_HASH);
-      });
-    });
+  it("uses the generic Zelle payment method hash", () => {
+    expect(ZELLE_PROVIDER_CONFIG.paymentMethodHash).to.eq(EXPECTED_ZELLE_PAYMENT_METHOD_HASH);
   });
 
-  describe("Zelle Chase Payment Method", () => {
-    describe("Payment Method Registry", () => {
-      it("should add Zelle Chase payment method to the registry", async () => {
-        const isPaymentMethod = await paymentVerifierRegistry.isPaymentMethod(ZELLE_CHASE_PAYMENT_METHOD_HASH);
-        expect(isPaymentMethod).to.be.true;
-      });
+  it("registers generic Zelle with its currencies", async () => {
+    const isPaymentMethod = await paymentVerifierRegistry.isPaymentMethod(
+      ZELLE_PROVIDER_CONFIG.paymentMethodHash
+    );
+    const currencies = await paymentVerifierRegistry.getCurrencies(
+      ZELLE_PROVIDER_CONFIG.paymentMethodHash
+    );
 
-      it("should add Zelle Chase currencies to the registry", async () => {
-        const currencies = await paymentVerifierRegistry.getCurrencies(ZELLE_CHASE_PAYMENT_METHOD_HASH);
-        expect(currencies).to.deep.eq(ZELLE_CHASE_PROVIDER_CONFIG.currencies);
-      });
-    });
-
-    describe("Unified Verifier Configuration", () => {
-      it("should add Zelle Chase payment method to unified verifier", async () => {
-        const paymentMethods = await unifiedPaymentVerifier.getPaymentMethods();
-        expect(paymentMethods).to.include(ZELLE_CHASE_PAYMENT_METHOD_HASH);
-      });
-    });
+    expect(isPaymentMethod).to.be.true;
+    expect(currencies).to.deep.eq(ZELLE_PROVIDER_CONFIG.currencies);
   });
 
-  describe("Zelle Bank of America Payment Method", () => {
-    describe("Payment Method Registry", () => {
-      it("should add Zelle BofA payment method to the registry", async () => {
-        const isPaymentMethod = await paymentVerifierRegistry.isPaymentMethod(ZELLE_BOFA_PAYMENT_METHOD_HASH);
-        expect(isPaymentMethod).to.be.true;
-      });
-
-      it("should add Zelle BofA currencies to the registry", async () => {
-        const currencies = await paymentVerifierRegistry.getCurrencies(ZELLE_BOFA_PAYMENT_METHOD_HASH);
-        expect(currencies).to.deep.eq(ZELLE_BOFA_PROVIDER_CONFIG.currencies);
-      });
-    });
-
-    describe("Unified Verifier Configuration", () => {
-      it("should add Zelle BofA payment method to unified verifier", async () => {
-        const paymentMethods = await unifiedPaymentVerifier.getPaymentMethods();
-        expect(paymentMethods).to.include(ZELLE_BOFA_PAYMENT_METHOD_HASH);
-      });
-    });
+  it("registers generic Zelle in the unified verifier", async () => {
+    const paymentMethods = await unifiedPaymentVerifierV2.getPaymentMethods();
+    expect(paymentMethods).to.include(ZELLE_PROVIDER_CONFIG.paymentMethodHash);
   });
 });
