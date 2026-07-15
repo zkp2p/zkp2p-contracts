@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // Generate declarations inside the built package directory
-const PACKAGE_ROOT = path.resolve(__dirname, '..', 'dist');
+const PACKAGE_ROOT = path.resolve(__dirname, '..');
 
 // Directories to process
 const DIRECTORIES_TO_PROCESS = [
@@ -94,11 +94,11 @@ function generateDeclarations(files: string[]): void {
 /**
  * Also compile protocolUtils.ts to .d.ts
  */
-function generateProtocolUtilsTypes(): void {
-  const protocolUtilsPath = path.join(PACKAGE_ROOT, 'utils', 'protocolUtils.ts');
-  if (fs.existsSync(protocolUtilsPath)) {
-    generateDeclarations([protocolUtilsPath]);
-  }
+function generateUtilityTypes(): void {
+  const utilityPaths = ['protocolUtils.ts', 'riskMath.ts']
+    .map(fileName => path.join(PACKAGE_ROOT, 'utils', fileName))
+    .filter(filePath => fs.existsSync(filePath));
+  if (utilityPaths.length > 0) generateDeclarations(utilityPaths);
 }
 
 /**
@@ -119,8 +119,8 @@ async function main() {
     }
     
     // Also generate for protocolUtils.ts
-    generateProtocolUtilsTypes();
-    console.log('✅ Generated .d.ts for protocolUtils');
+    generateUtilityTypes();
+    console.log('✅ Generated .d.ts for package utilities');
     
     console.log('✅ Type generation complete');
   } catch (error) {

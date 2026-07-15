@@ -33,6 +33,10 @@ import type { Escrow, Orchestrator } from "@zkp2p/contracts-v2/types"
 // Import utility functions
 import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils/protocolUtils"
 
+// Import the stable, not-yet-deployed risk-system ABI and exact bigint math helpers
+import { RiskManager } from "@zkp2p/contracts-v2/abis/contracts"
+import { calculateRequiredReservation } from "@zkp2p/contracts-v2/utils/riskMath"
+
 // Example: Create contract instance with ethers
 import { ethers } from 'ethers';
 
@@ -160,10 +164,12 @@ All modules are directly accessible via subpath exports:
 
 - `@zkp2p/contracts-v2/addresses` - Contract addresses for all networks
 - `@zkp2p/contracts-v2/abis/<network>` - Contract ABIs per network (e.g., `/abis/baseStaging`)
+- `@zkp2p/contracts-v2/abis/contracts` - Stable source ABIs for approved but not-yet-deployed contracts
 - `@zkp2p/contracts-v2/abis/<network>/<contract>.json` - Direct JSON import for specific contracts
 - `@zkp2p/contracts-v2/constants/<network>` - Constants per network
 - `@zkp2p/contracts-v2/paymentMethods` - Payment method configs
 - `@zkp2p/contracts-v2/utils/protocolUtils` - Protocol utilities
+- `@zkp2p/contracts-v2/utils/riskMath` - Exact bigint capacity, reservation, and penalty formulas
 - `@zkp2p/contracts-v2/types` - TypeScript types
 
 ### Export Format Details

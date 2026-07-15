@@ -9,13 +9,14 @@ import { extractUtils } from './extractors/utils';
 import { extractPaymentMethods } from './extractors/paymentMethods';
 import { extractCurrencies } from './extractors/currencies';
 import { extractOracleFeeds } from './extractors/oracleFeeds';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import * as path from 'path';
 
 async function generateTypeDeclarations() {
   try {
     const scriptPath = path.join(__dirname, 'generate-types.ts');
-    execSync(`npx ts-node --transpile-only ${scriptPath}`, { 
+    const tsNodePath = require.resolve('ts-node/dist/bin.js');
+    execFileSync(process.execPath, [tsNodePath, '--transpile-only', scriptPath], {
       stdio: 'inherit',
       cwd: path.join(__dirname, '..')
     });

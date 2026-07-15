@@ -18,6 +18,13 @@ const OUTPUTS_DIR = path.join(ROOT, 'deployments', 'outputs');
 const PKG_ROOT = path.resolve(__dirname, '../..');
 const ABIS_DIR = path.join(PKG_ROOT, 'abis');
 
+const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
+  RiskManager: 'contracts/RiskManager.sol/RiskManager.json',
+  StakeVault: 'contracts/StakeVault.sol/StakeVault.json',
+  OrchestratorV3: 'contracts/OrchestratorV3.sol/OrchestratorV3.json',
+  DeferredPayoutHook: 'contracts/hooks/DeferredPayoutHook.sol/DeferredPayoutHook.json',
+};
+
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
@@ -63,6 +70,24 @@ export async function extractABIs(): Promise<void> {
     fs.writeFileSync(path.join(networkDir, 'index.ts'), perNetworkIndex.join('\n') + '\n');
     topIndexExports.push(`export * as ${network} from './${network}';`);
   }
+
+  // Risk-system contracts are intentionally not deployed by this PR. Export their compiled source
+  // ABIs separately so downstream indexer/client work can target the stable interface commit without
+  // inventing placeholder network addresses.
+  const contractsDir = path.join(ABIS_DIR, 'contracts');
+  ensureDir(contractsDir);
+  const sourceIndex: string[] = [];
+  for (const [name, artifactRelativePath] of Object.entries(SOURCE_ABI_ARTIFACTS)) {
+    const artifactPath = path.join(ROOT, 'artifacts', artifactRelativePath);
+    if (!fs.existsSync(artifactPath)) {
+      throw new Error(`Missing compiled artifact for ${name}: ${artifactPath}`);
+    }
+    const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+    fs.writeFileSync(path.join(contractsDir, `${name}.json`), JSON.stringify(artifact.abi || [], null, 2));
+    sourceIndex.push(`export { default as ${name} } from './${name}.json';`);
+  }
+  fs.writeFileSync(path.join(contractsDir, 'index.ts'), sourceIndex.join('\n') + '\n');
+  topIndexExports.push(`export * as contracts from './contracts';`);
 
   fs.writeFileSync(path.join(ABIS_DIR, 'index.ts'), topIndexExports.join('\n') + '\n');
   console.log(`✅ ABIs written to ${ABIS_DIR}`);
