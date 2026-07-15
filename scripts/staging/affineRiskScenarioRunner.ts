@@ -1838,10 +1838,13 @@ async function runAction(
     options.reconcile &&
     (!evidence.reconciliation || evidence.reconciliationError)
   ) {
+    const reconciliationBlock = await provider.getBlockNumber();
+    evidence.reconciliationBlock = reconciliationBlock;
+    evidence.reconciliationSync = await waitForIndexer(reconciliationBlock);
     evidence.postOnchain = await contractSnapshot(
       contracts,
       state,
-      Number(evidence.blockNumber)
+      reconciliationBlock
     );
     const response = await indexedSnapshot(state);
     evidence.graphql = { query: buildExactSnapshotQuery(state), response };
@@ -1850,7 +1853,7 @@ async function runAction(
         response,
         contracts,
         state,
-        Number(evidence.blockNumber)
+        reconciliationBlock
       );
       evidence.reconciliation = reconciliation;
       delete evidence.reconciliationError;
