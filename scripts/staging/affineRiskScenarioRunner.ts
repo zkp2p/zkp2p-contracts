@@ -279,7 +279,57 @@ async function prepareSignedTransaction(
   signer: Wallet,
   request: ethers.providers.TransactionRequest
 ): Promise<{ rawTransaction: string; journal: Json }> {
-  const populated = await signer.populateTransaction(request);
+  if (!signer.provider)
+    throw new Error("Transaction signer is missing an RPC provider");
+  const [latestBlock, rpcGasPrice] = await Promise.all([
+    signer.provider.getBlock("latest"),
+    signer.provider.getGasPrice(),
+  ]);
+  if (!latestBlock?.baseFeePerGas)
+    throw new Error("Base RPC did not return an EIP-1559 base fee");
+
+  const baseFee = latestBlock.baseFeePerGas;
+  const minimumTip = BigNumber.from(
+    process.env.E2E_MIN_PRIORITY_FEE_PER_GAS_WEI || "1000000"
+  );
+  const maximumAutomaticTip = BigNumber.from(
+    process.env.E2E_MAX_AUTOMATIC_PRIORITY_FEE_PER_GAS_WEI || "5000000"
+  );
+  const suggestedTip = rpcGasPrice.gt(baseFee)
+    ? rpcGasPrice.sub(baseFee)
+    : minimumTip;
+  const automaticTip = suggestedTip.gt(minimumTip) ? suggestedTip : minimumTip;
+  if (
+    !process.env.E2E_PRIORITY_FEE_PER_GAS_WEI &&
+    automaticTip.gt(maximumAutomaticTip)
+  ) {
+    throw new Error(
+      `RPC priority fee ${automaticTip.toString()} exceeds automatic safety cap ${maximumAutomaticTip.toString()}; set E2E_PRIORITY_FEE_PER_GAS_WEI only after operator review`
+    );
+  }
+  const priorityFee = process.env.E2E_PRIORITY_FEE_PER_GAS_WEI
+    ? BigNumber.from(process.env.E2E_PRIORITY_FEE_PER_GAS_WEI)
+    : automaticTip;
+  const maxFee = process.env.E2E_MAX_FEE_PER_GAS_WEI
+    ? BigNumber.from(process.env.E2E_MAX_FEE_PER_GAS_WEI)
+    : baseFee.mul(2).add(priorityFee);
+  const absoluteMaxFee = BigNumber.from(
+    process.env.E2E_ABSOLUTE_MAX_FEE_PER_GAS_WEI || "100000000"
+  );
+  if (maxFee.lt(baseFee.add(priorityFee)))
+    throw new Error("Configured max fee does not cover base fee plus priority");
+  if (maxFee.gt(absoluteMaxFee)) {
+    throw new Error(
+      `Max fee ${maxFee.toString()} exceeds safety cap ${absoluteMaxFee.toString()}`
+    );
+  }
+
+  const eip1559Request = { ...request };
+  delete eip1559Request.gasPrice;
+  eip1559Request.type = 2;
+  eip1559Request.maxPriorityFeePerGas = priorityFee;
+  eip1559Request.maxFeePerGas = maxFee;
+  const populated = await signer.populateTransaction(eip1559Request);
   if (populated.nonce === undefined)
     throw new Error("Populated transaction is missing an explicit nonce");
   if (populated.chainId === undefined)
