@@ -38,13 +38,11 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
 
     mapping(address => uint256) public override stakeBalance;
     mapping(address => uint256) public override reservedStake;
-    mapping(address => uint256) public override activeIntentCount;
     mapping(address => address) internal delegatedStakeOwners;
     mapping(address => bool) internal stakeDelegationDisabled;
     mapping(address => address) internal allowedStakeOwners;
     mapping(address => ExitRequest) internal exitRequests;
     mapping(address => StakeWithdrawalRequest) internal stakeWithdrawalRequests;
-    mapping(bytes32 => IntentCapacity) internal intentCapacities;
     mapping(bytes32 => Reservation) internal reservations;
     mapping(bytes32 => DeferredPayout) internal deferredPayouts;
     mapping(address => uint256) public override claimableCompensation;
@@ -76,9 +74,6 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     error PendingStakeWithdrawal(address stakeOwner, uint256 amount);
     error ActiveReservations(address staker, uint256 reservedAmount);
     error InsufficientFreeStake(address staker, uint256 available, uint256 required);
-    error ConcurrentIntentLimitReached(address stakeOwner, uint256 activeIntents, uint256 limit);
-    error IntentCapacityAlreadyReserved(bytes32 intentHash);
-    error IntentCapacityNotFound(bytes32 intentHash);
     error ReservationAlreadyExists(bytes32 intentHash);
     error ReservationNotFound(bytes32 intentHash);
     error InvalidReservationAmount(uint256 amount, uint256 reservedAmount);
@@ -233,7 +228,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
 
     /**
      * @notice Requests a delayed withdrawal of currently unreserved stake.
-     * @dev The requested amount immediately stops contributing to tier eligibility and free stake.
+     * @dev The requested amount immediately stops contributing to reservation eligibility and free stake.
      * @param _amount Amount of stake token to withdraw after the delay.
      */
     function requestStakeWithdrawal(uint256 _amount) external override {
@@ -429,49 +424,6 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     }
 
     /* ============ Controller Functions ============ */
-
-    /**
-     * @notice Reserves one shared active-intent slot for a stake owner.
-     * @dev The creating controller is snapshotted so it can release this slot after controller rotation.
-     */
-    function reserveIntentCapacity(
-        address _stakeOwner,
-        bytes32 _intentHash,
-        uint256 _limit
-    ) external override onlyController {
-        if (_stakeOwner == address(0)) revert ZeroAddress();
-        if (intentCapacities[_intentHash].active) revert IntentCapacityAlreadyReserved(_intentHash);
-
-        uint256 activeIntents = activeIntentCount[_stakeOwner];
-        if (activeIntents >= _limit) {
-            revert ConcurrentIntentLimitReached(_stakeOwner, activeIntents, _limit);
-        }
-
-        uint256 nextActiveIntents = activeIntents + 1;
-        intentCapacities[_intentHash] = IntentCapacity({
-            stakeOwner: _stakeOwner,
-            controller: msg.sender,
-            active: true
-        });
-        activeIntentCount[_stakeOwner] = nextActiveIntents;
-
-        emit IntentCapacityReserved(_intentHash, _stakeOwner, msg.sender, nextActiveIntents);
-    }
-
-    /**
-     * @notice Releases one shared active-intent slot.
-     */
-    function releaseIntentCapacity(bytes32 _intentHash) external override {
-        IntentCapacity memory capacity = intentCapacities[_intentHash];
-        if (!capacity.active) revert IntentCapacityNotFound(_intentHash);
-        _requirePositionController(capacity.controller);
-
-        delete intentCapacities[_intentHash];
-        uint256 nextActiveIntents = activeIntentCount[capacity.stakeOwner] - 1;
-        activeIntentCount[capacity.stakeOwner] = nextActiveIntents;
-
-        emit IntentCapacityReleased(_intentHash, capacity.stakeOwner, capacity.controller, nextActiveIntents);
-    }
 
     /**
      * @notice Reserves free membership stake for one risk position.
@@ -755,7 +707,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     /* ============ View Functions ============ */
 
     /**
-     * @notice Returns stake contributing to tier eligibility after a pending withdrawal is excluded.
+     * @notice Returns stake eligible for new reservations after a pending withdrawal is excluded.
      */
     function eligibleStake(address _staker) public view override returns (uint256) {
         return stakeBalance[_staker] - stakeWithdrawalRequests[_staker].amount;
@@ -812,13 +764,6 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         address _staker
     ) external view override returns (StakeWithdrawalRequest memory) {
         return stakeWithdrawalRequests[_staker];
-    }
-
-    /**
-     * @notice Returns the controller-snapshotted active-intent capacity record.
-     */
-    function getIntentCapacity(bytes32 _intentHash) external view override returns (IntentCapacity memory) {
-        return intentCapacities[_intentHash];
     }
 
     /**
