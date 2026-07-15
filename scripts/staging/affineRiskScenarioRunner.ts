@@ -1373,7 +1373,7 @@ async function assertIndexedReconciliation(
       PAYMENT_METHODS.zelle,
       call
     );
-    if (!used.isZero()) {
+    if (!BigNumber.from(used).isZero()) {
       const row = data[`free_${role}_zelle`] as Json | undefined;
       if (!row) throw new Error(`Indexer missing FreeTakeUsage for ${owner}`);
       assertEqual(row.freeTakesUsed, used, `${owner} indexed free takes used`);
