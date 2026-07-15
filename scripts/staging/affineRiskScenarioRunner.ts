@@ -2086,7 +2086,11 @@ async function signal(
   contracts: LoadedContracts,
   state: RunState
 ): Promise<string> {
-  if (state.intents[intentName]) return state.intents[intentName] as string;
+  if (state.intents[intentName] && !state.transactions[label]) {
+    throw new Error(
+      `Intent ${intentName} exists without its transaction journal ${label}`
+    );
+  }
   await runAction(
     label,
     taker,
@@ -2107,6 +2111,8 @@ async function signal(
       },
     }
   );
+  if (!state.intents[intentName])
+    throw new Error(`Intent ${intentName} missing after ${label}`);
   return state.intents[intentName] as string;
 }
 
@@ -2797,27 +2803,33 @@ async function setup(
       contracts,
       state
     );
-    if (!state.deposits[role]) {
-      await runAction(
-        `03.${role}.create-deposit`,
-        lp,
-        contracts.escrow,
-        "createDeposit",
-        [depositParams(amount, maximum, [...methods], lp.address)],
-        provider,
-        contracts,
-        state,
-        {
-          reconcile: true,
-          afterReceipt: (evidence) => {
-            state.deposits[role] = eventArgument(
-              findDecodedEvent(evidence, "DepositReceived"),
-              "depositId"
-            );
-          },
-        }
+    const depositLabel = `03.${role}.create-deposit`;
+    if (state.deposits[role] && !state.transactions[depositLabel]) {
+      throw new Error(
+        `Deposit ${role} exists without its transaction journal ${depositLabel}`
       );
     }
+    await runAction(
+      depositLabel,
+      lp,
+      contracts.escrow,
+      "createDeposit",
+      [depositParams(amount, maximum, [...methods], lp.address)],
+      provider,
+      contracts,
+      state,
+      {
+        reconcile: true,
+        afterReceipt: (evidence) => {
+          state.deposits[role] = eventArgument(
+            findDecodedEvent(evidence, "DepositReceived"),
+            "depositId"
+          );
+        },
+      }
+    );
+    if (!state.deposits[role])
+      throw new Error(`Deposit ${role} missing after ${depositLabel}`);
     await runAction(
       `03.${role}.set-risk-hook`,
       lp,
