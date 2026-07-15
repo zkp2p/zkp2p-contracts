@@ -3,14 +3,7 @@ import os from "os";
 import path from "path";
 
 import { JsonFragment } from "@ethersproject/abi";
-import {
-  BigNumber,
-  Contract,
-  ContractReceipt,
-  ContractTransaction,
-  Wallet,
-  ethers,
-} from "ethers";
+import { BigNumber, Contract, ContractReceipt, Wallet, ethers } from "ethers";
 
 import {
   ADDRESSES,
@@ -209,6 +202,51 @@ function writeEvidence(label: string, evidence: unknown): void {
     `${JSON.stringify(normalize(evidence), null, 2)}\n`,
     "utf8"
   );
+}
+
+function writeTransactionEvidence(label: string, record: Json): void {
+  const publicRecord = { ...record };
+  delete publicRecord.rawTransaction;
+  writeEvidence(label, publicRecord);
+}
+
+async function prepareSignedTransaction(
+  signer: Wallet,
+  request: ethers.providers.TransactionRequest
+): Promise<{ rawTransaction: string; journal: Json }> {
+  const populated = await signer.populateTransaction(request);
+  if (populated.nonce === undefined)
+    throw new Error("Populated transaction is missing an explicit nonce");
+  if (populated.chainId === undefined)
+    throw new Error("Populated transaction is missing an explicit chain id");
+  if (!populated.gasLimit)
+    throw new Error("Populated transaction is missing an explicit gas limit");
+  if (
+    populated.gasPrice === undefined &&
+    (populated.maxFeePerGas === undefined ||
+      populated.maxPriorityFeePerGas === undefined)
+  ) {
+    throw new Error("Populated transaction is missing explicit fee fields");
+  }
+  assertEqual(populated.chainId, EXPECTED_CHAIN_ID, "signed transaction chain");
+  const rawTransaction = await signer.signTransaction(populated);
+  const transactionHash = ethers.utils.keccak256(rawTransaction);
+  return {
+    rawTransaction,
+    journal: {
+      transactionHash,
+      nonce: populated.nonce,
+      chainId: populated.chainId,
+      type: populated.type,
+      to: populated.to,
+      value: populated.value || 0,
+      dataHash: ethers.utils.keccak256(populated.data || "0x"),
+      gasLimit: populated.gasLimit,
+      gasPrice: populated.gasPrice,
+      maxFeePerGas: populated.maxFeePerGas,
+      maxPriorityFeePerGas: populated.maxPriorityFeePerGas,
+    },
+  };
 }
 
 function decodeLogs(
@@ -1466,11 +1504,11 @@ async function runAction(
   const persist = (record: Json): void => {
     state.transactions[label] = record;
     saveState(state);
-    writeEvidence(label, record);
+    writeTransactionEvidence(label, record);
   };
 
   let evidence = state.transactions[label];
-  let broadcastTransaction: ContractTransaction | undefined;
+  let broadcastTransaction: ethers.providers.TransactionResponse | undefined;
   if (!evidence) {
     const connected = contract.connect(signer);
     const preBlock = await provider.getBlockNumber();
@@ -1484,24 +1522,40 @@ async function runAction(
     }
 
     requireMutationFlag();
-    broadcastTransaction = (await connected[method](
-      ...args
-    )) as ContractTransaction;
+    const request = await connected.populateTransaction[method](...args);
+    const prepared = await prepareSignedTransaction(signer, request);
     evidence = {
       label,
-      journalStatus: "PENDING_RECEIPT",
-      submittedAtUtc: new Date().toISOString(),
+      journalStatus: "PRE_BROADCAST",
+      preparedAtUtc: new Date().toISOString(),
       actor: signer.address,
       contract: contract.address,
       method,
-      transactionHash: broadcastTransaction.hash,
-      nonce: broadcastTransaction.nonce,
+      ...prepared.journal,
+      rawTransaction: prepared.rawTransaction,
       preBlock,
       preOnchain,
     };
-    // Persist immediately after the RPC returns a hash. A later timeout or crash
-    // must recover this exact transaction and must never rebroadcast the action.
+    // Persist the locally signed hash before eth_sendRawTransaction. A lost RPC
+    // response can then only resolve this exact hash; it can never build a new tx.
     persist(evidence);
+    try {
+      broadcastTransaction = await provider.sendTransaction(
+        prepared.rawTransaction
+      );
+      assertEqual(
+        broadcastTransaction.hash,
+        prepared.journal.transactionHash,
+        `${label} broadcast hash`
+      );
+      evidence.journalStatus = "PENDING_RECEIPT";
+      evidence.broadcastAcknowledgedAtUtc = new Date().toISOString();
+      persist(evidence);
+    } catch (error) {
+      evidence.broadcastError = redact(error);
+      evidence.broadcastAttemptedAtUtc = new Date().toISOString();
+      persist(evidence);
+    }
   }
 
   if (evidence.skipped) return evidence;
@@ -1517,7 +1571,7 @@ async function runAction(
       throw new Error(
         `${label} journaled transaction ${String(
           evidence.transactionHash
-        )} is absent from the RPC. Treat it as dropped/replaced and resolve its signer nonce explicitly in the private run-state journal; automatic rebroadcast is forbidden.`
+        )} is absent from the RPC. Treat the pre-signed hash/nonce as an ambiguous or dropped/replaced send. Resolve it explicitly from the private run-state journal; never construct or automatically broadcast a different transaction.`
       );
     }
     receipt = await provider.waitForTransaction(
@@ -1536,6 +1590,7 @@ async function runAction(
 
   if (!evidence.blockNumber) {
     const block = await provider.getBlock(receipt.blockNumber);
+    delete evidence.rawTransaction;
     evidence = {
       ...evidence,
       journalStatus: receipt.status === 1 ? "MINED" : "REVERTED",
@@ -1617,7 +1672,7 @@ async function runNativeFunding(
   const persist = (record: Json): void => {
     state.transactions[label] = record;
     saveState(state);
-    writeEvidence(label, record);
+    writeTransactionEvidence(label, record);
   };
   let evidence = state.transactions[label];
   let broadcastTransaction: ethers.providers.TransactionResponse | undefined;
@@ -1635,22 +1690,39 @@ async function runNativeFunding(
     const value = target.sub(balance);
     await provider.call({ from: governance.address, to: recipient, value });
     requireMutationFlag();
-    broadcastTransaction = await governance.sendTransaction({
+    const prepared = await prepareSignedTransaction(governance, {
       to: recipient,
       value,
     });
     evidence = {
       label,
-      journalStatus: "PENDING_RECEIPT",
-      submittedAtUtc: new Date().toISOString(),
+      journalStatus: "PRE_BROADCAST",
+      preparedAtUtc: new Date().toISOString(),
       actor: governance.address,
       recipient,
       asset: "ETH",
       amount: value,
-      transactionHash: broadcastTransaction.hash,
-      nonce: broadcastTransaction.nonce,
+      ...prepared.journal,
+      rawTransaction: prepared.rawTransaction,
     };
     persist(evidence);
+    try {
+      broadcastTransaction = await provider.sendTransaction(
+        prepared.rawTransaction
+      );
+      assertEqual(
+        broadcastTransaction.hash,
+        prepared.journal.transactionHash,
+        `${label} broadcast hash`
+      );
+      evidence.journalStatus = "PENDING_RECEIPT";
+      evidence.broadcastAcknowledgedAtUtc = new Date().toISOString();
+      persist(evidence);
+    } catch (error) {
+      evidence.broadcastError = redact(error);
+      evidence.broadcastAttemptedAtUtc = new Date().toISOString();
+      persist(evidence);
+    }
   }
   if (evidence.skipped) return;
 
@@ -1665,7 +1737,7 @@ async function runNativeFunding(
       throw new Error(
         `${label} journaled native-funding transaction ${String(
           evidence.transactionHash
-        )} is absent from the RPC. Resolve its signer nonce explicitly in the private run-state journal; automatic rebroadcast is forbidden.`
+        )} is absent from the RPC. Resolve the pre-signed hash/nonce explicitly from the private run-state journal; never construct or automatically broadcast a different transaction.`
       );
     }
     receipt = await provider.waitForTransaction(
@@ -1683,6 +1755,7 @@ async function runNativeFunding(
   }
   if (!evidence.blockNumber) {
     const block = await provider.getBlock(receipt.blockNumber);
+    delete evidence.rawTransaction;
     evidence = {
       ...evidence,
       journalStatus: receipt.status === 1 ? "MINED" : "REVERTED",
@@ -1839,7 +1912,21 @@ async function runTokenFunding(
   contracts: LoadedContracts,
   state: RunState
 ): Promise<void> {
-  if (state.transactions[label]) return;
+  const existing = state.transactions[label];
+  if (existing?.skipped) return;
+  if (existing) {
+    await runAction(
+      label,
+      governance,
+      contracts.token,
+      "transfer",
+      [recipient, 0],
+      provider,
+      contracts,
+      state
+    );
+    return;
+  }
   const balance = await contracts.token.balanceOf(recipient);
   if (balance.gte(target)) {
     state.transactions[label] = {
