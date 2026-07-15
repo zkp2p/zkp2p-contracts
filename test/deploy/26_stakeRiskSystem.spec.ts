@@ -3,18 +3,14 @@ import "module-alias/register";
 import { expect } from "chai";
 import hre, { deployments, ethers } from "hardhat";
 
-import deployStakeRiskSystem from "../../deploy/26_deploy_stake_risk_system";
+import deployStakeRiskSystem, {
+  stakeRiskPlatformPolicyForNetwork,
+} from "../../deploy/26_deploy_stake_risk_system";
 import {
   MULTI_SIG,
   MULTI_WITNESS_ADDRESSES,
   MULTI_WITNESS_THRESHOLD,
-  NON_CHARGEBACKABLE_FREE_TAKE_AMOUNT,
-  NON_CHARGEBACKABLE_FREE_TAKE_COUNT,
-  REVERSIBLE_PLATFORM_RESERVE_BPS,
-  REVERSIBLE_PLATFORM_RISK_WINDOW,
   RISK_CALLBACK_GAS_LIMIT,
-  RISK_GRIEFING_CLIFF,
-  RISK_GRIEFING_PENALTY_BPS_PER_HOUR,
   STAKE_VAULT_BASE_EXIT_DELAY,
 } from "../../deployments/parameters";
 
@@ -24,6 +20,7 @@ const ZELLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("zelle"));
 
 describe("Affine stake risk system deployment", () => {
   const network = deployments.getNetworkName();
+  const platformPolicy = stakeRiskPlatformPolicyForNetwork(network);
 
   function deployedAddress(contractName: string): string {
     return require(`../../deployments/${network}/${contractName}.json`).address;
@@ -109,10 +106,11 @@ describe("Affine stake risk system deployment", () => {
       expect(config.enabled).to.eq(true);
       expect(config.chargeback.chargebackable).to.eq(true);
       expect(config.chargeback.deferredPayoutEnabled).to.eq(true);
-      expect(config.chargeback.reserveBps).to.eq(REVERSIBLE_PLATFORM_RESERVE_BPS);
-      expect(config.chargeback.riskWindow).to.eq(REVERSIBLE_PLATFORM_RISK_WINDOW);
-      expect(config.griefing.griefingCliff).to.eq(RISK_GRIEFING_CLIFF);
-      expect(config.griefing.griefingPenaltyBpsPerHour).to.eq(RISK_GRIEFING_PENALTY_BPS_PER_HOUR);
+      expect(config.chargeback.reserveBps).to.eq(platformPolicy.reversible.chargeback.reserveBps);
+      expect(config.chargeback.riskWindow).to.eq(platformPolicy.reversible.chargeback.riskWindow);
+      expect(config.griefing.griefingCliff).to.eq(platformPolicy.reversible.griefing.griefingCliff);
+      expect(config.griefing.griefingPenaltyBpsPerHour)
+        .to.eq(platformPolicy.reversible.griefing.griefingPenaltyBpsPerHour);
       expect(config.griefing.freeTakeCount).to.eq(0);
     });
   }
@@ -123,8 +121,14 @@ describe("Affine stake risk system deployment", () => {
     expect(config.enabled).to.eq(true);
     expect(config.chargeback.chargebackable).to.eq(false);
     expect(config.chargeback.reserveBps).to.eq(0);
-    expect(config.griefing.freeTakeCount).to.eq(NON_CHARGEBACKABLE_FREE_TAKE_COUNT);
-    expect(config.griefing.freeTakeAmount).to.eq(NON_CHARGEBACKABLE_FREE_TAKE_AMOUNT);
+    expect(config.griefing.freeTakeCount).to.eq(platformPolicy.nonChargebackable.griefing.freeTakeCount);
+    expect(config.griefing.freeTakeAmount).to.eq(platformPolicy.nonChargebackable.griefing.freeTakeAmount);
+  });
+
+  it("refuses nonlocal deployment without governance-ratified platform policy", async () => {
+    expect(() => stakeRiskPlatformPolicyForNetwork("base")).to.throw(
+      "No governance-ratified stake risk platform policy for network: base",
+    );
   });
 
   it("uses the deployed modular attestation verifier and RiskManager EIP-712 domain", async () => {

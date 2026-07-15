@@ -133,12 +133,46 @@ export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
 export const STAKE_VAULT_BASE_EXIT_DELAY = ONE_DAY_IN_SECONDS.mul(30);
 export const STAKE_VAULT_CONTROLLER_CHANGE_DELAY = ONE_DAY_IN_SECONDS.mul(2);
 export const RISK_CALLBACK_GAS_LIMIT = 2_000_000;
-export const RISK_GRIEFING_CLIFF = 15 * 60;
-export const RISK_GRIEFING_PENALTY_BPS_PER_HOUR = 10;
-export const NON_CHARGEBACKABLE_FREE_TAKE_COUNT = 3;
-export const NON_CHARGEBACKABLE_FREE_TAKE_AMOUNT = usdc(20);
-export const REVERSIBLE_PLATFORM_RISK_WINDOW = ONE_DAY_IN_SECONDS.mul(30);
-export const REVERSIBLE_PLATFORM_RESERVE_BPS = 10_000;
+
+// Local-only examples from STAKE_RISK_POLICY_SPEC.md. Nonlocal launch economics must be
+// added under an explicit network key only after governance ratifies them.
+const LOCAL_STAKE_RISK_PLATFORM_POLICY = {
+  reversible: {
+    enabled: true,
+    chargeback: {
+      chargebackable: true,
+      deferredPayoutEnabled: true,
+      reserveBps: 10_000,
+      riskWindow: ONE_DAY_IN_SECONDS.mul(30),
+    },
+    griefing: {
+      griefingCliff: 15 * 60,
+      griefingPenaltyBpsPerHour: 10,
+      freeTakeCount: 0,
+      freeTakeAmount: 0,
+    },
+  },
+  nonChargebackable: {
+    enabled: true,
+    chargeback: {
+      chargebackable: false,
+      deferredPayoutEnabled: false,
+      reserveBps: 0,
+      riskWindow: 0,
+    },
+    griefing: {
+      griefingCliff: 15 * 60,
+      griefingPenaltyBpsPerHour: 10,
+      freeTakeCount: 3,
+      freeTakeAmount: usdc(20),
+    },
+  },
+};
+
+export const STAKE_RISK_PLATFORM_POLICY: any = {
+  localhost: LOCAL_STAKE_RISK_PLATFORM_POLICY,
+  hardhat: LOCAL_STAKE_RISK_PLATFORM_POLICY,
+};
 
 // Pyth Network contract addresses
 export const PYTH_CONTRACT: any = {

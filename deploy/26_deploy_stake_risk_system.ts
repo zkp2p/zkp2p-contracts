@@ -6,15 +6,10 @@ import { ethers } from "hardhat";
 
 import {
   MULTI_SIG,
-  NON_CHARGEBACKABLE_FREE_TAKE_AMOUNT,
-  NON_CHARGEBACKABLE_FREE_TAKE_COUNT,
   ORCHESTRATOR_V2_PROTOCOL_FEE,
   ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT,
-  REVERSIBLE_PLATFORM_RESERVE_BPS,
-  REVERSIBLE_PLATFORM_RISK_WINDOW,
   RISK_CALLBACK_GAS_LIMIT,
-  RISK_GRIEFING_CLIFF,
-  RISK_GRIEFING_PENALTY_BPS_PER_HOUR,
+  STAKE_RISK_PLATFORM_POLICY,
   STAKE_VAULT_BASE_EXIT_DELAY,
   STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
   USDC,
@@ -43,45 +38,23 @@ function platformRiskConfigMatches(actual: any, expected: any): boolean {
     && ethers.BigNumber.from(actual.griefing.freeTakeAmount).eq(expected.griefing.freeTakeAmount);
 }
 
-const reversibleConfig = {
-  enabled: true,
-  chargeback: {
-    chargebackable: true,
-    deferredPayoutEnabled: true,
-    reserveBps: REVERSIBLE_PLATFORM_RESERVE_BPS,
-    riskWindow: REVERSIBLE_PLATFORM_RISK_WINDOW,
-  },
-  griefing: {
-    griefingCliff: RISK_GRIEFING_CLIFF,
-    griefingPenaltyBpsPerHour: RISK_GRIEFING_PENALTY_BPS_PER_HOUR,
-    freeTakeCount: 0,
-    freeTakeAmount: 0,
-  },
-};
-
-const nonChargebackableConfig = {
-  enabled: true,
-  chargeback: {
-    chargebackable: false,
-    deferredPayoutEnabled: false,
-    reserveBps: 0,
-    riskWindow: 0,
-  },
-  griefing: {
-    griefingCliff: RISK_GRIEFING_CLIFF,
-    griefingPenaltyBpsPerHour: RISK_GRIEFING_PENALTY_BPS_PER_HOUR,
-    freeTakeCount: NON_CHARGEBACKABLE_FREE_TAKE_COUNT,
-    freeTakeAmount: NON_CHARGEBACKABLE_FREE_TAKE_AMOUNT,
-  },
-};
+export function stakeRiskPlatformPolicyForNetwork(network: string): any {
+  const policy = STAKE_RISK_PLATFORM_POLICY[network];
+  if (!policy) {
+    throw new Error(`No governance-ratified stake risk platform policy for network: ${network}`);
+  }
+  return policy;
+}
 
 /**
  * Deploys the continuous stake-risk system against the existing EscrowV2 and registries.
- * Non-local execution remains explicitly opt-in until launch platform values are ratified.
+ * Non-local execution requires both an explicit opt-in and a network-keyed, governance-ratified policy.
  */
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deploy } = hre.deployments;
   const network = hre.deployments.getNetworkName();
+  const { reversible: reversibleConfig, nonChargebackable: nonChargebackableConfig } =
+    stakeRiskPlatformPolicyForNetwork(network);
   const chainId = (await ethers.provider.getNetwork()).chainId;
   const [deployer] = await hre.getUnnamedAccounts();
   const multiSig = MULTI_SIG[network] ? MULTI_SIG[network] : deployer;
@@ -200,7 +173,9 @@ func.dependencies = ["16_configure_v2_payment_methods", "MultiAttestationVerifie
 func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.deployments.getNetworkName();
   if (network === "localhost" || network === "hardhat") return false;
-  return process.env.DEPLOY_STAKE_RISK_SYSTEM !== "true";
+  if (process.env.DEPLOY_STAKE_RISK_SYSTEM !== "true") return true;
+  stakeRiskPlatformPolicyForNetwork(network);
+  return false;
 };
 
 export default func;
