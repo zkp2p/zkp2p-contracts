@@ -70,15 +70,6 @@ const TOKEN_ABI = [
   "function transfer(address,uint256) returns (bool)",
 ];
 
-// Fork-only fixture ABI. Live-chain code paths are hard-disabled before this can be used.
-const VERIFIER_ABI = [
-  "function owner() view returns (address)",
-  "function requiredSignatures() view returns (uint256)",
-  "function isWitness(address) view returns (bool)",
-  "function addWitness(address)",
-  "function removeWitness(address)",
-];
-
 type Json = Record<string, unknown>;
 type IntentName =
   | "freeLong"
@@ -98,8 +89,6 @@ type RunState = {
   intents: Partial<Record<IntentName, string>>;
   transactions: Record<string, Json>;
   expectedReverts: Record<string, Json>;
-  nonceSeed: string;
-  witnessAddedByRun: boolean;
 };
 
 type LoadedContracts = {
@@ -118,9 +107,6 @@ function ensurePrivateDirectory(): void {
 }
 
 function newState(): RunState {
-  const nonceSeed = BigInt(
-    ethers.utils.keccak256(ethers.utils.randomBytes(32))
-  ).toString();
   return {
     version: 1,
     createdAt: new Date().toISOString(),
@@ -128,8 +114,6 @@ function newState(): RunState {
     intents: {},
     transactions: {},
     expectedReverts: {},
-    nonceSeed,
-    witnessAddedByRun: false,
   };
 }
 
@@ -1400,7 +1384,7 @@ const ACTION_PLAN = [
   "setup: targeted native/USDC funding, one-sided delegated stake, two isolated LP deposits, risk hooks",
   "fast: whole-free boundary cases, bonded reservation, partial withdrawal/exit gates, shared capacity, stake-backed settlement, deferred settlement",
   "after-cliff: cancel long-lived free and bonded positions and reconcile exact time-linear griefing charge",
-  "fork-only chargebacks/failure induction: hard-disabled on chain 8453; use an isolated fork or an already-authorized non-mutating proof",
+  "fork-only chargebacks/failure induction: intentionally absent from this live runner; execute from a separately reviewed isolated-fork fixture",
   "reconcile: exact chain+contract primary keys, raw receipt event rows, hook projections, and conservation equations",
 ];
 
@@ -1792,10 +1776,135 @@ async function runTokenFunding(
   );
 }
 
+function setupHasStarted(state: RunState): boolean {
+  return (
+    Object.keys(state.deposits).length > 0 ||
+    Object.keys(state.intents).length > 0 ||
+    Object.keys(state.transactions).some(
+      (label) => label.startsWith("01.") || label.startsWith("02.")
+    )
+  );
+}
+
+function requireNullIndexerRow(data: Json, alias: string): void {
+  if (!(alias in data))
+    throw new Error(`Fresh-baseline GraphQL response omitted ${alias}`);
+  if (data[alias] !== null)
+    throw new Error(`Fresh-baseline indexer row ${alias} is not null`);
+}
+
+async function assertFreshActorBaseline(
+  contracts: LoadedContracts,
+  indexer: Json,
+  state: RunState,
+  blockTag: number
+): Promise<void> {
+  if (setupHasStarted(state))
+    throw new Error(
+      "Fresh-baseline assertion requested after setup state was recorded"
+    );
+
+  const actors = actorAddresses(loadActors());
+  const call = { blockTag };
+  for (const role of ["ownerA", "ownerB"] as const) {
+    const owner = actors[role];
+    const [stake, reserved, eligible, free, exit, withdrawal] =
+      await Promise.all([
+        contracts.vault.stakeBalance(owner, call),
+        contracts.vault.reservedStake(owner, call),
+        contracts.vault.eligibleStake(owner, call),
+        contracts.vault.freeStake(owner, call),
+        contracts.vault.getExitRequest(owner, call),
+        contracts.vault.getStakeWithdrawalRequest(owner, call),
+      ]);
+    assertEqual(stake, 0, `${role} fresh stake`);
+    assertEqual(reserved, 0, `${role} fresh reserved stake`);
+    assertEqual(eligible, 0, `${role} fresh eligible stake`);
+    assertEqual(free, 0, `${role} fresh free stake`);
+    assertEqual(exit.exiting, false, `${role} fresh exit flag`);
+    assertEqual(exit.requestedAt, 0, `${role} fresh exit requestedAt`);
+    assertEqual(exit.availableAt, 0, `${role} fresh exit availableAt`);
+    assertEqual(withdrawal.amount, 0, `${role} fresh withdrawal amount`);
+    assertEqual(
+      withdrawal.requestedAt,
+      0,
+      `${role} fresh withdrawal requestedAt`
+    );
+    assertEqual(
+      withdrawal.availableAt,
+      0,
+      `${role} fresh withdrawal availableAt`
+    );
+    for (const method of Object.values(PAYMENT_METHODS)) {
+      assertEqual(
+        await contracts.risk.freeTakesUsed(owner, method, call),
+        0,
+        `${role} fresh free-take usage`
+      );
+    }
+  }
+
+  for (const role of [
+    "takerA1",
+    "takerA2",
+    "takerB",
+    "unauthorized",
+  ] as const) {
+    const taker = actors[role];
+    const [stakeOwner, allowedStakeOwner, delegationEnabled, takerState] =
+      await Promise.all([
+        contracts.vault.stakeOwnerOf(taker, call),
+        contracts.vault.allowedStakeOwner(taker, call),
+        contracts.vault.stakeDelegationEnabled(taker, call),
+        contracts.risk.getTakerState(taker, call),
+      ]);
+    assertEqual(stakeOwner, taker, `${role} fresh self stake owner`);
+    assertEqual(allowedStakeOwner, ZERO, `${role} fresh allowed stake owner`);
+    assertEqual(delegationEnabled, true, `${role} fresh delegation policy`);
+    assertEqual(takerState.stakeOwner, taker, `${role} fresh taker owner`);
+    assertEqual(takerState.totalStake, 0, `${role} fresh taker total stake`);
+    assertEqual(takerState.reserved, 0, `${role} fresh taker reserved stake`);
+    assertEqual(takerState.free, 0, `${role} fresh taker free stake`);
+    assertEqual(takerState.exiting, false, `${role} fresh taker exit flag`);
+  }
+
+  for (const role of ["lpA", "lpB"] as const) {
+    assertEqual(
+      await contracts.vault.claimableCompensation(actors[role], call),
+      0,
+      `${role} fresh compensation`
+    );
+  }
+
+  const data = graphqlData(indexer);
+  for (const role of ["ownerA", "ownerB"] as const) {
+    requireNullIndexerRow(data, `stake_${role}`);
+    requireNullIndexerRow(data, `summary_${role}`);
+    for (const methodName of Object.keys(PAYMENT_METHODS))
+      requireNullIndexerRow(data, `free_${role}_${methodName}`);
+  }
+  for (const role of [
+    "takerA1",
+    "takerA2",
+    "takerB",
+    "unauthorized",
+  ] as const) {
+    requireNullIndexerRow(data, `taker_${role}`);
+    requireNullIndexerRow(data, `authorization_${role}`);
+    requireNullIndexerRow(data, `delegation_${role}`);
+  }
+  for (const role of ["lpA", "lpB"] as const) {
+    requireNullIndexerRow(data, `compensation_${role}`);
+    for (const methodName of Object.keys(PAYMENT_METHODS))
+      requireNullIndexerRow(data, `exposure_${role}_${methodName}`);
+  }
+}
+
 async function preflight(
   provider: ethers.providers.JsonRpcProvider,
   contracts: LoadedContracts,
-  state: RunState
+  state: RunState,
+  requireFreshActors: boolean
 ): Promise<void> {
   const network = await provider.getNetwork();
   assertEqual(network.chainId, EXPECTED_CHAIN_ID, "chain id");
@@ -1810,6 +1919,15 @@ async function preflight(
     stakeToken,
     controller,
     riskOrchestrator,
+    riskVault,
+    riskHook,
+    hookToken,
+    hookVault,
+    hookRisk,
+    admissionPaused,
+    depositsPaused,
+    reservationsPaused,
+    escrowPaused,
   ] = await Promise.all([
     contracts.risk.owner(),
     contracts.vault.owner(),
@@ -1817,6 +1935,15 @@ async function preflight(
     contracts.vault.stakeToken(),
     contracts.vault.controller(),
     contracts.risk.orchestrator(),
+    contracts.risk.stakeVault(),
+    contracts.risk.deferredPayoutHook(),
+    contracts.hook.payoutToken(),
+    contracts.hook.stakeVault(),
+    contracts.hook.riskManager(),
+    contracts.risk.admissionPaused(),
+    contracts.vault.depositsPaused(),
+    contracts.vault.reservationsPaused(),
+    contracts.escrow.paused(),
   ]);
   assertEqual(riskOwner, EXPECTED_GOVERNANCE, "RiskManager owner");
   assertEqual(vaultOwner, EXPECTED_GOVERNANCE, "StakeVault owner");
@@ -1828,10 +1955,24 @@ async function preflight(
     ADDRESSES.orchestratorV3,
     "RiskManager orchestrator"
   );
+  assertEqual(riskVault, ADDRESSES.stakeVault, "RiskManager vault");
+  assertEqual(riskHook, ADDRESSES.deferredPayoutHook, "RiskManager hook");
+  assertEqual(hookToken, ADDRESSES.usdc, "DeferredPayoutHook token");
+  assertEqual(hookVault, ADDRESSES.stakeVault, "DeferredPayoutHook vault");
+  assertEqual(
+    hookRisk,
+    ADDRESSES.riskManager,
+    "DeferredPayoutHook risk manager"
+  );
+  assertEqual(admissionPaused, false, "RiskManager admission pause");
+  assertEqual(depositsPaused, false, "StakeVault deposits pause");
+  assertEqual(reservationsPaused, false, "StakeVault reservations pause");
+  assertEqual(escrowPaused, false, "Escrow pause");
 
-  const [zelle, venmo, maxIntentPeriod] = await Promise.all([
+  const [zelle, venmo, paypal, maxIntentPeriod] = await Promise.all([
     contracts.risk.getPlatformRiskConfig(PAYMENT_METHODS.zelle),
     contracts.risk.getPlatformRiskConfig(PAYMENT_METHODS.venmo),
+    contracts.risk.getPlatformRiskConfig(PAYMENT_METHODS.paypal),
     contracts.escrow.intentExpirationPeriod(),
   ]);
   assertEqual(maxIntentPeriod, "3600", "staging maximum intent period");
@@ -1859,6 +2000,22 @@ async function preflight(
   assertEqual(venmo.chargeback.reserveBps, "10000", "Venmo reserve bps");
   assertEqual(venmo.chargeback.riskWindow, "2592000", "Venmo risk window");
   assertEqual(venmo.griefing.freeTakeCount, "0", "Venmo free take count");
+  assertEqual(paypal.enabled, true, "PayPal enabled");
+  assertEqual(paypal.chargeback.chargebackable, true, "PayPal chargebackable");
+  assertEqual(
+    paypal.chargeback.deferredPayoutEnabled,
+    true,
+    "PayPal deferred payout"
+  );
+  assertEqual(paypal.chargeback.reserveBps, "10000", "PayPal reserve bps");
+  assertEqual(paypal.chargeback.riskWindow, "2592000", "PayPal risk window");
+  assertEqual(paypal.griefing.griefingCliff, "900", "PayPal griefing cliff");
+  assertEqual(
+    paypal.griefing.griefingPenaltyBpsPerHour,
+    "10",
+    "PayPal griefing slope"
+  );
+  assertEqual(paypal.griefing.freeTakeCount, "0", "PayPal free take count");
 
   const invalidBase = {
     enabled: true,
@@ -2000,6 +2157,8 @@ async function preflight(
     contractSnapshot(contracts, state, latestBlock),
     indexedSnapshot(state),
   ]);
+  if (requireFreshActors)
+    await assertFreshActorBaseline(contracts, indexer, state, latestBlock);
   const evidence: Json = {
     label: "00.preflight",
     observedAtUtc: new Date().toISOString(),
@@ -2007,8 +2166,18 @@ async function preflight(
     latestBlock,
     governance: governance.address,
     actorAddresses: actorAddresses(loadActors()),
+    freshActorBaselineRequired: requireFreshActors,
     sync,
-    verifiedConfig: { zelle, venmo, maxIntentPeriod },
+    verifiedConfig: {
+      zelle,
+      venmo,
+      paypal,
+      maxIntentPeriod,
+      admissionPaused,
+      depositsPaused,
+      reservationsPaused,
+      escrowPaused,
+    },
     onchain,
     graphql: { query: buildExactSnapshotQuery(state), response: indexer },
   };
@@ -3015,278 +3184,6 @@ async function afterCliff(
   printJson({ afterCliff: "PASS", penalty: oracle.expectedPenalty, block });
 }
 
-function chargebackAttestation(
-  state: RunState,
-  index: bigint,
-  intentHash: string,
-  paymentMethod: string,
-  chargebackAmount: string,
-  now: number
-): Json {
-  const modulus = (1n << 256n) - 100n;
-  return {
-    chainId: EXPECTED_CHAIN_ID,
-    riskManager: ADDRESSES.riskManager,
-    orchestrator: ADDRESSES.orchestratorV3,
-    intentHash,
-    paymentMethod,
-    chargebackAmount,
-    evidenceId: ethers.utils.keccak256(
-      ethers.utils.toUtf8Bytes(
-        `affine-risk-staging-e2e:${intentHash}:${index.toString()}`
-      )
-    ),
-    nonce: ((BigInt(state.nonceSeed) % modulus) + index).toString(),
-    validAfter: now - 60,
-    validUntil: now + 3_600,
-  };
-}
-
-async function signedChargeback(
-  label: string,
-  attestation: Json,
-  governance: Wallet,
-  caller: Wallet,
-  provider: ethers.providers.JsonRpcProvider,
-  contracts: LoadedContracts,
-  state: RunState
-): Promise<Json> {
-  const digest = await contracts.risk.hashChargebackAttestation(attestation);
-  const signature = ethers.utils.joinSignature(
-    governance._signingKey().signDigest(digest)
-  );
-  return runAction(
-    label,
-    caller,
-    contracts.risk,
-    "submitChargeback",
-    [attestation, [signature], "0x"],
-    provider,
-    contracts,
-    state,
-    { reconcile: true }
-  );
-}
-
-async function cleanupWitness(
-  verifier: Contract,
-  governance: Wallet,
-  provider: ethers.providers.JsonRpcProvider,
-  contracts: LoadedContracts,
-  state: RunState
-): Promise<void> {
-  if (!state.witnessAddedByRun) return;
-  if (!(await verifier.isWitness(EXPECTED_GOVERNANCE))) {
-    state.witnessAddedByRun = false;
-    saveState(state);
-    return;
-  }
-  await runAction(
-    "10.governance.remove-temporary-witness",
-    governance,
-    verifier,
-    "removeWitness",
-    [EXPECTED_GOVERNANCE],
-    provider,
-    contracts,
-    state,
-    {
-      reconcile: true,
-      afterReceipt: () => {
-        state.witnessAddedByRun = false;
-      },
-    }
-  );
-}
-
-async function chargebacks(
-  provider: ethers.providers.JsonRpcProvider,
-  contracts: LoadedContracts,
-  state: RunState
-): Promise<void> {
-  const { chainId } = await provider.getNetwork();
-  if (
-    chainId === EXPECTED_CHAIN_ID ||
-    process.env.E2E_ISOLATED_FORK !== "YES"
-  ) {
-    throw new Error(
-      "chargeback/verifier mutation cases are hard-disabled on Base and require E2E_ISOLATED_FORK=YES on a non-8453 isolated fork"
-    );
-  }
-  requireMutationFlag();
-  const settled = state.intents.chargebackSettled;
-  const deferred = state.intents.deferredSettled;
-  if (!settled || !deferred) throw new Error("Run fast before chargebacks");
-  const governance = deployer(provider);
-  const caller = actorWallet("caller", provider);
-  const lpA = actorWallet("lpA", provider);
-  const lpB = actorWallet("lpB", provider);
-  const verifierAddress = await contracts.risk.attestationVerifier();
-  const verifier = new Contract(verifierAddress, VERIFIER_ABI, provider);
-  assertEqual(
-    await verifier.owner(),
-    EXPECTED_GOVERNANCE,
-    "attestation verifier owner"
-  );
-  assertEqual(
-    await verifier.requiredSignatures(),
-    "1",
-    "attestation verifier threshold"
-  );
-
-  const wasWitness = await verifier.isWitness(EXPECTED_GOVERNANCE);
-  if (
-    !wasWitness &&
-    !state.transactions["10.governance.add-temporary-witness"]
-  ) {
-    await runAction(
-      "10.governance.add-temporary-witness",
-      governance,
-      verifier,
-      "addWitness",
-      [EXPECTED_GOVERNANCE],
-      provider,
-      contracts,
-      state,
-      {
-        reconcile: true,
-        afterReceipt: () => {
-          state.witnessAddedByRun = true;
-        },
-      }
-    );
-  } else if (!wasWitness) {
-    throw new Error(
-      "Temporary witness transaction is recorded but signer is not currently a witness"
-    );
-  }
-
-  try {
-    const now = (await provider.getBlock("latest")).timestamp;
-    const partial = chargebackAttestation(
-      state,
-      1n,
-      settled,
-      PAYMENT_METHODS.venmo,
-      "750000",
-      now
-    );
-    await signedChargeback(
-      "10.chargeback.stake.partial-750000",
-      partial,
-      governance,
-      caller,
-      provider,
-      contracts,
-      state
-    );
-    const partialDigest = await contracts.risk.hashChargebackAttestation(
-      partial
-    );
-    const partialSignature = ethers.utils.joinSignature(
-      governance._signingKey().signDigest(partialDigest)
-    );
-    await expectRevert(
-      "10.chargeback.replay-nonce-reverts",
-      caller,
-      contracts.risk,
-      "submitChargeback",
-      [partial, [partialSignature], "0x"],
-      state
-    );
-
-    const capped = chargebackAttestation(
-      state,
-      2n,
-      settled,
-      PAYMENT_METHODS.venmo,
-      "5000000",
-      now
-    );
-    await signedChargeback(
-      "10.chargeback.stake.capped-to-remaining",
-      capped,
-      governance,
-      caller,
-      provider,
-      contracts,
-      state
-    );
-    const lpAClaimable = await contracts.vault.claimableCompensation(
-      lpA.address
-    );
-    assertEqual(lpAClaimable, "2000000", "LP A aggregate compensation");
-    await runAction(
-      "10.compensation.lpA.withdraw-all",
-      lpA,
-      contracts.vault,
-      "withdrawCompensation",
-      [lpA.address],
-      provider,
-      contracts,
-      state,
-      { reconcile: true }
-    );
-    assertEqual(
-      await contracts.vault.claimableCompensation(lpA.address),
-      "0",
-      "LP A post-withdraw compensation"
-    );
-
-    const deferredPartial = chargebackAttestation(
-      state,
-      3n,
-      deferred,
-      PAYMENT_METHODS.venmo,
-      "400000",
-      now
-    );
-    await signedChargeback(
-      "10.chargeback.deferred.partial-400000",
-      deferredPartial,
-      governance,
-      caller,
-      provider,
-      contracts,
-      state
-    );
-    assertEqual(
-      await contracts.vault.claimableCompensation(lpB.address),
-      "400000",
-      "LP B compensation"
-    );
-    const deferredPayout = await contracts.vault.getDeferredPayout(deferred);
-    assertEqual(deferredPayout.amount, "600000", "remaining deferred payout");
-    await runAction(
-      "10.compensation.lpB.withdraw-all",
-      lpB,
-      contracts.vault,
-      "withdrawCompensation",
-      [lpB.address],
-      provider,
-      contracts,
-      state,
-      { reconcile: true }
-    );
-  } finally {
-    if (!wasWitness)
-      await cleanupWitness(verifier, governance, provider, contracts, state);
-  }
-
-  const block = await provider.getBlockNumber();
-  await saveSynchronizedSnapshot(
-    "10.chargebacks-complete",
-    block,
-    contracts,
-    state
-  );
-  printJson({
-    chargebacks: "PASS",
-    witnessRestored: !(await verifier.isWitness(EXPECTED_GOVERNANCE)),
-    block,
-  });
-}
-
 async function finalReconciliation(
   provider: ethers.providers.JsonRpcProvider,
   contracts: LoadedContracts,
@@ -3319,15 +3216,26 @@ async function main(): Promise<void> {
   const contracts = loadContracts(provider);
   const state = loadState();
 
-  if (command === "preflight") return preflight(provider, contracts, state);
-  if (command === "setup") return setup(provider, contracts, state);
-  if (command === "fast") return fastScenarios(provider, contracts, state);
-  if (command === "after-cliff") return afterCliff(provider, contracts, state);
-  if (command === "chargebacks") return chargebacks(provider, contracts, state);
+  const runSafetyGate = () =>
+    preflight(provider, contracts, state, !setupHasStarted(state));
+
+  if (command === "preflight") return runSafetyGate();
+  if (command === "setup") {
+    await runSafetyGate();
+    return setup(provider, contracts, state);
+  }
+  if (command === "fast") {
+    await runSafetyGate();
+    return fastScenarios(provider, contracts, state);
+  }
+  if (command === "after-cliff") {
+    await runSafetyGate();
+    return afterCliff(provider, contracts, state);
+  }
   if (command === "reconcile")
     return finalReconciliation(provider, contracts, state);
   if (command === "execute") {
-    await preflight(provider, contracts, state);
+    await runSafetyGate();
     await setup(provider, contracts, state);
     await fastScenarios(provider, contracts, state);
     try {
@@ -3339,7 +3247,7 @@ async function main(): Promise<void> {
     return finalReconciliation(provider, contracts, state);
   }
   throw new Error(
-    "Usage: affineRiskScenarioRunner.ts <plan|preflight|setup|fast|after-cliff|chargebacks(fork-only)|reconcile|execute>"
+    "Usage: affineRiskScenarioRunner.ts <plan|preflight|setup|fast|after-cliff|reconcile|execute>"
   );
 }
 

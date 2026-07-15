@@ -366,17 +366,18 @@ The exact final GraphQL type names are filled in from the reviewed indexer schem
 1. Receive exact deployment addresses, chain ID, deployment commit and block range, merged indexer commit, Envio deployment ID, start blocks, and fully synced raw endpoint from the root task.
 2. Verify the contracts checkout is clean and points at the deployment source. Keep this document branch isolated; do not edit deployment artifacts owned by the deployment task.
 3. Load `.env` without printing it. List key names only. Derive the configured signer address in-process and abort unless it equals the approved `0x84…` deployer address supplied in the handoff.
-4. Save the environment inventory, deployment receipts, config reads, token decimals, indexed head, and baseline GraphQL responses.
-5. Generate fresh actor keys in an ignored runtime directory or ephemeral process. Fund only minimal gas/USDC. Record public addresses only.
-6. Create isolated LP deposits and establish one-sided owner→taker authorizations.
-7. Execute `S02`, `S03`, `S06`, and the executable parts of `S07`/`S08`, polling the indexer after each economically distinct transition.
-8. Execute chargebackable signaling/cancellation and full LP manual-release settlement portions of `S04`; never modify the shared verifier. Attestation cases require an already-authorized non-mutating proof or an isolated fork.
-9. Execute deferred admission/rejection boundaries, full zero-fee manual release, registration, early withdrawal, and batch-revert paths. Do not fake high-volume merchant data.
-10. Never run `GOV` cases against shared chain `8453`. Policy/pause/callback/verifier/hook mutations and failure induction run only on an isolated fork/pre-production deployment.
-11. Run conservation, exact-decimal, duplicate-ID, expiry-bucket, and aggregate recomputations over all data created by this pass.
-12. Mark long-window, attestation-blocked, reorg, and volume cases `BLOCKED` or `DEFERRED` with explicit pre-production follow-ups.
-13. Report any high-confidence bug immediately to the root task. Do not patch source code from this testing task.
-14. Redact RPC credentials and secrets, commit outcome updates, push this branch, and open/update the testing PR only after execution is complete.
+4. Every mutating runner command (`setup`, `fast`, `after-cliff`, or `execute`) must first re-run the chain/config/current-Envio-head safety gate. Direct phase commands never bypass this gate.
+5. Save the environment inventory, deployment receipts, config reads, token decimals, indexed head, and baseline GraphQL responses. Before the first funding transaction, require zero/self-owned on-chain actor state and exact GraphQL `null` for every fresh event-derived stake, taker, authorization, delegation, free-take, owner-summary, LP-exposure, and compensation row.
+6. Generate fresh actor keys in an ignored runtime directory or ephemeral process. Fund only minimal gas/USDC. Record public addresses only.
+7. Create isolated LP deposits and establish one-sided owner→taker authorizations.
+8. Execute `S02`, `S03`, `S06`, and the executable parts of `S07`/`S08`, polling the indexer after each economically distinct transition.
+9. Execute chargebackable signaling/cancellation and full LP manual-release settlement portions of `S04`; never modify the shared verifier. Attestation cases require an already-authorized non-mutating proof or an isolated fork.
+10. Execute deferred admission/rejection boundaries, full zero-fee manual release, registration, early withdrawal, and batch-revert paths. Do not fake high-volume merchant data.
+11. Never run `GOV` cases against shared chain `8453`. Policy/pause/callback/verifier/hook mutations and failure induction are intentionally absent from the live runner and require a separately reviewed isolated-fork/pre-production fixture.
+12. Run conservation, exact-decimal, duplicate-ID, expiry-bucket, and aggregate recomputations over all data created by this pass.
+13. Mark long-window, attestation-blocked, reorg, and volume cases `BLOCKED` or `DEFERRED` with explicit pre-production follow-ups.
+14. Report any high-confidence bug immediately to the root task. Do not patch source code from this testing task.
+15. Redact RPC credentials and secrets, commit outcome updates, push this branch, and open/update the testing PR only after execution is complete.
 
 ### Isolated-fork governance cleanup checklist
 
