@@ -545,6 +545,21 @@ async function waitForIndexer(blockNumber: number): Promise<Json> {
   );
 }
 
+async function waitForMinedBlock(
+  provider: ethers.providers.JsonRpcProvider,
+  blockNumber: number
+): Promise<ethers.providers.Block> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt <= RECEIPT_TIMEOUT_MS) {
+    const block = await provider.getBlock(blockNumber);
+    if (block) return block;
+    await new Promise((resolve) => setTimeout(resolve, INDEXER_POLL_MS));
+  }
+  throw new Error(
+    `RPC did not return mined block ${blockNumber} within ${RECEIPT_TIMEOUT_MS}ms; resume the journaled transaction later`
+  );
+}
+
 const STAKE_FIELDS = `chainId vaultAddress stakeOwner totalStake pendingWithdrawalAmount eligibleStake reservedStake freeStake exiting exitRequestedAt exitAvailableAt updatedAt`;
 const TAKER_FIELDS = `chainId vaultAddress taker stakeOwner delegatedStakeOwner stakeDelegationEnabled allowedStakeOwner riskManagerAddress vaultControllerVersion totalStake pendingWithdrawalAmount eligibleStake reservedStake freeStake exiting exitRequestedAt exitAvailableAt updatedAt`;
 const POSITION_FIELDS = `chainId riskManagerAddress intentHash taker stakeOwner lp paymentMethod mode consumedFreeTake intentAmount createdAt maxIntentPeriod griefingCliff griefingPenaltyBpsPerHour chargebackReserveBps riskWindow maxGriefingBond chargebackReserve initialReservation`;
@@ -1657,7 +1672,7 @@ async function runAction(
   }
 
   if (!evidence.blockNumber) {
-    const block = await provider.getBlock(receipt.blockNumber);
+    const block = await waitForMinedBlock(provider, receipt.blockNumber);
     delete evidence.rawTransaction;
     delete evidence.broadcastError;
     evidence = {
@@ -1826,7 +1841,7 @@ async function runNativeFunding(
     }
   }
   if (!evidence.blockNumber) {
-    const block = await provider.getBlock(receipt.blockNumber);
+    const block = await waitForMinedBlock(provider, receipt.blockNumber);
     delete evidence.rawTransaction;
     delete evidence.broadcastError;
     evidence = {
