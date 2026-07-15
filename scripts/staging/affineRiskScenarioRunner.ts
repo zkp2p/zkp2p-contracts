@@ -410,6 +410,27 @@ const RAW_EVENT_PREFIX: Record<string, string> = {
   hook: "DeferredPayoutHook",
 };
 
+// EscrowV2 delegates inherited lifecycle events to the V2.1 handlers, which
+// intentionally retain the Escrow_V21 raw-audit entity namespace.
+const ESCROW_V21_AUDIT_EVENTS = new Set([
+  "DepositReceived",
+  "DepositDelegateSet",
+  "DepositDelegateRemoved",
+  "DepositFundsAdded",
+  "DepositWithdrawn",
+  "DepositClosed",
+  "DepositPaymentMethodAdded",
+  "DepositPaymentMethodActiveUpdated",
+  "DepositCurrencyAdded",
+  "FundsLocked",
+  "FundsUnlocked",
+  "FundsUnlockedAndTransferred",
+  "IntentExpiryExtended",
+  "DepositIntentAmountRangeUpdated",
+  "DepositMinConversionRateUpdated",
+  "DepositAcceptingIntentsUpdated",
+]);
+
 function normalizeEventValue(value: unknown): unknown {
   if (BigNumber.isBigNumber(value)) return value.toString();
   if (typeof value === "bigint") return value.toString();
@@ -437,7 +458,11 @@ function normalizeEventValue(value: unknown): unknown {
 function rawEventExpectation(
   log: Json
 ): { entity: string; fields: string[]; expected: Json } | undefined {
-  const prefix = RAW_EVENT_PREFIX[String(log.source)];
+  const eventName = String(log.event);
+  const prefix =
+    log.source === "escrow" && ESCROW_V21_AUDIT_EVENTS.has(eventName)
+      ? "Escrow_V21"
+      : RAW_EVENT_PREFIX[String(log.source)];
   if (!prefix || !log.event) return undefined;
   const expected = normalizeEventValue(log.args) as Json;
   if (
@@ -466,7 +491,7 @@ function rawEventExpectation(
     delete expected.active;
   }
   return {
-    entity: `${prefix}_${String(log.event)}`,
+    entity: `${prefix}_${eventName}`,
     fields: ["id", ...Object.keys(expected)],
     expected,
   };
