@@ -185,7 +185,52 @@ function redact(input: unknown): string {
   for (const secret of secrets)
     output = output.split(secret).join("[REDACTED]");
   output = output.replace(/https?:\/\/[^\s"']+/g, "[REDACTED_URL]");
+  output = output.replace(/0x[0-9a-fA-F]{128,}/g, "[REDACTED_HEX_PAYLOAD]");
   return output.slice(0, 4_000);
+}
+
+const SAFE_BROADCAST_ERROR_CODES = new Set([
+  "ACTION_REJECTED",
+  "INSUFFICIENT_FUNDS",
+  "NETWORK_ERROR",
+  "NONCE_EXPIRED",
+  "REPLACEMENT_UNDERPRICED",
+  "SERVER_ERROR",
+  "TIMEOUT",
+  "TRANSACTION_REPLACED",
+  "UNKNOWN_ERROR",
+  "-32000",
+  "-32001",
+  "-32603",
+]);
+
+function safeBroadcastError(error: unknown, rawTransaction: string): Json {
+  const candidate =
+    error && typeof error === "object"
+      ? (error as Record<string, unknown>)
+      : ({} as Record<string, unknown>);
+  const nested =
+    candidate.error && typeof candidate.error === "object"
+      ? (candidate.error as Record<string, unknown>)
+      : ({} as Record<string, unknown>);
+  const observedCode = String(candidate.code ?? nested.code ?? "UNKNOWN_ERROR");
+  const code = SAFE_BROADCAST_ERROR_CODES.has(observedCode)
+    ? observedCode
+    : "UNKNOWN_ERROR";
+  const observedReason = String(
+    candidate.reason ??
+      nested.reason ??
+      nested.message ??
+      candidate.message ??
+      "raw transaction broadcast failed"
+  );
+  const withoutExactPayload = observedReason
+    .split(rawTransaction)
+    .join("[REDACTED_SIGNED_TRANSACTION]");
+  return {
+    code,
+    reason: redact(withoutExactPayload).slice(0, 500),
+  };
 }
 
 function evidenceFile(label: string): string {
@@ -204,10 +249,30 @@ function writeEvidence(label: string, evidence: unknown): void {
   );
 }
 
+function sanitizeTransactionEvidence(value: unknown): unknown {
+  if (BigNumber.isBigNumber(value)) return value;
+  if (typeof value === "string")
+    return value.replace(/0x[0-9a-fA-F]{128,}/g, "[REDACTED_HEX_PAYLOAD]");
+  if (Array.isArray(value)) return value.map(sanitizeTransactionEvidence);
+  if (value && typeof value === "object") {
+    const sanitized: Json = {};
+    for (const [key, child] of Object.entries(value as Json)) {
+      const normalizedKey = key.toLowerCase();
+      if (
+        normalizedKey === "rawtransaction" ||
+        normalizedKey === "signedtransaction"
+      ) {
+        continue;
+      }
+      sanitized[key] = sanitizeTransactionEvidence(child);
+    }
+    return sanitized;
+  }
+  return value;
+}
+
 function writeTransactionEvidence(label: string, record: Json): void {
-  const publicRecord = { ...record };
-  delete publicRecord.rawTransaction;
-  writeEvidence(label, publicRecord);
+  writeEvidence(label, sanitizeTransactionEvidence(record));
 }
 
 async function prepareSignedTransaction(
@@ -1552,7 +1617,10 @@ async function runAction(
       evidence.broadcastAcknowledgedAtUtc = new Date().toISOString();
       persist(evidence);
     } catch (error) {
-      evidence.broadcastError = redact(error);
+      evidence.broadcastError = safeBroadcastError(
+        error,
+        prepared.rawTransaction
+      );
       evidence.broadcastAttemptedAtUtc = new Date().toISOString();
       persist(evidence);
     }
@@ -1591,6 +1659,7 @@ async function runAction(
   if (!evidence.blockNumber) {
     const block = await provider.getBlock(receipt.blockNumber);
     delete evidence.rawTransaction;
+    delete evidence.broadcastError;
     evidence = {
       ...evidence,
       journalStatus: receipt.status === 1 ? "MINED" : "REVERTED",
@@ -1719,7 +1788,10 @@ async function runNativeFunding(
       evidence.broadcastAcknowledgedAtUtc = new Date().toISOString();
       persist(evidence);
     } catch (error) {
-      evidence.broadcastError = redact(error);
+      evidence.broadcastError = safeBroadcastError(
+        error,
+        prepared.rawTransaction
+      );
       evidence.broadcastAttemptedAtUtc = new Date().toISOString();
       persist(evidence);
     }
@@ -1756,6 +1828,7 @@ async function runNativeFunding(
   if (!evidence.blockNumber) {
     const block = await provider.getBlock(receipt.blockNumber);
     delete evidence.rawTransaction;
+    delete evidence.broadcastError;
     evidence = {
       ...evidence,
       journalStatus: receipt.status === 1 ? "MINED" : "REVERTED",
