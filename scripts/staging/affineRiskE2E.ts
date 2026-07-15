@@ -12,15 +12,15 @@ import {
   ethers,
 } from "ethers";
 
-const EXPECTED_CHAIN_ID = 8453;
-const EXPECTED_GOVERNANCE = "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929";
+export const EXPECTED_CHAIN_ID = 8453;
+export const EXPECTED_GOVERNANCE = "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929";
 const DEFAULT_ACTOR_FILE = path.join(
   os.tmpdir(),
   "zkp2p-affine-risk-e2e",
   "actors.json"
 );
 
-const ADDRESSES = {
+export const ADDRESSES = {
   orchestratorV3: "0x79dE2123eE792e77165b2E6E65A54B745E8A734E",
   stakeVault: "0x5c570D2be2bFD8960B2B9F8d2D3C8148A1e24C5f",
   riskManager: "0x57E4b9046EA5ABCe1fc688b77D846aE67222b998",
@@ -51,7 +51,7 @@ const DEPLOYMENTS = {
   },
 } as const;
 
-const PAYMENT_METHODS = {
+export const PAYMENT_METHODS = {
   venmo: "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
   paypal: "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f",
   zelle: "0xf752c7d19698ecb0bb8988abf9b9a53a4c3657f3bc8850a6fb59fdf3e3ce8cd3",
@@ -138,9 +138,12 @@ const ABIS = {
   ],
 };
 
-type ActorRecord = Record<string, { address: string; privateKey: string }>;
+export type ActorRecord = Record<
+  string,
+  { address: string; privateKey: string }
+>;
 
-function loadEnvironment(): void {
+export function loadEnvironment(): void {
   const envPath = process.env.CONTRACTS_ENV_PATH;
   if (!envPath)
     throw new Error("CONTRACTS_ENV_PATH must point to the contracts repo .env");
@@ -148,14 +151,14 @@ function loadEnvironment(): void {
   if (result.error) throw new Error("Unable to load CONTRACTS_ENV_PATH");
 }
 
-function rpcUrl(): string {
+export function rpcUrl(): string {
   if (process.env.E2E_RPC_URL) return process.env.E2E_RPC_URL;
   if (process.env.INFURA_TOKEN)
     return `https://base-mainnet.infura.io/v3/${process.env.INFURA_TOKEN}`;
   return "https://developer-access-mainnet.base.org";
 }
 
-function deployer(provider: ethers.providers.Provider): Wallet {
+export function deployer(provider: ethers.providers.Provider): Wallet {
   const rawKey = process.env.BASE_DEPLOY_PRIVATE_KEY;
   if (!rawKey) throw new Error("BASE_DEPLOY_PRIVATE_KEY is missing");
   const normalizedKey = rawKey.startsWith("0x") ? rawKey : `0x${rawKey}`;
@@ -168,7 +171,7 @@ function deployer(provider: ethers.providers.Provider): Wallet {
   return wallet;
 }
 
-function normalize(value: unknown): unknown {
+export function normalize(value: unknown): unknown {
   if (BigNumber.isBigNumber(value)) return value.toString();
   if (typeof value === "bigint") return value.toString();
   if (Array.isArray(value)) return value.map(normalize);
@@ -181,15 +184,15 @@ function normalize(value: unknown): unknown {
   return value;
 }
 
-function printJson(value: unknown): void {
+export function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(normalize(value), null, 2)}\n`);
 }
 
-function actorFile(): string {
+export function actorFile(): string {
   return process.env.E2E_ACTORS_FILE || DEFAULT_ACTOR_FILE;
 }
 
-function loadActors(): ActorRecord {
+export function loadActors(): ActorRecord {
   const file = actorFile();
   const stat = fs.statSync(file);
   if ((stat.mode & 0o077) !== 0)
@@ -197,7 +200,7 @@ function loadActors(): ActorRecord {
   return JSON.parse(fs.readFileSync(file, "utf8")) as ActorRecord;
 }
 
-function actorAddresses(actors: ActorRecord): Record<string, string> {
+export function actorAddresses(actors: ActorRecord): Record<string, string> {
   return Object.fromEntries(
     Object.entries(actors).map(([role, actor]) => [role, actor.address])
   );
@@ -393,7 +396,7 @@ async function baseline(
   });
 }
 
-function requireMutationFlag(): void {
+export function requireMutationFlag(): void {
   if (process.env.E2E_ALLOW_MUTATION !== "YES") {
     throw new Error(
       "Set E2E_ALLOW_MUTATION=YES explicitly before any transaction command"
@@ -401,7 +404,7 @@ function requireMutationFlag(): void {
   }
 }
 
-async function receiptEvidence(
+export async function receiptEvidence(
   provider: ethers.providers.JsonRpcProvider,
   transaction: ContractTransaction
 ): Promise<Record<string, unknown>> {
@@ -477,7 +480,7 @@ async function fundActors(
   });
 }
 
-function ceilDiv(numerator: bigint, denominator: bigint): bigint {
+export function ceilDiv(numerator: bigint, denominator: bigint): bigint {
   if (denominator <= 0n) throw new Error("denominator must be positive");
   return numerator === 0n ? 0n : (numerator - 1n) / denominator + 1n;
 }
@@ -521,8 +524,10 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`affine-risk-e2e: ${message}\n`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`affine-risk-e2e: ${message}\n`);
+    process.exitCode = 1;
+  });
+}
