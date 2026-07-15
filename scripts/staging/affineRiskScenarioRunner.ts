@@ -2,6 +2,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
+import { JsonFragment } from "@ethersproject/abi";
 import {
   BigNumber,
   Contract,
@@ -69,10 +70,10 @@ const TOKEN_ABI = [
   "function transfer(address,uint256) returns (bool)",
 ];
 
+// Fork-only fixture ABI. Live-chain code paths are hard-disabled before this can be used.
 const VERIFIER_ABI = [
   "function owner() view returns (address)",
   "function requiredSignatures() view returns (uint256)",
-  "function witnesses() view returns (address[])",
   "function isWitness(address) view returns (bool)",
   "function addWitness(address)",
   "function removeWitness(address)",
@@ -84,6 +85,7 @@ type IntentName =
   | "oversizeBonded"
   | "freeExact"
   | "freeReleased"
+  | "freeWhileExiting"
   | "bondedLong"
   | "chargebackCancelled"
   | "chargebackSettled"
@@ -156,14 +158,16 @@ function artifactPath(relative: string): string {
   return path.resolve(__dirname, "../..", relative);
 }
 
-function loadArtifact(relative: string): { abi: unknown[] } {
+function loadArtifact(relative: string): { abi: JsonFragment[] } {
   const absolute = artifactPath(relative);
   if (!fs.existsSync(absolute)) {
     throw new Error(
       `Missing ${relative}; run forge build in this worktree before scenario execution`
     );
   }
-  return JSON.parse(fs.readFileSync(absolute, "utf8")) as { abi: unknown[] };
+  return JSON.parse(fs.readFileSync(absolute, "utf8")) as {
+    abi: JsonFragment[];
+  };
 }
 
 function loadContracts(
@@ -224,10 +228,18 @@ function decodeLogs(
   receipt: ContractReceipt,
   contracts: LoadedContracts
 ): Json[] {
+  const sourceByAddress: Record<string, keyof LoadedContracts["interfaces"]> = {
+    [ADDRESSES.riskManager.toLowerCase()]: "risk",
+    [ADDRESSES.stakeVault.toLowerCase()]: "vault",
+    [ADDRESSES.orchestratorV3.toLowerCase()]: "orchestrator",
+    [ADDRESSES.escrowV2.toLowerCase()]: "escrow",
+    [ADDRESSES.deferredPayoutHook.toLowerCase()]: "hook",
+  };
   return receipt.logs.map((log) => {
-    for (const [source, iface] of Object.entries(contracts.interfaces)) {
+    const source = sourceByAddress[log.address.toLowerCase()];
+    if (source) {
       try {
-        const parsed = iface.parseLog(log);
+        const parsed = contracts.interfaces[source].parseLog(log);
         return {
           source,
           address: log.address,
@@ -237,7 +249,7 @@ function decodeLogs(
           args: parsed.args,
         };
       } catch {
-        // Try the next ABI. Addresses disambiguate events in the evidence bundle.
+        // The address is known, but this event is not present in the selected ABI.
       }
     }
     return {
@@ -248,6 +260,116 @@ function decodeLogs(
       data: log.data,
     };
   });
+}
+
+const RAW_EVENT_PREFIX: Record<string, string> = {
+  risk: "RiskManager",
+  vault: "StakeVault",
+  orchestrator: "OrchestratorV3",
+  escrow: "EscrowV2",
+  hook: "DeferredPayoutHook",
+};
+
+function rawEventExpectation(
+  log: Json
+): { entity: string; fields: string[]; expected: Json } | undefined {
+  const prefix = RAW_EVENT_PREFIX[String(log.source)];
+  if (!prefix || !log.event) return undefined;
+  const expected = normalize(log.args) as Json;
+  if (
+    log.event === "DepositReceived" ||
+    log.event === "DepositIntentAmountRangeUpdated"
+  ) {
+    const range = expected.intentAmountRange as Json | undefined;
+    delete expected.intentAmountRange;
+    if (range) {
+      expected.intentAmountRange_0 = range.min;
+      expected.intentAmountRange_1 = range.max;
+    }
+  }
+  if (
+    log.event === "DepositPaymentMethodAdded" &&
+    expected.payeeDetails !== undefined
+  ) {
+    expected.payeeDetailsHash = expected.payeeDetails;
+    delete expected.payeeDetails;
+  }
+  if (
+    log.event === "DepositPaymentMethodActiveUpdated" &&
+    expected.active !== undefined
+  ) {
+    expected.isActive = expected.active;
+    delete expected.active;
+  }
+  return {
+    entity: `${prefix}_${String(log.event)}`,
+    fields: ["id", ...Object.keys(expected)],
+    expected,
+  };
+}
+
+function compareRawScalar(
+  actual: unknown,
+  expected: unknown,
+  label: string
+): void {
+  if (typeof actual === "boolean" || typeof expected === "boolean") {
+    assertEqual(actual, expected, label);
+    return;
+  }
+  assertEqual(String(actual), String(expected), label);
+}
+
+async function fetchAndAssertRawReceiptRows(
+  receipt: ContractReceipt,
+  contracts: LoadedContracts
+): Promise<Json> {
+  const logs = decodeLogs(receipt, contracts);
+  const expectedRows = logs
+    .map((log) => ({ log, expectation: rawEventExpectation(log) }))
+    .filter(
+      (
+        item
+      ): item is {
+        log: Json;
+        expectation: { entity: string; fields: string[]; expected: Json };
+      } => Boolean(item.expectation)
+    );
+  if (expectedRows.length === 0)
+    return { query: null, response: null, checks: [] };
+  const fields = expectedRows.map(({ log, expectation }, index) => {
+    const id = `${EXPECTED_CHAIN_ID}_${receipt.blockNumber}_${String(
+      log.logIndex
+    )}`;
+    return `event_${index}: ${expectation.entity}_by_pk(id: ${quoted(
+      id
+    )}) { ${expectation.fields.join(" ")} }`;
+  });
+  const query = `query RiskE2ERawReceipt {\n${fields.join("\n")}\n}`;
+  const response = await graphql(query);
+  const data = graphqlData(response);
+  const checks: Json[] = [];
+  expectedRows.forEach(({ log, expectation }, index) => {
+    const row = data[`event_${index}`] as Json | undefined;
+    if (!row) {
+      throw new Error(
+        `Indexer missing raw ${expectation.entity} row for ${
+          receipt.blockNumber
+        }/${String(log.logIndex)}`
+      );
+    }
+    for (const [name, expected] of Object.entries(expectation.expected)) {
+      compareRawScalar(row[name], expected, `${expectation.entity}.${name}`);
+    }
+    checks.push({
+      entity: expectation.entity,
+      id: row.id,
+      blockNumber: receipt.blockNumber,
+      logIndex: log.logIndex,
+      result: "PASS",
+    });
+  });
+  return { query, response, checks };
 }
 
 async function graphql(query: string, variables: Json = {}): Promise<Json> {
@@ -297,7 +419,7 @@ function maximumNumeric(value: unknown, keys: string[]): bigint {
 }
 
 const META_QUERIES = [
-  `query RiskE2ESync { chain_metadata { chain_id block_height latest_fetched_block_number num_events_processed } }`,
+  `query RiskE2ESync { chain_metadata(where: { chain_id: { _eq: ${EXPECTED_CHAIN_ID} } }) { chain_id block_height num_events_processed } }`,
   `query RiskE2ESync { chain_metadata { chain_id block_height } }`,
 ];
 
@@ -311,7 +433,6 @@ async function waitForIndexer(blockNumber: number): Promise<Json> {
         last = await graphql(query);
         const indexed = maximumNumeric(last, [
           "block_height",
-          "latest_fetched_block_number",
           "latest_processed_block",
         ]);
         if (indexed >= BigInt(blockNumber)) {
@@ -334,137 +455,253 @@ async function waitForIndexer(blockNumber: number): Promise<Json> {
   );
 }
 
-const SNAPSHOT_QUERY = `
-query RiskE2ESnapshot(
-  $owners: [String!]!
-  $takers: [String!]!
-  $lps: [String!]!
-  $methods: [String!]!
-  $intents: [String!]!
-) {
-  TakerStakeState(where: { taker: { _in: $takers } }) {
-    chainId vaultAddress taker stakeOwner delegatedStakeOwner stakeDelegationEnabled
-    allowedStakeOwner riskManagerAddress vaultControllerVersion totalStake
-    pendingWithdrawalAmount eligibleStake reservedStake freeStake exiting
-    exitRequestedAt exitAvailableAt updatedAt
-  }
-  StakeAccountState(where: { stakeOwner: { _in: $owners } }) {
-    chainId vaultAddress stakeOwner totalStake pendingWithdrawalAmount eligibleStake
-    reservedStake freeStake exiting exitRequestedAt exitAvailableAt updatedAt
-  }
-  TakerStakeAuthorization(where: { taker: { _in: $takers } }) {
-    chainId vaultAddress taker stakeOwner authorized updatedAt
-  }
-  TakerStakeDelegationPolicy(where: { taker: { _in: $takers } }) {
-    chainId vaultAddress taker enabled allowedStakeOwner updatedAt
-  }
-  StakeExitState(where: { stakeOwner: { _in: $owners } }) {
-    chainId vaultAddress stakeOwner exiting exitRequestedAt exitAvailableAt updatedAt
-  }
-  StakeWithdrawalState(where: { stakeOwner: { _in: $owners } }) {
-    chainId vaultAddress stakeOwner status amount requestedAt availableAt updatedAt
-  }
-  StakeReservation(where: { intentHash: { _in: $intents } }) {
-    chainId vaultAddress intentHash stakeOwner controller originalAmount createdAt
-  }
-  StakeReservationState(where: { intentHash: { _in: $intents } }) {
-    chainId vaultAddress intentHash stakeOwner currentAmount status updatedAt
-  }
-  StakeReservationSchedule(where: { intentHash: { _in: $intents } }) {
-    chainId vaultAddress intentHash releaseTime updatedAt
-  }
-  RiskPosition(where: { intentHash: { _in: $intents } }) {
-    chainId riskManagerAddress intentHash taker stakeOwner lp paymentMethod mode
-    consumedFreeTake intentAmount createdAt maxIntentPeriod griefingCliff
-    griefingPenaltyBpsPerHour chargebackReserveBps riskWindow maxGriefingBond
-    chargebackReserve initialReservation
-  }
-  RiskPositionState(where: { intentHash: { _in: $intents } }) {
-    chainId riskManagerAddress intentHash status currentReservation releasedReservation
-    griefingPenalty releasedAmount chargebackCoverage remainingCoverage deferredPayoutAmount
-    totalChargebackCompensation cancelledAt settledAt coverageDeadline lastEvidenceId updatedAt
-  }
-  GriefingRiskState(where: { intentHash: { _in: $intents } }) {
-    chainId riskManagerAddress intentHash maxGriefingBond penaltyCharged
-    effectiveElapsed chargedAt updatedAt
-  }
-  ChargebackCoverage(where: { intentHash: { _in: $intents } }) {
-    chainId riskManagerAddress intentHash stakeOwner lp paymentMethod mode status
-    releasedAmount initialCoverage remainingCoverage uncoveredAmount deferredPayoutAmount
-    beneficiary totalCompensated settledAt coverageDeadline updatedAt
-  }
-  PlatformRiskConfig(where: { paymentMethod: { _in: $methods } }) {
-    chainId riskManagerAddress paymentMethod enabled updatedAt
-  }
-  PlatformChargebackConfig(where: { paymentMethod: { _in: $methods } }) {
-    chainId riskManagerAddress paymentMethod chargebackable deferredPayoutEnabled
-    reserveBps riskWindow updatedAt
-  }
-  PlatformGriefingConfig(where: { paymentMethod: { _in: $methods } }) {
-    chainId riskManagerAddress paymentMethod griefingCliff griefingPenaltyBpsPerHour
-    freeTakeCount freeTakeAmount updatedAt
-  }
-  FreeTakeUsage(where: { stakeOwner: { _in: $owners }, paymentMethod: { _in: $methods } }) {
-    chainId riskManagerAddress stakeOwner paymentMethod freeTakesUsed freeTakeCount
-    remainingFreeTakes totalFreeTakeAmount lastIntentHash lastAmount updatedAt
-  }
-  StakeOwnerRiskSummary(where: { stakeOwner: { _in: $owners } }) {
-    chainId riskManagerAddress stakeOwner pendingPositionCount pendingIntentAmount
-    pendingMaxGriefingBond pendingInitialReservation activeChargebackPositionCount
-    activeChargebackCoverage deferredPayoutCoverage accruedGriefingPenalties
-    totalChargebackCompensation updatedAt
-  }
-  LpRiskExposure(where: { lp: { _in: $lps }, paymentMethod: { _in: $methods } }) {
-    chainId riskManagerAddress lp paymentMethod pendingPositionCount pendingIntentAmount
-    pendingMaxGriefingBond pendingInitialReservation activeCoveragePositionCount
-    activeReleasedAmount remainingCoverage uncoveredExposure deferredPayoutExposure
-    maturedPositionCount maturedExposure exhaustedPositionCount exhaustedExposure
-    totalGriefingCompensation totalChargebackCompensation updatedAt
-  }
-  MakerCompensation(where: { maker: { _in: $lps } }) {
-    chainId vaultAddress maker claimableAmount updatedAt
-  }
-  DeferredPayoutState(where: { intentHash: { _in: $intents } }) {
-    chainId vaultAddress intentHash beneficiary status amount updatedAt
-  }
-  DeferredPayoutSchedule(where: { intentHash: { _in: $intents } }) {
-    chainId vaultAddress intentHash releaseTime updatedAt
-  }
-  DeferredPayoutRegistration(where: { intentHash: { _in: $intents } }) {
-    chainId riskManagerAddress intentHash beneficiary deferredAmount
-    chargebackCoverage coverageDeadline updatedAt
-  }
-  DepositRiskHook(where: { escrowAddress: { _eq: "${ADDRESSES.escrowV2.toLowerCase()}" } }) {
-    chainId orchestratorAddress escrowAddress depositId hook setter updatedAt
-  }
-  IntentRiskHookState(where: { intentHash: { _in: $intents } }) {
-    chainId intentHash orchestratorAddress riskHook requiresPostIntentHook updatedAt
-  }
-  IntentSettlementState(where: { intentHash: { _in: $intents } }) {
-    chainId intentHash orchestratorAddress releasedAmount settledAt updatedAt
-  }
-  IntentCancellationState(where: { intentHash: { _in: $intents } }) {
-    chainId intentHash orchestratorAddress cancelledAt updatedAt
-  }
-  EscrowIntentPeriodState(where: { escrowAddress: { _eq: "${ADDRESSES.escrowV2.toLowerCase()}" } }) {
-    chainId escrowAddress maxIntentPeriod observedFrom updatedAt
-  }
-}`;
+const STAKE_FIELDS = `chainId vaultAddress stakeOwner totalStake pendingWithdrawalAmount eligibleStake reservedStake freeStake exiting exitRequestedAt exitAvailableAt updatedAt`;
+const TAKER_FIELDS = `chainId vaultAddress taker stakeOwner delegatedStakeOwner stakeDelegationEnabled allowedStakeOwner riskManagerAddress vaultControllerVersion totalStake pendingWithdrawalAmount eligibleStake reservedStake freeStake exiting exitRequestedAt exitAvailableAt updatedAt`;
+const POSITION_FIELDS = `chainId riskManagerAddress intentHash taker stakeOwner lp paymentMethod mode consumedFreeTake intentAmount createdAt maxIntentPeriod griefingCliff griefingPenaltyBpsPerHour chargebackReserveBps riskWindow maxGriefingBond chargebackReserve initialReservation`;
+const POSITION_STATE_FIELDS = `chainId riskManagerAddress intentHash status currentReservation releasedReservation griefingPenalty releasedAmount chargebackCoverage remainingCoverage deferredPayoutAmount totalChargebackCompensation cancelledAt settledAt coverageDeadline lastEvidenceId updatedAt`;
 
-function snapshotVariables(state: RunState): Json {
+function quoted(value: string): string {
+  return JSON.stringify(value.toLowerCase());
+}
+
+function byPk(
+  alias: string,
+  entity: string,
+  id: string,
+  fields: string
+): string {
+  return `${alias}: ${entity}_by_pk(id: ${quoted(id)}) { ${fields} }`;
+}
+
+function buildExactSnapshotQuery(state: RunState): string {
   const actors = actorAddresses(loadActors());
-  return {
-    owners: [actors.ownerA, actors.ownerB].map((value) => value.toLowerCase()),
-    takers: [
-      actors.takerA1,
-      actors.takerA2,
-      actors.takerB,
-      actors.unauthorized,
-    ].map((value) => value.toLowerCase()),
-    lps: [actors.lpA, actors.lpB].map((value) => value.toLowerCase()),
-    methods: Object.values(PAYMENT_METHODS).map((value) => value.toLowerCase()),
-    intents: Object.values(state.intents).map((value) => value.toLowerCase()),
-  };
+  const chain = EXPECTED_CHAIN_ID;
+  const vault = ADDRESSES.stakeVault.toLowerCase();
+  const manager = ADDRESSES.riskManager.toLowerCase();
+  const orchestrator = ADDRESSES.orchestratorV3.toLowerCase();
+  const escrow = ADDRESSES.escrowV2.toLowerCase();
+  const fields: string[] = [];
+
+  for (const role of ["ownerA", "ownerB"] as const) {
+    const address = actors[role].toLowerCase();
+    fields.push(
+      byPk(
+        `stake_${role}`,
+        "StakeAccountState",
+        `${chain}_${vault}_${address}`,
+        STAKE_FIELDS
+      )
+    );
+    fields.push(
+      byPk(
+        `summary_${role}`,
+        "StakeOwnerRiskSummary",
+        `${chain}_${manager}_${address}`,
+        `chainId riskManagerAddress stakeOwner pendingPositionCount pendingIntentAmount pendingMaxGriefingBond pendingInitialReservation activeChargebackPositionCount activeChargebackCoverage deferredPayoutCoverage accruedGriefingPenalties totalChargebackCompensation updatedAt`
+      )
+    );
+  }
+  for (const role of [
+    "takerA1",
+    "takerA2",
+    "takerB",
+    "unauthorized",
+  ] as const) {
+    const address = actors[role].toLowerCase();
+    const id = `${chain}_${vault}_${address}`;
+    fields.push(byPk(`taker_${role}`, "TakerStakeState", id, TAKER_FIELDS));
+    fields.push(
+      byPk(
+        `authorization_${role}`,
+        "TakerStakeAuthorization",
+        id,
+        `chainId vaultAddress taker stakeOwner authorized updatedAt`
+      )
+    );
+    fields.push(
+      byPk(
+        `delegation_${role}`,
+        "TakerStakeDelegationPolicy",
+        id,
+        `chainId vaultAddress taker enabled allowedStakeOwner updatedAt`
+      )
+    );
+  }
+  for (const [methodName, method] of Object.entries(PAYMENT_METHODS)) {
+    const platformId = `${chain}_${manager}_${method.toLowerCase()}`;
+    fields.push(
+      byPk(
+        `platform_${methodName}`,
+        "PlatformRiskConfig",
+        platformId,
+        `chainId riskManagerAddress paymentMethod enabled updatedAt`
+      ),
+      byPk(
+        `chargebackConfig_${methodName}`,
+        "PlatformChargebackConfig",
+        platformId,
+        `chainId riskManagerAddress paymentMethod chargebackable deferredPayoutEnabled reserveBps riskWindow updatedAt`
+      ),
+      byPk(
+        `griefingConfig_${methodName}`,
+        "PlatformGriefingConfig",
+        platformId,
+        `chainId riskManagerAddress paymentMethod griefingCliff griefingPenaltyBpsPerHour freeTakeCount freeTakeAmount updatedAt`
+      )
+    );
+    for (const role of ["ownerA", "ownerB"] as const) {
+      fields.push(
+        byPk(
+          `free_${role}_${methodName}`,
+          "FreeTakeUsage",
+          `${chain}_${manager}_${actors[
+            role
+          ].toLowerCase()}_${method.toLowerCase()}`,
+          `chainId riskManagerAddress stakeOwner paymentMethod freeTakesUsed freeTakeCount remainingFreeTakes totalFreeTakeAmount lastIntentHash lastAmount updatedAt`
+        )
+      );
+    }
+    for (const role of ["lpA", "lpB"] as const) {
+      fields.push(
+        byPk(
+          `exposure_${role}_${methodName}`,
+          "LpRiskExposure",
+          `${chain}_${manager}_${actors[
+            role
+          ].toLowerCase()}_${method.toLowerCase()}`,
+          `chainId riskManagerAddress lp paymentMethod pendingPositionCount pendingIntentAmount pendingMaxGriefingBond pendingInitialReservation activeCoveragePositionCount activeReleasedAmount remainingCoverage uncoveredExposure deferredPayoutExposure maturedPositionCount maturedExposure exhaustedPositionCount exhaustedExposure totalGriefingCompensation totalChargebackCompensation updatedAt`
+        )
+      );
+    }
+  }
+  fields.push(
+    byPk(
+      "escrowPeriod",
+      "EscrowIntentPeriodState",
+      `${chain}_${escrow}`,
+      `chainId escrowAddress maxIntentPeriod observedFrom updatedAt`
+    ),
+    byPk(
+      "managerAdmission",
+      "RiskAdmissionConfig",
+      `${chain}_${manager}`,
+      `chainId riskManagerAddress admissionPaused updatedAt`
+    )
+  );
+
+  for (const [role, depositId] of Object.entries(state.deposits)) {
+    const depositEntityId = `${escrow}_${depositId}`;
+    fields.push(
+      byPk(
+        `deposit_${role}`,
+        "Deposit",
+        depositEntityId,
+        `chainId escrowAddress depositId depositor token remainingDeposits outstandingIntentAmount riskHookAddress updatedAt`
+      ),
+      byPk(
+        `depositHook_${role}`,
+        "DepositRiskHook",
+        `${chain}_${orchestrator}_${escrow}_${depositId}`,
+        `chainId orchestratorAddress escrowAddress depositId hook setter updatedAt`
+      )
+    );
+    const methods =
+      role === "lpA"
+        ? { zelle: PAYMENT_METHODS.zelle, venmo: PAYMENT_METHODS.venmo }
+        : { venmo: PAYMENT_METHODS.venmo };
+    for (const [methodName, method] of Object.entries(methods)) {
+      const quoteId = `${depositEntityId}_${method.toLowerCase()}_${USD.toLowerCase()}`;
+      fields.push(
+        byPk(
+          `quote_${role}_${methodName}`,
+          "QuoteCandidate",
+          quoteId,
+          `chainId depositId escrowAddress paymentMethodHash currencyCode riskHookAddress isActive updatedAt`
+        ),
+        byPk(
+          `orderbook_${role}_${methodName}`,
+          "OrderbookEntry",
+          `${depositEntityId}_${methodName}_${USD.toLowerCase()}`,
+          `chainId depositId escrowAddress paymentMethodHash currencyCode riskHookAddress isActive updatedAt`
+        )
+      );
+    }
+  }
+
+  for (const [name, intentHash] of Object.entries(state.intents)) {
+    const intent = intentHash.toLowerCase();
+    const positionId = `${chain}_${manager}_${intent}`;
+    const reservationId = `${chain}_${vault}_${intent}`;
+    const lifecycleId = `${chain}_${intent}`;
+    fields.push(
+      byPk(`position_${name}`, "RiskPosition", positionId, POSITION_FIELDS),
+      byPk(
+        `positionState_${name}`,
+        "RiskPositionState",
+        positionId,
+        POSITION_STATE_FIELDS
+      ),
+      byPk(
+        `griefing_${name}`,
+        "GriefingRiskState",
+        positionId,
+        `chainId riskManagerAddress intentHash maxGriefingBond penaltyCharged effectiveElapsed chargedAt updatedAt`
+      ),
+      byPk(
+        `coverage_${name}`,
+        "ChargebackCoverage",
+        positionId,
+        `chainId riskManagerAddress intentHash stakeOwner lp paymentMethod mode status releasedAmount initialCoverage remainingCoverage uncoveredAmount deferredPayoutAmount beneficiary totalCompensated settledAt coverageDeadline updatedAt`
+      ),
+      byPk(
+        `reservation_${name}`,
+        "StakeReservationState",
+        reservationId,
+        `chainId vaultAddress intentHash stakeOwner currentAmount status updatedAt`
+      ),
+      byPk(
+        `deferred_${name}`,
+        "DeferredPayoutState",
+        lifecycleId,
+        `chainId vaultAddress intentHash beneficiary status amount updatedAt`
+      ),
+      byPk(
+        `deferredRegistration_${name}`,
+        "DeferredPayoutRegistration",
+        positionId,
+        `chainId riskManagerAddress intentHash beneficiary deferredAmount chargebackCoverage coverageDeadline updatedAt`
+      ),
+      byPk(
+        `intentHook_${name}`,
+        "IntentRiskHookState",
+        lifecycleId,
+        `chainId intentHash orchestratorAddress riskHook requiresPostIntentHook updatedAt`
+      ),
+      byPk(
+        `intentSettlement_${name}`,
+        "IntentSettlementState",
+        lifecycleId,
+        `chainId intentHash orchestratorAddress releasedAmount settledAt updatedAt`
+      ),
+      byPk(
+        `intentCancellation_${name}`,
+        "IntentCancellationState",
+        lifecycleId,
+        `chainId intentHash orchestratorAddress cancelledAt updatedAt`
+      )
+    );
+  }
+  for (const role of ["lpA", "lpB"] as const) {
+    fields.push(
+      byPk(
+        `compensation_${role}`,
+        "MakerCompensation",
+        `${chain}_${vault}_${actors[role].toLowerCase()}`,
+        `chainId vaultAddress maker claimableAmount updatedAt`
+      )
+    );
+  }
+  return `query RiskE2EExactSnapshot {\n${fields.join("\n")}\n}`;
 }
 
 async function contractSnapshot(
@@ -550,7 +787,7 @@ async function contractSnapshot(
 }
 
 async function indexedSnapshot(state: RunState): Promise<Json> {
-  return graphql(SNAPSHOT_QUERY, snapshotVariables(state));
+  return graphql(buildExactSnapshotQuery(state));
 }
 
 const MODE_NAMES = ["NONE", "FREE", "STAKE_BACKED", "DEFERRED_PAYOUT"];
@@ -563,12 +800,10 @@ const STATUS_NAMES = [
   "SLASHED",
 ];
 
-function graphqlRows(indexer: Json, entity: string): Json[] {
+function graphqlData(indexer: Json): Json {
   const data = indexer.data as Json | undefined;
-  const rows = data?.[entity];
-  if (!Array.isArray(rows))
-    throw new Error(`GraphQL response is missing ${entity}`);
-  return rows as Json[];
+  if (!data) throw new Error("GraphQL response is missing data");
+  return data;
 }
 
 async function assertIndexedReconciliation(
@@ -580,14 +815,135 @@ async function assertIndexedReconciliation(
   const checks: Json[] = [];
   const call = { blockTag };
   const actors = actorAddresses(loadActors());
+  const data = graphqlData(indexer);
+  const observedPositions: Array<{
+    name: string;
+    intentHash: string;
+    position: any;
+  }> = [];
 
-  for (const taker of [actors.takerA1, actors.takerA2, actors.takerB]) {
-    const owner = await contracts.vault.stakeOwnerOf(taker, call);
-    const rows = graphqlRows(indexer, "TakerStakeState");
-    const row = rows.find(
-      (candidate) =>
-        String(candidate.taker).toLowerCase() === taker.toLowerCase()
+  for (const [methodName, method] of Object.entries(PAYMENT_METHODS)) {
+    const admission = data[`platform_${methodName}`] as Json | undefined;
+    const chargeback = data[`chargebackConfig_${methodName}`] as
+      | Json
+      | undefined;
+    const griefing = data[`griefingConfig_${methodName}`] as Json | undefined;
+    if (!admission || !chargeback || !griefing)
+      throw new Error(
+        `Indexer missing exact three-row platform config for ${methodName}`
+      );
+    const expected = await contracts.risk.getPlatformRiskConfig(method, call);
+    assertEqual(
+      admission.riskManagerAddress,
+      ADDRESSES.riskManager,
+      `${methodName} manager scope`
     );
+    assertEqual(admission.enabled, expected.enabled, `${methodName} enabled`);
+    assertEqual(
+      chargeback.chargebackable,
+      expected.chargeback.chargebackable,
+      `${methodName} chargebackable`
+    );
+    assertEqual(
+      chargeback.deferredPayoutEnabled,
+      expected.chargeback.deferredPayoutEnabled,
+      `${methodName} deferred payout enabled`
+    );
+    assertEqual(
+      chargeback.reserveBps,
+      expected.chargeback.reserveBps,
+      `${methodName} reserve bps`
+    );
+    assertEqual(
+      chargeback.riskWindow,
+      expected.chargeback.riskWindow,
+      `${methodName} risk window`
+    );
+    assertEqual(
+      griefing.griefingCliff,
+      expected.griefing.griefingCliff,
+      `${methodName} cliff`
+    );
+    assertEqual(
+      griefing.griefingPenaltyBpsPerHour,
+      expected.griefing.griefingPenaltyBpsPerHour,
+      `${methodName} slope`
+    );
+    assertEqual(
+      griefing.freeTakeCount,
+      expected.griefing.freeTakeCount,
+      `${methodName} free count`
+    );
+    assertEqual(
+      griefing.freeTakeAmount,
+      expected.griefing.freeTakeAmount,
+      `${methodName} free amount`
+    );
+    checks.push({
+      entity: "PlatformRiskConfig(3 rows)",
+      key: method,
+      result: "PASS",
+    });
+  }
+
+  const vaultTokenBalance = await contracts.token.balanceOf(
+    ADDRESSES.stakeVault,
+    call
+  );
+  const totalLiabilities = await contracts.vault.totalLiabilities(call);
+  assertEqual(
+    vaultTokenBalance,
+    totalLiabilities,
+    "StakeVault token/liability conservation"
+  );
+  checks.push({
+    entity: "StakeVault",
+    key: ADDRESSES.stakeVault,
+    result: "PASS",
+  });
+
+  for (const role of ["ownerA", "ownerB"] as const) {
+    const owner = actors[role];
+    const expected = {
+      totalStake: await contracts.vault.stakeBalance(owner, call),
+      eligibleStake: await contracts.vault.eligibleStake(owner, call),
+      reservedStake: await contracts.vault.reservedStake(owner, call),
+      freeStake: await contracts.vault.freeStake(owner, call),
+      exiting: await contracts.vault.isExiting(owner, call),
+    };
+    const row = data[`stake_${role}`] as Json | undefined;
+    if (!expected.totalStake.isZero()) {
+      if (!row)
+        throw new Error(`Indexer missing StakeAccountState for ${role}`);
+      assertEqual(
+        row.totalStake,
+        expected.totalStake,
+        `${role} indexed total stake`
+      );
+      assertEqual(
+        row.eligibleStake,
+        expected.eligibleStake,
+        `${role} indexed eligible stake`
+      );
+      assertEqual(
+        row.reservedStake,
+        expected.reservedStake,
+        `${role} indexed reserved stake`
+      );
+      assertEqual(
+        row.freeStake,
+        expected.freeStake,
+        `${role} indexed free stake`
+      );
+      assertEqual(row.exiting, expected.exiting, `${role} indexed exit state`);
+      checks.push({ entity: "StakeAccountState", key: owner, result: "PASS" });
+    }
+  }
+
+  for (const role of ["takerA1", "takerA2", "takerB"] as const) {
+    const taker = actors[role];
+    const owner = await contracts.vault.stakeOwnerOf(taker, call);
+    const row = data[`taker_${role}`] as Json | undefined;
     if (owner.toLowerCase() !== taker.toLowerCase()) {
       if (!row)
         throw new Error(
@@ -612,19 +968,14 @@ async function assertIndexedReconciliation(
   }
 
   for (const [name, intentHash] of Object.entries(state.intents)) {
-    const immutable = graphqlRows(indexer, "RiskPosition").find(
-      (candidate) =>
-        String(candidate.intentHash).toLowerCase() === intentHash.toLowerCase()
-    );
-    const current = graphqlRows(indexer, "RiskPositionState").find(
-      (candidate) =>
-        String(candidate.intentHash).toLowerCase() === intentHash.toLowerCase()
-    );
+    const immutable = data[`position_${name}`] as Json | undefined;
+    const current = data[`positionState_${name}`] as Json | undefined;
     if (!immutable || !current)
       throw new Error(
         `Indexer missing risk position rows for ${name}/${intentHash}`
       );
     const position = await contracts.risk.getRiskPosition(intentHash, call);
+    observedPositions.push({ name, intentHash, position });
     assertEqual(immutable.taker, position.taker, `${name} indexed taker`);
     assertEqual(
       immutable.stakeOwner,
@@ -690,33 +1041,260 @@ async function assertIndexedReconciliation(
       key: intentHash,
       result: "PASS",
     });
+
+    const coverage = data[`coverage_${name}`] as Json | undefined;
+    if (coverage) {
+      const initial = BigInt(String(coverage.initialCoverage));
+      const remaining = BigInt(String(coverage.remainingCoverage));
+      const compensated = BigInt(String(coverage.totalCompensated));
+      const released = BigInt(String(coverage.releasedAmount));
+      const uncovered = BigInt(String(coverage.uncoveredAmount));
+      assertEqual(
+        initial,
+        remaining + compensated,
+        `${name} coverage conservation`
+      );
+      assertEqual(
+        released,
+        initial + uncovered,
+        `${name} released coverage conservation`
+      );
+      checks.push({
+        entity: "ChargebackCoverage",
+        key: intentHash,
+        result: "PASS",
+      });
+    }
+    const deferred = data[`deferred_${name}`] as Json | undefined;
+    if (deferred) {
+      const fundedRemaining =
+        BigInt(position.deferredPayoutAmount.toString()) -
+        BigInt(position.slashedAmount.toString());
+      assertEqual(
+        deferred.amount,
+        fundedRemaining,
+        `${name} deferred funded remainder`
+      );
+      checks.push({
+        entity: "DeferredPayoutState",
+        key: intentHash,
+        result: "PASS",
+      });
+    }
   }
 
-  for (const owner of [actors.ownerA, actors.ownerB]) {
+  const sum = (values: bigint[]): bigint =>
+    values.reduce((total, value) => total + value, 0n);
+  for (const role of ["ownerA", "ownerB"] as const) {
+    const owner = actors[role].toLowerCase();
+    const positions = observedPositions.filter(
+      ({ position }) => String(position.stakeOwner).toLowerCase() === owner
+    );
+    if (positions.length === 0) continue;
+    const row = data[`summary_${role}`] as Json | undefined;
+    if (!row)
+      throw new Error(`Indexer missing StakeOwnerRiskSummary for ${role}`);
+    const pending = positions.filter(
+      ({ position }) => Number(position.status) === 1
+    );
+    const active = positions.filter(
+      ({ position }) => Number(position.status) === 3
+    );
+    const cancelled = positions.filter(
+      ({ position }) => Number(position.status) === 2
+    );
+    assertEqual(
+      row.pendingPositionCount,
+      BigInt(pending.length),
+      `${role} pending count`
+    );
+    assertEqual(
+      row.pendingIntentAmount,
+      sum(
+        pending.map(({ position }) => BigInt(position.intentAmount.toString()))
+      ),
+      `${role} pending amount`
+    );
+    assertEqual(
+      row.pendingMaxGriefingBond,
+      sum(
+        pending.map(({ position }) =>
+          BigInt(position.maxGriefingBond.toString())
+        )
+      ),
+      `${role} pending maximum griefing bond`
+    );
+    assertEqual(
+      row.pendingInitialReservation,
+      sum(
+        pending.map(({ position }) =>
+          BigInt(position.initialReservation.toString())
+        )
+      ),
+      `${role} pending initial reservation`
+    );
+    assertEqual(
+      row.activeChargebackPositionCount,
+      BigInt(active.length),
+      `${role} active coverage count`
+    );
+    assertEqual(
+      row.activeChargebackCoverage,
+      sum(
+        active.map(({ position }) => BigInt(position.reservedAmount.toString()))
+      ),
+      `${role} active coverage`
+    );
+    assertEqual(
+      row.deferredPayoutCoverage,
+      sum(
+        active
+          .filter(({ position }) => Number(position.mode) === 3)
+          .map(({ position }) => BigInt(position.reservedAmount.toString()))
+      ),
+      `${role} deferred coverage`
+    );
+    assertEqual(
+      row.accruedGriefingPenalties,
+      sum(
+        cancelled.map(({ position }) =>
+          BigInt(position.slashedAmount.toString())
+        )
+      ),
+      `${role} griefing compensation`
+    );
+    checks.push({
+      entity: "StakeOwnerRiskSummary",
+      key: owner,
+      result: "PASS",
+    });
+  }
+
+  for (const role of ["lpA", "lpB"] as const) {
+    for (const [methodName, method] of Object.entries(PAYMENT_METHODS)) {
+      const positions = observedPositions.filter(
+        ({ position }) =>
+          String(position.lp).toLowerCase() === actors[role].toLowerCase() &&
+          String(position.paymentMethod).toLowerCase() === method.toLowerCase()
+      );
+      if (positions.length === 0) continue;
+      const row = data[`exposure_${role}_${methodName}`] as Json | undefined;
+      if (!row)
+        throw new Error(
+          `Indexer missing LpRiskExposure for ${role}/${methodName}`
+        );
+      const pending = positions.filter(
+        ({ position }) => Number(position.status) === 1
+      );
+      const active = positions.filter(
+        ({ position }) => Number(position.status) === 3
+      );
+      assertEqual(
+        row.pendingPositionCount,
+        BigInt(pending.length),
+        `${role}/${methodName} pending count`
+      );
+      assertEqual(
+        row.pendingIntentAmount,
+        sum(
+          pending.map(({ position }) =>
+            BigInt(position.intentAmount.toString())
+          )
+        ),
+        `${role}/${methodName} pending amount`
+      );
+      assertEqual(
+        row.pendingMaxGriefingBond,
+        sum(
+          pending.map(({ position }) =>
+            BigInt(position.maxGriefingBond.toString())
+          )
+        ),
+        `${role}/${methodName} pending max bond`
+      );
+      assertEqual(
+        row.pendingInitialReservation,
+        sum(
+          pending.map(({ position }) =>
+            BigInt(position.initialReservation.toString())
+          )
+        ),
+        `${role}/${methodName} pending reservation`
+      );
+      assertEqual(
+        row.activeCoveragePositionCount,
+        BigInt(active.length),
+        `${role}/${methodName} active count`
+      );
+      assertEqual(
+        row.activeReleasedAmount,
+        sum(
+          active.map(({ position }) =>
+            BigInt(position.releasedAmount.toString())
+          )
+        ),
+        `${role}/${methodName} active released amount`
+      );
+      assertEqual(
+        row.remainingCoverage,
+        sum(
+          active.map(({ position }) =>
+            BigInt(position.reservedAmount.toString())
+          )
+        ),
+        `${role}/${methodName} remaining coverage`
+      );
+      const uncovered = sum(
+        active.map(({ position }) => {
+          const released = BigInt(position.releasedAmount.toString());
+          const initial = ceilDiv(
+            released * BigInt(position.chargebackReserveBps.toString()),
+            10_000n
+          );
+          return released - initial;
+        })
+      );
+      assertEqual(
+        row.uncoveredExposure,
+        uncovered,
+        `${role}/${methodName} uncovered exposure`
+      );
+      assertEqual(
+        row.deferredPayoutExposure,
+        sum(
+          active
+            .filter(({ position }) => Number(position.mode) === 3)
+            .map(({ position }) => BigInt(position.reservedAmount.toString()))
+        ),
+        `${role}/${methodName} deferred exposure`
+      );
+      checks.push({
+        entity: "LpRiskExposure",
+        key: `${role}/${methodName}`,
+        result: "PASS",
+      });
+    }
+  }
+
+  for (const role of ["ownerA", "ownerB"] as const) {
+    const owner = actors[role];
     const used = await contracts.risk.freeTakesUsed(
       owner,
       PAYMENT_METHODS.zelle,
       call
     );
     if (!used.isZero()) {
-      const row = graphqlRows(indexer, "FreeTakeUsage").find(
-        (candidate) =>
-          String(candidate.stakeOwner).toLowerCase() === owner.toLowerCase() &&
-          String(candidate.paymentMethod).toLowerCase() ===
-            PAYMENT_METHODS.zelle.toLowerCase()
-      );
+      const row = data[`free_${role}_zelle`] as Json | undefined;
       if (!row) throw new Error(`Indexer missing FreeTakeUsage for ${owner}`);
       assertEqual(row.freeTakesUsed, used, `${owner} indexed free takes used`);
       checks.push({ entity: "FreeTakeUsage", key: owner, result: "PASS" });
     }
   }
 
-  for (const maker of [actors.lpA, actors.lpB]) {
+  for (const role of ["lpA", "lpB"] as const) {
+    const maker = actors[role];
     const expected = await contracts.vault.claimableCompensation(maker, call);
-    const row = graphqlRows(indexer, "MakerCompensation").find(
-      (candidate) =>
-        String(candidate.maker).toLowerCase() === maker.toLowerCase()
-    );
+    const row = data[`compensation_${role}`] as Json | undefined;
     if (row)
       assertEqual(
         row.claimableAmount,
@@ -727,6 +1305,63 @@ async function assertIndexedReconciliation(
       throw new Error(`Indexer missing MakerCompensation for ${maker}`);
     if (row)
       checks.push({ entity: "MakerCompensation", key: maker, result: "PASS" });
+  }
+
+  for (const [role, depositId] of Object.entries(state.deposits)) {
+    const hook = data[`depositHook_${role}`] as Json | undefined;
+    const deposit = data[`deposit_${role}`] as Json | undefined;
+    if (!deposit)
+      throw new Error(
+        `Indexer missing exact deposit row for ${role}/${depositId}`
+      );
+    const expectedHook = await contracts.orchestrator.getDepositRiskHook(
+      ADDRESSES.escrowV2,
+      depositId,
+      call
+    );
+    if (String(expectedHook).toLowerCase() === ZERO.toLowerCase()) {
+      if (hook) assertEqual(hook.hook, ZERO, `${role} pre-hook exact hook row`);
+      checks.push({ entity: "Deposit(pre-hook)", key: role, result: "PASS" });
+      continue;
+    }
+    if (!hook)
+      throw new Error(
+        `Indexer missing exact deposit hook row for ${role}/${depositId}`
+      );
+    assertEqual(
+      hook.hook,
+      ADDRESSES.riskManager,
+      `${role} indexed deposit hook`
+    );
+    assertEqual(
+      deposit.riskHookAddress,
+      ADDRESSES.riskManager,
+      `${role} deposit risk hook projection`
+    );
+    const methods = role === "lpA" ? ["zelle", "venmo"] : ["venmo"];
+    for (const method of methods) {
+      const quote = data[`quote_${role}_${method}`] as Json | undefined;
+      const orderbook = data[`orderbook_${role}_${method}`] as Json | undefined;
+      if (!quote || !orderbook)
+        throw new Error(
+          `Indexer missing quote/orderbook hook rows for ${role}/${method}`
+        );
+      assertEqual(
+        quote.riskHookAddress,
+        ADDRESSES.riskManager,
+        `${role}/${method} quote risk hook`
+      );
+      assertEqual(
+        orderbook.riskHookAddress,
+        ADDRESSES.riskManager,
+        `${role}/${method} orderbook risk hook`
+      );
+      checks.push({
+        entity: "Deposit+QuoteCandidate+OrderbookEntry",
+        key: `${role}/${method}`,
+        result: "PASS",
+      });
+    }
   }
   return checks;
 }
@@ -747,11 +1382,7 @@ async function saveSynchronizedSnapshot(
     capturedAtUtc: new Date().toISOString(),
     receiptBlock: blockNumber,
     sync,
-    graphql: {
-      query: SNAPSHOT_QUERY,
-      variables: snapshotVariables(state),
-      response: indexer,
-    },
+    graphql: { query: buildExactSnapshotQuery(state), response: indexer },
     onchain,
   };
   evidence.reconciliation = await assertIndexedReconciliation(
@@ -769,8 +1400,8 @@ const ACTION_PLAN = [
   "setup: targeted native/USDC funding, one-sided delegated stake, two isolated LP deposits, risk hooks",
   "fast: whole-free boundary cases, bonded reservation, partial withdrawal/exit gates, shared capacity, stake-backed settlement, deferred settlement",
   "after-cliff: cancel long-lived free and bonded positions and reconcile exact time-linear griefing charge",
-  "chargebacks: temporarily authorize 0x84 witness, submit partial/capped/replay claims, aggregate compensation, restore witness set",
-  "cleanup: remove temporary witness if necessary and emit final contract/indexer reconciliation snapshot",
+  "fork-only chargebacks/failure induction: hard-disabled on chain 8453; use an isolated fork or an already-authorized non-mutating proof",
+  "reconcile: exact chain+contract primary keys, raw receipt event rows, hook projections, and conservation equations",
 ];
 
 function showPlan(): void {
@@ -847,8 +1478,20 @@ async function runAction(
 ): Promise<Json> {
   const existing = state.transactions[label];
   if (existing) {
-    if (!existing.indexerSync && existing.blockNumber) {
-      existing.indexerSync = await waitForIndexer(Number(existing.blockNumber));
+    if (
+      (!existing.indexerSync || !existing.rawEventRows) &&
+      existing.blockNumber
+    ) {
+      existing.indexerSync =
+        existing.indexerSync ||
+        (await waitForIndexer(Number(existing.blockNumber)));
+      const receipt = (await provider.getTransactionReceipt(
+        String(existing.transactionHash)
+      )) as ContractReceipt;
+      existing.rawEventRows = await fetchAndAssertRawReceiptRows(
+        receipt,
+        contracts
+      );
       if (options.reconcile) {
         existing.postOnchain = await contractSnapshot(
           contracts,
@@ -856,11 +1499,7 @@ async function runAction(
           Number(existing.blockNumber)
         );
         const response = await indexedSnapshot(state);
-        existing.graphql = {
-          query: SNAPSHOT_QUERY,
-          variables: snapshotVariables(state),
-          response,
-        };
+        existing.graphql = { query: buildExactSnapshotQuery(state), response };
         existing.reconciliation = await assertIndexedReconciliation(
           response,
           contracts,
@@ -915,6 +1554,10 @@ async function runAction(
 
   const sync = await waitForIndexer(receipt.blockNumber);
   evidence.indexerSync = sync;
+  evidence.rawEventRows = await fetchAndAssertRawReceiptRows(
+    receipt,
+    contracts
+  );
   if (options.reconcile) {
     evidence.postOnchain = await contractSnapshot(
       contracts,
@@ -922,11 +1565,7 @@ async function runAction(
       receipt.blockNumber
     );
     const response = await indexedSnapshot(state);
-    evidence.graphql = {
-      query: SNAPSHOT_QUERY,
-      variables: snapshotVariables(state),
-      response,
-    };
+    evidence.graphql = { query: buildExactSnapshotQuery(state), response };
     try {
       evidence.reconciliation = await assertIndexedReconciliation(
         response,
@@ -977,7 +1616,7 @@ async function runNativeFunding(
   });
   const receipt = await transaction.wait();
   const block = await provider.getBlock(receipt.blockNumber);
-  const evidence = {
+  const evidence: Json = {
     label,
     actor: governance.address,
     recipient,
@@ -1311,13 +1950,57 @@ async function preflight(
     ],
     state
   );
+  await expectRevert(
+    "00.config.zero-payment-method-reverts",
+    governance,
+    contracts.risk,
+    "setPlatformRiskConfig",
+    [ethers.constants.HashZero, invalidBase],
+    state
+  );
+  for (const [label, chargeback] of [
+    ["zero-reserve", { ...invalidBase.chargeback, reserveBps: 0 }],
+    ["zero-window", { ...invalidBase.chargeback, riskWindow: 0 }],
+    [
+      "window-over-365-days",
+      { ...invalidBase.chargeback, riskWindow: 31_536_001 },
+    ],
+  ] as const) {
+    await expectRevert(
+      `00.config.chargeback-${label}-reverts`,
+      governance,
+      contracts.risk,
+      "setPlatformRiskConfig",
+      [PAYMENT_METHODS.venmo, { ...invalidBase, chargeback }],
+      state
+    );
+  }
+  await expectRevert(
+    "00.config.nonchargeback-deferred-reverts",
+    governance,
+    contracts.risk,
+    "setPlatformRiskConfig",
+    [
+      PAYMENT_METHODS.zelle,
+      {
+        ...invalidBase,
+        chargeback: {
+          chargebackable: false,
+          deferredPayoutEnabled: true,
+          reserveBps: 0,
+          riskWindow: 0,
+        },
+      },
+    ],
+    state
+  );
 
   const sync = await waitForIndexer(latestBlock);
   const [onchain, indexer] = await Promise.all([
     contractSnapshot(contracts, state, latestBlock),
     indexedSnapshot(state),
   ]);
-  const evidence = {
+  const evidence: Json = {
     label: "00.preflight",
     observedAtUtc: new Date().toISOString(),
     chainId: network.chainId,
@@ -1327,12 +2010,14 @@ async function preflight(
     sync,
     verifiedConfig: { zelle, venmo, maxIntentPeriod },
     onchain,
-    graphql: {
-      query: SNAPSHOT_QUERY,
-      variables: snapshotVariables(state),
-      response: indexer,
-    },
+    graphql: { query: buildExactSnapshotQuery(state), response: indexer },
   };
+  evidence.reconciliation = await assertIndexedReconciliation(
+    indexer,
+    contracts,
+    state,
+    latestBlock
+  );
   writeEvidence("00.preflight", evidence);
   printJson({
     preflight: "PASS",
@@ -1376,6 +2061,7 @@ async function setup(
   const ownerB = actorWallet("ownerB", provider);
   const lpA = actorWallet("lpA", provider);
   const lpB = actorWallet("lpB", provider);
+  const unauthorized = actorWallet("unauthorized", provider);
 
   await runAction(
     "02.ownerA.approve-vault",
@@ -1425,6 +2111,116 @@ async function setup(
     contracts.vault,
     "depositStakeFor",
     [actors.takerB, "10000"],
+    provider,
+    contracts,
+    state,
+    { reconcile: true }
+  );
+
+  await expectRevert(
+    "02.authorization.batch-atomic-on-invalid-taker",
+    ownerA,
+    contracts.vault,
+    "setTakerAuthorizations",
+    [[actors.takerA1, ZERO], true],
+    state
+  );
+  await runAction(
+    "02.delegation.unauthorized-opt-out",
+    unauthorized,
+    contracts.vault,
+    "setStakeDelegationEnabled",
+    [false],
+    provider,
+    contracts,
+    state,
+    { reconcile: true }
+  );
+  await expectRevert(
+    "02.delegation.opt-out-rejects-owner",
+    ownerA,
+    contracts.vault,
+    "setTakerAuthorization",
+    [actors.unauthorized, true],
+    state
+  );
+  await runAction(
+    "02.delegation.unauthorized-allow-ownerB",
+    unauthorized,
+    contracts.vault,
+    "setAllowedStakeOwner",
+    [actors.ownerB],
+    provider,
+    contracts,
+    state,
+    { reconcile: true }
+  );
+  await expectRevert(
+    "02.delegation.exact-owner-rejects-ownerA",
+    ownerA,
+    contracts.vault,
+    "setTakerAuthorization",
+    [actors.unauthorized, true],
+    state
+  );
+  await runAction(
+    "02.delegation.ownerB-authorizes-exact-taker",
+    ownerB,
+    contracts.vault,
+    "setTakerAuthorization",
+    [actors.unauthorized, true],
+    provider,
+    contracts,
+    state,
+    { reconcile: true }
+  );
+  await expectRevert(
+    "02.delegation.first-owner-collision-reverts",
+    ownerA,
+    contracts.vault,
+    "setTakerAuthorization",
+    [actors.unauthorized, true],
+    state
+  );
+  await runAction(
+    "02.delegation.taker-clears-owner",
+    unauthorized,
+    contracts.vault,
+    "clearStakeOwner",
+    [],
+    provider,
+    contracts,
+    state,
+    { reconcile: true }
+  );
+  await runAction(
+    "02.delegation.taker-reenables",
+    unauthorized,
+    contracts.vault,
+    "setStakeDelegationEnabled",
+    [true],
+    provider,
+    contracts,
+    state,
+    { reconcile: true }
+  );
+  await runAction(
+    "02.delegation.ownerA-authorizes-after-recovery",
+    ownerA,
+    contracts.vault,
+    "setTakerAuthorization",
+    [actors.unauthorized, true],
+    provider,
+    contracts,
+    state,
+    { reconcile: true }
+  );
+  await runAction(
+    "02.delegation.ownerA-revokes-cleanup",
+    ownerA,
+    contracts.vault,
+    "setTakerAuthorization",
+    [actors.unauthorized, false],
     provider,
     contracts,
     state,
@@ -1523,6 +2319,7 @@ async function fastScenarios(
   const takerA2 = actorWallet("takerA2", provider);
   const takerB = actorWallet("takerB", provider);
   const ownerA = actorWallet("ownerA", provider);
+  const ownerB = actorWallet("ownerB", provider);
   const lpA = actorWallet("lpA", provider);
   const lpB = actorWallet("lpB", provider);
   const recipient = actorWallet("recipient", provider);
@@ -1741,6 +2538,10 @@ async function fastScenarios(
     { reconcile: true }
   );
 
+  const eligibleBeforeWithdrawal = await contracts.vault.eligibleStake(
+    ownerA.address
+  );
+  const freeBeforeWithdrawal = await contracts.vault.freeStake(ownerA.address);
   await runAction(
     "05.partial-withdrawal.request",
     ownerA,
@@ -1751,6 +2552,16 @@ async function fastScenarios(
     contracts,
     state,
     { reconcile: true }
+  );
+  assertEqual(
+    await contracts.vault.eligibleStake(ownerA.address),
+    eligibleBeforeWithdrawal.sub("1000000"),
+    "partial request immediately reduces eligible stake"
+  );
+  assertEqual(
+    await contracts.vault.freeStake(ownerA.address),
+    freeBeforeWithdrawal.sub("1000000"),
+    "partial request immediately reduces free stake"
   );
   await expectRevert(
     "05.partial-withdrawal.early-withdraw-reverts",
@@ -1800,6 +2611,60 @@ async function fastScenarios(
   await runAction(
     "05.full-exit.cancel",
     ownerA,
+    contracts.vault,
+    "cancelExit",
+    [],
+    provider,
+    contracts,
+    state,
+    { reconcile: true }
+  );
+
+  await runAction(
+    "05.free-admission-while-owner-exiting.request-exit",
+    ownerB,
+    contracts.vault,
+    "requestExit",
+    [],
+    provider,
+    contracts,
+    state,
+    { reconcile: true }
+  );
+  const freeWhileExiting = await signal(
+    "05.free-admission-while-owner-exiting.signal",
+    "freeWhileExiting",
+    takerB,
+    signalParams(
+      state.deposits.lpA,
+      "1",
+      PAYMENT_METHODS.zelle,
+      actors.recipient
+    ),
+    provider,
+    contracts,
+    state
+  );
+  await assertPosition(contracts, freeWhileExiting, {
+    mode: 1,
+    status: 1,
+    reservation: "0",
+    free: true,
+  });
+  await runAction(
+    "05.free-admission-while-owner-exiting.cancel",
+    takerB,
+    contracts.orchestrator,
+    "cancelIntent",
+    [freeWhileExiting],
+    provider,
+    contracts,
+    state,
+    { reconcile: true }
+  );
+  await runAction(
+    "05.free-admission-while-owner-exiting.cancel-exit",
+    ownerB,
     contracts.vault,
     "cancelExit",
     [],
@@ -1887,6 +2752,61 @@ async function fastScenarios(
     { reconcile: true }
   );
 
+  await expectRevert(
+    "07.deferred.missing-canonical-hook-reverts",
+    takerB,
+    contracts.orchestrator,
+    "signalIntent",
+    [
+      signalParams(
+        state.deposits.lpB,
+        "1000000",
+        PAYMENT_METHODS.venmo,
+        actors.recipient
+      ),
+    ],
+    state
+  );
+  await expectRevert(
+    "07.deferred.below-griefing-bond-reverts",
+    takerB,
+    contracts.orchestrator,
+    "signalIntent",
+    [
+      signalParams(
+        state.deposits.lpA,
+        "20000000",
+        PAYMENT_METHODS.venmo,
+        actors.recipient,
+        ADDRESSES.deferredPayoutHook
+      ),
+    ],
+    state
+  );
+  await expectRevert(
+    "07.deferred.canonical-hook-rejected-for-fully-staked-position",
+    takerA1,
+    contracts.orchestrator,
+    "signalIntent",
+    [
+      signalParams(
+        state.deposits.lpA,
+        "1000000",
+        PAYMENT_METHODS.venmo,
+        actors.recipient,
+        ADDRESSES.deferredPayoutHook
+      ),
+    ],
+    state
+  );
+  assertEqual(
+    await contracts.orchestrator.protocolFee(),
+    "0",
+    "deferred protocol fee prerequisite"
+  );
+  const managerFee = await contracts.escrow.getManagerFee(state.deposits.lpB);
+  assertEqual(managerFee.fee, "0", "deferred manager fee prerequisite");
+
   const deferred = await signal(
     "07.deferred.signal",
     "deferredSettled",
@@ -1918,6 +2838,21 @@ async function fastScenarios(
     contracts,
     state,
     { reconcile: true }
+  );
+  const deferredPosition = await contracts.risk.getRiskPosition(deferred);
+  const deferredPayout = await contracts.vault.getDeferredPayout(deferred);
+  assertEqual(
+    deferredPayout.amount,
+    deferredPosition.releasedAmount,
+    "zero-fee deferred payout equals gross released amount"
+  );
+  await expectRevert(
+    "07.deferred.registration-wrong-caller-reverts",
+    caller,
+    contracts.risk,
+    "registerDeferredPayout",
+    [deferred, actors.recipient, "1000000"],
+    state
   );
 
   await expectRevert(
@@ -2169,6 +3104,15 @@ async function chargebacks(
   contracts: LoadedContracts,
   state: RunState
 ): Promise<void> {
+  const { chainId } = await provider.getNetwork();
+  if (
+    chainId === EXPECTED_CHAIN_ID ||
+    process.env.E2E_ISOLATED_FORK !== "YES"
+  ) {
+    throw new Error(
+      "chargeback/verifier mutation cases are hard-disabled on Base and require E2E_ISOLATED_FORK=YES on a non-8453 isolated fork"
+    );
+  }
   requireMutationFlag();
   const settled = state.intents.chargebackSettled;
   const deferred = state.intents.deferredSettled;
@@ -2382,21 +3326,10 @@ async function main(): Promise<void> {
   if (command === "chargebacks") return chargebacks(provider, contracts, state);
   if (command === "reconcile")
     return finalReconciliation(provider, contracts, state);
-  if (command === "cleanup-witness") {
-    const governance = deployer(provider);
-    const verifierAddress = await contracts.risk.attestationVerifier();
-    const verifier = new Contract(verifierAddress, VERIFIER_ABI, provider);
-    await cleanupWitness(verifier, governance, provider, contracts, state);
-    return printJson({
-      cleanupWitness: "COMPLETE",
-      isWitness: await verifier.isWitness(governance.address),
-    });
-  }
   if (command === "execute") {
     await preflight(provider, contracts, state);
     await setup(provider, contracts, state);
     await fastScenarios(provider, contracts, state);
-    await chargebacks(provider, contracts, state);
     try {
       await afterCliff(provider, contracts, state);
     } catch (error) {
@@ -2406,7 +3339,7 @@ async function main(): Promise<void> {
     return finalReconciliation(provider, contracts, state);
   }
   throw new Error(
-    "Usage: affineRiskScenarioRunner.ts <plan|preflight|setup|fast|after-cliff|chargebacks|reconcile|cleanup-witness|execute>"
+    "Usage: affineRiskScenarioRunner.ts <plan|preflight|setup|fast|after-cliff|chargebacks(fork-only)|reconcile|execute>"
   );
 }
 
