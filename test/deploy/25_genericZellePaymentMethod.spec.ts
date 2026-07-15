@@ -17,22 +17,11 @@ import {
 } from "../../utils/test";
 import { Account } from "../../utils/test/types";
 
-import {
-  ZELLE_PROVIDER_CONFIG,
-  ZELLE_CITI_PROVIDER_CONFIG,
-  ZELLE_CHASE_PROVIDER_CONFIG,
-  ZELLE_BOFA_PROVIDER_CONFIG,
-} from "../../deployments/verifiers/zelle";
+import { ZELLE_PROVIDER_CONFIG } from "../../deployments/verifiers/zelle";
 import { LUXON_PROVIDER_CONFIG } from "../../deployments/verifiers/luxon";
 import { N26_PROVIDER_CONFIG } from "../../deployments/verifiers/n26";
 
 const expect = getWaffleExpect();
-
-const LEGACY_ZELLE_METHODS = [
-  { name: "Zelle Citi", config: ZELLE_CITI_PROVIDER_CONFIG },
-  { name: "Zelle Chase", config: ZELLE_CHASE_PROVIDER_CONFIG },
-  { name: "Zelle BofA", config: ZELLE_BOFA_PROVIDER_CONFIG },
-];
 
 const REMOVED_PAYMENT_METHODS = [
   { name: "N26", config: N26_PROVIDER_CONFIG },
@@ -86,16 +75,6 @@ describe("Generic Zelle Payment Method Configuration", () => {
     const paymentMethods = await unifiedPaymentVerifierV2.getPaymentMethods();
     expect(paymentMethods).to.include(ZELLE_PROVIDER_CONFIG.paymentMethodHash);
   });
-
-  for (const { name, config } of LEGACY_ZELLE_METHODS) {
-    it(`keeps ${name} registered for drain support`, async () => {
-      const isPaymentMethod = await paymentVerifierRegistry.isPaymentMethod(config.paymentMethodHash);
-      const paymentMethods = await unifiedPaymentVerifierV2.getPaymentMethods();
-
-      expect(isPaymentMethod).to.be.true;
-      expect(paymentMethods).to.include(config.paymentMethodHash);
-    });
-  }
 
   for (const { name, config } of REMOVED_PAYMENT_METHODS) {
     it(`removes ${name} from payment method surfaces`, async () => {

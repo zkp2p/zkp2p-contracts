@@ -347,3 +347,41 @@ describe("Remove legacy Zelle payment methods", () => {
     expect(v2PaymentMethods).to.include(GENERIC_ZELLE_PAYMENT_METHOD_HASH);
   });
 });
+
+describe("Deployed Zelle payment method state", () => {
+  const network = hre.deployments.getNetworkName();
+
+  function getDeployedContractAddress(contractName: string): string {
+    return require(`../../deployments/${network}/${contractName}.json`).address;
+  }
+
+  it("leaves generic Zelle active and every legacy hash unsupported after the full deploy sequence", async () => {
+    const paymentVerifierRegistry = await ethers.getContractAt(
+      "PaymentVerifierRegistry",
+      getDeployedContractAddress("PaymentVerifierRegistry")
+    );
+    const legacyUnifiedPaymentVerifier = await ethers.getContractAt(
+      "UnifiedPaymentVerifier",
+      getDeployedContractAddress("UnifiedPaymentVerifier")
+    );
+    const unifiedPaymentVerifierV2 = await ethers.getContractAt(
+      "UnifiedPaymentVerifier",
+      getDeployedContractAddress("UnifiedPaymentVerifierV2")
+    );
+
+    const legacyPaymentMethods = await legacyUnifiedPaymentVerifier.getPaymentMethods();
+    const v2PaymentMethods = await unifiedPaymentVerifierV2.getPaymentMethods();
+    for (const { hash } of LEGACY_ZELLE_PAYMENT_METHODS) {
+      expect(await paymentVerifierRegistry.isPaymentMethod(hash)).to.be.false;
+      expect(await paymentVerifierRegistry.getVerifier(hash)).to.eq(ADDRESS_ZERO);
+      expect(legacyPaymentMethods).to.not.include(hash);
+      expect(v2PaymentMethods).to.not.include(hash);
+    }
+
+    expect(await paymentVerifierRegistry.isPaymentMethod(GENERIC_ZELLE_PAYMENT_METHOD_HASH)).to.be.true;
+    expect(await paymentVerifierRegistry.getVerifier(GENERIC_ZELLE_PAYMENT_METHOD_HASH)).to.eq(
+      getDeployedContractAddress("UnifiedPaymentVerifierV2")
+    );
+    expect(v2PaymentMethods).to.include(GENERIC_ZELLE_PAYMENT_METHOD_HASH);
+  });
+});
