@@ -147,6 +147,5 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
 };
 
 func.tags = ["27_remove_legacy_zelle_payment_methods"];
-func.dependencies = ["25_add_generic_zelle_payment_method"];
 
 export default func;

@@ -1,6 +1,7 @@
 import "module-alias/register";
 
 import { BigNumber, BytesLike } from "ethers";
+import * as fs from "fs";
 import * as hre from "hardhat";
 
 import DeployHelper from "@utils/deploys";
@@ -28,6 +29,7 @@ import {
   LEGACY_ZELLE_PAYMENT_METHODS,
   removeLegacyZelleVerifierRegistrations,
 } from "../../deploy/27_remove_legacy_zelle_payment_methods";
+import { safeBatchCollector } from "../../deployments/safeBatchCollector";
 
 const { ethers } = hre;
 const expect = getWaffleExpect();
@@ -104,6 +106,7 @@ describe("Remove legacy Zelle payment methods", () => {
   }
 
   beforeEach(async () => {
+    safeBatchCollector.reset();
     [owner, maker, taker, witness] = await getAccounts();
     deployer = new DeployHelper(owner.wallet);
     chainId = (await ethers.provider.getNetwork()).chainId;
@@ -171,6 +174,10 @@ describe("Remove legacy Zelle payment methods", () => {
     for (const { hash } of LEGACY_ZELLE_PAYMENT_METHODS) {
       legacyDepositIds.push(await createDeposit(hash, usdc(300)));
     }
+  });
+
+  afterEach(() => {
+    safeBatchCollector.reset();
   });
 
   it("removes all legacy registrations, preserves withdrawal, and keeps generic Zelle functional", async () => {
@@ -280,5 +287,68 @@ describe("Remove legacy Zelle payment methods", () => {
       unifiedPaymentVerifierV2.address
     );
     expect(await owner.wallet.getTransactionCount()).to.eq(nonceBeforeSecondRun);
+  });
+
+  it("queues the exact registry-first removal batch when the contracts are Safe-owned", async () => {
+    const safeOwner = ethers.Wallet.createRandom().address;
+    const unnamedAccounts = (await hre.getUnnamedAccounts()).map((account) => account.toLowerCase());
+    expect(unnamedAccounts).to.not.include(safeOwner.toLowerCase());
+    expect(safeBatchCollector.count()).to.eq(0);
+
+    await paymentVerifierRegistry.transferOwnership(safeOwner);
+    await legacyUnifiedPaymentVerifier.transferOwnership(safeOwner);
+    await unifiedPaymentVerifierV2.transferOwnership(safeOwner);
+
+    await removeLegacyZelleVerifierRegistrations(
+      hre,
+      { paymentVerifierRegistry, legacyUnifiedPaymentVerifier, unifiedPaymentVerifierV2 },
+      unifiedPaymentVerifierV2.address
+    );
+
+    expect(safeBatchCollector.count()).to.eq(9);
+
+    const expectedTransactions = [
+      ...LEGACY_ZELLE_PAYMENT_METHODS.map(({ hash }) => ({
+        to: paymentVerifierRegistry.address,
+        data: paymentVerifierRegistry.interface.encodeFunctionData("removePaymentMethod", [hash]),
+      })),
+      ...LEGACY_ZELLE_PAYMENT_METHODS.map(({ hash }) => ({
+        to: legacyUnifiedPaymentVerifier.address,
+        data: legacyUnifiedPaymentVerifier.interface.encodeFunctionData("removePaymentMethod", [hash]),
+      })),
+      ...LEGACY_ZELLE_PAYMENT_METHODS.map(({ hash }) => ({
+        to: unifiedPaymentVerifierV2.address,
+        data: unifiedPaymentVerifierV2.interface.encodeFunctionData("removePaymentMethod", [hash]),
+      })),
+    ].map(({ to, data }) => ({
+      to,
+      value: "0",
+      data,
+      contractMethod: null,
+      contractInputsValues: null,
+    }));
+
+    const batchFile = safeBatchCollector.writeBatchFile("hardhat", String(chainId), safeOwner);
+    try {
+      const batch = JSON.parse(fs.readFileSync(batchFile, "utf8"));
+      expect(batch.chainId).to.eq(String(chainId));
+      expect(batch.meta.createdFromSafeAddress).to.eq(safeOwner);
+      expect(batch.transactions).to.deep.eq(expectedTransactions);
+    } finally {
+      fs.unlinkSync(batchFile);
+    }
+
+    const legacyPaymentMethods = await legacyUnifiedPaymentVerifier.getPaymentMethods();
+    const v2PaymentMethods = await unifiedPaymentVerifierV2.getPaymentMethods();
+    for (const { hash } of LEGACY_ZELLE_PAYMENT_METHODS) {
+      expect(await paymentVerifierRegistry.isPaymentMethod(hash)).to.be.true;
+      expect(legacyPaymentMethods).to.include(hash);
+      expect(v2PaymentMethods).to.include(hash);
+    }
+    expect(await paymentVerifierRegistry.isPaymentMethod(GENERIC_ZELLE_PAYMENT_METHOD_HASH)).to.be.true;
+    expect(await paymentVerifierRegistry.getVerifier(GENERIC_ZELLE_PAYMENT_METHOD_HASH)).to.eq(
+      unifiedPaymentVerifierV2.address
+    );
+    expect(v2PaymentMethods).to.include(GENERIC_ZELLE_PAYMENT_METHOD_HASH);
   });
 });

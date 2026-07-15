@@ -155,7 +155,7 @@ export type { PaymentMethodConfig, NetworkPaymentMethods };
 // Network-specific payment method exports
 ${networks.map(net => `export { default as ${net} } from './${net}.json';`).join('\n')}
 
-// Cross-network lookups (name<->hash mappings, Zelle helpers)
+// Cross-network name-to-hash and hash-to-name lookups
 export { default as lookups } from './lookups.json';
 
 // Helper function to get payment method config for a specific network and method

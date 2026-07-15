@@ -37,6 +37,10 @@ jobs:
           PORT: 8545
       - name: Run tests
         run: yarn test
+      - name: Build contracts package
+        run: yarn pkg:build
+      - name: Test contracts package
+        run: yarn pkg:test
       - name: Deploy to localhost
         run: yarn deploy:localhost
       - name: Test deploy

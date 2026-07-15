@@ -43,6 +43,10 @@ class SafeBatchCollector {
     return this.transactions.length;
   }
 
+  reset(): void {
+    this.transactions = [];
+  }
+
   writeBatchFile(network: string, chainId: string, safeAddress: string): string {
     if (this.transactions.length === 0) {
       return "";
