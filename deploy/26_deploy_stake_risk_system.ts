@@ -6,15 +6,15 @@ import { ethers } from "hardhat";
 
 import {
   MULTI_SIG,
+  NON_CHARGEBACKABLE_FREE_TAKE_AMOUNT,
+  NON_CHARGEBACKABLE_FREE_TAKE_COUNT,
   ORCHESTRATOR_V2_PROTOCOL_FEE,
   ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT,
   REVERSIBLE_PLATFORM_RESERVE_BPS,
   REVERSIBLE_PLATFORM_RISK_WINDOW,
-  RISK_MAX_INTENT_LIFETIME,
   RISK_CALLBACK_GAS_LIMIT,
-  RISK_SETTLEMENT_BUFFER,
-  STAKE_RISK_CONCURRENCY_LIMITS,
-  STAKE_RISK_TIER_THRESHOLDS,
+  RISK_GRIEFING_CLIFF,
+  RISK_GRIEFING_PENALTY_BPS_PER_HOUR,
   STAKE_VAULT_BASE_EXIT_DELAY,
   STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
   USDC,
@@ -28,22 +28,56 @@ import {
 
 const PAYPAL = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("paypal"));
 const VENMO = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
+const ZELLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("zelle"));
 
 function platformRiskConfigMatches(actual: any, expected: any): boolean {
   return actual.enabled === expected.enabled
-    && actual.chargebackable === expected.chargebackable
-    && actual.deferredPayoutEnabled === expected.deferredPayoutEnabled
-    && ethers.BigNumber.from(actual.reserveBps).eq(expected.reserveBps)
-    && ethers.BigNumber.from(actual.riskWindow).eq(expected.riskWindow)
-    && actual.tierCaps.length === expected.tierCaps.length
-    && actual.tierCaps.every(
-      (cap: any, index: number) => ethers.BigNumber.from(cap).eq(expected.tierCaps[index]),
-    );
+    && actual.chargeback.chargebackable === expected.chargeback.chargebackable
+    && actual.chargeback.deferredPayoutEnabled === expected.chargeback.deferredPayoutEnabled
+    && ethers.BigNumber.from(actual.chargeback.reserveBps).eq(expected.chargeback.reserveBps)
+    && ethers.BigNumber.from(actual.chargeback.riskWindow).eq(expected.chargeback.riskWindow)
+    && ethers.BigNumber.from(actual.griefing.griefingCliff).eq(expected.griefing.griefingCliff)
+    && ethers.BigNumber.from(actual.griefing.griefingPenaltyBpsPerHour)
+      .eq(expected.griefing.griefingPenaltyBpsPerHour)
+    && ethers.BigNumber.from(actual.griefing.freeTakeCount).eq(expected.griefing.freeTakeCount)
+    && ethers.BigNumber.from(actual.griefing.freeTakeAmount).eq(expected.griefing.freeTakeAmount);
 }
 
+const reversibleConfig = {
+  enabled: true,
+  chargeback: {
+    chargebackable: true,
+    deferredPayoutEnabled: true,
+    reserveBps: REVERSIBLE_PLATFORM_RESERVE_BPS,
+    riskWindow: REVERSIBLE_PLATFORM_RISK_WINDOW,
+  },
+  griefing: {
+    griefingCliff: RISK_GRIEFING_CLIFF,
+    griefingPenaltyBpsPerHour: RISK_GRIEFING_PENALTY_BPS_PER_HOUR,
+    freeTakeCount: 0,
+    freeTakeAmount: 0,
+  },
+};
+
+const nonChargebackableConfig = {
+  enabled: true,
+  chargeback: {
+    chargebackable: false,
+    deferredPayoutEnabled: false,
+    reserveBps: 0,
+    riskWindow: 0,
+  },
+  griefing: {
+    griefingCliff: RISK_GRIEFING_CLIFF,
+    griefingPenaltyBpsPerHour: RISK_GRIEFING_PENALTY_BPS_PER_HOUR,
+    freeTakeCount: NON_CHARGEBACKABLE_FREE_TAKE_COUNT,
+    freeTakeAmount: NON_CHARGEBACKABLE_FREE_TAKE_AMOUNT,
+  },
+};
+
 /**
- * Deploys the stake-based taker risk system against the existing EscrowV2 and registries.
- * Production execution is opt-in because positive stake thresholds require governance approval.
+ * Deploys the continuous stake-risk system against the existing EscrowV2 and registries.
+ * Non-local execution remains explicitly opt-in until launch platform values are ratified.
  */
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deploy } = hre.deployments;
@@ -51,14 +85,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const chainId = (await ethers.provider.getNetwork()).chainId;
   const [deployer] = await hre.getUnnamedAccounts();
   const multiSig = MULTI_SIG[network] ? MULTI_SIG[network] : deployer;
-
-  const tierThresholds = STAKE_RISK_TIER_THRESHOLDS[network];
-  const concurrencyLimits = STAKE_RISK_CONCURRENCY_LIMITS[network];
-  if (!tierThresholds || !concurrencyLimits) {
-    throw new Error(
-      `Stake risk launch policy is not configured for ${network}; governance must ratify thresholds before deployment`,
-    );
-  }
 
   const escrowRegistryAddress = getDeployedContractAddress(network, "EscrowRegistry");
   const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
@@ -69,17 +95,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     ? USDC[network]
     : getDeployedContractAddress(network, "USDCMock");
 
-  const boundedCall = await deploy("BoundedCall", {
-    from: deployer,
-    args: [],
-  });
+  const boundedCall = await deploy("BoundedCall", { from: deployer, args: [] });
   console.log("BoundedCall deployed at", boundedCall.address);
   await waitForDeploymentDelay(hre);
 
-  const postIntentHookExecutor = await deploy("PostIntentHookExecutor", {
-    from: deployer,
-    args: [],
-  });
+  const postIntentHookExecutor = await deploy("PostIntentHookExecutor", { from: deployer, args: [] });
   console.log("PostIntentHookExecutor deployed at", postIntentHookExecutor.address);
   await waitForDeploymentDelay(hre);
 
@@ -116,49 +136,35 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("StakeVault deployed at", stakeVault.address);
   await waitForDeploymentDelay(hre);
 
-  const riskTierManager = await deploy("RiskTierManager", {
+  const riskManager = await deploy("RiskManager", {
     from: deployer,
-    args: [
-      deployer,
-      orchestratorV3.address,
-      stakeVault.address,
-      attestationVerifierAddress,
-      tierThresholds,
-      concurrencyLimits,
-      RISK_MAX_INTENT_LIFETIME,
-      RISK_SETTLEMENT_BUFFER,
-    ],
+    args: [deployer, orchestratorV3.address, stakeVault.address, attestationVerifierAddress],
   });
-  console.log("RiskTierManager deployed at", riskTierManager.address);
+  console.log("RiskManager deployed at", riskManager.address);
   await waitForDeploymentDelay(hre);
 
   const deferredPayoutHook = await deploy("DeferredPayoutHook", {
     from: deployer,
-    args: [
-      stakeTokenAddress,
-      stakeVault.address,
-      riskTierManager.address,
-      orchestratorRegistryAddress,
-    ],
+    args: [stakeTokenAddress, stakeVault.address, riskManager.address, orchestratorRegistryAddress],
   });
   console.log("DeferredPayoutHook deployed at", deferredPayoutHook.address);
   await waitForDeploymentDelay(hre);
 
   const stakeVaultContract = await ethers.getContractAt("StakeVault", stakeVault.address);
-  const riskTierManagerContract = await ethers.getContractAt("RiskTierManager", riskTierManager.address);
+  const riskManagerContract = await ethers.getContractAt("RiskManager", riskManager.address);
   const orchestratorV3Contract = await ethers.getContractAt("OrchestratorV3", orchestratorV3.address);
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
 
   const currentController = await stakeVaultContract.controller();
   if (currentController === ethers.constants.AddressZero) {
-    await (await stakeVaultContract.initializeController(riskTierManager.address)).wait();
+    await (await stakeVaultContract.initializeController(riskManager.address)).wait();
     await waitForDeploymentDelay(hre);
-  } else if (currentController.toLowerCase() !== riskTierManager.address.toLowerCase()) {
-    throw new Error(`StakeVault controller mismatch: expected ${riskTierManager.address}, found ${currentController}`);
+  } else if (currentController.toLowerCase() !== riskManager.address.toLowerCase()) {
+    throw new Error(`StakeVault controller mismatch: expected ${riskManager.address}, found ${currentController}`);
   }
 
-  if ((await riskTierManagerContract.deferredPayoutHook()).toLowerCase() !== deferredPayoutHook.address.toLowerCase()) {
-    await (await riskTierManagerContract.setDeferredPayoutHook(deferredPayoutHook.address)).wait();
+  if ((await riskManagerContract.deferredPayoutHook()).toLowerCase() !== deferredPayoutHook.address.toLowerCase()) {
+    await (await riskManagerContract.setDeferredPayoutHook(deferredPayoutHook.address)).wait();
     await waitForDeploymentDelay(hre);
   }
 
@@ -167,29 +173,16 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     await waitForDeploymentDelay(hre);
   }
 
-  const paypalConfig = {
-    enabled: true,
-    chargebackable: true,
-    deferredPayoutEnabled: true,
-    reserveBps: REVERSIBLE_PLATFORM_RESERVE_BPS,
-    riskWindow: REVERSIBLE_PLATFORM_RISK_WINDOW,
-    tierCaps: [0, 0, 750e6, 1_875e6, 3_750e6] as [number, number, number, number, number],
-  };
-  if (!platformRiskConfigMatches(await riskTierManagerContract.getPlatformRiskConfig(PAYPAL), paypalConfig)) {
-    await (await riskTierManagerContract.setPlatformRiskConfig(PAYPAL, paypalConfig)).wait();
-    await waitForDeploymentDelay(hre);
+  for (const paymentMethod of [PAYPAL, VENMO]) {
+    const actual = await riskManagerContract.getPlatformRiskConfig(paymentMethod);
+    if (!platformRiskConfigMatches(actual, reversibleConfig)) {
+      await (await riskManagerContract.setPlatformRiskConfig(paymentMethod, reversibleConfig)).wait();
+      await waitForDeploymentDelay(hre);
+    }
   }
 
-  const venmoConfig = {
-    enabled: true,
-    chargebackable: true,
-    deferredPayoutEnabled: true,
-    reserveBps: REVERSIBLE_PLATFORM_RESERVE_BPS,
-    riskWindow: REVERSIBLE_PLATFORM_RISK_WINDOW,
-    tierCaps: [0, 0, 1_000e6, 2_500e6, 5_000e6] as [number, number, number, number, number],
-  };
-  if (!platformRiskConfigMatches(await riskTierManagerContract.getPlatformRiskConfig(VENMO), venmoConfig)) {
-    await (await riskTierManagerContract.setPlatformRiskConfig(VENMO, venmoConfig)).wait();
+  if (!platformRiskConfigMatches(await riskManagerContract.getPlatformRiskConfig(ZELLE), nonChargebackableConfig)) {
+    await (await riskManagerContract.setPlatformRiskConfig(ZELLE, nonChargebackableConfig)).wait();
     await waitForDeploymentDelay(hre);
   }
 
@@ -197,7 +190,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("OrchestratorV3 added to OrchestratorRegistry");
 
   await setNewOwner(hre, orchestratorV3Contract, multiSig);
-  await setNewOwner(hre, riskTierManagerContract, multiSig);
+  await setNewOwner(hre, riskManagerContract, multiSig);
   await setNewOwner(hre, stakeVaultContract, multiSig);
   console.log("Stake risk system ownership transferred to", multiSig);
 };

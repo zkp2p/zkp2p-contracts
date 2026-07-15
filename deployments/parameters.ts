@@ -130,23 +130,13 @@ export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
   "base_staging": "",
 };
 
-// Stake-based risk system parameters. Production thresholds remain an explicit governance
-// decision; the values below are local-development defaults used by deployment tests.
-export const STAKE_RISK_TIER_THRESHOLDS: Record<string, any[]> = {
-  localhost: [usdc(100), usdc(500), usdc(1_000), usdc(5_000)],
-  hardhat: [usdc(100), usdc(500), usdc(1_000), usdc(5_000)],
-};
-
-export const STAKE_RISK_CONCURRENCY_LIMITS: Record<string, number[]> = {
-  localhost: [1, 5, 20, 50, 1_000],
-  hardhat: [1, 5, 20, 50, 1_000],
-};
-
 export const STAKE_VAULT_BASE_EXIT_DELAY = ONE_DAY_IN_SECONDS.mul(30);
 export const STAKE_VAULT_CONTROLLER_CHANGE_DELAY = ONE_DAY_IN_SECONDS.mul(2);
-export const RISK_MAX_INTENT_LIFETIME = ONE_DAY_IN_SECONDS.mul(5);
-export const RISK_SETTLEMENT_BUFFER = ONE_DAY_IN_SECONDS;
 export const RISK_CALLBACK_GAS_LIMIT = 2_000_000;
+export const RISK_GRIEFING_CLIFF = 15 * 60;
+export const RISK_GRIEFING_PENALTY_BPS_PER_HOUR = 10;
+export const NON_CHARGEBACKABLE_FREE_TAKE_COUNT = 3;
+export const NON_CHARGEBACKABLE_FREE_TAKE_AMOUNT = usdc(20);
 export const REVERSIBLE_PLATFORM_RISK_WINDOW = ONE_DAY_IN_SECONDS.mul(30);
 export const REVERSIBLE_PLATFORM_RESERVE_BPS = 10_000;
 
