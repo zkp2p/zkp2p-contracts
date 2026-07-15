@@ -2,6 +2,7 @@
 
 pragma solidity ^0.8.18;
 
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
@@ -67,6 +68,10 @@ import { IStakeVault } from "./interfaces/IStakeVault.sol";
  *      5. Chargeback compensation cannot exceed remaining snapshotted coverage. Uncovered losses and
  *         claims after maturity remain the LP's risk by design.
  *      6. This contract never holds tokens. StakeVault is the sole accounting and custody boundary.
+ *      7. Escrow intent amounts and StakeVault liabilities must use the same immutable token, otherwise
+ *         raw units, griefing penalties, free limits, and chargeback ratios would have no shared meaning.
+ *      8. Deferred proceeds must cover the complete configured reserve after fees. A shortfall fails
+ *         settlement rather than silently advertising less protection than governance configured.
  */
 contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     /* ============ Constants ============ */
@@ -79,6 +84,11 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /// @notice Combined denominator for the time-linear griefing formula.
     uint256 public constant GRIEFING_DENOMINATOR = BPS_DENOMINATOR * SECONDS_PER_HOUR;
+
+    /// @notice Operational ceiling preventing a governance value that cannot fit in uint64 deadlines.
+    /// @dev One year is deliberately far above the approved illustrative 30-day window while keeping
+    ///      settlement deadline construction safe for every realistic EVM timestamp horizon.
+    uint64 public constant MAX_RISK_WINDOW = 365 days;
 
     /// @notice EIP-712 type hash binding chargeback evidence to this manager and orchestrator.
     bytes32 public constant CHARGEBACK_ATTESTATION_TYPEHASH = keccak256(
@@ -185,6 +195,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         _validatePositionPolicy(intent.paymentMethod, maxIntentPeriod, config.griefing);
 
         IEscrowV2.Deposit memory deposit = IEscrowV2(intent.escrow).getDeposit(intent.depositId);
+        _validateIntentToken(deposit.token);
         address stakeOwner = stakeVault.stakeOwnerOf(intent.owner);
 
         (uint256 maxGriefingBond, uint256 chargebackReserve, uint256 requiredReservation) =
@@ -239,34 +250,26 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             revert DeferredPayoutHookNotAllowed(deferredPayoutHook);
         }
 
-        address snapshottedDeferredHook = mode == RiskMode.DEFERRED_PAYOUT ? deferredPayoutHook : address(0);
-        riskPositions[_intentHash] = RiskPosition({
-            taker: intent.owner,
-            stakeOwner: stakeOwner,
-            lp: deposit.depositor,
-            paymentMethod: intent.paymentMethod,
-            mode: mode,
-            status: PositionStatus.PENDING,
-            consumedFreeTake: consumedFreeTake,
-            deferredPayoutHook: snapshottedDeferredHook,
-            payoutRecipient: intent.to,
-            chargebackReserveBps: config.chargeback.reserveBps,
-            griefingPenaltyBpsPerHour: config.griefing.griefingPenaltyBpsPerHour,
-            riskWindow: config.chargeback.riskWindow,
-            createdAt: intent.createdAt,
-            maxIntentPeriod: maxIntentPeriod,
-            griefingCliff: config.griefing.griefingCliff,
-            cancelledAt: 0,
-            settledAt: 0,
-            coverageDeadline: 0,
-            intentAmount: intent.amount,
-            maxGriefingBond: maxGriefingBond,
-            initialReservation: initialReservation,
-            reservedAmount: initialReservation,
-            releasedAmount: 0,
-            deferredPayoutAmount: 0,
-            slashedAmount: 0
-        });
+        RiskPosition storage position = riskPositions[_intentHash];
+        position.taker = intent.owner;
+        position.stakeOwner = stakeOwner;
+        position.lp = deposit.depositor;
+        position.paymentMethod = intent.paymentMethod;
+        position.mode = mode;
+        position.status = PositionStatus.PENDING;
+        position.consumedFreeTake = consumedFreeTake;
+        position.deferredPayoutHook = mode == RiskMode.DEFERRED_PAYOUT ? deferredPayoutHook : address(0);
+        position.payoutRecipient = intent.to;
+        position.chargebackReserveBps = config.chargeback.reserveBps;
+        position.griefingPenaltyBpsPerHour = config.griefing.griefingPenaltyBpsPerHour;
+        position.riskWindow = config.chargeback.riskWindow;
+        position.createdAt = intent.createdAt;
+        position.maxIntentPeriod = maxIntentPeriod;
+        position.griefingCliff = config.griefing.griefingCliff;
+        position.intentAmount = intent.amount;
+        position.maxGriefingBond = maxGriefingBond;
+        position.initialReservation = initialReservation;
+        position.reservedAmount = initialReservation;
 
         if (initialReservation != 0) {
             stakeVault.reserveStake(stakeOwner, _intentHash, initialReservation, 0);
@@ -275,23 +278,32 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             stakeVault.authorizeDeferredPayout(_intentHash, intent.to, 0);
         }
 
+        _emitRiskPositionCreated(_intentHash, position, chargebackReserve);
+    }
+
+    /** @dev Emits the complete admission snapshot from storage to keep admission stack usage bounded. */
+    function _emitRiskPositionCreated(
+        bytes32 _intentHash,
+        RiskPosition storage _position,
+        uint256 _chargebackReserve
+    ) internal {
         emit RiskPositionCreated(
             _intentHash,
-            stakeOwner,
-            deposit.depositor,
-            intent.owner,
-            intent.paymentMethod,
-            mode,
-            intent.amount,
-            intent.createdAt,
-            maxIntentPeriod,
-            config.griefing.griefingCliff,
-            config.griefing.griefingPenaltyBpsPerHour,
-            config.chargeback.reserveBps,
-            config.chargeback.riskWindow,
-            maxGriefingBond,
-            chargebackReserve,
-            initialReservation
+            _position.stakeOwner,
+            _position.lp,
+            _position.taker,
+            _position.paymentMethod,
+            _position.mode,
+            _position.intentAmount,
+            _position.createdAt,
+            _position.maxIntentPeriod,
+            _position.griefingCliff,
+            _position.griefingPenaltyBpsPerHour,
+            _position.chargebackReserveBps,
+            _position.riskWindow,
+            _position.maxGriefingBond,
+            _chargebackReserve,
+            _position.initialReservation
         );
     }
 
@@ -380,8 +392,9 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     /**
      * @inheritdoc IRiskManager
      * @dev The canonical hook transfers net proceeds into StakeVault before calling this function.
-     *      Coverage is capped by both those proceeds and the configured reserve ratio. Any excess held
-     *      proceeds remain the beneficiary's property but mature on the same deadline.
+     *      Held proceeds must cover the complete configured reserve after fees; otherwise settlement
+     *      fails closed instead of silently weakening coverage. Any excess remains the beneficiary's
+     *      property but matures on the same deadline.
      */
     function registerDeferredPayout(
         bytes32 _intentHash,
@@ -405,17 +418,19 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             position.releasedAmount,
             position.chargebackReserveBps
         );
-        uint256 actualCoverage = _min(_amount, expectedCoverage);
+        if (_amount < expectedCoverage) {
+            revert InsufficientDeferredPayoutCoverage(_amount, expectedCoverage);
+        }
 
         position.deferredPayoutAmount = _amount;
-        position.reservedAmount = actualCoverage;
+        position.reservedAmount = expectedCoverage;
         stakeVault.recordDeferredPayout(_intentHash, _beneficiary, _amount, position.coverageDeadline);
 
         emit DeferredPayoutRegistered(
             _intentHash,
             _beneficiary,
             _amount,
-            actualCoverage,
+            expectedCoverage,
             position.coverageDeadline
         );
     }
@@ -701,14 +716,18 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             revert PositionNotPending(_intentHash, position.status);
         }
 
-        (uint256 penalty, uint256 effectiveElapsed) = _calculateGriefingPenalty(
-            position.intentAmount,
-            position.createdAt,
-            _cancelledAt,
-            position.maxIntentPeriod,
-            position.griefingCliff,
-            position.griefingPenaltyBpsPerHour
-        );
+        uint256 penalty;
+        uint256 effectiveElapsed;
+        if (position.mode != RiskMode.FREE) {
+            (penalty, effectiveElapsed) = _calculateGriefingPenalty(
+                position.intentAmount,
+                position.createdAt,
+                _cancelledAt,
+                position.maxIntentPeriod,
+                position.griefingCliff,
+                position.griefingPenaltyBpsPerHour
+            );
+        }
         uint256 releasedReservation = position.reservedAmount - penalty;
 
         position.status = PositionStatus.CANCELLED;
@@ -831,7 +850,11 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         if (hasFreeCount != hasFreeAmount) revert InvalidPlatformConfig(_paymentMethod);
 
         if (_config.chargeback.chargebackable) {
-            if (_config.chargeback.reserveBps == 0 || _config.chargeback.riskWindow == 0) {
+            if (
+                _config.chargeback.reserveBps == 0
+                    || _config.chargeback.riskWindow == 0
+                    || _config.chargeback.riskWindow > MAX_RISK_WINDOW
+            ) {
                 revert InvalidPlatformConfig(_paymentMethod);
             }
             // The equality check above guarantees both free-take fields are either set or unset.
@@ -857,6 +880,14 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             uint256(_config.griefingPenaltyBpsPerHour) * (_maxIntentPeriod - _config.griefingCliff);
         if (maximumRateNumerator > GRIEFING_DENOMINATOR) {
             revert GriefingPenaltyExceedsIntentAmount(_paymentMethod);
+        }
+    }
+
+    /** @dev Binds every risk amount to StakeVault's immutable accounting token before admission. */
+    function _validateIntentToken(IERC20 _intentToken) internal view {
+        address expectedToken = address(stakeVault.stakeToken());
+        if (address(_intentToken) != expectedToken) {
+            revert IntentTokenMismatch(expectedToken, address(_intentToken));
         }
     }
 

@@ -284,6 +284,59 @@ contract RiskManagerTest is Test {
         assertEq(uint256(manager.getRiskPosition(intentHash).status), uint256(IRiskManager.PositionStatus.CANCELLED));
     }
 
+    function test_FreeCancellationAfterCliffNeverChargesStake() public {
+        bytes32 intentHash = keccak256("cancelled-free-after-cliff");
+        _setIntent(intentHash, taker, 20e6, ZELLE, address(0));
+        _createPosition(intentHash);
+        uint64 createdAt = manager.getRiskPosition(intentHash).createdAt;
+        vm.warp(createdAt + 2 hours);
+
+        orchestrator.cancelPosition(manager, intentHash);
+
+        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        assertEq(uint256(position.status), uint256(IRiskManager.PositionStatus.CANCELLED));
+        assertEq(position.slashedAmount, 0);
+        assertEq(vault.claimableCompensation(maker), 0);
+    }
+
+    function test_FreeCancellationReconciliationAfterCliffNeverChargesStake() public {
+        bytes32 intentHash = keccak256("reconciled-free-after-cliff");
+        _setIntent(intentHash, taker, 20e6, ZELLE, address(0));
+        _createPosition(intentHash);
+        uint64 createdAt = manager.getRiskPosition(intentHash).createdAt;
+        orchestrator.recordCancellationWithoutCallback(intentHash, createdAt + 2 hours);
+
+        manager.reconcileCancellation(intentHash);
+
+        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        assertEq(uint256(position.status), uint256(IRiskManager.PositionStatus.CANCELLED));
+        assertEq(position.slashedAmount, 0);
+        assertEq(vault.claimableCompensation(maker), 0);
+    }
+
+    function test_AdmissionRejectsIntentTokenUnitMismatch() public {
+        USDCMock otherToken = new USDCMock(1e6, "Other Token", "OTHER");
+        RiskEscrowHarness otherEscrow = new RiskEscrowHarness(maker, otherToken, MAX_INTENT_PERIOD);
+        bytes32 intentHash = keccak256("token-mismatch");
+        orchestrator.setIntent(intentHash, taker, address(otherEscrow), 20e6, ZELLE, address(0));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IRiskManager.IntentTokenMismatch.selector,
+                address(token),
+                address(otherToken)
+            )
+        );
+        _createPosition(intentHash);
+    }
+
+    function test_PlatformConfigurationRejectsRiskWindowAboveMaximum() public {
+        uint64 invalidWindow = manager.MAX_RISK_WINDOW() + 1;
+        vm.expectRevert(abi.encodeWithSelector(IRiskManager.InvalidPlatformConfig.selector, PAYPAL));
+        vm.prank(owner);
+        manager.setPlatformRiskConfig(PAYPAL, _chargebackConfig(10_000, invalidWindow, true));
+    }
+
     function test_DelegatedTakersShareStakeOwnerReservations() public {
         _stake(stakeOwner, 1_000e6);
         vm.startPrank(stakeOwner);
@@ -454,6 +507,24 @@ contract RiskManagerTest is Test {
         assertEq(uint256(position.mode), uint256(IRiskManager.RiskMode.DEFERRED_PAYOUT));
         assertEq(position.initialReservation, 4.025e6);
         assertEq(vault.reservedStake(taker), 4.025e6);
+    }
+
+    function test_DeferredRegistrationRejectsCoverageBelowConfiguredReserve() public {
+        _stake(taker, 10e6);
+        bytes32 intentHash = keccak256("deferred-shortfall");
+        _setIntent(intentHash, taker, 700e6, PAYPAL, address(verifier));
+        _createPosition(intentHash);
+        orchestrator.fulfillPosition(manager, intentHash, 700e6);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IRiskManager.InsufficientDeferredPayoutCoverage.selector,
+                350e6,
+                700e6
+            )
+        );
+        vm.prank(address(verifier));
+        manager.registerDeferredPayout(intentHash, taker, 350e6);
     }
 
     function test_PlatformChangesDoNotAlterPositionSnapshots() public {

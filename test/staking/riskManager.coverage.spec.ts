@@ -297,6 +297,22 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       }))).to.be.revertedWithCustomError(manager, "InvalidPlatformConfig");
     });
 
+    it("accepts the maximum supported chargeback risk window", async () => {
+      const { manager } = await loadFixture(deployHarnessFixture);
+      const maxRiskWindow = await manager.MAX_RISK_WINDOW();
+      await expect(manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig({
+        chargeback: { riskWindow: maxRiskWindow },
+      }))).to.emit(manager, "PlatformRiskConfigUpdated");
+    });
+
+    it("rejects a chargeback risk window above the supported maximum", async () => {
+      const { manager } = await loadFixture(deployHarnessFixture);
+      const maxRiskWindow = await manager.MAX_RISK_WINDOW();
+      await expect(manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig({
+        chargeback: { riskWindow: maxRiskWindow.add(1) },
+      }))).to.be.revertedWithCustomError(manager, "InvalidPlatformConfig");
+    });
+
     it("rejects a non-chargebackable platform with a reserve", async () => {
       const { manager } = await loadFixture(deployHarnessFixture);
       await expect(manager.setPlatformRiskConfig(OTHER_METHOD, nonChargebackConfig({
@@ -439,6 +455,15 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       await setRiskIntent(fixture, intentHash);
       await expect(fixture.orchestrator.createPosition(fixture.manager.address, intentHash))
         .to.be.revertedWithCustomError(fixture.manager, "TimestampOverflow");
+    });
+
+    it("rejects an Escrow deposit whose token differs from the vault token", async () => {
+      const fixture = await loadFixture(deployHarnessFixture);
+      const intentHash = ethers.utils.id("mismatched-intent-token");
+      await fixture.escrow.setToken(fixture.other.address);
+      await setRiskIntent(fixture, intentHash);
+      await expect(fixture.orchestrator.createPosition(fixture.manager.address, intentHash))
+        .to.be.revertedWithCustomError(fixture.manager, "IntentTokenMismatch");
     });
 
     it("rejects a zero Escrow intent period", async () => {
@@ -653,6 +678,22 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       expect((await fixture.manager.getRiskPosition(intentHash)).status).to.eq(2);
     });
 
+    it("reconciles a free cancellation after the cliff without a penalty", async () => {
+      const fixture = await loadFixture(deployHarnessFixture);
+      const intentHash = ethers.utils.id("free-cancel-reconciliation");
+      await createPosition(fixture, intentHash, { amount: usdc(20), paymentMethod: ZELLE });
+      const position = await fixture.manager.getRiskPosition(intentHash);
+      await fixture.orchestrator.setIntentCancellation(
+        intentHash,
+        position.createdAt.toNumber() + CLIFF + 1,
+      );
+      await fixture.manager.reconcileCancellation(intentHash);
+      const cancelled = await fixture.manager.getRiskPosition(intentHash);
+      expect(cancelled.status).to.eq(2);
+      expect(cancelled.slashedAmount).to.eq(0);
+      expect(await fixture.vault.claimableCompensation(fixture.maker.address)).to.eq(0);
+    });
+
     it("rejects an empty cancellation reconciliation batch", async () => {
       const { manager } = await loadFixture(deployHarnessFixture);
       await expect(manager.reconcileCancellations([])).to.be.revertedWithCustomError(manager, "EmptyBatch");
@@ -814,15 +855,14 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       )).to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutAlreadyRegistered");
     });
 
-    it("caps coverage at proceeds when the deferred amount is smaller", async () => {
+    it("rejects deferred proceeds below the configured coverage", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("deferred-less-than-coverage");
       await createDeferredPosition(fixture, intentHash);
       await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(50));
-      await fixture.orchestrator.registerDeferredPayout(
+      await expect(fixture.orchestrator.registerDeferredPayout(
         fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(20),
-      );
-      expect((await fixture.manager.getRiskPosition(intentHash)).reservedAmount).to.eq(usdc(20));
+      )).to.be.revertedWithCustomError(fixture.manager, "InsufficientDeferredPayoutCoverage");
     });
 
     it("caps coverage at the configured ratio when proceeds are larger", async () => {
@@ -846,6 +886,19 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
         fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(50),
       );
       expect((await fixture.manager.getRiskPosition(intentHash)).reservedAmount).to.eq(usdc(25));
+    });
+
+    it("settles at the maximum supported chargeback risk window", async () => {
+      const fixture = await loadFixture(deployHarnessFixture);
+      const intentHash = ethers.utils.id("maximum-risk-window-settlement");
+      const maxRiskWindow = await fixture.manager.MAX_RISK_WINDOW();
+      await fixture.manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig({
+        chargeback: { riskWindow: maxRiskWindow, deferredPayoutEnabled: false },
+      }));
+      await createPosition(fixture, intentHash, { paymentMethod: OTHER_METHOD });
+      await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(50));
+      const position = await fixture.manager.getRiskPosition(intentHash);
+      expect(position.coverageDeadline.sub(position.settledAt)).to.eq(maxRiskWindow);
     });
   });
 
@@ -1021,6 +1074,136 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       await expect(fixture.manager.submitChargeback(
         await validAttestation(fixture, intentHash), [], "0x",
       )).to.be.revertedWithCustomError(fixture.manager, "ZeroAmount");
+    });
+  });
+
+  describe("reentrancy guards", () => {
+    async function deployGuardFixture() {
+      const fixture = await deployHarnessFixture();
+      const manager = await (await ethers.getContractFactory("RiskManagerStateHarness")).deploy(
+        fixture.owner.address,
+        fixture.orchestrator.address,
+        fixture.vault.address,
+        fixture.verifier.address,
+      );
+      return { ...fixture, manager };
+    }
+
+    async function expectGuardRevert(fixture: Awaited<ReturnType<typeof deployGuardFixture>>, data: string) {
+      await expect(fixture.manager.callWhileEntered(fixture.manager.address, data))
+        .to.be.revertedWith("ReentrancyGuard: reentrant call");
+    }
+
+    it("blocks reentrant intent admission", async () => {
+      const fixture = await loadFixture(deployGuardFixture);
+      const intentHash = ethers.utils.id("guard-admission");
+      const data = fixture.orchestrator.interface.encodeFunctionData("createPosition", [
+        fixture.manager.address,
+        intentHash,
+      ]);
+      await expect(fixture.manager.callWhileEntered(fixture.orchestrator.address, data))
+        .to.be.revertedWith("ReentrancyGuard: reentrant call");
+    });
+
+    it("blocks a reentrant cancellation callback", async () => {
+      const fixture = await loadFixture(deployGuardFixture);
+      const data = fixture.orchestrator.interface.encodeFunctionData("cancelPosition", [
+        fixture.manager.address,
+        ethers.utils.id("guard-cancellation"),
+      ]);
+      await expect(fixture.manager.callWhileEntered(fixture.orchestrator.address, data))
+        .to.be.revertedWith("ReentrancyGuard: reentrant call");
+    });
+
+    it("blocks a reentrant fulfillment callback", async () => {
+      const fixture = await loadFixture(deployGuardFixture);
+      const data = fixture.orchestrator.interface.encodeFunctionData("fulfillPosition", [
+        fixture.manager.address,
+        ethers.utils.id("guard-fulfillment"),
+        1,
+      ]);
+      await expect(fixture.manager.callWhileEntered(fixture.orchestrator.address, data))
+        .to.be.revertedWith("ReentrancyGuard: reentrant call");
+    });
+
+    it("blocks a reentrant maker-release callback", async () => {
+      const fixture = await loadFixture(deployGuardFixture);
+      const data = fixture.orchestrator.interface.encodeFunctionData("releasePosition", [
+        fixture.manager.address,
+        ethers.utils.id("guard-release"),
+        1,
+      ]);
+      await expect(fixture.manager.callWhileEntered(fixture.orchestrator.address, data))
+        .to.be.revertedWith("ReentrancyGuard: reentrant call");
+    });
+
+    it("blocks reentrant cancellation reconciliation", async () => {
+      const fixture = await loadFixture(deployGuardFixture);
+      await expectGuardRevert(
+        fixture,
+        fixture.manager.interface.encodeFunctionData("reconcileCancellation", [ethers.constants.HashZero]),
+      );
+    });
+
+    it("blocks reentrant cancellation batch reconciliation", async () => {
+      const fixture = await loadFixture(deployGuardFixture);
+      await expectGuardRevert(
+        fixture,
+        fixture.manager.interface.encodeFunctionData("reconcileCancellations", [[ethers.constants.HashZero]]),
+      );
+    });
+
+    it("blocks reentrant settlement reconciliation", async () => {
+      const fixture = await loadFixture(deployGuardFixture);
+      await expectGuardRevert(
+        fixture,
+        fixture.manager.interface.encodeFunctionData("reconcileSettlement", [ethers.constants.HashZero]),
+      );
+    });
+
+    it("blocks reentrant settlement batch reconciliation", async () => {
+      const fixture = await loadFixture(deployGuardFixture);
+      await expectGuardRevert(
+        fixture,
+        fixture.manager.interface.encodeFunctionData("reconcileSettlements", [[ethers.constants.HashZero]]),
+      );
+    });
+
+    it("blocks reentrant deferred payout registration", async () => {
+      const fixture = await loadFixture(deployGuardFixture);
+      await expectGuardRevert(
+        fixture,
+        fixture.manager.interface.encodeFunctionData("registerDeferredPayout", [
+          ethers.constants.HashZero,
+          fixture.beneficiary.address,
+          1,
+        ]),
+      );
+    });
+
+    it("blocks reentrant maturity release", async () => {
+      const fixture = await loadFixture(deployGuardFixture);
+      await expectGuardRevert(
+        fixture,
+        fixture.manager.interface.encodeFunctionData("releaseMaturedPosition", [ethers.constants.HashZero]),
+      );
+    });
+
+    it("blocks reentrant maturity batch release", async () => {
+      const fixture = await loadFixture(deployGuardFixture);
+      await expectGuardRevert(
+        fixture,
+        fixture.manager.interface.encodeFunctionData("releaseMaturedPositions", [[ethers.constants.HashZero]]),
+      );
+    });
+
+    it("blocks reentrant chargeback submission", async () => {
+      const fixture = await loadFixture(deployGuardFixture);
+      const attestation = await validAttestation(fixture, ethers.constants.HashZero);
+      await expectGuardRevert(
+        fixture,
+        fixture.manager.interface.encodeFunctionData("submitChargeback", [attestation, [], "0x"]),
+      );
     });
   });
 

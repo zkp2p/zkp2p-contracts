@@ -56,6 +56,10 @@ contract DeferredPayoutHook is IDeferredPayoutHook {
         ) {
             revert ZeroAddress();
         }
+        address vaultToken = address(_stakeVault.stakeToken());
+        if (address(_payoutToken) != vaultToken) {
+            revert InvalidPayoutToken(vaultToken, address(_payoutToken));
+        }
 
         payoutToken = _payoutToken;
         stakeVault = _stakeVault;

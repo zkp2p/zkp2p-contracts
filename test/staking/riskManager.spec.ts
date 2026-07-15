@@ -180,6 +180,7 @@ describe("RiskManager and OrchestratorV3", () => {
     amount: BigNumber,
     paymentMethod: string,
     postIntentHook = ZERO,
+    referralFees: Array<{ recipient: string; fee: BigNumber }> = [],
   ) {
     return {
       escrow: escrow.address,
@@ -189,7 +190,7 @@ describe("RiskManager and OrchestratorV3", () => {
       paymentMethod,
       fiatCurrency: USD,
       conversionRate: precise(1),
-      referralFees: [],
+      referralFees,
       gatingServiceSignature: "0x",
       signatureExpiration: 0,
       postIntentHook,
@@ -256,6 +257,18 @@ describe("RiskManager and OrchestratorV3", () => {
   }
 
   describe("configuration and exact formulas", () => {
+    it("rejects a deferred hook token that differs from the vault token", async () => {
+      const { vault, manager, deferredHook, orchestratorRegistry } = await loadFixture(deployFixture);
+      const otherToken = await (await ethers.getContractFactory("USDCMock"))
+        .deploy(usdc(1), "Other Token", "OTHER");
+      await expect((await ethers.getContractFactory("DeferredPayoutHook")).deploy(
+        otherToken.address,
+        vault.address,
+        manager.address,
+        orchestratorRegistry.address,
+      )).to.be.revertedWithCustomError(deferredHook, "InvalidPayoutToken");
+    });
+
     it("rejects a chargeback reserve above 100 percent", async () => {
       const { manager } = await loadFixture(deployFixture);
       await expect(manager.setPlatformRiskConfig(PAYPAL, {
@@ -325,6 +338,28 @@ describe("RiskManager and OrchestratorV3", () => {
       await orchestrator.connect(taker).cancelIntent(intentHash);
       expect(await manager.freeTakesUsed(taker.address, ZELLE)).to.eq(1);
       expect((await manager.getRiskPosition(intentHash)).status).to.eq(2);
+    });
+
+    it("cancels a free intent after the griefing cliff without charging stake", async () => {
+      const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(20), ZELLE);
+      await time.increase(GRIEFING_CLIFF + 1);
+      await orchestrator.connect(taker).cancelIntent(intentHash);
+      const position = await manager.getRiskPosition(intentHash);
+      expect(position.status).to.eq(2);
+      expect(position.slashedAmount).to.eq(0);
+      expect(await vault.reservedStake(taker.address)).to.eq(0);
+    });
+
+    it("expires a free intent after the griefing cliff without charging stake", async () => {
+      const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(20), ZELLE);
+      await time.increase(MAX_INTENT_PERIOD + 1);
+      await escrow.pruneExpiredIntents(0);
+      const position = await manager.getRiskPosition(intentHash);
+      expect(position.status).to.eq(2);
+      expect(position.slashedAmount).to.eq(0);
+      expect(await vault.reservedStake(taker.address)).to.eq(0);
     });
 
     it("does not apply a partial free tranche to a larger intent", async () => {
@@ -579,6 +614,24 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await vault.reservedStake(taker.address)).to.eq(0);
       expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(usdc(700));
       expect((await manager.getRiskPosition(intentHash)).reservedAmount).to.eq(usdc(700));
+    });
+
+    it("rejects a self-referral that would reduce deferred proceeds below configured coverage", async () => {
+      const { taker, escrow, orchestrator, vault, manager, deferredHook } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(10));
+      const tx = await orchestrator.connect(taker).signalIntent(signalParams(
+        escrow,
+        taker.address,
+        usdc(700),
+        PAYPAL,
+        deferredHook.address,
+        [{ recipient: taker.address, fee: precise("0.5") }],
+      ));
+      const intentHash = intentHashFrom(await tx.wait());
+      await expect(fulfillIntent(orchestrator, intentHash, usdc(700)))
+        .to.be.revertedWithCustomError(manager, "InsufficientDeferredPayoutCoverage");
+      expect((await manager.getRiskPosition(intentHash)).status).to.eq(1);
+      expect(await vault.reservedStake(taker.address)).to.eq(usdc("4.025"));
     });
 
     it("requires the canonical deferred hook for the exception", async () => {

@@ -43,6 +43,15 @@ contract RiskManagerStateHarness is RiskManager {
         position.chargebackReserveBps = _chargebackReserveBps;
         position.coverageDeadline = _coverageDeadline;
     }
+
+    /** @notice Calls a target while this manager's inherited reentrancy guard is entered. */
+    function callWhileEntered(address _target, bytes calldata _data) external nonReentrant {
+        (bool success, bytes memory returnData) = _target.call(_data);
+        if (success) return;
+        assembly {
+            revert(add(returnData, 0x20), mload(returnData))
+        }
+    }
 }
 
 /**
@@ -111,6 +120,7 @@ contract RiskManagerOrchestratorHarness {
 contract RiskManagerEscrowHarness {
     uint256 public intentExpirationPeriod;
     address public depositor;
+    IERC20 public token = IERC20(address(0xbeef));
 
     constructor(uint256 _intentExpirationPeriod, address _depositor) {
         intentExpirationPeriod = _intentExpirationPeriod;
@@ -121,11 +131,15 @@ contract RiskManagerEscrowHarness {
         intentExpirationPeriod = _intentExpirationPeriod;
     }
 
+    function setToken(IERC20 _token) external {
+        token = _token;
+    }
+
     function getDeposit(uint256) external view returns (IEscrowV2.Deposit memory) {
         return IEscrowV2.Deposit({
             depositor: depositor,
             delegate: address(0),
-            token: IERC20(address(0)),
+            token: token,
             intentAmountRange: IEscrowV2.Range({ min: 0, max: type(uint256).max }),
             acceptingIntents: true,
             remainingDeposits: type(uint256).max,
@@ -163,6 +177,11 @@ contract RiskManagerVaultHarness {
     mapping(bytes32 => Reservation) public reservations;
     mapping(bytes32 => DeferredPayout) public deferredPayouts;
     uint256 public acceptControllerCalls;
+    IERC20 public stakeToken = IERC20(address(0xbeef));
+
+    function setStakeToken(IERC20 _stakeToken) external {
+        stakeToken = _stakeToken;
+    }
 
     function setTakerState(
         address _taker,

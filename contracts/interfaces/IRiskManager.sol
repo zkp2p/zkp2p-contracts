@@ -267,8 +267,10 @@ interface IRiskManager is IIntentRiskHook {
     error IntentStateMismatch(bytes32 intentHash);
     error CancellationNotRecorded(bytes32 intentHash);
     error SettlementNotRecorded(bytes32 intentHash);
+    error IntentTokenMismatch(address expectedToken, address actualToken);
     error DeferredPayoutAlreadyRegistered(bytes32 intentHash);
     error DeferredPayoutExceedsReleasedAmount(uint256 payoutAmount, uint256 releasedAmount);
+    error InsufficientDeferredPayoutCoverage(uint256 availableCoverage, uint256 requiredCoverage);
     error PositionNotMature(uint64 coverageDeadline, uint64 currentTime);
     error InvalidAttestation();
     error AttestationNotYetValid(uint64 validAfter, uint64 currentTime);
