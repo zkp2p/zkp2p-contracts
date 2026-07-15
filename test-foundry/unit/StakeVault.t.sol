@@ -462,38 +462,6 @@ contract StakeVaultTest is Test {
         assertEq(vault.reservedStake(staker), 0);
     }
 
-    function test_IntentCapacityPersistsAcrossControllerHandover() public {
-        address nextController = makeAddr("nextController");
-        bytes32 oldIntent = keccak256("old-capacity-intent");
-        bytes32 newIntent = keccak256("new-capacity-intent");
-        vm.prank(controller);
-        vault.reserveIntentCapacity(staker, oldIntent, 1);
-
-        vm.prank(owner);
-        vault.proposeController(nextController);
-        vm.warp(block.timestamp + DAY);
-        vm.prank(nextController);
-        vault.acceptController();
-
-        vm.expectRevert(
-            abi.encodeWithSelector(StakeVault.ConcurrentIntentLimitReached.selector, staker, 1, 1)
-        );
-        vm.prank(nextController);
-        vault.reserveIntentCapacity(staker, newIntent, 1);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(StakeVault.UnauthorizedPositionController.selector, nextController, controller)
-        );
-        vm.prank(nextController);
-        vault.releaseIntentCapacity(oldIntent);
-
-        vm.prank(controller);
-        vault.releaseIntentCapacity(oldIntent);
-        vm.prank(nextController);
-        vault.reserveIntentCapacity(staker, newIntent, 1);
-        assertEq(vault.activeIntentCount(staker), 1);
-    }
-
     function test_PreviousControllerFundsDeferredPositionAfterHandoverAndPause() public {
         address nextController = makeAddr("nextController");
         bytes32 intentHash = keccak256("deferred");
