@@ -134,9 +134,9 @@ export const STAKE_VAULT_BASE_EXIT_DELAY = ONE_DAY_IN_SECONDS.mul(30);
 export const STAKE_VAULT_CONTROLLER_CHANGE_DELAY = ONE_DAY_IN_SECONDS.mul(2);
 export const RISK_CALLBACK_GAS_LIMIT = 2_000_000;
 
-// Local-only examples from STAKE_RISK_POLICY_SPEC.md. Nonlocal launch economics must be
-// added under an explicit network key only after governance ratifies them.
-const LOCAL_STAKE_RISK_PLATFORM_POLICY = {
+// Initial policy approved in STAKE_RISK_POLICY_SPEC.md for local validation and the
+// Base staging E2E rollout. Production remains an explicit governance decision.
+const INITIAL_STAKE_RISK_PLATFORM_POLICY = {
   reversible: {
     enabled: true,
     chargeback: {
@@ -170,8 +170,9 @@ const LOCAL_STAKE_RISK_PLATFORM_POLICY = {
 };
 
 export const STAKE_RISK_PLATFORM_POLICY: any = {
-  localhost: LOCAL_STAKE_RISK_PLATFORM_POLICY,
-  hardhat: LOCAL_STAKE_RISK_PLATFORM_POLICY,
+  localhost: INITIAL_STAKE_RISK_PLATFORM_POLICY,
+  hardhat: INITIAL_STAKE_RISK_PLATFORM_POLICY,
+  base_staging: INITIAL_STAKE_RISK_PLATFORM_POLICY,
 };
 
 // Pyth Network contract addresses

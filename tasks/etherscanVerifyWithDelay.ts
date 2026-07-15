@@ -29,6 +29,7 @@ task('etherscan-verify-with-delay', 'Verify contracts on Etherscan with delays t
         await hre.run('verify:verify', {
           address: deployment.address,
           constructorArguments: deployment.args || [],
+          libraries: deployment.libraries || {},
         });
 
         console.log(`✅ Contract ${contractName} is now verified`);
