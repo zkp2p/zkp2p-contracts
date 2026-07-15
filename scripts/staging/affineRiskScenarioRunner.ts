@@ -41,6 +41,9 @@ const INDEXER_TIMEOUT_MS = Number(
   process.env.E2E_INDEXER_TIMEOUT_MS || "55000"
 );
 const INDEXER_POLL_MS = Number(process.env.E2E_INDEXER_POLL_MS || "3000");
+const RECEIPT_TIMEOUT_MS = Number(
+  process.env.E2E_RECEIPT_TIMEOUT_MS || "55000"
+);
 
 const TARGET_FUNDING = {
   ownerA: { native: "180000000000000", usdc: "8000000" },
@@ -1460,114 +1463,146 @@ async function runAction(
     afterReceipt?: (evidence: Json) => void;
   } = {}
 ): Promise<Json> {
-  const existing = state.transactions[label];
-  if (existing) {
-    if (
-      (!existing.indexerSync || !existing.rawEventRows) &&
-      existing.blockNumber
-    ) {
-      existing.indexerSync =
-        existing.indexerSync ||
-        (await waitForIndexer(Number(existing.blockNumber)));
-      const receipt = (await provider.getTransactionReceipt(
-        String(existing.transactionHash)
-      )) as ContractReceipt;
-      existing.rawEventRows = await fetchAndAssertRawReceiptRows(
-        receipt,
-        contracts
-      );
-      if (options.reconcile) {
-        existing.postOnchain = await contractSnapshot(
-          contracts,
-          state,
-          Number(existing.blockNumber)
-        );
-        const response = await indexedSnapshot(state);
-        existing.graphql = { query: buildExactSnapshotQuery(state), response };
-        existing.reconciliation = await assertIndexedReconciliation(
-          response,
-          contracts,
-          state,
-          Number(existing.blockNumber)
-        );
-      }
-      state.transactions[label] = existing;
-      saveState(state);
-      writeEvidence(label, existing);
-    }
-    return existing;
-  }
-
-  const connected = contract.connect(signer);
-  const preBlock = await provider.getBlockNumber();
-  const preOnchain = options.reconcile
-    ? await contractSnapshot(contracts, state, preBlock)
-    : undefined;
-  try {
-    await connected.callStatic[method](...args);
-  } catch (error) {
-    throw new Error(`${label} simulation failed: ${redact(error)}`);
-  }
-
-  requireMutationFlag();
-  const transaction = (await connected[method](...args)) as ContractTransaction;
-  const receipt = await transaction.wait();
-  const block = await provider.getBlock(receipt.blockNumber);
-  const evidence: Json = {
-    label,
-    submittedAtUtc: new Date().toISOString(),
-    actor: signer.address,
-    contract: contract.address,
-    method,
-    transactionHash: receipt.transactionHash,
-    status: receipt.status,
-    blockNumber: receipt.blockNumber,
-    blockHash: receipt.blockHash,
-    blockTimestamp: block.timestamp,
-    gasUsed: receipt.gasUsed,
-    decodedLogs: decodeLogs(receipt, contracts),
-    preOnchain,
+  const persist = (record: Json): void => {
+    state.transactions[label] = record;
+    saveState(state);
+    writeEvidence(label, record);
   };
-  if (receipt.status !== 1)
-    throw new Error(
-      `${label} reverted in transaction ${receipt.transactionHash}`
-    );
-  options.afterReceipt?.(evidence);
-  state.transactions[label] = evidence;
-  saveState(state);
 
-  const sync = await waitForIndexer(receipt.blockNumber);
-  evidence.indexerSync = sync;
-  evidence.rawEventRows = await fetchAndAssertRawReceiptRows(
-    receipt,
-    contracts
+  let evidence = state.transactions[label];
+  let broadcastTransaction: ContractTransaction | undefined;
+  if (!evidence) {
+    const connected = contract.connect(signer);
+    const preBlock = await provider.getBlockNumber();
+    const preOnchain = options.reconcile
+      ? await contractSnapshot(contracts, state, preBlock)
+      : undefined;
+    try {
+      await connected.callStatic[method](...args);
+    } catch (error) {
+      throw new Error(`${label} simulation failed: ${redact(error)}`);
+    }
+
+    requireMutationFlag();
+    broadcastTransaction = (await connected[method](
+      ...args
+    )) as ContractTransaction;
+    evidence = {
+      label,
+      journalStatus: "PENDING_RECEIPT",
+      submittedAtUtc: new Date().toISOString(),
+      actor: signer.address,
+      contract: contract.address,
+      method,
+      transactionHash: broadcastTransaction.hash,
+      nonce: broadcastTransaction.nonce,
+      preBlock,
+      preOnchain,
+    };
+    // Persist immediately after the RPC returns a hash. A later timeout or crash
+    // must recover this exact transaction and must never rebroadcast the action.
+    persist(evidence);
+  }
+
+  if (evidence.skipped) return evidence;
+
+  let receipt = await provider.getTransactionReceipt(
+    String(evidence.transactionHash)
   );
-  if (options.reconcile) {
+  if (!receipt) {
+    const observed =
+      broadcastTransaction ||
+      (await provider.getTransaction(String(evidence.transactionHash)));
+    if (!observed) {
+      throw new Error(
+        `${label} journaled transaction ${String(
+          evidence.transactionHash
+        )} is absent from the RPC. Treat it as dropped/replaced and resolve its signer nonce explicitly in the private run-state journal; automatic rebroadcast is forbidden.`
+      );
+    }
+    receipt = await provider.waitForTransaction(
+      String(evidence.transactionHash),
+      1,
+      RECEIPT_TIMEOUT_MS
+    );
+    if (!receipt) {
+      throw new Error(
+        `${label} transaction ${String(
+          evidence.transactionHash
+        )} is still pending after ${RECEIPT_TIMEOUT_MS}ms; resume later without deleting its journal entry`
+      );
+    }
+  }
+
+  if (!evidence.blockNumber) {
+    const block = await provider.getBlock(receipt.blockNumber);
+    evidence = {
+      ...evidence,
+      journalStatus: receipt.status === 1 ? "MINED" : "REVERTED",
+      transactionHash: receipt.transactionHash,
+      status: receipt.status,
+      blockNumber: receipt.blockNumber,
+      blockHash: receipt.blockHash,
+      blockTimestamp: block.timestamp,
+      gasUsed: receipt.gasUsed,
+      decodedLogs: decodeLogs(receipt as ContractReceipt, contracts),
+      afterReceiptApplied: false,
+    };
+    persist(evidence);
+  }
+  if (Number(evidence.status) !== 1) {
+    throw new Error(
+      `${label} reverted in transaction ${String(evidence.transactionHash)}`
+    );
+  }
+
+  if (
+    evidence.journalStatus === "MINED" &&
+    evidence.afterReceiptApplied !== true
+  ) {
+    options.afterReceipt?.(evidence);
+    evidence.afterReceiptApplied = true;
+    persist(evidence);
+  }
+
+  if (!evidence.indexerSync) {
+    evidence.indexerSync = await waitForIndexer(Number(evidence.blockNumber));
+    persist(evidence);
+  }
+  if (!evidence.rawEventRows) {
+    evidence.rawEventRows = await fetchAndAssertRawReceiptRows(
+      receipt as ContractReceipt,
+      contracts
+    );
+    persist(evidence);
+  }
+  if (
+    options.reconcile &&
+    (!evidence.reconciliation || evidence.reconciliationError)
+  ) {
     evidence.postOnchain = await contractSnapshot(
       contracts,
       state,
-      receipt.blockNumber
+      Number(evidence.blockNumber)
     );
     const response = await indexedSnapshot(state);
     evidence.graphql = { query: buildExactSnapshotQuery(state), response };
     try {
-      evidence.reconciliation = await assertIndexedReconciliation(
+      const reconciliation = await assertIndexedReconciliation(
         response,
         contracts,
         state,
-        receipt.blockNumber
+        Number(evidence.blockNumber)
       );
+      evidence.reconciliation = reconciliation;
+      delete evidence.reconciliationError;
+      persist(evidence);
     } catch (error) {
       evidence.reconciliationError = redact(error);
-      state.transactions[label] = evidence;
-      saveState(state);
-      writeEvidence(label, evidence);
+      persist(evidence);
       throw error;
     }
   }
-  state.transactions[label] = evidence;
-  saveState(state);
-  writeEvidence(label, evidence);
   return evidence;
 }
 
@@ -1579,44 +1614,96 @@ async function runNativeFunding(
   provider: ethers.providers.JsonRpcProvider,
   state: RunState
 ): Promise<void> {
-  if (state.transactions[label]) return;
-  const balance = await provider.getBalance(recipient);
-  if (balance.gte(target)) {
-    state.transactions[label] = {
-      label,
-      skipped: true,
-      reason: "target balance already present",
-      observedBalance: balance,
-    };
+  const persist = (record: Json): void => {
+    state.transactions[label] = record;
     saveState(state);
-    return;
-  }
-  const value = target.sub(balance);
-  await provider.call({ from: governance.address, to: recipient, value });
-  requireMutationFlag();
-  const transaction = await governance.sendTransaction({
-    to: recipient,
-    value,
-  });
-  const receipt = await transaction.wait();
-  const block = await provider.getBlock(receipt.blockNumber);
-  const evidence: Json = {
-    label,
-    actor: governance.address,
-    recipient,
-    asset: "ETH",
-    amount: value,
-    transactionHash: receipt.transactionHash,
-    status: receipt.status,
-    blockNumber: receipt.blockNumber,
-    blockHash: receipt.blockHash,
-    blockTimestamp: block.timestamp,
-    gasUsed: receipt.gasUsed,
-    indexerSync: await waitForIndexer(receipt.blockNumber),
+    writeEvidence(label, record);
   };
-  state.transactions[label] = evidence;
-  saveState(state);
-  writeEvidence(label, evidence);
+  let evidence = state.transactions[label];
+  let broadcastTransaction: ethers.providers.TransactionResponse | undefined;
+  if (!evidence) {
+    const balance = await provider.getBalance(recipient);
+    if (balance.gte(target)) {
+      persist({
+        label,
+        skipped: true,
+        reason: "target balance already present",
+        observedBalance: balance,
+      });
+      return;
+    }
+    const value = target.sub(balance);
+    await provider.call({ from: governance.address, to: recipient, value });
+    requireMutationFlag();
+    broadcastTransaction = await governance.sendTransaction({
+      to: recipient,
+      value,
+    });
+    evidence = {
+      label,
+      journalStatus: "PENDING_RECEIPT",
+      submittedAtUtc: new Date().toISOString(),
+      actor: governance.address,
+      recipient,
+      asset: "ETH",
+      amount: value,
+      transactionHash: broadcastTransaction.hash,
+      nonce: broadcastTransaction.nonce,
+    };
+    persist(evidence);
+  }
+  if (evidence.skipped) return;
+
+  let receipt = await provider.getTransactionReceipt(
+    String(evidence.transactionHash)
+  );
+  if (!receipt) {
+    const observed =
+      broadcastTransaction ||
+      (await provider.getTransaction(String(evidence.transactionHash)));
+    if (!observed) {
+      throw new Error(
+        `${label} journaled native-funding transaction ${String(
+          evidence.transactionHash
+        )} is absent from the RPC. Resolve its signer nonce explicitly in the private run-state journal; automatic rebroadcast is forbidden.`
+      );
+    }
+    receipt = await provider.waitForTransaction(
+      String(evidence.transactionHash),
+      1,
+      RECEIPT_TIMEOUT_MS
+    );
+    if (!receipt) {
+      throw new Error(
+        `${label} native-funding transaction ${String(
+          evidence.transactionHash
+        )} is still pending after ${RECEIPT_TIMEOUT_MS}ms; resume later without deleting its journal entry`
+      );
+    }
+  }
+  if (!evidence.blockNumber) {
+    const block = await provider.getBlock(receipt.blockNumber);
+    evidence = {
+      ...evidence,
+      journalStatus: receipt.status === 1 ? "MINED" : "REVERTED",
+      transactionHash: receipt.transactionHash,
+      status: receipt.status,
+      blockNumber: receipt.blockNumber,
+      blockHash: receipt.blockHash,
+      blockTimestamp: block.timestamp,
+      gasUsed: receipt.gasUsed,
+    };
+    persist(evidence);
+  }
+  if (Number(evidence.status) !== 1) {
+    throw new Error(
+      `${label} reverted in transaction ${String(evidence.transactionHash)}`
+    );
+  }
+  if (!evidence.indexerSync) {
+    evidence.indexerSync = await waitForIndexer(Number(evidence.blockNumber));
+    persist(evidence);
+  }
 }
 
 async function expectRevert(
