@@ -410,12 +410,36 @@ const RAW_EVENT_PREFIX: Record<string, string> = {
   hook: "DeferredPayoutHook",
 };
 
+function normalizeEventValue(value: unknown): unknown {
+  if (BigNumber.isBigNumber(value)) return value.toString();
+  if (typeof value === "bigint") return value.toString();
+  if (Array.isArray(value)) {
+    const namedEntries = Object.entries(value).filter(
+      ([key]) => !/^\d+$/.test(key)
+    );
+    if (namedEntries.length > 0) {
+      return Object.fromEntries(
+        namedEntries.map(([key, child]) => [key, normalizeEventValue(child)])
+      );
+    }
+    return value.map(normalizeEventValue);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([key]) => !/^\d+$/.test(key))
+        .map(([key, child]) => [key, normalizeEventValue(child)])
+    );
+  }
+  return value;
+}
+
 function rawEventExpectation(
   log: Json
 ): { entity: string; fields: string[]; expected: Json } | undefined {
   const prefix = RAW_EVENT_PREFIX[String(log.source)];
   if (!prefix || !log.event) return undefined;
-  const expected = normalize(log.args) as Json;
+  const expected = normalizeEventValue(log.args) as Json;
   if (
     log.event === "DepositReceived" ||
     log.event === "DepositIntentAmountRangeUpdated"
@@ -486,8 +510,28 @@ async function fetchAndAssertRawReceiptRows(
     )}) { ${expectation.fields.join(" ")} }`;
   });
   const query = `query RiskE2ERawReceipt {\n${fields.join("\n")}\n}`;
-  const response = await graphql(query);
-  const data = graphqlData(response);
+  const startedAt = Date.now();
+  let response: Json;
+  let data: Json;
+  let missing: string[];
+  do {
+    response = await graphql(query);
+    data = graphqlData(response);
+    missing = expectedRows
+      .map(({ expectation }, index) =>
+        data[`event_${index}`] ? "" : expectation.entity
+      )
+      .filter(Boolean);
+    if (missing.length === 0) break;
+    if (Date.now() - startedAt > INDEXER_TIMEOUT_MS) {
+      throw new Error(
+        `Indexer raw rows not visible within ${INDEXER_TIMEOUT_MS}ms: ${missing.join(
+          ","
+        )}`
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, INDEXER_POLL_MS));
+  } while (true);
   const checks: Json[] = [];
   expectedRows.forEach(({ log, expectation }, index) => {
     const row = data[`event_${index}`] as Json | undefined;
@@ -509,7 +553,7 @@ async function fetchAndAssertRawReceiptRows(
       result: "PASS",
     });
   });
-  return { query, response, checks };
+  return { query, response, checks, waitedMs: Date.now() - startedAt };
 }
 
 async function graphql(query: string, variables: Json = {}): Promise<Json> {
