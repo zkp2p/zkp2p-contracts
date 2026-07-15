@@ -1,0 +1,77 @@
+{
+  "version": "1.0",
+  "chainId": "8453",
+  "createdAt": 1784126418741,
+  "meta": {
+    "name": "ZKP2P V2 Deployment - base",
+    "description": "Registry wiring and payment method migration for V2 deployment on base",
+    "txBuilderVersion": "1.16.5",
+    "createdFromSafeAddress": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+    "createdFromOwnerAddress": ""
+  },
+  "transactions": [
+    {
+      "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+      "value": "0",
+      "data": "0x334c2ef3817260692b75e93c7fbc51c71637d4075a975e221e1ebc1abeddfabd731fd90d",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+      "value": "0",
+      "data": "0x334c2ef36aa1d1401e79ad0549dced8b1b96fb72c41cd02b32a7d9ea1fed54ba9e17152e",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+      "value": "0",
+      "data": "0x334c2ef34bc42b322a3ad413b91b2fde30549ca70d6ee900eded1681de91aaf32ffd7ab5",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0x16b3e4a3CA36D3A4bCA281767f15C7ADeF4ab163",
+      "value": "0",
+      "data": "0x334c2ef3817260692b75e93c7fbc51c71637d4075a975e221e1ebc1abeddfabd731fd90d",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0x16b3e4a3CA36D3A4bCA281767f15C7ADeF4ab163",
+      "value": "0",
+      "data": "0x334c2ef36aa1d1401e79ad0549dced8b1b96fb72c41cd02b32a7d9ea1fed54ba9e17152e",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0x16b3e4a3CA36D3A4bCA281767f15C7ADeF4ab163",
+      "value": "0",
+      "data": "0x334c2ef34bc42b322a3ad413b91b2fde30549ca70d6ee900eded1681de91aaf32ffd7ab5",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0x46A58Dc65587D4D7B8198C6A25eEdf5b2535Da94",
+      "value": "0",
+      "data": "0x334c2ef3817260692b75e93c7fbc51c71637d4075a975e221e1ebc1abeddfabd731fd90d",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0x46A58Dc65587D4D7B8198C6A25eEdf5b2535Da94",
+      "value": "0",
+      "data": "0x334c2ef36aa1d1401e79ad0549dced8b1b96fb72c41cd02b32a7d9ea1fed54ba9e17152e",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0x46A58Dc65587D4D7B8198C6A25eEdf5b2535Da94",
+      "value": "0",
+      "data": "0x334c2ef34bc42b322a3ad413b91b2fde30549ca70d6ee900eded1681de91aaf32ffd7ab5",
+      "contractMethod": null,
+      "contractInputsValues": null
+    }
+  ]
+}
