@@ -6,7 +6,7 @@ import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
 
 /**
  * @title AttestationVerifierMock
- * @notice Configurable verifier used by RiskTierManager unit and integration tests.
+ * @notice Configurable verifier used by RiskManager unit and integration tests.
  */
 contract AttestationVerifierMock is IAttestationVerifier {
     bool public result = true;

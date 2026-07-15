@@ -98,7 +98,8 @@ function updatePackageExports(networks: string[]): void {
     './oracleFeeds/*.json': packageJson.exports['./oracleFeeds/*.json'],
     './types': packageJson.exports['./types'],
     './utils': packageJson.exports['./utils'],
-    './utils/protocolUtils': packageJson.exports['./utils/protocolUtils']
+    './utils/protocolUtils': packageJson.exports['./utils/protocolUtils'],
+    './utils/riskMath': packageJson.exports['./utils/riskMath']
   };
   
   // Create new exports object with proper ordering

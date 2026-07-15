@@ -50,28 +50,18 @@ function compileModule(moduleName: string, format: 'esm' | 'cjs') {
         const jsPath = outputPath.replace(/\.json$/, '.js');
         fs.writeFileSync(jsPath, moduleSource);
       } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
-        // Compile TypeScript files
+        // Compile TypeScript files. This must be a real transpilation because utility modules contain
+        // type annotations and bigint literals that cannot be copied verbatim into published .js files.
         const source = fs.readFileSync(inputPath, 'utf8');
-
-        // Simple transformation for imports/exports
-        let transformed = source;
-
-        if (format === 'cjs') {
-          // Convert ES modules to CommonJS
-          transformed = transformed
-            .replace(/export \{ default as (\w+) \} from '\.\/(.+)\.json'/g, 
-                    "exports.$1 = require('./$2.json')")
-            .replace(/export \* as (\w+) from '\.\/(.+)'/g, 
-                    "exports.$1 = require('./$2')")
-            .replace(/export \{([^}]+)\} from '\.\/(.+)'/g, 
-                    "Object.assign(exports, require('./$2'))")
-            .replace(/import type \{([^}]+)\} from '\.\/(.+)'/g, '')
-            .replace(/export type \{([^}]+)\}/g, '');
-        } else {
-          transformed = transformed
-            .replace(/from "\.\/(.+)\.json"/g, "from './$1.js'")
-            .replace(/from '\.\/(.+)\.json'/g, "from './$1.js'");
-        }
+        const transformed = ts.transpileModule(source, {
+          compilerOptions: {
+            target: ts.ScriptTarget.ES2020,
+            module: format === 'cjs' ? ts.ModuleKind.CommonJS : ts.ModuleKind.ESNext,
+            esModuleInterop: true,
+            resolveJsonModule: true,
+          },
+          fileName: inputPath,
+        }).outputText;
 
         // Write the output file with .js extension
         const jsPath = outputPath.replace(/\.ts$/, '.js');

@@ -30,6 +30,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
     mapping(bytes32 => IIntentRiskHook) internal intentRiskHooks;
     mapping(bytes32 => bool) public override intentRequiresPostIntentHook;
     mapping(bytes32 => IntentSettlement) internal failedIntentSettlements;
+    mapping(bytes32 => IntentCancellation) internal failedIntentCancellations;
 
     uint256 public riskCallbackGasLimit;
 
@@ -160,7 +161,8 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             depositId: intent.depositId,
             amount: intent.amount,
             paymentMethod: intent.paymentMethod,
-            postIntentHook: address(intent.postIntentHook)
+            postIntentHook: address(intent.postIntentHook),
+            createdAt: uint64(intent.timestamp)
         });
     }
 
@@ -180,6 +182,13 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
     ) external view override returns (uint256 releasedAmount, uint64 settledAt) {
         IntentSettlement memory settlement = failedIntentSettlements[_intentHash];
         return (settlement.releasedAmount, settlement.settledAt);
+    }
+
+    /**
+     * @notice Returns the liquidity-unlock timestamp for a cancellation callback that failed open.
+     */
+    function getIntentCancellation(bytes32 _intentHash) external view override returns (uint64 cancelledAt) {
+        return failedIntentCancellations[_intentHash].cancelledAt;
     }
 
     /* ============ Internal Lifecycle Extensions ============ */
@@ -213,10 +222,13 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
     ) internal override {
         bool isSettlement = _resolution != IntentResolution.CANCELLED;
         uint64 settledAt;
+        uint64 cancelledAt;
 
         if (isSettlement) {
             settledAt = uint64(block.timestamp);
             emit IntentSettlementRecorded(_intentHash, _releasedAmount, settledAt);
+        } else {
+            cancelledAt = uint64(block.timestamp);
         }
 
         IIntentRiskHook riskHook = intentRiskHooks[_intentHash];
@@ -238,6 +250,9 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
                 releasedAmount: _releasedAmount,
                 settledAt: settledAt
             });
+        } else if (!isSettlement && !callbackSucceeded) {
+            failedIntentCancellations[_intentHash] = IntentCancellation({ cancelledAt: cancelledAt });
+            emit IntentCancellationRecorded(_intentHash, cancelledAt);
         }
     }
 

@@ -20,11 +20,16 @@ interface IOrchestratorV3 is IOrchestratorV2 {
         uint256 amount;
         bytes32 paymentMethod;
         address postIntentHook;
+        uint64 createdAt;
     }
 
     struct IntentSettlement {
         uint256 releasedAmount;
         uint64 settledAt;
+    }
+
+    struct IntentCancellation {
+        uint64 cancelledAt;
     }
 
     /* ============ Events ============ */
@@ -39,6 +44,7 @@ interface IOrchestratorV3 is IOrchestratorV2 {
     );
     event RiskCallbackGasLimitUpdated(uint256 gasLimit);
     event IntentSettlementRecorded(bytes32 indexed intentHash, uint256 releasedAmount, uint64 settledAt);
+    event IntentCancellationRecorded(bytes32 indexed intentHash, uint64 cancelledAt);
 
     /* ============ Errors ============ */
 
@@ -65,4 +71,9 @@ interface IOrchestratorV3 is IOrchestratorV2 {
      * @dev Successful settlement callbacks leave this record empty.
      */
     function getIntentSettlement(bytes32 _intentHash) external view returns (uint256 releasedAmount, uint64 settledAt);
+    /**
+     * @notice Returns the liquidity-unlock timestamp when a cancellation callback failed open.
+     * @dev The risk hook must use this timestamp during reconciliation rather than the later transaction time.
+     */
+    function getIntentCancellation(bytes32 _intentHash) external view returns (uint64 cancelledAt);
 }

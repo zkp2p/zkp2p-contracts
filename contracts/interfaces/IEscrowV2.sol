@@ -269,6 +269,7 @@ interface IEscrowV2 {
 
     /* ============ View Functions ============ */
 
+    function intentExpirationPeriod() external view returns (uint256);
     function getDeposit(uint256 _depositId) external view returns (Deposit memory);
     function getDepositIntent(uint256 _depositId, bytes32 _intentHash) external view returns (Intent memory);
     function getDepositPaymentMethods(uint256 _depositId) external view returns (bytes32[] memory);
