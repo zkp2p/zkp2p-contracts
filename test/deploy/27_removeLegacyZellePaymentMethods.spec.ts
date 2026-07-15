@@ -106,7 +106,6 @@ describe("Remove legacy Zelle payment methods", () => {
   }
 
   beforeEach(async () => {
-    safeBatchCollector.reset();
     [owner, maker, taker, witness] = await getAccounts();
     deployer = new DeployHelper(owner.wallet);
     chainId = (await ethers.provider.getNetwork()).chainId;
@@ -174,10 +173,6 @@ describe("Remove legacy Zelle payment methods", () => {
     for (const { hash } of LEGACY_ZELLE_PAYMENT_METHODS) {
       legacyDepositIds.push(await createDeposit(hash, usdc(300)));
     }
-  });
-
-  afterEach(() => {
-    safeBatchCollector.reset();
   });
 
   it("removes all legacy registrations, preserves withdrawal, and keeps generic Zelle functional", async () => {

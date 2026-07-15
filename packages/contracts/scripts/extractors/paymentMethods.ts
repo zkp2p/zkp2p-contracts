@@ -30,6 +30,21 @@ function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
+// The package is an active API, so it is generated from an explicit catalog
+// rather than copying every immutable entry from deployment history.
+const PUBLISHED_PAYMENT_METHOD_NAMES = new Set([
+  'alipay',
+  'cashapp',
+  'chime',
+  'mercadopago',
+  'monzo',
+  'paypal',
+  'revolut',
+  'venmo',
+  'wise',
+  'zelle',
+]);
+
 export async function extractPaymentMethods(): Promise<void> {
   ensureDir(PAYMENT_METHODS_DIR);
 
@@ -86,6 +101,8 @@ export async function extractPaymentMethods(): Promise<void> {
 
       // Process each payment method
       for (const [methodKey, entry] of Object.entries<any>(methods)) {
+        if (!PUBLISHED_PAYMENT_METHOD_NAMES.has(methodKey)) continue;
+
         const paymentMethodHash = entry.paymentMethodHash?.toLowerCase?.() || '';
         // Read currencies and timestampBuffer directly from the snapshot
         const currencies = entry.currencies || [];

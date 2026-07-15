@@ -8,7 +8,6 @@ import {
   getDeployedContractAddress,
   removePaymentMethodFromRegistry,
   removePaymentMethodFromUnifiedVerifier,
-  removePaymentMethodSnapshot,
   waitForDeploymentDelay,
 } from "../deployments/helpers";
 
@@ -107,10 +106,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   console.log("\nRemoving legacy Zelle payment methods");
   await removeLegacyZelleVerifierRegistrations(hre, contracts, unifiedPaymentVerifierV2Address);
-
-  for (const { key } of LEGACY_ZELLE_PAYMENT_METHODS) {
-    removePaymentMethodSnapshot(network, key);
-  }
 
   await waitForDeploymentDelay(hre);
 };

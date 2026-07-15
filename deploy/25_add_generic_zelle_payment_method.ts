@@ -36,6 +36,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   console.log("\nConfiguring generic Zelle payment method");
 
+  // New Zelle liquidity uses only the generic zelle hash. The legacy
+  // zelle-citi/chase/bofa hashes remain registered in earlier scripts for
+  // historical fulfillment and drain support only.
   await addPaymentMethodToUnifiedVerifier(
     hre,
     v2VerifierContract,

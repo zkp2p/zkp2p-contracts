@@ -20,7 +20,11 @@ import { REVOLUT_PROVIDER_CONFIG } from "../deployments/verifiers/revolut";
 import { CASHAPP_PROVIDER_CONFIG } from "../deployments/verifiers/cashapp";
 import { WISE_PROVIDER_CONFIG } from "../deployments/verifiers/wise";
 import { MERCADOPAGO_PROVIDER_CONFIG } from "../deployments/verifiers/mercadopago";
-import { ZELLE_PROVIDER_CONFIG } from "../deployments/verifiers/zelle";
+import {
+  ZELLE_CITI_PROVIDER_CONFIG,
+  ZELLE_CHASE_PROVIDER_CONFIG,
+  ZELLE_BOFA_PROVIDER_CONFIG,
+} from "../deployments/verifiers/zelle";
 import { PAYPAL_PROVIDER_CONFIG } from "../deployments/verifiers/paypal";
 import { MONZO_PROVIDER_CONFIG } from "../deployments/verifiers/monzo";
 import { N26_PROVIDER_CONFIG } from "../deployments/verifiers/n26";
@@ -34,7 +38,9 @@ const ALL_PAYMENT_METHODS = [
   { key: "cashapp", config: CASHAPP_PROVIDER_CONFIG },
   { key: "wise", config: WISE_PROVIDER_CONFIG },
   { key: "mercadopago", config: MERCADOPAGO_PROVIDER_CONFIG },
-  { key: "zelle", config: ZELLE_PROVIDER_CONFIG },
+  { key: "zelle-citi", config: ZELLE_CITI_PROVIDER_CONFIG },
+  { key: "zelle-chase", config: ZELLE_CHASE_PROVIDER_CONFIG },
+  { key: "zelle-bofa", config: ZELLE_BOFA_PROVIDER_CONFIG },
   { key: "paypal", config: PAYPAL_PROVIDER_CONFIG },
   { key: "monzo", config: MONZO_PROVIDER_CONFIG },
   { key: "n26", config: N26_PROVIDER_CONFIG },
