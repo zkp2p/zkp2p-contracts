@@ -98,8 +98,8 @@ The diagrams above describe the v2 settlement base. V3 adds the risk path docume
 
 `OrchestratorV3` preserves the v2 intent lifecycle and snapshots the depositor-selected risk hook when
 an intent is admitted. Admission callbacks fail closed; terminal callbacks are gas-bounded and may fail
-open so escrow liquidity is not trapped. `RiskManager` retains durable recovery data so a failed terminal
-callback can be reconciled permissionlessly using the original lifecycle timestamp.
+open so escrow liquidity is not trapped. `OrchestratorV3` retains durable recovery data so `RiskManager`
+can reconcile a failed terminal callback permissionlessly using the original lifecycle timestamp.
 
 For intent amount `A`, hourly griefing slope `s`, intent period `T`, griefing cliff `C`, and chargeback
 reserve ratio `r`, admission reserves the greater pending liability:
@@ -130,22 +130,29 @@ The current merged chargeback path is deliberately narrow and fail closed:
 
 - Chargebackable platform configs require `reserveBps == 10_000` and
   `deferredPayoutEnabled == false`, so the full gross released amount is stake-backed at admission.
-- `UnifiedPaymentVerifier` stores a commitment scoped by `(orchestrator, intentHash)` over the payment
-  method, hashed provider payment ID, fiat amount, and fiat currency. `RiskManager` snapshots the
-  payment verifier at admission and requires that commitment during verified-settlement reconciliation.
-- A maker manual release records no payment commitment, releases the reservation, starts no coverage
+- `UnifiedPaymentVerifierV3` returns the provider payment ID already authenticated inside the signed
+  `PaymentDetails`. `OrchestratorV3` passes that value through its fulfillment callback and
+  `RiskManager` stores it with the settled position; no payment verifier is snapshotted at admission.
+- A maker manual release records no payment ID, releases the reservation, starts no coverage
   window, and cannot be charged back.
 - Chargeback evidence uses the EIP-712 domain `ZKP2P RiskManager`, version `1`, current chain ID, and
   the `RiskManager` address. The signed type is
-  `ChargebackAttestation(bytes32 intentHash,bytes32 dataHash)`.
-- `data` ABI-encodes `ChargebackDetails(paymentMethod, originalPaymentId, disputeId, paymentAmount,
-  paymentCurrency)`. Those details must exactly match the verifier-backed payment commitment, and
-  `disputeId` must be nonzero.
+  `ChargebackAttestation(bytes32 intentHash,bytes32 originalPaymentId,bytes32 disputeId)`.
+- `originalPaymentId` must exactly match the identifier stored from verified fulfillment, and
+  `disputeId` must be nonzero. The payment method and gross token amount come from the position rather
+  than witness-supplied chargeback fields.
 - A valid claim inside the half-open interval `settledAt <= now < coverageDeadline` compensates the LP
   for the full gross `releasedAmount`. Partial chargebacks are not supported by this v1 policy.
 - Replay protection consumes `keccak256(paymentMethod, disputeId)` globally.
 - Fresh deployments require a dedicated three-witness chargeback verifier with a 2-of-3 threshold and
   a witness set disjoint from payment-attestation witnesses.
+
+The payment-ID lane is deployed in parallel with the legacy lane. It has a separate
+`PaymentVerifierRegistryV3`, `UnifiedPaymentVerifierV3`, `OrchestratorV3`, and risk stack, while both
+unified verifiers use the same `NullifierRegistry`. Deployment mirrors the legacy registry's exact live
+method/currency set and leaves all legacy routes and writers intact. Although the payment-attestation
+input schema is unchanged, its EIP-712 domain binds each signature to the selected verifier address.
+Subsequent payment-method and currency governance changes must update both registries atomically.
 
 The witness/threshold configuration remains immediately mutable and open positions do not snapshot a
 witness epoch. Delayed two-step governance and epoch snapshotting, followed by real provider E2E, are

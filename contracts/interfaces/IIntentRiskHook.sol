@@ -27,8 +27,9 @@ interface IIntentRiskHook {
      * @notice Resolves risk accounting after proof verification succeeds.
      * @param _intentHash Identifier of the intent being fulfilled.
      * @param _releasedAmount Gross escrow amount released for the verified payment.
+     * @param _paymentId Provider payment identifier authenticated by the payment verifier.
      */
-    function onIntentFulfilled(bytes32 _intentHash, uint256 _releasedAmount) external;
+    function onIntentFulfilled(bytes32 _intentHash, uint256 _releasedAmount, bytes32 _paymentId) external;
 
     /**
      * @notice Resolves risk accounting after a maker authorizes manual release.

@@ -195,9 +195,17 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
      */
     function getIntentSettlement(
         bytes32 _intentHash
-    ) external view override returns (uint256 releasedAmount, uint64 settledAt, bool isManualRelease) {
+    ) external view override returns (
+        uint256 releasedAmount,
+        bytes32 paymentId,
+        uint64 settledAt
+    ) {
         IntentSettlement memory settlement = failedIntentSettlements[_intentHash];
-        return (settlement.releasedAmount, settlement.settledAt, settlement.isManualRelease);
+        return (
+            settlement.releasedAmount,
+            settlement.paymentId,
+            settlement.settledAt
+        );
     }
 
     /**
@@ -236,6 +244,16 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         IntentResolution _resolution,
         uint256 _releasedAmount
     ) internal override {
+        _resolveIntentWithPaymentId(_intentHash, _resolution, _releasedAmount, bytes32(0));
+    }
+
+    /** @dev Transports the authenticated payment identifier through terminal risk accounting. */
+    function _resolveIntentWithPaymentId(
+        bytes32 _intentHash,
+        IntentResolution _resolution,
+        uint256 _releasedAmount,
+        bytes32 _paymentId
+    ) internal override {
         bool isSettlement = _resolution != IntentResolution.CANCELLED;
         uint64 settledAt;
         uint64 cancelledAt;
@@ -258,19 +276,36 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             _intentHash,
             uint8(_resolution),
             _releasedAmount,
+            _paymentId,
             riskCallbackGasLimit,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
         if (isSettlement && !callbackSucceeded) {
             failedIntentSettlements[_intentHash] = IntentSettlement({
                 releasedAmount: _releasedAmount,
-                settledAt: settledAt,
-                isManualRelease: _resolution == IntentResolution.RELEASED
+                paymentId: _paymentId,
+                settledAt: settledAt
             });
         } else if (!isSettlement && !callbackSucceeded) {
             failedIntentCancellations[_intentHash] = IntentCancellation({ cancelledAt: cancelledAt });
             emit IntentCancellationRecorded(_intentHash, cancelledAt);
         }
+    }
+
+    /** @dev Calls the payment-ID-aware verifier ABI used exclusively by the V3 lane. */
+    function _verifyPayment(
+        FulfillIntentParams calldata _params,
+        bytes32 _paymentMethod
+    ) internal override returns (uint256 releaseAmount, bytes32 paymentId) {
+        address verifier = paymentVerifierRegistry.getVerifier(_paymentMethod);
+        if (verifier == address(0)) revert PaymentMethodDoesNotExist(_paymentMethod);
+
+        return BoundedCall.verifyPaymentV3(
+            verifier,
+            _params.intentHash,
+            _params.paymentProof,
+            _params.verificationData
+        );
     }
 
     /**

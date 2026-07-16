@@ -65,6 +65,16 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     StakeVault:                         ${tryGetAddress(network, "StakeVault")}
     RiskManager:                        ${tryGetAddress(network, "RiskManager")}
     DeferredPayoutHook:                 ${tryGetAddress(network, "DeferredPayoutHook")}
+    ----------------------------------------------------------------------
+    Payment-ID Risk Contracts:
+    PaymentVerifierRegistryV3:          ${tryGetAddress(network, "PaymentVerifierRegistryV3")}
+    UnifiedPaymentVerifierV3:           ${tryGetAddress(network, "UnifiedPaymentVerifierV3")}
+    BoundedCallPaymentId:               ${tryGetAddress(network, "BoundedCallPaymentId")}
+    OrchestratorV3PaymentId:            ${tryGetAddress(network, "OrchestratorV3PaymentId")}
+    StakeVaultPaymentId:                ${tryGetAddress(network, "StakeVaultPaymentId")}
+    ChargebackVerifierPaymentId:        ${tryGetAddress(network, "ChargebackAttestationVerifierPaymentId")}
+    RiskManagerPaymentId:               ${tryGetAddress(network, "RiskManagerPaymentId")}
+    DeferredPayoutHookPaymentId:        ${tryGetAddress(network, "DeferredPayoutHookPaymentId")}
     `
   );
 

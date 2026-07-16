@@ -1,7 +1,10 @@
+import "module-alias/register";
+
 import { expect } from "chai";
 import { BigNumber, Contract, ContractReceipt } from "ethers";
 import { ethers } from "hardhat";
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
+import { buildUnifiedPaymentProof } from "@utils/unifiedVerifierUtils";
 
 const usdc = (amount: string | number) => ethers.utils.parseUnits(String(amount), 6);
 const precise = (amount: string | number) => ethers.utils.parseEther(String(amount));
@@ -19,7 +22,8 @@ const ZERO = ethers.constants.AddressZero;
 
 describe("RiskManager and OrchestratorV3", () => {
   async function deployFixture() {
-    const [owner, maker, makerDelegate, taker, secondTaker, recipient, other] = await ethers.getSigners();
+    const [owner, maker, makerDelegate, taker, secondTaker, recipient, other, witness] =
+      await ethers.getSigners();
     const network = await ethers.provider.getNetwork();
 
     const token = await (await ethers.getContractFactory("USDCMock"))
@@ -28,7 +32,7 @@ describe("RiskManager and OrchestratorV3", () => {
     const escrowRegistry = await (await ethers.getContractFactory("EscrowRegistry")).deploy();
     const relayerRegistry = await (await ethers.getContractFactory("RelayerRegistry")).deploy();
     const orchestratorRegistry = await (await ethers.getContractFactory("OrchestratorRegistry")).deploy();
-    const verifier = await (await ethers.getContractFactory("PaymentVerifierMock")).deploy();
+    const verifier = await (await ethers.getContractFactory("PaymentVerifierV3Mock")).deploy();
     const attestationVerifier = await (await ethers.getContractFactory("AttestationVerifierMock")).deploy();
 
     await paymentVerifierRegistry.addPaymentMethod(PAYPAL, verifier.address, [USD]);
@@ -89,9 +93,6 @@ describe("RiskManager and OrchestratorV3", () => {
     await escrowRegistry.addEscrow(escrow.address);
     await orchestratorRegistry.addOrchestrator(orchestrator.address);
     await orchestrator.setAllowMultipleIntents(true);
-    await verifier.setShouldVerifyPayment(true);
-    await verifier.setVerificationContext(orchestrator.address, escrow.address);
-
     await manager.setPlatformRiskConfig(ZELLE, {
       enabled: true,
       chargeback: {
@@ -161,6 +162,7 @@ describe("RiskManager and OrchestratorV3", () => {
       secondTaker,
       recipient,
       other,
+      witness,
       network,
       token,
       escrow,
@@ -169,7 +171,9 @@ describe("RiskManager and OrchestratorV3", () => {
       manager,
       deferredHook,
       orchestratorRegistry,
+      paymentVerifierRegistry,
       verifier,
+      boundedCall,
       attestationVerifier,
     };
   }
@@ -234,32 +238,17 @@ describe("RiskManager and OrchestratorV3", () => {
   }
 
   async function chargebackAttestation(
-    manager: Contract,
     intentHash: string,
-    paymentAmount: BigNumber,
     disputeId = ethers.utils.id(`dispute-${intentHash}`),
-    detailsOverrides: Record<string, unknown> = {},
+    originalPaymentId = ethers.utils.keccak256(
+      ethers.utils.solidityPack(["string", "bytes32"], ["payment", intentHash]),
+    ),
   ) {
-    const details = {
-      paymentMethod: PAYPAL,
-      originalPaymentId: ethers.utils.keccak256(
-        ethers.utils.solidityPack(["string", "bytes32"], ["payment", intentHash]),
-      ),
-      disputeId,
-      paymentAmount,
-      paymentCurrency: USD,
-      ...detailsOverrides,
-    };
-    const data = ethers.utils.defaultAbiCoder.encode(
-      ["tuple(bytes32 paymentMethod,bytes32 originalPaymentId,bytes32 disputeId,uint256 paymentAmount,bytes32 paymentCurrency)"],
-      [details],
-    );
     return {
       intentHash,
-      dataHash: ethers.utils.keccak256(data),
+      originalPaymentId,
+      disputeId,
       signatures: [],
-      data,
-      metadata: "0x",
     };
   }
 
@@ -525,7 +514,120 @@ describe("RiskManager and OrchestratorV3", () => {
       const position = await manager.getRiskPosition(intentHash);
       expect(position.status).to.eq(3);
       expect(position.reservedAmount).to.eq(usdc(600));
+      expect(position.paymentId).to.eq(ethers.utils.keccak256(
+        ethers.utils.solidityPack(["string", "bytes32"], ["payment", intentHash]),
+      ));
       expect(await vault.reservedStake(taker.address)).to.eq(usdc(600));
+    });
+
+    it("uses the verifier selected at fulfillment and stores its authenticated payment ID", async () => {
+      const {
+        taker,
+        escrow,
+        orchestrator,
+        vault,
+        manager,
+        paymentVerifierRegistry,
+      } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(500));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
+
+      const replacement = await (await ethers.getContractFactory("PaymentVerifierV3Mock")).deploy();
+      const replacementPaymentId = ethers.utils.id("replacement-verifier-payment");
+      await replacement.setPaymentId(replacementPaymentId);
+      await paymentVerifierRegistry.removePaymentMethod(PAYPAL);
+      await paymentVerifierRegistry.addPaymentMethod(PAYPAL, replacement.address, [USD]);
+
+      await fulfillIntent(orchestrator, intentHash, usdc(500));
+      expect((await manager.getRiskPosition(intentHash)).paymentId).to.eq(replacementPaymentId);
+    });
+
+    it("propagates a real UnifiedPaymentVerifierV3 result through OrchestratorV3", async () => {
+      const {
+        owner,
+        witness,
+        taker,
+        escrow,
+        orchestrator,
+        vault,
+        manager,
+        orchestratorRegistry,
+        paymentVerifierRegistry,
+      } = await loadFixture(deployFixture);
+      const nullifierRegistry = await (await ethers.getContractFactory("NullifierRegistry")).deploy();
+      const paymentAttestationVerifier = await (
+        await ethers.getContractFactory("SimpleAttestationVerifier")
+      ).deploy(witness.address);
+      const unifiedVerifier = await (
+        await ethers.getContractFactory("UnifiedPaymentVerifierV3")
+      ).deploy(orchestratorRegistry.address, nullifierRegistry.address, paymentAttestationVerifier.address);
+      await nullifierRegistry.addWritePermission(unifiedVerifier.address);
+      await unifiedVerifier.addPaymentMethod(PAYPAL);
+      await paymentVerifierRegistry.removePaymentMethod(PAYPAL);
+      await paymentVerifierRegistry.addPaymentMethod(PAYPAL, unifiedVerifier.address, [USD]);
+
+      await vault.connect(taker).depositStake(usdc(500));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
+      const intent = await orchestrator.getIntent(intentHash);
+      const paymentId = ethers.utils.id("real-unified-verifier-payment");
+      const proof = await buildUnifiedPaymentProof({
+        verifier: unifiedVerifier.address,
+        witness: { address: witness.address, wallet: witness } as any,
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        paymentPaymentMethod: PAYPAL,
+        paymentPayeeId: PAYEE,
+        paymentAmount: usdc(500),
+        paymentCurrency: USD,
+        paymentTimestamp: BigNumber.from(intent.timestamp).mul(1000),
+        paymentPaymentId: paymentId,
+        attestationIntentHash: intentHash,
+        attestationReleaseAmount: usdc(500),
+        snapshotIntentHash: intentHash,
+        snapshotIntentAmount: intent.amount,
+        snapshotIntentPaymentMethod: PAYPAL,
+        snapshotIntentFiatCurrency: USD,
+        snapshotIntentPayeeDetails: PAYEE,
+        snapshotIntentConversionRate: intent.conversionRate,
+        snapshotIntentSignalTimestamp: intent.timestamp,
+        snapshotIntentTimestampBuffer: BigNumber.from(0),
+        intentDepositId: intent.depositId,
+        intentEscrow: escrow.address,
+        intentTo: taker.address,
+      });
+
+      await orchestrator.connect(owner).fulfillIntent({
+        paymentProof: proof.paymentProof,
+        intentHash,
+        verificationData: "0x",
+        settlementHookData: "0x",
+      });
+      expect((await manager.getRiskPosition(intentHash)).paymentId).to.eq(paymentId);
+    });
+
+    it("rejects a zero verifier payment ID before resolving the intent", async () => {
+      const { taker, escrow, orchestrator, vault, manager, verifier } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(500));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
+      await verifier.setPaymentId(ethers.constants.HashZero);
+
+      await expect(fulfillIntent(orchestrator, intentHash, usdc(500))).to.be.reverted;
+      expect((await orchestrator.getIntent(intentHash)).owner).to.eq(taker.address);
+      expect((await manager.getRiskPosition(intentHash)).status).to.eq(1);
+    });
+
+    it("records the authenticated payment ID when a terminal risk callback fails open", async () => {
+      const { maker, taker, escrow, orchestrator } = await loadFixture(deployFixture);
+      const mock = await (await ethers.getContractFactory("IntentRiskHookMock")).deploy();
+      await orchestrator.connect(maker).setDepositRiskHook(escrow.address, 0, mock.address);
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(10), ZELLE);
+      await mock.setRevertOnTerminal(true);
+
+      await fulfillIntent(orchestrator, intentHash, usdc(10));
+      const settlement = await orchestrator.getIntentSettlement(intentHash);
+      expect(settlement.releasedAmount).to.eq(usdc(10));
+      expect(settlement.paymentId).to.eq(ethers.utils.keccak256(
+        ethers.utils.solidityPack(["string", "bytes32"], ["payment", intentHash]),
+      ));
     });
 
     it("makes a maker manual release immediately non-chargebackable and releases its reservation", async () => {
@@ -536,7 +638,7 @@ describe("RiskManager and OrchestratorV3", () => {
       await orchestrator.connect(maker).releaseFundsToPayer(intentHash);
       const position = await manager.getRiskPosition(intentHash);
       expect(position.status).to.eq(4);
-      expect(position.paymentDetailsHash).to.eq(ethers.constants.HashZero);
+      expect(position.paymentId).to.eq(ethers.constants.HashZero);
       expect(position.coverageDeadline).to.eq(0);
       expect(position.reservedAmount).to.eq(0);
       expect(await vault.reservedStake(taker.address)).to.eq(0);
@@ -548,15 +650,20 @@ describe("RiskManager and OrchestratorV3", () => {
       await vault.connect(taker).depositStake(usdc(500));
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
       await fulfillIntent(orchestrator, intentHash, usdc(500));
-      const claim = await chargebackAttestation(manager, intentHash, usdc(500));
+      const claim = await chargebackAttestation(intentHash);
       const { chainId } = await ethers.provider.getNetwork();
       expect(await manager.hashChargebackAttestation(claim)).to.eq(ethers.utils._TypedDataEncoder.hash(
         { name: "ZKP2P RiskManager", version: "1", chainId, verifyingContract: manager.address },
         { ChargebackAttestation: [
           { name: "intentHash", type: "bytes32" },
-          { name: "dataHash", type: "bytes32" },
+          { name: "originalPaymentId", type: "bytes32" },
+          { name: "disputeId", type: "bytes32" },
         ] },
-        { intentHash: claim.intentHash, dataHash: claim.dataHash },
+        {
+          intentHash: claim.intentHash,
+          originalPaymentId: claim.originalPaymentId,
+          disputeId: claim.disputeId,
+        },
       ));
       await manager.submitChargeback(claim);
       expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(500));
@@ -571,9 +678,9 @@ describe("RiskManager and OrchestratorV3", () => {
       await fulfillIntent(orchestrator, firstHash, usdc(500));
       await fulfillIntent(orchestrator, secondHash, usdc(500));
       const disputeId = ethers.utils.id("shared-dispute");
-      await manager.submitChargeback(await chargebackAttestation(manager, firstHash, usdc(500), disputeId));
+      await manager.submitChargeback(await chargebackAttestation(firstHash, disputeId));
       await expect(manager.submitChargeback(
-        await chargebackAttestation(manager, secondHash, usdc(500), disputeId),
+        await chargebackAttestation(secondHash, disputeId),
       )).to.be.revertedWithCustomError(manager, "ChargebackEvidenceUsed");
     });
 
@@ -583,15 +690,15 @@ describe("RiskManager and OrchestratorV3", () => {
       const manualHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
       await orchestrator.connect(maker).releaseFundsToPayer(manualHash);
       await expect(manager.submitChargeback(
-        await chargebackAttestation(manager, manualHash, usdc(500)),
+        await chargebackAttestation(manualHash),
       )).to.be.revertedWithCustomError(manager, "PositionNotSettled");
 
       const verifiedHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
       await fulfillIntent(orchestrator, verifiedHash, usdc(500));
       await expect(manager.submitChargeback(await chargebackAttestation(
-        manager,
         verifiedHash,
-        usdc(499),
+        undefined,
+        ethers.utils.id("wrong-payment-id"),
       ))).to.be.revertedWithCustomError(manager, "InvalidAttestation");
     });
 
@@ -614,7 +721,7 @@ describe("RiskManager and OrchestratorV3", () => {
       await fulfillIntent(orchestrator, intentHash, usdc(500));
       const deadline = (await manager.getRiskPosition(intentHash)).coverageDeadline.toNumber();
       await time.increaseTo(deadline);
-      const claim = await chargebackAttestation(manager, intentHash, usdc(500));
+      const claim = await chargebackAttestation(intentHash);
       await expect(manager.submitChargeback(claim))
         .to.be.revertedWithCustomError(manager, "ChargebackWindowClosed");
     });

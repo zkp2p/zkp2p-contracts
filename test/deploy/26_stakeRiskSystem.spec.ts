@@ -173,16 +173,16 @@ describe("Affine stake risk system deployment", () => {
     const { chainId } = await ethers.provider.getNetwork();
     const chargeback = {
       intentHash: ethers.utils.id("affine-risk-deployment-test"),
-      dataHash: ethers.utils.id("deployment-evidence"),
+      originalPaymentId: ethers.utils.id("deployment-payment"),
+      disputeId: ethers.utils.id("deployment-dispute"),
       signatures: [],
-      data: "0x",
-      metadata: "0x",
     };
     const domain = { name: "ZKP2P RiskManager", version: "1", chainId, verifyingContract: manager.address };
     const types = {
       ChargebackAttestation: [
         { name: "intentHash", type: "bytes32" },
-        { name: "dataHash", type: "bytes32" },
+        { name: "originalPaymentId", type: "bytes32" },
+        { name: "disputeId", type: "bytes32" },
       ],
     };
     const digest = await manager.hashChargebackAttestation(chargeback);
@@ -192,7 +192,11 @@ describe("Affine stake risk system deployment", () => {
       const signers = await ethers.getSigners();
       const localWitnesses = signers.filter((signer) => witnessConfig.witnesses
         .map((address) => address.toLowerCase()).includes(signer.address.toLowerCase()));
-      const value = { intentHash: chargeback.intentHash, dataHash: chargeback.dataHash };
+      const value = {
+        intentHash: chargeback.intentHash,
+        originalPaymentId: chargeback.originalPaymentId,
+        disputeId: chargeback.disputeId,
+      };
       const signatures = [
         await localWitnesses[0]._signTypedData(domain, types, value),
         await localWitnesses[1]._signTypedData(domain, types, value),

@@ -230,9 +230,12 @@ describe("UnifiedPaymentVerifier", () => {
     builtProof = await buildProof();
   });
 
-  const buildProof = async (overrides: BuildPaymentProofOverrides = {}) => {
+  const buildProof = async (
+    overrides: BuildPaymentProofOverrides = {},
+    targetVerifier = verifier.address,
+  ) => {
     return buildUnifiedPaymentProof({
-      verifier: verifier.address,
+      verifier: targetVerifier,
       witness,
       chainId,
       paymentPaymentMethod: overrides.paymentPaymentMethod ?? venmoPaymentMethodHash,
@@ -335,6 +338,66 @@ describe("UnifiedPaymentVerifier", () => {
       expect(result.success).to.be.true;
       expect(result.intentHash).to.eq(intentHash);
       expect(result.releaseAmount).to.eq(builtProof.attestation.releaseAmount);
+      expect((result as { paymentId?: string }).paymentId).to.eq(undefined);
+    });
+
+    it("returns the signed payment ID through the V3 result without changing the payment attestation", async () => {
+      const verifierV3 = await (await ethers.getContractFactory("UnifiedPaymentVerifierV3", owner.wallet)).deploy(
+        orchestratorRegistry.address,
+        nullifierRegistry.address,
+        attestationVerifier.address,
+      );
+      await nullifierRegistry.addWritePermission(verifierV3.address);
+      await verifierV3.addPaymentMethod(venmoPaymentMethodHash);
+      const proofV3 = await buildProof({}, verifierV3.address);
+      const verificationData = await buildVerificationDataForIntent(intentHash);
+      const encodedCall = verifierV3.interface.encodeFunctionData("verifyPayment", [{
+        intentHash,
+        paymentProof: proofV3.paymentProof,
+        data: verificationData,
+      }]);
+      const raw = await ethers.provider.call({
+        to: verifierV3.address,
+        data: encodedCall,
+        from: orchestrator.address,
+      });
+      const [result] = verifierV3.interface.decodeFunctionResult("verifyPayment", raw);
+
+      expect(verifierV3.interface.getSighash("verifyPayment")).to.eq(
+        verifier.interface.getSighash("verifyPayment"),
+      );
+      expect(result.success).to.eq(true);
+      expect(result.intentHash).to.eq(intentHash);
+      expect(result.releaseAmount).to.eq(proofV3.attestation.releaseAmount);
+      expect(result.paymentId).to.eq(proofV3.paymentDetails.paymentId);
+    });
+
+    it("rejects payment replay across legacy and V3 lanes sharing one nullifier registry", async () => {
+      const verifierV3 = await (await ethers.getContractFactory("UnifiedPaymentVerifierV3", owner.wallet)).deploy(
+        orchestratorRegistry.address,
+        nullifierRegistry.address,
+        attestationVerifier.address,
+      );
+      await nullifierRegistry.addWritePermission(verifierV3.address);
+      await verifierV3.addPaymentMethod(venmoPaymentMethodHash);
+      const proofV3 = await buildProof({}, verifierV3.address);
+      const verificationData = await buildVerificationDataForIntent(intentHash);
+
+      await ethers.provider.send("hardhat_impersonateAccount", [orchestrator.address]);
+      await ethers.provider.send("hardhat_setBalance", [orchestrator.address, "0x1000000000000000000"]);
+      const orchestratorSigner = await ethers.getSigner(orchestrator.address);
+      await verifier.connect(orchestratorSigner).verifyPayment({
+        intentHash,
+        paymentProof: builtProof.paymentProof,
+        data: verificationData,
+      });
+
+      await expect(verifierV3.connect(orchestratorSigner).verifyPayment({
+        intentHash,
+        paymentProof: proofV3.paymentProof,
+        data: verificationData,
+      })).to.be.revertedWith("Nullifier has already been used");
+      await ethers.provider.send("hardhat_stopImpersonatingAccount", [orchestrator.address]);
     });
 
     it("emits PaymentVerified event", async () => {
@@ -351,40 +414,22 @@ describe("UnifiedPaymentVerifier", () => {
         );
     });
 
-    it("persists the verifier-backed chargeback evidence commitment", async () => {
-      await subject();
-      const expectedDetailsHash = ethers.utils.keccak256(ethers.utils.defaultAbiCoder.encode(
-        ["bytes32", "bytes32", "uint256", "bytes32"],
-        [
-          builtProof.paymentDetails.method,
-          builtProof.paymentDetails.paymentId,
-          builtProof.paymentDetails.amount,
-          builtProof.paymentDetails.currency,
-        ],
-      ));
-      expect(await verifier.getPaymentDetailsHash(orchestrator.address, intentHash)).to.eq(expectedDetailsHash);
-      expect(await verifier.getPaymentDetailsHash(attacker.address, intentHash)).to.eq(ethers.constants.HashZero);
-    });
-
-    it("rejects a zero payment identifier before recording evidence", async () => {
+    it("rejects a zero payment identifier", async () => {
       builtProof = await buildProof({ paymentPaymentId: ethers.constants.HashZero });
       subjectProof = builtProof.paymentProof;
       await expect(subject()).to.be.revertedWith("UPV: Invalid payment ID");
-      expect(await verifier.getPaymentDetailsHash(orchestrator.address, intentHash)).to.eq(ethers.constants.HashZero);
     });
 
-    it("rejects a zero fiat amount before recording evidence", async () => {
+    it("rejects a zero fiat amount", async () => {
       builtProof = await buildProof({ paymentAmount: BigNumber.from(0) });
       subjectProof = builtProof.paymentProof;
       await expect(subject()).to.be.revertedWith("UPV: Invalid payment amount");
-      expect(await verifier.getPaymentDetailsHash(orchestrator.address, intentHash)).to.eq(ethers.constants.HashZero);
     });
 
-    it("rejects a zero fiat currency before recording evidence", async () => {
+    it("rejects a zero fiat currency", async () => {
       builtProof = await buildProof({ paymentCurrency: ethers.constants.HashZero });
       subjectProof = builtProof.paymentProof;
       await expect(subject()).to.be.revertedWith("UPV: Invalid payment currency");
-      expect(await verifier.getPaymentDetailsHash(orchestrator.address, intentHash)).to.eq(ethers.constants.HashZero);
     });
 
     it("should nullify the payment with correct collision-resistant nullifier", async () => {
