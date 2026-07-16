@@ -4,6 +4,7 @@ pragma solidity ^0.8.18;
 
 import { IIntentRiskHook } from "./IIntentRiskHook.sol";
 import { IOrchestratorV3 } from "./IOrchestratorV3.sol";
+import { IPaymentVerifierRegistry } from "./IPaymentVerifierRegistry.sol";
 import { IStakeVault } from "./IStakeVault.sol";
 
 /**
@@ -363,4 +364,21 @@ interface IRiskManager is IIntentRiskHook {
     function orchestrator() external view returns (IOrchestratorV3);
     /** @notice Returns the immutable policy-agnostic custody and reservation vault. */
     function stakeVault() external view returns (IStakeVault);
+}
+
+/**
+ * @title IPaymentEvidenceVerifier
+ * @notice Exposes the immutable evidence commitment produced while verifying an intent payment.
+ */
+interface IPaymentEvidenceVerifier {
+    /** @notice Returns payment details committed while the named orchestrator verified the intent. */
+    function getPaymentDetailsHash(
+        address _orchestrator,
+        bytes32 _intentHash
+    ) external view returns (bytes32);
+}
+
+/** @notice Narrow Orchestrator surface used to snapshot a payment verifier at admission. */
+interface IOrchestratorPaymentVerifier {
+    function paymentVerifierRegistry() external view returns (IPaymentVerifierRegistry);
 }

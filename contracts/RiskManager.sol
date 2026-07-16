@@ -12,11 +12,7 @@ import { IAttestationVerifier } from "./interfaces/IAttestationVerifier.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IIntentRiskHook } from "./interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV3 } from "./interfaces/IOrchestratorV3.sol";
-import {
-    IPaymentEvidenceVerifier,
-    IOrchestratorPaymentVerifier
-} from "./interfaces/IPaymentEvidenceVerifier.sol";
-import { IRiskManager } from "./interfaces/IRiskManager.sol";
+import { IRiskManager, IPaymentEvidenceVerifier, IOrchestratorPaymentVerifier } from "./interfaces/IRiskManager.sol";
 import { IStakeVault } from "./interfaces/IStakeVault.sol";
 
 /**

@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 import { BaseUnifiedPaymentVerifier } from "./BaseUnifiedPaymentVerifier.sol";
 import { INullifierRegistry } from "../interfaces/INullifierRegistry.sol";
 import { IPaymentVerifier } from "../interfaces/IPaymentVerifier.sol";
-import { IPaymentEvidenceVerifier } from "../interfaces/IPaymentEvidenceVerifier.sol";
+import { IPaymentEvidenceVerifier } from "../interfaces/IRiskManager.sol";
 import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
 import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
 import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";

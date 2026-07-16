@@ -2,7 +2,7 @@
 pragma solidity ^0.8.18;
 
 import { IPaymentVerifier } from "../interfaces/IPaymentVerifier.sol";
-import { IPaymentEvidenceVerifier } from "../interfaces/IPaymentEvidenceVerifier.sol";
+import { IPaymentEvidenceVerifier } from "../interfaces/IRiskManager.sol";
 import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
 import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
 import { IEscrow } from "../interfaces/IEscrow.sol";
