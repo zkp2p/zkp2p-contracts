@@ -62,7 +62,7 @@ const config: HardhatUserConfig = {
       allowBlocksWithSameTimestamp: true,
     },
     base_staging: {
-      url: "https://developer-access-mainnet.base.org",
+      url: process.env.BASE_STAGING_RPC_URL ?? "https://developer-access-mainnet.base.org",
       // @ts-ignore
       accounts: [
         `0x${process.env.BASE_DEPLOY_PRIVATE_KEY}`,

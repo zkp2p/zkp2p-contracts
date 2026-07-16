@@ -89,7 +89,8 @@ ephemeral wallets in memory and expose only their public addresses:
 
 - three payment witnesses, used only by `PaymentAttestationVerifierChargebackE2E` at threshold 2;
 - three distinct chargeback witnesses, used only by `ChargebackAttestationVerifierE2E` at threshold 2;
-- optionally a distinct taker wallet for a meaningful maker/taker balance test.
+- a distinct recoverable staging taker for a meaningful maker/taker balance test. Supply its key
+  only through `CHARGEBACK_E2E_TAKER_PRIVATE_KEY`; never print, copy into the repo, or commit it.
 
 The two witness sets must be disjoint and must also be disjoint from the existing payment witness set.
 Sign the positive payment and chargeback attestations with two witnesses from their respective sets.
@@ -104,8 +105,8 @@ After all positions are terminal:
 3. pause the test RiskManager's admission;
 4. remove each temporary witness only while maintaining the verifier's current threshold invariant,
    or leave the isolated verifier ownerless/disabled according to the approved cleanup transaction;
-5. sweep residual test-account ETH back to `0x84`, discard the in-memory wallets, and retain no key
-   material or signed evidence.
+5. sweep only the test-funded ETH above the recoverable taker's starting balance back to `0x84`,
+   discard the in-memory witness wallets, and retain no signed evidence.
 
 Immediate witness mutation is acceptable only for this isolated staging fixture. It remains a launch
 blocker for public use.
@@ -188,15 +189,15 @@ pre-existing deposit will normally not support a fresh run-scoped method, so the
 3. read `depositId` from `DepositReceived`, not from Indexer;
 4. `0x84` calls `OrchestratorV3.setDepositRiskHook(escrow, depositId, newRiskManager)`.
 
-Chargebackable admission also requires stake. If a distinct ephemeral taker is used, `0x84` approves
-the fresh StakeVault and calls `depositStakeFor(taker, 200_000)`; otherwise it calls
-`depositStake(200_000)`. Use the distinct taker path so the fulfillment recipient and compensated LP
-balances are independently observable. Fund the taker with only enough ETH for `signalIntent` and
-sweep the remainder during cleanup.
+Chargebackable admission also requires stake. `0x84` approves the fresh StakeVault and calls
+`depositStakeFor(taker, 200_000)`. The distinct taker is mandatory because StakeVault rejects a stake
+owner authorizing itself, and it keeps the fulfillment recipient and compensated LP balances
+independently observable. Fund the taker with only enough incremental ETH for the run and sweep only
+that excess during cleanup, preserving its starting balance.
 
 ## Signal the intent
 
-The ephemeral taker calls `signalIntent` on the selected OrchestratorV3 with:
+The recoverable staging taker calls `signalIntent` on the selected OrchestratorV3 with:
 
 ```text
 escrow = recorded EscrowV2
@@ -416,14 +417,15 @@ npx hardhat test test/deploy/28_chargebackE2EStaging.spec.ts
 CHARGEBACK_E2E_MODE=preflight npx hardhat run scripts/chargeback-staging-e2e.ts --network base_staging
 DEPLOY_CHARGEBACK_E2E=true npx hardhat deploy --network base_staging --tags ChargebackE2E
 CHARGEBACK_E2E_MODE=positive npx hardhat run scripts/chargeback-staging-e2e.ts --network base_staging
-CHARGEBACK_E2E_MODE=negative npx hardhat run scripts/chargeback-staging-e2e.ts --network base_staging
+CHARGEBACK_E2E_TAKER_PRIVATE_KEY="$STAGING_TAKER_PRIVATE_KEY" CHARGEBACK_E2E_MODE=negative npx hardhat run scripts/chargeback-staging-e2e.ts --network base_staging
 CHARGEBACK_E2E_MODE=cleanup npx hardhat run scripts/chargeback-staging-e2e.ts --network base_staging
 CHARGEBACK_E2E_MODE=verify npx hardhat run scripts/chargeback-staging-e2e.ts --network base_staging
 yarn etherscan:base_staging
 ```
 
-`CHARGEBACK_E2E_MODE` is a non-secret control value. The script must require a unique public run ID
-and refuse to reuse payment/dispute identifiers from a previous run.
+`CHARGEBACK_E2E_MODE` is a non-secret control value. `CHARGEBACK_E2E_TAKER_PRIVATE_KEY` is secret and
+must remain environment-only. The script must require a unique public run ID and refuse to reuse
+payment/dispute identifiers from a previous run.
 
 The setup/cleanup path must be resumable from on-chain state after interruption. The positive and
 negative flows are intentionally one-shot per unique run identifier; if either is interrupted after

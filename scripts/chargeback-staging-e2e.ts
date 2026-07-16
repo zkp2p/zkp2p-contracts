@@ -60,6 +60,7 @@ type SettledFixture = {
   depositId: BigNumber;
   intentHash: string;
   taker: Wallet;
+  takerEthFloor: BigNumber;
   paymentId: string;
   disputeId: string;
   paymentAmount: BigNumber;
@@ -177,7 +178,7 @@ async function assertOwner(contract: Contract, owner: string, label: string): Pr
   assert.equal((await contract.owner()).toLowerCase(), owner.toLowerCase(), `${label} owner mismatch`);
 }
 
-async function preflight(ctx: Context, requireBaselineWitnesses = true): Promise<void> {
+async function preflight(ctx: Context, requireBaselineWitnesses = true, requireFunding = true): Promise<void> {
   if (ctx.network === "base_staging") {
     assert.equal(ctx.chainId, 8453, "staging chain ID mismatch");
     assert.equal(ctx.deployer.address.toLowerCase(), CHARGEBACK_E2E_DEPLOYER.toLowerCase(), "staging deployer mismatch");
@@ -230,8 +231,10 @@ async function preflight(ctx: Context, requireBaselineWitnesses = true): Promise
   }
 
   await ctx.unifiedPaymentVerifier.getPaymentDetailsHash(ctx.orchestrator.address, ethers.constants.HashZero);
-  assert((await ctx.usdc.balanceOf(ctx.deployer.address)).gte(500_000), "deployer has less than 500,000 USDC units");
-  assert((await ethers.provider.getBalance(ctx.deployer.address)).gte(ethers.utils.parseEther("0.002")), "deployer ETH low");
+  if (requireFunding) {
+    assert((await ctx.usdc.balanceOf(ctx.deployer.address)).gte(500_000), "deployer has less than 500,000 USDC units");
+    assert((await ethers.provider.getBalance(ctx.deployer.address)).gte(ethers.utils.parseEther("0.002")), "deployer ETH low");
+  }
 
   const venmoVerifier = await ctx.paymentVerifierRegistry.getVerifier(VENMO);
   assert.notEqual(deriveRunIdentifiers(publicRunId()).paymentMethod, VENMO, "run method collides with Venmo");
@@ -243,7 +246,9 @@ async function preflight(ctx: Context, requireBaselineWitnesses = true): Promise
 
 async function send(label: string, txPromise: Promise<any>): Promise<ContractReceipt> {
   const transaction = await txPromise;
-  const receipt = await transaction.wait();
+  // The staging deployer is an EIP-7702 delegated account. Waiting for the next block avoids the
+  // Base RPC's one-in-flight-transaction guard before submitting the following owner operation.
+  const receipt = await transaction.wait(hre.deployments.getNetworkName() === "base_staging" ? 2 : 1);
   console.log(`${label} tx=${receipt.transactionHash} block=${receipt.blockNumber}`);
   return receipt;
 }
@@ -322,9 +327,19 @@ async function replaceWitnesses(verifier: Contract, desired: string[], label: st
       await send(`${label}.removeWitness(${witness})`, verifier.removeWitness(witness));
     }
   }
-  const finalWitnesses: string[] = await verifier.witnesses();
-  assert(sameAddresses(finalWitnesses, desired), `${label} witness rotation incomplete`);
-  assert.equal((await verifier.requiredSignatures()).toNumber(), 2, `${label} threshold changed`);
+  // Base's public RPC is load balanced and can briefly serve a stale latest block even after a
+  // receipt is returned. Poll until the mutation is visible instead of trusting one backend's tip.
+  for (let attempt = 0; attempt < 15; attempt++) {
+    try {
+      const finalWitnesses: string[] = await verifier.witnesses();
+      const threshold = (await verifier.requiredSignatures()).toNumber();
+      if (sameAddresses(finalWitnesses, desired) && threshold === 2) return;
+    } catch (_) {
+      // A backend can briefly lack the receipt block; retry against the next load-balanced read.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  throw new Error(`${label} witness rotation incomplete`);
 }
 
 function parseEvent(receipt: ContractReceipt, contract: Contract, eventName: string): any {
@@ -455,7 +470,10 @@ async function createAndSettle(
 
   // Fund against the provider's advertised EIP-1559 max fee, not only Base's usually much lower
   // effective gas price. Admission invokes the risk hook and can exceed a simple transfer estimate.
-  await send("fundTaker", ctx.deployer.sendTransaction({ to: taker.address, value: TAKER_ETH_AMOUNT }));
+  const takerEthFloor = await ethers.provider.getBalance(taker.address);
+  if (taker.address.toLowerCase() !== ctx.deployer.address.toLowerCase()) {
+    await send("fundTaker", ctx.deployer.sendTransaction({ to: taker.address, value: TAKER_ETH_AMOUNT }));
+  }
   await send("usdc.approveEscrow", ctx.usdc.approve(ctx.escrow.address, DEPOSIT_AMOUNT));
   const createReceipt = await send("escrow.createDeposit", ctx.escrow.createDeposit({
     token: ctx.usdc.address,
@@ -534,7 +552,15 @@ async function createAndSettle(
   assert.equal(position.paymentDetailsHash, expectedPaymentDetailsHash, "risk payment commitment mismatch");
 
   console.log(`depositId=${depositId.toString()} intentHash=${intentHash}`);
-  return { depositId, intentHash, taker, paymentId, disputeId: ids.disputeId, paymentAmount: FIAT_MINOR_AMOUNT };
+  return {
+    depositId,
+    intentHash,
+    taker,
+    takerEthFloor,
+    paymentId,
+    disputeId: ids.disputeId,
+    paymentAmount: FIAT_MINOR_AMOUNT,
+  };
 }
 
 async function settleChargeback(
@@ -578,17 +604,31 @@ async function settleChargeback(
   await send("taker.returnUSDC", ctx.usdc.connect(fixture.taker).transfer(ctx.deployer.address, RELEASE_AMOUNT));
   position = await ctx.riskManager.getRiskPosition(fixture.intentHash);
   assert.equal(position.status, 5, "terminal position changed during cleanup");
-  await sweepEth(fixture.taker, ctx.deployer.address);
 }
 
-async function sweepEth(wallet: Wallet, recipient: string): Promise<void> {
+async function sweepEth(wallet: Wallet, recipient: string, retainedBalance = BigNumber.from(0)): Promise<void> {
+  if (wallet.address.toLowerCase() === recipient.toLowerCase()) return;
   const balance = await ethers.provider.getBalance(wallet.address);
   const fee = await ethers.provider.getFeeData();
-  const gasPrice = fee.maxFeePerGas ?? fee.gasPrice;
-  if (!gasPrice) return;
-  const gasCost = gasPrice.mul(21_000);
-  if (balance.lte(gasCost)) return;
-  await send("taker.sweepETH", wallet.sendTransaction({ to: recipient, value: balance.sub(gasCost), gasLimit: 21_000 }));
+  const quotedMaxFee = fee.maxFeePerGas ?? fee.gasPrice;
+  if (!quotedMaxFee) return;
+  // Pin a buffered max fee in the transaction. If ethers repopulates fees after this balance
+  // calculation, even a tiny quote change can otherwise make the sweep exceed the wallet balance.
+  const maxFeePerGas = quotedMaxFee.mul(2);
+  const maxPriorityFeePerGas = fee.maxPriorityFeePerGas ?? quotedMaxFee;
+  // 0x84 is an EIP-7702 delegated account, so receiving ETH can execute code and needs more than
+  // the legacy 21,000-gas stipend. Estimate the delegated receive path and retain a 20% buffer.
+  const estimatedGas = await wallet.estimateGas({ to: recipient, value: 1 });
+  const gasLimit = estimatedGas.mul(120).div(100);
+  const gasCost = maxFeePerGas.mul(gasLimit);
+  if (balance.lte(retainedBalance.add(gasCost))) return;
+  await send("taker.sweepETH", wallet.sendTransaction({
+    to: recipient,
+    value: balance.sub(retainedBalance).sub(gasCost),
+    gasLimit,
+    maxFeePerGas,
+    maxPriorityFeePerGas,
+  }));
 }
 
 function ephemeralWitnesses(): { payment: Wallet[]; chargeback: Wallet[] } {
@@ -628,6 +668,7 @@ async function runPositive(ctx: Context, ids: RunIdentifiers): Promise<void> {
   await withEphemeralWitnesses(ctx, async (paymentWitnesses, chargebackWitnesses) => {
     const fixture = await createAndSettle(ctx, ids, paymentWitnesses, Wallet.createRandom().connect(ethers.provider));
     await settleChargeback(ctx, ids, chargebackWitnesses, fixture);
+    await sweepEth(fixture.taker, ctx.deployer.address, fixture.takerEthFloor);
   });
 }
 
@@ -642,9 +683,15 @@ async function expectRevert(label: string, action: () => Promise<unknown>): Prom
 }
 
 async function runNegative(ctx: Context, ids: RunIdentifiers): Promise<void> {
+  const takerPrivateKey = process.env.CHARGEBACK_E2E_TAKER_PRIVATE_KEY;
+  if (!takerPrivateKey) throw new Error("CHARGEBACK_E2E_TAKER_PRIVATE_KEY is required for recoverable negative runs");
+  const taker = new Wallet(takerPrivateKey, ethers.provider);
+  assert.notEqual(taker.address.toLowerCase(), ctx.deployer.address.toLowerCase(), "negative taker must differ from stake owner");
   await configureRun(ctx, ids);
   await withEphemeralWitnesses(ctx, async (paymentWitnesses, chargebackWitnesses) => {
-    const fixture = await createAndSettle(ctx, ids, paymentWitnesses, Wallet.createRandom().connect(ethers.provider));
+    // Require a recoverable non-owner signer so an interrupted diagnostic can be resumed without
+    // persisting or logging a newly generated private key.
+    const fixture = await createAndSettle(ctx, ids, paymentWitnesses, taker);
     const valid = await buildChargebackAttestation(ctx, chargebackWitnesses, ids, fixture.intentHash);
     const originalPosition = await ctx.riskManager.getRiskPosition(fixture.intentHash);
     const originalClaimable = await ctx.stakeVault.claimableCompensation(ctx.deployer.address);
@@ -695,6 +742,7 @@ async function runNegative(ctx: Context, ids: RunIdentifiers): Promise<void> {
 
     await settleChargeback(ctx, ids, chargebackWitnesses, fixture);
     await expectRevert("same_position_replay", () => ctx.riskManager.callStatic.submitChargeback(valid));
+    await sweepEth(fixture.taker, ctx.deployer.address, fixture.takerEthFloor);
   });
   console.log("negative.long_lived_cases=NOT_RUN (global dispute replay, payment replay, manual release, deadline require independent positions)");
 }
@@ -744,13 +792,19 @@ async function cleanup(ctx: Context, ids: RunIdentifiers): Promise<void> {
 }
 
 async function verify(ctx: Context, ids: RunIdentifiers): Promise<void> {
-  await preflight(ctx);
+  await preflight(ctx, true, false);
   const expectClean = process.env.CHARGEBACK_E2E_EXPECT_CLEAN === "true";
   if (expectClean) {
     assert(await ctx.riskManager.admissionPaused(), "admission is not paused after cleanup");
     assert(!(await ctx.paymentVerifierRegistry.isPaymentMethod(ids.paymentMethod)), "run payment method remains registered");
     assert(!(await ctx.nullifierRegistry.isWriter(ctx.unifiedPaymentVerifier.address)), "UPV still has nullifier permission");
     assert(!(await ctx.orchestratorRegistry.isOrchestrator(ctx.orchestrator.address)), "isolated orchestrator remains registered");
+    assert((await ctx.stakeVault.stakeBalance(ctx.deployer.address)).isZero(), "deployer stake remains after cleanup");
+    assert((await ctx.stakeVault.reservedStake(ctx.deployer.address)).isZero(), "deployer reservation remains after cleanup");
+    assert(
+      (await ctx.stakeVault.claimableCompensation(ctx.deployer.address)).isZero(),
+      "deployer compensation remains after cleanup",
+    );
   } else {
     assert(await ctx.paymentVerifierRegistry.isPaymentMethod(ids.paymentMethod), "run payment method is not configured");
     assert(await ctx.nullifierRegistry.isWriter(ctx.unifiedPaymentVerifier.address), "UPV is not a nullifier writer");
