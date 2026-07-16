@@ -684,7 +684,7 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await vault.reservedStake(taker.address)).to.eq(usdc(600));
     });
 
-    it("uses the verifier selected at fulfillment and stores its authenticated payment ID", async () => {
+    it("keeps a rotated verifier's authenticated payment ID slashable", async () => {
       const {
         taker,
         escrow,
@@ -704,6 +704,17 @@ describe("RiskManager and OrchestratorV3", () => {
 
       await fulfillIntent(orchestrator, intentHash, usdc(500));
       expect((await manager.getRiskPosition(intentHash)).paymentId).to.eq(replacementPaymentId);
+
+      await manager.submitChargeback(await chargebackAttestation(
+        intentHash,
+        undefined,
+        replacementPaymentId,
+      ));
+
+      const position = await manager.getRiskPosition(intentHash);
+      expect(position.status).to.eq(5);
+      expect(position.reservedAmount).to.eq(0);
+      expect(await vault.reservedStake(taker.address)).to.eq(0);
     });
 
     it("propagates a real UnifiedPaymentVerifierV3 result through OrchestratorV3", async () => {
