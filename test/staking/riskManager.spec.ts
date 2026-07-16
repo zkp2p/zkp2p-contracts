@@ -628,7 +628,6 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(settlement.paymentId).to.eq(ethers.utils.keccak256(
         ethers.utils.solidityPack(["string", "bytes32"], ["payment", intentHash]),
       ));
-      expect(settlement.isManualRelease).to.eq(false);
     });
 
     it("makes a maker manual release immediately non-chargebackable and releases its reservation", async () => {

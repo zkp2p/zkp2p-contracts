@@ -99,8 +99,8 @@ contract RiskManagerInvariantHandler is Test {
         return intents[_intentHash];
     }
 
-    function getIntentSettlement(bytes32) external pure returns (uint256, bytes32, uint64, bool) {
-        return (0, bytes32(0), 0, false);
+    function getIntentSettlement(bytes32) external pure returns (uint256, bytes32, uint64) {
+        return (0, bytes32(0), 0);
     }
 
     function getIntentCancellation(bytes32) external pure returns (uint64) {

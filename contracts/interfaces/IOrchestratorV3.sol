@@ -28,8 +28,6 @@ interface IOrchestratorV3 is IOrchestratorV2 {
         /// @notice Payment identifier returned by the verifier; zero for maker manual release.
         bytes32 paymentId;
         uint64 settledAt;
-        /// @notice Distinguishes an evidence-free maker release from verified fulfillment recovery.
-        bool isManualRelease;
     }
 
     struct IntentCancellation {
@@ -79,8 +77,7 @@ interface IOrchestratorV3 is IOrchestratorV2 {
     ) external view returns (
         uint256 releasedAmount,
         bytes32 paymentId,
-        uint64 settledAt,
-        bool isManualRelease
+        uint64 settledAt
     );
     /**
      * @notice Returns the liquidity-unlock timestamp when a cancellation callback failed open.

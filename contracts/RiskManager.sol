@@ -397,17 +397,14 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /** @dev Reads and applies one failed settlement record. */
     function _reconcileSettlement(bytes32 _intentHash) internal {
-        (uint256 releasedAmount, bytes32 paymentId, uint64 settledAt, bool isManualRelease) =
+        (uint256 releasedAmount, bytes32 paymentId, uint64 settledAt) =
             orchestrator.getIntentSettlement(_intentHash);
         if (releasedAmount == 0 || settledAt == 0) revert SettlementNotRecorded(_intentHash);
-        if (isManualRelease) {
+        if (paymentId == bytes32(0)) {
             _releaseManualPosition(_intentHash, releasedAmount, settledAt);
             return;
         }
 
-        if (riskPositions[_intentHash].chargebackReserveBps != 0 && paymentId == bytes32(0)) {
-            revert InvalidPaymentEvidence(_intentHash);
-        }
         _settlePosition(_intentHash, releasedAmount, paymentId, settledAt);
     }
 
@@ -902,18 +899,15 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /** @dev Applies a durable failed-settlement record only when the position remains pending. */
     function _synchronizeSettlement(bytes32 _intentHash) internal {
-        (uint256 releasedAmount, bytes32 paymentId, uint64 settledAt, bool isManualRelease) =
+        (uint256 releasedAmount, bytes32 paymentId, uint64 settledAt) =
             orchestrator.getIntentSettlement(_intentHash);
         if (releasedAmount == 0) revert SettlementNotRecorded(_intentHash);
         if (settledAt == 0) revert SettlementNotRecorded(_intentHash);
-        if (isManualRelease) {
+        if (paymentId == bytes32(0)) {
             _releaseManualPosition(_intentHash, releasedAmount, settledAt);
             return;
         }
 
-        if (riskPositions[_intentHash].chargebackReserveBps != 0 && paymentId == bytes32(0)) {
-            revert InvalidPaymentEvidence(_intentHash);
-        }
         _settlePosition(_intentHash, releasedAmount, paymentId, settledAt);
     }
 

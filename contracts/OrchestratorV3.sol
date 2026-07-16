@@ -197,15 +197,13 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
     ) external view override returns (
         uint256 releasedAmount,
         bytes32 paymentId,
-        uint64 settledAt,
-        bool isManualRelease
+        uint64 settledAt
     ) {
         IntentSettlement memory settlement = failedIntentSettlements[_intentHash];
         return (
             settlement.releasedAmount,
             settlement.paymentId,
-            settlement.settledAt,
-            settlement.isManualRelease
+            settlement.settledAt
         );
     }
 
@@ -285,8 +283,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             failedIntentSettlements[_intentHash] = IntentSettlement({
                 releasedAmount: _releasedAmount,
                 paymentId: _paymentId,
-                settledAt: settledAt,
-                isManualRelease: _resolution == IntentResolution.RELEASED
+                settledAt: settledAt
             });
         } else if (!isSettlement && !callbackSucceeded) {
             failedIntentCancellations[_intentHash] = IntentCancellation({ cancelledAt: cancelledAt });

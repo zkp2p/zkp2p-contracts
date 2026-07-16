@@ -152,6 +152,7 @@ The payment-ID lane is deployed in parallel with the legacy lane. It has a separ
 unified verifiers use the same `NullifierRegistry`. Deployment mirrors the legacy registry's exact live
 method/currency set and leaves all legacy routes and writers intact. Although the payment-attestation
 input schema is unchanged, its EIP-712 domain binds each signature to the selected verifier address.
+Subsequent payment-method and currency governance changes must update both registries atomically.
 
 The witness/threshold configuration remains immediately mutable and open positions do not snapshot a
 witness epoch. Delayed two-step governance and epoch snapshotting, followed by real provider E2E, are

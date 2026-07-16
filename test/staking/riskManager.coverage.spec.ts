@@ -684,26 +684,6 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       expect(await fixture.vault.reservedStake(fixture.taker.address)).to.eq(0);
     });
 
-    it("keeps a failed verified fulfillment pending when payment evidence is unavailable", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("failed-verified-without-evidence");
-      await createPosition(fixture, intentHash);
-      const reservedBefore = (await fixture.manager.getRiskPosition(intentHash)).reservedAmount;
-      await fixture.orchestrator.setIntentSettlementWithPaymentId(
-        intentHash,
-        usdc(50),
-        ethers.constants.HashZero,
-        await time.latest(),
-        false,
-      );
-
-      await expect(fixture.manager.reconcileSettlement(intentHash))
-        .to.be.revertedWithCustomError(fixture.manager, "InvalidPaymentEvidence");
-      const position = await fixture.manager.getRiskPosition(intentHash);
-      expect(position.status).to.eq(1);
-      expect(position.reservedAmount).to.eq(reservedBefore);
-    });
-
     it("rejects an empty settlement reconciliation batch", async () => {
       const { manager } = await loadFixture(deployHarnessFixture);
       await expect(manager.reconcileSettlements([])).to.be.revertedWithCustomError(manager, "EmptyBatch");
