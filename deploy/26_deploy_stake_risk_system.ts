@@ -24,6 +24,32 @@ import {
 const PAYPAL = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("paypal"));
 const VENMO = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
 const ZELLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("zelle"));
+const LOCAL_CHARGEBACK_WITNESSES = [
+  "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+  "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+];
+
+export function chargebackWitnessConfigForNetwork(
+  network: string,
+  configuredWitnesses = process.env.CHARGEBACK_WITNESS_ADDRESSES,
+) {
+  const witnesses = network === "localhost" || network === "hardhat"
+    ? LOCAL_CHARGEBACK_WITNESSES
+    : (configuredWitnesses ?? "").split(",").map((address) => address.trim()).filter(Boolean);
+
+  if (witnesses.length !== 3) {
+    throw new Error(`${network} chargeback authorization requires exactly three dedicated witnesses`);
+  }
+  if (new Set(witnesses.map((address) => address.toLowerCase())).size !== witnesses.length) {
+    throw new Error(`${network} chargeback witnesses must be unique`);
+  }
+  if (witnesses.some((address) => !ethers.utils.isAddress(address))) {
+    throw new Error(`${network} has an invalid chargeback witness address`);
+  }
+
+  return { witnesses, threshold: 2 };
+}
 
 function platformRiskConfigMatches(actual: any, expected: any): boolean {
   return actual.enabled === expected.enabled
@@ -58,12 +84,12 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const chainId = (await ethers.provider.getNetwork()).chainId;
   const [deployer] = await hre.getUnnamedAccounts();
   const multiSig = MULTI_SIG[network] ? MULTI_SIG[network] : deployer;
+  const chargebackWitnessConfig = chargebackWitnessConfigForNetwork(network);
 
   const escrowRegistryAddress = getDeployedContractAddress(network, "EscrowRegistry");
   const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
   const relayerRegistryAddress = getDeployedContractAddress(network, "RelayerRegistry");
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
-  const attestationVerifierAddress = getDeployedContractAddress(network, "MultiAttestationVerifier");
   const stakeTokenAddress = USDC[network]
     ? USDC[network]
     : getDeployedContractAddress(network, "USDCMock");
@@ -109,9 +135,17 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("StakeVault deployed at", stakeVault.address);
   if (stakeVault.newlyDeployed) await waitForDeploymentDelay(hre);
 
+  const chargebackAttestationVerifier = await deploy("ChargebackAttestationVerifier", {
+    contract: "MultiAttestationVerifier",
+    from: deployer,
+    args: [chargebackWitnessConfig.witnesses, chargebackWitnessConfig.threshold],
+  });
+  console.log("ChargebackAttestationVerifier deployed at", chargebackAttestationVerifier.address);
+  if (chargebackAttestationVerifier.newlyDeployed) await waitForDeploymentDelay(hre);
+
   const riskManager = await deploy("RiskManager", {
     from: deployer,
-    args: [deployer, orchestratorV3.address, stakeVault.address, attestationVerifierAddress],
+    args: [deployer, orchestratorV3.address, stakeVault.address, chargebackAttestationVerifier.address],
   });
   console.log("RiskManager deployed at", riskManager.address);
   if (riskManager.newlyDeployed) await waitForDeploymentDelay(hre);
@@ -124,6 +158,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   if (deferredPayoutHook.newlyDeployed) await waitForDeploymentDelay(hre);
 
   const stakeVaultContract = await ethers.getContractAt("StakeVault", stakeVault.address);
+  const chargebackAttestationVerifierContract = await ethers.getContractAt(
+    "MultiAttestationVerifier",
+    chargebackAttestationVerifier.address,
+  );
   const riskManagerContract = await ethers.getContractAt("RiskManager", riskManager.address);
   const orchestratorV3Contract = await ethers.getContractAt("OrchestratorV3", orchestratorV3.address);
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
@@ -165,6 +203,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await setNewOwner(hre, orchestratorV3Contract, multiSig);
   await setNewOwner(hre, riskManagerContract, multiSig);
   await setNewOwner(hre, stakeVaultContract, multiSig);
+  await setNewOwner(hre, chargebackAttestationVerifierContract, multiSig);
   console.log("Stake risk system ownership transferred to", multiSig);
 };
 

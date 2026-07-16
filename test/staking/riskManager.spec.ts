@@ -235,24 +235,31 @@ describe("RiskManager and OrchestratorV3", () => {
 
   async function chargebackAttestation(
     manager: Contract,
-    orchestrator: Contract,
     intentHash: string,
-    amount: BigNumber,
-    nonce = 1,
+    paymentAmount: BigNumber,
+    disputeId = ethers.utils.id(`dispute-${intentHash}`),
+    detailsOverrides: Record<string, unknown> = {},
   ) {
-    const now = await time.latest();
-    const { chainId } = await ethers.provider.getNetwork();
-    return {
-      chainId,
-      riskManager: manager.address,
-      orchestrator: orchestrator.address,
-      intentHash,
+    const details = {
       paymentMethod: PAYPAL,
-      chargebackAmount: amount,
-      evidenceId: ethers.utils.id(`evidence-${nonce}`),
-      nonce,
-      validAfter: now - 1,
-      validUntil: now + DAY,
+      originalPaymentId: ethers.utils.keccak256(
+        ethers.utils.solidityPack(["string", "bytes32"], ["payment", intentHash]),
+      ),
+      disputeId,
+      paymentAmount,
+      paymentCurrency: USD,
+      ...detailsOverrides,
+    };
+    const data = ethers.utils.defaultAbiCoder.encode(
+      ["tuple(bytes32 paymentMethod,bytes32 originalPaymentId,bytes32 disputeId,uint256 paymentAmount,bytes32 paymentCurrency)"],
+      [details],
+    );
+    return {
+      intentHash,
+      dataHash: ethers.utils.keccak256(data),
+      signatures: [],
+      data,
+      metadata: "0x",
     };
   }
 
@@ -415,7 +422,7 @@ describe("RiskManager and OrchestratorV3", () => {
       const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
       await manager.setPlatformRiskConfig(PAYPAL, {
         enabled: true,
-        chargeback: { chargebackable: true, deferredPayoutEnabled: true, reserveBps: 5_000, riskWindow: DAY },
+        chargeback: { chargebackable: true, deferredPayoutEnabled: true, reserveBps: 10_000, riskWindow: DAY },
         griefing: {
           griefingCliff: GRIEFING_CLIFF,
           griefingPenaltyBpsPerHour: GRIEFING_SLOPE,
@@ -436,7 +443,7 @@ describe("RiskManager and OrchestratorV3", () => {
         },
       });
       const position = await manager.getRiskPosition(intentHash);
-      expect(position.chargebackReserveBps).to.eq(5_000);
+      expect(position.chargebackReserveBps).to.eq(10_000);
       expect(position.riskWindow).to.eq(DAY);
       expect(position.griefingCliff).to.eq(GRIEFING_CLIFF);
     });
@@ -521,39 +528,56 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(position.coverageDeadline.sub(position.settledAt)).to.eq(30 * DAY);
     });
 
-    it("slashes a partial chargeback and preserves remaining coverage", async () => {
+    it("authenticates the payment-style typed data and compensates the exact gross release", async () => {
       const { maker, taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
       await vault.connect(taker).depositStake(usdc(500));
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
       await fulfillIntent(orchestrator, intentHash, usdc(500));
-      const claim = await chargebackAttestation(manager, orchestrator, intentHash, usdc(200));
-      await manager.submitChargeback(claim, [], "0x");
-      expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(200));
-      expect(await vault.reservedStake(taker.address)).to.eq(usdc(300));
-      expect((await manager.getRiskPosition(intentHash)).status).to.eq(3);
-    });
-
-    it("caps a chargeback request at the remaining coverage", async () => {
-      const { maker, taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
-      await vault.connect(taker).depositStake(usdc(500));
-      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
-      await fulfillIntent(orchestrator, intentHash, usdc(500));
-      const claim = await chargebackAttestation(manager, orchestrator, intentHash, usdc(800));
-      await manager.submitChargeback(claim, [], "0x");
+      const claim = await chargebackAttestation(manager, intentHash, usdc(500));
+      const { chainId } = await ethers.provider.getNetwork();
+      expect(await manager.hashChargebackAttestation(claim)).to.eq(ethers.utils._TypedDataEncoder.hash(
+        { name: "ZKP2P RiskManager", version: "1", chainId, verifyingContract: manager.address },
+        { ChargebackAttestation: [
+          { name: "intentHash", type: "bytes32" },
+          { name: "dataHash", type: "bytes32" },
+        ] },
+        { intentHash: claim.intentHash, dataHash: claim.dataHash },
+      ));
+      await manager.submitChargeback(claim);
       expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(500));
       expect((await manager.getRiskPosition(intentHash)).status).to.eq(5);
     });
 
-    it("rejects replaying a chargeback nonce", async () => {
+    it("rejects reused dispute evidence across positions", async () => {
       const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
-      await vault.connect(taker).depositStake(usdc(500));
-      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
-      await fulfillIntent(orchestrator, intentHash, usdc(500));
-      const first = await chargebackAttestation(manager, orchestrator, intentHash, usdc(100), 7);
-      await manager.submitChargeback(first, [], "0x");
-      const replay = await chargebackAttestation(manager, orchestrator, intentHash, usdc(100), 7);
-      await expect(manager.submitChargeback(replay, [], "0x"))
-        .to.be.revertedWithCustomError(manager, "AttestationNonceUsed");
+      await vault.connect(taker).depositStake(usdc(1_000));
+      const firstHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
+      const secondHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
+      await fulfillIntent(orchestrator, firstHash, usdc(500));
+      await fulfillIntent(orchestrator, secondHash, usdc(500));
+      const disputeId = ethers.utils.id("shared-dispute");
+      await manager.submitChargeback(await chargebackAttestation(manager, firstHash, usdc(500), disputeId));
+      await expect(manager.submitChargeback(
+        await chargebackAttestation(manager, secondHash, usdc(500), disputeId),
+      )).to.be.revertedWithCustomError(manager, "ChargebackEvidenceUsed");
+    });
+
+    it("rejects manual release and mismatched original payment evidence", async () => {
+      const { maker, taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(1_000));
+      const manualHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
+      await orchestrator.connect(maker).releaseFundsToPayer(manualHash);
+      await expect(manager.submitChargeback(
+        await chargebackAttestation(manager, manualHash, usdc(500)),
+      )).to.be.revertedWithCustomError(manager, "InvalidAttestation");
+
+      const verifiedHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
+      await fulfillIntent(orchestrator, verifiedHash, usdc(500));
+      await expect(manager.submitChargeback(await chargebackAttestation(
+        manager,
+        verifiedHash,
+        usdc(499),
+      ))).to.be.revertedWithCustomError(manager, "InvalidAttestation");
     });
 
     it("releases remaining coverage at maturity", async () => {
@@ -575,8 +599,8 @@ describe("RiskManager and OrchestratorV3", () => {
       await fulfillIntent(orchestrator, intentHash, usdc(500));
       const deadline = (await manager.getRiskPosition(intentHash)).coverageDeadline.toNumber();
       await time.increaseTo(deadline);
-      const claim = await chargebackAttestation(manager, orchestrator, intentHash, usdc(100));
-      await expect(manager.submitChargeback(claim, [], "0x"))
+      const claim = await chargebackAttestation(manager, intentHash, usdc(500));
+      await expect(manager.submitChargeback(claim))
         .to.be.revertedWithCustomError(manager, "ChargebackWindowClosed");
     });
   });
@@ -661,11 +685,11 @@ describe("RiskManager and OrchestratorV3", () => {
         deferredHook.address,
       );
       await fulfillIntent(orchestrator, intentHash, usdc(700));
-      const claim = await chargebackAttestation(manager, orchestrator, intentHash, usdc(200));
-      await manager.submitChargeback(claim, [], "0x");
+      const claim = await chargebackAttestation(manager, intentHash, usdc(700));
+      await manager.submitChargeback(claim);
       expect(await vault.stakeBalance(taker.address)).to.eq(usdc(10));
-      expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(200));
-      expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(usdc(500));
+      expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(700));
+      expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(0);
     });
   });
 });

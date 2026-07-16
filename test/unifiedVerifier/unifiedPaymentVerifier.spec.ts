@@ -127,11 +127,11 @@ describe("UnifiedPaymentVerifier", () => {
 
     attestationVerifier = await deployer.deploySimpleAttestationVerifier(witness.address);
 
-    verifier = await deployer.deployUnifiedPaymentVerifier(
+    verifier = await (await ethers.getContractFactory("UnifiedPaymentVerifier", owner.wallet)).deploy(
       orchestratorRegistry.address,
       nullifierRegistry.address,
       attestationVerifier.address,
-    );
+    ) as UnifiedPaymentVerifier;
 
     await nullifierRegistry.connect(owner.wallet).addWritePermission(verifier.address);
 
@@ -349,6 +349,28 @@ describe("UnifiedPaymentVerifier", () => {
           builtProof.paymentDetails.paymentId,
           builtProof.paymentDetails.payeeId,
         );
+    });
+
+    it("persists the verifier-backed chargeback evidence commitment", async () => {
+      await subject();
+      const expectedDetailsHash = ethers.utils.keccak256(ethers.utils.defaultAbiCoder.encode(
+        ["bytes32", "bytes32", "uint256", "bytes32"],
+        [
+          builtProof.paymentDetails.method,
+          builtProof.paymentDetails.paymentId,
+          builtProof.paymentDetails.amount,
+          builtProof.paymentDetails.currency,
+        ],
+      ));
+      expect(await verifier.getPaymentDetailsHash(orchestrator.address, intentHash)).to.eq(expectedDetailsHash);
+      expect(await verifier.getPaymentDetailsHash(attacker.address, intentHash)).to.eq(ethers.constants.HashZero);
+    });
+
+    it("rejects a zero payment identifier before recording evidence", async () => {
+      builtProof = await buildProof({ paymentPaymentId: ethers.constants.HashZero });
+      subjectProof = builtProof.paymentProof;
+      await expect(subject()).to.be.revertedWith("UPV: Invalid payment ID");
+      expect(await verifier.getPaymentDetailsHash(orchestrator.address, intentHash)).to.eq(ethers.constants.HashZero);
     });
 
     it("should nullify the payment with correct collision-resistant nullifier", async () => {

@@ -10,6 +10,7 @@ import { RiskManager } from "../../contracts/RiskManager.sol";
 import { StakeVault } from "../../contracts/StakeVault.sol";
 import { IEscrowV2 } from "../../contracts/interfaces/IEscrowV2.sol";
 import { IOrchestratorV3 } from "../../contracts/interfaces/IOrchestratorV3.sol";
+import { IPaymentVerifierRegistry } from "../../contracts/interfaces/IPaymentVerifierRegistry.sol";
 import { IRiskManager } from "../../contracts/interfaces/IRiskManager.sol";
 import { IStakeVault } from "../../contracts/interfaces/IStakeVault.sol";
 import { AttestationVerifierMock } from "../../contracts/mocks/AttestationVerifierMock.sol";
@@ -42,6 +43,7 @@ contract RiskManagerInvariantHandler is Test {
     uint256 public nonce;
 
     mapping(bytes32 => IOrchestratorV3.RiskIntentData) internal intents;
+    mapping(bytes32 => bytes32) internal paymentEvidence;
     bytes32[] internal intentHashes;
 
     constructor(RiskInvariantEscrow _escrow, address _stakeOwner) {
@@ -90,12 +92,31 @@ contract RiskManagerInvariantHandler is Test {
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
         if (position.status != IRiskManager.PositionStatus.PENDING) return;
         uint256 releasedAmount = bound(uint256(rawReleasedAmount), 1, position.intentAmount);
+        bytes32 paymentId = keccak256(abi.encodePacked("payment", intentHash));
+        paymentEvidence[intentHash] = keccak256(abi.encode(
+            position.paymentMethod,
+            paymentId,
+            releasedAmount,
+            keccak256("USD")
+        ));
         manager.onIntentFulfilled(intentHash, releasedAmount);
         delete intents[intentHash];
     }
 
     function getRiskIntent(bytes32 _intentHash) external view returns (IOrchestratorV3.RiskIntentData memory) {
         return intents[_intentHash];
+    }
+
+    function paymentVerifierRegistry() external view returns (IPaymentVerifierRegistry) {
+        return IPaymentVerifierRegistry(address(this));
+    }
+
+    function getVerifier(bytes32) external view returns (address) {
+        return address(this);
+    }
+
+    function getPaymentDetailsHash(address, bytes32 _intentHash) external view returns (bytes32) {
+        return paymentEvidence[_intentHash];
     }
 
     function getIntentSettlement(bytes32) external pure returns (uint256, uint64) {

@@ -4,6 +4,7 @@ pragma solidity ^0.8.18;
 import { BaseUnifiedPaymentVerifier } from "./BaseUnifiedPaymentVerifier.sol";
 import { INullifierRegistry } from "../interfaces/INullifierRegistry.sol";
 import { IPaymentVerifier } from "../interfaces/IPaymentVerifier.sol";
+import { IPaymentEvidenceVerifier } from "../interfaces/IPaymentEvidenceVerifier.sol";
 import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
 import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
 import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
@@ -24,7 +25,7 @@ import { IEscrow } from "../interfaces/IEscrow.sol";
  * - Verifies standardized payment details against provided data
  * @dev The payment attestation should be signed using the EIP-712 standard
  */
-contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier {
+contract UnifiedPaymentVerifier is IPaymentVerifier, IPaymentEvidenceVerifier, BaseUnifiedPaymentVerifier {
 
     /* ============ Constants ============ */
     
@@ -49,6 +50,7 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
 
     // EIP-712 Domain Separator (computed once at deployment)
     bytes32 public immutable DOMAIN_SEPARATOR;
+    mapping(address => mapping(bytes32 => bytes32)) internal verifiedPaymentDetailsHashes;
 
     /* ============ Events ============ */
 
@@ -157,6 +159,12 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
         _emitPaymentDetails(attestation.intentHash, paymentDetails);
     
         uint256 releaseAmount = _calculateReleaseAmount(attestation.releaseAmount, intentSnapshot.amount);
+        verifiedPaymentDetailsHashes[msg.sender][attestation.intentHash] = keccak256(abi.encode(
+            paymentDetails.method,
+            paymentDetails.paymentId,
+            paymentDetails.amount,
+            paymentDetails.currency
+        ));
 
         result = PaymentVerificationResult({
             success: true,
@@ -165,6 +173,14 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
         });
 
         return result;
+    }
+
+    /** @notice Returns the verifier-backed payment details commitment for an intent. */
+    function getPaymentDetailsHash(
+        address _orchestrator,
+        bytes32 _intentHash
+    ) external view override returns (bytes32) {
+        return verifiedPaymentDetailsHashes[_orchestrator][_intentHash];
     }
 
     /* ============ Internal Functions ============ */
@@ -289,6 +305,7 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, BaseUnifiedPaymentVerifier 
      * methods (e.g., Venmo transaction #123 vs PayPal transaction #123).
      */
     function _nullifyPayment(bytes32 paymentMethod, bytes32 paymentId) internal {
+        require(paymentId != bytes32(0), "UPV: Invalid payment ID");
         bytes32 nullifier = keccak256(abi.encodePacked(paymentMethod, paymentId));
         _validateAndAddNullifier(nullifier);
     }

@@ -131,22 +131,35 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
   async function validAttestation(
     fixture: Awaited<ReturnType<typeof deployHarnessFixture>>,
     intentHash: string,
-    overrides: Record<string, unknown> = {},
+    options: {
+      paymentMethod?: string;
+      originalPaymentId?: string;
+      disputeId?: string;
+      paymentAmount?: BigNumber;
+      paymentCurrency?: string;
+      data?: string;
+      dataHash?: string;
+    } = {},
   ) {
-    const now = await time.latest();
-    const { chainId } = await ethers.provider.getNetwork();
+    const paymentId = options.originalPaymentId ?? ethers.utils.keccak256(
+      ethers.utils.solidityPack(["string", "bytes32"], ["payment", intentHash]),
+    );
+    const data = options.data ?? ethers.utils.defaultAbiCoder.encode(
+      ["tuple(bytes32 paymentMethod,bytes32 originalPaymentId,bytes32 disputeId,uint256 paymentAmount,bytes32 paymentCurrency)"],
+      [{
+        paymentMethod: options.paymentMethod ?? PAYPAL,
+        originalPaymentId: paymentId,
+        disputeId: options.disputeId ?? ethers.utils.id(`evidence-${intentHash}`),
+        paymentAmount: options.paymentAmount ?? usdc(50),
+        paymentCurrency: options.paymentCurrency ?? ethers.utils.id("USD"),
+      }],
+    );
     return {
-      chainId,
-      riskManager: fixture.manager.address,
-      orchestrator: fixture.orchestrator.address,
       intentHash,
-      paymentMethod: PAYPAL,
-      chargebackAmount: usdc(10),
-      evidenceId: ethers.utils.id(`evidence-${intentHash}`),
-      nonce: 1,
-      validAfter: now - 1,
-      validUntil: now + DAY,
-      ...overrides,
+      dataHash: options.dataHash ?? ethers.utils.keccak256(data),
+      signatures: [],
+      data,
+      metadata: "0x",
     };
   }
 
@@ -865,27 +878,11 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       )).to.be.revertedWithCustomError(fixture.manager, "InsufficientDeferredPayoutCoverage");
     });
 
-    it("caps coverage at the configured ratio when proceeds are larger", async () => {
+    it("rejects partial chargeback coverage in the full-only v1 policy", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("deferred-more-than-coverage");
-      await fixture.manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig({
+      await expect(fixture.manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig({
         chargeback: { reserveBps: 5_000 },
-      }));
-      await fixture.vault.setTakerState(
-        fixture.taker.address,
-        fixture.taker.address,
-        usdc(1),
-        usdc(1),
-        false,
-      );
-      await createPosition(fixture, intentHash, {
-        paymentMethod: OTHER_METHOD, postIntentHook: fixture.orchestrator.address,
-      });
-      await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(50));
-      await fixture.orchestrator.registerDeferredPayout(
-        fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(50),
-      );
-      expect((await fixture.manager.getRiskPosition(intentHash)).reservedAmount).to.eq(usdc(25));
+      }))).to.be.revertedWithCustomError(fixture.manager, "InvalidPlatformConfig");
     });
 
     it("settles at the maximum supported chargeback risk window", async () => {
@@ -987,8 +984,8 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       const intentHash = ethers.utils.id("claim-sync");
       await createPosition(fixture, intentHash);
       await fixture.orchestrator.setIntentSettlement(intentHash, usdc(50), await time.latest());
-      await fixture.manager.submitChargeback(await validAttestation(fixture, intentHash), [], "0x");
-      expect((await fixture.manager.getRiskPosition(intentHash)).slashedAmount).to.eq(usdc(10));
+      await fixture.manager.submitChargeback(await validAttestation(fixture, intentHash));
+      expect((await fixture.manager.getRiskPosition(intentHash)).slashedAmount).to.eq(usdc(50));
     });
 
     it("rejects a claim against a released non-chargebackable position", async () => {
@@ -996,74 +993,60 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       const intentHash = ethers.utils.id("claim-free-position");
       await createPosition(fixture, intentHash, { amount: usdc(20), paymentMethod: ZELLE });
       await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(20));
-      await expect(fixture.manager.submitChargeback(await validAttestation(fixture, intentHash), [], "0x"))
+      await expect(fixture.manager.submitChargeback(await validAttestation(fixture, intentHash)))
         .to.be.revertedWithCustomError(fixture.manager, "PositionNotSettled");
     });
 
-    it("rejects a claim scoped to another chain", async () => {
+    it("rejects a mismatched payment method", async () => {
       const fixture = await loadFixture(settledFixture);
       await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { chainId: 1 }), [], "0x",
+        await validAttestation(fixture, fixture.intentHash, { paymentMethod: OTHER_METHOD }),
       )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
     });
 
-    it("rejects a claim scoped to another risk manager", async () => {
+    it("rejects a mismatched original payment identifier", async () => {
       const fixture = await loadFixture(settledFixture);
       await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { riskManager: fixture.other.address }), [], "0x",
+        await validAttestation(fixture, fixture.intentHash, { originalPaymentId: ethers.utils.id("wrong") }),
       )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
     });
 
-    it("rejects a claim scoped to another orchestrator", async () => {
+    it("rejects mismatched fiat amount or currency", async () => {
       const fixture = await loadFixture(settledFixture);
       await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { orchestrator: fixture.other.address }), [], "0x",
+        await validAttestation(fixture, fixture.intentHash, { paymentAmount: usdc(49) }),
+      )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
+      await expect(fixture.manager.submitChargeback(
+        await validAttestation(fixture, fixture.intentHash, { paymentCurrency: ethers.utils.id("EUR") }),
       )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
     });
 
-    it("rejects a claim for another payment method", async () => {
+    it("rejects a zero dispute identifier and a data hash mismatch", async () => {
       const fixture = await loadFixture(settledFixture);
       await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { paymentMethod: OTHER_METHOD }), [], "0x",
+        await validAttestation(fixture, fixture.intentHash, { disputeId: ethers.constants.HashZero }),
       )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
-    });
-
-    it("rejects a zero chargeback amount", async () => {
-      const fixture = await loadFixture(settledFixture);
       await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { chargebackAmount: 0 }), [], "0x",
+        await validAttestation(fixture, fixture.intentHash, { dataHash: ethers.utils.id("wrong-data") }),
       )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
-    });
-
-    it("rejects an empty evidence identifier", async () => {
-      const fixture = await loadFixture(settledFixture);
-      await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { evidenceId: ethers.constants.HashZero }), [], "0x",
-      )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
-    });
-
-    it("rejects an attestation before validAfter", async () => {
-      const fixture = await loadFixture(settledFixture);
-      const now = await time.latest();
-      await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { validAfter: now + DAY, validUntil: now + 2 * DAY }), [], "0x",
-      )).to.be.revertedWithCustomError(fixture.manager, "AttestationNotYetValid");
-    });
-
-    it("rejects an expired attestation", async () => {
-      const fixture = await loadFixture(settledFixture);
-      const now = await time.latest();
-      await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { validAfter: now - DAY, validUntil: now - 1 }), [], "0x",
-      )).to.be.revertedWithCustomError(fixture.manager, "AttestationExpired");
     });
 
     it("rejects an attestation that fails verification", async () => {
       const fixture = await loadFixture(settledFixture);
       await fixture.verifier.setResult(false);
       await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash), [], "0x",
+        await validAttestation(fixture, fixture.intentHash),
       )).to.be.revertedWithCustomError(fixture.manager, "AttestationVerificationFailed");
+    });
+
+    it("rejects maker manual release evidence", async () => {
+      const fixture = await loadFixture(deployHarnessFixture);
+      const intentHash = ethers.utils.id("claim-manual-release");
+      await createPosition(fixture, intentHash);
+      await fixture.orchestrator.releasePosition(fixture.manager.address, intentHash, usdc(50));
+      await expect(fixture.manager.submitChargeback(
+        await validAttestation(fixture, intentHash),
+      )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
     });
 
     it("rejects a claim before deferred proceeds establish coverage", async () => {
@@ -1072,8 +1055,8 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       await createDeferredPosition(fixture, intentHash);
       await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(50));
       await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, intentHash), [], "0x",
-      )).to.be.revertedWithCustomError(fixture.manager, "ZeroAmount");
+        await validAttestation(fixture, intentHash),
+      )).to.be.revertedWithCustomError(fixture.manager, "IncompleteChargebackCoverage");
     });
   });
 
@@ -1202,7 +1185,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       const attestation = await validAttestation(fixture, ethers.constants.HashZero);
       await expectGuardRevert(
         fixture,
-        fixture.manager.interface.encodeFunctionData("submitChargeback", [attestation, [], "0x"]),
+        fixture.manager.interface.encodeFunctionData("submitChargeback", [attestation]),
       );
     });
   });
@@ -1236,7 +1219,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       const intentHash = ethers.utils.id("forced-settlement-mode");
       await fixture.manager.forcePosition(intentHash, 1, 1, ZERO, PAYPAL, 1, 0);
       await expect(fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, 1))
-        .to.be.revertedWithCustomError(fixture.manager, "PositionModeMismatch");
+        .to.be.revertedWithCustomError(fixture.manager, "InvalidPaymentEvidence");
     });
 
     it("rejects chargeback evidence for an impossible settled free position", async () => {
@@ -1253,8 +1236,6 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       );
       await expect(fixture.manager.submitChargeback(
         await validAttestation(fixture, intentHash),
-        [],
-        "0x",
       )).to.be.revertedWithCustomError(fixture.manager, "PositionModeMismatch");
     });
 
