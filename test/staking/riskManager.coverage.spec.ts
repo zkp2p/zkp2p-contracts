@@ -153,9 +153,10 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
   describe("constructor and governance", () => {
     it("rejects a zero owner", async () => {
       const { orchestrator, vault, verifier } = await loadFixture(deployHarnessFixture);
-      await expect((await ethers.getContractFactory("RiskManager")).deploy(
-        ZERO, orchestrator.address, vault.address, verifier.address,
-      )).to.be.revertedWithCustomError(await ethers.getContractFactory("RiskManager"), "ZeroAddress");
+      const factory = await ethers.getContractFactory("RiskManager");
+      await expect(factory.deploy(
+        ZERO, orchestrator.address, vault.address, verifier.address, { gasLimit: 8_000_000 },
+      )).to.be.revertedWithCustomError(factory, "ZeroAddress");
     });
 
     it("rejects a zero orchestrator", async () => {
