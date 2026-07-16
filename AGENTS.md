@@ -9,6 +9,16 @@
 - `tasks/`: Custom Hardhat tasks (e.g., Etherscan verification with delay).
 - `typechain/`, `artifacts/`, `out/`, `dist/`: Generated output; do not edit by hand.
 
+## Hard Cutover & Coordination
+
+- Use hard cutovers. Do not add compatibility aliases, legacy exports, dual
+  registry behavior, or fallback deployment paths.
+- Preserve immutable deployment history and existing deploy scripts. New live
+  operations require a new numbered script; never overwrite the script or
+  artifacts that produced an earlier deployment.
+- Use `.agents/skills/zkp2p-stack-impact/SKILL.md` for ABI, address, event,
+  registry, package, or deployment changes with downstream impact.
+
 ## Architecture Overview (v2.1)
 - Core: `Escrow` holds maker deposits and per-deposit config (methods, currencies, min rates, intent limits/expiry); `Orchestrator` manages intents, routes to verifiers, collects protocol/referrer fees; `ProtocolViewer` provides aggregated read views.
 - Registries: `PaymentVerifierRegistry` maps `paymentMethod` → verifier + currencies; `EscrowRegistry` whitelists escrows; `RelayerRegistry` whitelists relayers; `PostIntentHookRegistry` whitelists post‑intent hooks; `NullifierRegistry` records consumed nullifiers.
@@ -61,6 +71,7 @@ Orchestrator ── net ──▶ Recipient OR PostIntentHook (then executes)
 
 | Skill | Location | Description |
 |-------|----------|-------------|
+| `zkp2p-stack-impact` | `.agents/skills/zkp2p-stack-impact/SKILL.md` | Audit and coordinate contract, package, deployment, and downstream changes across the active stack |
 | `zkp2p-contracts-publish` | `.agents/skills/zkp2p-contracts-publish/SKILL.md` | Bump, build, test, verify addresses, and publish `@zkp2p/contracts-v2` to npm |
 
 ## Security & Configuration Tips

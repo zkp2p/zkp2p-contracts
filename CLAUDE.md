@@ -4,6 +4,12 @@
 
 ZKP2P V2 Contracts -- Solidity 0.8.18 smart contracts for trustless P2P fiat-to-crypto exchange on Base. Off-chain fiat payments (Venmo, PayPal, Wise, Revolut, CashApp, Zelle, MercadoPago, Monzo, N26, Alipay, Chime, Luxon) are verified on-chain via EIP-712 attestations from a zkTLS attestation service, then escrowed USDC is released to the buyer.
 
+Use hard cutovers: do not add compatibility aliases, legacy exports, dual
+registry behavior, or fallback deployment paths. Preserve immutable deployment
+history and existing deploy scripts; every new live operation gets a new
+numbered script. Use `.agents/skills/zkp2p-stack-impact/SKILL.md` for changes to
+ABIs, addresses, events, registries, packages, or downstream behavior.
+
 ## Build and Test
 
 ```bash
@@ -289,6 +295,7 @@ import { Orchestrator } from "@zkp2p/contracts-v2/typechain";
 
 | Skill | Description |
 |-------|-------------|
+| [zkp2p-stack-impact](.agents/skills/zkp2p-stack-impact/SKILL.md) | Audit and coordinate contract, package, deployment, and downstream changes across the active stack |
 | [zkp2p-contracts-publish](.agents/skills/zkp2p-contracts-publish/SKILL.md) | Bump, build, test, and publish @zkp2p/contracts-v2 to npm |
 | [ship-contracts](.claude/skills/ship-contracts/SKILL.md) | Full deployment pipeline: script + tests, local, staging, prod, publish |
 | [audit](.claude/skills/audit/SKILL.md) | Security audits: full, differential, or single checks |

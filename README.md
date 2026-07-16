@@ -1,4 +1,4 @@
-# zkp2p-v2-contracts
+# zkp2p-contracts
 
 [![Coverage](https://codecov.io/gh/zkp2p/zkp2p-contracts/branch/main/graph/badge.svg?precision=2)](https://codecov.io/gh/zkp2p/zkp2p-contracts)
 

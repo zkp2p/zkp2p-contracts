@@ -5,14 +5,13 @@ description: >
   bump the contracts package version (rc or stable), extract deployment artifacts,
   build, test, and publish with the correct dist-tag. Covers both prerelease (dev tag)
   and stable (latest tag) workflows.
-compatibility: Requires Node.js 18+, Yarn, and npm access to the @zkp2p org.
 ---
 
 # @zkp2p/contracts-v2 — Publish Workflows
 
 ## Package Location
 
-`packages/contracts/` within the `zkp2p-v2-contracts` repo.
+`packages/contracts/` within the `zkp2p-contracts` repo.
 
 Publishes: ABIs, addresses, constants, currencies, oracle feeds, payment methods, network bundles, TypeChain types, and utils — all as built CJS + ESM artifacts.
 
