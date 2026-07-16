@@ -510,6 +510,20 @@ describe("RiskManager and OrchestratorV3", () => {
   });
 
   describe("admission and portfolio reservations", () => {
+    it("fails closed when the admission callback exhausts its gas allowance", async () => {
+      const { maker, taker, escrow, orchestrator } = await loadFixture(deployFixture);
+      const mock = await (await ethers.getContractFactory("IntentRiskHookMock")).deploy();
+      await mock.setConsumeAllCreateGas(true);
+      await orchestrator.connect(maker).setDepositRiskHook(escrow.address, 0, mock.address);
+
+      await expect(orchestrator.connect(taker).signalIntent(
+        signalParams(escrow, taker.address, usdc(10), ZELLE),
+        { gasLimit: 2_500_000 },
+      )).to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+
+      expect(await orchestrator.getAccountIntentCount(taker.address)).to.eq(0);
+    });
+
     it("uses a delegated Safe as the shared stake owner", async () => {
       const { owner: safe, taker, escrow, orchestrator, token, vault, manager } = await loadFixture(deployFixture);
       await token.connect(safe).approve(vault.address, ethers.constants.MaxUint256);
@@ -630,6 +644,19 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(settlement.releasedAmount).to.eq(usdc(10));
       expect(settlement.settledAt).to.be.gte(before);
       expect(settlement.settledAt).to.eq(await time.latest());
+    });
+
+    it("retains enough gas to record cancellation recovery after a callback exhausts its allowance", async () => {
+      const { maker, taker, escrow, orchestrator } = await loadFixture(deployFixture);
+      const mock = await (await ethers.getContractFactory("IntentRiskHookMock")).deploy();
+      await orchestrator.connect(maker).setDepositRiskHook(escrow.address, 0, mock.address);
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(10), ZELLE);
+      await mock.setConsumeAllTerminalGas(true);
+
+      await orchestrator.connect(taker).cancelIntent(intentHash, { gasLimit: 2_500_000 });
+
+      expect(await orchestrator.getIntentCancellation(intentHash)).to.eq(await time.latest());
+      expect(await orchestrator.getAccountIntentCount(taker.address)).to.eq(0);
     });
   });
 

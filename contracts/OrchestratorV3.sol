@@ -23,8 +23,10 @@ import { OrchestratorV3Validation } from "./lib/OrchestratorV3Validation.sol";
 contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
     /* ============ Constants ============ */
 
-    uint256 internal constant MIN_RISK_CALLBACK_GAS_LIMIT = 750_000;
-    uint256 internal constant MAX_RISK_CALLBACK_RETURN_DATA = 2_048;
+    uint256 public constant MIN_RISK_CALLBACK_GAS_LIMIT = 750_000;
+    uint256 public constant MAX_RISK_CALLBACK_GAS_LIMIT = 2_000_000;
+    uint256 public constant MAX_RISK_CALLBACK_RETURN_DATA = 2_048;
+    uint256 public constant RISK_CALLBACK_POST_CALL_GAS_RESERVE = 250_000;
 
     /* ============ State Variables ============ */
 
@@ -229,6 +231,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             intents,
             _intentHash,
             riskCallbackGasLimit,
+            RISK_CALLBACK_POST_CALL_GAS_RESERVE,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
     }
@@ -263,6 +266,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             _releasedAmount,
             _paymentId,
             riskCallbackGasLimit,
+            RISK_CALLBACK_POST_CALL_GAS_RESERVE,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
     }
@@ -339,6 +343,9 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
     function _setRiskCallbackGasLimit(uint256 _gasLimit) internal {
         if (_gasLimit < MIN_RISK_CALLBACK_GAS_LIMIT) {
             revert RiskCallbackGasLimitTooLow(_gasLimit, MIN_RISK_CALLBACK_GAS_LIMIT);
+        }
+        if (_gasLimit > MAX_RISK_CALLBACK_GAS_LIMIT) {
+            revert RiskCallbackGasLimitTooHigh(_gasLimit, MAX_RISK_CALLBACK_GAS_LIMIT);
         }
         riskCallbackGasLimit = _gasLimit;
         emit RiskCallbackGasLimitUpdated(_gasLimit);

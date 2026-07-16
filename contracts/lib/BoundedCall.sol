@@ -13,6 +13,9 @@ import { IPaymentVerifierV3 } from "../interfaces/IPaymentVerifierV3.sol";
  *      copy unbounded return data and exhaust gas during memory expansion.
  */
 library BoundedCall {
+    /// @dev Conservative allowance for CALL base/cold-access cost and local argument bookkeeping.
+    uint256 internal constant CALL_OVERHEAD_GAS = 10_000;
+
     event RiskHookCallbackFailed(
         bytes32 indexed intentHash,
         address indexed riskHook,
@@ -59,6 +62,7 @@ library BoundedCall {
         bytes32 _intentHash,
         address _settlementHook,
         uint256 _gasLimit,
+        uint256 _postCallGasReserve,
         uint256 _maxReturnDataSize
     ) public returns (bool requiresSettlementHook) {
         if (address(_riskHook) == address(0)) return false;
@@ -66,6 +70,7 @@ library BoundedCall {
         (bool success, bytes memory response) = callWithBoundedReturnData(
             address(_riskHook),
             _gasLimit,
+            _postCallGasReserve,
             _maxReturnDataSize,
             abi.encodeCall(IIntentRiskHook.onIntentCreated, (_intentHash))
         );
@@ -90,6 +95,7 @@ library BoundedCall {
         uint256 _releasedAmount,
         bytes32 _paymentId,
         uint256 _gasLimit,
+        uint256 _postCallGasReserve,
         uint256 _maxReturnDataSize
     ) public returns (bool success) {
         if (address(_riskHook) == address(0)) return true;
@@ -114,6 +120,7 @@ library BoundedCall {
         (success, revertData) = callWithBoundedReturnData(
             address(_riskHook),
             _gasLimit,
+            _postCallGasReserve,
             _maxReturnDataSize,
             callData
         );
@@ -126,6 +133,7 @@ library BoundedCall {
      * @notice Calls a target with a fixed gas allowance and copies at most `_maxReturnDataSize` bytes.
      * @param _target Address receiving the call.
      * @param _gasLimit Maximum gas forwarded to the target.
+     * @param _postCallGasReserve Gas retained for caller-side reconciliation after the call.
      * @param _maxReturnDataSize Maximum number of return-data bytes copied into memory.
      * @param _callData Encoded calldata sent to the target.
      * @return success Whether the target call succeeded.
@@ -134,12 +142,16 @@ library BoundedCall {
     function callWithBoundedReturnData(
         address _target,
         uint256 _gasLimit,
+        uint256 _postCallGasReserve,
         uint256 _maxReturnDataSize,
         bytes memory _callData
     ) internal returns (bool success, bytes memory returnData) {
+        uint256 callGas = _calculateCallGas(gasleft(), _gasLimit, _postCallGasReserve);
+        if (callGas == 0) return (false, bytes(""));
+
         assembly ("memory-safe") {
             success := call(
-                _gasLimit,
+                callGas,
                 _target,
                 0,
                 add(_callData, 0x20),
@@ -159,6 +171,26 @@ library BoundedCall {
                 add(add(returnData, 0x20), and(add(copySize, 0x1f), not(0x1f)))
             )
         }
+    }
+
+    /**
+     * @dev Caps forwarded gas by the configured allowance, EIP-150's 63/64 rule, and the
+     *      amount that leaves the requested reconciliation reserve after conservative CALL overhead.
+     */
+    function _calculateCallGas(
+        uint256 _availableGas,
+        uint256 _gasLimit,
+        uint256 _postCallGasReserve
+    ) internal pure returns (uint256 callGas) {
+        if (_availableGas <= CALL_OVERHEAD_GAS + _postCallGasReserve) return 0;
+
+        uint256 afterOverhead = _availableGas - CALL_OVERHEAD_GAS;
+        uint256 eip150Maximum = afterOverhead - (afterOverhead / 64);
+        uint256 reserveMaximum = afterOverhead - _postCallGasReserve;
+
+        callGas = _gasLimit;
+        if (callGas > eip150Maximum) callGas = eip150Maximum;
+        if (callGas > reserveMaximum) callGas = reserveMaximum;
     }
 
 }

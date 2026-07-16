@@ -78,6 +78,7 @@ library OrchestratorV3RiskLib {
         mapping(bytes32 => IOrchestratorV2.Intent) storage _intents,
         bytes32 _intentHash,
         uint256 _callbackGasLimit,
+        uint256 _postCallGasReserve,
         uint256 _maxReturnData
     ) external {
         IOrchestratorV2.Intent storage intent = _intents[_intentHash];
@@ -89,6 +90,7 @@ library OrchestratorV3RiskLib {
             _intentHash,
             address(intent.settlementHook),
             _callbackGasLimit,
+            _postCallGasReserve,
             _maxReturnData
         );
         _intentRequiresSettlementHook[_intentHash] = requiresSettlementHook;
@@ -107,6 +109,7 @@ library OrchestratorV3RiskLib {
         uint256 _releasedAmount,
         bytes32 _paymentId,
         uint256 _callbackGasLimit,
+        uint256 _postCallGasReserve,
         uint256 _maxReturnData
     ) external {
         bool isSettlement = _resolution != 0;
@@ -125,6 +128,7 @@ library OrchestratorV3RiskLib {
             _releasedAmount,
             _paymentId,
             _callbackGasLimit,
+            _postCallGasReserve,
             _maxReturnData
         );
         RiskCallbackRecorder.recordFailure(

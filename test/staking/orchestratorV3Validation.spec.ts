@@ -5,6 +5,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 
 const MAX_PROTOCOL_FEE = ethers.utils.parseEther("0.05");
 const MIN_CALLBACK_GAS = 750_000;
+const MAX_CALLBACK_GAS = 2_000_000;
 const ZERO = ethers.constants.AddressZero;
 
 describe("OrchestratorV3 constructor validation", () => {
@@ -89,6 +90,13 @@ describe("OrchestratorV3 constructor validation", () => {
     const { factory, validArgs } = await loadFixture(deployFixture);
     await expect(deployWith(factory, validArgs, 6, ZERO))
       .to.be.revertedWithCustomError(factory, "ZeroAddress");
+  });
+
+  it("rejects a callback gas allowance above the reconciliation-safe maximum", async () => {
+    const { factory, validArgs } = await loadFixture(deployFixture);
+    await expect(deployWith(factory, validArgs, 7, MAX_CALLBACK_GAS + 1))
+      .to.be.revertedWithCustomError(factory, "RiskCallbackGasLimitTooHigh")
+      .withArgs(MAX_CALLBACK_GAS + 1, MAX_CALLBACK_GAS);
   });
 
   it("keeps deployed bytecode within the EIP-170 limit", async () => {

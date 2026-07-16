@@ -60,6 +60,7 @@ interface IOrchestratorV3 is IOrchestratorV2 {
     error InvalidRiskHookResponse(address hook, bytes response);
     error RequiredSettlementHookMissing(bytes32 intentHash);
     error RiskCallbackGasLimitTooLow(uint256 gasLimit, uint256 minimum);
+    error RiskCallbackGasLimitTooHigh(uint256 gasLimit, uint256 maximum);
     error InvalidContract(address account);
     error InvalidChainId(uint256 suppliedChainId, uint256 actualChainId);
 
