@@ -38,24 +38,26 @@ describe("StakeVault", () => {
   describe("contract dependency validation", () => {
     it("rejects a stake token without deployed code", async () => {
       const [owner, eoa] = await ethers.getSigners();
-      await expect((await ethers.getContractFactory("StakeVault")).deploy(
+      const vaultFactory = await ethers.getContractFactory("StakeVault");
+      await expect(vaultFactory.deploy(
         owner.address,
         eoa.address,
         ZERO_ADDRESS,
         30 * DAY,
         DAY,
-      )).to.be.revertedWithCustomError(await ethers.getContractFactory("StakeVault"), "InvalidContract");
+      )).to.be.revertedWithCustomError(vaultFactory, "InvalidContract");
     });
 
     it("rejects an initial controller without deployed code", async () => {
       const { owner, staker: eoa, token } = await deployFixture();
-      await expect((await ethers.getContractFactory("StakeVault")).deploy(
+      const vaultFactory = await ethers.getContractFactory("StakeVault");
+      await expect(vaultFactory.deploy(
         owner.address,
         token.address,
         eoa.address,
         30 * DAY,
         DAY,
-      )).to.be.revertedWithCustomError(await ethers.getContractFactory("StakeVault"), "InvalidContract");
+      )).to.be.revertedWithCustomError(vaultFactory, "InvalidContract");
     });
 
     it("rejects initializing a controller without deployed code", async () => {
