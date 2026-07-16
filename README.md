@@ -2,19 +2,28 @@
 
 [![Coverage](https://codecov.io/gh/zkp2p/zkp2p-contracts/branch/main/graph/badge.svg?precision=2)](https://codecov.io/gh/zkp2p/zkp2p-contracts)
 
-Smart contracts for the ZKP2P fiat on/off-ramp, with the current repository centered on the v2 system:
+Smart contracts for the ZKP2P fiat on/off-ramp. The current source tree contains the deployed v2
+settlement stack and the merged v3 stake-risk extension:
 
 - `EscrowV2`: maker liquidity, per-deposit payment configuration, oracle-backed pricing, delegated rate managers.
 - `OrchestratorV2`: intent lifecycle, fee handling, pre-intent hooks, whitelist hooks, post-intent execution.
 - `UnifiedPaymentVerifierV2`: shared attestation-based verifier registered across supported payment methods.
 - `ProtocolViewerV2`: batched read model for deposits, intents, supported payment methods, and effective rates.
+- `OrchestratorV3`: v2-compatible settlement with depositor-selected, snapshotted risk callbacks.
+- `RiskManager`: affine stake reservations, elapsed-time griefing penalties, and authenticated chargebacks.
+- `StakeVault`: shared stake custody, delegation, reservations, exits, and compensation accounting.
 
-The repository still contains legacy v1 contracts and deploy scripts because v2 is deployed on top of shared protocol infrastructure, but the active development work over the last month has been concentrated in the v2 contracts, periphery, and deployment pipeline.
+The repository retains v1 and v2 contracts because deployed systems and the v3 extension reuse that
+infrastructure. V3 source is merged and an affine-risk stack is deployed on Base staging, but the final
+direct-chargeback implementation is not publicly rolled out. See [Deployment Status](#deployment-status)
+before treating source behavior or package exports as live-network behavior.
 
 ## Table of Contents
 
 - [What Landed Recently](#what-landed-recently)
 - [System Overview](#system-overview)
+- [V3 Affine Stake-Risk Architecture](#v3-affine-stake-risk-architecture)
+- [Direct Chargeback Model](#direct-chargeback-model)
 - [V2 Contract Inventory](#v2-contract-inventory)
 - [Core Lifecycle](#core-lifecycle)
 - [Rate Management Model](#rate-management-model)
@@ -27,9 +36,21 @@ The repository still contains legacy v1 contracts and deploy scripts because v2 
 - [Supported Payment Methods](#supported-payment-methods)
 - [Testing Strategy](#testing-strategy)
 - [Networks and Deployment Artifacts](#networks-and-deployment-artifacts)
+- [Deployment Status](#deployment-status)
 - [Security Notes](#security-notes)
 
 ## What Landed Recently
+
+The current v3 risk architecture landed in July 2026:
+
+- `2026-07-15`: the tier-based risk design was replaced by an affine `RiskManager`. It has no
+  contract-level tiers, stake thresholds, amount caps, cooldowns, stake-derived concurrency limit,
+  or protocol-wide exposure ceiling.
+- `2026-07-16`: `OrchestratorV3`, `RiskManager`, `StakeVault`, and `DeferredPayoutHook` were deployed
+  to Base staging for integration work. This was not a production rollout.
+- `2026-07-16`: verified fulfillment was bound to exact payment details for direct chargeback
+  authentication. Chargebackable v1 policies are now full-reserve, stake-backed only; deferred payout
+  is rejected.
 
 The v2 surface was built out rapidly between February 20, 2026 and March 11, 2026. The main additions in that window are:
 
@@ -43,13 +64,13 @@ The v2 surface was built out rapidly between February 20, 2026 and March 11, 202
 - `2026-03-11`: `OrchestratorV2` added support for multi-recipient referral fees, with `ReferralFeeLib` and updated interfaces/tests.
 - `2026-03-11`: a staging redeploy script for `EscrowV2`, `OrchestratorV2`, and `SignatureGatingPreIntentHook` landed in `deploy/19_redeploy_escrowv2_orchestratorv2_staging.ts`.
 
-In practice, "the latest contracts we have added in the past month" means the README should be read as a v2-first document.
+The detailed v2 sections below remain the reference for the settlement layer that v3 extends.
 
 ## System Overview
 
 ZKP2P is a non-custodial fiat-to-crypto settlement protocol. Makers deposit on-chain liquidity, takers lock a portion of that liquidity by signaling an intent, a payment proof is verified on-chain against an off-chain attestation, and settlement completes either directly to the taker or through a post-intent hook.
 
-The v2 system is built around four layers:
+The active source architecture is built around five layers:
 
 1. Liquidity custody and pricing.
    `EscrowV2` stores deposits, payment methods, payee hashes, supported fiat currencies, fixed floors, oracle configs, rate-manager delegation, and outstanding intents.
@@ -57,7 +78,10 @@ The v2 system is built around four layers:
    `OrchestratorV2` validates whether a taker can lock liquidity, snapshots fee terms and min intent size, verifies payments through the registry-selected verifier, and releases funds.
 3. Verification and registries.
    `UnifiedPaymentVerifier` validates EIP-712 attestations and nullifies payments. Shared registries define which escrows, orchestrators, relayers, hooks, and payment methods are valid.
-4. Read models and periphery.
+4. Stake-risk policy and custody.
+   `OrchestratorV3` snapshots an optional deposit risk hook. `RiskManager` applies affine policy, and
+   `StakeVault` composes reservations across each delegated stake-owner portfolio.
+5. Read models and periphery.
    `ProtocolViewerV2`, oracle adapters, bridge hooks, and pre-intent hooks provide the ergonomic layer used by frontends, routing systems, and privileged operators.
 
 ### High-Level Flow
@@ -67,6 +91,65 @@ The v2 system is built around four layers:
 ### Contract Architecture
 
 ![ZKP2P V2 Contract Architecture](diagrams/architecture.png)
+
+The diagrams above describe the v2 settlement base. V3 adds the risk path documented next.
+
+## V3 Affine Stake-Risk Architecture
+
+`OrchestratorV3` preserves the v2 intent lifecycle and snapshots the depositor-selected risk hook when
+an intent is admitted. Admission callbacks fail closed; terminal callbacks are gas-bounded and may fail
+open so escrow liquidity is not trapped. `RiskManager` retains durable recovery data so a failed terminal
+callback can be reconciled permissionlessly using the original lifecycle timestamp.
+
+For intent amount `A`, hourly griefing slope `s`, intent period `T`, griefing cliff `C`, and chargeback
+reserve ratio `r`, admission reserves the greater pending liability:
+
+```text
+G_max(A) = ceil(A * s * (T - C) / (10_000 * 1 hour))
+C(A)     = ceil(A * r / 10_000)
+R(A)     = max(G_max(A), C(A))
+```
+
+Cancellation charges only elapsed time after the cliff, capped by the snapshotted intent period. All
+mutable liability inputs are snapshotted at admission. Multiple concurrent intents are allowed whenever
+their aggregate reservations fit the stake owner's free stake; there is no intent-count capacity tier.
+
+The merged contracts have these roles:
+
+- `OrchestratorV3`: v2 lifecycle plus risk-hook selection, snapshots, bounded callbacks, and settlement
+  recovery records.
+- `RiskManager`: platform policy, exact reservation math, cancellation penalties, chargeback validation,
+  maturity, reconciliation, and slashing instructions.
+- `StakeVault`: the sole stake-token custody and portfolio-accounting boundary.
+- `DeferredPayoutHook`: retained in the general architecture for separately governed future policy, but
+  rejected by the current chargebackable v1 configuration rules.
+
+## Direct Chargeback Model
+
+The current merged chargeback path is deliberately narrow and fail closed:
+
+- Chargebackable platform configs require `reserveBps == 10_000` and
+  `deferredPayoutEnabled == false`, so the full gross released amount is stake-backed at admission.
+- `UnifiedPaymentVerifier` stores a commitment scoped by `(orchestrator, intentHash)` over the payment
+  method, hashed provider payment ID, fiat amount, and fiat currency. `RiskManager` snapshots the
+  payment verifier at admission and requires that commitment during verified-settlement reconciliation.
+- A maker manual release records no payment commitment, releases the reservation, starts no coverage
+  window, and cannot be charged back.
+- Chargeback evidence uses the EIP-712 domain `ZKP2P RiskManager`, version `1`, current chain ID, and
+  the `RiskManager` address. The signed type is
+  `ChargebackAttestation(bytes32 intentHash,bytes32 dataHash)`.
+- `data` ABI-encodes `ChargebackDetails(paymentMethod, originalPaymentId, disputeId, paymentAmount,
+  paymentCurrency)`. Those details must exactly match the verifier-backed payment commitment, and
+  `disputeId` must be nonzero.
+- A valid claim inside the half-open interval `settledAt <= now < coverageDeadline` compensates the LP
+  for the full gross `releasedAmount`. Partial chargebacks are not supported by this v1 policy.
+- Replay protection consumes `keccak256(paymentMethod, disputeId)` globally.
+- Fresh deployments require a dedicated three-witness chargeback verifier with a 2-of-3 threshold and
+  a witness set disjoint from payment-attestation witnesses.
+
+The witness/threshold configuration remains immediately mutable and open positions do not snapshot a
+witness epoch. Delayed two-step governance and epoch snapshotting, followed by real provider E2E, are
+required before public rollout.
 
 ## V2 Contract Inventory
 
@@ -428,9 +511,12 @@ contracts/
   EscrowV2.sol
   Orchestrator.sol
   OrchestratorV2.sol
+  OrchestratorV3.sol
   ProtocolViewer.sol
   ProtocolViewerV2.sol
   RateManagerV1.sol
+  RiskManager.sol
+  StakeVault.sol
   hooks/
   interfaces/
   lib/
@@ -450,6 +536,7 @@ deploy/
   17_deploy_pyth_oracle.ts
   18_redeploy_escrowv2_ratemanager.ts
   19_redeploy_escrowv2_orchestratorv2_staging.ts
+  26_deploy_stake_risk_system.ts
   deploy_summary.ts
 
 test/
@@ -462,6 +549,7 @@ test/
   orchestratorV2/
   periphery/
   rateManager/
+  staking/
   registries/
   unifiedVerifier/
 
@@ -550,6 +638,16 @@ Coverage is intentionally heavy in this repo. On `foundry-main`, it should not s
 ## Deployment Model
 
 The deployment pipeline is layered because v2 reuses shared protocol infrastructure.
+
+### V3 Stake-Risk Deployment
+
+`deploy/26_deploy_stake_risk_system.ts` performs a fresh deployment of the linked v3 orchestrator,
+`StakeVault`, the dedicated chargeback verifier, `RiskManager`, and `DeferredPayoutHook`, then wires
+ownership, controller, hook, registry, and platform-policy state. It refuses to mutate an existing
+nonlocal stake-risk deployment; upgrades require a separately reviewed governance migration.
+
+This script describes the current merged source architecture. It has not been run against the canonical
+Base staging deployment recorded by PR #171 after the direct-chargeback changes in PR #175.
 
 ### Legacy Base System
 
@@ -712,6 +810,24 @@ The deploy scripts also reference current network parameters such as:
 
 These parameters live in `deployments/parameters.ts`.
 
+## Deployment Status
+
+The repository records the affine-risk Base staging deployment from PR #171:
+
+| Contract | Base staging address |
+| --- | --- |
+| `OrchestratorV3` | `0x79dE2123eE792e77165b2E6E65A54B745E8A734E` |
+| `StakeVault` | `0x5c570D2be2bFD8960B2B9F8d2D3C8148A1e24C5f` |
+| `RiskManager` | `0x57E4b9046EA5ABCe1fc688b77D846aE67222b998` |
+| `DeferredPayoutHook` | `0xd279997e057b22ecC4660C7bBaD82FF0017B08A9` |
+
+Use block `48667836` as the common indexer start block for that deployment. These addresses predate the
+direct-chargeback changes merged in PR #175 and must not be presented as a public chargeback rollout.
+
+Draft PR #177 uses a separate, isolated Base staging fixture to exercise the new direct path. Its runner,
+addresses, and temporary permissions are test-only, are not merged source, and are not canonical network
+coordinates. Production policy remains unset.
+
 ## Security Notes
 
 - The contracts are designed around explicit registry-based authorization rather than open-ended plugin injection.
@@ -720,6 +836,10 @@ These parameters live in `deployments/parameters.ts`.
 - Oracle safety depends on both adapter validation and escrow-side `maxStaleness`.
 - `AcrossBridgeHookV2` is intentionally biased toward successful settlement; it falls back to a direct transfer instead of reverting bridge failures.
 - Manager fees are capped and snapshotted at signal time.
+- Chargeback correctness depends on exact verifier-backed payment commitments, a disjoint dedicated
+  chargeback witness set, full-reserve stake accounting, deadline enforcement, and dispute nullification.
+- Public chargeback rollout is blocked on delayed/two-step witness governance, verifier or witness epoch
+  snapshotting for open positions, and a real provider E2E against the companion attestation service.
 - The README is not a full audit report. Contract behavior should be read alongside the source and tests before making deployment or integration assumptions.
 
 ## License

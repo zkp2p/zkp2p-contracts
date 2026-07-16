@@ -1,6 +1,11 @@
 # @zkp2p/contracts-v2
 
-Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
+Official npm package source for ZKP2P smart contract interfaces, ABIs, addresses, and utilities.
+
+> **Release status:** the latest npm release is `0.3.0`, published before the merged affine-risk and
+> direct-chargeback source changes. It does not contain the new `abis/contracts` or `utils/riskMath`
+> exports described under [Unpublished Source Exports](#unpublished-source-exports). Do not use the
+> source manifest's unchanged `0.3.0` version as evidence that those paths are available from npm.
 
 ## Installation
 
@@ -32,10 +37,6 @@ import type { Escrow, Orchestrator } from "@zkp2p/contracts-v2/types"
 
 // Import utility functions
 import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils/protocolUtils"
-
-// Import the stable, not-yet-deployed risk-system ABI and exact bigint math helpers
-import { RiskManager } from "@zkp2p/contracts-v2/abis/contracts"
-import { calculateRequiredReservation } from "@zkp2p/contracts-v2/utils/riskMath"
 
 // Example: Create contract instance with ethers
 import { ethers } from 'ethers';
@@ -164,13 +165,24 @@ All modules are directly accessible via subpath exports:
 
 - `@zkp2p/contracts-v2/addresses` - Contract addresses for all networks
 - `@zkp2p/contracts-v2/abis/<network>` - Contract ABIs per network (e.g., `/abis/baseStaging`)
-- `@zkp2p/contracts-v2/abis/contracts` - Stable source ABIs for approved but not-yet-deployed contracts
 - `@zkp2p/contracts-v2/abis/<network>/<contract>.json` - Direct JSON import for specific contracts
 - `@zkp2p/contracts-v2/constants/<network>` - Constants per network
 - `@zkp2p/contracts-v2/paymentMethods` - Payment method configs
 - `@zkp2p/contracts-v2/utils/protocolUtils` - Protocol utilities
-- `@zkp2p/contracts-v2/utils/riskMath` - Exact bigint capacity, reservation, and penalty formulas
 - `@zkp2p/contracts-v2/types` - TypeScript types
+
+## Unpublished Source Exports
+
+The current repository source builds additional exports for the merged v3 architecture:
+
+- `@zkp2p/contracts-v2/abis/contracts`: source ABIs for `OrchestratorV3`, `RiskManager`, `StakeVault`,
+  and `DeferredPayoutHook`, independent of a network deployment.
+- `@zkp2p/contracts-v2/utils/riskMath`: exact `bigint` helpers for affine reservation, capacity, and
+  elapsed cancellation-penalty calculations.
+
+These paths are development source until a later package version is built, validated, and published.
+They must not be imported from npm `0.3.0`. Network-specific v3 address exports describe the recorded
+Base staging affine deployment and do not imply that the final direct-chargeback implementation is live.
 
 ### Export Format Details
 
@@ -195,7 +207,9 @@ Each network export provides:
 
 ## Version
 
-Current version: `0.0.1-rc5`
+Source manifest version: `0.3.0`
+
+Latest npm version: `0.3.0` (does not include the unpublished source exports above)
 
 ## Development
 
@@ -214,6 +228,6 @@ MIT
 
 ## Links
 
-- [GitHub Repository](https://github.com/zkp2p/zkp2p-v2-contracts)
+- [GitHub Repository](https://github.com/zkp2p/zkp2p-contracts)
 - [Documentation](https://docs.zkp2p.xyz)
 - [Website](https://zkp2p.xyz)
