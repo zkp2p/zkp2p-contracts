@@ -45,11 +45,11 @@ describe("RiskManager and OrchestratorV3", () => {
       MAX_INTENT_PERIOD,
     );
     const boundedCall = await (await ethers.getContractFactory("BoundedCall")).deploy();
-    const settlementHookExecutor = await (await ethers.getContractFactory("SettlementHookExecutor")).deploy();
+    const postIntentHookExecutor = await (await ethers.getContractFactory("PostIntentHookExecutor")).deploy();
     const orchestrator = await (await ethers.getContractFactory("OrchestratorV3", {
       libraries: {
         BoundedCall: boundedCall.address,
-        SettlementHookExecutor: settlementHookExecutor.address,
+        PostIntentHookExecutor: postIntentHookExecutor.address,
       },
     })).deploy(
       owner.address,
