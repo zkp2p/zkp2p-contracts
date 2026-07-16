@@ -21,8 +21,6 @@ interface IOrchestratorV3 is IOrchestratorV2 {
         bytes32 paymentMethod;
         address postIntentHook;
         uint64 createdAt;
-        /// @notice Whether protocol, manager, or referral fees can reduce settlement proceeds.
-        bool hasSettlementFees;
     }
 
     struct IntentSettlement {

@@ -228,7 +228,6 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
                     && config.chargeback.deferredPayoutEnabled
                     && available >= maxGriefingBond
             ) {
-                if (intent.hasSettlementFees) revert DeferredPayoutFeesUnsupported(_intentHash);
                 if (deferredPayoutHook == address(0) || intent.postIntentHook != deferredPayoutHook) {
                     revert DeferredPayoutHookRequired(deferredPayoutHook, intent.postIntentHook);
                 }
@@ -959,6 +958,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
                 _config.chargeback.reserveBps != BPS_DENOMINATOR
                     || _config.chargeback.riskWindow == 0
                     || _config.chargeback.riskWindow > MAX_RISK_WINDOW
+                    || _config.chargeback.deferredPayoutEnabled
             ) {
                 revert InvalidPlatformConfig(_paymentMethod);
             }

@@ -111,7 +111,7 @@ describe("Affine stake risk system deployment", () => {
       const config = await manager.getPlatformRiskConfig(paymentMethod);
       expect(config.enabled).to.eq(true);
       expect(config.chargeback.chargebackable).to.eq(true);
-      expect(config.chargeback.deferredPayoutEnabled).to.eq(true);
+      expect(config.chargeback.deferredPayoutEnabled).to.eq(false);
       expect(config.chargeback.reserveBps).to.eq(platformPolicy.reversible.chargeback.reserveBps);
       expect(config.chargeback.riskWindow).to.eq(platformPolicy.reversible.chargeback.riskWindow);
       expect(config.griefing.griefingCliff).to.eq(platformPolicy.reversible.griefing.griefingCliff);

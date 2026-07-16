@@ -154,10 +154,6 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
      */
     function getRiskIntent(bytes32 _intentHash) external view override returns (RiskIntentData memory riskIntent) {
         Intent storage intent = intents[_intentHash];
-        bool hasSettlementFees = protocolFee != 0 || intentManagerFee[_intentHash] != 0;
-        for (uint256 feeIndex = 0; !hasSettlementFees && feeIndex < intent.referralFees.length; ++feeIndex) {
-            hasSettlementFees = intent.referralFees[feeIndex].fee != 0;
-        }
         riskIntent = RiskIntentData({
             owner: intent.owner,
             to: intent.to,
@@ -166,9 +162,23 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             amount: intent.amount,
             paymentMethod: intent.paymentMethod,
             postIntentHook: address(intent.postIntentHook),
-            createdAt: uint64(intent.timestamp),
-            hasSettlementFees: hasSettlementFees
+            createdAt: uint64(intent.timestamp)
         });
+    }
+
+    /**
+     * @notice Enforces deferred payout execution for manual releases that required it at admission.
+     * @dev V1 policy rejects new deferred positions, but retaining the V3 behavior preserves the
+     *      lifecycle semantics for any separately migrated legacy position.
+     */
+    function _shouldExecutePostIntentHookOnManualRelease(
+        bytes32 _intentHash
+    ) internal view override returns (bool) {
+        bool requiresPostIntentHook = intentRequiresPostIntentHook[_intentHash];
+        if (requiresPostIntentHook && address(intents[_intentHash].postIntentHook) == address(0)) {
+            revert RequiredPostIntentHookMissing(_intentHash);
+        }
+        return requiresPostIntentHook;
     }
 
     /**

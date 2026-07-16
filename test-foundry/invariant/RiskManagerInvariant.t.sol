@@ -67,8 +67,7 @@ contract RiskManagerInvariantHandler is Test {
             amount: amount,
             paymentMethod: chargebackable ? PAYPAL : ZELLE,
             postIntentHook: address(0),
-            createdAt: uint64(block.timestamp),
-            hasSettlementFees: false
+            createdAt: uint64(block.timestamp)
         });
 
         try manager.onIntentCreated(intentHash) {

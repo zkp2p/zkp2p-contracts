@@ -270,7 +270,6 @@ interface IRiskManager is IIntentRiskHook {
     error InsufficientCollateral(address stakeOwner, uint256 available, uint256 required);
     error DeferredPayoutHookRequired(address expectedHook, address actualHook);
     error DeferredPayoutHookNotAllowed(address hook);
-    error DeferredPayoutFeesUnsupported(bytes32 intentHash);
     error PositionAlreadyExists(bytes32 intentHash);
     error PositionNotPending(bytes32 intentHash, PositionStatus status);
     error PositionNotSettled(bytes32 intentHash, PositionStatus status);

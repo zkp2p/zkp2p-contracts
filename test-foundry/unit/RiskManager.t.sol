@@ -73,8 +73,7 @@ contract RiskOrchestratorHarness {
             amount: _amount,
             paymentMethod: _paymentMethod,
             postIntentHook: _postIntentHook,
-            createdAt: uint64(block.timestamp),
-            hasSettlementFees: false
+            createdAt: uint64(block.timestamp)
         });
     }
 
@@ -176,7 +175,7 @@ contract RiskManagerTest is Test {
         manager.acceptVaultController();
 
         vm.startPrank(owner);
-        manager.setPlatformRiskConfig(PAYPAL, _chargebackConfig(10_000, 30 days, true));
+        manager.setPlatformRiskConfig(PAYPAL, _chargebackConfig(10_000, 30 days));
         manager.setPlatformRiskConfig(ZELLE, _nonChargebackableConfig(2, 20e6));
         manager.setDeferredPayoutHook(address(verifier));
         vm.stopPrank();
@@ -191,14 +190,13 @@ contract RiskManagerTest is Test {
 
     function _chargebackConfig(
         uint16 _reserveBps,
-        uint64 _riskWindow,
-        bool _deferred
+        uint64 _riskWindow
     ) internal pure returns (IRiskManager.PlatformRiskConfig memory) {
         return IRiskManager.PlatformRiskConfig({
             enabled: true,
             chargeback: IRiskManager.ChargebackConfig({
                 chargebackable: true,
-                deferredPayoutEnabled: _deferred,
+                deferredPayoutEnabled: false,
                 reserveBps: _reserveBps,
                 riskWindow: _riskWindow
             }),
@@ -366,7 +364,7 @@ contract RiskManagerTest is Test {
         uint64 invalidWindow = manager.MAX_RISK_WINDOW() + 1;
         vm.expectRevert(abi.encodeWithSelector(IRiskManager.InvalidPlatformConfig.selector, PAYPAL));
         vm.prank(owner);
-        manager.setPlatformRiskConfig(PAYPAL, _chargebackConfig(10_000, invalidWindow, true));
+        manager.setPlatformRiskConfig(PAYPAL, _chargebackConfig(10_000, invalidWindow));
     }
 
     function test_DelegatedTakersShareStakeOwnerReservations() public {
@@ -528,48 +526,24 @@ contract RiskManagerTest is Test {
         assertEq(uint256(manager.getRiskPosition(intentHash).status), uint256(IRiskManager.PositionStatus.RELEASED));
     }
 
-    function test_DeferredAdmissionReservesOnlyGriefingBond() public {
-        _stake(taker, 10e6);
-        bytes32 intentHash = keccak256("deferred");
-        _setIntent(intentHash, taker, 700e6, PAYPAL, address(verifier));
-
-        bool requiresHook = _createPosition(intentHash);
-
-        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
-        assertTrue(requiresHook);
-        assertEq(uint256(position.mode), uint256(IRiskManager.RiskMode.DEFERRED_PAYOUT));
-        assertEq(position.initialReservation, 4.025e6);
-        assertEq(vault.reservedStake(taker), 4.025e6);
-    }
-
-    function test_DeferredRegistrationRejectsCoverageBelowConfiguredReserve() public {
-        _stake(taker, 10e6);
-        bytes32 intentHash = keccak256("deferred-shortfall");
-        _setIntent(intentHash, taker, 700e6, PAYPAL, address(verifier));
-        _createPosition(intentHash);
-        orchestrator.fulfillPosition(manager, intentHash, 700e6);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IRiskManager.InsufficientDeferredPayoutCoverage.selector,
-                350e6,
-                700e6
-            )
-        );
-        vm.prank(address(verifier));
-        manager.registerDeferredPayout(intentHash, taker, 350e6);
+    function test_PlatformConfigurationRejectsDeferredChargebackCoverage() public {
+        IRiskManager.PlatformRiskConfig memory config = _chargebackConfig(10_000, 30 days);
+        config.chargeback.deferredPayoutEnabled = true;
+        vm.expectRevert(abi.encodeWithSelector(IRiskManager.InvalidPlatformConfig.selector, PAYPAL));
+        vm.prank(owner);
+        manager.setPlatformRiskConfig(PAYPAL, config);
     }
 
     function test_PlatformChangesDoNotAlterPositionSnapshots() public {
         vm.prank(owner);
-        manager.setPlatformRiskConfig(PAYPAL, _chargebackConfig(10_000, 10 days, false));
+        manager.setPlatformRiskConfig(PAYPAL, _chargebackConfig(10_000, 10 days));
         _stake(taker, 500e6);
         bytes32 intentHash = keccak256("snapshot");
         _setIntent(intentHash, taker, 500e6, PAYPAL, address(0));
         _createPosition(intentHash);
 
         vm.prank(owner);
-        manager.setPlatformRiskConfig(PAYPAL, _chargebackConfig(10_000, 30 days, false));
+        manager.setPlatformRiskConfig(PAYPAL, _chargebackConfig(10_000, 30 days));
 
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
         assertEq(position.chargebackReserveBps, 10_000);

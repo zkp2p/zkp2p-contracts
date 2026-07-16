@@ -47,6 +47,8 @@ export function chargebackWitnessConfigForNetwork(
     ?? (process.env.PAYMENT_ATTESTATION_WITNESS_ADDRESSES ?? "")
       .split(",").map((address) => address.trim()).filter(Boolean),
 ) {
+  // Fresh-deployment guard only: a future migration must read the live payment-verifier
+  // witness set onchain and compare it before governance executes the migration.
   const witnesses = network === "localhost" || network === "hardhat"
     ? LOCAL_CHARGEBACK_WITNESSES
     : (configuredWitnesses ?? "").split(",").map((address) => address.trim()).filter(Boolean);
