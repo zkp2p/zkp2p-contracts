@@ -581,7 +581,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     /**
      * @notice Validates an intent before it is signaled.
      */
-    function _validateSignalIntent(SignalIntentParams calldata _intent) internal view {
+    function _validateSignalIntent(SignalIntentParams calldata _intent) internal {
         // Check if account can have multiple intents
         bool canHaveMultipleIntents = relayerRegistry.isWhitelistedRelayer(msg.sender) || allowMultipleIntents;
         if (!canHaveMultipleIntents && accountIntents[msg.sender].length > 0) {
@@ -625,9 +625,22 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
                 revert SignatureExpired(_intent.signatureExpiration, block.timestamp);
             }
 
-            if (!_isValidIntentGatingSignature(_intent, intentGatingService, msg.sender)) {
-                revert InvalidSignature();
-            }
+            _validateIntentGatingAuthorization(_intent, intentGatingService, msg.sender);
+        }
+    }
+
+    /**
+     * @dev Extension point for orchestrator versions that use one-time gating authorizations.
+     *      V2 retains its legacy signature format; V3 overrides this hook with nonce consumption
+     *      and complete intent-field binding.
+     */
+    function _validateIntentGatingAuthorization(
+        SignalIntentParams calldata _intent,
+        address _intentGatingService,
+        address _caller
+    ) internal virtual {
+        if (!_isValidIntentGatingSignature(_intent, _intentGatingService, _caller)) {
+            revert InvalidSignature();
         }
     }
 

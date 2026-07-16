@@ -43,6 +43,13 @@ interface IOrchestratorV3 is IOrchestratorV2 {
         address indexed feeRecipient,
         uint256 feeRate
     );
+    event IntentGatingAuthorizationConsumed(
+        address indexed taker,
+        address indexed escrow,
+        uint256 indexed depositId,
+        bytes32 paymentMethod,
+        uint256 nonce
+    );
     event RiskHookCallbackFailed(
         bytes32 indexed intentHash,
         address indexed riskHook,
@@ -73,6 +80,27 @@ interface IOrchestratorV3 is IOrchestratorV2 {
 
     function getDepositRiskHook(address _escrow, uint256 _depositId) external view returns (IIntentRiskHook);
     function getIntentRiskHook(bytes32 _intentHash) external view returns (IIntentRiskHook);
+    /**
+     * @notice Returns the nonce that must be included in the taker's next gated authorization.
+     * @dev Nonces are scoped by taker, escrow, deposit, and payment method so independent deposit
+     *      authorizations do not invalidate one another.
+     */
+    function getIntentGatingNonce(
+        address _taker,
+        address _escrow,
+        uint256 _depositId,
+        bytes32 _paymentMethod
+    ) external view returns (uint256);
+    /**
+     * @notice Returns the unprefixed message hash for the current scoped nonce.
+     * @dev The gating service must sign this 32-byte value with EIP-191 `personal_sign`/`signMessage`.
+     *      The hash binds every security-relevant SignalIntentParams field except the signature
+     *      bytes themselves, plus the taker, chain id, verifying orchestrator, and current nonce.
+     */
+    function getIntentGatingMessageHash(
+        SignalIntentParams calldata _params,
+        address _taker
+    ) external view returns (bytes32);
     /**
      * @notice Returns the aggregate fee rate snapshotted before risk admission.
      * @dev Returns zero after an intent reaches a terminal state.

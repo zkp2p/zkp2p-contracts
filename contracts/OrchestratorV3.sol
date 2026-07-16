@@ -32,6 +32,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
 
     mapping(address => mapping(uint256 => IIntentRiskHook)) internal depositRiskHooks;
     mapping(bytes32 => IIntentRiskHook) internal intentRiskHooks;
+    mapping(bytes32 => uint256) internal intentGatingNonces;
     mapping(bytes32 => OrchestratorV3FeeLib.IntentFeeSnapshot) internal intentFeeSnapshots;
     // Historical ABI name retained so existing V3 consumers keep the deployed getter selector.
     mapping(bytes32 => bool) public override intentRequiresPostIntentHook;
@@ -148,6 +149,36 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         return intentRiskHooks[_intentHash];
     }
 
+    /** @notice Returns the current single-use gating nonce for one taker and deposit scope. */
+    function getIntentGatingNonce(
+        address _taker,
+        address _escrow,
+        uint256 _depositId,
+        bytes32 _paymentMethod
+    ) external view override returns (uint256) {
+        return OrchestratorV3Validation.intentGatingNonce(
+            intentGatingNonces,
+            _taker,
+            _escrow,
+            _depositId,
+            _paymentMethod
+        );
+    }
+
+    /** @notice Returns the unprefixed message hash the gating service must sign. */
+    function getIntentGatingMessageHash(
+        SignalIntentParams calldata _params,
+        address _taker
+    ) external view override returns (bytes32) {
+        return OrchestratorV3Validation.currentIntentGatingMessageHash(
+            intentGatingNonces,
+            _params,
+            _taker,
+            address(this),
+            chainId
+        );
+    }
+
     /** @notice Returns the effective aggregate fee rate snapshotted for an unresolved intent. */
     function getIntentTotalFeeRate(bytes32 _intentHash) external view override returns (uint256) {
         return intentFeeSnapshots[_intentHash].totalFeeRate;
@@ -209,6 +240,26 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
     }
 
     /* ============ Internal Lifecycle Extensions ============ */
+
+    /**
+     * @dev Consumes one nonce before checking the gating service. A failed signature or any later
+     *      signalIntent revert rolls the nonce back with the transaction. Deposits without a gating
+     *      service never enter this hook and therefore never consume a nonce.
+     */
+    function _validateIntentGatingAuthorization(
+        SignalIntentParams calldata _params,
+        address _intentGatingService,
+        address _caller
+    ) internal override {
+        OrchestratorV3Validation.validateAndConsumeIntentGatingAuthorization(
+            intentGatingNonces,
+            _params,
+            _intentGatingService,
+            _caller,
+            address(this),
+            chainId
+        );
+    }
 
     /**
      * @notice Snapshots and executes risk admission after V2 stores the intent.
