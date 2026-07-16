@@ -12,7 +12,7 @@ import { IAttestationVerifier } from "./interfaces/IAttestationVerifier.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IIntentRiskHook } from "./interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV3 } from "./interfaces/IOrchestratorV3.sol";
-import { IRiskManager, IPaymentEvidenceVerifier, IOrchestratorPaymentVerifier } from "./interfaces/IRiskManager.sol";
+import { IRiskManager } from "./interfaces/IRiskManager.sol";
 import { IStakeVault } from "./interfaces/IStakeVault.sol";
 
 /**
@@ -92,7 +92,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /// @notice Minimal EIP-712 type hash; chain and manager binding live in the EIP-712 domain.
     bytes32 public constant CHARGEBACK_ATTESTATION_TYPEHASH = keccak256(
-        "ChargebackAttestation(bytes32 intentHash,bytes32 dataHash)"
+        "ChargebackAttestation(bytes32 intentHash,bytes32 originalPaymentId,bytes32 disputeId)"
     );
 
     /* ============ Immutable Dependencies ============ */
@@ -260,19 +260,6 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         position.status = PositionStatus.PENDING;
         position.consumedFreeTake = consumedFreeTake;
         position.deferredPayoutHook = mode == RiskMode.DEFERRED_PAYOUT ? deferredPayoutHook : address(0);
-        if (config.chargeback.chargebackable) {
-            address paymentVerifier = IOrchestratorPaymentVerifier(address(orchestrator))
-                .paymentVerifierRegistry()
-                .getVerifier(intent.paymentMethod);
-            (bool exposesEvidence, bytes memory response) = paymentVerifier.staticcall(
-                abi.encodeCall(
-                    IPaymentEvidenceVerifier.getPaymentDetailsHash,
-                    (address(orchestrator), bytes32(0))
-                )
-            );
-            if (!exposesEvidence || response.length != 32) revert InvalidPaymentEvidence(_intentHash);
-            position.paymentVerifier = paymentVerifier;
-        }
         position.payoutRecipient = intent.to;
         position.chargebackReserveBps = config.chargeback.reserveBps;
         position.griefingPenaltyBpsPerHour = config.griefing.griefingPenaltyBpsPerHour;
@@ -334,17 +321,17 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
      */
     function onIntentFulfilled(
         bytes32 _intentHash,
-        uint256 _releasedAmount
+        uint256 _releasedAmount,
+        bytes32 _paymentId
     ) external override onlyOrchestrator nonReentrant {
-        bytes32 paymentDetailsHash = _getPaymentDetailsHash(_intentHash);
         if (
             riskPositions[_intentHash].chargebackReserveBps != 0
-                && paymentDetailsHash == bytes32(0)
+                && _paymentId == bytes32(0)
         ) revert InvalidPaymentEvidence(_intentHash);
         _settlePosition(
             _intentHash,
             _releasedAmount,
-            paymentDetailsHash,
+            _paymentId,
             uint64(block.timestamp)
         );
     }
@@ -410,7 +397,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /** @dev Reads and applies one failed settlement record. */
     function _reconcileSettlement(bytes32 _intentHash) internal {
-        (uint256 releasedAmount, uint64 settledAt, bool isManualRelease) =
+        (uint256 releasedAmount, bytes32 paymentId, uint64 settledAt, bool isManualRelease) =
             orchestrator.getIntentSettlement(_intentHash);
         if (releasedAmount == 0 || settledAt == 0) revert SettlementNotRecorded(_intentHash);
         if (isManualRelease) {
@@ -418,11 +405,10 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             return;
         }
 
-        bytes32 paymentDetailsHash = _getPaymentDetailsHash(_intentHash);
-        if (riskPositions[_intentHash].chargebackReserveBps != 0 && paymentDetailsHash == bytes32(0)) {
+        if (riskPositions[_intentHash].chargebackReserveBps != 0 && paymentId == bytes32(0)) {
             revert InvalidPaymentEvidence(_intentHash);
         }
-        _settlePosition(_intentHash, releasedAmount, paymentDetailsHash, settledAt);
+        _settlePosition(_intentHash, releasedAmount, paymentId, settledAt);
     }
 
     /* ============ Deferred Payout ============ */
@@ -530,9 +516,9 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             revert PositionModeMismatch(_attestation.intentHash, position.mode);
         }
 
-        (ChargebackDetails memory details, bytes32 nullifier) = _validateAttestation(_attestation, position);
+        bytes32 nullifier = _validateAttestation(_attestation, position);
         bytes32 digest = _hashTypedDataV4(_hashChargebackAttestation(_attestation));
-        if (!attestationVerifier.verify(digest, _attestation.signatures, _attestation.data)) {
+        if (!attestationVerifier.verify(digest, _attestation.signatures, bytes(""))) {
             revert AttestationVerificationFailed();
         }
 
@@ -561,7 +547,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             compensatedAmount,
             position.slashedAmount,
             position.reservedAmount,
-            details.disputeId
+            _attestation.disputeId
         );
     }
 
@@ -804,7 +790,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     function _settlePosition(
         bytes32 _intentHash,
         uint256 _releasedAmount,
-        bytes32 _paymentDetailsHash,
+        bytes32 _paymentId,
         uint64 _settledAt
     ) internal {
         if (_releasedAmount == 0) revert ZeroAmount();
@@ -815,7 +801,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
         uint256 pendingReservation = position.reservedAmount;
         position.releasedAmount = _releasedAmount;
-        position.paymentDetailsHash = _paymentDetailsHash;
+        position.paymentId = _paymentId;
         position.settledAt = _settledAt;
 
         if (position.chargebackReserveBps == 0) {
@@ -891,7 +877,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         uint256 releasedReservation = position.reservedAmount;
         position.status = PositionStatus.RELEASED;
         position.releasedAmount = _releasedAmount;
-        position.paymentDetailsHash = bytes32(0);
+        position.paymentId = bytes32(0);
         position.settledAt = _settledAt;
         position.coverageDeadline = 0;
         position.reservedAmount = 0;
@@ -916,7 +902,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /** @dev Applies a durable failed-settlement record only when the position remains pending. */
     function _synchronizeSettlement(bytes32 _intentHash) internal {
-        (uint256 releasedAmount, uint64 settledAt, bool isManualRelease) =
+        (uint256 releasedAmount, bytes32 paymentId, uint64 settledAt, bool isManualRelease) =
             orchestrator.getIntentSettlement(_intentHash);
         if (releasedAmount == 0) revert SettlementNotRecorded(_intentHash);
         if (settledAt == 0) revert SettlementNotRecorded(_intentHash);
@@ -925,21 +911,10 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             return;
         }
 
-        bytes32 paymentDetailsHash = _getPaymentDetailsHash(_intentHash);
-        if (riskPositions[_intentHash].chargebackReserveBps != 0 && paymentDetailsHash == bytes32(0)) {
+        if (riskPositions[_intentHash].chargebackReserveBps != 0 && paymentId == bytes32(0)) {
             revert InvalidPaymentEvidence(_intentHash);
         }
-        _settlePosition(_intentHash, releasedAmount, paymentDetailsHash, settledAt);
-    }
-
-    /** @dev Reads evidence from the payment verifier snapshotted before funds were locked. */
-    function _getPaymentDetailsHash(bytes32 _intentHash) internal view returns (bytes32) {
-        address paymentVerifier = riskPositions[_intentHash].paymentVerifier;
-        if (paymentVerifier == address(0)) return bytes32(0);
-        return IPaymentEvidenceVerifier(paymentVerifier).getPaymentDetailsHash(
-            address(orchestrator),
-            _intentHash
-        );
+        _settlePosition(_intentHash, releasedAmount, paymentId, settledAt);
     }
 
     /* ============ Internal Validation ============ */
@@ -1013,29 +988,20 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     function _validateAttestation(
         ChargebackAttestation calldata _attestation,
         RiskPosition storage _position
-    ) internal view returns (ChargebackDetails memory details, bytes32 nullifier) {
+    ) internal view returns (bytes32 nullifier) {
         if (_attestation.intentHash == bytes32(0)) revert InvalidAttestation();
-        if (keccak256(_attestation.data) != _attestation.dataHash) revert InvalidAttestation();
-        if (_position.paymentDetailsHash == bytes32(0)) revert InvalidAttestation();
+        if (_position.paymentId == bytes32(0)) revert InvalidAttestation();
         if (block.timestamp >= _position.coverageDeadline) {
             revert ChargebackWindowClosed(_position.coverageDeadline, uint64(block.timestamp));
         }
 
-        details = abi.decode(_attestation.data, (ChargebackDetails));
-        if (details.paymentMethod != _position.paymentMethod) revert InvalidAttestation();
-        if (details.originalPaymentId == bytes32(0)) revert InvalidAttestation();
-        if (details.disputeId == bytes32(0)) revert InvalidAttestation();
-        if (details.paymentAmount == 0 || details.paymentCurrency == bytes32(0)) revert InvalidAttestation();
         if (
-            keccak256(abi.encode(
-                details.paymentMethod,
-                details.originalPaymentId,
-                details.paymentAmount,
-                details.paymentCurrency
-            )) != _position.paymentDetailsHash
+            _attestation.originalPaymentId == bytes32(0)
+                || _attestation.originalPaymentId != _position.paymentId
+                || _attestation.disputeId == bytes32(0)
         ) revert InvalidAttestation();
 
-        nullifier = keccak256(abi.encodePacked(details.paymentMethod, details.disputeId));
+        nullifier = keccak256(abi.encodePacked(_position.paymentMethod, _attestation.disputeId));
         if (usedChargebackNullifiers[nullifier]) revert ChargebackEvidenceUsed(nullifier);
     }
 
@@ -1107,7 +1073,8 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             abi.encode(
                 CHARGEBACK_ATTESTATION_TYPEHASH,
                 _attestation.intentHash,
-                _attestation.dataHash
+                _attestation.originalPaymentId,
+                _attestation.disputeId
             )
         );
     }

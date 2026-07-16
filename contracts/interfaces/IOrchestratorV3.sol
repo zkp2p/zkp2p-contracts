@@ -25,6 +25,8 @@ interface IOrchestratorV3 is IOrchestratorV2 {
 
     struct IntentSettlement {
         uint256 releasedAmount;
+        /// @notice Payment identifier returned by the verifier; zero for maker manual release.
+        bytes32 paymentId;
         uint64 settledAt;
         /// @notice Distinguishes an evidence-free maker release from verified fulfillment recovery.
         bool isManualRelease;
@@ -74,7 +76,12 @@ interface IOrchestratorV3 is IOrchestratorV2 {
      */
     function getIntentSettlement(
         bytes32 _intentHash
-    ) external view returns (uint256 releasedAmount, uint64 settledAt, bool isManualRelease);
+    ) external view returns (
+        uint256 releasedAmount,
+        bytes32 paymentId,
+        uint64 settledAt,
+        bool isManualRelease
+    );
     /**
      * @notice Returns the liquidity-unlock timestamp when a cancellation callback failed open.
      * @dev The risk hook must use this timestamp during reconciliation rather than the later transaction time.

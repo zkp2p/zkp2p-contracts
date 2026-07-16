@@ -4,7 +4,6 @@ pragma solidity ^0.8.18;
 
 import { IIntentRiskHook } from "./IIntentRiskHook.sol";
 import { IOrchestratorV3 } from "./IOrchestratorV3.sol";
-import { IPaymentVerifierRegistry } from "./IPaymentVerifierRegistry.sol";
 import { IStakeVault } from "./IStakeVault.sol";
 
 /**
@@ -91,8 +90,6 @@ interface IRiskManager is IIntentRiskHook {
         bool consumedFreeTake;
         /// @notice Canonical deferred hook snapshotted only for a deferred-payout position.
         address deferredPayoutHook;
-        /// @notice Payment verifier snapshotted at admission as the immutable source of payment evidence.
-        address paymentVerifier;
         /// @notice Original intent recipient entitled to unslashed deferred proceeds.
         address payoutRecipient;
         /// @notice Snapshotted chargeback reserve ratio applied to the exact released amount.
@@ -123,9 +120,9 @@ interface IRiskManager is IIntentRiskHook {
         uint256 reservedAmount;
         /// @notice Exact amount released from Escrow at settlement before post-hook fees.
         uint256 releasedAmount;
-        /// @notice Commitment to the verifier-backed method, payment ID, fiat amount, and currency.
+        /// @notice Provider payment identifier authenticated and returned by the payment verifier.
         /// @dev Zero means the position came from maker manual release rather than verified fulfillment.
-        bytes32 paymentDetailsHash;
+        bytes32 paymentId;
         /// @notice Total net proceeds recorded in StakeVault for a deferred payout.
         uint256 deferredPayoutAmount;
         /// @notice Cumulative compensation already charged against this position.
@@ -136,28 +133,12 @@ interface IRiskManager is IIntentRiskHook {
     struct ChargebackAttestation {
         /// @notice Position whose full released amount may be consumed.
         bytes32 intentHash;
-        /// @notice Hash of `data`, binding all chargeback details to the witness signatures.
-        bytes32 dataHash;
-        /// @notice Signatures from the dedicated chargeback witness set.
-        bytes[] signatures;
-        /// @notice ABI-encoded `ChargebackDetails` authenticated by `dataHash`.
-        bytes data;
-        /// @notice Optional unsigned metadata for off-chain correlation.
-        bytes metadata;
-    }
-
-    /** @notice Verifier-derived dispute details bound to the original fulfilled payment. */
-    struct ChargebackDetails {
-        /// @notice Payment-method hash recorded by the payment verifier.
-        bytes32 paymentMethod;
-        /// @notice Hashed provider payment identifier recorded by the payment verifier.
+        /// @notice Original provider payment identifier stored from verified fulfillment.
         bytes32 originalPaymentId;
         /// @notice Nonzero provider dispute identifier used for global replay protection.
         bytes32 disputeId;
-        /// @notice Original fiat amount in the payment method's minor unit (for example, cents).
-        uint256 paymentAmount;
-        /// @notice Fiat-currency hash recorded by the payment verifier.
-        bytes32 paymentCurrency;
+        /// @notice Signatures from the dedicated chargeback witness set.
+        bytes[] signatures;
     }
 
     /* ============ Events ============ */
@@ -364,21 +345,4 @@ interface IRiskManager is IIntentRiskHook {
     function orchestrator() external view returns (IOrchestratorV3);
     /** @notice Returns the immutable policy-agnostic custody and reservation vault. */
     function stakeVault() external view returns (IStakeVault);
-}
-
-/**
- * @title IPaymentEvidenceVerifier
- * @notice Exposes the immutable evidence commitment produced while verifying an intent payment.
- */
-interface IPaymentEvidenceVerifier {
-    /** @notice Returns payment details committed while the named orchestrator verified the intent. */
-    function getPaymentDetailsHash(
-        address _orchestrator,
-        bytes32 _intentHash
-    ) external view returns (bytes32);
-}
-
-/** @notice Narrow Orchestrator surface used to snapshot a payment verifier at admission. */
-interface IOrchestratorPaymentVerifier {
-    function paymentVerifierRegistry() external view returns (IPaymentVerifierRegistry);
 }
