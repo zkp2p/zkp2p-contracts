@@ -984,6 +984,37 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await orchestrator.getIntentTotalFeeRate(intentHash)).to.eq(0);
     });
 
+    it("pays the taker directly and releases deferred coverage on maker manual release", async () => {
+      const { maker, taker, escrow, orchestrator, token, vault, manager, deferredHook } =
+        await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(10));
+      const intentHash = await signalIntent(
+        orchestrator,
+        escrow,
+        taker,
+        usdc(700),
+        PAYPAL,
+        deferredHook.address,
+      );
+      const balanceBefore = await token.balanceOf(taker.address);
+
+      await orchestrator.connect(maker).releaseFundsToPayer(intentHash);
+
+      const position = await manager.getRiskPosition(intentHash);
+      const deferredPayout = await vault.getDeferredPayout(intentHash);
+      expect(await token.balanceOf(taker.address)).to.eq(balanceBefore.add(usdc(700)));
+      expect(position.status).to.eq(4);
+      expect(position.paymentId).to.eq(ethers.constants.HashZero);
+      expect(position.coverageDeadline).to.eq(0);
+      expect(position.reservedAmount).to.eq(0);
+      expect(position.deferredPayoutAmount).to.eq(0);
+      expect(await vault.reservedStake(taker.address)).to.eq(0);
+      expect(deferredPayout.beneficiary).to.eq(ZERO);
+      expect(deferredPayout.amount).to.eq(0);
+      await expect(manager.submitChargeback(await chargebackAttestation(intentHash)))
+        .to.be.revertedWithCustomError(manager, "PositionNotSettled");
+    });
+
     it("rejects aggregate protocol, manager, and referral fees at full reserve", async () => {
       const {
         owner,

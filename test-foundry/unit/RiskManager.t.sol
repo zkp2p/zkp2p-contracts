@@ -565,6 +565,27 @@ contract RiskManagerTest is Test {
         manager.registerDeferredPayout(intentHash, taker, 350e6);
     }
 
+    function test_DeferredManualReleaseClearsAuthorizationWithoutFunding() public {
+        _enableDeferredPayouts();
+        _stake(taker, 10e6);
+        bytes32 intentHash = keccak256("deferred-manual-release");
+        _setIntent(intentHash, taker, 700e6, PAYPAL, address(verifier));
+        _createPosition(intentHash);
+
+        vm.prank(address(orchestrator));
+        manager.onIntentReleased(intentHash, 700e6);
+
+        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        IStakeVault.DeferredPayout memory payout = vault.getDeferredPayout(intentHash);
+        assertEq(uint256(position.status), uint256(IRiskManager.PositionStatus.RELEASED));
+        assertEq(position.paymentId, bytes32(0));
+        assertEq(position.reservedAmount, 0);
+        assertEq(position.deferredPayoutAmount, 0);
+        assertEq(vault.reservedStake(taker), 0);
+        assertEq(payout.beneficiary, address(0));
+        assertEq(payout.amount, 0);
+    }
+
     function test_PlatformChangesDoNotAlterPositionSnapshots() public {
         vm.prank(owner);
         manager.setPlatformRiskConfig(PAYPAL, _chargebackConfig(10_000, 10 days));

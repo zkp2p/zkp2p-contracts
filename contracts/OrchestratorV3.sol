@@ -192,21 +192,6 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
     }
 
     /**
-     * @notice Enforces deferred payout execution for manual releases that required it at admission.
-     * @dev V1 policy rejects new deferred positions, but retaining the V3 behavior preserves the
-     *      lifecycle semantics for any separately migrated legacy position.
-     */
-    function _shouldExecuteSettlementHookOnManualRelease(
-        bytes32 _intentHash
-    ) internal view override returns (bool) {
-        bool requiresSettlementHook = intentRequiresPostIntentHook[_intentHash];
-        if (requiresSettlementHook && address(intents[_intentHash].settlementHook) == address(0)) {
-            revert RequiredSettlementHookMissing(_intentHash);
-        }
-        return requiresSettlementHook;
-    }
-
-    /**
      * @notice Returns the number of unresolved intents for an account in constant time.
      */
     function getAccountIntentCount(address _account) external view override returns (uint256) {
