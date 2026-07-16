@@ -70,11 +70,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const boundedCall = await deploy("BoundedCall", { from: deployer, args: [] });
   console.log("BoundedCall deployed at", boundedCall.address);
-  await waitForDeploymentDelay(hre);
+  if (boundedCall.newlyDeployed) await waitForDeploymentDelay(hre);
 
   const postIntentHookExecutor = await deploy("PostIntentHookExecutor", { from: deployer, args: [] });
   console.log("PostIntentHookExecutor deployed at", postIntentHookExecutor.address);
-  await waitForDeploymentDelay(hre);
+  if (postIntentHookExecutor.newlyDeployed) await waitForDeploymentDelay(hre);
 
   const orchestratorV3 = await deploy("OrchestratorV3", {
     from: deployer,
@@ -94,7 +94,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     ],
   });
   console.log("OrchestratorV3 deployed at", orchestratorV3.address);
-  await waitForDeploymentDelay(hre);
+  if (orchestratorV3.newlyDeployed) await waitForDeploymentDelay(hre);
 
   const stakeVault = await deploy("StakeVault", {
     from: deployer,
@@ -107,21 +107,21 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     ],
   });
   console.log("StakeVault deployed at", stakeVault.address);
-  await waitForDeploymentDelay(hre);
+  if (stakeVault.newlyDeployed) await waitForDeploymentDelay(hre);
 
   const riskManager = await deploy("RiskManager", {
     from: deployer,
     args: [deployer, orchestratorV3.address, stakeVault.address, attestationVerifierAddress],
   });
   console.log("RiskManager deployed at", riskManager.address);
-  await waitForDeploymentDelay(hre);
+  if (riskManager.newlyDeployed) await waitForDeploymentDelay(hre);
 
   const deferredPayoutHook = await deploy("DeferredPayoutHook", {
     from: deployer,
     args: [stakeTokenAddress, stakeVault.address, riskManager.address, orchestratorRegistryAddress],
   });
   console.log("DeferredPayoutHook deployed at", deferredPayoutHook.address);
-  await waitForDeploymentDelay(hre);
+  if (deferredPayoutHook.newlyDeployed) await waitForDeploymentDelay(hre);
 
   const stakeVaultContract = await ethers.getContractAt("StakeVault", stakeVault.address);
   const riskManagerContract = await ethers.getContractAt("RiskManager", riskManager.address);

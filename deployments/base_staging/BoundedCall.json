@@ -1,0 +1,144 @@
+{
+  "address": "0xb43aCa7a37EDb93aa514D32323E1d843A1F82609",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "hook",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes",
+          "name": "response",
+          "type": "bytes"
+        }
+      ],
+      "name": "InvalidRiskHookResponse",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "RequiredPostIntentHookMissing",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "address",
+          "name": "hook",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes",
+          "name": "revertData",
+          "type": "bytes"
+        }
+      ],
+      "name": "RiskHookAdmissionFailed",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "riskHook",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes4",
+          "name": "callbackSelector",
+          "type": "bytes4"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes",
+          "name": "revertData",
+          "type": "bytes"
+        }
+      ],
+      "name": "RiskHookCallbackFailed",
+      "type": "event"
+    }
+  ],
+  "transactionHash": "0x3c80bbe192ea7bb98ff084e30771aa8041a4e15c113d71471c09b82da6fad99b",
+  "receipt": {
+    "to": null,
+    "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "contractAddress": "0xb43aCa7a37EDb93aa514D32323E1d843A1F82609",
+    "transactionIndex": 141,
+    "gasUsed": "287435",
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0xa97ef9f1e3d90e8a0fea5ecb568530943e29f53175ed8ddb44c8f92252eec01b",
+    "transactionHash": "0x3c80bbe192ea7bb98ff084e30771aa8041a4e15c113d71471c09b82da6fad99b",
+    "logs": [],
+    "blockNumber": 48667826,
+    "cumulativeGasUsed": "19491920",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [],
+  "numDeployments": 1,
+  "solcInputHash": "cd8c76c0c7277703095be1e750de9b81",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"hook\",\"type\":\"address\"},{\"internalType\":\"bytes\",\"name\":\"response\",\"type\":\"bytes\"}],\"name\":\"InvalidRiskHookResponse\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"}],\"name\":\"RequiredPostIntentHookMissing\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"hook\",\"type\":\"address\"},{\"internalType\":\"bytes\",\"name\":\"revertData\",\"type\":\"bytes\"}],\"name\":\"RiskHookAdmissionFailed\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"riskHook\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes4\",\"name\":\"callbackSelector\",\"type\":\"bytes4\"},{\"indexed\":false,\"internalType\":\"bytes\",\"name\":\"revertData\",\"type\":\"bytes\"}],\"name\":\"RiskHookCallbackFailed\",\"type\":\"event\"}],\"devdoc\":{\"details\":\"This follows the excessively-safe-call pattern: the callee cannot force the caller to      copy unbounded return data and exhaust gas during memory expansion.\",\"kind\":\"dev\",\"methods\":{\"executeRiskAdmission(IIntentRiskHook,bytes32,address,uint256,uint256)\":{\"returns\":{\"requiresPostIntentHook\":\"Whether settlement must use the snapshotted post-intent hook.\"}},\"executeTerminalRiskCallback(IIntentRiskHook,bytes32,uint8,uint256,uint256,uint256)\":{\"params\":{\"_resolution\":\"Zero for cancellation, one for fulfillment, and two for manual release.\"},\"returns\":{\"success\":\"Whether the callback completed successfully.\"}}},\"title\":\"BoundedCall\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"executeRiskAdmission(IIntentRiskHook,bytes32,address,uint256,uint256)\":{\"notice\":\"Executes a fail-closed risk admission callback.\"},\"executeTerminalRiskCallback(IIntentRiskHook,bytes32,uint8,uint256,uint256,uint256)\":{\"notice\":\"Executes a fail-open terminal risk callback.\"}},\"notice\":\"Performs gas-limited calls while bounding copied return data.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/lib/BoundedCall.sol\":\"BoundedCall\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"contracts/interfaces/IIntentRiskHook.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IIntentRiskHook\\n * @notice Lifecycle callbacks used by OrchestratorV3 for depositor-selected risk policy.\\n * @dev Admission is fail-closed. Terminal callbacks are invoked after the active intent body is\\n *      pruned and may be handled fail-open by the orchestrator. Failed settlement callbacks may\\n *      be reconciled from durable recovery data exposed by the orchestrator.\\n */\\ninterface IIntentRiskHook {\\n    /**\\n     * @notice Validates and records a newly created intent.\\n     * @param _intentHash Identifier of the readable intent in the calling orchestrator.\\n     * @return requiresPostIntentHook True when manual release must execute the intent's post-intent hook.\\n     */\\n    function onIntentCreated(bytes32 _intentHash) external returns (bool requiresPostIntentHook);\\n\\n    /**\\n     * @notice Resolves risk accounting for a cancelled or expired intent.\\n     * @param _intentHash Identifier of the intent being cancelled.\\n     */\\n    function onIntentCancelled(bytes32 _intentHash) external;\\n\\n    /**\\n     * @notice Resolves risk accounting after proof verification succeeds.\\n     * @param _intentHash Identifier of the intent being fulfilled.\\n     * @param _releasedAmount Gross escrow amount released for the verified payment.\\n     */\\n    function onIntentFulfilled(bytes32 _intentHash, uint256 _releasedAmount) external;\\n\\n    /**\\n     * @notice Resolves risk accounting after a maker authorizes manual release.\\n     * @param _intentHash Identifier of the intent being released.\\n     * @param _releasedAmount Gross escrow amount manually released.\\n     */\\n    function onIntentReleased(bytes32 _intentHash, uint256 _releasedAmount) external;\\n}\\n\",\"keccak256\":\"0xe96fd12ecefc47f86e678c2b8191afd3d0eb5b9d8b976e8bb461b4be9daf28eb\",\"license\":\"MIT\"},\"contracts/lib/BoundedCall.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IIntentRiskHook } from \\\"../interfaces/IIntentRiskHook.sol\\\";\\n\\n/**\\n * @title BoundedCall\\n * @notice Performs gas-limited calls while bounding copied return data.\\n * @dev This follows the excessively-safe-call pattern: the callee cannot force the caller to\\n *      copy unbounded return data and exhaust gas during memory expansion.\\n */\\nlibrary BoundedCall {\\n    event RiskHookCallbackFailed(\\n        bytes32 indexed intentHash,\\n        address indexed riskHook,\\n        bytes4 indexed callbackSelector,\\n        bytes revertData\\n    );\\n\\n    error RiskHookAdmissionFailed(bytes32 intentHash, address hook, bytes revertData);\\n    error InvalidRiskHookResponse(address hook, bytes response);\\n    error RequiredPostIntentHookMissing(bytes32 intentHash);\\n\\n    /**\\n     * @notice Executes a fail-closed risk admission callback.\\n     * @return requiresPostIntentHook Whether settlement must use the snapshotted post-intent hook.\\n     */\\n    function executeRiskAdmission(\\n        IIntentRiskHook _riskHook,\\n        bytes32 _intentHash,\\n        address _postIntentHook,\\n        uint256 _gasLimit,\\n        uint256 _maxReturnDataSize\\n    ) public returns (bool requiresPostIntentHook) {\\n        if (address(_riskHook) == address(0)) return false;\\n\\n        (bool success, bytes memory response) = callWithBoundedReturnData(\\n            address(_riskHook),\\n            _gasLimit,\\n            _maxReturnDataSize,\\n            abi.encodeCall(IIntentRiskHook.onIntentCreated, (_intentHash))\\n        );\\n        if (!success) revert RiskHookAdmissionFailed(_intentHash, address(_riskHook), response);\\n        if (response.length != 32) revert InvalidRiskHookResponse(address(_riskHook), response);\\n\\n        requiresPostIntentHook = abi.decode(response, (bool));\\n        if (requiresPostIntentHook && _postIntentHook == address(0)) {\\n            revert RequiredPostIntentHookMissing(_intentHash);\\n        }\\n    }\\n\\n    /**\\n     * @notice Executes a fail-open terminal risk callback.\\n     * @param _resolution Zero for cancellation, one for fulfillment, and two for manual release.\\n     * @return success Whether the callback completed successfully.\\n     */\\n    function executeTerminalRiskCallback(\\n        IIntentRiskHook _riskHook,\\n        bytes32 _intentHash,\\n        uint8 _resolution,\\n        uint256 _releasedAmount,\\n        uint256 _gasLimit,\\n        uint256 _maxReturnDataSize\\n    ) public returns (bool success) {\\n        if (address(_riskHook) == address(0)) return true;\\n\\n        bytes4 callbackSelector;\\n        bytes memory callData;\\n        if (_resolution == 0) {\\n            callbackSelector = IIntentRiskHook.onIntentCancelled.selector;\\n            callData = abi.encodeCall(IIntentRiskHook.onIntentCancelled, (_intentHash));\\n        } else if (_resolution == 1) {\\n            callbackSelector = IIntentRiskHook.onIntentFulfilled.selector;\\n            callData = abi.encodeCall(IIntentRiskHook.onIntentFulfilled, (_intentHash, _releasedAmount));\\n        } else {\\n            callbackSelector = IIntentRiskHook.onIntentReleased.selector;\\n            callData = abi.encodeCall(IIntentRiskHook.onIntentReleased, (_intentHash, _releasedAmount));\\n        }\\n\\n        bytes memory revertData;\\n        (success, revertData) = callWithBoundedReturnData(\\n            address(_riskHook),\\n            _gasLimit,\\n            _maxReturnDataSize,\\n            callData\\n        );\\n        if (!success) {\\n            emit RiskHookCallbackFailed(_intentHash, address(_riskHook), callbackSelector, revertData);\\n        }\\n    }\\n\\n    /**\\n     * @notice Calls a target with a fixed gas allowance and copies at most `_maxReturnDataSize` bytes.\\n     * @param _target Address receiving the call.\\n     * @param _gasLimit Maximum gas forwarded to the target.\\n     * @param _maxReturnDataSize Maximum number of return-data bytes copied into memory.\\n     * @param _callData Encoded calldata sent to the target.\\n     * @return success Whether the target call succeeded.\\n     * @return returnData Bounded return or revert data from the target.\\n     */\\n    function callWithBoundedReturnData(\\n        address _target,\\n        uint256 _gasLimit,\\n        uint256 _maxReturnDataSize,\\n        bytes memory _callData\\n    ) internal returns (bool success, bytes memory returnData) {\\n        assembly (\\\"memory-safe\\\") {\\n            success := call(\\n                _gasLimit,\\n                _target,\\n                0,\\n                add(_callData, 0x20),\\n                mload(_callData),\\n                0,\\n                0\\n            )\\n\\n            let copySize := returndatasize()\\n            if gt(copySize, _maxReturnDataSize) { copySize := _maxReturnDataSize }\\n\\n            returnData := mload(0x40)\\n            mstore(returnData, copySize)\\n            returndatacopy(add(returnData, 0x20), 0, copySize)\\n            mstore(\\n                0x40,\\n                add(add(returnData, 0x20), and(add(copySize, 0x1f), not(0x1f)))\\n            )\\n        }\\n    }\\n\\n}\\n\",\"keccak256\":\"0x168e451389b148286406de5ddf9870a765d3f2cc4f3b817d01a507aff78ee06e\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x6080806040523461001c5761043d90816100228239308160070152f35b600080fdfe6080604052307f000000000000000000000000000000000000000000000000000000000000000014600436101561003557600080fd5b600090813560e01c806366acb690146100a55763f969feff1461005757600080fd5b6100a25760a03660031901126100a25761006f6100e5565b604435916001600160a01b03831683036100a2576020610098608435606435866024358761018e565b6040519015158152f35b80fd5b506100a25760c03660031901126100a2576100be6100e5565b906044359060ff821682036100a257602061009860a435608435606435866024358961029c565b600435906001600160a01b03821682036100fb57565b600080fd5b6060810190811067ffffffffffffffff82111761011c57604052565b634e487b7160e01b600052604160045260246000fd5b6080810190811067ffffffffffffffff82111761011c57604052565b919082519283825260005b84811061017a575050826000602080949584010152601f8019910116010190565b602081830181015184830182015201610159565b91949390926001600160a01b0392831691821561029157906101d49160405191633fa81f2760e11b6020840152866024840152602483526101ce83610100565b846103c3565b91901561026057602082510361023357506020818051810103126100fb57602001519081151582036100fb57819482610228575b50506102115750565b602490604051906209a5a960e51b82526004820152fd5b161590503880610208565b61025c6040519283926357a0fbc560e01b8452600484015260406024840152604483019061014e565b0390fd5b604051631a41d3e160e31b8152600481018590526024810191909152606060448201528061025c606482018461014e565b506000955050505050565b94959490936001600160a01b0390911692909183156103b85760ff168061034e5750506102ef9063050a7dad60e01b95604051876020820152856024820152602481526102e881610100565b91846103c3565b92909485156102ff575b50505050565b6103427f111a3d951f076de7a264d00b0cc1f6e1328ae97267a847d37db0e2457f3c1a2f916040519182916020835263ffffffff60e01b1696602083019061014e565b0390a4388080806102f9565b90956102ef929160010361038d576307cc979f60e01b966040519088602083015286602483015260448201526044815261038781610132565b916101ce565b6302af1fff60e41b966040519088602083015286602483015260448201526044815261038781610132565b506001955050505050565b92600092939183809360208451940192f1913d918083116103ff575b506020604051928084528060008386013e601f01601f1916830101604052565b9150386103df56fea2646970667358221220b8381fa5da5c874d56f152d984208ced13ad89f5d7e93a06be97c8194e2a379164736f6c63430008120033",
+  "deployedBytecode": "0x6080604052307f000000000000000000000000000000000000000000000000000000000000000014600436101561003557600080fd5b600090813560e01c806366acb690146100a55763f969feff1461005757600080fd5b6100a25760a03660031901126100a25761006f6100e5565b604435916001600160a01b03831683036100a2576020610098608435606435866024358761018e565b6040519015158152f35b80fd5b506100a25760c03660031901126100a2576100be6100e5565b906044359060ff821682036100a257602061009860a435608435606435866024358961029c565b600435906001600160a01b03821682036100fb57565b600080fd5b6060810190811067ffffffffffffffff82111761011c57604052565b634e487b7160e01b600052604160045260246000fd5b6080810190811067ffffffffffffffff82111761011c57604052565b919082519283825260005b84811061017a575050826000602080949584010152601f8019910116010190565b602081830181015184830182015201610159565b91949390926001600160a01b0392831691821561029157906101d49160405191633fa81f2760e11b6020840152866024840152602483526101ce83610100565b846103c3565b91901561026057602082510361023357506020818051810103126100fb57602001519081151582036100fb57819482610228575b50506102115750565b602490604051906209a5a960e51b82526004820152fd5b161590503880610208565b61025c6040519283926357a0fbc560e01b8452600484015260406024840152604483019061014e565b0390fd5b604051631a41d3e160e31b8152600481018590526024810191909152606060448201528061025c606482018461014e565b506000955050505050565b94959490936001600160a01b0390911692909183156103b85760ff168061034e5750506102ef9063050a7dad60e01b95604051876020820152856024820152602481526102e881610100565b91846103c3565b92909485156102ff575b50505050565b6103427f111a3d951f076de7a264d00b0cc1f6e1328ae97267a847d37db0e2457f3c1a2f916040519182916020835263ffffffff60e01b1696602083019061014e565b0390a4388080806102f9565b90956102ef929160010361038d576307cc979f60e01b966040519088602083015286602483015260448201526044815261038781610132565b916101ce565b6302af1fff60e41b966040519088602083015286602483015260448201526044815261038781610132565b506001955050505050565b92600092939183809360208451940192f1913d918083116103ff575b506020604051928084528060008386013e601f01601f1916830101604052565b9150386103df56fea2646970667358221220b8381fa5da5c874d56f152d984208ced13ad89f5d7e93a06be97c8194e2a379164736f6c63430008120033",
+  "devdoc": {
+    "details": "This follows the excessively-safe-call pattern: the callee cannot force the caller to      copy unbounded return data and exhaust gas during memory expansion.",
+    "kind": "dev",
+    "methods": {
+      "executeRiskAdmission(IIntentRiskHook,bytes32,address,uint256,uint256)": {
+        "returns": {
+          "requiresPostIntentHook": "Whether settlement must use the snapshotted post-intent hook."
+        }
+      },
+      "executeTerminalRiskCallback(IIntentRiskHook,bytes32,uint8,uint256,uint256,uint256)": {
+        "params": {
+          "_resolution": "Zero for cancellation, one for fulfillment, and two for manual release."
+        },
+        "returns": {
+          "success": "Whether the callback completed successfully."
+        }
+      }
+    },
+    "title": "BoundedCall",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "executeRiskAdmission(IIntentRiskHook,bytes32,address,uint256,uint256)": {
+        "notice": "Executes a fail-closed risk admission callback."
+      },
+      "executeTerminalRiskCallback(IIntentRiskHook,bytes32,uint8,uint256,uint256,uint256)": {
+        "notice": "Executes a fail-open terminal risk callback."
+      }
+    },
+    "notice": "Performs gas-limited calls while bounding copied return data.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [],
+    "types": null
+  }
+}
