@@ -6,6 +6,7 @@ import hre, { deployments, ethers } from "hardhat";
 import deployPaymentIdRiskSystem, {
   assertFreshNonLocalPaymentIdRiskDeployment,
   PAYMENT_ID_RISK_DEPLOYMENT_NAMES,
+  requireHistoricalPostIntentHookExecutor,
 } from "../../deploy/28_deploy_payment_id_risk_system";
 import {
   MULTI_SIG,
@@ -168,6 +169,11 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
     await expect(assertFreshNonLocalPaymentIdRiskDeployment("base_staging", async (name) => (
       name === "UnifiedPaymentVerifierV3" ? { address: ethers.constants.AddressZero } : null
     ))).to.be.rejectedWith("use a new governance-reviewed version");
+  });
+
+  it("fails descriptively when the historical settlement executor prerequisite is absent", async () => {
+    await expect(requireHistoricalPostIntentHookExecutor("base", async () => null))
+      .to.be.rejectedWith("base requires the historical PostIntentHookExecutor deployment");
   });
 
   it("reruns locally without changing versioned addresses or wiring", async function () {

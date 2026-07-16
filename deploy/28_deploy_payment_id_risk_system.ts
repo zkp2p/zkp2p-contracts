@@ -59,6 +59,19 @@ export async function assertFreshNonLocalPaymentIdRiskDeployment(
   }
 }
 
+export async function requireHistoricalPostIntentHookExecutor(
+  network: string,
+  getDeployment: (name: string) => Promise<{ address: string } | null>,
+): Promise<string> {
+  const deployment = await getDeployment("PostIntentHookExecutor");
+  if (!deployment) {
+    throw new Error(
+      `${network} requires the historical PostIntentHookExecutor deployment before the payment-ID risk lane`,
+    );
+  }
+  return deployment.address;
+}
+
 function normalize(values: string[]): string[] {
   return values.map((value) => value.toLowerCase()).sort();
 }
@@ -174,7 +187,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const relayerRegistryAddress = getDeployedContractAddress(network, "RelayerRegistry");
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
   const nullifierRegistryAddress = getDeployedContractAddress(network, "NullifierRegistry");
-  const postIntentHookExecutorAddress = getDeployedContractAddress(network, "PostIntentHookExecutor");
+  const postIntentHookExecutorAddress = await requireHistoricalPostIntentHookExecutor(
+    network,
+    hre.deployments.getOrNull.bind(hre.deployments),
+  );
   const stakeTokenAddress = USDC[network] || getDeployedContractAddress(network, "USDCMock");
 
   const paymentVerifierRegistryV3 = await deploy("PaymentVerifierRegistryV3", {
