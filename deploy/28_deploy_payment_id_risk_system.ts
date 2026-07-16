@@ -35,6 +35,7 @@ export const PAYMENT_ID_RISK_DEPLOYMENT_NAMES = [
   "PaymentVerifierRegistryV3",
   "UnifiedPaymentVerifierV3",
   "BoundedCallPaymentId",
+  "OrchestratorV3ValidationPaymentId",
   "OrchestratorV3FeeLibPaymentId",
   "RiskCallbackRecorderPaymentId",
   "OrchestratorV3RiskLibPaymentId",
@@ -222,6 +223,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     from: deployer,
     args: [],
   });
+  const orchestratorV3Validation = await deploy("OrchestratorV3ValidationPaymentId", {
+    contract: "OrchestratorV3Validation",
+    from: deployer,
+    args: [],
+  });
   const orchestratorV3FeeLib = await deploy("OrchestratorV3FeeLibPaymentId", {
     contract: "OrchestratorV3FeeLib",
     from: deployer,
@@ -247,6 +253,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     libraries: {
       BoundedCall: boundedCall.address,
       PostIntentHookExecutor: postIntentHookExecutorAddress,
+      OrchestratorV3Validation: orchestratorV3Validation.address,
       OrchestratorV3FeeLib: orchestratorV3FeeLib.address,
       OrchestratorV3RiskLib: orchestratorV3RiskLib.address,
     },

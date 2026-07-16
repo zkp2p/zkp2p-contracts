@@ -167,7 +167,21 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       const { owner, other, orchestrator, vault } = await loadFixture(deployHarnessFixture);
       await expect((await ethers.getContractFactory("RiskManager")).deploy(
         owner.address, orchestrator.address, vault.address, other.address,
-      )).to.be.reverted;
+      )).to.be.revertedWithCustomError(await ethers.getContractFactory("RiskManager"), "InvalidContract");
+    });
+
+    it("rejects an EOA orchestrator", async () => {
+      const { owner, other, vault, verifier } = await loadFixture(deployHarnessFixture);
+      await expect((await ethers.getContractFactory("RiskManager")).deploy(
+        owner.address, other.address, vault.address, verifier.address,
+      )).to.be.revertedWithCustomError(await ethers.getContractFactory("RiskManager"), "InvalidContract");
+    });
+
+    it("rejects an EOA stake vault", async () => {
+      const { owner, other, orchestrator, verifier } = await loadFixture(deployHarnessFixture);
+      await expect((await ethers.getContractFactory("RiskManager")).deploy(
+        owner.address, orchestrator.address, other.address, verifier.address,
+      )).to.be.revertedWithCustomError(await ethers.getContractFactory("RiskManager"), "InvalidContract");
     });
 
     it("updates the attestation verifier", async () => {
@@ -185,7 +199,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
 
     it("rejects an EOA attestation verifier update", async () => {
       const { manager, other } = await loadFixture(deployHarnessFixture);
-      await expect(manager.setAttestationVerifier(other.address)).to.be.revertedWithCustomError(manager, "ZeroAddress");
+      await expect(manager.setAttestationVerifier(other.address)).to.be.revertedWithCustomError(manager, "InvalidContract");
     });
 
     it("clears the deferred payout hook", async () => {
@@ -196,7 +210,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
 
     it("rejects an EOA deferred payout hook", async () => {
       const { manager, other } = await loadFixture(deployHarnessFixture);
-      await expect(manager.setDeferredPayoutHook(other.address)).to.be.revertedWithCustomError(manager, "ZeroAddress");
+      await expect(manager.setDeferredPayoutHook(other.address)).to.be.revertedWithCustomError(manager, "InvalidContract");
     });
 
     it("pauses and unpauses admission", async () => {

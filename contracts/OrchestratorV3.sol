@@ -12,6 +12,7 @@ import { BoundedCall } from "./lib/BoundedCall.sol";
 import { OrchestratorV3FeeLib } from "./lib/OrchestratorV3FeeLib.sol";
 import { OrchestratorV3RiskLib } from "./lib/OrchestratorV3RiskLib.sol";
 import { PostIntentHookExecutor as SettlementHookExecutor } from "./lib/SettlementHookExecutor.sol";
+import { OrchestratorV3Validation } from "./lib/OrchestratorV3Validation.sol";
 
 /**
  * @title OrchestratorV3
@@ -70,6 +71,14 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             _protocolFeeRecipient
         )
     {
+        OrchestratorV3Validation.validateConstructor(
+            _chainId,
+            _escrowRegistry,
+            _paymentVerifierRegistry,
+            _relayerRegistry,
+            _protocolFee,
+            _protocolFeeRecipient
+        );
         _setRiskCallbackGasLimit(_riskCallbackGasLimit);
     }
 

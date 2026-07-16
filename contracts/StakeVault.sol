@@ -117,6 +117,8 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         if (_owner == address(0) || address(_stakeToken) == address(0)) {
             revert ZeroAddress();
         }
+        _requireContract(address(_stakeToken));
+        if (_controller != address(0)) _requireContract(_controller);
         if (_controllerChangeDelay < MIN_CONTROLLER_CHANGE_DELAY) {
             revert InvalidControllerChangeDelay(_controllerChangeDelay);
         }
@@ -659,6 +661,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
      */
     function initializeController(address _controller) external override onlyOwner {
         if (_controller == address(0)) revert ZeroAddress();
+        _requireContract(_controller);
         if (controller != address(0)) revert ControllerAlreadyInitialized(controller);
 
         controller = _controller;
@@ -670,6 +673,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
      */
     function proposeController(address _controller) external override onlyOwner {
         if (_controller == address(0)) revert ZeroAddress();
+        _requireContract(_controller);
 
         pendingController = _controller;
         pendingControllerValidAt = uint64(block.timestamp) + controllerChangeDelay;
@@ -683,6 +687,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     function acceptController() external override {
         if (pendingController == address(0)) revert NoPendingController();
         if (msg.sender != pendingController) revert UnauthorizedController(msg.sender);
+        _requireContract(pendingController);
         if (block.timestamp < pendingControllerValidAt) {
             revert ControllerProposalNotReady(pendingControllerValidAt, uint64(block.timestamp));
         }
@@ -718,6 +723,11 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
      */
     function freeStake(address _staker) public view override returns (uint256) {
         return eligibleStake(_staker) - reservedStake[_staker];
+    }
+
+    /** @dev Rejects an address that cannot execute controller or token code. */
+    function _requireContract(address _account) internal view {
+        if (_account.code.length == 0) revert InvalidContract(_account);
     }
 
     /**

@@ -159,15 +159,12 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         IStakeVault _stakeVault,
         IAttestationVerifier _attestationVerifier
     ) Ownable() EIP712("ZKP2P RiskManager", "1") {
-        if (
-            _owner == address(0)
-                || address(_orchestrator) == address(0)
-                || address(_stakeVault) == address(0)
-                || address(_attestationVerifier) == address(0)
-        ) {
+        if (_owner == address(0)) {
             revert ZeroAddress();
         }
-        if (address(_attestationVerifier).code.length == 0) revert ZeroAddress();
+        _requireContract(address(_orchestrator));
+        _requireContract(address(_stakeVault));
+        _requireContract(address(_attestationVerifier));
 
         orchestrator = _orchestrator;
         stakeVault = _stakeVault;
@@ -591,7 +588,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
      * @inheritdoc IRiskManager
      */
     function setAttestationVerifier(address _verifier) external override onlyOwner {
-        if (_verifier == address(0) || _verifier.code.length == 0) revert ZeroAddress();
+        _requireContract(_verifier);
         address previousVerifier = address(attestationVerifier);
         attestationVerifier = IAttestationVerifier(_verifier);
         emit AttestationVerifierUpdated(previousVerifier, _verifier);
@@ -601,7 +598,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
      * @inheritdoc IRiskManager
      */
     function setDeferredPayoutHook(address _hook) external override onlyOwner {
-        if (_hook != address(0) && _hook.code.length == 0) revert ZeroAddress();
+        if (_hook != address(0)) _requireContract(_hook);
         address previousHook = deferredPayoutHook;
         deferredPayoutHook = _hook;
         emit DeferredPayoutHookUpdated(previousHook, _hook);
@@ -993,6 +990,11 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         }
     }
 
+    /** @dev Distinguishes an unset dependency from an address without deployed code. */
+    function _requireContract(address _account) internal view {
+        if (_account == address(0)) revert ZeroAddress();
+        if (_account.code.length == 0) revert InvalidContract(_account);
+    }
 
     /** @dev Returns true only for a whole, non-chargebackable intent within an unused lifetime allowance. */
     function _isFreeTakeEligible(

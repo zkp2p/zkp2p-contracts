@@ -48,6 +48,7 @@ describe("Affine stake risk system deployment", () => {
   it("deploys the linked orchestrator components", async () => {
     expect(deployedAddress("BoundedCall")).to.properAddress;
     expect(deployedAddress("PostIntentHookExecutor")).to.properAddress;
+    expect(deployedAddress("OrchestratorV3Validation")).to.properAddress;
     expect(deployedAddress("OrchestratorV3FeeLib")).to.properAddress;
     expect(deployedAddress("RiskCallbackRecorder")).to.properAddress;
     expect(deployedAddress("OrchestratorV3RiskLib")).to.properAddress;

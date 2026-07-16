@@ -4,10 +4,20 @@ import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 const usdc = (amount: string | number) => ethers.utils.parseUnits(String(amount), 6);
 const DAY = 24 * 60 * 60;
+const ZERO_ADDRESS = ethers.constants.AddressZero;
 
 describe("StakeVault", () => {
   async function deployFixture() {
-    const [owner, controller, nextController, staker, maker, recipient] = await ethers.getSigners();
+    const [owner, , , staker, maker, recipient] = await ethers.getSigners();
+
+    const controllerContract = await (await ethers.getContractFactory("RiskManagerOrchestratorHarness")).deploy();
+    const nextControllerContract = await (await ethers.getContractFactory("RiskManagerOrchestratorHarness")).deploy();
+    for (const controllerAddress of [controllerContract.address, nextControllerContract.address]) {
+      await ethers.provider.send("hardhat_impersonateAccount", [controllerAddress]);
+      await ethers.provider.send("hardhat_setBalance", [controllerAddress, "0x56BC75E2D63100000"]);
+    }
+    const controller = await ethers.getSigner(controllerContract.address);
+    const nextController = await ethers.getSigner(nextControllerContract.address);
 
     const token = await (await ethers.getContractFactory("USDCMock"))
       .deploy(usdc(1_000_000), "USD Coin", "USDC");
@@ -24,6 +34,59 @@ describe("StakeVault", () => {
 
     return { owner, controller, nextController, staker, maker, recipient, token, vault };
   }
+
+  describe("contract dependency validation", () => {
+    it("rejects a stake token without deployed code", async () => {
+      const [owner, eoa] = await ethers.getSigners();
+      await expect((await ethers.getContractFactory("StakeVault")).deploy(
+        owner.address,
+        eoa.address,
+        ZERO_ADDRESS,
+        30 * DAY,
+        DAY,
+      )).to.be.revertedWithCustomError(await ethers.getContractFactory("StakeVault"), "InvalidContract");
+    });
+
+    it("rejects an initial controller without deployed code", async () => {
+      const { owner, staker: eoa, token } = await deployFixture();
+      await expect((await ethers.getContractFactory("StakeVault")).deploy(
+        owner.address,
+        token.address,
+        eoa.address,
+        30 * DAY,
+        DAY,
+      )).to.be.revertedWithCustomError(await ethers.getContractFactory("StakeVault"), "InvalidContract");
+    });
+
+    it("rejects initializing a controller without deployed code", async () => {
+      const { owner, staker: eoa, token } = await deployFixture();
+      const vault = await (await ethers.getContractFactory("StakeVault")).deploy(
+        owner.address,
+        token.address,
+        ZERO_ADDRESS,
+        30 * DAY,
+        DAY,
+      );
+      await expect(vault.connect(owner).initializeController(eoa.address))
+        .to.be.revertedWithCustomError(vault, "InvalidContract");
+    });
+
+    it("rejects proposing a controller without deployed code", async () => {
+      const { owner, staker: eoa, vault } = await deployFixture();
+      await expect(vault.connect(owner).proposeController(eoa.address))
+        .to.be.revertedWithCustomError(vault, "InvalidContract");
+    });
+
+    it("rechecks controller code when a handover is accepted", async () => {
+      const { owner, nextController, vault } = await deployFixture();
+      await vault.connect(owner).proposeController(nextController.address);
+      await time.increase(DAY);
+      await ethers.provider.send("hardhat_setCode", [nextController.address, "0x"]);
+
+      await expect(vault.connect(nextController).acceptController())
+        .to.be.revertedWithCustomError(vault, "InvalidContract");
+    });
+  });
 
   describe("#depositStake", () => {
     it("records stake and emits the resulting balance", async () => {

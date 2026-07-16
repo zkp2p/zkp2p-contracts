@@ -50,6 +50,7 @@ describe("RiskManager and OrchestratorV3", () => {
     );
     const boundedCall = await (await ethers.getContractFactory("BoundedCall")).deploy();
     const postIntentHookExecutor = await (await ethers.getContractFactory("PostIntentHookExecutor")).deploy();
+    const orchestratorV3Validation = await (await ethers.getContractFactory("OrchestratorV3Validation")).deploy();
     const orchestratorV3FeeLib = await (await ethers.getContractFactory("OrchestratorV3FeeLib")).deploy();
     const riskCallbackRecorder = await (await ethers.getContractFactory("RiskCallbackRecorder")).deploy();
     const orchestratorV3RiskLib = await (await ethers.getContractFactory("OrchestratorV3RiskLib", {
@@ -62,6 +63,7 @@ describe("RiskManager and OrchestratorV3", () => {
       libraries: {
         BoundedCall: boundedCall.address,
         PostIntentHookExecutor: postIntentHookExecutor.address,
+        OrchestratorV3Validation: orchestratorV3Validation.address,
         OrchestratorV3FeeLib: orchestratorV3FeeLib.address,
         OrchestratorV3RiskLib: orchestratorV3RiskLib.address,
       },
@@ -78,7 +80,7 @@ describe("RiskManager and OrchestratorV3", () => {
     const vault = await (await ethers.getContractFactory("StakeVault")).deploy(
       owner.address,
       token.address,
-      owner.address,
+      ZERO,
       30 * DAY,
       DAY,
     );
@@ -263,6 +265,73 @@ describe("RiskManager and OrchestratorV3", () => {
   }
 
   describe("configuration and exact formulas", () => {
+    it("rejects a deferred hook with a zero dependency", async () => {
+      const { vault, manager, deferredHook, orchestratorRegistry } = await loadFixture(deployFixture);
+      await expect((await ethers.getContractFactory("DeferredPayoutHook")).deploy(
+        ZERO,
+        vault.address,
+        manager.address,
+        orchestratorRegistry.address,
+      )).to.be.revertedWithCustomError(deferredHook, "ZeroAddress");
+    });
+
+    it("rejects a deferred hook payout token without deployed code", async () => {
+      const { other, vault, manager, deferredHook, orchestratorRegistry } = await loadFixture(deployFixture);
+      await expect((await ethers.getContractFactory("DeferredPayoutHook")).deploy(
+        other.address,
+        vault.address,
+        manager.address,
+        orchestratorRegistry.address,
+      )).to.be.revertedWithCustomError(deferredHook, "InvalidContract");
+    });
+
+    it("rejects a deferred hook stake vault without deployed code", async () => {
+      const { other, token, manager, deferredHook, orchestratorRegistry } = await loadFixture(deployFixture);
+      await expect((await ethers.getContractFactory("DeferredPayoutHook")).deploy(
+        token.address,
+        other.address,
+        manager.address,
+        orchestratorRegistry.address,
+      )).to.be.revertedWithCustomError(deferredHook, "InvalidContract");
+    });
+
+    it("rejects a deferred hook risk manager without deployed code", async () => {
+      const { other, token, vault, deferredHook, orchestratorRegistry } = await loadFixture(deployFixture);
+      await expect((await ethers.getContractFactory("DeferredPayoutHook")).deploy(
+        token.address,
+        vault.address,
+        other.address,
+        orchestratorRegistry.address,
+      )).to.be.revertedWithCustomError(deferredHook, "InvalidContract");
+    });
+
+    it("rejects a deferred hook orchestrator registry without deployed code", async () => {
+      const { other, token, vault, manager, deferredHook } = await loadFixture(deployFixture);
+      await expect((await ethers.getContractFactory("DeferredPayoutHook")).deploy(
+        token.address,
+        vault.address,
+        manager.address,
+        other.address,
+      )).to.be.revertedWithCustomError(deferredHook, "InvalidContract");
+    });
+
+    it("rejects a deferred hook wired to another manager vault", async () => {
+      const { owner, token, manager, deferredHook, orchestratorRegistry, vault } = await loadFixture(deployFixture);
+      const otherVault = await (await ethers.getContractFactory("StakeVault")).deploy(
+        owner.address,
+        token.address,
+        ZERO,
+        30 * DAY,
+        DAY,
+      );
+      await expect((await ethers.getContractFactory("DeferredPayoutHook")).deploy(
+        token.address,
+        otherVault.address,
+        manager.address,
+        orchestratorRegistry.address,
+      )).to.be.revertedWithCustomError(deferredHook, "RiskManagerStakeVaultMismatch");
+    });
+
     it("rejects a deferred hook token that differs from the vault token", async () => {
       const { vault, manager, deferredHook, orchestratorRegistry } = await loadFixture(deployFixture);
       const otherToken = await (await ethers.getContractFactory("USDCMock"))
@@ -334,6 +403,48 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(result.maxGriefingBond).to.eq(usdc("5.75"));
       expect(result.chargebackReserve).to.eq(usdc(1_000));
       expect(result.requiredReservation).to.eq(usdc(1_000));
+    });
+
+    it("rejects a risk-hook update for an escrow address without deployed code", async () => {
+      const { maker, other, orchestrator } = await loadFixture(deployFixture);
+      await expect(orchestrator.connect(maker).setDepositRiskHook(other.address, 0, ZERO))
+        .to.be.revertedWithCustomError(orchestrator, "InvalidContract");
+    });
+
+    it("rejects a risk-hook address without deployed code", async () => {
+      const { maker, other, escrow, orchestrator } = await loadFixture(deployFixture);
+      await expect(orchestrator.connect(maker).setDepositRiskHook(escrow.address, 0, other.address))
+        .to.be.revertedWithCustomError(orchestrator, "InvalidRiskHook");
+    });
+
+    it("rejects a risk-hook update from someone other than the depositor or delegate", async () => {
+      const { other, escrow, orchestrator } = await loadFixture(deployFixture);
+      await expect(orchestrator.connect(other).setDepositRiskHook(escrow.address, 0, ZERO))
+        .to.be.revertedWithCustomError(orchestrator, "UnauthorizedCallerOrDelegate");
+    });
+
+    it("rejects deferred-hook execution from an unregistered caller", async () => {
+      const { other, token, escrow, deferredHook } = await loadFixture(deployFixture);
+      const hookContext = {
+        intentHash: ethers.utils.id("unauthorized-deferred-hook"),
+        token: token.address,
+        executableAmount: 1,
+        intent: {
+          owner: other.address,
+          to: other.address,
+          escrow: escrow.address,
+          depositId: 0,
+          amount: 1,
+          timestamp: await time.latest(),
+          paymentMethod: PAYPAL,
+          fiatCurrency: USD,
+          conversionRate: precise(1),
+          payeeId: PAYEE,
+          signalHookData: "0x",
+        },
+      };
+      await expect(deferredHook.connect(other).execute(hookContext, "0x"))
+        .to.be.revertedWithCustomError(deferredHook, "UnauthorizedOrchestrator");
     });
   });
 

@@ -9,6 +9,10 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  * @notice Policy-agnostic interface for membership stake and deferred payouts.
  */
 interface IStakeVault {
+    /* ============ Errors ============ */
+
+    error InvalidContract(address account);
+
     /* ============ Structs ============ */
 
     struct ExitRequest {

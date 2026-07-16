@@ -22,6 +22,7 @@ library OrchestratorV3RiskLib {
     event IntentSettlementRecorded(bytes32 indexed intentHash, uint256 releasedAmount, uint64 settledAt);
 
     error ZeroAddress();
+    error InvalidContract(address account);
     error InvalidRiskHook(address hook);
     error UnauthorizedCallerOrDelegate(address caller, address depositor, address delegate);
 
@@ -33,6 +34,7 @@ library OrchestratorV3RiskLib {
         IIntentRiskHook _hook
     ) external {
         if (_escrow == address(0)) revert ZeroAddress();
+        if (_escrow.code.length == 0) revert InvalidContract(_escrow);
 
         address hookAddress = address(_hook);
         if (hookAddress != address(0) && hookAddress.code.length == 0) {
