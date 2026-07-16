@@ -125,4 +125,33 @@ contract RiskManagerMathFuzzTest is Test {
         assertLe(griefing, amount);
         assertLe(chargeback, amount);
     }
+
+    function testFuzz_FeasibleAggregateFeesAlwaysFundRoundedReserve(
+        uint96 rawReleaseAmount,
+        uint16 rawReserveBps,
+        uint64 rawProtocolFee,
+        uint64 rawManagerFee,
+        uint64 rawReferralFee
+    ) public pure {
+        uint256 preciseUnit = 1e18;
+        uint256 releaseAmount = bound(uint256(rawReleaseAmount), 1, type(uint96).max);
+        uint16 reserveBps = uint16(bound(uint256(rawReserveBps), 1, 10_000));
+        uint256 reserveRate = uint256(reserveBps) * 1e14;
+        uint256 feeCapacity = preciseUnit - reserveRate;
+        uint256 protocolFee = bound(uint256(rawProtocolFee), 0, feeCapacity);
+        uint256 managerFee = bound(uint256(rawManagerFee), 0, feeCapacity - protocolFee);
+        uint256 referralFee = bound(
+            uint256(rawReferralFee),
+            0,
+            feeCapacity - protocolFee - managerFee
+        );
+
+        uint256 actualFees = (releaseAmount * protocolFee) / preciseUnit
+            + (releaseAmount * managerFee) / preciseUnit
+            + (releaseAmount * referralFee) / preciseUnit;
+        uint256 netProceeds = releaseAmount - actualFees;
+        uint256 roundedReserve = (releaseAmount * reserveBps + 9_999) / 10_000;
+
+        assertGe(netProceeds, roundedReserve);
+    }
 }

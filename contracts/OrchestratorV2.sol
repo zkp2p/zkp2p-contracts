@@ -141,7 +141,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         if (managerFee > MAX_MANAGER_FEE) revert FeeExceedsMaximum(managerFee, MAX_MANAGER_FEE);  // policy cap (e.g., 5%)
         intentManagerFeeRecipient[intentHash] = managerFeeRecipient;
         intentManagerFee[intentHash] = managerFee;
-        
+
         intentMinAtSignal[intentHash] = dep.intentAmountRange.min;
         Intent storage storedIntent = intents[intentHash];
         storedIntent.owner = msg.sender;
@@ -717,7 +717,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         uint256 _releaseAmount,
         address _managerFeeRecipient,
         uint256 _managerFee
-    ) internal returns (uint256 netFees) {
+    ) internal virtual returns (uint256 netFees) {
         uint256 protocolFeeAmount;
         uint256 referralFeeAmount;
         uint256 managerFeeAmount;

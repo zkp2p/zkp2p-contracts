@@ -38,6 +38,11 @@ interface IOrchestratorV3 is IOrchestratorV2 {
 
     event DepositRiskHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
     event IntentRiskHookSnapshotted(bytes32 indexed intentHash, address indexed riskHook, bool requiresSettlementHook);
+    event IntentProtocolFeeSnapshotted(
+        bytes32 indexed intentHash,
+        address indexed feeRecipient,
+        uint256 feeRate
+    );
     event RiskHookCallbackFailed(
         bytes32 indexed intentHash,
         address indexed riskHook,
@@ -55,6 +60,8 @@ interface IOrchestratorV3 is IOrchestratorV2 {
     error InvalidRiskHookResponse(address hook, bytes response);
     error RequiredSettlementHookMissing(bytes32 intentHash);
     error RiskCallbackGasLimitTooLow(uint256 gasLimit, uint256 minimum);
+    error InvalidContract(address account);
+    error InvalidChainId(uint256 suppliedChainId, uint256 actualChainId);
 
     /* ============ External Functions ============ */
 
@@ -65,6 +72,11 @@ interface IOrchestratorV3 is IOrchestratorV2 {
 
     function getDepositRiskHook(address _escrow, uint256 _depositId) external view returns (IIntentRiskHook);
     function getIntentRiskHook(bytes32 _intentHash) external view returns (IIntentRiskHook);
+    /**
+     * @notice Returns the aggregate fee rate snapshotted before risk admission.
+     * @dev Returns zero after an intent reaches a terminal state.
+     */
+    function getIntentTotalFeeRate(bytes32 _intentHash) external view returns (uint256);
     /// @dev Historical ABI name retained; the returned policy requires the intent settlement hook.
     function intentRequiresPostIntentHook(bytes32 _intentHash) external view returns (bool);
     function getRiskIntent(bytes32 _intentHash) external view returns (RiskIntentData memory);

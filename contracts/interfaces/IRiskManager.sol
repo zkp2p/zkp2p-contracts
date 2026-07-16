@@ -238,6 +238,7 @@ interface IRiskManager is IIntentRiskHook {
     /* ============ Errors ============ */
 
     error ZeroAddress();
+    error InvalidContract(address account);
     error ZeroAmount();
     error EmptyBatch();
     error UnauthorizedOrchestrator(address caller);
@@ -262,6 +263,7 @@ interface IRiskManager is IIntentRiskHook {
     error DeferredPayoutAlreadyRegistered(bytes32 intentHash);
     error DeferredPayoutExceedsReleasedAmount(uint256 payoutAmount, uint256 releasedAmount);
     error InsufficientDeferredPayoutCoverage(uint256 availableCoverage, uint256 requiredCoverage);
+    error DeferredPayoutFeesExceedCapacity(uint256 totalFee, uint16 reserveBps);
     error PositionNotMature(uint64 coverageDeadline, uint64 currentTime);
     error InvalidAttestation();
     error InvalidPaymentEvidence(bytes32 intentHash);

@@ -62,6 +62,7 @@ contract RiskManagerStateHarness is RiskManager {
  */
 contract RiskManagerOrchestratorHarness {
     mapping(bytes32 => IOrchestratorV3.RiskIntentData) internal riskIntents;
+    mapping(bytes32 => uint256) internal totalFeeRates;
     mapping(bytes32 => uint64) internal cancellationTimes;
     mapping(bytes32 => IOrchestratorV3.IntentSettlement) internal settlements;
 
@@ -89,8 +90,16 @@ contract RiskManagerOrchestratorHarness {
         );
     }
 
+    function setIntentTotalFeeRate(bytes32 _intentHash, uint256 _totalFeeRate) external {
+        totalFeeRates[_intentHash] = _totalFeeRate;
+    }
+
     function getRiskIntent(bytes32 _intentHash) external view returns (IOrchestratorV3.RiskIntentData memory) {
         return riskIntents[_intentHash];
+    }
+
+    function getIntentTotalFeeRate(bytes32 _intentHash) external view returns (uint256) {
+        return totalFeeRates[_intentHash];
     }
 
     function getIntentCancellation(bytes32 _intentHash) external view returns (uint64) {

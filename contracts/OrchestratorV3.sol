@@ -5,11 +5,12 @@ pragma solidity ^0.8.18;
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { OrchestratorV2 } from "./OrchestratorV2.sol";
-import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IIntentRiskHook } from "./interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV2 } from "./interfaces/IOrchestratorV2.sol";
 import { IOrchestratorV3 } from "./interfaces/IOrchestratorV3.sol";
 import { BoundedCall } from "./lib/BoundedCall.sol";
+import { OrchestratorV3FeeLib } from "./lib/OrchestratorV3FeeLib.sol";
+import { OrchestratorV3RiskLib } from "./lib/OrchestratorV3RiskLib.sol";
 import { PostIntentHookExecutor as SettlementHookExecutor } from "./lib/SettlementHookExecutor.sol";
 
 /**
@@ -28,6 +29,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
 
     mapping(address => mapping(uint256 => IIntentRiskHook)) internal depositRiskHooks;
     mapping(bytes32 => IIntentRiskHook) internal intentRiskHooks;
+    mapping(bytes32 => OrchestratorV3FeeLib.IntentFeeSnapshot) internal intentFeeSnapshots;
     // Historical ABI name retained so existing V3 consumers keep the deployed getter selector.
     mapping(bytes32 => bool) public override intentRequiresPostIntentHook;
     mapping(bytes32 => IntentSettlement) internal failedIntentSettlements;
@@ -104,22 +106,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         uint256 _depositId,
         IIntentRiskHook _hook
     ) external override nonReentrant {
-        if (_escrow == address(0)) revert ZeroAddress();
-
-        address hookAddress = address(_hook);
-        if (hookAddress != address(0) && hookAddress.code.length == 0) {
-            revert InvalidRiskHook(hookAddress);
-        }
-
-        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
-        bool isDepositorOrDelegate = msg.sender == deposit.depositor
-            || (deposit.delegate != address(0) && msg.sender == deposit.delegate);
-        if (!isDepositorOrDelegate) {
-            revert UnauthorizedCallerOrDelegate(msg.sender, deposit.depositor, deposit.delegate);
-        }
-
-        depositRiskHooks[_escrow][_depositId] = _hook;
-        emit DepositRiskHookSet(_escrow, _depositId, hookAddress, msg.sender);
+        OrchestratorV3RiskLib.setDepositRiskHook(depositRiskHooks, _escrow, _depositId, _hook);
     }
 
     /* ============ Governance Functions ============ */
@@ -150,21 +137,16 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         return intentRiskHooks[_intentHash];
     }
 
+    /** @notice Returns the effective aggregate fee rate snapshotted for an unresolved intent. */
+    function getIntentTotalFeeRate(bytes32 _intentHash) external view override returns (uint256) {
+        return intentFeeSnapshots[_intentHash].totalFeeRate;
+    }
+
     /**
      * @notice Returns the scalar intent fields required by a risk hook without copying dynamic intent data.
      */
     function getRiskIntent(bytes32 _intentHash) external view override returns (RiskIntentData memory riskIntent) {
-        Intent storage intent = intents[_intentHash];
-        riskIntent = RiskIntentData({
-            owner: intent.owner,
-            to: intent.to,
-            escrow: intent.escrow,
-            depositId: intent.depositId,
-            amount: intent.amount,
-            paymentMethod: intent.paymentMethod,
-            settlementHook: address(intent.settlementHook),
-            createdAt: uint64(intent.timestamp)
-        });
+        return OrchestratorV3RiskLib.getRiskIntent(intents, _intentHash);
     }
 
     /**
@@ -221,19 +203,25 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
      * @notice Snapshots and executes risk admission after V2 stores the intent.
      */
     function _afterIntentSignaled(bytes32 _intentHash) internal override {
-        Intent storage intent = intents[_intentHash];
-        IIntentRiskHook riskHook = depositRiskHooks[intent.escrow][intent.depositId];
-        intentRiskHooks[_intentHash] = riskHook;
-
-        bool requiresSettlementHook = BoundedCall.executeRiskAdmission(
-            riskHook,
+        OrchestratorV3FeeLib.snapshotIntentFees(
+            intentFeeSnapshots,
+            intents,
+            intentManagerFeeRecipient,
+            intentManagerFee,
             _intentHash,
-            address(intent.settlementHook),
+            protocolFeeRecipient,
+            protocolFee
+        );
+
+        OrchestratorV3RiskLib.snapshotAndAdmit(
+            depositRiskHooks,
+            intentRiskHooks,
+            intentRequiresPostIntentHook,
+            intents,
+            _intentHash,
             riskCallbackGasLimit,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
-        intentRequiresPostIntentHook[_intentHash] = requiresSettlementHook;
-        emit IntentRiskHookSnapshotted(_intentHash, address(riskHook), requiresSettlementHook);
     }
 
     /**
@@ -254,25 +242,13 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         uint256 _releasedAmount,
         bytes32 _paymentId
     ) internal override {
-        bool isSettlement = _resolution != IntentResolution.CANCELLED;
-        uint64 settledAt;
-        uint64 cancelledAt;
-
-        if (isSettlement) {
-            settledAt = uint64(block.timestamp);
-            emit IntentSettlementRecorded(_intentHash, _releasedAmount, settledAt);
-        } else {
-            cancelledAt = uint64(block.timestamp);
-        }
-
-        IIntentRiskHook riskHook = intentRiskHooks[_intentHash];
-
         super._resolveIntent(_intentHash, _resolution, _releasedAmount);
-        delete intentRiskHooks[_intentHash];
-        delete intentRequiresPostIntentHook[_intentHash];
-
-        bool callbackSucceeded = BoundedCall.executeTerminalRiskCallback(
-            riskHook,
+        OrchestratorV3RiskLib.executeTerminalCallback(
+            intentRiskHooks,
+            intentRequiresPostIntentHook,
+            intentFeeSnapshots,
+            failedIntentSettlements,
+            failedIntentCancellations,
             _intentHash,
             uint8(_resolution),
             _releasedAmount,
@@ -280,16 +256,6 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             riskCallbackGasLimit,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
-        if (isSettlement && !callbackSucceeded) {
-            failedIntentSettlements[_intentHash] = IntentSettlement({
-                releasedAmount: _releasedAmount,
-                paymentId: _paymentId,
-                settledAt: settledAt
-            });
-        } else if (!isSettlement && !callbackSucceeded) {
-            failedIntentCancellations[_intentHash] = IntentCancellation({ cancelledAt: cancelledAt });
-            emit IntentCancellationRecorded(_intentHash, cancelledAt);
-        }
     }
 
     /** @dev Calls the payment-ID-aware verifier ABI used exclusively by the V3 lane. */
@@ -341,11 +307,30 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         emit IntentFulfilled(_intentHash, fundsTransferredTo, netAmount, _isManualRelease);
     }
 
+    /** @dev Distributes fees using the terms snapshotted before risk admission. */
+    function _calculateAndTransferFees(
+        IERC20 _token,
+        bytes32 _intentHash,
+        Intent memory _intent,
+        uint256 _releaseAmount,
+        address _managerFeeRecipient,
+        uint256 _managerFee
+    ) internal override returns (uint256 netFees) {
+        return OrchestratorV3FeeLib.calculateAndTransferFees(
+            intentFeeSnapshots,
+            _token,
+            _intentHash,
+            _intent,
+            _releaseAmount,
+            _managerFeeRecipient,
+            _managerFee
+        );
+    }
+
     function _setRiskCallbackGasLimit(uint256 _gasLimit) internal {
         if (_gasLimit < MIN_RISK_CALLBACK_GAS_LIMIT) {
             revert RiskCallbackGasLimitTooLow(_gasLimit, MIN_RISK_CALLBACK_GAS_LIMIT);
         }
-
         riskCallbackGasLimit = _gasLimit;
         emit RiskCallbackGasLimitUpdated(_gasLimit);
     }

@@ -99,6 +99,10 @@ contract RiskManagerInvariantHandler is Test {
         return intents[_intentHash];
     }
 
+    function getIntentTotalFeeRate(bytes32) external pure returns (uint256) {
+        return 0;
+    }
+
     function getIntentSettlement(bytes32) external pure returns (uint256, bytes32, uint64) {
         return (0, bytes32(0), 0);
     }

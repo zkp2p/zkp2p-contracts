@@ -50,10 +50,20 @@ describe("RiskManager and OrchestratorV3", () => {
     );
     const boundedCall = await (await ethers.getContractFactory("BoundedCall")).deploy();
     const postIntentHookExecutor = await (await ethers.getContractFactory("PostIntentHookExecutor")).deploy();
+    const orchestratorV3FeeLib = await (await ethers.getContractFactory("OrchestratorV3FeeLib")).deploy();
+    const riskCallbackRecorder = await (await ethers.getContractFactory("RiskCallbackRecorder")).deploy();
+    const orchestratorV3RiskLib = await (await ethers.getContractFactory("OrchestratorV3RiskLib", {
+      libraries: {
+        BoundedCall: boundedCall.address,
+        RiskCallbackRecorder: riskCallbackRecorder.address,
+      },
+    })).deploy();
     const orchestrator = await (await ethers.getContractFactory("OrchestratorV3", {
       libraries: {
         BoundedCall: boundedCall.address,
         PostIntentHookExecutor: postIntentHookExecutor.address,
+        OrchestratorV3FeeLib: orchestratorV3FeeLib.address,
+        OrchestratorV3RiskLib: orchestratorV3RiskLib.address,
       },
     })).deploy(
       owner.address,
@@ -112,7 +122,7 @@ describe("RiskManager and OrchestratorV3", () => {
       enabled: true,
       chargeback: {
         chargebackable: true,
-        deferredPayoutEnabled: false,
+        deferredPayoutEnabled: true,
         reserveBps: 10_000,
         riskWindow: 30 * DAY,
       },
@@ -274,13 +284,14 @@ describe("RiskManager and OrchestratorV3", () => {
       })).to.be.revertedWithCustomError(manager, "InvalidPlatformConfig");
     });
 
-    it("rejects deferred payout for a chargebackable platform in v1", async () => {
+    it("accepts deferred payout for a chargebackable platform", async () => {
       const { manager } = await loadFixture(deployFixture);
-      await expect(manager.setPlatformRiskConfig(PAYPAL, {
+      await manager.setPlatformRiskConfig(PAYPAL, {
         enabled: true,
         chargeback: { chargebackable: true, deferredPayoutEnabled: true, reserveBps: 10_000, riskWindow: DAY },
         griefing: { griefingCliff: 1, griefingPenaltyBpsPerHour: 1, freeTakeCount: 0, freeTakeAmount: 0 },
-      })).to.be.revertedWithCustomError(manager, "InvalidPlatformConfig");
+      });
+      expect((await manager.getPlatformRiskConfig(PAYPAL)).chargeback.deferredPayoutEnabled).to.eq(true);
     });
 
     it("rejects free takes on a chargebackable platform", async () => {
@@ -493,6 +504,21 @@ describe("RiskManager and OrchestratorV3", () => {
       const cancelledAt = await orchestrator.getIntentCancellation(intentHash);
       expect(cancelledAt).to.be.gte(before);
       expect(cancelledAt).to.eq(await time.latest());
+    });
+
+    it("records released amount and time when a settlement callback fails", async () => {
+      const { maker, taker, escrow, orchestrator } = await loadFixture(deployFixture);
+      const mock = await (await ethers.getContractFactory("IntentRiskHookMock")).deploy();
+      await orchestrator.connect(maker).setDepositRiskHook(escrow.address, 0, mock.address);
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(10), ZELLE);
+      await mock.setRevertOnTerminal(true);
+      const before = await time.latest();
+      await fulfillIntent(orchestrator, intentHash, usdc(10));
+
+      const settlement = await orchestrator.getIntentSettlement(intentHash);
+      expect(settlement.releasedAmount).to.eq(usdc(10));
+      expect(settlement.settledAt).to.be.gte(before);
+      expect(settlement.settledAt).to.eq(await time.latest());
     });
   });
 
@@ -727,4 +753,211 @@ describe("RiskManager and OrchestratorV3", () => {
     });
   });
 
+  describe("deferred payout exception", () => {
+    it("reserves only the maximum griefing bond when stake cannot cover chargebacks", async () => {
+      const { taker, escrow, orchestrator, vault, manager, deferredHook } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(10));
+      const intentHash = await signalIntent(
+        orchestrator,
+        escrow,
+        taker,
+        usdc(700),
+        PAYPAL,
+        deferredHook.address,
+      );
+      const position = await manager.getRiskPosition(intentHash);
+      expect(position.mode).to.eq(3);
+      expect(position.initialReservation).to.eq(usdc("4.025"));
+      expect(await vault.reservedStake(taker.address)).to.eq(usdc("4.025"));
+    });
+
+    it("holds settled proceeds as chargeback coverage and releases griefing stake", async () => {
+      const { taker, escrow, orchestrator, vault, manager, deferredHook } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(10));
+      const intentHash = await signalIntent(
+        orchestrator,
+        escrow,
+        taker,
+        usdc(700),
+        PAYPAL,
+        deferredHook.address,
+      );
+      await fulfillIntent(orchestrator, intentHash, usdc(700));
+      expect(await vault.reservedStake(taker.address)).to.eq(0);
+      expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(usdc(700));
+      expect((await manager.getRiskPosition(intentHash)).reservedAmount).to.eq(usdc(700));
+    });
+
+    it("rejects at admission when a self-referral would reduce deferred proceeds below coverage", async () => {
+      const { taker, escrow, orchestrator, vault, deferredHook } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(10));
+      await expect(orchestrator.connect(taker).signalIntent(signalParams(
+          escrow,
+          taker.address,
+          usdc(700),
+          PAYPAL,
+          deferredHook.address,
+          [{ recipient: taker.address, fee: precise("0.5") }],
+        )))
+        .to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+      expect(await vault.reservedStake(taker.address)).to.eq(0);
+      expect(await orchestrator.getAccountIntentCount(taker.address)).to.eq(0);
+    });
+
+    it("rejects any nonzero fee when deferred coverage reserves 100 percent", async () => {
+      const { owner, taker, escrow, orchestrator, vault, deferredHook } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(10));
+      await orchestrator.connect(owner).setProtocolFee(1);
+
+      await expect(signalIntent(
+        orchestrator,
+        escrow,
+        taker,
+        usdc(700),
+        PAYPAL,
+        deferredHook.address,
+      )).to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+
+      expect(await vault.reservedStake(taker.address)).to.eq(0);
+    });
+
+    it("uses the zero fee snapshot when governance raises the protocol fee after admission", async () => {
+      const { owner, taker, escrow, orchestrator, vault, deferredHook, token } =
+        await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(10));
+
+      const intentHash = await signalIntent(
+        orchestrator,
+        escrow,
+        taker,
+        usdc(700),
+        PAYPAL,
+        deferredHook.address,
+      );
+      expect(await orchestrator.getIntentTotalFeeRate(intentHash)).to.eq(0);
+
+      const releaseAmount = usdc("1.000001");
+      const protocolBalanceBefore = await token.balanceOf(owner.address);
+      await orchestrator.connect(owner).setProtocolFee(precise("0.05"));
+      await fulfillIntent(orchestrator, intentHash, releaseAmount);
+
+      expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(releaseAmount);
+      expect((await token.balanceOf(owner.address)).sub(protocolBalanceBefore)).to.eq(0);
+      expect(await orchestrator.getIntentTotalFeeRate(intentHash)).to.eq(0);
+    });
+
+    it("rejects aggregate protocol, manager, and referral fees at full reserve", async () => {
+      const {
+        owner,
+        maker,
+        taker,
+        recipient,
+        other,
+        escrow,
+        orchestrator,
+        vault,
+        deferredHook,
+      } = await loadFixture(deployFixture);
+      const feeRate = precise("0.01");
+      const rateManagerId = ethers.utils.id("v3-fee-manager");
+      const rateManager = await (await ethers.getContractFactory("RateManagerMock")).deploy();
+      await rateManager.setManager(rateManagerId, true);
+      await rateManager.setFee(rateManagerId, recipient.address, feeRate);
+      await rateManager.setRate(rateManagerId, escrow.address, 0, PAYPAL, USD, precise(1));
+      await escrow.connect(maker).setRateManager(0, rateManager.address, rateManagerId);
+      await orchestrator.connect(owner).setProtocolFee(feeRate);
+      await vault.connect(taker).depositStake(usdc(10));
+
+      await expect(orchestrator.connect(taker).signalIntent(signalParams(
+        escrow,
+        taker.address,
+        usdc(700),
+        PAYPAL,
+        deferredHook.address,
+        [{ recipient: other.address, fee: feeRate }],
+      ))).to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+    });
+
+    it("distributes snapshotted protocol, manager, and referral fees for stake-backed settlement", async () => {
+      const {
+        owner,
+        maker,
+        taker,
+        recipient,
+        other,
+        escrow,
+        orchestrator,
+        token,
+        vault,
+      } = await loadFixture(deployFixture);
+      const feeRate = precise("0.01");
+      const releaseAmount = usdc(700);
+      const expectedFee = usdc(7);
+      const rateManagerId = ethers.utils.id("v3-fee-distribution-manager");
+      const rateManager = await (await ethers.getContractFactory("RateManagerMock")).deploy();
+      await rateManager.setManager(rateManagerId, true);
+      await rateManager.setFee(rateManagerId, recipient.address, feeRate);
+      await rateManager.setRate(rateManagerId, escrow.address, 0, PAYPAL, USD, precise(1));
+      await escrow.connect(maker).setRateManager(0, rateManager.address, rateManagerId);
+      await orchestrator.connect(owner).setProtocolFee(feeRate);
+      await vault.connect(taker).depositStake(releaseAmount);
+
+      const protocolBalanceBefore = await token.balanceOf(owner.address);
+      const managerBalanceBefore = await token.balanceOf(recipient.address);
+      const referralBalanceBefore = await token.balanceOf(other.address);
+      const takerBalanceBefore = await token.balanceOf(taker.address);
+      const intentHash = intentHashFrom(await (
+        await orchestrator.connect(taker).signalIntent(signalParams(
+          escrow,
+          taker.address,
+          releaseAmount,
+          PAYPAL,
+          ZERO,
+          [{ recipient: other.address, fee: feeRate }],
+        ))
+      ).wait());
+
+      await fulfillIntent(orchestrator, intentHash, releaseAmount);
+
+      expect((await token.balanceOf(owner.address)).sub(protocolBalanceBefore)).to.eq(expectedFee);
+      expect((await token.balanceOf(recipient.address)).sub(managerBalanceBefore)).to.eq(expectedFee);
+      expect((await token.balanceOf(other.address)).sub(referralBalanceBefore)).to.eq(expectedFee);
+      expect((await token.balanceOf(taker.address)).sub(takerBalanceBefore)).to.eq(
+        releaseAmount.sub(expectedFee.mul(3)),
+      );
+    });
+
+    it("requires the canonical deferred hook for the exception", async () => {
+      const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(10));
+      await expect(signalIntent(orchestrator, escrow, taker, usdc(700), PAYPAL))
+        .to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+    });
+
+    it("rejects the deferred hook when stake already covers the full reservation", async () => {
+      const { taker, escrow, orchestrator, vault, manager, deferredHook } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(700));
+      await expect(signalIntent(orchestrator, escrow, taker, usdc(700), PAYPAL, deferredHook.address))
+        .to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+    });
+
+    it("slashes deferred proceeds without reducing membership stake", async () => {
+      const { maker, taker, escrow, orchestrator, vault, manager, deferredHook } =
+        await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(10));
+      const intentHash = await signalIntent(
+        orchestrator,
+        escrow,
+        taker,
+        usdc(700),
+        PAYPAL,
+        deferredHook.address,
+      );
+      await fulfillIntent(orchestrator, intentHash, usdc(700));
+      await manager.submitChargeback(await chargebackAttestation(intentHash));
+      expect(await vault.stakeBalance(taker.address)).to.eq(usdc(10));
+      expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(700));
+      expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(0);
+    });
+  });
 });

@@ -40,6 +40,7 @@ contract RiskEscrowHarness {
 
 contract RiskOrchestratorHarness {
     mapping(bytes32 => IOrchestratorV3.RiskIntentData) internal intents;
+    mapping(bytes32 => uint256) internal totalFeeRates;
     mapping(bytes32 => IOrchestratorV3.IntentSettlement) internal settlements;
     mapping(bytes32 => IOrchestratorV3.IntentCancellation) internal cancellations;
     function setIntent(
@@ -64,6 +65,14 @@ contract RiskOrchestratorHarness {
 
     function getRiskIntent(bytes32 _intentHash) external view returns (IOrchestratorV3.RiskIntentData memory) {
         return intents[_intentHash];
+    }
+
+    function setIntentTotalFeeRate(bytes32 _intentHash, uint256 _totalFeeRate) external {
+        totalFeeRates[_intentHash] = _totalFeeRate;
+    }
+
+    function getIntentTotalFeeRate(bytes32 _intentHash) external view returns (uint256) {
+        return totalFeeRates[_intentHash];
     }
 
     function getIntentSettlement(bytes32 _intentHash) external view returns (uint256, bytes32, uint64) {
@@ -231,6 +240,13 @@ contract RiskManagerTest is Test {
 
     function _createPosition(bytes32 _intentHash) internal returns (bool) {
         return orchestrator.createPosition(manager, _intentHash);
+    }
+
+    function _enableDeferredPayouts() internal {
+        IRiskManager.PlatformRiskConfig memory config = _chargebackConfig(10_000, 30 days);
+        config.chargeback.deferredPayoutEnabled = true;
+        vm.prank(owner);
+        manager.setPlatformRiskConfig(PAYPAL, config);
     }
 
     function _chargeback(
@@ -496,12 +512,57 @@ contract RiskManagerTest is Test {
         assertEq(uint256(manager.getRiskPosition(intentHash).status), uint256(IRiskManager.PositionStatus.RELEASED));
     }
 
-    function test_PlatformConfigurationRejectsDeferredChargebackCoverage() public {
-        IRiskManager.PlatformRiskConfig memory config = _chargebackConfig(10_000, 30 days);
-        config.chargeback.deferredPayoutEnabled = true;
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.InvalidPlatformConfig.selector, PAYPAL));
-        vm.prank(owner);
-        manager.setPlatformRiskConfig(PAYPAL, config);
+    function test_DeferredAdmissionReservesOnlyGriefingBond() public {
+        _enableDeferredPayouts();
+        _stake(taker, 10e6);
+        bytes32 intentHash = keccak256("deferred");
+        _setIntent(intentHash, taker, 700e6, PAYPAL, address(verifier));
+
+        bool requiresHook = _createPosition(intentHash);
+
+        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        assertTrue(requiresHook);
+        assertEq(uint256(position.mode), uint256(IRiskManager.RiskMode.DEFERRED_PAYOUT));
+        assertEq(position.initialReservation, 4.025e6);
+        assertEq(vault.reservedStake(taker), 4.025e6);
+    }
+
+    function test_DeferredAdmissionRejectsInfeasibleFeeMixBeforeReservation() public {
+        _enableDeferredPayouts();
+        _stake(taker, 10e6);
+        bytes32 intentHash = keccak256("deferred-infeasible-fees");
+        _setIntent(intentHash, taker, 700e6, PAYPAL, address(verifier));
+        orchestrator.setIntentTotalFeeRate(intentHash, 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IRiskManager.DeferredPayoutFeesExceedCapacity.selector,
+                1,
+                10_000
+            )
+        );
+        _createPosition(intentHash);
+
+        assertEq(vault.reservedStake(taker), 0);
+    }
+
+    function test_DeferredRegistrationRejectsCoverageBelowConfiguredReserve() public {
+        _enableDeferredPayouts();
+        _stake(taker, 10e6);
+        bytes32 intentHash = keccak256("deferred-shortfall");
+        _setIntent(intentHash, taker, 700e6, PAYPAL, address(verifier));
+        _createPosition(intentHash);
+        orchestrator.fulfillPosition(manager, intentHash, 700e6);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IRiskManager.InsufficientDeferredPayoutCoverage.selector,
+                350e6,
+                700e6
+            )
+        );
+        vm.prank(address(verifier));
+        manager.registerDeferredPayout(intentHash, taker, 350e6);
     }
 
     function test_PlatformChangesDoNotAlterPositionSnapshots() public {

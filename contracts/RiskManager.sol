@@ -71,13 +71,20 @@ import { IStakeVault } from "./interfaces/IStakeVault.sol";
  *      7. Escrow intent amounts and StakeVault liabilities must use the same immutable token, otherwise
  *         raw units, griefing penalties, free limits, and chargeback ratios would have no shared meaning.
  *      8. Deferred proceeds must cover the complete configured reserve after fees. A shortfall fails
- *         settlement rather than silently advertising less protection than governance configured.
+ *         admission rather than stranding settlement after the LP has already accepted an intent.
+ *         The exact post-transfer amount is checked again during hook registration.
  */
 contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     /* ============ Constants ============ */
 
     /// @notice Basis-point denominator shared by both affine curves.
     uint256 public constant BPS_DENOMINATOR = 10_000;
+
+    /// @notice Conversion from one basis point to Orchestrator fee precise units.
+    uint256 public constant BPS_TO_PRECISE_UNIT = 1e14;
+
+    /// @notice Denominator used by Orchestrator fee rates.
+    uint256 public constant PRECISE_UNIT = 1e18;
 
     /// @notice Seconds per hour used to convert the configured hourly griefing slope.
     uint256 public constant SECONDS_PER_HOUR = 1 hours;
@@ -228,6 +235,10 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
                     && config.chargeback.deferredPayoutEnabled
                     && available >= maxGriefingBond
             ) {
+                _validateDeferredPayoutFeasibility(
+                    orchestrator.getIntentTotalFeeRate(_intentHash),
+                    config.chargeback.reserveBps
+                );
                 if (deferredPayoutHook == address(0) || intent.settlementHook != deferredPayoutHook) {
                     revert DeferredPayoutHookRequired(deferredPayoutHook, intent.settlementHook);
                 }
@@ -927,7 +938,6 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
                 _config.chargeback.reserveBps != BPS_DENOMINATOR
                     || _config.chargeback.riskWindow == 0
                     || _config.chargeback.riskWindow > MAX_RISK_WINDOW
-                    || _config.chargeback.deferredPayoutEnabled
             ) {
                 revert InvalidPlatformConfig(_paymentMethod);
             }
@@ -964,6 +974,25 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             revert IntentTokenMismatch(expectedToken, address(_intentToken));
         }
     }
+
+    /**
+     * @dev Proves that every possible full or partial release can fund the configured reserve.
+     *      For release `R`, fee component rates `f_i`, aggregate `F`, and precise reserve rate `B`:
+     *
+     *        sum(floor(R * f_i / U)) <= floor(R * F / U)
+     *
+     *      Therefore `F + B <= U` implies net proceeds are at least
+     *      `R - floor(R * (U - B) / U) = ceil(R * B / U)`. This remains true despite each
+     *      fee being rounded independently. At a 100% reserve, `B == U`, so only `F == 0`
+     *      is feasible. `registerDeferredPayout` retains the exact amount check as defense in depth.
+     */
+    function _validateDeferredPayoutFeasibility(uint256 _totalFee, uint16 _reserveBps) internal pure {
+        uint256 reserveRate = uint256(_reserveBps) * BPS_TO_PRECISE_UNIT;
+        if (_totalFee > PRECISE_UNIT - reserveRate) {
+            revert DeferredPayoutFeesExceedCapacity(_totalFee, _reserveBps);
+        }
+    }
+
 
     /** @dev Returns true only for a whole, non-chargebackable intent within an unused lifetime allowance. */
     function _isFreeTakeEligible(
