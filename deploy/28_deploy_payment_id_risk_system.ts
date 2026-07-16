@@ -174,7 +174,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const relayerRegistryAddress = getDeployedContractAddress(network, "RelayerRegistry");
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
   const nullifierRegistryAddress = getDeployedContractAddress(network, "NullifierRegistry");
-  const settlementHookExecutorAddress = getDeployedContractAddress(network, "SettlementHookExecutor");
+  const postIntentHookExecutorAddress = getDeployedContractAddress(network, "PostIntentHookExecutor");
   const stakeTokenAddress = USDC[network] || getDeployedContractAddress(network, "USDCMock");
 
   const paymentVerifierRegistryV3 = await deploy("PaymentVerifierRegistryV3", {
@@ -208,7 +208,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     from: deployer,
     libraries: {
       BoundedCall: boundedCall.address,
-      SettlementHookExecutor: settlementHookExecutorAddress,
+      PostIntentHookExecutor: postIntentHookExecutorAddress,
     },
     args: [
       deployer,
