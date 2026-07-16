@@ -10,7 +10,7 @@ import { IIntentRiskHook } from "./interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV2 } from "./interfaces/IOrchestratorV2.sol";
 import { IOrchestratorV3 } from "./interfaces/IOrchestratorV3.sol";
 import { BoundedCall } from "./lib/BoundedCall.sol";
-import { SettlementHookExecutor } from "./lib/SettlementHookExecutor.sol";
+import { PostIntentHookExecutor as SettlementHookExecutor } from "./lib/SettlementHookExecutor.sol";
 
 /**
  * @title OrchestratorV3
@@ -28,7 +28,8 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
 
     mapping(address => mapping(uint256 => IIntentRiskHook)) internal depositRiskHooks;
     mapping(bytes32 => IIntentRiskHook) internal intentRiskHooks;
-    mapping(bytes32 => bool) public override intentRequiresSettlementHook;
+    // Historical ABI name retained so existing V3 consumers keep the deployed getter selector.
+    mapping(bytes32 => bool) public override intentRequiresPostIntentHook;
     mapping(bytes32 => IntentSettlement) internal failedIntentSettlements;
     mapping(bytes32 => IntentCancellation) internal failedIntentCancellations;
 
@@ -174,7 +175,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
     function _shouldExecuteSettlementHookOnManualRelease(
         bytes32 _intentHash
     ) internal view override returns (bool) {
-        bool requiresSettlementHook = intentRequiresSettlementHook[_intentHash];
+        bool requiresSettlementHook = intentRequiresPostIntentHook[_intentHash];
         if (requiresSettlementHook && address(intents[_intentHash].settlementHook) == address(0)) {
             revert RequiredSettlementHookMissing(_intentHash);
         }
@@ -231,7 +232,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             riskCallbackGasLimit,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
-        intentRequiresSettlementHook[_intentHash] = requiresSettlementHook;
+        intentRequiresPostIntentHook[_intentHash] = requiresSettlementHook;
         emit IntentRiskHookSnapshotted(_intentHash, address(riskHook), requiresSettlementHook);
     }
 
@@ -268,7 +269,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
 
         super._resolveIntent(_intentHash, _resolution, _releasedAmount);
         delete intentRiskHooks[_intentHash];
-        delete intentRequiresSettlementHook[_intentHash];
+        delete intentRequiresPostIntentHook[_intentHash];
 
         bool callbackSucceeded = BoundedCall.executeTerminalRiskCallback(
             riskHook,

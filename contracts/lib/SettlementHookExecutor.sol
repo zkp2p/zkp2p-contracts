@@ -9,10 +9,11 @@ import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
 import { ISettlementHook } from "../interfaces/ISettlementHook.sol";
 
 /**
- * @title SettlementHookExecutor
- * @notice Transfers settled funds directly or executes a settlement hook with an exact allowance.
+ * @title PostIntentHookExecutor
+ * @notice Historical linked-library coordinate that executes settlement hooks with an exact allowance.
+ * @dev The name is retained to preserve immutable deployment history; the public hook API is ISettlementHook.
  */
-library SettlementHookExecutor {
+library PostIntentHookExecutor {
     using SafeERC20 for IERC20;
 
     /**
