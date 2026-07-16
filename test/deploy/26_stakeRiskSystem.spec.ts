@@ -4,12 +4,11 @@ import { expect } from "chai";
 import hre, { deployments, ethers } from "hardhat";
 
 import deployStakeRiskSystem, {
+  chargebackWitnessConfigForNetwork,
   stakeRiskPlatformPolicyForNetwork,
 } from "../../deploy/26_deploy_stake_risk_system";
 import {
   MULTI_SIG,
-  MULTI_WITNESS_ADDRESSES,
-  MULTI_WITNESS_THRESHOLD,
   RISK_CALLBACK_GAS_LIMIT,
   STAKE_VAULT_BASE_EXIT_DELAY,
 } from "../../deployments/parameters";
@@ -33,6 +32,10 @@ describe("Affine stake risk system deployment", () => {
       orchestrator: await ethers.getContractAt("OrchestratorV3", deployedAddress("OrchestratorV3")),
       vault: await ethers.getContractAt("StakeVault", deployedAddress("StakeVault")),
       manager: await ethers.getContractAt("RiskManager", deployedAddress("RiskManager")),
+      chargebackVerifier: await ethers.getContractAt(
+        "EpochMultiAttestationVerifier",
+        deployedAddress("ChargebackAttestationVerifier"),
+      ),
       deferredHook: await ethers.getContractAt("DeferredPayoutHook", deployedAddress("DeferredPayoutHook")),
       orchestratorRegistry: await ethers.getContractAt(
         "OrchestratorRegistry",
@@ -50,15 +53,17 @@ describe("Affine stake risk system deployment", () => {
   it("deploys the replacement risk components", async () => {
     expect(deployedAddress("StakeVault")).to.properAddress;
     expect(deployedAddress("RiskManager")).to.properAddress;
+    expect(deployedAddress("ChargebackAttestationVerifier")).to.properAddress;
     expect(deployedAddress("DeferredPayoutHook")).to.properAddress;
   });
 
   it("transfers every owned component to the configured multisig", async () => {
-    const { deployer, orchestrator, vault, manager } = await contracts();
+    const { deployer, orchestrator, vault, manager, chargebackVerifier } = await contracts();
     const expectedOwner = MULTI_SIG[network] || deployer.address;
     expect(await orchestrator.owner()).to.eq(expectedOwner);
     expect(await vault.owner()).to.eq(expectedOwner);
     expect(await manager.owner()).to.eq(expectedOwner);
+    expect(await chargebackVerifier.owner()).to.eq(expectedOwner);
   });
 
   it("wires RiskManager as the vault controller", async () => {
@@ -134,13 +139,14 @@ describe("Affine stake risk system deployment", () => {
   it("uses the deployed modular attestation verifier and RiskManager EIP-712 domain", async () => {
     const { deployer, manager } = await contracts();
     const verifier = await ethers.getContractAt(
-      "MultiAttestationVerifier",
-      deployedAddress("MultiAttestationVerifier"),
+      "EpochMultiAttestationVerifier",
+      deployedAddress("ChargebackAttestationVerifier"),
     );
+    const witnessConfig = chargebackWitnessConfigForNetwork(network);
     expect(await manager.attestationVerifier()).to.eq(verifier.address);
-    expect((await verifier.requiredSignatures()).toNumber()).to.eq(MULTI_WITNESS_THRESHOLD[network]);
+    expect((await verifier.requiredSignatures()).toNumber()).to.eq(witnessConfig.threshold);
     expect((await verifier.witnesses()).map((w) => w.toLowerCase())).to.have.members(
-      MULTI_WITNESS_ADDRESSES[network].map((w) => w.toLowerCase()),
+      witnessConfig.witnesses.map((w) => w.toLowerCase()),
     );
 
     const { chainId } = await ethers.provider.getNetwork();
@@ -177,8 +183,12 @@ describe("Affine stake risk system deployment", () => {
     // Local deployments use the deployer as their witness, while live networks
     // intentionally keep witness keys separate from the deployment key.
     if (await verifier.isWitness(deployer.address)) {
-      const signature = await deployer._signTypedData(domain, types, chargeback);
-      expect(await verifier.verify(digest, [signature], "0x")).to.eq(true);
+      const [, secondWitness] = await ethers.getSigners();
+      const signatures = [
+        await deployer._signTypedData(domain, types, chargeback),
+        await secondWitness._signTypedData(domain, types, chargeback),
+      ];
+      expect(await verifier.verify(digest, signatures, "0x")).to.eq(true);
     }
   });
 

@@ -92,6 +92,10 @@ interface IRiskManager is IIntentRiskHook {
         address deferredPayoutHook;
         /// @notice Original intent recipient entitled to unslashed deferred proceeds.
         address payoutRecipient;
+        /// @notice Chargeback verifier contract snapshotted when the position was admitted.
+        address attestationVerifier;
+        /// @notice Immutable witness epoch used for every later chargeback against this position.
+        uint64 attestationVerifierEpoch;
         /// @notice Snapshotted chargeback reserve ratio applied to the exact released amount.
         uint16 chargebackReserveBps;
         /// @notice Snapshotted hourly slope used by the time-linear cancellation formula.
@@ -181,6 +185,11 @@ interface IRiskManager is IIntentRiskHook {
         uint256 maxGriefingBond,
         uint256 chargebackReserve,
         uint256 initialReservation
+    );
+    event RiskVerifierSnapshotted(
+        bytes32 indexed intentHash,
+        address indexed attestationVerifier,
+        uint64 indexed attestationVerifierEpoch
     );
     event FreeTakeConsumed(
         bytes32 indexed intentHash,
@@ -273,6 +282,7 @@ interface IRiskManager is IIntentRiskHook {
     error InsufficientDeferredPayoutCoverage(uint256 availableCoverage, uint256 requiredCoverage);
     error PositionNotMature(uint64 coverageDeadline, uint64 currentTime);
     error InvalidAttestation();
+    error InvalidAttestationVerifier(address verifier);
     error AttestationNotYetValid(uint64 validAfter, uint64 currentTime);
     error AttestationExpired(uint64 validUntil, uint64 currentTime);
     error ChargebackWindowClosed(uint64 coverageDeadline, uint64 currentTime);

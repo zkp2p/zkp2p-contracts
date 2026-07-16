@@ -5,7 +5,7 @@ pragma solidity ^0.8.18;
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { IEscrowV2 } from "../interfaces/IEscrowV2.sol";
-import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
+import { IEpochAttestationVerifier } from "../interfaces/IEpochAttestationVerifier.sol";
 import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV3 } from "../interfaces/IOrchestratorV3.sol";
 import { IRiskManager } from "../interfaces/IRiskManager.sol";
@@ -23,7 +23,7 @@ contract RiskManagerStateHarness is RiskManager {
         address _owner,
         IOrchestratorV3 _orchestrator,
         IStakeVault _stakeVault,
-        IAttestationVerifier _attestationVerifier
+        IEpochAttestationVerifier _attestationVerifier
     ) RiskManager(_owner, _orchestrator, _stakeVault, _attestationVerifier) { }
 
     function forcePosition(
@@ -40,6 +40,8 @@ contract RiskManagerStateHarness is RiskManager {
         position.status = _status;
         position.deferredPayoutHook = _deferredPayoutHook;
         position.paymentMethod = _paymentMethod;
+        position.attestationVerifier = address(attestationVerifier);
+        position.attestationVerifierEpoch = attestationVerifier.currentEpoch();
         position.chargebackReserveBps = _chargebackReserveBps;
         position.coverageDeadline = _coverageDeadline;
     }

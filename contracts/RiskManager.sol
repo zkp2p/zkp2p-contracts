@@ -8,7 +8,7 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuar
 import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { IAttestationVerifier } from "./interfaces/IAttestationVerifier.sol";
+import { IEpochAttestationVerifier } from "./interfaces/IEpochAttestationVerifier.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IIntentRiskHook } from "./interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV3 } from "./interfaces/IOrchestratorV3.sol";
@@ -106,7 +106,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     /* ============ Mutable Governance State ============ */
 
     /// @notice Verifier that authenticates typed chargeback attestations.
-    IAttestationVerifier public attestationVerifier;
+    IEpochAttestationVerifier public attestationVerifier;
 
     /// @notice Canonical post-intent hook used only by deferred-payout positions.
     address public deferredPayoutHook;
@@ -149,7 +149,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         address _owner,
         IOrchestratorV3 _orchestrator,
         IStakeVault _stakeVault,
-        IAttestationVerifier _attestationVerifier
+        IEpochAttestationVerifier _attestationVerifier
     ) Ownable() EIP712("ZKP2P RiskManager", "1") {
         if (
             _owner == address(0)
@@ -160,6 +160,9 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             revert ZeroAddress();
         }
         if (address(_attestationVerifier).code.length == 0) revert ZeroAddress();
+        if (_attestationVerifier.currentEpoch() == 0) {
+            revert InvalidAttestationVerifier(address(_attestationVerifier));
+        }
 
         orchestrator = _orchestrator;
         stakeVault = _stakeVault;
@@ -260,6 +263,8 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         position.consumedFreeTake = consumedFreeTake;
         position.deferredPayoutHook = mode == RiskMode.DEFERRED_PAYOUT ? deferredPayoutHook : address(0);
         position.payoutRecipient = intent.to;
+        position.attestationVerifier = address(attestationVerifier);
+        position.attestationVerifierEpoch = attestationVerifier.currentEpoch();
         position.chargebackReserveBps = config.chargeback.reserveBps;
         position.griefingPenaltyBpsPerHour = config.griefing.griefingPenaltyBpsPerHour;
         position.riskWindow = config.chargeback.riskWindow;
@@ -279,6 +284,11 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         }
 
         _emitRiskPositionCreated(_intentHash, position, chargebackReserve);
+        emit RiskVerifierSnapshotted(
+            _intentHash,
+            position.attestationVerifier,
+            position.attestationVerifierEpoch
+        );
     }
 
     /** @dev Emits the complete admission snapshot from storage to keep admission stack usage bounded. */
@@ -498,7 +508,12 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
         _validateAttestation(_attestation, position);
         bytes32 digest = _hashTypedDataV4(_hashChargebackAttestation(_attestation));
-        if (!attestationVerifier.verify(digest, _signatures, _verificationData)) {
+        if (!IEpochAttestationVerifier(position.attestationVerifier).verifyAtEpoch(
+            position.attestationVerifierEpoch,
+            digest,
+            _signatures,
+            _verificationData
+        )) {
             revert AttestationVerificationFailed();
         }
 
@@ -562,8 +577,11 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
      */
     function setAttestationVerifier(address _verifier) external override onlyOwner {
         if (_verifier == address(0) || _verifier.code.length == 0) revert ZeroAddress();
+        if (IEpochAttestationVerifier(_verifier).currentEpoch() == 0) {
+            revert InvalidAttestationVerifier(_verifier);
+        }
         address previousVerifier = address(attestationVerifier);
-        attestationVerifier = IAttestationVerifier(_verifier);
+        attestationVerifier = IEpochAttestationVerifier(_verifier);
         emit AttestationVerifierUpdated(previousVerifier, _verifier);
     }
 

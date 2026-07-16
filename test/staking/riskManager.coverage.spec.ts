@@ -991,6 +991,70 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       expect((await fixture.manager.getRiskPosition(intentHash)).slashedAmount).to.eq(usdc(10));
     });
 
+    it("keeps each position bound to its admission-time verifier and witness epoch", async () => {
+      const fixture = await loadFixture(deployHarnessFixture);
+      const admittedBeforeRotation = ethers.utils.id("claim-before-verifier-rotation");
+      await createPosition(fixture, admittedBeforeRotation);
+      await fixture.orchestrator.fulfillPosition(fixture.manager.address, admittedBeforeRotation, usdc(50));
+
+      const originalPosition = await fixture.manager.getRiskPosition(admittedBeforeRotation);
+      expect(originalPosition.attestationVerifier).to.eq(fixture.verifier.address);
+      expect(originalPosition.attestationVerifierEpoch).to.eq(1);
+
+      const replacement = await (await ethers.getContractFactory("AttestationVerifierMock")).deploy();
+      await replacement.setResult(false);
+      await fixture.manager.setAttestationVerifier(replacement.address);
+
+      await fixture.manager.submitChargeback(
+        await validAttestation(fixture, admittedBeforeRotation),
+        [],
+        "0x",
+      );
+
+      const admittedAfterRotation = ethers.utils.id("claim-after-verifier-rotation");
+      await createPosition(fixture, admittedAfterRotation);
+      await fixture.orchestrator.fulfillPosition(fixture.manager.address, admittedAfterRotation, usdc(50));
+      const replacementPosition = await fixture.manager.getRiskPosition(admittedAfterRotation);
+      expect(replacementPosition.attestationVerifier).to.eq(replacement.address);
+      expect(replacementPosition.attestationVerifierEpoch).to.eq(1);
+
+      await expect(
+        fixture.manager.submitChargeback(
+          await validAttestation(fixture, admittedAfterRotation, { nonce: 2 }),
+          [],
+          "0x",
+        ),
+      ).to.be.revertedWithCustomError(fixture.manager, "AttestationVerificationFailed");
+    });
+
+    it("does not move an admitted position to a newly activated witness epoch", async () => {
+      const fixture = await loadFixture(deployHarnessFixture);
+      const admittedAtEpochOne = ethers.utils.id("claim-at-witness-epoch-one");
+      await createPosition(fixture, admittedAtEpochOne);
+      await fixture.orchestrator.fulfillPosition(fixture.manager.address, admittedAtEpochOne, usdc(50));
+
+      await fixture.verifier.setEpochResult(1, true);
+      await fixture.verifier.setCurrentEpoch(2);
+      await fixture.verifier.setEpochResult(2, false);
+      await fixture.manager.submitChargeback(
+        await validAttestation(fixture, admittedAtEpochOne),
+        [],
+        "0x",
+      );
+
+      const admittedAtEpochTwo = ethers.utils.id("claim-at-witness-epoch-two");
+      await createPosition(fixture, admittedAtEpochTwo);
+      await fixture.orchestrator.fulfillPosition(fixture.manager.address, admittedAtEpochTwo, usdc(50));
+      expect((await fixture.manager.getRiskPosition(admittedAtEpochTwo)).attestationVerifierEpoch).to.eq(2);
+      await expect(
+        fixture.manager.submitChargeback(
+          await validAttestation(fixture, admittedAtEpochTwo, { nonce: 2 }),
+          [],
+          "0x",
+        ),
+      ).to.be.revertedWithCustomError(fixture.manager, "AttestationVerificationFailed");
+    });
+
     it("rejects a claim against a released non-chargebackable position", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("claim-free-position");
