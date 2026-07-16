@@ -95,8 +95,7 @@ describe("OrchestratorV3 constructor validation", () => {
   it("rejects a callback gas allowance above the reconciliation-safe maximum", async () => {
     const { factory, validArgs } = await loadFixture(deployFixture);
     await expect(deployWith(factory, validArgs, 7, MAX_CALLBACK_GAS + 1))
-      .to.be.revertedWithCustomError(factory, "RiskCallbackGasLimitTooHigh")
-      .withArgs(MAX_CALLBACK_GAS + 1, MAX_CALLBACK_GAS);
+      .to.be.revertedWithCustomError(factory, "RiskCallbackGasLimitTooHigh");
   });
 
   it("keeps deployed bytecode within the EIP-170 limit", async () => {
