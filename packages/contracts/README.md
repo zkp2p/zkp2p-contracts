@@ -214,6 +214,6 @@ MIT
 
 ## Links
 
-- [GitHub Repository](https://github.com/zkp2p/zkp2p-v2-contracts)
+- [GitHub Repository](https://github.com/zkp2p/zkp2p-contracts)
 - [Documentation](https://docs.zkp2p.xyz)
 - [Website](https://zkp2p.xyz)
