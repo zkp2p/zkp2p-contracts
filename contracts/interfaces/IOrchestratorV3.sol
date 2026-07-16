@@ -65,7 +65,8 @@ interface IOrchestratorV3 is IOrchestratorV2 {
 
     function getDepositRiskHook(address _escrow, uint256 _depositId) external view returns (IIntentRiskHook);
     function getIntentRiskHook(bytes32 _intentHash) external view returns (IIntentRiskHook);
-    function intentRequiresSettlementHook(bytes32 _intentHash) external view returns (bool);
+    /// @dev Historical ABI name retained; the returned policy requires the intent settlement hook.
+    function intentRequiresPostIntentHook(bytes32 _intentHash) external view returns (bool);
     function getRiskIntent(bytes32 _intentHash) external view returns (RiskIntentData memory);
     function getAccountIntentCount(address _account) external view returns (uint256);
     /**
