@@ -66,7 +66,7 @@ contract RiskManagerInvariantHandler is Test {
             depositId: 0,
             amount: amount,
             paymentMethod: chargebackable ? PAYPAL : ZELLE,
-            postIntentHook: address(0),
+            settlementHook: address(0),
             createdAt: uint64(block.timestamp)
         });
 

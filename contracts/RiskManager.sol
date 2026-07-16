@@ -109,7 +109,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     /// @dev Deployments must use credentials independent from payment-attestation witnesses.
     IAttestationVerifier public attestationVerifier;
 
-    /// @notice Canonical post-intent hook used only by deferred-payout positions.
+    /// @notice Canonical settlement hook used only by deferred-payout positions.
     address public deferredPayoutHook;
 
     /// @notice Emergency admission switch; terminal accounting remains available while paused.
@@ -181,7 +181,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         override
         onlyOrchestrator
         nonReentrant
-        returns (bool requiresPostIntentHook)
+        returns (bool requiresSettlementHook)
     {
         if (admissionPaused) revert AdmissionPaused();
         if (riskPositions[_intentHash].status != PositionStatus.NONE) revert PositionAlreadyExists(_intentHash);
@@ -228,12 +228,12 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
                     && config.chargeback.deferredPayoutEnabled
                     && available >= maxGriefingBond
             ) {
-                if (deferredPayoutHook == address(0) || intent.postIntentHook != deferredPayoutHook) {
-                    revert DeferredPayoutHookRequired(deferredPayoutHook, intent.postIntentHook);
+                if (deferredPayoutHook == address(0) || intent.settlementHook != deferredPayoutHook) {
+                    revert DeferredPayoutHookRequired(deferredPayoutHook, intent.settlementHook);
                 }
                 mode = RiskMode.DEFERRED_PAYOUT;
                 initialReservation = maxGriefingBond;
-                requiresPostIntentHook = true;
+                requiresSettlementHook = true;
             } else {
                 revert InsufficientCollateral(stakeOwner, available, requiredReservation);
             }
@@ -246,7 +246,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         if (
             mode != RiskMode.DEFERRED_PAYOUT
                 && deferredPayoutHook != address(0)
-                && intent.postIntentHook == deferredPayoutHook
+                && intent.settlementHook == deferredPayoutHook
         ) {
             revert DeferredPayoutHookNotAllowed(deferredPayoutHook);
         }

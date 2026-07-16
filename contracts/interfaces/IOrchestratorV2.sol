@@ -3,7 +3,7 @@
 pragma solidity ^0.8.18;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { IPostIntentHookV2 } from "./IPostIntentHookV2.sol";
+import { ISettlementHook } from "./ISettlementHook.sol";
 import { IPreIntentHook } from "./IPreIntentHook.sol";
 import { IReferralFee } from "./IReferralFee.sol";
 
@@ -28,8 +28,8 @@ interface IOrchestratorV2 {
         uint256 conversionRate;                     // Conversion rate of deposit token to fiat currency at the time of intent
         bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
-        IPostIntentHookV2 postIntentHook;            // Address of the post-intent hook that will execute any post-intent actions
-        bytes data;                                 // Additional data to be passed to the post-intent hook contract
+        ISettlementHook settlementHook;            // Optional action that consumes the net settlement amount
+        bytes data;                                 // Signal-time data persisted for the settlement hook
     }
 
     struct SignalIntentParams {
@@ -43,16 +43,16 @@ interface IOrchestratorV2 {
         IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
         bytes gatingServiceSignature;               // Signature from the deposit's gating service
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
-        IPostIntentHookV2 postIntentHook;           // Optional post-intent hook (address(0) for no hook)
+        ISettlementHook settlementHook;            // Optional settlement hook (address(0) for no hook)
         bytes preIntentHookData;                    // Ephemeral data passed only to the pre-intent hook during signalIntent
-        bytes data;                                 // Signal data persisted in Intent and forwarded as post-intent hook signalHookData
+        bytes data;                                 // Signal data persisted in Intent and forwarded as signalHookData
     }
 
     struct FulfillIntentParams {
         bytes paymentProof;                         // Payment proof. Can be Groth16 Proof, TLSNotary proof, TLSProxy proof, attestation etc.
         bytes32 intentHash;                         // Identifier of intent being fulfilled
         bytes verificationData;                     // Additional data for payment verifier
-        bytes postIntentHookData;                   // Additional data for post intent hook
+        bytes settlementHookData;                  // Fulfillment-time data for the settlement hook
     }
 
     /* ============ Events ============ */
@@ -130,7 +130,7 @@ interface IOrchestratorV2 {
 
     // Validation errors
     error AccountHasActiveIntent(address account, bytes32 existingIntent);
-    error InvalidPostIntentHook(address hook);
+    error InvalidSettlementHook(address hook);
     error InvalidPreIntentHook(address hook);
     error InvalidSignature();
     error SignatureExpired(uint256 expiration, uint256 currentTime);

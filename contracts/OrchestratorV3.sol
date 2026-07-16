@@ -10,7 +10,7 @@ import { IIntentRiskHook } from "./interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV2 } from "./interfaces/IOrchestratorV2.sol";
 import { IOrchestratorV3 } from "./interfaces/IOrchestratorV3.sol";
 import { BoundedCall } from "./lib/BoundedCall.sol";
-import { PostIntentHookExecutor } from "./lib/PostIntentHookExecutor.sol";
+import { SettlementHookExecutor } from "./lib/SettlementHookExecutor.sol";
 
 /**
  * @title OrchestratorV3
@@ -28,7 +28,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
 
     mapping(address => mapping(uint256 => IIntentRiskHook)) internal depositRiskHooks;
     mapping(bytes32 => IIntentRiskHook) internal intentRiskHooks;
-    mapping(bytes32 => bool) public override intentRequiresPostIntentHook;
+    mapping(bytes32 => bool) public override intentRequiresSettlementHook;
     mapping(bytes32 => IntentSettlement) internal failedIntentSettlements;
     mapping(bytes32 => IntentCancellation) internal failedIntentCancellations;
 
@@ -161,7 +161,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             depositId: intent.depositId,
             amount: intent.amount,
             paymentMethod: intent.paymentMethod,
-            postIntentHook: address(intent.postIntentHook),
+            settlementHook: address(intent.settlementHook),
             createdAt: uint64(intent.timestamp)
         });
     }
@@ -171,14 +171,14 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
      * @dev V1 policy rejects new deferred positions, but retaining the V3 behavior preserves the
      *      lifecycle semantics for any separately migrated legacy position.
      */
-    function _shouldExecutePostIntentHookOnManualRelease(
+    function _shouldExecuteSettlementHookOnManualRelease(
         bytes32 _intentHash
     ) internal view override returns (bool) {
-        bool requiresPostIntentHook = intentRequiresPostIntentHook[_intentHash];
-        if (requiresPostIntentHook && address(intents[_intentHash].postIntentHook) == address(0)) {
-            revert RequiredPostIntentHookMissing(_intentHash);
+        bool requiresSettlementHook = intentRequiresSettlementHook[_intentHash];
+        if (requiresSettlementHook && address(intents[_intentHash].settlementHook) == address(0)) {
+            revert RequiredSettlementHookMissing(_intentHash);
         }
-        return requiresPostIntentHook;
+        return requiresSettlementHook;
     }
 
     /**
@@ -216,15 +216,15 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         IIntentRiskHook riskHook = depositRiskHooks[intent.escrow][intent.depositId];
         intentRiskHooks[_intentHash] = riskHook;
 
-        bool requiresPostIntentHook = BoundedCall.executeRiskAdmission(
+        bool requiresSettlementHook = BoundedCall.executeRiskAdmission(
             riskHook,
             _intentHash,
-            address(intent.postIntentHook),
+            address(intent.settlementHook),
             riskCallbackGasLimit,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
-        intentRequiresPostIntentHook[_intentHash] = requiresPostIntentHook;
-        emit IntentRiskHookSnapshotted(_intentHash, address(riskHook), requiresPostIntentHook);
+        intentRequiresSettlementHook[_intentHash] = requiresSettlementHook;
+        emit IntentRiskHookSnapshotted(_intentHash, address(riskHook), requiresSettlementHook);
     }
 
     /**
@@ -250,7 +250,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
 
         super._resolveIntent(_intentHash, _resolution, _releasedAmount);
         delete intentRiskHooks[_intentHash];
-        delete intentRequiresPostIntentHook[_intentHash];
+        delete intentRequiresSettlementHook[_intentHash];
 
         bool callbackSucceeded = BoundedCall.executeTerminalRiskCallback(
             riskHook,
@@ -280,7 +280,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         bytes32 _intentHash,
         Intent memory _intent,
         uint256 _releaseAmount,
-        bytes memory _postIntentHookData,
+        bytes memory _settlementHookData,
         address _managerFeeRecipient,
         uint256 _managerFee,
         bool _isManualRelease
@@ -294,12 +294,12 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             _managerFee
         );
         uint256 netAmount = _releaseAmount - netFees;
-        address fundsTransferredTo = PostIntentHookExecutor.transferOrExecute(
+        address fundsTransferredTo = SettlementHookExecutor.transferOrExecute(
             _token,
             _intentHash,
             _intent,
             netAmount,
-            _postIntentHookData
+            _settlementHookData
         );
 
         emit IntentFulfilled(_intentHash, fundsTransferredTo, netAmount, _isManualRelease);

@@ -9,7 +9,7 @@ import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
  * @notice Configurable lifecycle hook used to exercise OrchestratorV3 callback behavior.
  */
 contract IntentRiskHookMock is IIntentRiskHook {
-    bool public requiresPostIntentHook;
+    bool public requiresSettlementHook;
     bool public revertOnCreate;
     bool public revertOnTerminal;
     uint256 public terminalRevertDataSize;
@@ -20,8 +20,8 @@ contract IntentRiskHookMock is IIntentRiskHook {
     uint256 public fulfilledCalls;
     uint256 public releasedCalls;
 
-    function setRequiresPostIntentHook(bool _required) external {
-        requiresPostIntentHook = _required;
+    function setRequiresSettlementHook(bool _required) external {
+        requiresSettlementHook = _required;
     }
 
     function setRevertOnCreate(bool _shouldRevert) external {
@@ -40,7 +40,7 @@ contract IntentRiskHookMock is IIntentRiskHook {
         if (revertOnCreate) revert("risk admission failed");
         lastIntentHash = _intentHash;
         createdCalls++;
-        return requiresPostIntentHook;
+        return requiresSettlementHook;
     }
 
     function onIntentCancelled(bytes32 _intentHash) external override {

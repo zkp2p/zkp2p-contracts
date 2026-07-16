@@ -3,15 +3,15 @@
 pragma solidity ^0.8.18;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { IPostIntentHookV2 } from "../interfaces/IPostIntentHookV2.sol";
+import { ISettlementHook } from "../interfaces/ISettlementHook.sol";
 import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
 
 /**
- * @title ReentrantPostIntentHookV2
+ * @title ReentrantSettlementHook
  * @notice Malicious V2 hook contract that attempts reentrancy attack on fulfillIntent
  * @dev Used for testing reentrancy protection in OrchestratorV2 contract
  */
-contract ReentrantPostIntentHookV2 is IPostIntentHookV2 {
+contract ReentrantSettlementHook is ISettlementHook {
 
     /* ============ State Variables ============ */
 
@@ -46,13 +46,13 @@ contract ReentrantPostIntentHookV2 is IPostIntentHookV2 {
         bytes calldata paymentProof,
         bytes32 intentHash,
         bytes calldata verificationData,
-        bytes calldata postIntentHookData
+        bytes calldata settlementHookData
     ) external {
         storedFulfillParams = IOrchestratorV2.FulfillIntentParams({
             paymentProof: paymentProof,
             intentHash: intentHash,
             verificationData: verificationData,
-            postIntentHookData: postIntentHookData
+            settlementHookData: settlementHookData
         });
     }
 
@@ -64,7 +64,7 @@ contract ReentrantPostIntentHookV2 is IPostIntentHookV2 {
     }
 
     /**
-     * @notice Executes post-intent action and attempts reentrancy attack
+     * @notice Executes settlement action and attempts reentrancy attack
      * @param _ctx Hook execution context
      */
     function execute(

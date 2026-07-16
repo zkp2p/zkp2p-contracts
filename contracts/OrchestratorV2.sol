@@ -16,7 +16,7 @@ import { IReferralFee } from "./interfaces/IReferralFee.sol";
 import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
-import { IPostIntentHookV2 } from "./interfaces/IPostIntentHookV2.sol";
+import { ISettlementHook } from "./interfaces/ISettlementHook.sol";
 import { IPreIntentHook } from "./interfaces/IPreIntentHook.sol";
 import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
@@ -154,7 +154,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         storedIntent.conversionRate = _params.conversionRate;
         storedIntent.payeeId = depData.payeeDetails;
         storedIntent.timestamp = block.timestamp;
-        storedIntent.postIntentHook = _params.postIntentHook;
+        storedIntent.settlementHook = _params.settlementHook;
         storedIntent.data = _params.data;
 
         for (uint256 i = 0; i < _params.referralFees.length; ++i) {
@@ -250,7 +250,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      * @notice Anyone can submit a fulfill intent transaction, even if caller isn't the intent owner. Upon submission the
      * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated.
      * Deposit token is transferred to the intent.to address.
-     * @dev This function adds a reentrancy guard as it's calling the post intent hook contract which itself might call 
+     * @dev This function adds a reentrancy guard as it's calling the settlement hook contract which itself might call
      * malicious contracts.
      *
      * @param _params               Struct containing all the fulfill intent parameters
@@ -296,7 +296,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
             _params.intentHash, 
             intent, 
             verificationResult.releaseAmount,
-            _params.postIntentHookData,
+            _params.settlementHookData,
             managerFeeRecipient,
             managerFee,
             false
@@ -321,7 +321,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         // Snapshot manager fee terms before pruning (pruning deletes the mappings).
         address managerFeeRecipient = intentManagerFeeRecipient[_intentHash];
         uint256 managerFee = intentManagerFee[_intentHash];
-        bool executePostIntentHook = _shouldExecutePostIntentHookOnManualRelease(_intentHash);
+        bool executeSettlementHook = _shouldExecuteSettlementHookOnManualRelease(_intentHash);
         
         // Effects
         _resolveIntent(_intentHash, IntentResolution.RELEASED, intent.amount);
@@ -329,7 +329,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         // Interactions
         IEscrow(intent.escrow).unlockAndTransferFunds(intent.depositId, _intentHash, intent.amount, address(this));
 
-        if (executePostIntentHook) {
+        if (executeSettlementHook) {
             _collectFeesTransferFundsAndExecuteAction(
                 deposit.token,
                 _intentHash,
@@ -535,10 +535,10 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     }
 
     /**
-     * @notice Returns whether manual release should execute the intent's post-intent hook.
+     * @notice Returns whether manual release should execute the intent's settlement hook.
      * @dev V2 manual releases transfer directly to the intent recipient.
      */
-    function _shouldExecutePostIntentHookOnManualRelease(bytes32) internal view virtual returns (bool) {
+    function _shouldExecuteSettlementHookOnManualRelease(bytes32) internal view virtual returns (bool) {
         return false;
     }
 
@@ -556,9 +556,9 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         
         ReferralFeeLib.validateReferralFees(_intent.referralFees);
 
-        if (address(_intent.postIntentHook) != address(0)) {
-            if (address(_intent.postIntentHook).code.length == 0) {
-                revert InvalidPostIntentHook(address(_intent.postIntentHook));
+        if (address(_intent.settlementHook) != address(0)) {
+            if (address(_intent.settlementHook).code.length == 0) {
+                revert InvalidSettlementHook(address(_intent.settlementHook));
             }
         }
 
@@ -742,14 +742,14 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     }
 
     /**
-     * @notice Handles fee calculations and transfers, then executes any post-intent hooks if present. Called by fulfillIntent.
+     * @notice Handles fee calculations and transfers, then executes any settlement hooks if present. Called by fulfillIntent.
      */
     function _collectFeesTransferFundsAndExecuteAction(
         IERC20 _token, 
         bytes32 _intentHash, 
         Intent memory _intent, 
         uint256 _releaseAmount,
-        bytes memory _postIntentHookData,
+        bytes memory _settlementHookData,
         address _managerFeeRecipient,
         uint256 _managerFee,
         bool _isManualRelease
@@ -765,18 +765,18 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         uint256 netAmount = _releaseAmount - netFees;
 
         address fundsTransferredTo = _intent.to;
-        if (address(_intent.postIntentHook) != address(0)) {
+        if (address(_intent.settlementHook) != address(0)) {
             // Snapshot balance to enforce exact consumption by the hook
             uint256 preBalance = _token.balanceOf(address(this));
 
-            // Grant exact allowance to the post-intent hook using SafeERC20 with zero-before-set
-            _token.safeApprove(address(_intent.postIntentHook), 0);
-            _token.safeApprove(address(_intent.postIntentHook), netAmount);
-            IPostIntentHookV2.HookExecutionContext memory hookCtx = IPostIntentHookV2.HookExecutionContext({
+            // Grant exact allowance to the settlement hook using SafeERC20 with zero-before-set
+            _token.safeApprove(address(_intent.settlementHook), 0);
+            _token.safeApprove(address(_intent.settlementHook), netAmount);
+            ISettlementHook.HookExecutionContext memory hookCtx = ISettlementHook.HookExecutionContext({
                 intentHash: _intentHash,
                 token: address(_token),
                 executableAmount: netAmount,
-                intent: IPostIntentHookV2.HookIntentContext({
+                intent: ISettlementHook.HookIntentContext({
                     owner: _intent.owner,
                     to: _intent.to,
                     escrow: _intent.escrow,
@@ -790,18 +790,18 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
                     signalHookData: _intent.data
                 })
             });
-            _intent.postIntentHook.execute(hookCtx, _postIntentHookData);
+            _intent.settlementHook.execute(hookCtx, _settlementHookData);
             
             // Enforce that the hook pulled exactly netAmount to prevent stranded funds
             uint256 postBalance = _token.balanceOf(address(this));
-            require(postBalance <= preBalance, "PostIntentHook: unexpected balance increase");
+            require(postBalance <= preBalance, "SettlementHook: unexpected balance increase");
             uint256 spent = preBalance - postBalance;
-            require(spent == netAmount, "PostIntentHook: must pull exact netAmount");
+            require(spent == netAmount, "SettlementHook: must pull exact netAmount");
 
             // Reset allowance to prevent residual balance drainage (and fail closed on non-standard ERC20s)
-            _token.safeApprove(address(_intent.postIntentHook), 0);
+            _token.safeApprove(address(_intent.settlementHook), 0);
 
-            fundsTransferredTo = address(_intent.postIntentHook);
+            fundsTransferredTo = address(_intent.settlementHook);
         } else {
             // Otherwise transfer directly to the intent recipient
             _token.safeTransfer(_intent.to, netAmount);

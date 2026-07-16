@@ -8,7 +8,7 @@ import { ether, usdc } from "@utils/common";
 import { ADDRESS_ZERO, EMPTY_ORACLE_RATE_CONFIG, ONE, ZERO } from "@utils/constants";
 import { Currency } from "@utils/protocolUtils";
 import { getAccounts, getWaffleExpect } from "@utils/test";
-import { createSignalIntentParams } from "@utils/test/helpers";
+import { createSignalIntentParamsV2 } from "@utils/test/helpers";
 import {
   Escrow,
   EscrowRegistry,
@@ -193,7 +193,7 @@ describe("Patch Coverage", () => {
       // Enable the acceptAll flag
       await escrowRegistry.connect(owner.wallet).setAcceptAllEscrows(true);
 
-      const params = await createSignalIntentParams(
+      const params = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         depositId,
@@ -583,7 +583,7 @@ describe("Patch Coverage", () => {
     it("fulfills intent correctly when protocol fee is zero (skips fee transfer)", async () => {
       // Protocol fee is already zero by default
 
-      const params = await createSignalIntentParams(
+      const params = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         depositId,
@@ -618,7 +618,7 @@ describe("Patch Coverage", () => {
           paymentProof,
           intentHash,
           verificationData: "0x",
-          postIntentHookData: "0x",
+          settlementHookData: "0x",
         })
       ).to.emit(orchestrator, "IntentFulfilled");
     });
@@ -907,7 +907,7 @@ describe("Patch Coverage", () => {
 
   describe("OrchestratorV2 -- referral fee validation uncovered branch", () => {
     it("reverts when a referral fee recipient has a zero fee", async () => {
-      const params = await createSignalIntentParams(
+      const params = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         depositId,

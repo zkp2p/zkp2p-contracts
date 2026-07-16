@@ -88,7 +88,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
     options: {
       amount?: BigNumber;
       paymentMethod?: string;
-      postIntentHook?: string;
+      settlementHook?: string;
       createdAt?: number;
       owner?: string;
       recipient?: string;
@@ -101,7 +101,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       depositId: 0,
       amount: options.amount ?? usdc(100),
       paymentMethod: options.paymentMethod ?? PAYPAL,
-      postIntentHook: options.postIntentHook ?? ZERO,
+      settlementHook: options.settlementHook ?? ZERO,
       createdAt: options.createdAt ?? await time.latest(),
     });
   }
@@ -534,7 +534,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
     it("rejects the deferred hook for a fully stake-backed position", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("deferred-hook-with-stake");
-      await setRiskIntent(fixture, intentHash, { postIntentHook: fixture.orchestrator.address });
+      await setRiskIntent(fixture, intentHash, { settlementHook: fixture.orchestrator.address });
       await expect(fixture.orchestrator.createPosition(fixture.manager.address, intentHash))
         .to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutHookNotAllowed");
     });
@@ -543,7 +543,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("deferred-hook-with-free");
       await setRiskIntent(fixture, intentHash, {
-        amount: usdc(20), paymentMethod: ZELLE, postIntentHook: fixture.orchestrator.address,
+        amount: usdc(20), paymentMethod: ZELLE, settlementHook: fixture.orchestrator.address,
       });
       await expect(fixture.orchestrator.createPosition(fixture.manager.address, intentHash))
         .to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutHookNotAllowed");

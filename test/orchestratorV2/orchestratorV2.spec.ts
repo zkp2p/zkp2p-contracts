@@ -8,7 +8,7 @@ import { ether, usdc } from "@utils/common";
 import { ADDRESS_ZERO, EMPTY_ORACLE_RATE_CONFIG, ONE, ZERO } from "@utils/constants";
 import { Currency } from "@utils/protocolUtils";
 import { getAccounts, getWaffleExpect } from "@utils/test";
-import { createSignalIntentParams } from "@utils/test/helpers";
+import { createSignalIntentParamsV2 } from "@utils/test/helpers";
 import {
   EscrowRegistry,
   EscrowV2,
@@ -127,7 +127,7 @@ describe("OrchestratorV2", () => {
     let subjectConversionRate: BigNumber;
 
     async function subject() {
-      const params = await createSignalIntentParams(
+      const params = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         ZERO,
@@ -187,7 +187,7 @@ describe("OrchestratorV2", () => {
     let intentHash: BytesLike;
 
     beforeEach(async () => {
-      const signalParams = await createSignalIntentParams(
+      const signalParams = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         ZERO,
@@ -228,7 +228,7 @@ describe("OrchestratorV2", () => {
         paymentProof,
         intentHash,
         verificationData: "0x",
-        postIntentHookData: "0x",
+        settlementHookData: "0x",
       });
 
       const expectedManagerFee = releaseAmount.mul(ether(0.01)).div(ether(1));

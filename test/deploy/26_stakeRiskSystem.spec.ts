@@ -47,7 +47,7 @@ describe("Affine stake risk system deployment", () => {
 
   it("deploys the linked orchestrator components", async () => {
     expect(deployedAddress("BoundedCall")).to.properAddress;
-    expect(deployedAddress("PostIntentHookExecutor")).to.properAddress;
+    expect(deployedAddress("SettlementHookExecutor")).to.properAddress;
     expect(deployedAddress("OrchestratorV3")).to.properAddress;
   });
 
@@ -147,13 +147,15 @@ describe("Affine stake risk system deployment", () => {
       .to.throw("chargeback witnesses must be disjoint from payment witnesses");
   });
 
-  it("fails before a nonlocal canonical deployment can be overwritten", async () => {
-    const lookedUp: string[] = [];
-    await expect(assertFreshNonLocalStakeRiskDeployment("base_staging", async (name) => {
-      lookedUp.push(name);
-      return name === "OrchestratorV3" ? { address: ethers.constants.AddressZero } : null;
-    })).to.be.rejectedWith("use a separately named, governance-reviewed migration");
-    expect(lookedUp).to.include("OrchestratorV3");
+  it("fails before either historical or current executor coordinates can be overwritten", async () => {
+    for (const executorName of ["PostIntentHookExecutor", "SettlementHookExecutor"]) {
+      const lookedUp: string[] = [];
+      await expect(assertFreshNonLocalStakeRiskDeployment("base_staging", async (name) => {
+        lookedUp.push(name);
+        return name === executorName ? { address: ethers.constants.AddressZero } : null;
+      })).to.be.rejectedWith("use a separately named, governance-reviewed migration");
+      expect(lookedUp).to.include(executorName);
+    }
   });
 
   it("uses the deployed modular attestation verifier and RiskManager EIP-712 domain", async () => {

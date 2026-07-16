@@ -8,7 +8,7 @@ import { ether, usdc } from "@utils/common";
 import { ADDRESS_ZERO, EMPTY_ORACLE_RATE_CONFIG, ONE, ZERO } from "@utils/constants";
 import { Currency } from "@utils/protocolUtils";
 import { getAccounts, getWaffleExpect } from "@utils/test";
-import { createSignalIntentParams, hashReferralFees, type ReferralFeeParam } from "@utils/test/helpers";
+import { createSignalIntentParamsV2, hashReferralFees, type ReferralFeeParam } from "@utils/test/helpers";
 import {
   EscrowRegistry,
   EscrowV2,
@@ -17,14 +17,14 @@ import {
   OrchestratorV2,
   PaymentVerifierMock,
   PaymentVerifierRegistry,
-  PartialPullPostIntentHookV2Mock,
-  ReentrantPostIntentHookV2,
+  PartialPullSettlementHookMock,
+  ReentrantSettlementHook,
   ReentrantPreIntentHookMock,
   ReentrantHookSetterMock,
   ReentrantSignalIntentCallerV2Mock,
-  PostIntentHookV2Mock,
+  SettlementHookMock,
   PreIntentHookMock,
-  PushPostIntentHookV2Mock,
+  PushSettlementHookMock,
   RelayerRegistry,
   USDCMock,
 } from "@utils/contracts";
@@ -53,10 +53,10 @@ describe("OrchestratorV2", () => {
   let verifier: PaymentVerifierMock;
   let preIntentHookMock: PreIntentHookMock;
   let whitelistHookMock: PreIntentHookMock;
-  let postIntentHookMock: PostIntentHookV2Mock;
-  let partialPostIntentHookMock: PartialPullPostIntentHookV2Mock;
-  let pushPostIntentHookMock: PushPostIntentHookV2Mock;
-  let reentrantPostIntentHook: ReentrantPostIntentHookV2;
+  let settlementHookMock: SettlementHookMock;
+  let partialSettlementHookMock: PartialPullSettlementHookMock;
+  let pushSettlementHookMock: PushSettlementHookMock;
+  let reentrantSettlementHook: ReentrantSettlementHook;
   let reentrantPreIntentHookMock: ReentrantPreIntentHookMock;
   let reentrantSignalIntentCallerMock: ReentrantSignalIntentCallerV2Mock;
   let orchestratorMock: OrchestratorMock;
@@ -97,7 +97,7 @@ describe("OrchestratorV2", () => {
     subjectReferrerFee?: BigNumber;
     subjectGatingService?: any | null;
     subjectSignatureExpiration?: BigNumber;
-    subjectPostIntentHook?: string;
+    subjectSettlementHook?: string;
     subjectData?: string;
     subjectReferralFees?: ReferralFeeParam[];
   }) {
@@ -110,11 +110,11 @@ describe("OrchestratorV2", () => {
     const subjectReferrerFee = args?.subjectReferrerFee ?? ZERO;
     const subjectGatingService = args?.subjectGatingService ?? null;
     const subjectSignatureExpiration = args?.subjectSignatureExpiration;
-    const subjectPostIntentHook = args?.subjectPostIntentHook ?? ADDRESS_ZERO;
+    const subjectSettlementHook = args?.subjectSettlementHook ?? ADDRESS_ZERO;
     const subjectData = args?.subjectData ?? "0x";
     const subjectReferralFees = args?.subjectReferralFees;
 
-    const params = await createSignalIntentParams(
+    const params = await createSignalIntentParamsV2(
       orchestrator.address,
       escrow.address,
       subjectDepositId,
@@ -127,7 +127,7 @@ describe("OrchestratorV2", () => {
       subjectReferrerFee,
       subjectGatingService,
       "1",
-      subjectPostIntentHook,
+      subjectSettlementHook,
       subjectData,
       subjectSignatureExpiration,
       "0x",
@@ -153,7 +153,7 @@ describe("OrchestratorV2", () => {
       paymentProof,
       intentHash,
       verificationData: "0x",
-      postIntentHookData: "0x",
+      settlementHookData: "0x",
     });
   }
 
@@ -214,14 +214,14 @@ describe("OrchestratorV2", () => {
       protocolFeeRecipient.address
     );
 
-    postIntentHookMock = await deployer.deployPostIntentHookV2Mock(usdcToken.address, orchestrator.address);
-    partialPostIntentHookMock = await deployer.deployPartialPullPostIntentHookV2Mock(usdcToken.address, orchestrator.address);
-    pushPostIntentHookMock = await deployer.deployPushPostIntentHookV2Mock(usdcToken.address, orchestrator.address);
-    reentrantPostIntentHook = await deployer.deployReentrantPostIntentHookV2(usdcToken.address, orchestrator.address);
+    settlementHookMock = await deployer.deploySettlementHookMock(usdcToken.address, orchestrator.address);
+    partialSettlementHookMock = await deployer.deployPartialPullSettlementHookMock(usdcToken.address, orchestrator.address);
+    pushSettlementHookMock = await deployer.deployPushSettlementHookMock(usdcToken.address, orchestrator.address);
+    reentrantSettlementHook = await deployer.deployReentrantSettlementHook(usdcToken.address, orchestrator.address);
     reentrantSignalIntentCallerMock = await deployer.deployReentrantSignalIntentCallerV2Mock(orchestrator.address);
     reentrantPreIntentHookMock = await deployer.deployReentrantPreIntentHookMock(reentrantSignalIntentCallerMock.address);
     orchestratorMock = await deployer.deployOrchestratorMock(escrow.address);
-    await usdcToken.transfer(pushPostIntentHookMock.address, usdc(10));
+    await usdcToken.transfer(pushSettlementHookMock.address, usdc(10));
 
     await escrowRegistry.connect(owner.wallet).addEscrow(escrow.address);
     await orchestratorRegistry.connect(owner.wallet).addOrchestrator(orchestrator.address);
@@ -423,7 +423,7 @@ describe("OrchestratorV2", () => {
       await escrowRegistry.connect(owner.wallet).addEscrow(reentrantEscrow.address);
       await usdcToken.transfer(reentrantEscrow.address, usdc(100));
 
-      const params = await createSignalIntentParams(
+      const params = await createSignalIntentParamsV2(
         orchestrator.address,
         reentrantEscrow.address,
         ZERO,
@@ -469,7 +469,7 @@ describe("OrchestratorV2", () => {
           paymentProof,
           intentHash,
           verificationData: "0x",
-          postIntentHookData: "0x",
+          settlementHookData: "0x",
         })
       ).to.be.revertedWithCustomError(orchestrator, "AmountBelowMin");
     });
@@ -508,7 +508,7 @@ describe("OrchestratorV2", () => {
           paymentProof,
           intentHash,
           verificationData: "0x",
-          postIntentHookData: "0x",
+          settlementHookData: "0x",
         })
       ).to.be.revertedWithCustomError(orchestrator, "HashMismatch");
     });
@@ -631,7 +631,7 @@ describe("OrchestratorV2", () => {
     });
   });
 
-  describe("signal validations and post-intent hook path", () => {
+  describe("signal validations and settlement hook path", () => {
     it("reverts when account already has an active intent", async () => {
       await signalIntent({ subjectCaller: taker });
 
@@ -716,7 +716,7 @@ describe("OrchestratorV2", () => {
       ];
 
       const signalTx = await orchestrator.connect(taker.wallet).signalIntent(
-        await createSignalIntentParams(
+        await createSignalIntentParamsV2(
           orchestrator.address,
           escrow.address,
           depositId,
@@ -772,8 +772,8 @@ describe("OrchestratorV2", () => {
       await expect(signalIntent()).to.be.revertedWithCustomError(orchestrator, "CurrencyNotSupported");
     });
 
-    it("reverts when post-intent hook is an EOA", async () => {
-      const params = await createSignalIntentParams(
+    it("reverts when settlement hook is an EOA", async () => {
+      const params = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         depositId,
@@ -794,13 +794,13 @@ describe("OrchestratorV2", () => {
 
       await expect(
         orchestrator.connect(taker.wallet).signalIntent(params)
-      ).to.be.revertedWithCustomError(orchestrator, "InvalidPostIntentHook");
+      ).to.be.revertedWithCustomError(orchestrator, "InvalidSettlementHook");
     });
 
-    it("executes post-intent hook flow on fulfill", async () => {
+    it("executes settlement hook flow on fulfill", async () => {
       const target = other.address;
       const intentHash = await signalIntent({
-        subjectPostIntentHook: postIntentHookMock.address,
+        subjectSettlementHook: settlementHookMock.address,
         subjectData: ethers.utils.defaultAbiCoder.encode(["address"], [target]),
       });
 
@@ -818,7 +818,7 @@ describe("OrchestratorV2", () => {
         reentrantPreIntentHookMock.address
       );
 
-      const params = await createSignalIntentParams(
+      const params = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         depositId,
@@ -844,29 +844,29 @@ describe("OrchestratorV2", () => {
       expect(await reentrantPreIntentHookMock.lastReentrySucceeded()).to.eq(false);
     });
 
-    it("reverts when post-intent hook pulls less than net amount", async () => {
+    it("reverts when settlement hook pulls less than net amount", async () => {
       const target = other.address;
       const intentHash = await signalIntent({
-        subjectPostIntentHook: partialPostIntentHookMock.address,
+        subjectSettlementHook: partialSettlementHookMock.address,
         subjectData: ethers.utils.defaultAbiCoder.encode(["address"], [target]),
       });
 
-      await expect(fulfillIntent(intentHash)).to.be.revertedWith("PostIntentHook: must pull exact netAmount");
+      await expect(fulfillIntent(intentHash)).to.be.revertedWith("SettlementHook: must pull exact netAmount");
     });
 
-    it("reverts when post-intent hook increases orchestrator balance", async () => {
+    it("reverts when settlement hook increases orchestrator balance", async () => {
       const target = other.address;
       const intentHash = await signalIntent({
-        subjectPostIntentHook: pushPostIntentHookMock.address,
+        subjectSettlementHook: pushSettlementHookMock.address,
         subjectData: ethers.utils.defaultAbiCoder.encode(["address"], [target]),
       });
 
-      await expect(fulfillIntent(intentHash)).to.be.revertedWith("PostIntentHook: unexpected balance increase");
+      await expect(fulfillIntent(intentHash)).to.be.revertedWith("SettlementHook: unexpected balance increase");
     });
 
-    it("blocks reentrant fulfillIntent calls from post-intent hook", async () => {
+    it("blocks reentrant fulfillIntent calls from settlement hook", async () => {
       const intentHash = await signalIntent({
-        subjectPostIntentHook: reentrantPostIntentHook.address,
+        subjectSettlementHook: reentrantSettlementHook.address,
       });
       const timestamp = BigNumber.from((await ethers.provider.getBlock("latest")).timestamp);
       const paymentProof = ethers.utils.defaultAbiCoder.encode(
@@ -874,17 +874,17 @@ describe("OrchestratorV2", () => {
         [usdc(50), timestamp, payeeDetails, Currency.USD, intentHash]
       );
 
-      await reentrantPostIntentHook.setFulfillParams(paymentProof, intentHash, "0x", "0x");
+      await reentrantSettlementHook.setFulfillParams(paymentProof, intentHash, "0x", "0x");
 
       await expect(
         orchestrator.connect(owner.wallet).fulfillIntent({
           paymentProof,
           intentHash,
           verificationData: "0x",
-          postIntentHookData: "0x",
+          settlementHookData: "0x",
         })
       )
-        .to.emit(reentrantPostIntentHook, "ReentrancyAttempted")
+        .to.emit(reentrantSettlementHook, "ReentrancyAttempted")
         .withArgs(false);
     });
   });
@@ -923,7 +923,7 @@ describe("OrchestratorV2", () => {
 
     it("reverts when a different sender replays a valid gating signature", async () => {
       // Generate signature for taker
-      const params = await createSignalIntentParams(
+      const params = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         gatedDepositId,
@@ -950,7 +950,7 @@ describe("OrchestratorV2", () => {
 
       // Create a second gated deposit for second attempt
       const gatedDepositId2 = await createDeposit(gatingService.address);
-      const params2 = await createSignalIntentParams(
+      const params2 = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         gatedDepositId2,

@@ -19,7 +19,7 @@ interface IOrchestratorV3 is IOrchestratorV2 {
         uint256 depositId;
         uint256 amount;
         bytes32 paymentMethod;
-        address postIntentHook;
+        address settlementHook;
         uint64 createdAt;
     }
 
@@ -37,7 +37,7 @@ interface IOrchestratorV3 is IOrchestratorV2 {
     /* ============ Events ============ */
 
     event DepositRiskHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
-    event IntentRiskHookSnapshotted(bytes32 indexed intentHash, address indexed riskHook, bool requiresPostIntentHook);
+    event IntentRiskHookSnapshotted(bytes32 indexed intentHash, address indexed riskHook, bool requiresSettlementHook);
     event RiskHookCallbackFailed(
         bytes32 indexed intentHash,
         address indexed riskHook,
@@ -53,7 +53,7 @@ interface IOrchestratorV3 is IOrchestratorV2 {
     error InvalidRiskHook(address hook);
     error RiskHookAdmissionFailed(bytes32 intentHash, address hook, bytes revertData);
     error InvalidRiskHookResponse(address hook, bytes response);
-    error RequiredPostIntentHookMissing(bytes32 intentHash);
+    error RequiredSettlementHookMissing(bytes32 intentHash);
     error RiskCallbackGasLimitTooLow(uint256 gasLimit, uint256 minimum);
 
     /* ============ External Functions ============ */
@@ -65,7 +65,7 @@ interface IOrchestratorV3 is IOrchestratorV2 {
 
     function getDepositRiskHook(address _escrow, uint256 _depositId) external view returns (IIntentRiskHook);
     function getIntentRiskHook(bytes32 _intentHash) external view returns (IIntentRiskHook);
-    function intentRequiresPostIntentHook(bytes32 _intentHash) external view returns (bool);
+    function intentRequiresSettlementHook(bytes32 _intentHash) external view returns (bool);
     function getRiskIntent(bytes32 _intentHash) external view returns (RiskIntentData memory);
     function getAccountIntentCount(address _account) external view returns (uint256);
     /**

@@ -6,7 +6,7 @@ Smart contracts for the ZKP2P fiat on/off-ramp. The current source tree contains
 settlement stack and the merged v3 stake-risk extension:
 
 - `EscrowV2`: maker liquidity, per-deposit payment configuration, oracle-backed pricing, delegated rate managers.
-- `OrchestratorV2`: intent lifecycle, fee handling, pre-intent hooks, whitelist hooks, post-intent execution.
+- `OrchestratorV2`: intent lifecycle, fee handling, pre-intent hooks, whitelist hooks, settlement-hook execution.
 - `UnifiedPaymentVerifierV2`: shared attestation-based verifier registered across supported payment methods.
 - `ProtocolViewerV2`: batched read model for deposits, intents, supported payment methods, and effective rates.
 - `OrchestratorV3`: v2-compatible settlement with depositor-selected, snapshotted risk callbacks.
@@ -68,7 +68,7 @@ The detailed v2 sections below remain the reference for the settlement layer tha
 
 ## System Overview
 
-ZKP2P is a non-custodial fiat-to-crypto settlement protocol. Makers deposit on-chain liquidity, takers lock a portion of that liquidity by signaling an intent, a payment proof is verified on-chain against an off-chain attestation, and settlement completes either directly to the taker or through a post-intent hook.
+ZKP2P is a non-custodial fiat-to-crypto settlement protocol. Makers deposit on-chain liquidity, takers lock a portion of that liquidity by signaling an intent, a payment proof is verified on-chain against an off-chain attestation, and settlement completes either directly to the taker or through a settlement hook.
 
 The active source architecture is built around five layers:
 
@@ -216,7 +216,7 @@ Key v2 behavior:
 - Snapshots the deposit minimum at signal time to prevent sub-minimum fulfillments later.
 - Snapshots delegated manager fee terms at signal time.
 - Supports a generic pre-intent hook and a dedicated whitelist hook per deposit.
-- Supports optional post-intent hooks through `IPostIntentHookV2`.
+- Supports optional settlement hooks through `ISettlementHook`.
 - Distributes protocol fees, manager fees, and multiple referral fees.
 - Supports relayer-authorized flows through `RelayerRegistry`.
 
@@ -290,7 +290,7 @@ This is useful for private liquidity, per-trade approval, or off-chain risk chec
 
 #### `AcrossBridgeHookV2`
 
-A post-intent hook that bridges fulfilled tokens through Across `depositNow`.
+A settlement hook that bridges fulfilled tokens through Across `depositNow`.
 
 Design constraints:
 
@@ -347,7 +347,7 @@ The v2 stack reuses and extends the existing registry model:
 - `EscrowRegistry`: whitelists escrow contracts
 - `OrchestratorRegistry`: whitelists both v1 and v2 orchestrators for escrow/verifier authorization
 - `PaymentVerifierRegistry`: maps payment method hash to verifier and supported currencies
-- `PostIntentHookRegistry`: whitelists post-intent hooks
+- `PostIntentHookRegistry`: whitelists legacy post-intent hooks
 - `RelayerRegistry`: whitelists relayers
 - `NullifierRegistry`: stores consumed payment nullifiers
 
@@ -404,7 +404,7 @@ The taker pays the maker using the selected payment rail. The off-chain attestat
 - prunes the intent
 - unlocks and transfers escrowed funds
 - distributes protocol, referral, and manager fees
-- optionally executes a post-intent hook
+- optionally executes a settlement hook
 
 ### 6. Expired Intents Can Be Reclaimed
 
@@ -459,9 +459,9 @@ Executed during `signalIntent`, before funds are locked:
 
 These hooks are configured per deposit by the depositor or delegate.
 
-### Post-Intent Hooks
+### Settlement Hooks
 
-Executed during `fulfillIntent`, after verification and escrow release:
+Executed as part of `fulfillIntent`, after verification and escrow release:
 
 - direct recipient settlement remains the default
 - hooks can route fulfilled funds into external workflows

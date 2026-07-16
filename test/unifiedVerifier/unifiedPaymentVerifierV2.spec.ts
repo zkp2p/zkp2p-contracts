@@ -137,7 +137,7 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
       referralFees: [],
       gatingServiceSignature: ZERO_BYTES,
       signatureExpiration: ZERO,
-      postIntentHook: ADDRESS_ZERO,
+      settlementHook: ADDRESS_ZERO,
       preIntentHookData: ZERO_BYTES,
       data: ZERO_BYTES,
     });
@@ -184,7 +184,7 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
         paymentProof: builtProof.paymentProof,
         intentHash,
         verificationData: ZERO_BYTES,
-        postIntentHookData: ZERO_BYTES,
+        settlementHookData: ZERO_BYTES,
       }),
     )
       .to.emit(verifier, "PaymentVerified")

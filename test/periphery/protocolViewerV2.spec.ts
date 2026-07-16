@@ -20,7 +20,7 @@ import { getAccounts, getWaffleExpect } from "@utils/test";
 import { ether, usdc } from "@utils/common";
 import { ADDRESS_ZERO, EMPTY_ORACLE_RATE_CONFIG, ONE, ZERO, ONE_DAY_IN_SECONDS } from "@utils/constants";
 import { Currency } from "@utils/protocolUtils";
-import { createSignalIntentParams } from "@utils/test/helpers";
+import { createSignalIntentParamsV2 } from "@utils/test/helpers";
 
 const expect = getWaffleExpect();
 
@@ -224,7 +224,7 @@ describe("ProtocolViewerV2", () => {
     beforeEach(async () => {
       await orchestrator.connect(owner.wallet).setAllowMultipleIntents(true);
 
-      const paramsOne = await createSignalIntentParams(
+      const paramsOne = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         ZERO,
@@ -248,7 +248,7 @@ describe("ProtocolViewerV2", () => {
       const signaledEvent = receiptOne.events?.find((event: any) => event.event === "IntentSignaled");
       intentHash = signaledEvent?.args?.intentHash;
 
-      const paramsTwo = await createSignalIntentParams(
+      const paramsTwo = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         ZERO,
