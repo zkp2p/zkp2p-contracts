@@ -228,6 +228,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
                     && config.chargeback.deferredPayoutEnabled
                     && available >= maxGriefingBond
             ) {
+                if (intent.hasSettlementFees) revert DeferredPayoutFeesUnsupported(_intentHash);
                 if (deferredPayoutHook == address(0) || intent.postIntentHook != deferredPayoutHook) {
                     revert DeferredPayoutHookRequired(deferredPayoutHook, intent.postIntentHook);
                 }
@@ -356,10 +357,9 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         bytes32 _intentHash,
         uint256 _releasedAmount
     ) external override onlyOrchestrator nonReentrant {
-        _settlePosition(
+        _releaseManualPosition(
             _intentHash,
             _releasedAmount,
-            bytes32(0),
             uint64(block.timestamp)
         );
     }
@@ -411,14 +411,19 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /** @dev Reads and applies one failed settlement record. */
     function _reconcileSettlement(bytes32 _intentHash) internal {
-        (uint256 releasedAmount, uint64 settledAt) = orchestrator.getIntentSettlement(_intentHash);
+        (uint256 releasedAmount, uint64 settledAt, bool isManualRelease) =
+            orchestrator.getIntentSettlement(_intentHash);
         if (releasedAmount == 0 || settledAt == 0) revert SettlementNotRecorded(_intentHash);
-        _settlePosition(
-            _intentHash,
-            releasedAmount,
-            _getPaymentDetailsHash(_intentHash),
-            settledAt
-        );
+        if (isManualRelease) {
+            _releaseManualPosition(_intentHash, releasedAmount, settledAt);
+            return;
+        }
+
+        bytes32 paymentDetailsHash = _getPaymentDetailsHash(_intentHash);
+        if (riskPositions[_intentHash].chargebackReserveBps != 0 && paymentDetailsHash == bytes32(0)) {
+            revert InvalidPaymentEvidence(_intentHash);
+        }
+        _settlePosition(_intentHash, releasedAmount, paymentDetailsHash, settledAt);
     }
 
     /* ============ Deferred Payout ============ */
@@ -868,17 +873,64 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         );
     }
 
+    /**
+     * @dev A maker manual release proves no off-chain payment. It therefore ends both pending
+     *      griefing liability and chargeback slashability immediately, including a deferred-payout
+     *      authorization that must not capture the manually released proceeds.
+     */
+    function _releaseManualPosition(
+        bytes32 _intentHash,
+        uint256 _releasedAmount,
+        uint64 _settledAt
+    ) internal {
+        if (_releasedAmount == 0) revert ZeroAmount();
+        RiskPosition storage position = riskPositions[_intentHash];
+        if (position.status != PositionStatus.PENDING) {
+            revert PositionNotPending(_intentHash, position.status);
+        }
+
+        uint256 releasedReservation = position.reservedAmount;
+        position.status = PositionStatus.RELEASED;
+        position.releasedAmount = _releasedAmount;
+        position.paymentDetailsHash = bytes32(0);
+        position.settledAt = _settledAt;
+        position.coverageDeadline = 0;
+        position.reservedAmount = 0;
+
+        if (releasedReservation != 0) stakeVault.releaseReservation(_intentHash);
+        if (position.mode == RiskMode.DEFERRED_PAYOUT) {
+            stakeVault.releaseDeferredPayoutAuthorization(_intentHash);
+        }
+
+        emit RiskPositionSettled(
+            _intentHash,
+            position.stakeOwner,
+            position.lp,
+            position.mode,
+            _releasedAmount,
+            0,
+            releasedReservation,
+            _settledAt,
+            0
+        );
+    }
+
     /** @dev Applies a durable failed-settlement record only when the position remains pending. */
     function _synchronizeSettlement(bytes32 _intentHash) internal {
-        (uint256 releasedAmount, uint64 settledAt) = orchestrator.getIntentSettlement(_intentHash);
+        (uint256 releasedAmount, uint64 settledAt, bool isManualRelease) =
+            orchestrator.getIntentSettlement(_intentHash);
         if (releasedAmount == 0) revert SettlementNotRecorded(_intentHash);
         if (settledAt == 0) revert SettlementNotRecorded(_intentHash);
-        _settlePosition(
-            _intentHash,
-            releasedAmount,
-            _getPaymentDetailsHash(_intentHash),
-            settledAt
-        );
+        if (isManualRelease) {
+            _releaseManualPosition(_intentHash, releasedAmount, settledAt);
+            return;
+        }
+
+        bytes32 paymentDetailsHash = _getPaymentDetailsHash(_intentHash);
+        if (riskPositions[_intentHash].chargebackReserveBps != 0 && paymentDetailsHash == bytes32(0)) {
+            revert InvalidPaymentEvidence(_intentHash);
+        }
+        _settlePosition(_intentHash, releasedAmount, paymentDetailsHash, settledAt);
     }
 
     /** @dev Reads evidence from the payment verifier snapshotted before funds were locked. */

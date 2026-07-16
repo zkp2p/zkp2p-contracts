@@ -4,6 +4,7 @@ import { expect } from "chai";
 import hre, { deployments, ethers } from "hardhat";
 
 import deployStakeRiskSystem, {
+  assertFreshNonLocalStakeRiskDeployment,
   chargebackWitnessConfigForNetwork,
   stakeRiskPlatformPolicyForNetwork,
 } from "../../deploy/26_deploy_stake_risk_system";
@@ -136,8 +137,27 @@ describe("Affine stake risk system deployment", () => {
     );
   });
 
+  it("requires chargeback witnesses to be disjoint from payment witnesses", () => {
+    const witnesses = [
+      "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+      "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+    ];
+    expect(() => chargebackWitnessConfigForNetwork("base_staging", witnesses.join(","), [witnesses[0]]))
+      .to.throw("chargeback witnesses must be disjoint from payment witnesses");
+  });
+
+  it("fails before a nonlocal canonical deployment can be overwritten", async () => {
+    const lookedUp: string[] = [];
+    await expect(assertFreshNonLocalStakeRiskDeployment("base_staging", async (name) => {
+      lookedUp.push(name);
+      return name === "OrchestratorV3" ? { address: ethers.constants.AddressZero } : null;
+    })).to.be.rejectedWith("use a separately named, governance-reviewed migration");
+    expect(lookedUp).to.include("OrchestratorV3");
+  });
+
   it("uses the deployed modular attestation verifier and RiskManager EIP-712 domain", async () => {
-    const { deployer, manager } = await contracts();
+    const { manager } = await contracts();
     const verifier = await ethers.getContractAt(
       "MultiAttestationVerifier",
       deployedAddress("ChargebackAttestationVerifier"),
@@ -168,14 +188,14 @@ describe("Affine stake risk system deployment", () => {
     const digest = await manager.hashChargebackAttestation(chargeback);
     expect(digest).to.eq(ethers.utils._TypedDataEncoder.hash(domain, types, chargeback));
 
-    // Local deployments use the deployer as their witness, while live networks
-    // intentionally keep witness keys separate from the deployment key.
-    if (await verifier.isWitness(deployer.address)) {
-      const [, secondWitness] = await ethers.getSigners();
+    if (network === "localhost" || network === "hardhat") {
+      const signers = await ethers.getSigners();
+      const localWitnesses = signers.filter((signer) => witnessConfig.witnesses
+        .map((address) => address.toLowerCase()).includes(signer.address.toLowerCase()));
       const value = { intentHash: chargeback.intentHash, dataHash: chargeback.dataHash };
       const signatures = [
-        await deployer._signTypedData(domain, types, value),
-        await secondWitness._signTypedData(domain, types, value),
+        await localWitnesses[0]._signTypedData(domain, types, value),
+        await localWitnesses[1]._signTypedData(domain, types, value),
       ];
       expect(await verifier.verify(digest, signatures, "0x")).to.eq(true);
     }

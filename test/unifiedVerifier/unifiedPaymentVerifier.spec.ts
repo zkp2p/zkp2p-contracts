@@ -373,6 +373,20 @@ describe("UnifiedPaymentVerifier", () => {
       expect(await verifier.getPaymentDetailsHash(orchestrator.address, intentHash)).to.eq(ethers.constants.HashZero);
     });
 
+    it("rejects a zero fiat amount before recording evidence", async () => {
+      builtProof = await buildProof({ paymentAmount: BigNumber.from(0) });
+      subjectProof = builtProof.paymentProof;
+      await expect(subject()).to.be.revertedWith("UPV: Invalid payment amount");
+      expect(await verifier.getPaymentDetailsHash(orchestrator.address, intentHash)).to.eq(ethers.constants.HashZero);
+    });
+
+    it("rejects a zero fiat currency before recording evidence", async () => {
+      builtProof = await buildProof({ paymentCurrency: ethers.constants.HashZero });
+      subjectProof = builtProof.paymentProof;
+      await expect(subject()).to.be.revertedWith("UPV: Invalid payment currency");
+      expect(await verifier.getPaymentDetailsHash(orchestrator.address, intentHash)).to.eq(ethers.constants.HashZero);
+    });
+
     it("should nullify the payment with correct collision-resistant nullifier", async () => {
       await subject();
 

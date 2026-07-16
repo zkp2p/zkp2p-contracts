@@ -79,6 +79,10 @@ contract RiskManagerOrchestratorHarness {
         return paymentEvidence[_intentHash];
     }
 
+    function setPaymentEvidence(bytes32 _intentHash, bytes32 _evidence) external {
+        paymentEvidence[_intentHash] = _evidence;
+    }
+
     function setRiskIntent(bytes32 _intentHash, IOrchestratorV3.RiskIntentData calldata _intent) external {
         riskIntents[_intentHash] = _intent;
     }
@@ -87,7 +91,12 @@ contract RiskManagerOrchestratorHarness {
         cancellationTimes[_intentHash] = _cancelledAt;
     }
 
-    function setIntentSettlement(bytes32 _intentHash, uint256 _releasedAmount, uint64 _settledAt) external {
+    function setIntentSettlement(
+        bytes32 _intentHash,
+        uint256 _releasedAmount,
+        uint64 _settledAt,
+        bool _isManualRelease
+    ) external {
         bytes32 paymentId = keccak256(abi.encodePacked("payment", _intentHash));
         paymentEvidence[_intentHash] = keccak256(abi.encode(
             riskIntents[_intentHash].paymentMethod,
@@ -95,7 +104,7 @@ contract RiskManagerOrchestratorHarness {
             _releasedAmount,
             keccak256("USD")
         ));
-        settlements[_intentHash] = IOrchestratorV3.IntentSettlement(_releasedAmount, _settledAt);
+        settlements[_intentHash] = IOrchestratorV3.IntentSettlement(_releasedAmount, _settledAt, _isManualRelease);
     }
 
     function getRiskIntent(bytes32 _intentHash) external view returns (IOrchestratorV3.RiskIntentData memory) {
@@ -106,9 +115,9 @@ contract RiskManagerOrchestratorHarness {
         return cancellationTimes[_intentHash];
     }
 
-    function getIntentSettlement(bytes32 _intentHash) external view returns (uint256, uint64) {
+    function getIntentSettlement(bytes32 _intentHash) external view returns (uint256, uint64, bool) {
         IOrchestratorV3.IntentSettlement memory settlement = settlements[_intentHash];
-        return (settlement.releasedAmount, settlement.settledAt);
+        return (settlement.releasedAmount, settlement.settledAt, settlement.isManualRelease);
     }
 
     function createPosition(IIntentRiskHook _hook, bytes32 _intentHash) external returns (bool) {

@@ -21,11 +21,15 @@ interface IOrchestratorV3 is IOrchestratorV2 {
         bytes32 paymentMethod;
         address postIntentHook;
         uint64 createdAt;
+        /// @notice Whether protocol, manager, or referral fees can reduce settlement proceeds.
+        bool hasSettlementFees;
     }
 
     struct IntentSettlement {
         uint256 releasedAmount;
         uint64 settledAt;
+        /// @notice Distinguishes an evidence-free maker release from verified fulfillment recovery.
+        bool isManualRelease;
     }
 
     struct IntentCancellation {
@@ -70,7 +74,9 @@ interface IOrchestratorV3 is IOrchestratorV2 {
      * @notice Returns recovery data when a settlement callback failed open.
      * @dev Successful settlement callbacks leave this record empty.
      */
-    function getIntentSettlement(bytes32 _intentHash) external view returns (uint256 releasedAmount, uint64 settledAt);
+    function getIntentSettlement(
+        bytes32 _intentHash
+    ) external view returns (uint256 releasedAmount, uint64 settledAt, bool isManualRelease);
     /**
      * @notice Returns the liquidity-unlock timestamp when a cancellation callback failed open.
      * @dev The risk hook must use this timestamp during reconciliation rather than the later transaction time.

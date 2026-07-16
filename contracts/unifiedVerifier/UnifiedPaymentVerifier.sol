@@ -147,6 +147,8 @@ contract UnifiedPaymentVerifier is IPaymentVerifier, IPaymentEvidenceVerifier, B
             IntentSnapshot memory intentSnapshot
         ) = _decodeAttestationPayload(attestation.data);
         require(isPaymentMethod[paymentDetails.method], "UPV: Invalid payment method");
+        require(paymentDetails.amount != 0, "UPV: Invalid payment amount");
+        require(paymentDetails.currency != bytes32(0), "UPV: Invalid payment currency");
         
         _validateIntentSnapshot(_verifyPaymentData.intentHash, intentSnapshot);
 
