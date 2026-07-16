@@ -13,9 +13,9 @@ interface IIntentRiskHook {
     /**
      * @notice Validates and records a newly created intent.
      * @param _intentHash Identifier of the readable intent in the calling orchestrator.
-     * @return requiresPostIntentHook True when manual release must execute the intent's post-intent hook.
+     * @return requiresSettlementHook True when manual release must execute the intent's settlement hook.
      */
-    function onIntentCreated(bytes32 _intentHash) external returns (bool requiresPostIntentHook);
+    function onIntentCreated(bytes32 _intentHash) external returns (bool requiresSettlementHook);
 
     /**
      * @notice Resolves risk accounting for a cancelled or expired intent.

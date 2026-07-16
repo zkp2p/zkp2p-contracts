@@ -11,7 +11,7 @@ import { IEscrowV2 } from "../../contracts/interfaces/IEscrowV2.sol";
 import { IIntentRiskHook } from "../../contracts/interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV3 } from "../../contracts/interfaces/IOrchestratorV3.sol";
 import { IPaymentVerifierRegistry } from "../../contracts/interfaces/IPaymentVerifierRegistry.sol";
-import { IPostIntentHookV2 } from "../../contracts/interfaces/IPostIntentHookV2.sol";
+import { ISettlementHook } from "../../contracts/interfaces/ISettlementHook.sol";
 import { IRiskManager } from "../../contracts/interfaces/IRiskManager.sol";
 import { IStakeVault } from "../../contracts/interfaces/IStakeVault.sol";
 import { AttestationVerifierMock } from "../../contracts/mocks/AttestationVerifierMock.sol";
@@ -63,7 +63,7 @@ contract RiskOrchestratorHarness {
         address _escrow,
         uint256 _amount,
         bytes32 _paymentMethod,
-        address _postIntentHook
+        address _settlementHook
     ) external {
         intents[_intentHash] = IOrchestratorV3.RiskIntentData({
             owner: _taker,
@@ -72,7 +72,7 @@ contract RiskOrchestratorHarness {
             depositId: 0,
             amount: _amount,
             paymentMethod: _paymentMethod,
-            postIntentHook: _postIntentHook,
+            settlementHook: _settlementHook,
             createdAt: uint64(block.timestamp)
         });
     }
@@ -240,7 +240,7 @@ contract RiskManagerTest is Test {
         address _taker,
         uint256 _amount,
         bytes32 _paymentMethod,
-        address _postIntentHook
+        address _settlementHook
     ) internal {
         orchestrator.setIntent(
             _intentHash,
@@ -248,7 +248,7 @@ contract RiskManagerTest is Test {
             address(escrow),
             _amount,
             _paymentMethod,
-            _postIntentHook
+            _settlementHook
         );
     }
 

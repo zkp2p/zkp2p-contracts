@@ -9,7 +9,7 @@ import { Currency } from "@utils/protocolUtils";
 import { Account } from "@utils/test/types";
 import { ADDRESS_ZERO, EMPTY_ORACLE_RATE_CONFIG, ONE, ZERO } from "@utils/constants";
 import { getAccounts, getWaffleExpect } from "@utils/test";
-import { createSignalIntentParams, hashReferralFees } from "@utils/test/helpers";
+import { createSignalIntentParamsV2, hashReferralFees } from "@utils/test/helpers";
 import {
   EscrowV2,
   OrchestratorV2,
@@ -227,7 +227,7 @@ describe("OrchestratorV2 - PreIntentHook", () => {
     let subjectData: string;
 
     async function subject(): Promise<any> {
-      const params = await createSignalIntentParams(
+      const params = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         ZERO,
@@ -325,7 +325,7 @@ describe("OrchestratorV2 - PreIntentHook", () => {
         reentrantPreIntentHookMock.address
       );
 
-      const reentrantParams = await createSignalIntentParams(
+      const reentrantParams = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         ZERO,
@@ -479,7 +479,7 @@ describe("OrchestratorV2 - PreIntentHook", () => {
       }
 
       async function subject(): Promise<any> {
-        const params = await createSignalIntentParams(
+        const params = await createSignalIntentParamsV2(
           orchestrator.address,
           escrow.address,
           ZERO,

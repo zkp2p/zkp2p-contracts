@@ -8,11 +8,11 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 
 import { IAcrossSpokePool } from "../external/Interfaces/IAcrossSpokePool.sol";
 import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
-import { IPostIntentHookV2 } from "../interfaces/IPostIntentHookV2.sol";
+import { ISettlementHook } from "../interfaces/ISettlementHook.sol";
 
 /**
  * @title AcrossBridgeHookV2
- * @notice V2 post-intent hook that bridges tokens into Across SpokePool using committed destination params.
+ * @notice Settlement hook that bridges tokens into Across SpokePool using committed destination params.
  *
  * @dev IMPORTANT: This hook is designed for stablecoin-to-stablecoin bridging only.
  *
@@ -30,7 +30,7 @@ import { IPostIntentHookV2 } from "../interfaces/IPostIntentHookV2.sol";
  * This enables bridging to both EVM chains (addresses left-padded to bytes32) and
  * non-EVM chains like Solana (native 32-byte addresses).
  */
-contract AcrossBridgeHookV2 is IPostIntentHookV2, Ownable {
+contract AcrossBridgeHookV2 is ISettlementHook, Ownable {
     using SafeERC20 for IERC20;
 
     /* ============ Enums ============ */

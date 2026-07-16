@@ -29,16 +29,16 @@ import {
   ReentrantSignalIntentCallerMock,
   ReentrantOrchestratorMock,
   PartialPullPostIntentHookMock,
-  PartialPullPostIntentHookV2Mock,
+  PartialPullSettlementHookMock,
   PushPostIntentHookMock,
-  PushPostIntentHookV2Mock,
-  ReentrantPostIntentHookV2,
+  PushSettlementHookMock,
+  ReentrantSettlementHook,
   RateManagerMock,
   ReentrantRateManagerMock,
   ReentrantHookSetterMock,
   ReentrantSignalIntentCallerV2Mock,
   PostIntentHookRegistry,
-  PostIntentHookV2Mock
+  SettlementHookMock
 } from "./contracts";
 import {
   USDCMock__factory,
@@ -50,11 +50,11 @@ import {
   ReentrantSignalIntentCallerMock__factory,
   ReentrantOrchestratorMock__factory,
   PartialPullPostIntentHookMock__factory,
-  PartialPullPostIntentHookV2Mock__factory,
+  PartialPullSettlementHookMock__factory,
   PushPostIntentHookMock__factory,
-  PushPostIntentHookV2Mock__factory,
-  ReentrantPostIntentHookV2__factory,
-  PostIntentHookV2Mock__factory,
+  PushSettlementHookMock__factory,
+  ReentrantSettlementHook__factory,
+  SettlementHookMock__factory,
   ReentrantRateManagerMock__factory
 } from "../typechain/factories/contracts/mocks";
 import { ReentrantSignalIntentCallerV2Mock__factory } from "../typechain/factories/contracts/mocks/ReentrantSignalIntentCallerV2Mock__factory";
@@ -293,32 +293,32 @@ export default class DeployHelper {
     );
   }
 
-  public async deployPostIntentHookV2Mock(
+  public async deploySettlementHookMock(
     usdc: Address,
     orchestrator: Address
-  ): Promise<PostIntentHookV2Mock> {
-    return await new PostIntentHookV2Mock__factory(this._deployerSigner).deploy(usdc, orchestrator);
+  ): Promise<SettlementHookMock> {
+    return await new SettlementHookMock__factory(this._deployerSigner).deploy(usdc, orchestrator);
   }
 
-  public async deployPartialPullPostIntentHookV2Mock(
+  public async deployPartialPullSettlementHookMock(
     usdc: Address,
     orchestrator: Address
-  ): Promise<PartialPullPostIntentHookV2Mock> {
-    return await new PartialPullPostIntentHookV2Mock__factory(this._deployerSigner).deploy(usdc, orchestrator);
+  ): Promise<PartialPullSettlementHookMock> {
+    return await new PartialPullSettlementHookMock__factory(this._deployerSigner).deploy(usdc, orchestrator);
   }
 
-  public async deployPushPostIntentHookV2Mock(
+  public async deployPushSettlementHookMock(
     usdc: Address,
     orchestrator: Address
-  ): Promise<PushPostIntentHookV2Mock> {
-    return await new PushPostIntentHookV2Mock__factory(this._deployerSigner).deploy(usdc, orchestrator);
+  ): Promise<PushSettlementHookMock> {
+    return await new PushSettlementHookMock__factory(this._deployerSigner).deploy(usdc, orchestrator);
   }
 
-  public async deployReentrantPostIntentHookV2(
+  public async deployReentrantSettlementHook(
     usdc: Address,
     orchestrator: Address
-  ): Promise<ReentrantPostIntentHookV2> {
-    return await new ReentrantPostIntentHookV2__factory(this._deployerSigner).deploy(
+  ): Promise<ReentrantSettlementHook> {
+    return await new ReentrantSettlementHook__factory(this._deployerSigner).deploy(
       usdc,
       orchestrator
     );

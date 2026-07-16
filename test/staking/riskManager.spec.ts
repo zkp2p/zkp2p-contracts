@@ -45,11 +45,11 @@ describe("RiskManager and OrchestratorV3", () => {
       MAX_INTENT_PERIOD,
     );
     const boundedCall = await (await ethers.getContractFactory("BoundedCall")).deploy();
-    const postIntentHookExecutor = await (await ethers.getContractFactory("PostIntentHookExecutor")).deploy();
+    const settlementHookExecutor = await (await ethers.getContractFactory("SettlementHookExecutor")).deploy();
     const orchestrator = await (await ethers.getContractFactory("OrchestratorV3", {
       libraries: {
         BoundedCall: boundedCall.address,
-        PostIntentHookExecutor: postIntentHookExecutor.address,
+        SettlementHookExecutor: settlementHookExecutor.address,
       },
     })).deploy(
       owner.address,
@@ -179,7 +179,7 @@ describe("RiskManager and OrchestratorV3", () => {
     recipient: string,
     amount: BigNumber,
     paymentMethod: string,
-    postIntentHook = ZERO,
+    settlementHook = ZERO,
     referralFees: Array<{ recipient: string; fee: BigNumber }> = [],
   ) {
     return {
@@ -193,7 +193,7 @@ describe("RiskManager and OrchestratorV3", () => {
       referralFees,
       gatingServiceSignature: "0x",
       signatureExpiration: 0,
-      postIntentHook,
+      settlementHook,
       preIntentHookData: "0x",
       data: "0x",
     };
@@ -211,11 +211,11 @@ describe("RiskManager and OrchestratorV3", () => {
     taker: any,
     amount: BigNumber,
     paymentMethod: string,
-    postIntentHook = ZERO,
+    settlementHook = ZERO,
     recipient = taker.address,
   ): Promise<string> {
     const tx = await orchestrator.connect(taker).signalIntent(
-      signalParams(escrow, recipient, amount, paymentMethod, postIntentHook),
+      signalParams(escrow, recipient, amount, paymentMethod, settlementHook),
     );
     return intentHashFrom(await tx.wait());
   }
@@ -229,7 +229,7 @@ describe("RiskManager and OrchestratorV3", () => {
       paymentProof: proof,
       intentHash,
       verificationData: "0x",
-      postIntentHookData: "0x",
+      settlementHookData: "0x",
     });
   }
 

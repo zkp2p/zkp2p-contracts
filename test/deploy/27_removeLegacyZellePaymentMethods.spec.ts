@@ -20,7 +20,7 @@ import {
   USDCMock,
 } from "@utils/contracts";
 import { getAccounts, getWaffleExpect } from "@utils/test";
-import { createSignalIntentParams } from "@utils/test/helpers";
+import { createSignalIntentParamsV2 } from "@utils/test/helpers";
 import { Account } from "@utils/test/types";
 import { buildUnifiedPaymentProof } from "@utils/unifiedVerifierUtils";
 import { Currency } from "@utils/protocolUtils";
@@ -84,7 +84,7 @@ describe("Remove legacy Zelle payment methods", () => {
   }
 
   async function signalIntent(depositId: BigNumber, paymentMethod: BytesLike, amount: BigNumber) {
-    const params = await createSignalIntentParams(
+    const params = await createSignalIntentParamsV2(
       orchestrator.address,
       escrow.address,
       depositId,
@@ -272,7 +272,7 @@ describe("Remove legacy Zelle payment methods", () => {
       paymentProof: builtProof.paymentProof,
       intentHash,
       verificationData: ZERO_BYTES,
-      postIntentHookData: ZERO_BYTES,
+      settlementHookData: ZERO_BYTES,
     })).to.emit(unifiedPaymentVerifierV2, "PaymentVerified");
 
     const nonceBeforeSecondRun = await owner.wallet.getTransactionCount();

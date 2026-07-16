@@ -33,6 +33,7 @@ const LOCAL_CHARGEBACK_WITNESSES = [
 const STAKE_RISK_DEPLOYMENT_NAMES = [
   "BoundedCall",
   "PostIntentHookExecutor",
+  "SettlementHookExecutor",
   "OrchestratorV3",
   "StakeVault",
   "ChargebackAttestationVerifier",
@@ -143,15 +144,15 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("BoundedCall deployed at", boundedCall.address);
   if (boundedCall.newlyDeployed) await waitForDeploymentDelay(hre);
 
-  const postIntentHookExecutor = await deploy("PostIntentHookExecutor", { from: deployer, args: [] });
-  console.log("PostIntentHookExecutor deployed at", postIntentHookExecutor.address);
-  if (postIntentHookExecutor.newlyDeployed) await waitForDeploymentDelay(hre);
+  const settlementHookExecutor = await deploy("SettlementHookExecutor", { from: deployer, args: [] });
+  console.log("SettlementHookExecutor deployed at", settlementHookExecutor.address);
+  if (settlementHookExecutor.newlyDeployed) await waitForDeploymentDelay(hre);
 
   const orchestratorV3 = await deploy("OrchestratorV3", {
     from: deployer,
     libraries: {
       BoundedCall: boundedCall.address,
-      PostIntentHookExecutor: postIntentHookExecutor.address,
+      SettlementHookExecutor: settlementHookExecutor.address,
     },
     args: [
       deployer,

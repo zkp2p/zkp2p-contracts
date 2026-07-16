@@ -6,7 +6,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { AcrossBridgeHookV2 } from "contracts/hooks/AcrossBridgeHookV2.sol";
 import { OrchestratorRegistry } from "contracts/registries/OrchestratorRegistry.sol";
-import { IPostIntentHookV2 } from "contracts/interfaces/IPostIntentHookV2.sol";
+import { ISettlementHook } from "contracts/interfaces/ISettlementHook.sol";
 
 contract AcrossBridgeHookForkTest is Test {
     event AcrossBridgeInitiated(
@@ -71,11 +71,11 @@ contract AcrossBridgeHookForkTest is Test {
         });
         bytes memory commitmentData = abi.encode(commitment);
 
-        IPostIntentHookV2.HookExecutionContext memory ctx = IPostIntentHookV2.HookExecutionContext({
+        ISettlementHook.HookExecutionContext memory ctx = ISettlementHook.HookExecutionContext({
             intentHash: keccak256("across-intent"),
             token: BASE_USDC,
             executableAmount: INPUT_AMOUNT,
-            intent: IPostIntentHookV2.HookIntentContext({
+            intent: ISettlementHook.HookIntentContext({
                 owner: address(this),
                 to: recipient,
                 escrow: address(0),
@@ -124,11 +124,11 @@ contract AcrossBridgeHookForkTest is Test {
         bytes memory commitmentData = abi.encode(commitment);
 
         bytes32 intentHash = keccak256("across-fallback-intent");
-        IPostIntentHookV2.HookExecutionContext memory ctx = IPostIntentHookV2.HookExecutionContext({
+        ISettlementHook.HookExecutionContext memory ctx = ISettlementHook.HookExecutionContext({
             intentHash: intentHash,
             token: BASE_USDC,
             executableAmount: INPUT_AMOUNT,
-            intent: IPostIntentHookV2.HookIntentContext({
+            intent: ISettlementHook.HookIntentContext({
                 owner: address(this),
                 to: recipient,
                 escrow: address(0),
@@ -185,11 +185,11 @@ contract AcrossBridgeHookForkTest is Test {
         bytes memory commitmentData = abi.encode(commitment);
 
         bytes32 intentHash = keccak256("across-solana-intent");
-        IPostIntentHookV2.HookExecutionContext memory ctx = IPostIntentHookV2.HookExecutionContext({
+        ISettlementHook.HookExecutionContext memory ctx = ISettlementHook.HookExecutionContext({
             intentHash: intentHash,
             token: BASE_USDC,
             executableAmount: INPUT_AMOUNT,
-            intent: IPostIntentHookV2.HookIntentContext({
+            intent: ISettlementHook.HookIntentContext({
                 owner: address(this),
                 to: fallbackRecipient,
                 escrow: address(0),

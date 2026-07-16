@@ -3,10 +3,10 @@
 pragma solidity ^0.8.18;
 
 /**
- * @title IPostIntentHookV2
- * @notice V2 interface for post-intent hooks with structured execution context.
+ * @title ISettlementHook
+ * @notice Interface for actions that atomically consume an intent's net settlement proceeds.
  */
-interface IPostIntentHookV2 {
+interface ISettlementHook {
     struct HookIntentContext {
         address owner;
         address to;
@@ -29,12 +29,12 @@ interface IPostIntentHookV2 {
     }
 
     /**
-     * @notice Post-intent hook
+     * @notice Executes a settlement action.
      * @param _ctx The execution context built from intent + fulfill state
-     * @param _fulfillHookData The data passed to fulfillIntent for the hook
+     * @param _settlementHookData Fulfillment-time data supplied for the settlement action
      */
     function execute(
         HookExecutionContext calldata _ctx,
-        bytes calldata _fulfillHookData
+        bytes calldata _settlementHookData
     ) external;
 }

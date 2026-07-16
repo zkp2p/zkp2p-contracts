@@ -3,14 +3,14 @@
 pragma solidity ^0.8.18;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { IPostIntentHookV2 } from "../interfaces/IPostIntentHookV2.sol";
+import { ISettlementHook } from "../interfaces/ISettlementHook.sol";
 
 /**
- * @title PushPostIntentHookV2Mock
+ * @title PushSettlementHookMock
  * @notice V2 mock hook that pushes tokens into the Orchestrator during execution to trigger the
  *         balance-increase invariant in the Orchestrator.
  */
-contract PushPostIntentHookV2Mock is IPostIntentHookV2 {
+contract PushSettlementHookMock is ISettlementHook {
     IERC20 public immutable token;
     address public immutable orchestrator;
 

@@ -20,19 +20,19 @@ library BoundedCall {
 
     error RiskHookAdmissionFailed(bytes32 intentHash, address hook, bytes revertData);
     error InvalidRiskHookResponse(address hook, bytes response);
-    error RequiredPostIntentHookMissing(bytes32 intentHash);
+    error RequiredSettlementHookMissing(bytes32 intentHash);
 
     /**
      * @notice Executes a fail-closed risk admission callback.
-     * @return requiresPostIntentHook Whether settlement must use the snapshotted post-intent hook.
+     * @return requiresSettlementHook Whether settlement must use the snapshotted settlement hook.
      */
     function executeRiskAdmission(
         IIntentRiskHook _riskHook,
         bytes32 _intentHash,
-        address _postIntentHook,
+        address _settlementHook,
         uint256 _gasLimit,
         uint256 _maxReturnDataSize
-    ) public returns (bool requiresPostIntentHook) {
+    ) public returns (bool requiresSettlementHook) {
         if (address(_riskHook) == address(0)) return false;
 
         (bool success, bytes memory response) = callWithBoundedReturnData(
@@ -44,9 +44,9 @@ library BoundedCall {
         if (!success) revert RiskHookAdmissionFailed(_intentHash, address(_riskHook), response);
         if (response.length != 32) revert InvalidRiskHookResponse(address(_riskHook), response);
 
-        requiresPostIntentHook = abi.decode(response, (bool));
-        if (requiresPostIntentHook && _postIntentHook == address(0)) {
-            revert RequiredPostIntentHookMissing(_intentHash);
+        requiresSettlementHook = abi.decode(response, (bool));
+        if (requiresSettlementHook && _settlementHook == address(0)) {
+            revert RequiredSettlementHookMissing(_intentHash);
         }
     }
 

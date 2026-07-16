@@ -209,3 +209,48 @@ export const createSignalIntentParams = async (
 
   return params;
 }
+
+export const createSignalIntentParamsV2 = async (
+  orchestrator: Address,
+  escrow: Address,
+  depositId: BigNumber,
+  amount: BigNumber,
+  to: Address,
+  paymentMethod: BytesLike,
+  fiatCurrency: string,
+  conversionRate: BigNumber,
+  referrer: Address = ethers.constants.AddressZero,
+  referrerFee: BigNumber = BigNumber.from(0),
+  gatingService: Account | null = null,
+  chainId: string = "1",
+  settlementHook: Address = ethers.constants.AddressZero,
+  data: string = "0x",
+  signatureExpiration?: BigNumber,
+  preIntentHookData?: string,
+  caller?: Address,
+  referralFees?: ReferralFeeParam[]
+) => {
+  const legacyParams = await createSignalIntentParams(
+    orchestrator,
+    escrow,
+    depositId,
+    amount,
+    to,
+    paymentMethod,
+    fiatCurrency,
+    conversionRate,
+    referrer,
+    referrerFee,
+    gatingService,
+    chainId,
+    settlementHook,
+    data,
+    signatureExpiration,
+    preIntentHookData,
+    caller,
+    referralFees
+  );
+  const { postIntentHook, ...params } = legacyParams;
+
+  return { ...params, settlementHook: postIntentHook };
+}

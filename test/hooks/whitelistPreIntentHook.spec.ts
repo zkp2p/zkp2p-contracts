@@ -9,7 +9,7 @@ import { Currency } from "@utils/protocolUtils";
 import { Account } from "@utils/test/types";
 import { ADDRESS_ZERO, EMPTY_ORACLE_RATE_CONFIG, ONE, ZERO } from "@utils/constants";
 import { getAccounts, getWaffleExpect } from "@utils/test";
-import { createSignalIntentParams } from "@utils/test/helpers";
+import { createSignalIntentParamsV2 } from "@utils/test/helpers";
 import {
   EscrowV2,
   OrchestratorV2,
@@ -393,7 +393,7 @@ describe("WhitelistPreIntentHook", () => {
     let subjectConversionRate: BigNumber;
 
     async function subject(): Promise<any> {
-      const params = await createSignalIntentParams(
+      const params = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         ZERO,
@@ -528,7 +528,7 @@ describe("WhitelistPreIntentHook", () => {
         [taker.address]
       );
 
-      const params = await createSignalIntentParams(
+      const params = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         ZERO,
@@ -553,7 +553,7 @@ describe("WhitelistPreIntentHook", () => {
     });
 
     it("signalIntent reverts if whitelist hook rejects (taker not whitelisted)", async () => {
-      const params = await createSignalIntentParams(
+      const params = await createSignalIntentParamsV2(
         orchestrator.address,
         escrow.address,
         ZERO,

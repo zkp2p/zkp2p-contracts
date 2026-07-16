@@ -3,13 +3,13 @@
 pragma solidity ^0.8.18;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { IPostIntentHookV2 } from "../interfaces/IPostIntentHookV2.sol";
+import { ISettlementHook } from "../interfaces/ISettlementHook.sol";
 
 /**
- * @title PartialPullPostIntentHookV2Mock
+ * @title PartialPullSettlementHookMock
  * @notice V2 mock hook that deliberately pulls only a portion of the approved amount to simulate buggy hooks.
  */
-contract PartialPullPostIntentHookV2Mock is IPostIntentHookV2 {
+contract PartialPullSettlementHookMock is ISettlementHook {
     IERC20 public immutable token;
     address public immutable orchestrator;
 
@@ -22,7 +22,7 @@ contract PartialPullPostIntentHookV2Mock is IPostIntentHookV2 {
         HookExecutionContext calldata _ctx,
         bytes calldata /* _fulfillHookData */
     ) external override {
-        // Decode target address from intent signalHookData (same format as PostIntentHookV2Mock)
+        // Decode target address from intent signalHookData (same format as SettlementHookMock)
         address targetAddress = abi.decode(_ctx.intent.signalHookData, (address));
         require(targetAddress != address(0), "target=0");
 
