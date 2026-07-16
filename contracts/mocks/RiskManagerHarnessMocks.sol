@@ -8,6 +8,7 @@ import { IEscrowV2 } from "../interfaces/IEscrowV2.sol";
 import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
 import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV3 } from "../interfaces/IOrchestratorV3.sol";
+import { IPaymentVerifierRegistry } from "../interfaces/IPaymentVerifierRegistry.sol";
 import { IRiskManager } from "../interfaces/IRiskManager.sol";
 import { IStakeVault } from "../interfaces/IStakeVault.sol";
 import { RiskManager } from "../RiskManager.sol";
@@ -64,6 +65,23 @@ contract RiskManagerOrchestratorHarness {
     mapping(bytes32 => IOrchestratorV3.RiskIntentData) internal riskIntents;
     mapping(bytes32 => uint64) internal cancellationTimes;
     mapping(bytes32 => IOrchestratorV3.IntentSettlement) internal settlements;
+    mapping(bytes32 => bytes32) internal paymentEvidence;
+
+    function paymentVerifierRegistry() external view returns (IPaymentVerifierRegistry) {
+        return IPaymentVerifierRegistry(address(this));
+    }
+
+    function getVerifier(bytes32) external view returns (address) {
+        return address(this);
+    }
+
+    function getPaymentDetailsHash(address, bytes32 _intentHash) external view returns (bytes32) {
+        return paymentEvidence[_intentHash];
+    }
+
+    function setPaymentEvidence(bytes32 _intentHash, bytes32 _evidence) external {
+        paymentEvidence[_intentHash] = _evidence;
+    }
 
     function setRiskIntent(bytes32 _intentHash, IOrchestratorV3.RiskIntentData calldata _intent) external {
         riskIntents[_intentHash] = _intent;
@@ -73,8 +91,20 @@ contract RiskManagerOrchestratorHarness {
         cancellationTimes[_intentHash] = _cancelledAt;
     }
 
-    function setIntentSettlement(bytes32 _intentHash, uint256 _releasedAmount, uint64 _settledAt) external {
-        settlements[_intentHash] = IOrchestratorV3.IntentSettlement(_releasedAmount, _settledAt);
+    function setIntentSettlement(
+        bytes32 _intentHash,
+        uint256 _releasedAmount,
+        uint64 _settledAt,
+        bool _isManualRelease
+    ) external {
+        bytes32 paymentId = keccak256(abi.encodePacked("payment", _intentHash));
+        paymentEvidence[_intentHash] = keccak256(abi.encode(
+            riskIntents[_intentHash].paymentMethod,
+            paymentId,
+            _releasedAmount,
+            keccak256("USD")
+        ));
+        settlements[_intentHash] = IOrchestratorV3.IntentSettlement(_releasedAmount, _settledAt, _isManualRelease);
     }
 
     function getRiskIntent(bytes32 _intentHash) external view returns (IOrchestratorV3.RiskIntentData memory) {
@@ -85,9 +115,9 @@ contract RiskManagerOrchestratorHarness {
         return cancellationTimes[_intentHash];
     }
 
-    function getIntentSettlement(bytes32 _intentHash) external view returns (uint256, uint64) {
+    function getIntentSettlement(bytes32 _intentHash) external view returns (uint256, uint64, bool) {
         IOrchestratorV3.IntentSettlement memory settlement = settlements[_intentHash];
-        return (settlement.releasedAmount, settlement.settledAt);
+        return (settlement.releasedAmount, settlement.settledAt, settlement.isManualRelease);
     }
 
     function createPosition(IIntentRiskHook _hook, bytes32 _intentHash) external returns (bool) {
@@ -99,6 +129,13 @@ contract RiskManagerOrchestratorHarness {
     }
 
     function fulfillPosition(IIntentRiskHook _hook, bytes32 _intentHash, uint256 _releasedAmount) external {
+        bytes32 paymentId = keccak256(abi.encodePacked("payment", _intentHash));
+        paymentEvidence[_intentHash] = keccak256(abi.encode(
+            riskIntents[_intentHash].paymentMethod,
+            paymentId,
+            _releasedAmount,
+            keccak256("USD")
+        ));
         _hook.onIntentFulfilled(_intentHash, _releasedAmount);
     }
 

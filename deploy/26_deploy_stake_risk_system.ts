@@ -6,6 +6,7 @@ import { ethers } from "hardhat";
 
 import {
   MULTI_SIG,
+  MULTI_WITNESS_ADDRESSES,
   ORCHESTRATOR_V2_PROTOCOL_FEE,
   ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT,
   RISK_CALLBACK_GAS_LIMIT,
@@ -24,6 +25,75 @@ import {
 const PAYPAL = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("paypal"));
 const VENMO = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
 const ZELLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("zelle"));
+const LOCAL_CHARGEBACK_WITNESSES = [
+  "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+  "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+  "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+];
+const STAKE_RISK_DEPLOYMENT_NAMES = [
+  "BoundedCall",
+  "PostIntentHookExecutor",
+  "OrchestratorV3",
+  "StakeVault",
+  "ChargebackAttestationVerifier",
+  "RiskManager",
+  "DeferredPayoutHook",
+] as const;
+
+export function chargebackWitnessConfigForNetwork(
+  network: string,
+  configuredWitnesses = process.env.CHARGEBACK_WITNESS_ADDRESSES,
+  paymentWitnesses = MULTI_WITNESS_ADDRESSES[network]
+    ?? (process.env.PAYMENT_ATTESTATION_WITNESS_ADDRESSES ?? "")
+      .split(",").map((address) => address.trim()).filter(Boolean),
+) {
+  // Fresh-deployment guard only: a future migration must read the live payment-verifier
+  // witness set onchain and compare it before governance executes the migration.
+  const witnesses = network === "localhost" || network === "hardhat"
+    ? LOCAL_CHARGEBACK_WITNESSES
+    : (configuredWitnesses ?? "").split(",").map((address) => address.trim()).filter(Boolean);
+
+  if (witnesses.length !== 3) {
+    throw new Error(`${network} chargeback authorization requires exactly three dedicated witnesses`);
+  }
+  if (new Set(witnesses.map((address) => address.toLowerCase())).size !== witnesses.length) {
+    throw new Error(`${network} chargeback witnesses must be unique`);
+  }
+  if (witnesses.some((address) => !ethers.utils.isAddress(address))) {
+    throw new Error(`${network} has an invalid chargeback witness address`);
+  }
+  if (paymentWitnesses.length === 0) {
+    throw new Error(`${network} payment witnesses must be explicit before configuring chargeback witnesses`);
+  }
+  const paymentWitnessSet = new Set(paymentWitnesses.map((address) => address.toLowerCase()));
+  if (witnesses.some((address) => paymentWitnessSet.has(address.toLowerCase()))) {
+    throw new Error(`${network} chargeback witnesses must be disjoint from payment witnesses`);
+  }
+
+  return { witnesses, threshold: 2 };
+}
+
+/**
+ * Existing named deployments need an explicit versioned migration. Refusing before `deploy()` is
+ * called prevents source-metadata drift from silently replacing OrchestratorV3 and then discovering
+ * that the one-time StakeVault controller is already bound to the previous RiskManager.
+ */
+export async function assertFreshNonLocalStakeRiskDeployment(
+  network: string,
+  getDeployment: (name: string) => Promise<unknown | null>,
+) {
+  if (network === "localhost" || network === "hardhat") return;
+  const existing: string[] = [];
+  for (const name of STAKE_RISK_DEPLOYMENT_NAMES) {
+    if (await getDeployment(name)) existing.push(name);
+  }
+  if (existing.length !== 0) {
+    throw new Error(
+      `${network} already has stake-risk deployment records (${existing.join(", ")}); `
+      + "use a separately named, governance-reviewed migration",
+    );
+  }
+}
 
 function platformRiskConfigMatches(actual: any, expected: any): boolean {
   return actual.enabled === expected.enabled
@@ -53,17 +123,18 @@ export function stakeRiskPlatformPolicyForNetwork(network: string): any {
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deploy } = hre.deployments;
   const network = hre.deployments.getNetworkName();
+  await assertFreshNonLocalStakeRiskDeployment(network, hre.deployments.getOrNull.bind(hre.deployments));
   const { reversible: reversibleConfig, nonChargebackable: nonChargebackableConfig } =
     stakeRiskPlatformPolicyForNetwork(network);
   const chainId = (await ethers.provider.getNetwork()).chainId;
   const [deployer] = await hre.getUnnamedAccounts();
   const multiSig = MULTI_SIG[network] ? MULTI_SIG[network] : deployer;
+  const chargebackWitnessConfig = chargebackWitnessConfigForNetwork(network);
 
   const escrowRegistryAddress = getDeployedContractAddress(network, "EscrowRegistry");
   const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
   const relayerRegistryAddress = getDeployedContractAddress(network, "RelayerRegistry");
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
-  const attestationVerifierAddress = getDeployedContractAddress(network, "MultiAttestationVerifier");
   const stakeTokenAddress = USDC[network]
     ? USDC[network]
     : getDeployedContractAddress(network, "USDCMock");
@@ -109,9 +180,17 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("StakeVault deployed at", stakeVault.address);
   if (stakeVault.newlyDeployed) await waitForDeploymentDelay(hre);
 
+  const chargebackAttestationVerifier = await deploy("ChargebackAttestationVerifier", {
+    contract: "MultiAttestationVerifier",
+    from: deployer,
+    args: [chargebackWitnessConfig.witnesses, chargebackWitnessConfig.threshold],
+  });
+  console.log("ChargebackAttestationVerifier deployed at", chargebackAttestationVerifier.address);
+  if (chargebackAttestationVerifier.newlyDeployed) await waitForDeploymentDelay(hre);
+
   const riskManager = await deploy("RiskManager", {
     from: deployer,
-    args: [deployer, orchestratorV3.address, stakeVault.address, attestationVerifierAddress],
+    args: [deployer, orchestratorV3.address, stakeVault.address, chargebackAttestationVerifier.address],
   });
   console.log("RiskManager deployed at", riskManager.address);
   if (riskManager.newlyDeployed) await waitForDeploymentDelay(hre);
@@ -124,6 +203,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   if (deferredPayoutHook.newlyDeployed) await waitForDeploymentDelay(hre);
 
   const stakeVaultContract = await ethers.getContractAt("StakeVault", stakeVault.address);
+  const chargebackAttestationVerifierContract = await ethers.getContractAt(
+    "MultiAttestationVerifier",
+    chargebackAttestationVerifier.address,
+  );
   const riskManagerContract = await ethers.getContractAt("RiskManager", riskManager.address);
   const orchestratorV3Contract = await ethers.getContractAt("OrchestratorV3", orchestratorV3.address);
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
@@ -165,16 +248,17 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await setNewOwner(hre, orchestratorV3Contract, multiSig);
   await setNewOwner(hre, riskManagerContract, multiSig);
   await setNewOwner(hre, stakeVaultContract, multiSig);
+  await setNewOwner(hre, chargebackAttestationVerifierContract, multiSig);
   console.log("Stake risk system ownership transferred to", multiSig);
 };
 
 func.tags = ["StakeRiskSystem"];
-func.dependencies = ["16_configure_v2_payment_methods", "MultiAttestationVerifier"];
 func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.deployments.getNetworkName();
   if (network === "localhost" || network === "hardhat") return false;
   if (process.env.DEPLOY_STAKE_RISK_SYSTEM !== "true") return true;
   stakeRiskPlatformPolicyForNetwork(network);
+  await assertFreshNonLocalStakeRiskDeployment(network, hre.deployments.getOrNull.bind(hre.deployments));
   return false;
 };
 

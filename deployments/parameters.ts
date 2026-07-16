@@ -141,7 +141,7 @@ const INITIAL_STAKE_RISK_PLATFORM_POLICY = {
     enabled: true,
     chargeback: {
       chargebackable: true,
-      deferredPayoutEnabled: true,
+      deferredPayoutEnabled: false,
       reserveBps: 10_000,
       riskWindow: ONE_DAY_IN_SECONDS.mul(30),
     },

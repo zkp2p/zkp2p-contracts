@@ -4,12 +4,12 @@ import { expect } from "chai";
 import hre, { deployments, ethers } from "hardhat";
 
 import deployStakeRiskSystem, {
+  assertFreshNonLocalStakeRiskDeployment,
+  chargebackWitnessConfigForNetwork,
   stakeRiskPlatformPolicyForNetwork,
 } from "../../deploy/26_deploy_stake_risk_system";
 import {
   MULTI_SIG,
-  MULTI_WITNESS_ADDRESSES,
-  MULTI_WITNESS_THRESHOLD,
   RISK_CALLBACK_GAS_LIMIT,
   STAKE_VAULT_BASE_EXIT_DELAY,
 } from "../../deployments/parameters";
@@ -33,6 +33,10 @@ describe("Affine stake risk system deployment", () => {
       orchestrator: await ethers.getContractAt("OrchestratorV3", deployedAddress("OrchestratorV3")),
       vault: await ethers.getContractAt("StakeVault", deployedAddress("StakeVault")),
       manager: await ethers.getContractAt("RiskManager", deployedAddress("RiskManager")),
+      chargebackVerifier: await ethers.getContractAt(
+        "MultiAttestationVerifier",
+        deployedAddress("ChargebackAttestationVerifier"),
+      ),
       deferredHook: await ethers.getContractAt("DeferredPayoutHook", deployedAddress("DeferredPayoutHook")),
       orchestratorRegistry: await ethers.getContractAt(
         "OrchestratorRegistry",
@@ -50,15 +54,17 @@ describe("Affine stake risk system deployment", () => {
   it("deploys the replacement risk components", async () => {
     expect(deployedAddress("StakeVault")).to.properAddress;
     expect(deployedAddress("RiskManager")).to.properAddress;
+    expect(deployedAddress("ChargebackAttestationVerifier")).to.properAddress;
     expect(deployedAddress("DeferredPayoutHook")).to.properAddress;
   });
 
   it("transfers every owned component to the configured multisig", async () => {
-    const { deployer, orchestrator, vault, manager } = await contracts();
+    const { deployer, orchestrator, vault, manager, chargebackVerifier } = await contracts();
     const expectedOwner = MULTI_SIG[network] || deployer.address;
     expect(await orchestrator.owner()).to.eq(expectedOwner);
     expect(await vault.owner()).to.eq(expectedOwner);
     expect(await manager.owner()).to.eq(expectedOwner);
+    expect(await chargebackVerifier.owner()).to.eq(expectedOwner);
   });
 
   it("wires RiskManager as the vault controller", async () => {
@@ -105,7 +111,7 @@ describe("Affine stake risk system deployment", () => {
       const config = await manager.getPlatformRiskConfig(paymentMethod);
       expect(config.enabled).to.eq(true);
       expect(config.chargeback.chargebackable).to.eq(true);
-      expect(config.chargeback.deferredPayoutEnabled).to.eq(true);
+      expect(config.chargeback.deferredPayoutEnabled).to.eq(false);
       expect(config.chargeback.reserveBps).to.eq(platformPolicy.reversible.chargeback.reserveBps);
       expect(config.chargeback.riskWindow).to.eq(platformPolicy.reversible.chargeback.riskWindow);
       expect(config.griefing.griefingCliff).to.eq(platformPolicy.reversible.griefing.griefingCliff);
@@ -131,54 +137,67 @@ describe("Affine stake risk system deployment", () => {
     );
   });
 
+  it("requires chargeback witnesses to be disjoint from payment witnesses", () => {
+    const witnesses = [
+      "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+      "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+    ];
+    expect(() => chargebackWitnessConfigForNetwork("base_staging", witnesses.join(","), [witnesses[0]]))
+      .to.throw("chargeback witnesses must be disjoint from payment witnesses");
+  });
+
+  it("fails before a nonlocal canonical deployment can be overwritten", async () => {
+    const lookedUp: string[] = [];
+    await expect(assertFreshNonLocalStakeRiskDeployment("base_staging", async (name) => {
+      lookedUp.push(name);
+      return name === "OrchestratorV3" ? { address: ethers.constants.AddressZero } : null;
+    })).to.be.rejectedWith("use a separately named, governance-reviewed migration");
+    expect(lookedUp).to.include("OrchestratorV3");
+  });
+
   it("uses the deployed modular attestation verifier and RiskManager EIP-712 domain", async () => {
-    const { deployer, manager } = await contracts();
+    const { manager } = await contracts();
     const verifier = await ethers.getContractAt(
       "MultiAttestationVerifier",
-      deployedAddress("MultiAttestationVerifier"),
+      deployedAddress("ChargebackAttestationVerifier"),
     );
+    const witnessConfig = chargebackWitnessConfigForNetwork(network);
     expect(await manager.attestationVerifier()).to.eq(verifier.address);
-    expect((await verifier.requiredSignatures()).toNumber()).to.eq(MULTI_WITNESS_THRESHOLD[network]);
+    expect(verifier.address).not.to.eq(deployedAddress("MultiAttestationVerifier"));
+    expect((await verifier.requiredSignatures()).toNumber()).to.eq(witnessConfig.threshold);
     expect((await verifier.witnesses()).map((w) => w.toLowerCase())).to.have.members(
-      MULTI_WITNESS_ADDRESSES[network].map((w) => w.toLowerCase()),
+      witnessConfig.witnesses.map((w) => w.toLowerCase()),
     );
 
     const { chainId } = await ethers.provider.getNetwork();
     const chargeback = {
-      chainId,
-      riskManager: manager.address,
-      orchestrator: await manager.orchestrator(),
       intentHash: ethers.utils.id("affine-risk-deployment-test"),
-      paymentMethod: PAYPAL,
-      chargebackAmount: 1,
-      evidenceId: ethers.utils.id("deployment-evidence"),
-      nonce: 1,
-      validAfter: 1,
-      validUntil: 2,
+      dataHash: ethers.utils.id("deployment-evidence"),
+      signatures: [],
+      data: "0x",
+      metadata: "0x",
     };
     const domain = { name: "ZKP2P RiskManager", version: "1", chainId, verifyingContract: manager.address };
     const types = {
       ChargebackAttestation: [
-        { name: "chainId", type: "uint256" },
-        { name: "riskManager", type: "address" },
-        { name: "orchestrator", type: "address" },
         { name: "intentHash", type: "bytes32" },
-        { name: "paymentMethod", type: "bytes32" },
-        { name: "chargebackAmount", type: "uint256" },
-        { name: "evidenceId", type: "bytes32" },
-        { name: "nonce", type: "uint256" },
-        { name: "validAfter", type: "uint64" },
-        { name: "validUntil", type: "uint64" },
+        { name: "dataHash", type: "bytes32" },
       ],
     };
     const digest = await manager.hashChargebackAttestation(chargeback);
     expect(digest).to.eq(ethers.utils._TypedDataEncoder.hash(domain, types, chargeback));
 
-    // Local deployments use the deployer as their witness, while live networks
-    // intentionally keep witness keys separate from the deployment key.
-    if (await verifier.isWitness(deployer.address)) {
-      const signature = await deployer._signTypedData(domain, types, chargeback);
-      expect(await verifier.verify(digest, [signature], "0x")).to.eq(true);
+    if (network === "localhost" || network === "hardhat") {
+      const signers = await ethers.getSigners();
+      const localWitnesses = signers.filter((signer) => witnessConfig.witnesses
+        .map((address) => address.toLowerCase()).includes(signer.address.toLowerCase()));
+      const value = { intentHash: chargeback.intentHash, dataHash: chargeback.dataHash };
+      const signatures = [
+        await localWitnesses[0]._signTypedData(domain, types, value),
+        await localWitnesses[1]._signTypedData(domain, types, value),
+      ];
+      expect(await verifier.verify(digest, signatures, "0x")).to.eq(true);
     }
   });
 

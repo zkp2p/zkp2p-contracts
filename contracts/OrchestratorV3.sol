@@ -21,8 +21,8 @@ import { PostIntentHookExecutor } from "./lib/PostIntentHookExecutor.sol";
 contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
     /* ============ Constants ============ */
 
-    uint256 public constant MIN_RISK_CALLBACK_GAS_LIMIT = 750_000;
-    uint256 public constant MAX_RISK_CALLBACK_RETURN_DATA = 2_048;
+    uint256 internal constant MIN_RISK_CALLBACK_GAS_LIMIT = 750_000;
+    uint256 internal constant MAX_RISK_CALLBACK_RETURN_DATA = 2_048;
 
     /* ============ State Variables ============ */
 
@@ -167,6 +167,21 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
     }
 
     /**
+     * @notice Enforces deferred payout execution for manual releases that required it at admission.
+     * @dev V1 policy rejects new deferred positions, but retaining the V3 behavior preserves the
+     *      lifecycle semantics for any separately migrated legacy position.
+     */
+    function _shouldExecutePostIntentHookOnManualRelease(
+        bytes32 _intentHash
+    ) internal view override returns (bool) {
+        bool requiresPostIntentHook = intentRequiresPostIntentHook[_intentHash];
+        if (requiresPostIntentHook && address(intents[_intentHash].postIntentHook) == address(0)) {
+            revert RequiredPostIntentHookMissing(_intentHash);
+        }
+        return requiresPostIntentHook;
+    }
+
+    /**
      * @notice Returns the number of unresolved intents for an account in constant time.
      */
     function getAccountIntentCount(address _account) external view override returns (uint256) {
@@ -179,9 +194,9 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
      */
     function getIntentSettlement(
         bytes32 _intentHash
-    ) external view override returns (uint256 releasedAmount, uint64 settledAt) {
+    ) external view override returns (uint256 releasedAmount, uint64 settledAt, bool isManualRelease) {
         IntentSettlement memory settlement = failedIntentSettlements[_intentHash];
-        return (settlement.releasedAmount, settlement.settledAt);
+        return (settlement.releasedAmount, settlement.settledAt, settlement.isManualRelease);
     }
 
     /**
@@ -248,25 +263,13 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         if (isSettlement && !callbackSucceeded) {
             failedIntentSettlements[_intentHash] = IntentSettlement({
                 releasedAmount: _releasedAmount,
-                settledAt: settledAt
+                settledAt: settledAt,
+                isManualRelease: _resolution == IntentResolution.RELEASED
             });
         } else if (!isSettlement && !callbackSucceeded) {
             failedIntentCancellations[_intentHash] = IntentCancellation({ cancelledAt: cancelledAt });
             emit IntentCancellationRecorded(_intentHash, cancelledAt);
         }
-    }
-
-    /**
-     * @notice Enforces deferred payout execution for manual releases that required it at admission.
-     */
-    function _shouldExecutePostIntentHookOnManualRelease(
-        bytes32 _intentHash
-    ) internal view override returns (bool) {
-        bool requiresPostIntentHook = intentRequiresPostIntentHook[_intentHash];
-        if (requiresPostIntentHook && address(intents[_intentHash].postIntentHook) == address(0)) {
-            revert RequiredPostIntentHookMissing(_intentHash);
-        }
-        return requiresPostIntentHook;
     }
 
     /**

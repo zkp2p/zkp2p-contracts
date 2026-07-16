@@ -2,11 +2,12 @@
 pragma solidity ^0.8.18;
 
 import { IPaymentVerifier } from "../interfaces/IPaymentVerifier.sol";
+import { IPaymentEvidenceVerifier } from "../interfaces/IRiskManager.sol";
 import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
 import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
 import { IEscrow } from "../interfaces/IEscrow.sol";
 
-contract PaymentVerifierMock is IPaymentVerifier {
+contract PaymentVerifierMock is IPaymentVerifier, IPaymentEvidenceVerifier {
 
     struct PaymentDetails {
         uint256 amount;
@@ -21,6 +22,7 @@ contract PaymentVerifierMock is IPaymentVerifier {
         uint256 conversionRate;
         uint256 signalTimestamp;
         bytes32 payeeDetails;
+        bytes32 paymentMethod;
         bool found;
     }
 
@@ -30,6 +32,7 @@ contract PaymentVerifierMock is IPaymentVerifier {
     bool public shouldReturnFalse;
     address public orchestratorAddress;
     address public escrowAddress;
+    mapping(address => mapping(bytes32 => bytes32)) internal verifiedPaymentDetailsHashes;
 
     function setShouldVerifyPayment(bool _shouldVerifyPayment) external {
         shouldVerifyPayment = _shouldVerifyPayment;
@@ -51,7 +54,7 @@ contract PaymentVerifierMock is IPaymentVerifier {
 
     function verifyPayment(
         IPaymentVerifier.VerifyPaymentData calldata _verifyPaymentData
-    ) external view override returns (PaymentVerificationResult memory) {
+    ) external override returns (PaymentVerificationResult memory) {
         PaymentDetails memory paymentDetails = _extractPaymentDetails(_verifyPaymentData.paymentProof);
 
         Snapshot memory snapshot = _fetchSnapshot(paymentDetails.intentHash);
@@ -72,7 +75,11 @@ contract PaymentVerifierMock is IPaymentVerifier {
         }
 
         if (shouldReturnFalse) {
-            return PaymentVerificationResult({ success: false, intentHash: bytes32(0), releaseAmount: 0 });
+            return PaymentVerificationResult({
+                success: false,
+                intentHash: bytes32(0),
+                releaseAmount: 0
+            });
         }
 
         uint256 releaseAmount = paymentDetails.amount;
@@ -84,11 +91,25 @@ contract PaymentVerifierMock is IPaymentVerifier {
             releaseAmount = snapshot.amount;
         }
 
+        bytes32 paymentId = keccak256(abi.encodePacked("payment", paymentDetails.intentHash));
+        verifiedPaymentDetailsHashes[msg.sender][paymentDetails.intentHash] = keccak256(abi.encode(
+            snapshot.paymentMethod,
+            paymentId,
+            paymentDetails.amount,
+            paymentDetails.fiatCurrency
+        ));
         return PaymentVerificationResult({
             success: true,
             intentHash: paymentDetails.intentHash,
             releaseAmount: releaseAmount
         });
+    }
+
+    function getPaymentDetailsHash(
+        address _orchestrator,
+        bytes32 _intentHash
+    ) external view override returns (bytes32) {
+        return verifiedPaymentDetailsHashes[_orchestrator][_intentHash];
     }
 
     function _fetchSnapshot(bytes32 intentHash) internal view returns (Snapshot memory snapshot) {
@@ -114,6 +135,7 @@ contract PaymentVerifierMock is IPaymentVerifier {
                 conversionRate: intentDataV2.conversionRate,
                 signalTimestamp: intentDataV2.timestamp,
                 payeeDetails: methodDataV2.payeeDetails,
+                paymentMethod: intentDataV2.paymentMethod,
                 found: true
             });
         }
@@ -131,6 +153,7 @@ contract PaymentVerifierMock is IPaymentVerifier {
             conversionRate: intentData.conversionRate,
             signalTimestamp: intentData.timestamp,
             payeeDetails: methodData.payeeDetails,
+            paymentMethod: intentData.paymentMethod,
             found: true
         });
     }
