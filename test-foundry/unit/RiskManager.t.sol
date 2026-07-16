@@ -73,7 +73,8 @@ contract RiskOrchestratorHarness {
             amount: _amount,
             paymentMethod: _paymentMethod,
             postIntentHook: _postIntentHook,
-            createdAt: uint64(block.timestamp)
+            createdAt: uint64(block.timestamp),
+            hasSettlementFees: false
         });
     }
 
@@ -81,9 +82,9 @@ contract RiskOrchestratorHarness {
         return intents[_intentHash];
     }
 
-    function getIntentSettlement(bytes32 _intentHash) external view returns (uint256, uint64) {
+    function getIntentSettlement(bytes32 _intentHash) external view returns (uint256, uint64, bool) {
         IOrchestratorV3.IntentSettlement memory settlement = settlements[_intentHash];
-        return (settlement.releasedAmount, settlement.settledAt);
+        return (settlement.releasedAmount, settlement.settledAt, settlement.isManualRelease);
     }
 
     function getIntentCancellation(bytes32 _intentHash) external view returns (uint64) {
@@ -126,7 +127,8 @@ contract RiskOrchestratorHarness {
         ));
         settlements[_intentHash] = IOrchestratorV3.IntentSettlement({
             releasedAmount: _amount,
-            settledAt: _settledAt
+            settledAt: _settledAt,
+            isManualRelease: false
         });
         delete intents[_intentHash];
     }

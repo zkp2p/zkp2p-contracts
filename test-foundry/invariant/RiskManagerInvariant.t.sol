@@ -67,7 +67,8 @@ contract RiskManagerInvariantHandler is Test {
             amount: amount,
             paymentMethod: chargebackable ? PAYPAL : ZELLE,
             postIntentHook: address(0),
-            createdAt: uint64(block.timestamp)
+            createdAt: uint64(block.timestamp),
+            hasSettlementFees: false
         });
 
         try manager.onIntentCreated(intentHash) {
@@ -119,8 +120,8 @@ contract RiskManagerInvariantHandler is Test {
         return paymentEvidence[_intentHash];
     }
 
-    function getIntentSettlement(bytes32) external pure returns (uint256, uint64) {
-        return (0, 0);
+    function getIntentSettlement(bytes32) external pure returns (uint256, uint64, bool) {
+        return (0, 0, false);
     }
 
     function getIntentCancellation(bytes32) external pure returns (uint64) {
