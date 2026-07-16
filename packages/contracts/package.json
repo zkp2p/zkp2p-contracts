@@ -30,6 +30,7 @@
     "bundle": "ts-node --transpile-only scripts/build-modules.ts",
     "test": "jest --passWithNoTests",
     "test:coverage": "jest --coverage --passWithNoTests",
+    "verify:release": "node scripts/verify-release.mjs",
     "prepublishOnly": "yarn build && yarn test"
   },
   "exports": {
@@ -193,7 +194,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/zkp2p/zkp2p-v2-contracts.git",
+    "url": "https://github.com/zkp2p/zkp2p-contracts.git",
     "directory": "packages/contracts"
   },
   "keywords": [
@@ -209,11 +210,12 @@
   "author": "ZKP2P",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/zkp2p/zkp2p-v2-contracts/issues"
+    "url": "https://github.com/zkp2p/zkp2p-contracts/issues"
   },
   "homepage": "https://zkp2p.xyz",
   "publishConfig": {
     "access": "public",
-    "registry": "https://registry.npmjs.org"
+    "registry": "https://registry.npmjs.org",
+    "provenance": true
   }
 }

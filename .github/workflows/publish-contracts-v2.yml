@@ -1,0 +1,157 @@
+name: Publish contracts-v2
+
+run-name: Publish @zkp2p/contracts-v2@${{ inputs.release }} with ${{ inputs.tag }} tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Exact SemVer already committed in packages/contracts/package.json
+        required: true
+        type: string
+      tag:
+        description: npm dist-tag (latest requires stable SemVer)
+        required: true
+        default: rc
+        type: choice
+        options:
+          - dev
+          - rc
+          - latest
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: npm-publish-contracts-v2
+  cancel-in-progress: false
+
+env:
+  PACKAGE_JSON: packages/contracts/package.json
+  PACK_ARTIFACT: contracts-v2-release-candidate
+  RELEASE_VERSION: ${{ inputs.release }}
+  DIST_TAG: ${{ inputs.tag }}
+  NPM_CONFIG_PROVENANCE: "true"
+
+jobs:
+  validate:
+    name: Build, test, and pack
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout canonical release commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.14.0
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Pin release tooling
+        run: |
+          npm install --global npm@11.9.0 corepack@0.34.0
+          corepack enable
+          test "$(npm --version)" = "11.9.0"
+
+      - name: Guard release inputs and unpublished version
+        run: node scripts/npm-release.mjs guard "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
+
+      - name: Require protected human approval environment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-environment.mjs npm-publish
+
+      - name: Install immutable dependencies
+        run: yarn install --immutable
+
+      - name: Compile contracts
+        run: |
+          set -a
+          . ./.env.default
+          set +a
+          yarn build
+
+      - name: Build and test package
+        run: |
+          yarn pkg:build
+          yarn pkg:test
+          yarn workspace @zkp2p/contracts-v2 verify:release
+
+      - name: Pack exact publish candidate
+        run: |
+          mkdir -p "$RUNNER_TEMP/npm-pack"
+          cd packages/contracts
+          npm pack --ignore-scripts --json --pack-destination "$RUNNER_TEMP/npm-pack" > "$RUNNER_TEMP/npm-pack.json"
+          cp "$RUNNER_TEMP/npm-pack.json" "$RUNNER_TEMP/npm-pack/pack.json"
+          cd ../..
+          node packages/contracts/scripts/verify-release.mjs --pack-json "$RUNNER_TEMP/npm-pack.json" --pack-dir "$RUNNER_TEMP/npm-pack"
+
+      - name: Preserve validated tarball for approved publish
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ env.PACK_ARTIFACT }}
+          path: ${{ runner.temp }}/npm-pack
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  publish:
+    name: Publish with npm OIDC
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: npm-publish
+      url: https://www.npmjs.com/package/@zkp2p/contracts-v2/v/${{ inputs.release }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout release verification code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js and npm registry
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.14.0
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Pin OIDC-capable npm
+        run: |
+          npm install --global npm@11.9.0
+          test "$(npm --version)" = "11.9.0"
+
+      - name: Re-check unpublished version after approval
+        run: node scripts/npm-release.mjs guard "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
+
+      - name: Download validated tarball
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: ${{ env.PACK_ARTIFACT }}
+          path: ${{ runner.temp }}/npm-pack
+
+      - name: Verify downloaded tarball
+        run: node packages/contracts/scripts/verify-release.mjs --pack-json "$RUNNER_TEMP/npm-pack/pack.json" --pack-dir "$RUNNER_TEMP/npm-pack"
+
+      - name: Publish exact tarball with provenance
+        run: |
+          tarball=$(node -e "const fs=require('fs'),p=require('path');const r=JSON.parse(fs.readFileSync(process.argv[1]))[0];process.stdout.write(p.join(process.argv[2],r.filename))" "$RUNNER_TEMP/npm-pack/pack.json" "$RUNNER_TEMP/npm-pack")
+          npm publish "$tarball" --access public --tag "$DIST_TAG" --provenance
+
+      - name: Verify registry version, dist-tag, integrity, and contents
+        run: |
+          node scripts/npm-release.mjs verify "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG" "$RUNNER_TEMP/npm-pack/pack.json"
+          mkdir -p "$RUNNER_TEMP/registry-pack"
+          npm pack "@zkp2p/contracts-v2@$RELEASE_VERSION" --ignore-scripts --json --pack-destination "$RUNNER_TEMP/registry-pack" > "$RUNNER_TEMP/registry-pack.json"
+          node packages/contracts/scripts/verify-release.mjs --pack-json "$RUNNER_TEMP/registry-pack.json" --pack-dir "$RUNNER_TEMP/registry-pack"
