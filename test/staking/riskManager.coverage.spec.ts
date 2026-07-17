@@ -582,12 +582,15 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
         .to.be.revertedWithCustomError(fixture.manager, "StakeOwnerExiting");
     });
 
-    it("rejects the deferred hook for a fully stake-backed position", async () => {
+    it("uses the canonical deferred hook as the mode selector with excess stake", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("deferred-hook-with-stake");
       await setRiskIntent(fixture, intentHash, { settlementHook: fixture.orchestrator.address });
-      await expect(fixture.orchestrator.createPosition(fixture.manager.address, intentHash))
-        .to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutHookNotAllowed");
+      await fixture.orchestrator.createPosition(fixture.manager.address, intentHash);
+
+      const position = await fixture.manager.getRiskPosition(intentHash);
+      expect(position.mode).to.eq(3);
+      expect(position.initialReservation).to.eq(usdc("0.575"));
     });
 
     it("rejects the deferred hook for a free position", async () => {

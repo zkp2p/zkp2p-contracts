@@ -1267,11 +1267,32 @@ describe("RiskManager and OrchestratorV3", () => {
         .to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
     });
 
-    it("rejects the deferred hook when stake already covers the full reservation", async () => {
-      const { taker, escrow, orchestrator, vault, manager, deferredHook } = await loadFixture(deployFixture);
-      await vault.connect(taker).depositStake(usdc(700));
-      await expect(signalIntent(orchestrator, escrow, taker, usdc(700), PAYPAL, deferredHook.address))
-        .to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+    it("keeps explicit deferred mode stable when a permissionless maturity release raises free stake", async () => {
+      const { taker, other, escrow, orchestrator, vault, manager, deferredHook } =
+        await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc("704.025"));
+
+      const previousIntent = await signalIntent(orchestrator, escrow, taker, usdc(700), PAYPAL);
+      await fulfillIntent(orchestrator, previousIntent, usdc(700));
+      const deadline = (await manager.getRiskPosition(previousIntent)).coverageDeadline.toNumber();
+      await time.increaseTo(deadline);
+      expect(await vault.freeStake(taker.address)).to.eq(usdc("4.025"));
+
+      await manager.connect(other).releaseMaturedPosition(previousIntent);
+      expect(await vault.freeStake(taker.address)).to.eq(usdc("704.025"));
+
+      const intentHash = await signalIntent(
+        orchestrator,
+        escrow,
+        taker,
+        usdc(700),
+        PAYPAL,
+        deferredHook.address,
+      );
+      const position = await manager.getRiskPosition(intentHash);
+      expect(position.mode).to.eq(3);
+      expect(position.initialReservation).to.eq(usdc("4.025"));
+      expect(await vault.reservedStake(taker.address)).to.eq(usdc("4.025"));
     });
 
     it("slashes deferred proceeds without reducing membership stake", async () => {

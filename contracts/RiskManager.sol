@@ -231,7 +231,18 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             );
         } else {
             uint256 available = stakeVault.freeStake(stakeOwner);
-            if (available >= requiredReservation) {
+            bool deferredPayoutRequested = config.chargeback.chargebackable
+                && config.chargeback.deferredPayoutEnabled
+                && deferredPayoutHook != address(0)
+                && intent.settlementHook == deferredPayoutHook;
+            if (deferredPayoutRequested) {
+                if (available < deferredRequiredReservation) {
+                    revert InsufficientCollateral(stakeOwner, available, deferredRequiredReservation);
+                }
+                mode = RiskMode.DEFERRED_PAYOUT;
+                initialReservation = deferredRequiredReservation;
+                requiresSettlementHook = true;
+            } else if (available >= requiredReservation) {
                 mode = RiskMode.STAKE_BACKED;
                 initialReservation = requiredReservation;
             } else if (config.chargeback.chargebackable && config.chargeback.deferredPayoutEnabled) {

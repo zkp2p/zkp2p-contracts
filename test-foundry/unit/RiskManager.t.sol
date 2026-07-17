@@ -554,6 +554,23 @@ contract RiskManagerTest is Test {
         assertEq(vault.reservedStake(taker), 21e6);
     }
 
+    function test_CanonicalDeferredHookSelectsHybridModeWithExcessStake() public {
+        _enableDeferredPayouts();
+        _stake(taker, 700e6);
+        bytes32 intentHash = keccak256("deferred-explicit-mode");
+        _setIntent(intentHash, taker, 700e6, PAYPAL, address(verifier));
+        orchestrator.setIntentTotalFeeRate(intentHash, 0.03e18);
+
+        bool requiresHook = _createPosition(intentHash);
+
+        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        assertTrue(requiresHook);
+        assertEq(uint256(position.mode), uint256(IRiskManager.RiskMode.DEFERRED_PAYOUT));
+        assertEq(position.initialReservation, 21e6);
+        assertEq(vault.reservedStake(taker), 21e6);
+        assertEq(vault.freeStake(taker), 679e6);
+    }
+
     function test_DeferredAdmissionRejectsStakeBelowFeeGapUpperBound() public {
         _enableDeferredPayouts();
         _stake(taker, 10e6);
