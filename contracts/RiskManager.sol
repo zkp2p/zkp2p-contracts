@@ -50,8 +50,9 @@ import { IStakeVault } from "./interfaces/IStakeVault.sol";
  *      - Non-chargebackable settlement releases the full pending reservation immediately.
  *      - Chargebackable settlement resizes stake coverage to the exact released amount and starts the
  *        snapshotted coverage window.
- *      - Deferred payout is an explicit exception: pending stake covers only griefing, while settled
- *        proceeds held in StakeVault replace chargeback stake coverage.
+ *      - Deferred payout is an explicit hybrid: pending stake covers the greater of maximum griefing
+ *        and a safe upper bound on settlement fees, then exact net proceeds plus the retained fee-gap
+ *        stake cover the complete gross release.
  *      - Maturity releases remaining stake coverage; valid chargebacks can consume coverage partially.
  *
  * @dev SECURITY INVARIANTS AND RATIONALE
@@ -70,14 +71,19 @@ import { IStakeVault } from "./interfaces/IStakeVault.sol";
  *      6. This contract never holds tokens. StakeVault is the sole accounting and custody boundary.
  *      7. Escrow intent amounts and StakeVault liabilities must use the same immutable token, otherwise
  *         raw units, griefing penalties, free limits, and chargeback ratios would have no shared meaning.
- *      8. Deferred proceeds must cover the complete configured reserve after fees. A shortfall fails
- *         settlement rather than silently advertising less protection than governance configured.
+ *      8. Deferred admission reserves max(maxGriefingBond, floor(A * aggregateFeeRate / 1e18)).
+ *         Independently rounded fee components can never exceed that aggregate-floor upper bound.
+ *         At registration, exact net proceeds D resize retained stake to S = R - D, proving D + S = R
+ *         without ever increasing stake after the off-chain payment.
  */
 contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     /* ============ Constants ============ */
 
     /// @notice Basis-point denominator shared by both affine curves.
     uint256 public constant BPS_DENOMINATOR = 10_000;
+
+    /// @notice Denominator used by Orchestrator fee rates.
+    uint256 public constant PRECISE_UNIT = 1e18;
 
     /// @notice Seconds per hour used to convert the configured hourly griefing slope.
     uint256 public constant SECONDS_PER_HOUR = 1 hours;
@@ -152,15 +158,12 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         IStakeVault _stakeVault,
         IAttestationVerifier _attestationVerifier
     ) Ownable() EIP712("ZKP2P RiskManager", "1") {
-        if (
-            _owner == address(0)
-                || address(_orchestrator) == address(0)
-                || address(_stakeVault) == address(0)
-                || address(_attestationVerifier) == address(0)
-        ) {
+        if (_owner == address(0)) {
             revert ZeroAddress();
         }
-        if (address(_attestationVerifier).code.length == 0) revert ZeroAddress();
+        _requireContract(address(_orchestrator));
+        _requireContract(address(_stakeVault));
+        _requireContract(address(_attestationVerifier));
 
         orchestrator = _orchestrator;
         stakeVault = _stakeVault;
@@ -201,6 +204,14 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
         (uint256 maxGriefingBond, uint256 chargebackReserve, uint256 requiredReservation) =
             _calculateRequiredReservation(intent.amount, maxIntentPeriod, config);
+        uint256 deferredRequiredReservation = maxGriefingBond;
+        if (config.chargeback.chargebackable && config.chargeback.deferredPayoutEnabled) {
+            uint256 maximumFeeGap = _calculateDeferredFeeGapUpperBound(
+                intent.amount,
+                orchestrator.getIntentTotalFeeRate(_intentHash)
+            );
+            deferredRequiredReservation = _max(maxGriefingBond, maximumFeeGap);
+        }
 
         bool consumedFreeTake = _isFreeTakeEligible(stakeOwner, intent, config);
         RiskMode mode;
@@ -220,19 +231,29 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             );
         } else {
             uint256 available = stakeVault.freeStake(stakeOwner);
-            if (available >= requiredReservation) {
+            bool deferredPayoutRequested = config.chargeback.chargebackable
+                && config.chargeback.deferredPayoutEnabled
+                && deferredPayoutHook != address(0)
+                && intent.settlementHook == deferredPayoutHook;
+            if (deferredPayoutRequested) {
+                if (available < deferredRequiredReservation) {
+                    revert InsufficientCollateral(stakeOwner, available, deferredRequiredReservation);
+                }
+                mode = RiskMode.DEFERRED_PAYOUT;
+                initialReservation = deferredRequiredReservation;
+                requiresSettlementHook = true;
+            } else if (available >= requiredReservation) {
                 mode = RiskMode.STAKE_BACKED;
                 initialReservation = requiredReservation;
-            } else if (
-                config.chargeback.chargebackable
-                    && config.chargeback.deferredPayoutEnabled
-                    && available >= maxGriefingBond
-            ) {
+            } else if (config.chargeback.chargebackable && config.chargeback.deferredPayoutEnabled) {
+                if (available < deferredRequiredReservation) {
+                    revert InsufficientCollateral(stakeOwner, available, deferredRequiredReservation);
+                }
                 if (deferredPayoutHook == address(0) || intent.settlementHook != deferredPayoutHook) {
                     revert DeferredPayoutHookRequired(deferredPayoutHook, intent.settlementHook);
                 }
                 mode = RiskMode.DEFERRED_PAYOUT;
-                initialReservation = maxGriefingBond;
+                initialReservation = deferredRequiredReservation;
                 requiresSettlementHook = true;
             } else {
                 revert InsufficientCollateral(stakeOwner, available, requiredReservation);
@@ -412,10 +433,10 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /**
      * @inheritdoc IRiskManager
-     * @dev The canonical hook transfers net proceeds into StakeVault before calling this function.
-     *      Held proceeds must cover the complete configured reserve after fees; otherwise settlement
-     *      fails closed instead of silently weakening coverage. Any excess remains the beneficiary's
-     *      property but matures on the same deadline.
+     * @dev The canonical hook transfers exact net proceeds D into StakeVault before calling this
+     *      function. Exact stake coverage is S = R - D. Admission already reserved an upper bound on S,
+     *      so registration can only retain or reduce stake after the off-chain payment. The combined
+     *      coverage is therefore exactly D + S = R and matures on one deadline.
      */
     function registerDeferredPayout(
         bytes32 _intentHash,
@@ -435,23 +456,32 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             revert DeferredPayoutExceedsReleasedAmount(_amount, position.releasedAmount);
         }
 
-        uint256 expectedCoverage = _calculateChargebackReserve(
-            position.releasedAmount,
-            position.chargebackReserveBps
-        );
-        if (_amount < expectedCoverage) {
-            revert InsufficientDeferredPayoutCoverage(_amount, expectedCoverage);
+        uint256 stakeCoverage = position.releasedAmount - _amount;
+        uint256 provisionalStakeCoverage = position.reservedAmount;
+        if (stakeCoverage > provisionalStakeCoverage) {
+            revert IncompleteChargebackCoverage(
+                _amount + provisionalStakeCoverage,
+                position.releasedAmount
+            );
         }
 
         position.deferredPayoutAmount = _amount;
-        position.reservedAmount = expectedCoverage;
+        position.reservedAmount = stakeCoverage;
+
+        if (provisionalStakeCoverage != 0) {
+            if (stakeCoverage == 0) {
+                stakeVault.releaseReservation(_intentHash);
+            } else {
+                stakeVault.updateReservation(_intentHash, stakeCoverage, position.coverageDeadline);
+            }
+        }
         stakeVault.recordDeferredPayout(_intentHash, _beneficiary, _amount, position.coverageDeadline);
 
         emit DeferredPayoutRegistered(
             _intentHash,
             _beneficiary,
             _amount,
-            expectedCoverage,
+            stakeCoverage,
             position.coverageDeadline
         );
     }
@@ -491,7 +521,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         position.status = PositionStatus.RELEASED;
         position.reservedAmount = 0;
 
-        if (position.mode == RiskMode.STAKE_BACKED && releasedCoverage != 0) {
+        if (releasedCoverage != 0) {
             stakeVault.releaseReservation(_intentHash);
         }
 
@@ -520,19 +550,36 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         }
 
         uint256 compensatedAmount = position.releasedAmount;
-        if (position.reservedAmount != compensatedAmount) {
-            revert IncompleteChargebackCoverage(position.reservedAmount, compensatedAmount);
+        uint256 deferredCoverage;
+        uint256 stakeCoverage = position.reservedAmount;
+        if (position.mode == RiskMode.DEFERRED_PAYOUT) {
+            deferredCoverage = position.deferredPayoutAmount;
+        }
+        uint256 totalCoverage = deferredCoverage + stakeCoverage;
+        if (totalCoverage != compensatedAmount) {
+            revert IncompleteChargebackCoverage(totalCoverage, compensatedAmount);
         }
 
         usedChargebackNullifiers[nullifier] = true;
         position.slashedAmount = compensatedAmount;
         position.reservedAmount = 0;
+        position.deferredPayoutAmount = 0;
         position.status = PositionStatus.SLASHED;
 
         if (position.mode == RiskMode.STAKE_BACKED) {
-            stakeVault.slashReservation(_attestation.intentHash, position.lp, compensatedAmount);
+            stakeVault.slashReservation(_attestation.intentHash, position.lp, stakeCoverage);
         } else {
-            stakeVault.slashDeferredPayout(_attestation.intentHash, position.lp, compensatedAmount);
+            stakeVault.slashDeferredPayout(_attestation.intentHash, position.lp, deferredCoverage);
+            if (stakeCoverage != 0) {
+                stakeVault.slashReservation(_attestation.intentHash, position.lp, stakeCoverage);
+            }
+            emit HybridCoverageSlashed(
+                _attestation.intentHash,
+                deferredCoverage,
+                stakeCoverage,
+                compensatedAmount,
+                0
+            );
         }
 
         emit ChargebackSettled(
@@ -580,7 +627,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
      * @inheritdoc IRiskManager
      */
     function setAttestationVerifier(address _verifier) external override onlyOwner {
-        if (_verifier == address(0) || _verifier.code.length == 0) revert ZeroAddress();
+        _requireContract(_verifier);
         address previousVerifier = address(attestationVerifier);
         attestationVerifier = IAttestationVerifier(_verifier);
         emit AttestationVerifierUpdated(previousVerifier, _verifier);
@@ -590,7 +637,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
      * @inheritdoc IRiskManager
      */
     function setDeferredPayoutHook(address _hook) external override onlyOwner {
-        if (_hook != address(0) && _hook.code.length == 0) revert ZeroAddress();
+        if (_hook != address(0)) _requireContract(_hook);
         address previousHook = deferredPayoutHook;
         deferredPayoutHook = _hook;
         emit DeferredPayoutHookUpdated(previousHook, _hook);
@@ -781,8 +828,9 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /**
      * @dev Transitions a pending position at settlement. Griefing liability disappears without penalty.
-     *      Stake-backed coverage is resized to the exact released amount; deferred coverage remains zero
-     *      until the mandatory hook atomically registers transferred proceeds.
+     *      Stake-backed coverage is resized to the exact released amount. Deferred mode retains its
+     *      admission reservation until the mandatory hook atomically registers exact net proceeds and
+     *      can safely shrink the reservation to the exact fee gap.
      */
     function _settlePosition(
         bytes32 _intentHash,
@@ -835,9 +883,8 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             position.reservedAmount = chargebackCoverage;
             stakeVault.updateReservation(_intentHash, chargebackCoverage, coverageDeadline);
         } else if (position.mode == RiskMode.DEFERRED_PAYOUT) {
-            releasedReservation = pendingReservation;
-            position.reservedAmount = 0;
-            if (pendingReservation != 0) stakeVault.releaseReservation(_intentHash);
+            chargebackCoverage = pendingReservation;
+            position.reservedAmount = pendingReservation;
         } else {
             revert PositionModeMismatch(_intentHash, position.mode);
         }
@@ -927,7 +974,6 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
                 _config.chargeback.reserveBps != BPS_DENOMINATOR
                     || _config.chargeback.riskWindow == 0
                     || _config.chargeback.riskWindow > MAX_RISK_WINDOW
-                    || _config.chargeback.deferredPayoutEnabled
             ) {
                 revert InvalidPlatformConfig(_paymentMethod);
             }
@@ -963,6 +1009,25 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         if (address(_intentToken) != expectedToken) {
             revert IntentTokenMismatch(expectedToken, address(_intentToken));
         }
+    }
+
+    /**
+     * @dev Returns a safe fee-gap upper bound for every release up to `_amount`. For component rates
+     *      `f_i` and aggregate rate `F`, sum(floor(R * f_i / U)) <= floor(R * F / U), and the right
+     *      side is monotonic for R <= A. Exact component rounding is reconciled from hook proceeds.
+     */
+    function _calculateDeferredFeeGapUpperBound(
+        uint256 _amount,
+        uint256 _totalFeeRate
+    ) internal pure returns (uint256) {
+        if (_totalFeeRate == 0) return 0;
+        return Math.mulDiv(_amount, _totalFeeRate, PRECISE_UNIT);
+    }
+
+    /** @dev Distinguishes an unset dependency from an address without deployed code. */
+    function _requireContract(address _account) internal view {
+        if (_account == address(0)) revert ZeroAddress();
+        if (_account.code.length == 0) revert InvalidContract(_account);
     }
 
     /** @dev Returns true only for a whole, non-chargebackable intent within an unused lifetime allowance. */

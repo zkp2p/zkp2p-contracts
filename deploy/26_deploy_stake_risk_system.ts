@@ -33,6 +33,10 @@ const LOCAL_CHARGEBACK_WITNESSES = [
 const STAKE_RISK_DEPLOYMENT_NAMES = [
   "BoundedCall",
   "PostIntentHookExecutor",
+  "OrchestratorV3Validation",
+  "OrchestratorV3FeeLib",
+  "RiskCallbackRecorder",
+  "OrchestratorV3RiskLib",
   "OrchestratorV3",
   "StakeVault",
   "ChargebackAttestationVerifier",
@@ -147,11 +151,37 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("PostIntentHookExecutor deployed at", postIntentHookExecutor.address);
   if (postIntentHookExecutor.newlyDeployed) await waitForDeploymentDelay(hre);
 
+  const orchestratorV3Validation = await deploy("OrchestratorV3Validation", { from: deployer, args: [] });
+  console.log("OrchestratorV3Validation deployed at", orchestratorV3Validation.address);
+  if (orchestratorV3Validation.newlyDeployed) await waitForDeploymentDelay(hre);
+
+  const orchestratorV3FeeLib = await deploy("OrchestratorV3FeeLib", { from: deployer, args: [] });
+  console.log("OrchestratorV3FeeLib deployed at", orchestratorV3FeeLib.address);
+  if (orchestratorV3FeeLib.newlyDeployed) await waitForDeploymentDelay(hre);
+
+  const riskCallbackRecorder = await deploy("RiskCallbackRecorder", { from: deployer, args: [] });
+  console.log("RiskCallbackRecorder deployed at", riskCallbackRecorder.address);
+  if (riskCallbackRecorder.newlyDeployed) await waitForDeploymentDelay(hre);
+
+  const orchestratorV3RiskLib = await deploy("OrchestratorV3RiskLib", {
+    from: deployer,
+    libraries: {
+      BoundedCall: boundedCall.address,
+      RiskCallbackRecorder: riskCallbackRecorder.address,
+    },
+    args: [],
+  });
+  console.log("OrchestratorV3RiskLib deployed at", orchestratorV3RiskLib.address);
+  if (orchestratorV3RiskLib.newlyDeployed) await waitForDeploymentDelay(hre);
+
   const orchestratorV3 = await deploy("OrchestratorV3", {
     from: deployer,
     libraries: {
       BoundedCall: boundedCall.address,
       PostIntentHookExecutor: postIntentHookExecutor.address,
+      OrchestratorV3Validation: orchestratorV3Validation.address,
+      OrchestratorV3FeeLib: orchestratorV3FeeLib.address,
+      OrchestratorV3RiskLib: orchestratorV3RiskLib.address,
     },
     args: [
       deployer,

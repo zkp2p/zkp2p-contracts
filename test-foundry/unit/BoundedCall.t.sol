@@ -10,15 +10,25 @@ contract BoundedCallHarness {
     function execute(
         address _target,
         uint256 _gasLimit,
+        uint256 _postCallGasReserve,
         uint256 _maxReturnDataSize,
         bytes calldata _callData
     ) external returns (bool success, bytes memory returnData) {
         return BoundedCall.callWithBoundedReturnData(
             _target,
             _gasLimit,
+            _postCallGasReserve,
             _maxReturnDataSize,
             _callData
         );
+    }
+
+    function calculateCallGas(
+        uint256 _availableGas,
+        uint256 _gasLimit,
+        uint256 _postCallGasReserve
+    ) external pure returns (uint256) {
+        return BoundedCall._calculateCallGas(_availableGas, _gasLimit, _postCallGasReserve);
     }
 }
 
@@ -53,6 +63,7 @@ contract BoundedCallTest is Test {
         (bool success, bytes memory returnData) = harness.execute(
             address(target),
             100_000,
+            10_000,
             2_048,
             abi.encodeCall(BoundedCallTarget.returnTrue, ())
         );
@@ -66,6 +77,7 @@ contract BoundedCallTest is Test {
         (bool success, bytes memory revertData) = harness.execute(
             address(target),
             100_000,
+            10_000,
             64,
             abi.encodeCall(BoundedCallTarget.revertWithData, (32_768))
         );
@@ -78,11 +90,31 @@ contract BoundedCallTest is Test {
         (bool success, bytes memory revertData) = harness.execute(
             address(target),
             20_000,
+            10_000,
             64,
             abi.encodeCall(BoundedCallTarget.consumeAllGas, ())
         );
 
         assertFalse(success);
         assertEq(revertData.length, 0);
+    }
+
+    function test_ReturnsZeroWhenReconciliationReserveCannotBeRetained() public view {
+        assertEq(harness.calculateCallGas(260_000, 100_000, 250_000), 0);
+    }
+
+    function test_UsesConfiguredGasLimitWhenItIsTheLowestCap() public view {
+        assertEq(harness.calculateCallGas(1_000_000, 100_000, 250_000), 100_000);
+    }
+
+    function test_CapsCallGasByEip150() public view {
+        uint256 afterOverhead = 90_000;
+        uint256 expected = afterOverhead - (afterOverhead / 64);
+
+        assertEq(harness.calculateCallGas(100_000, type(uint256).max, 0), expected);
+    }
+
+    function test_CapsCallGasByReconciliationReserve() public view {
+        assertEq(harness.calculateCallGas(100_000, type(uint256).max, 25_000), 65_000);
     }
 }

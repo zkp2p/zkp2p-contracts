@@ -177,12 +177,12 @@ The current repository source builds additional exports for the merged v3 archit
 
 - `@zkp2p/contracts-v2/abis/contracts`: source ABIs for `OrchestratorV3`, `RiskManager`, `StakeVault`,
   and `DeferredPayoutHook`, independent of a network deployment.
-- `@zkp2p/contracts-v2/utils/riskMath`: exact `bigint` helpers for affine reservation, capacity, and
-  elapsed cancellation-penalty calculations.
+- `@zkp2p/contracts-v2/utils/riskMath`: exact `bigint` helpers for affine reservation, hybrid deferred
+  fee-gap reservation, capacity, and elapsed cancellation-penalty calculations.
 
 These paths are development source until a later package version is built, validated, and published.
 They must not be imported from npm `0.3.0`. Network-specific v3 address exports describe the recorded
-Base staging affine deployment and do not imply that the final direct-chargeback implementation is live.
+Base staging affine deployment and do not imply that the final hybrid direct-chargeback implementation is live.
 
 ### Export Format Details
 
@@ -212,6 +212,26 @@ Source manifest version: `0.3.0`
 Latest npm version: `0.3.0` (does not include the unpublished source exports above)
 
 ## Development
+
+### OrchestratorV3 gating-signature migration
+
+`OrchestratorV3` treats a deposit gating signature as a single-intent authorization. The
+`SignalIntentParams` tuple is unchanged, but legacy reusable V2 signatures are not valid on V3.
+Curator and client signers must:
+
+1. Build the final `SignalIntentParams`, leaving `gatingServiceSignature` empty.
+2. Read `getIntentGatingNonce(taker, escrow, depositId, paymentMethod)` if the nonce is needed for
+   observability or caching.
+3. Call `getIntentGatingMessageHash(params, taker)` on the exact orchestrator that will receive the
+   intent.
+4. Sign the returned 32-byte hash with EIP-191 `personal_sign`/`signMessage` and place the result in
+   `gatingServiceSignature`.
+
+The signed hash binds the taker, recipient, amount, escrow, deposit, payment method, fiat currency,
+conversion rate, referral fees, settlement hook, pre-intent hook data, persisted signal hook data,
+expiry, chain id, verifying orchestrator, and current scoped nonce. A successful gated intent
+increments the nonce. Failed transactions roll it back, and deposits without a gating service do not
+consume a nonce. Nonces are independent per `(taker, escrow, depositId, paymentMethod)`.
 
 ### Build & Publish
 

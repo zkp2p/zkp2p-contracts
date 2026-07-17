@@ -20,7 +20,7 @@ function chargebackConfig(overrides: Record<string, unknown> = {}) {
     enabled: true,
     chargeback: {
       chargebackable: true,
-      deferredPayoutEnabled: false,
+      deferredPayoutEnabled: true,
       reserveBps: 10_000,
       riskWindow: DAY,
       ...((overrides.chargeback as Record<string, unknown>) ?? {}),
@@ -167,7 +167,21 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       const { owner, other, orchestrator, vault } = await loadFixture(deployHarnessFixture);
       await expect((await ethers.getContractFactory("RiskManager")).deploy(
         owner.address, orchestrator.address, vault.address, other.address,
-      )).to.be.reverted;
+      )).to.be.revertedWithCustomError(await ethers.getContractFactory("RiskManager"), "InvalidContract");
+    });
+
+    it("rejects an EOA orchestrator", async () => {
+      const { owner, other, vault, verifier } = await loadFixture(deployHarnessFixture);
+      await expect((await ethers.getContractFactory("RiskManager")).deploy(
+        owner.address, other.address, vault.address, verifier.address,
+      )).to.be.revertedWithCustomError(await ethers.getContractFactory("RiskManager"), "InvalidContract");
+    });
+
+    it("rejects an EOA stake vault", async () => {
+      const { owner, other, orchestrator, verifier } = await loadFixture(deployHarnessFixture);
+      await expect((await ethers.getContractFactory("RiskManager")).deploy(
+        owner.address, orchestrator.address, other.address, verifier.address,
+      )).to.be.revertedWithCustomError(await ethers.getContractFactory("RiskManager"), "InvalidContract");
     });
 
     it("updates the attestation verifier", async () => {
@@ -185,7 +199,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
 
     it("rejects an EOA attestation verifier update", async () => {
       const { manager, other } = await loadFixture(deployHarnessFixture);
-      await expect(manager.setAttestationVerifier(other.address)).to.be.revertedWithCustomError(manager, "ZeroAddress");
+      await expect(manager.setAttestationVerifier(other.address)).to.be.revertedWithCustomError(manager, "InvalidContract");
     });
 
     it("clears the deferred payout hook", async () => {
@@ -196,7 +210,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
 
     it("rejects an EOA deferred payout hook", async () => {
       const { manager, other } = await loadFixture(deployHarnessFixture);
-      await expect(manager.setDeferredPayoutHook(other.address)).to.be.revertedWithCustomError(manager, "ZeroAddress");
+      await expect(manager.setDeferredPayoutHook(other.address)).to.be.revertedWithCustomError(manager, "InvalidContract");
     });
 
     it("pauses and unpauses admission", async () => {
@@ -311,11 +325,11 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       }))).to.be.revertedWithCustomError(manager, "InvalidPlatformConfig");
     });
 
-    it("rejects deferred payout on a chargebackable platform in v1", async () => {
+    it("accepts deferred payout on a chargebackable platform", async () => {
       const { manager } = await loadFixture(deployHarnessFixture);
       await expect(manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig({
         chargeback: { deferredPayoutEnabled: true },
-      }))).to.be.revertedWithCustomError(manager, "InvalidPlatformConfig");
+      }))).to.emit(manager, "PlatformRiskConfigUpdated");
     });
 
     it("stores a disabled platform for future admission policy", async () => {
@@ -510,6 +524,55 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
         .to.be.revertedWithCustomError(fixture.manager, "InsufficientCollateral");
     });
 
+    it("requires the canonical hook for deferred payout admission", async () => {
+      const fixture = await loadFixture(deployHarnessFixture);
+      const intentHash = ethers.utils.id("deferred-hook-required");
+      await fixture.vault.setTakerState(
+        fixture.taker.address,
+        fixture.taker.address,
+        usdc(1),
+        usdc(1),
+        false,
+      );
+      await setRiskIntent(fixture, intentHash);
+      await expect(fixture.orchestrator.createPosition(fixture.manager.address, intentHash))
+        .to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutHookRequired");
+    });
+
+    it("rejects deferred admission when stake cannot cover the fee-gap upper bound", async () => {
+      const fixture = await loadFixture(deployHarnessFixture);
+      const intentHash = ethers.utils.id("deferred-fee-gap-undercollateralized");
+      await fixture.vault.setTakerState(
+        fixture.taker.address,
+        fixture.taker.address,
+        usdc(1),
+        usdc(1),
+        false,
+      );
+      await fixture.orchestrator.setIntentTotalFeeRate(intentHash, ethers.utils.parseUnits("0.5", 18));
+      await setRiskIntent(fixture, intentHash, { settlementHook: fixture.orchestrator.address });
+
+      await expect(fixture.orchestrator.createPosition(fixture.manager.address, intentHash))
+        .to.be.revertedWithCustomError(fixture.manager, "InsufficientCollateral");
+      expect(await fixture.vault.reservedStake(fixture.taker.address)).to.eq(0);
+    });
+
+    it("requires a configured canonical hook for deferred payout admission", async () => {
+      const fixture = await loadFixture(deployHarnessFixture);
+      const intentHash = ethers.utils.id("deferred-hook-unconfigured");
+      await fixture.manager.setDeferredPayoutHook(ZERO);
+      await fixture.vault.setTakerState(
+        fixture.taker.address,
+        fixture.taker.address,
+        usdc(1),
+        usdc(1),
+        false,
+      );
+      await setRiskIntent(fixture, intentHash);
+      await expect(fixture.orchestrator.createPosition(fixture.manager.address, intentHash))
+        .to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutHookRequired");
+    });
+
     it("rejects a bonded position for an exiting stake owner", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("exiting-stake-owner");
@@ -519,12 +582,15 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
         .to.be.revertedWithCustomError(fixture.manager, "StakeOwnerExiting");
     });
 
-    it("rejects the deferred hook for a fully stake-backed position", async () => {
+    it("uses the canonical deferred hook as the mode selector with excess stake", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("deferred-hook-with-stake");
       await setRiskIntent(fixture, intentHash, { settlementHook: fixture.orchestrator.address });
-      await expect(fixture.orchestrator.createPosition(fixture.manager.address, intentHash))
-        .to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutHookNotAllowed");
+      await fixture.orchestrator.createPosition(fixture.manager.address, intentHash);
+
+      const position = await fixture.manager.getRiskPosition(intentHash);
+      expect(position.mode).to.eq(3);
+      expect(position.initialReservation).to.eq(usdc("0.575"));
     });
 
     it("rejects the deferred hook for a free position", async () => {

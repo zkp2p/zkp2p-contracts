@@ -1,8 +1,10 @@
 import {
   calculateBondedTakingCapacity,
   calculateChargebackReserve,
+  calculateDeferredFeeGapUpperBound,
   calculateFreeTakeCapacity,
   calculateGriefingPenalty,
+  calculateHybridDeferredReservation,
   calculateMaxGriefingBond,
   calculateRequiredReservation,
 } from "../utils/riskMath";
@@ -33,6 +35,25 @@ describe("riskMath", () => {
 
   it("takes the maximum of griefing and chargeback requirements", () => {
     expect(calculateRequiredReservation(1_000_000_000n, terms, 10_000)).toBe(1_000_000_000n);
+  });
+
+  it("floors the aggregate deferred fee-gap upper bound in token units", () => {
+    expect(calculateDeferredFeeGapUpperBound(700_000_000n, 30_000_000_000_000_000n)).toBe(21_000_000n);
+    expect(calculateDeferredFeeGapUpperBound(700_000_000n, 1n)).toBe(0n);
+  });
+
+  it("reserves the maximum rather than summing griefing and deferred fee-gap exposure", () => {
+    expect(calculateHybridDeferredReservation(
+      700_000_000n,
+      terms,
+      30_000_000_000_000_000n,
+    )).toBe(21_000_000n);
+    expect(calculateHybridDeferredReservation(700_000_000n, terms, 0n)).toBe(4_025_000n);
+  });
+
+  it("rejects a deferred fee rate above 100 percent", () => {
+    expect(() => calculateDeferredFeeGapUpperBound(100n, 1_000_000_000_000_000_001n))
+      .toThrow("totalFeeRate");
   });
 
   it("charges nothing at the griefing cliff", () => {

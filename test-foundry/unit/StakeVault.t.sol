@@ -23,11 +23,37 @@ contract StakeVaultTest is Test {
 
     function setUp() public {
         token = new USDCMock(1_000_000e6, "USD Coin", "USDC");
+        vm.etch(controller, hex"00");
         vault = new StakeVault(owner, token, controller, EXIT_DELAY, DAY);
 
         deal(address(token), staker, 10_000e6);
         vm.prank(staker);
         token.approve(address(vault), type(uint256).max);
+    }
+
+    function test_ConstructorRejectsStakeTokenWithoutCode() public {
+        address eoaToken = makeAddr("eoaToken");
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InvalidContract.selector, eoaToken));
+        new StakeVault(owner, USDCMock(eoaToken), address(0), EXIT_DELAY, DAY);
+    }
+
+    function test_ConstructorRejectsControllerWithoutCode() public {
+        address eoaController = makeAddr("eoaController");
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InvalidContract.selector, eoaController));
+        new StakeVault(owner, token, eoaController, EXIT_DELAY, DAY);
+    }
+
+    function test_ControllerAcceptanceRechecksDeployedCode() public {
+        address nextController = makeAddr("ephemeralController");
+        vm.etch(nextController, hex"00");
+        vm.prank(owner);
+        vault.proposeController(nextController);
+        vm.etch(nextController, hex"");
+        vm.warp(block.timestamp + DAY);
+
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InvalidContract.selector, nextController));
+        vm.prank(nextController);
+        vault.acceptController();
     }
 
     function test_DepositStakeTracksLiabilities() public {
@@ -419,6 +445,7 @@ contract StakeVaultTest is Test {
 
     function test_ControllerHandoverIsDelayedAndTwoStep() public {
         address nextController = makeAddr("nextController");
+        vm.etch(nextController, hex"00");
         vm.prank(owner);
         vault.proposeController(nextController);
 
@@ -434,6 +461,7 @@ contract StakeVaultTest is Test {
 
     function test_PreviousControllerSettlesOnlyItsSnapshottedPositionAfterHandover() public {
         address nextController = makeAddr("nextController");
+        vm.etch(nextController, hex"00");
         bytes32 oldIntent = keccak256("oldIntent");
         bytes32 newIntent = keccak256("newIntent");
         vm.prank(staker);
@@ -464,6 +492,7 @@ contract StakeVaultTest is Test {
 
     function test_PreviousControllerFundsDeferredPositionAfterHandoverAndPause() public {
         address nextController = makeAddr("nextController");
+        vm.etch(nextController, hex"00");
         bytes32 intentHash = keccak256("deferred");
         vm.prank(controller);
         vault.authorizeDeferredPayout(intentHash, staker, uint64(block.timestamp + DAY));

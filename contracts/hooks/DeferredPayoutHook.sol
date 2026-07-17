@@ -26,13 +26,6 @@ contract DeferredPayoutHook is IDeferredPayoutHook {
     IRiskManager public immutable riskManager;
     IOrchestratorRegistry public immutable orchestratorRegistry;
 
-    /* ============ Errors ============ */
-
-    error ZeroAddress();
-    error ZeroAmount();
-    error UnauthorizedOrchestrator(address caller);
-    error InvalidPayoutToken(address expected, address actual);
-
     /* ============ Constructor ============ */
 
     /**
@@ -56,9 +49,18 @@ contract DeferredPayoutHook is IDeferredPayoutHook {
         ) {
             revert ZeroAddress();
         }
+        _requireContract(address(_payoutToken));
+        _requireContract(address(_stakeVault));
+        _requireContract(address(_riskManager));
+        _requireContract(address(_orchestratorRegistry));
+
         address vaultToken = address(_stakeVault.stakeToken());
         if (address(_payoutToken) != vaultToken) {
             revert InvalidPayoutToken(vaultToken, address(_payoutToken));
+        }
+        address managerVault = address(_riskManager.stakeVault());
+        if (managerVault != address(_stakeVault)) {
+            revert RiskManagerStakeVaultMismatch(managerVault, address(_stakeVault));
         }
 
         payoutToken = _payoutToken;
@@ -93,5 +95,10 @@ contract DeferredPayoutHook is IDeferredPayoutHook {
             address(stakeVault),
             _ctx.executableAmount
         );
+    }
+
+    /** @dev Rejects an address that cannot execute the expected dependency interface. */
+    function _requireContract(address _account) internal view {
+        if (_account.code.length == 0) revert InvalidContract(_account);
     }
 }

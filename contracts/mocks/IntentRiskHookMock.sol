@@ -11,7 +11,9 @@ import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
 contract IntentRiskHookMock is IIntentRiskHook {
     bool public requiresSettlementHook;
     bool public revertOnCreate;
+    bool public consumeAllCreateGas;
     bool public revertOnTerminal;
+    bool public consumeAllTerminalGas;
     uint256 public terminalRevertDataSize;
     bytes32 public lastIntentHash;
     bytes32 public lastPaymentId;
@@ -29,8 +31,16 @@ contract IntentRiskHookMock is IIntentRiskHook {
         revertOnCreate = _shouldRevert;
     }
 
+    function setConsumeAllCreateGas(bool _shouldConsume) external {
+        consumeAllCreateGas = _shouldConsume;
+    }
+
     function setRevertOnTerminal(bool _shouldRevert) external {
         revertOnTerminal = _shouldRevert;
+    }
+
+    function setConsumeAllTerminalGas(bool _shouldConsume) external {
+        consumeAllTerminalGas = _shouldConsume;
     }
 
     function setTerminalRevertDataSize(uint256 _size) external {
@@ -38,6 +48,11 @@ contract IntentRiskHookMock is IIntentRiskHook {
     }
 
     function onIntentCreated(bytes32 _intentHash) external override returns (bool) {
+        if (consumeAllCreateGas) {
+            assembly ("memory-safe") {
+                invalid()
+            }
+        }
         if (revertOnCreate) revert("risk admission failed");
         lastIntentHash = _intentHash;
         createdCalls++;
@@ -73,6 +88,11 @@ contract IntentRiskHookMock is IIntentRiskHook {
     }
 
     function _revertWithConfiguredData() internal view {
+        if (consumeAllTerminalGas) {
+            assembly ("memory-safe") {
+                invalid()
+            }
+        }
         uint256 revertDataSize = terminalRevertDataSize;
         if (revertDataSize == 0) return;
 

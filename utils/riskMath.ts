@@ -28,6 +28,7 @@ export interface GriefingPenalty {
 }
 
 export const RISK_BPS_DENOMINATOR = 10_000n;
+export const RISK_PRECISE_UNIT = 1_000_000_000_000_000_000n;
 export const RISK_SECONDS_PER_HOUR = 3_600n;
 export const RISK_GRIEFING_DENOMINATOR = RISK_BPS_DENOMINATOR * RISK_SECONDS_PER_HOUR;
 
@@ -76,6 +77,30 @@ export function calculateRequiredReservation(
   const griefingBond = calculateMaxGriefingBond(amount, terms);
   const chargebackReserve = calculateChargebackReserve(amount, reserveBps);
   return griefingBond > chargebackReserve ? griefingBond : chargebackReserve;
+}
+
+/** floor(A * aggregateFeeRate / 1e18), safely upper-bounding independently rounded fee components. */
+export function calculateDeferredFeeGapUpperBound(
+  amount: IntegerLike,
+  totalFeeRate: IntegerLike,
+): bigint {
+  const bondedAmount = integer(amount, "amount");
+  const aggregateFeeRate = integer(totalFeeRate, "totalFeeRate");
+  if (aggregateFeeRate > RISK_PRECISE_UNIT) {
+    throw new RangeError("totalFeeRate cannot exceed 1e18");
+  }
+  return (bondedAmount * aggregateFeeRate) / RISK_PRECISE_UNIT;
+}
+
+/** max(maxGriefingBond, feeGapUpperBound), never the sum of mutually exclusive liabilities. */
+export function calculateHybridDeferredReservation(
+  amount: IntegerLike,
+  terms: GriefingTerms,
+  totalFeeRate: IntegerLike,
+): bigint {
+  const griefingBond = calculateMaxGriefingBond(amount, terms);
+  const feeGapUpperBound = calculateDeferredFeeGapUpperBound(amount, totalFeeRate);
+  return griefingBond > feeGapUpperBound ? griefingBond : feeGapUpperBound;
 }
 
 /** Capped, upward-rounded time-linear penalty used for cancellation and reconciliation. */

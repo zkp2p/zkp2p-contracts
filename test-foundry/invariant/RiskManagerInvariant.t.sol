@@ -38,14 +38,19 @@ contract RiskManagerInvariantHandler is Test {
 
     RiskManager public manager;
     RiskInvariantEscrow public immutable escrow;
+    StakeVault public immutable vault;
+    IERC20 public immutable token;
     address public immutable stakeOwner;
     uint256 public nonce;
 
     mapping(bytes32 => IOrchestratorV3.RiskIntentData) internal intents;
+    mapping(bytes32 => uint256) internal totalFeeRates;
     bytes32[] internal intentHashes;
 
-    constructor(RiskInvariantEscrow _escrow, address _stakeOwner) {
+    constructor(RiskInvariantEscrow _escrow, StakeVault _vault, address _stakeOwner) {
         escrow = _escrow;
+        vault = _vault;
+        token = _escrow.token();
         stakeOwner = _stakeOwner;
     }
 
@@ -54,9 +59,48 @@ contract RiskManagerInvariantHandler is Test {
         manager = _manager;
     }
 
-    function create(uint96 rawAmount, bool chargebackable) external {
-        uint256 amount = bound(uint256(rawAmount), 1, 10_000e6);
-        bytes32 intentHash = keccak256(abi.encode(++nonce, amount, chargebackable));
+    function create(
+        uint96 rawAmount,
+        bool chargebackable,
+        bool useDeferredPayout,
+        uint16 rawFeeBps
+    ) external {
+        uint256 availableStake = vault.freeStake(stakeOwner);
+        uint256 amount;
+        uint256 totalFeeRate;
+        address settlementHook;
+
+        if (chargebackable && useDeferredPayout) {
+            if (availableStake == 0 || availableStake >= 10_000e6) return;
+            amount = bound(uint256(rawAmount), availableStake + 1, 10_000e6);
+            uint256 feeBps = bound(uint256(rawFeeBps), 0, 500);
+            totalFeeRate = feeBps * 1e14;
+            uint256 feeGapUpperBound = (amount * totalFeeRate) / 1e18;
+            uint256 maxGriefingBond = manager.calculateMaxGriefingBond(
+                amount,
+                6 hours,
+                IRiskManager.GriefingConfig({
+                    griefingCliff: 15 minutes,
+                    griefingPenaltyBpsPerHour: 10,
+                    freeTakeCount: 0,
+                    freeTakeAmount: 0
+                })
+            );
+            uint256 hybridReservation = feeGapUpperBound > maxGriefingBond
+                ? feeGapUpperBound
+                : maxGriefingBond;
+            if (hybridReservation > availableStake) return;
+            settlementHook = address(this);
+        } else if (chargebackable) {
+            if (availableStake == 0) return;
+            amount = bound(uint256(rawAmount), 1, availableStake < 10_000e6 ? availableStake : 10_000e6);
+        } else {
+            amount = bound(uint256(rawAmount), 1, 10_000e6);
+        }
+
+        bytes32 intentHash = keccak256(
+            abi.encode(++nonce, amount, chargebackable, useDeferredPayout, totalFeeRate)
+        );
         intents[intentHash] = IOrchestratorV3.RiskIntentData({
             owner: stakeOwner,
             to: stakeOwner,
@@ -64,14 +108,16 @@ contract RiskManagerInvariantHandler is Test {
             depositId: 0,
             amount: amount,
             paymentMethod: chargebackable ? PAYPAL : ZELLE,
-            settlementHook: address(0),
+            settlementHook: settlementHook,
             createdAt: uint64(block.timestamp)
         });
+        totalFeeRates[intentHash] = totalFeeRate;
 
         try manager.onIntentCreated(intentHash) {
             intentHashes.push(intentHash);
         } catch {
             delete intents[intentHash];
+            delete totalFeeRates[intentHash];
         }
     }
 
@@ -92,11 +138,48 @@ contract RiskManagerInvariantHandler is Test {
         uint256 releasedAmount = bound(uint256(rawReleasedAmount), 1, position.intentAmount);
         bytes32 paymentId = keccak256(abi.encodePacked("payment", intentHash));
         manager.onIntentFulfilled(intentHash, releasedAmount, paymentId);
+        if (position.mode == IRiskManager.RiskMode.DEFERRED_PAYOUT) {
+            uint256 feeGap = (releasedAmount * totalFeeRates[intentHash]) / 1e18;
+            uint256 deferredCoverage = releasedAmount - feeGap;
+            require(token.transfer(address(vault), deferredCoverage), "deferred transfer failed");
+            manager.registerDeferredPayout(intentHash, stakeOwner, deferredCoverage);
+        }
         delete intents[intentHash];
+    }
+
+    function chargeback(uint256 rawIndex) external {
+        if (intentHashes.length == 0) return;
+        bytes32 intentHash = intentHashes[rawIndex % intentHashes.length];
+        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        if (position.status != IRiskManager.PositionStatus.SETTLED) return;
+        manager.submitChargeback(IRiskManager.ChargebackAttestation({
+            intentHash: intentHash,
+            originalPaymentId: position.paymentId,
+            disputeId: keccak256(abi.encode("dispute", intentHash, ++nonce)),
+            signatures: new bytes[](0)
+        }));
+    }
+
+    function mature(uint256 rawIndex) external {
+        if (intentHashes.length == 0) return;
+        bytes32 intentHash = intentHashes[rawIndex % intentHashes.length];
+        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        if (position.status != IRiskManager.PositionStatus.SETTLED) return;
+        if (block.timestamp < position.coverageDeadline) vm.warp(position.coverageDeadline);
+        manager.releaseMaturedPosition(intentHash);
+        IStakeVault.DeferredPayout memory payout = vault.getDeferredPayout(intentHash);
+        if (payout.amount != 0) {
+            vm.prank(stakeOwner);
+            vault.withdrawDeferredPayout(intentHash, stakeOwner);
+        }
     }
 
     function getRiskIntent(bytes32 _intentHash) external view returns (IOrchestratorV3.RiskIntentData memory) {
         return intents[_intentHash];
+    }
+
+    function getIntentTotalFeeRate(bytes32 _intentHash) external view returns (uint256) {
+        return totalFeeRates[_intentHash];
     }
 
     function getIntentSettlement(bytes32) external pure returns (uint256, bytes32, uint64) {
@@ -132,9 +215,9 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
         vm.warp(1_000_000);
         token = new USDCMock(2_000_000e6, "USD Coin", "USDC");
         RiskInvariantEscrow escrow = new RiskInvariantEscrow(lp, token);
-        handler = new RiskManagerInvariantHandler(escrow, stakeOwner);
-        AttestationVerifierMock verifier = new AttestationVerifierMock();
         vault = new StakeVault(address(this), token, address(0), 30 days, 1 days);
+        handler = new RiskManagerInvariantHandler(escrow, vault, stakeOwner);
+        AttestationVerifierMock verifier = new AttestationVerifierMock();
         manager = new RiskManager(
             address(this),
             IOrchestratorV3(address(handler)),
@@ -154,12 +237,13 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
             enabled: true,
             chargeback: IRiskManager.ChargebackConfig({
                 chargebackable: true,
-                deferredPayoutEnabled: false,
+                deferredPayoutEnabled: true,
                 reserveBps: 10_000,
                 riskWindow: 30 days
             }),
             griefing: griefing
         }));
+        manager.setDeferredPayoutHook(address(handler));
         griefing.freeTakeCount = 2;
         griefing.freeTakeAmount = 20e6;
         manager.setPlatformRiskConfig(ZELLE, IRiskManager.PlatformRiskConfig({
@@ -173,16 +257,19 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
             griefing: griefing
         }));
 
-        deal(address(token), stakeOwner, 1_000_000e6);
+        deal(address(token), stakeOwner, 1_000e6);
         vm.startPrank(stakeOwner);
         token.approve(address(vault), type(uint256).max);
-        vault.depositStake(1_000_000e6);
+        vault.depositStake(1_000e6);
         vm.stopPrank();
+        deal(address(token), address(handler), 2_000_000e6);
 
-        bytes4[] memory selectors = new bytes4[](3);
+        bytes4[] memory selectors = new bytes4[](5);
         selectors[0] = RiskManagerInvariantHandler.create.selector;
         selectors[1] = RiskManagerInvariantHandler.cancel.selector;
         selectors[2] = RiskManagerInvariantHandler.settle.selector;
+        selectors[3] = RiskManagerInvariantHandler.chargeback.selector;
+        selectors[4] = RiskManagerInvariantHandler.mature.selector;
         targetSelector(FuzzSelector({ addr: address(handler), selectors: selectors }));
     }
 
@@ -196,7 +283,10 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
         for (uint256 index = 0; index < handler.hashCount(); index++) {
             IRiskManager.RiskPosition memory position = manager.getRiskPosition(handler.hashAt(index));
             if (
-                position.mode == IRiskManager.RiskMode.STAKE_BACKED
+                (
+                    position.mode == IRiskManager.RiskMode.STAKE_BACKED
+                        || position.mode == IRiskManager.RiskMode.DEFERRED_PAYOUT
+                )
                     && (
                         position.status == IRiskManager.PositionStatus.PENDING
                             || position.status == IRiskManager.PositionStatus.SETTLED
@@ -215,6 +305,35 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
                 assertEq(position.initialReservation, 0);
                 assertEq(position.reservedAmount, 0);
                 assertEq(position.slashedAmount, 0);
+            }
+        }
+    }
+
+    function invariant_DeferredSettlementAlwaysHasExactGrossCoverage() public view {
+        for (uint256 index = 0; index < handler.hashCount(); index++) {
+            IRiskManager.RiskPosition memory position = manager.getRiskPosition(handler.hashAt(index));
+            if (
+                position.mode == IRiskManager.RiskMode.DEFERRED_PAYOUT
+                    && position.status == IRiskManager.PositionStatus.SETTLED
+            ) {
+                assertEq(
+                    position.deferredPayoutAmount + position.reservedAmount,
+                    position.releasedAmount
+                );
+            }
+            if (
+                position.mode == IRiskManager.RiskMode.DEFERRED_PAYOUT
+                    && position.status == IRiskManager.PositionStatus.SLASHED
+            ) {
+                assertEq(position.deferredPayoutAmount, 0);
+                assertEq(position.reservedAmount, 0);
+                assertEq(position.slashedAmount, position.releasedAmount);
+            }
+            if (
+                position.mode == IRiskManager.RiskMode.DEFERRED_PAYOUT
+                    && position.status == IRiskManager.PositionStatus.RELEASED
+            ) {
+                assertEq(position.reservedAmount, 0);
             }
         }
     }
