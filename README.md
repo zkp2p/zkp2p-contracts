@@ -48,9 +48,9 @@ The current v3 risk architecture landed in July 2026:
   or protocol-wide exposure ceiling.
 - `2026-07-16`: `OrchestratorV3`, `RiskManager`, `StakeVault`, and `DeferredPayoutHook` were deployed
   to Base staging for integration work. This was not a production rollout.
-- `2026-07-16`: verified fulfillment was bound to exact payment details for direct chargeback
-  authentication. Chargebackable v1 policies are now full-reserve, stake-backed only; deferred payout
-  is rejected.
+- `2026-07-17`: verified fulfillment was bound to exact payment details for direct chargeback
+  authentication. Chargebackable v1 policies retain 100% gross maker compensation and now support a
+  hybrid deferred path backed by exact net proceeds plus retained fee-gap stake.
 
 The v2 surface was built out rapidly between February 20, 2026 and March 11, 2026. The main additions in that window are:
 
@@ -101,18 +101,23 @@ an intent is admitted. Admission callbacks fail closed; terminal callbacks are g
 open so escrow liquidity is not trapped. `OrchestratorV3` retains durable recovery data so `RiskManager`
 can reconcile a failed terminal callback permissionlessly using the original lifecycle timestamp.
 
-For intent amount `A`, hourly griefing slope `s`, intent period `T`, griefing cliff `C`, and chargeback
-reserve ratio `r`, admission reserves the greater pending liability:
+For intent amount `A`, hourly griefing slope `s`, intent period `T`, griefing cliff `C`, chargeback
+reserve ratio `r`, aggregate snapshotted fee rate `f`, and fee precise unit `U = 1e18`, admission uses:
 
 ```text
-G_max(A) = ceil(A * s * (T - C) / (10_000 * 1 hour))
-C(A)     = ceil(A * r / 10_000)
-R(A)     = max(G_max(A), C(A))
+G_max(A)      = ceil(A * s * (T - C) / (10_000 * 1 hour))
+C(A)          = ceil(A * r / 10_000)
+F_max(A)      = floor(A * f / U)
+R_stake(A)    = max(G_max(A), C(A))
+R_deferred(A) = max(G_max(A), F_max(A))
 ```
 
 Cancellation charges only elapsed time after the cliff, capped by the snapshotted intent period. All
 mutable liability inputs are snapshotted at admission. Multiple concurrent intents are allowed whenever
 their aggregate reservations fit the stake owner's free stake; there is no intent-count capacity tier.
+Griefing and post-settlement fee-gap coverage are mutually exclusive, so deferred admission reserves
+their maximum, never their sum. For gross release `R` and independently rounded exact fees `F`, the hook
+records net deferred proceeds `D = R - F` and retains exact stake `S = F`, proving `D + S = R`.
 
 The merged contracts have these roles:
 
@@ -121,15 +126,18 @@ The merged contracts have these roles:
 - `RiskManager`: platform policy, exact reservation math, cancellation penalties, chargeback validation,
   maturity, reconciliation, and slashing instructions.
 - `StakeVault`: the sole stake-token custody and portfolio-accounting boundary.
-- `DeferredPayoutHook`: retained in the general architecture for separately governed future policy, but
-  rejected by the current chargebackable v1 configuration rules.
+- `DeferredPayoutHook`: canonical verified-settlement hook that transfers exact net proceeds into
+  `StakeVault` and resizes the admission reservation to the exact fee gap.
 
 ## Direct Chargeback Model
 
 The current merged chargeback path is deliberately narrow and fail closed:
 
-- Chargebackable platform configs require `reserveBps == 10_000` and
-  `deferredPayoutEnabled == false`, so the full gross released amount is stake-backed at admission.
+- Chargebackable platform configs require `reserveBps == 10_000`, preserving full gross compensation.
+  If stake can cover the gross amount, admission uses ordinary stake backing. Otherwise, an enabled
+  deferred policy requires the canonical hook and enough stake for `R_deferred(A)`.
+- Protocol, manager, and referral fees are distributed immediately from snapshotted terms. The hook
+  defers the exact net amount and retains exact fee-gap stake; settlement never asks for unreserved stake.
 - `UnifiedPaymentVerifierV3` returns the provider payment ID already authenticated inside the signed
   `PaymentDetails`. `OrchestratorV3` passes that value through its fulfillment callback and
   `RiskManager` stores it with the settled position; no payment verifier is snapshotted at admission.
@@ -142,10 +150,14 @@ The current merged chargeback path is deliberately narrow and fail closed:
   `disputeId` must be nonzero. The payment method and gross token amount come from the position rather
   than witness-supplied chargeback fields.
 - A valid claim inside the half-open interval `settledAt <= now < coverageDeadline` compensates the LP
-  for the full gross `releasedAmount`. Partial chargebacks are not supported by this v1 policy.
+  for the full gross `releasedAmount`. Deferred positions slash net proceeds plus the exact retained
+  fee gap atomically. Partial chargebacks are not supported by this v1 policy.
+- At maturity, unslashed deferred proceeds become withdrawable by the beneficiary and the exact retained
+  stake gap unlocks. Cancellation pays only griefing; maker manual release bypasses deferred capture.
 - Replay protection consumes `keccak256(paymentMethod, disputeId)` globally.
 - Fresh deployments require a dedicated three-witness chargeback verifier with a 2-of-3 threshold and
-  a witness set disjoint from payment-attestation witnesses.
+  a witness set disjoint from payment-attestation witnesses, plus a `DeferredPayoutHook` bound to the
+  new `RiskManager`, `StakeVault`, and registered `OrchestratorV3`.
 
 The payment-ID lane is deployed in parallel with the legacy lane. It has a separate
 `PaymentVerifierRegistryV3`, `UnifiedPaymentVerifierV3`, `OrchestratorV3`, and risk stack, while both
