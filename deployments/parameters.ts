@@ -148,8 +148,7 @@ const INITIAL_STAKE_RISK_PLATFORM_POLICY = {
     griefing: {
       griefingCliff: 15 * 60,
       griefingPenaltyBpsPerHour: 10,
-      freeTakeCount: 0,
-      freeTakeAmount: 0,
+      baseUnbondedAmount: 0,
     },
   },
   nonChargebackable: {
@@ -163,8 +162,7 @@ const INITIAL_STAKE_RISK_PLATFORM_POLICY = {
     griefing: {
       griefingCliff: 15 * 60,
       griefingPenaltyBpsPerHour: 10,
-      freeTakeCount: 3,
-      freeTakeAmount: usdc(20),
+      baseUnbondedAmount: usdc(500),
     },
   },
 };
