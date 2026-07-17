@@ -116,7 +116,7 @@ interface IRiskManager is IIntentRiskHook {
         uint256 maxGriefingBond;
         /// @notice Stake reserved at admission before terminal resizing or release.
         uint256 initialReservation;
-        /// @notice Remaining slashable stake or deferred proceeds for this position.
+        /// @notice Remaining slashable membership-stake coverage for this position.
         uint256 reservedAmount;
         /// @notice Exact amount released from Escrow at settlement before post-hook fees.
         uint256 releasedAmount;
@@ -201,24 +201,31 @@ interface IRiskManager is IIntentRiskHook {
         address indexed stakeOwner,
         address indexed lp,
         RiskMode mode,
-        uint256 releasedAmount,
-        uint256 chargebackCoverage,
-        uint256 releasedReservation,
+        uint256 grossReleasedAmount,
+        uint256 stakeCoverage,
+        uint256 releasedStakeReservation,
         uint64 settledAt,
         uint64 coverageDeadline
     );
     event DeferredPayoutRegistered(
         bytes32 indexed intentHash,
         address indexed beneficiary,
-        uint256 deferredAmount,
-        uint256 chargebackCoverage,
+        uint256 deferredCoverage,
+        uint256 stakeCoverage,
         uint64 coverageDeadline
+    );
+    event HybridCoverageSlashed(
+        bytes32 indexed intentHash,
+        uint256 deferredCoverage,
+        uint256 stakeCoverage,
+        uint256 grossCompensation,
+        uint256 remainingCoverage
     );
     event RiskPositionReleased(
         bytes32 indexed intentHash,
         address indexed stakeOwner,
         RiskMode mode,
-        uint256 releasedCoverage
+        uint256 releasedStakeCoverage
     );
     event ChargebackSettled(
         bytes32 indexed intentHash,
@@ -262,8 +269,6 @@ interface IRiskManager is IIntentRiskHook {
     error IntentTokenMismatch(address expectedToken, address actualToken);
     error DeferredPayoutAlreadyRegistered(bytes32 intentHash);
     error DeferredPayoutExceedsReleasedAmount(uint256 payoutAmount, uint256 releasedAmount);
-    error InsufficientDeferredPayoutCoverage(uint256 availableCoverage, uint256 requiredCoverage);
-    error DeferredPayoutFeesExceedCapacity(uint256 totalFee, uint16 reserveBps);
     error PositionNotMature(uint64 coverageDeadline, uint64 currentTime);
     error InvalidAttestation();
     error InvalidPaymentEvidence(bytes32 intentHash);
@@ -288,7 +293,7 @@ interface IRiskManager is IIntentRiskHook {
 
     /* ============ Lifecycle Functions ============ */
 
-    /** @notice Records net proceeds already transferred to StakeVault by the snapshotted canonical hook. */
+    /** @notice Records exact net deferred coverage and resizes stake coverage to the gross-release gap. */
     function registerDeferredPayout(bytes32 _intentHash, address _beneficiary, uint256 _amount) external;
     /** @notice Permissionlessly applies one durable failed-cancellation record using its original timestamp. */
     function reconcileCancellation(bytes32 _intentHash) external;

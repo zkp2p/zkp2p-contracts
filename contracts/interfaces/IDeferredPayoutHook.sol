@@ -21,6 +21,6 @@ interface IDeferredPayoutHook is ISettlementHook {
         bytes32 indexed intentHash,
         address indexed beneficiary,
         address indexed vault,
-        uint256 amount
+        uint256 deferredCoverage
     );
 }
