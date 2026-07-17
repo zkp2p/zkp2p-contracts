@@ -1,7 +1,7 @@
 import "module-alias/register";
 
 import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { DeployFunction } from "hardhat-deploy/types";
+import { Deployment, DeploymentSubmission, DeployFunction } from "hardhat-deploy/types";
 import { ethers } from "hardhat";
 
 import {
@@ -46,15 +46,29 @@ export const PAYMENT_ID_RISK_DEPLOYMENT_NAMES = [
   "DeferredPayoutHookPaymentId",
 ] as const;
 
+export const BASE_STAGING_FINAL_CANONICAL_ALIASES = [
+  ["BoundedCall", "BoundedCallPaymentId", "BoundedCallPreFinalAffine"],
+  ["OrchestratorV3Validation", "OrchestratorV3ValidationPaymentId", "OrchestratorV3ValidationPreFinalAffine"],
+  ["OrchestratorV3FeeLib", "OrchestratorV3FeeLibPaymentId", "OrchestratorV3FeeLibPreFinalAffine"],
+  ["RiskCallbackRecorder", "RiskCallbackRecorderPaymentId", "RiskCallbackRecorderPreFinalAffine"],
+  ["OrchestratorV3RiskLib", "OrchestratorV3RiskLibPaymentId", "OrchestratorV3RiskLibPreFinalAffine"],
+  ["OrchestratorV3", "OrchestratorV3PaymentId", "OrchestratorV3PreFinalAffine"],
+  ["StakeVault", "StakeVaultPaymentId", "StakeVaultPreFinalAffine"],
+  ["RiskManager", "RiskManagerPaymentId", "RiskManagerPreFinalAffine"],
+  ["DeferredPayoutHook", "DeferredPayoutHookPaymentId", "DeferredPayoutHookPreFinalAffine"],
+] as const;
+
 export async function assertFreshNonLocalPaymentIdRiskDeployment(
   network: string,
   getDeployment: (name: string) => Promise<unknown | null>,
+  allowCompleteRerun = false,
 ) {
   if (network === "localhost" || network === "hardhat") return;
   const existing: string[] = [];
   for (const name of PAYMENT_ID_RISK_DEPLOYMENT_NAMES) {
     if (await getDeployment(name)) existing.push(name);
   }
+  if (allowCompleteRerun && existing.length === PAYMENT_ID_RISK_DEPLOYMENT_NAMES.length) return;
   if (existing.length !== 0) {
     throw new Error(
       `${network} already has payment-ID risk deployment records (${existing.join(", ")}); `
@@ -74,6 +88,42 @@ export async function requireHistoricalPostIntentHookExecutor(
     );
   }
   return deployment.address;
+}
+
+export function paymentIdRiskPlatformPolicyForNetwork(network: string) {
+  const policy = stakeRiskPlatformPolicyForNetwork(network);
+  return {
+    reversible: {
+      ...policy.reversible,
+      chargeback: {
+        ...policy.reversible.chargeback,
+        deferredPayoutEnabled: true,
+      },
+    },
+    nonChargebackable: policy.nonChargebackable,
+  };
+}
+
+export async function saveCanonicalBaseStagingAliases(
+  network: string,
+  getDeployment: (name: string) => Promise<Deployment>,
+  getDeploymentOrNull: (name: string) => Promise<Deployment | null>,
+  saveDeployment: (name: string, deployment: DeploymentSubmission) => Promise<void>,
+) {
+  if (network !== "base_staging") return;
+
+  for (const [canonicalName, finalName, archiveName] of BASE_STAGING_FINAL_CANONICAL_ALIASES) {
+    const finalDeployment = await getDeployment(finalName);
+    const canonicalDeployment = await getDeploymentOrNull(canonicalName);
+    if (
+      archiveName
+      && canonicalDeployment
+      && canonicalDeployment.address.toLowerCase() !== finalDeployment.address.toLowerCase()
+    ) {
+      await saveDeployment(archiveName, canonicalDeployment);
+    }
+    await saveDeployment(canonicalName, finalDeployment);
+  }
 }
 
 function normalize(values: string[]): string[] {
@@ -174,9 +224,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await assertFreshNonLocalPaymentIdRiskDeployment(
     network,
     hre.deployments.getOrNull.bind(hre.deployments),
+    true,
   );
   const { reversible: reversibleConfig, nonChargebackable: nonChargebackableConfig } =
-    stakeRiskPlatformPolicyForNetwork(network);
+    paymentIdRiskPlatformPolicyForNetwork(network);
   const legacy = await loadLegacyPaymentConfiguration(network);
   const chargebackWitnessConfig = chargebackWitnessConfigForNetwork(
     network,
@@ -337,6 +388,13 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await setNewOwner(hre, vault, multiSig);
   await setNewOwner(hre, manager, multiSig);
   await setNewOwner(hre, chargebackVerifier, multiSig);
+
+  await saveCanonicalBaseStagingAliases(
+    network,
+    hre.deployments.get.bind(hre.deployments),
+    hre.deployments.getOrNull.bind(hre.deployments),
+    hre.deployments.save.bind(hre.deployments),
+  );
 };
 
 func.tags = ["PaymentIdRiskSystem"];
@@ -345,10 +403,11 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.deployments.getNetworkName();
   if (network === "localhost" || network === "hardhat") return false;
   if (process.env.DEPLOY_PAYMENT_ID_RISK_SYSTEM !== "true") return true;
-  stakeRiskPlatformPolicyForNetwork(network);
+  paymentIdRiskPlatformPolicyForNetwork(network);
   await assertFreshNonLocalPaymentIdRiskDeployment(
     network,
     hre.deployments.getOrNull.bind(hre.deployments),
+    true,
   );
   return false;
 };

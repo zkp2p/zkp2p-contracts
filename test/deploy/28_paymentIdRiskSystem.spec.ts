@@ -5,14 +5,16 @@ import hre, { deployments, ethers } from "hardhat";
 
 import deployPaymentIdRiskSystem, {
   assertFreshNonLocalPaymentIdRiskDeployment,
+  BASE_STAGING_FINAL_CANONICAL_ALIASES,
+  paymentIdRiskPlatformPolicyForNetwork,
   PAYMENT_ID_RISK_DEPLOYMENT_NAMES,
   requireHistoricalPostIntentHookExecutor,
+  saveCanonicalBaseStagingAliases,
 } from "../../deploy/28_deploy_payment_id_risk_system";
 import {
   MULTI_SIG,
   RISK_CALLBACK_GAS_LIMIT,
 } from "../../deployments/parameters";
-import { stakeRiskPlatformPolicyForNetwork } from "../../deploy/26_deploy_stake_risk_system";
 
 const PAYPAL = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("paypal"));
 const VENMO = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
@@ -20,7 +22,7 @@ const ZELLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("zelle"));
 
 describe("Payment-ID-aware parallel risk system deployment", () => {
   const network = deployments.getNetworkName();
-  const policy = stakeRiskPlatformPolicyForNetwork(network);
+  const policy = paymentIdRiskPlatformPolicyForNetwork(network);
 
   function deployedAddress(name: string): string {
     return require(`../../deployments/${network}/${name}.json`).address;
@@ -152,6 +154,7 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
       const config = await manager.getPlatformRiskConfig(method);
       expect(config.enabled).to.eq(true);
       expect(config.chargeback.chargebackable).to.eq(true);
+      expect(config.chargeback.deferredPayoutEnabled).to.eq(true);
       expect(config.chargeback.reserveBps).to.eq(policy.reversible.chargeback.reserveBps);
       expect(config.chargeback.riskWindow).to.eq(policy.reversible.chargeback.riskWindow);
     });
@@ -171,9 +174,45 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
     ))).to.be.rejectedWith("use a new governance-reviewed version");
   });
 
+  it("allows an idempotent nonlocal rerun only when every versioned coordinate exists", async () => {
+    await expect(assertFreshNonLocalPaymentIdRiskDeployment(
+      "base_staging",
+      async (name) => ({ address: name }),
+      true,
+    )).not.to.be.rejected;
+    await expect(assertFreshNonLocalPaymentIdRiskDeployment(
+      "base_staging",
+      async (name) => (name === "UnifiedPaymentVerifierV3" ? null : { address: name }),
+      true,
+    )).to.be.rejectedWith("use a new governance-reviewed version");
+  });
+
   it("fails descriptively when the historical settlement executor prerequisite is absent", async () => {
     await expect(requireHistoricalPostIntentHookExecutor("base", async () => null))
       .to.be.rejectedWith("base requires the historical PostIntentHookExecutor deployment");
+  });
+
+  it("hard-cuts Base staging canonical aliases while archiving the pre-final affine records", async () => {
+    const records = new Map<string, any>();
+    const saved = new Map<string, any>();
+    for (const [canonicalName, finalName] of BASE_STAGING_FINAL_CANONICAL_ALIASES) {
+      records.set(canonicalName, { address: ethers.Wallet.createRandom().address });
+      records.set(finalName, { address: ethers.Wallet.createRandom().address });
+    }
+
+    await saveCanonicalBaseStagingAliases(
+      "base_staging",
+      async (name) => records.get(name),
+      async (name) => records.get(name) ?? null,
+      async (name, deployment) => { saved.set(name, deployment); },
+    );
+
+    for (const [canonicalName, finalName, archiveName] of BASE_STAGING_FINAL_CANONICAL_ALIASES) {
+      expect(saved.get(canonicalName).address).to.eq(records.get(finalName).address);
+      if (archiveName) {
+        expect(saved.get(archiveName).address).to.eq(records.get(canonicalName).address);
+      }
+    }
   });
 
   it("reruns locally without changing versioned addresses or wiring", async function () {
