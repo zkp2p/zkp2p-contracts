@@ -254,7 +254,7 @@ contract RiskManagerTest is Test {
         address _beneficiary,
         uint256 _amount
     ) internal {
-        token.transfer(address(vault), _amount);
+        assertTrue(token.transfer(address(vault), _amount));
         vm.prank(address(verifier));
         manager.registerDeferredPayout(_intentHash, _beneficiary, _amount);
     }
