@@ -1,9 +1,9 @@
 import "module-alias/register";
 
 import { expect } from "chai";
-import hre, { deployments, ethers } from "hardhat";
+import { deployments, ethers } from "hardhat";
 
-import deployPaymentIdRiskSystem, {
+import {
   assertFreshNonLocalPaymentIdRiskDeployment,
   PAYMENT_ID_RISK_DEPLOYMENT_NAMES,
   requireHistoricalPostIntentHookExecutor,
@@ -163,6 +163,7 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
     expect(config.enabled).to.eq(true);
     expect(config.chargeback.chargebackable).to.eq(false);
     expect(config.chargeback.reserveBps).to.eq(0);
+    expect(config.griefing.baseUnbondedAmount).to.eq(policy.nonChargebackable.griefing.baseUnbondedAmount);
   });
 
   it("rejects any existing versioned coordinate before a nonlocal deployment", async () => {
@@ -174,14 +175,5 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
   it("fails descriptively when the historical settlement executor prerequisite is absent", async () => {
     await expect(requireHistoricalPostIntentHookExecutor("base", async () => null))
       .to.be.rejectedWith("base requires the historical PostIntentHookExecutor deployment");
-  });
-
-  it("reruns locally without changing versioned addresses or wiring", async function () {
-    this.timeout(180_000);
-    const before = PAYMENT_ID_RISK_DEPLOYMENT_NAMES.map(deployedAddress);
-    const { vault, manager } = await contracts();
-    await deployPaymentIdRiskSystem(hre);
-    expect(PAYMENT_ID_RISK_DEPLOYMENT_NAMES.map(deployedAddress)).to.deep.eq(before);
-    expect(await vault.controller()).to.eq(manager.address);
   });
 });

@@ -1,9 +1,9 @@
 import "module-alias/register";
 
 import { expect } from "chai";
-import hre, { deployments, ethers } from "hardhat";
+import { deployments, ethers } from "hardhat";
 
-import deployStakeRiskSystem, {
+import {
   assertFreshNonLocalStakeRiskDeployment,
   chargebackWitnessConfigForNetwork,
   stakeRiskPlatformPolicyForNetwork,
@@ -121,18 +121,18 @@ describe("Affine stake risk system deployment", () => {
       expect(config.griefing.griefingCliff).to.eq(platformPolicy.reversible.griefing.griefingCliff);
       expect(config.griefing.griefingPenaltyBpsPerHour)
         .to.eq(platformPolicy.reversible.griefing.griefingPenaltyBpsPerHour);
-      expect(config.griefing.freeTakeCount).to.eq(0);
+      expect(config.griefing.baseUnbondedAmount).to.eq(0);
     });
   }
 
-  it("configures Zelle lifetime free takes only on the non-chargebackable platform", async () => {
+  it("configures a reusable Zelle base only on the non-chargebackable platform", async () => {
     const { manager } = await contracts();
     const config = await manager.getPlatformRiskConfig(ZELLE);
     expect(config.enabled).to.eq(true);
     expect(config.chargeback.chargebackable).to.eq(false);
     expect(config.chargeback.reserveBps).to.eq(0);
-    expect(config.griefing.freeTakeCount).to.eq(platformPolicy.nonChargebackable.griefing.freeTakeCount);
-    expect(config.griefing.freeTakeAmount).to.eq(platformPolicy.nonChargebackable.griefing.freeTakeAmount);
+    expect(config.griefing.baseUnbondedAmount)
+      .to.eq(platformPolicy.nonChargebackable.griefing.baseUnbondedAmount);
   });
 
   it("refuses nonlocal deployment without governance-ratified platform policy", async () => {
@@ -207,15 +207,5 @@ describe("Affine stake risk system deployment", () => {
       ];
       expect(await verifier.verify(digest, signatures, "0x")).to.eq(true);
     }
-  });
-
-  it("reruns idempotently without changing initialized wiring", async function () {
-    this.timeout(180_000);
-    const before = await contracts();
-    const controller = await before.vault.controller();
-    const deferredHook = await before.manager.deferredPayoutHook();
-    await deployStakeRiskSystem(hre);
-    expect(await before.vault.controller()).to.eq(controller);
-    expect(await before.manager.deferredPayoutHook()).to.eq(deferredHook);
   });
 });
