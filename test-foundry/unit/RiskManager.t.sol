@@ -147,7 +147,7 @@ contract RiskManagerTest is Test {
 
         vm.startPrank(owner);
         manager.setPlatformRiskConfig(PAYPAL, _chargebackConfig(10_000, 30 days, true));
-        manager.setPlatformRiskConfig(ZELLE, _nonChargebackableConfig(2, 20e6));
+        manager.setPlatformRiskConfig(ZELLE, _nonChargebackableConfig(20e6));
         manager.setDeferredPayoutHook(address(verifier));
         vm.stopPrank();
 
@@ -175,15 +175,13 @@ contract RiskManagerTest is Test {
             griefing: IRiskManager.GriefingConfig({
                 griefingCliff: GRIEFING_CLIFF,
                 griefingPenaltyBpsPerHour: GRIEFING_SLOPE,
-                freeTakeCount: 0,
-                freeTakeAmount: 0
+                baseUnbondedAmount: 0
             })
         });
     }
 
     function _nonChargebackableConfig(
-        uint32 _freeTakeCount,
-        uint256 _freeTakeAmount
+        uint256 _baseUnbondedAmount
     ) internal pure returns (IRiskManager.PlatformRiskConfig memory) {
         return IRiskManager.PlatformRiskConfig({
             enabled: true,
@@ -196,8 +194,7 @@ contract RiskManagerTest is Test {
             griefing: IRiskManager.GriefingConfig({
                 griefingCliff: GRIEFING_CLIFF,
                 griefingPenaltyBpsPerHour: GRIEFING_SLOPE,
-                freeTakeCount: _freeTakeCount,
-                freeTakeAmount: _freeTakeAmount
+                baseUnbondedAmount: _baseUnbondedAmount
             })
         });
     }
@@ -260,32 +257,34 @@ contract RiskManagerTest is Test {
         assertEq(vault.reservedStake(taker), 1_000e6);
     }
 
-    function test_FreeTakeConsumesAllowanceWithoutReservation() public {
-        bytes32 intentHash = keccak256("free");
+    function test_BaseAmountIsUnbondedWithoutReservation() public {
+        bytes32 intentHash = keccak256("base-unbonded");
         _setIntent(intentHash, taker, 20e6, ZELLE, address(0));
 
         _createPosition(intentHash);
 
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
-        assertEq(uint256(position.mode), uint256(IRiskManager.RiskMode.FREE));
-        assertTrue(position.consumedFreeTake);
-        assertEq(manager.freeTakesUsed(taker, ZELLE), 1);
+        assertEq(uint256(position.mode), uint256(IRiskManager.RiskMode.UNBONDED));
+        assertEq(position.bondedAmount, 0);
         assertEq(vault.reservedStake(taker), 0);
     }
 
-    function test_FreeTakeIsNotRestoredAfterCancellation() public {
-        bytes32 intentHash = keccak256("cancelled-free");
-        _setIntent(intentHash, taker, 20e6, ZELLE, address(0));
-        _createPosition(intentHash);
+    function test_BaseAmountIsReusableAfterCancellation() public {
+        bytes32 firstIntentHash = keccak256("cancelled-base");
+        _setIntent(firstIntentHash, taker, 20e6, ZELLE, address(0));
+        _createPosition(firstIntentHash);
 
-        orchestrator.cancelPosition(manager, intentHash);
+        orchestrator.cancelPosition(manager, firstIntentHash);
 
-        assertEq(manager.freeTakesUsed(taker, ZELLE), 1);
-        assertEq(uint256(manager.getRiskPosition(intentHash).status), uint256(IRiskManager.PositionStatus.CANCELLED));
+        bytes32 secondIntentHash = keccak256("reused-base");
+        _setIntent(secondIntentHash, taker, 20e6, ZELLE, address(0));
+        _createPosition(secondIntentHash);
+        assertEq(uint256(manager.getRiskPosition(secondIntentHash).mode), uint256(IRiskManager.RiskMode.UNBONDED));
+        assertEq(vault.reservedStake(taker), 0);
     }
 
-    function test_FreeCancellationAfterCliffNeverChargesStake() public {
-        bytes32 intentHash = keccak256("cancelled-free-after-cliff");
+    function test_BaseAmountCancellationAfterCliffNeverChargesStake() public {
+        bytes32 intentHash = keccak256("cancelled-base-after-cliff");
         _setIntent(intentHash, taker, 20e6, ZELLE, address(0));
         _createPosition(intentHash);
         uint64 createdAt = manager.getRiskPosition(intentHash).createdAt;
@@ -299,8 +298,8 @@ contract RiskManagerTest is Test {
         assertEq(vault.claimableCompensation(maker), 0);
     }
 
-    function test_FreeCancellationReconciliationAfterCliffNeverChargesStake() public {
-        bytes32 intentHash = keccak256("reconciled-free-after-cliff");
+    function test_BaseAmountCancellationReconciliationAfterCliffNeverChargesStake() public {
+        bytes32 intentHash = keccak256("reconciled-base-after-cliff");
         _setIntent(intentHash, taker, 20e6, ZELLE, address(0));
         _createPosition(intentHash);
         uint64 createdAt = manager.getRiskPosition(intentHash).createdAt;
@@ -395,7 +394,7 @@ contract RiskManagerTest is Test {
 
         orchestrator.cancelPosition(manager, intentHash);
 
-        assertEq(vault.claimableCompensation(maker), 5.75e6);
+        assertEq(vault.claimableCompensation(maker), 5.635e6);
     }
 
     function test_ReconcileCancellationUsesRecordedTimestamp() public {
