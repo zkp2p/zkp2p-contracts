@@ -1267,9 +1267,29 @@ describe("RiskManager and OrchestratorV3", () => {
         .to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
     });
 
-    it("keeps explicit deferred mode stable when a permissionless maturity release raises free stake", async () => {
-      const { taker, other, escrow, orchestrator, vault, manager, deferredHook } =
+    it("keeps a signed deferred authorization stable when permissionless maturity raises free stake", async () => {
+      const { maker, taker, other, witness, token, escrow, orchestrator, vault, manager, deferredHook } =
         await loadFixture(deployFixture);
+      await escrow.connect(maker).createDeposit({
+        token: token.address,
+        amount: usdc(50_000),
+        intentAmountRange: { min: usdc(1), max: usdc(10_000) },
+        paymentMethods: [PAYPAL],
+        paymentMethodData: [{
+          intentGatingService: witness.address,
+          payeeDetails: PAYEE,
+          data: "0x",
+        }],
+        currencies: [[{
+          code: USD,
+          minConversionRate: precise(1),
+          oracleRateConfig: { adapter: ZERO, adapterConfig: "0x", spreadBps: 0, maxStaleness: 0 },
+        }]],
+        delegate: ZERO,
+        intentGuardian: ZERO,
+        retainOnEmpty: true,
+      });
+      await orchestrator.connect(maker).setDepositRiskHook(escrow.address, 1, manager.address);
       await vault.connect(taker).depositStake(usdc("704.025"));
 
       const previousIntent = await signalIntent(orchestrator, escrow, taker, usdc(700), PAYPAL);
@@ -1278,21 +1298,35 @@ describe("RiskManager and OrchestratorV3", () => {
       await time.increaseTo(deadline);
       expect(await vault.freeStake(taker.address)).to.eq(usdc("4.025"));
 
+      const unsignedParams = {
+        ...signalParams(escrow, taker.address, usdc(700), PAYPAL, deferredHook.address),
+        depositId: 1,
+        signatureExpiration: (await time.latest()) + DAY,
+      };
+      const nonceBefore = await orchestrator.getIntentGatingNonce(taker.address, escrow.address, 1, PAYPAL);
+      const gatingHashBefore = await orchestrator.getIntentGatingMessageHash(unsignedParams, taker.address);
+      const params = {
+        ...unsignedParams,
+        gatingServiceSignature: await witness.signMessage(ethers.utils.arrayify(gatingHashBefore)),
+      };
+      await orchestrator.connect(taker).callStatic.signalIntent(params);
+
       await manager.connect(other).releaseMaturedPosition(previousIntent);
       expect(await vault.freeStake(taker.address)).to.eq(usdc("704.025"));
+      expect(await orchestrator.getIntentGatingNonce(taker.address, escrow.address, 1, PAYPAL))
+        .to.eq(nonceBefore);
+      expect(await orchestrator.getIntentGatingMessageHash(params, taker.address)).to.eq(gatingHashBefore);
 
-      const intentHash = await signalIntent(
-        orchestrator,
-        escrow,
-        taker,
-        usdc(700),
-        PAYPAL,
-        deferredHook.address,
-      );
+      const signalTx = await orchestrator.connect(taker).signalIntent(params);
+      await expect(signalTx).to.emit(orchestrator, "IntentGatingAuthorizationConsumed")
+        .withArgs(taker.address, escrow.address, 1, PAYPAL, nonceBefore);
+      const intentHash = intentHashFrom(await signalTx.wait());
       const position = await manager.getRiskPosition(intentHash);
       expect(position.mode).to.eq(3);
       expect(position.initialReservation).to.eq(usdc("4.025"));
       expect(await vault.reservedStake(taker.address)).to.eq(usdc("4.025"));
+      expect(await orchestrator.getIntentGatingNonce(taker.address, escrow.address, 1, PAYPAL))
+        .to.eq(nonceBefore.add(1));
     });
 
     it("slashes deferred proceeds without reducing membership stake", async () => {

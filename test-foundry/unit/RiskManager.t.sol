@@ -571,6 +571,30 @@ contract RiskManagerTest is Test {
         assertEq(vault.freeStake(taker), 679e6);
     }
 
+    function test_CanonicalDeferredHookSelectionSurvivesReconciliationCapacityIncrease() public {
+        _enableDeferredPayouts();
+        _stake(taker, 704.025e6);
+
+        bytes32 previousIntent = keccak256("reconciliation-capacity-source");
+        _setIntent(previousIntent, taker, 700e6, PAYPAL, address(0));
+        _createPosition(previousIntent);
+        assertEq(vault.freeStake(taker), 4.025e6);
+
+        bytes32 quotedIntent = keccak256("reconciliation-stable-deferred-selection");
+        _setIntent(quotedIntent, taker, 700e6, PAYPAL, address(verifier));
+        orchestrator.recordSettlementWithoutCallback(previousIntent, 1e6, uint64(block.timestamp));
+        manager.reconcileSettlement(previousIntent);
+        assertEq(vault.freeStake(taker), 703.025e6);
+
+        bool requiresHook = _createPosition(quotedIntent);
+
+        IRiskManager.RiskPosition memory position = manager.getRiskPosition(quotedIntent);
+        assertTrue(requiresHook);
+        assertEq(uint256(position.mode), uint256(IRiskManager.RiskMode.DEFERRED_PAYOUT));
+        assertEq(position.initialReservation, 4.025e6);
+        assertEq(vault.reservedStake(taker), 5.025e6);
+    }
+
     function test_DeferredAdmissionRejectsStakeBelowFeeGapUpperBound() public {
         _enableDeferredPayouts();
         _stake(taker, 10e6);
