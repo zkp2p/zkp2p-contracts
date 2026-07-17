@@ -126,32 +126,53 @@ contract RiskManagerMathFuzzTest is Test {
         assertLe(chargeback, amount);
     }
 
-    function testFuzz_FeasibleAggregateFeesAlwaysFundRoundedReserve(
+    function testFuzz_AggregateFeeFloorUpperBoundsEveryPartialRelease(
+        uint96 rawIntentAmount,
         uint96 rawReleaseAmount,
-        uint16 rawReserveBps,
         uint64 rawProtocolFee,
         uint64 rawManagerFee,
         uint64 rawReferralFee
     ) public pure {
         uint256 preciseUnit = 1e18;
-        uint256 releaseAmount = bound(uint256(rawReleaseAmount), 1, type(uint96).max);
-        uint16 reserveBps = uint16(bound(uint256(rawReserveBps), 1, 10_000));
-        uint256 reserveRate = uint256(reserveBps) * 1e14;
-        uint256 feeCapacity = preciseUnit - reserveRate;
-        uint256 protocolFee = bound(uint256(rawProtocolFee), 0, feeCapacity);
-        uint256 managerFee = bound(uint256(rawManagerFee), 0, feeCapacity - protocolFee);
-        uint256 referralFee = bound(
-            uint256(rawReferralFee),
-            0,
-            feeCapacity - protocolFee - managerFee
-        );
+        uint256 intentAmount = bound(uint256(rawIntentAmount), 1, type(uint96).max);
+        uint256 releaseAmount = bound(uint256(rawReleaseAmount), 1, intentAmount);
+        uint256 protocolFee = bound(uint256(rawProtocolFee), 0, 0.05e18);
+        uint256 managerFee = bound(uint256(rawManagerFee), 0, 0.40e18);
+        uint256 referralFee = bound(uint256(rawReferralFee), 0, 0.15e18);
+        uint256 aggregateRate = protocolFee + managerFee + referralFee;
 
         uint256 actualFees = (releaseAmount * protocolFee) / preciseUnit
             + (releaseAmount * managerFee) / preciseUnit
             + (releaseAmount * referralFee) / preciseUnit;
-        uint256 netProceeds = releaseAmount - actualFees;
-        uint256 roundedReserve = (releaseAmount * reserveBps + 9_999) / 10_000;
+        uint256 releaseUpperBound = (releaseAmount * aggregateRate) / preciseUnit;
+        uint256 admissionUpperBound = (intentAmount * aggregateRate) / preciseUnit;
 
-        assertGe(netProceeds, roundedReserve);
+        assertLe(actualFees, releaseUpperBound);
+        assertLe(releaseUpperBound, admissionUpperBound);
+    }
+
+    function testFuzz_HybridCoverageEqualsGrossReleaseAndNeverNeedsMoreStake(
+        uint96 rawIntentAmount,
+        uint96 rawReleaseAmount,
+        uint64 rawProtocolFee,
+        uint64 rawManagerFee,
+        uint64 rawReferralFee
+    ) public pure {
+        uint256 preciseUnit = 1e18;
+        uint256 intentAmount = bound(uint256(rawIntentAmount), 1, type(uint96).max);
+        uint256 releaseAmount = bound(uint256(rawReleaseAmount), 1, intentAmount);
+        uint256 protocolFee = bound(uint256(rawProtocolFee), 0, 0.05e18);
+        uint256 managerFee = bound(uint256(rawManagerFee), 0, 0.40e18);
+        uint256 referralFee = bound(uint256(rawReferralFee), 0, 0.15e18);
+        uint256 aggregateRate = protocolFee + managerFee + referralFee;
+
+        uint256 exactFeeGap = (releaseAmount * protocolFee) / preciseUnit
+            + (releaseAmount * managerFee) / preciseUnit
+            + (releaseAmount * referralFee) / preciseUnit;
+        uint256 deferredCoverage = releaseAmount - exactFeeGap;
+        uint256 admissionStakeCoverage = (intentAmount * aggregateRate) / preciseUnit;
+
+        assertEq(deferredCoverage + exactFeeGap, releaseAmount);
+        assertLe(exactFeeGap, admissionStakeCoverage);
     }
 }

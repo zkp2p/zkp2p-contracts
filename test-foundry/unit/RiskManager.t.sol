@@ -249,6 +249,16 @@ contract RiskManagerTest is Test {
         manager.setPlatformRiskConfig(PAYPAL, config);
     }
 
+    function _fundAndRegisterDeferredPayout(
+        bytes32 _intentHash,
+        address _beneficiary,
+        uint256 _amount
+    ) internal {
+        token.transfer(address(vault), _amount);
+        vm.prank(address(verifier));
+        manager.registerDeferredPayout(_intentHash, _beneficiary, _amount);
+    }
+
     function _chargeback(
         bytes32 _intentHash,
         uint256 _disputeNonce
@@ -512,7 +522,7 @@ contract RiskManagerTest is Test {
         assertEq(uint256(manager.getRiskPosition(intentHash).status), uint256(IRiskManager.PositionStatus.RELEASED));
     }
 
-    function test_DeferredAdmissionReservesOnlyGriefingBond() public {
+    function test_DeferredAdmissionReservesMaxGriefingBondWhenFeeGapIsZero() public {
         _enableDeferredPayouts();
         _stake(taker, 10e6);
         bytes32 intentHash = keccak256("deferred");
@@ -527,18 +537,36 @@ contract RiskManagerTest is Test {
         assertEq(vault.reservedStake(taker), 4.025e6);
     }
 
-    function test_DeferredAdmissionRejectsInfeasibleFeeMixBeforeReservation() public {
+    function test_DeferredAdmissionReservesFeeGapUpperBoundInsteadOfGrossRelease() public {
+        _enableDeferredPayouts();
+        _stake(taker, 25e6);
+        bytes32 intentHash = keccak256("deferred-hybrid-admission");
+        _setIntent(intentHash, taker, 700e6, PAYPAL, address(verifier));
+        orchestrator.setIntentTotalFeeRate(intentHash, 0.03e18);
+
+        bool requiresHook = _createPosition(intentHash);
+
+        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        assertTrue(requiresHook);
+        assertEq(uint256(position.mode), uint256(IRiskManager.RiskMode.DEFERRED_PAYOUT));
+        assertEq(position.maxGriefingBond, 4.025e6);
+        assertEq(position.initialReservation, 21e6);
+        assertEq(vault.reservedStake(taker), 21e6);
+    }
+
+    function test_DeferredAdmissionRejectsStakeBelowFeeGapUpperBound() public {
         _enableDeferredPayouts();
         _stake(taker, 10e6);
-        bytes32 intentHash = keccak256("deferred-infeasible-fees");
+        bytes32 intentHash = keccak256("deferred-hybrid-undercollateralized");
         _setIntent(intentHash, taker, 700e6, PAYPAL, address(verifier));
-        orchestrator.setIntentTotalFeeRate(intentHash, 1);
+        orchestrator.setIntentTotalFeeRate(intentHash, 0.03e18);
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IRiskManager.DeferredPayoutFeesExceedCapacity.selector,
-                1,
-                10_000
+                IRiskManager.InsufficientCollateral.selector,
+                taker,
+                10e6,
+                21e6
             )
         );
         _createPosition(intentHash);
@@ -546,7 +574,7 @@ contract RiskManagerTest is Test {
         assertEq(vault.reservedStake(taker), 0);
     }
 
-    function test_DeferredRegistrationRejectsCoverageBelowConfiguredReserve() public {
+    function test_DeferredRegistrationCannotRequireUnreservedStake() public {
         _enableDeferredPayouts();
         _stake(taker, 10e6);
         bytes32 intentHash = keccak256("deferred-shortfall");
@@ -556,13 +584,87 @@ contract RiskManagerTest is Test {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IRiskManager.InsufficientDeferredPayoutCoverage.selector,
-                350e6,
+                IRiskManager.IncompleteChargebackCoverage.selector,
+                354.025e6,
                 700e6
             )
         );
         vm.prank(address(verifier));
         manager.registerDeferredPayout(intentHash, taker, 350e6);
+    }
+
+    function test_DeferredChargebackSlashesNetProceedsPlusExactFeeGap() public {
+        _enableDeferredPayouts();
+        _stake(taker, 25e6);
+        bytes32 intentHash = keccak256("deferred-hybrid-chargeback");
+        _setIntent(intentHash, taker, 700e6, PAYPAL, address(verifier));
+        orchestrator.setIntentTotalFeeRate(intentHash, 0.03e18);
+        _createPosition(intentHash);
+        orchestrator.fulfillPosition(manager, intentHash, 700e6);
+        _fundAndRegisterDeferredPayout(intentHash, taker, 679e6);
+
+        IRiskManager.RiskPosition memory settled = manager.getRiskPosition(intentHash);
+        assertEq(settled.deferredPayoutAmount, 679e6);
+        assertEq(settled.reservedAmount, 21e6);
+        assertEq(settled.deferredPayoutAmount + settled.reservedAmount, settled.releasedAmount);
+
+        manager.submitChargeback(_chargeback(intentHash, 1));
+
+        IRiskManager.RiskPosition memory slashed = manager.getRiskPosition(intentHash);
+        assertEq(vault.claimableCompensation(maker), 700e6);
+        assertEq(vault.stakeBalance(taker), 4e6);
+        assertEq(vault.reservedStake(taker), 0);
+        assertEq(vault.getDeferredPayout(intentHash).amount, 0);
+        assertEq(slashed.slashedAmount, 700e6);
+        assertEq(slashed.deferredPayoutAmount, 0);
+        assertEq(slashed.reservedAmount, 0);
+        assertEq(vault.totalLiabilities(), token.balanceOf(address(vault)));
+    }
+
+    function test_DeferredMaturityUnlocksFeeGapAndPaysNetProceeds() public {
+        _enableDeferredPayouts();
+        _stake(taker, 25e6);
+        bytes32 intentHash = keccak256("deferred-hybrid-maturity");
+        _setIntent(intentHash, taker, 700e6, PAYPAL, address(verifier));
+        orchestrator.setIntentTotalFeeRate(intentHash, 0.03e18);
+        _createPosition(intentHash);
+        orchestrator.fulfillPosition(manager, intentHash, 700e6);
+        _fundAndRegisterDeferredPayout(intentHash, taker, 679e6);
+        uint64 coverageDeadline = manager.getRiskPosition(intentHash).coverageDeadline;
+        vm.warp(coverageDeadline);
+
+        manager.releaseMaturedPosition(intentHash);
+        uint256 takerBalanceBefore = token.balanceOf(taker);
+        vm.prank(taker);
+        vault.withdrawDeferredPayout(intentHash, taker);
+
+        assertEq(token.balanceOf(taker) - takerBalanceBefore, 679e6);
+        assertEq(vault.stakeBalance(taker), 25e6);
+        assertEq(vault.reservedStake(taker), 0);
+        assertEq(vault.getDeferredPayout(intentHash).amount, 0);
+        assertEq(vault.claimableCompensation(maker), 0);
+        assertEq(vault.totalLiabilities(), token.balanceOf(address(vault)));
+    }
+
+    function test_DeferredHookRegistrationReconcilesFailedSettlementCallback() public {
+        _enableDeferredPayouts();
+        _stake(taker, 25e6);
+        bytes32 intentHash = keccak256("deferred-hybrid-reconcile");
+        _setIntent(intentHash, taker, 700e6, PAYPAL, address(verifier));
+        orchestrator.setIntentTotalFeeRate(intentHash, 0.03e18);
+        _createPosition(intentHash);
+        uint64 settledAt = uint64(block.timestamp + 1 hours);
+        orchestrator.recordSettlementWithoutCallback(intentHash, 700e6, settledAt);
+        vm.warp(settledAt);
+
+        _fundAndRegisterDeferredPayout(intentHash, taker, 679e6);
+
+        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        assertEq(uint256(position.status), uint256(IRiskManager.PositionStatus.SETTLED));
+        assertEq(position.settledAt, settledAt);
+        assertEq(position.deferredPayoutAmount, 679e6);
+        assertEq(position.reservedAmount, 21e6);
+        assertEq(vault.totalLiabilities(), token.balanceOf(address(vault)));
     }
 
     function test_DeferredManualReleaseClearsAuthorizationWithoutFunding() public {

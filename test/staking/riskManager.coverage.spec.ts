@@ -539,9 +539,9 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
         .to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutHookRequired");
     });
 
-    it("rejects an infeasible deferred payout fee mix before reserving stake", async () => {
+    it("rejects deferred admission when stake cannot cover the fee-gap upper bound", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("deferred-fees-infeasible");
+      const intentHash = ethers.utils.id("deferred-fee-gap-undercollateralized");
       await fixture.vault.setTakerState(
         fixture.taker.address,
         fixture.taker.address,
@@ -549,11 +549,12 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
         usdc(1),
         false,
       );
-      await fixture.orchestrator.setIntentTotalFeeRate(intentHash, 1);
+      await fixture.orchestrator.setIntentTotalFeeRate(intentHash, ethers.utils.parseUnits("0.5", 18));
       await setRiskIntent(fixture, intentHash, { settlementHook: fixture.orchestrator.address });
 
       await expect(fixture.orchestrator.createPosition(fixture.manager.address, intentHash))
-        .to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutFeesExceedCapacity");
+        .to.be.revertedWithCustomError(fixture.manager, "InsufficientCollateral")
+        .withArgs(fixture.taker.address, usdc(1), usdc(50));
       expect(await fixture.vault.reservedStake(fixture.taker.address)).to.eq(0);
     });
 
