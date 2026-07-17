@@ -101,20 +101,25 @@ an intent is admitted. Admission callbacks fail closed; terminal callbacks are g
 open so escrow liquidity is not trapped. `OrchestratorV3` retains durable recovery data so `RiskManager`
 can reconcile a failed terminal callback permissionlessly using the original lifecycle timestamp.
 
-For intent amount `A`, hourly griefing slope `s`, intent period `T`, griefing cliff `C`, chargeback
-reserve ratio `r`, aggregate snapshotted fee rate `f`, and fee precise unit `U = 1e18`, admission uses:
+For intent amount `A`, reusable base-unbonded amount `B0`, bonded amount `B`, hourly griefing slope `s`,
+intent period `T`, griefing cliff `C`, chargeback reserve ratio `r`, aggregate snapshotted fee rate `f`,
+and fee precise unit `P = 1e18`, admission uses:
 
 ```text
-G_max(A)      = ceil(A * s * (T - C) / (10_000 * 1 hour))
+B              = max(A - B0, 0)
+G_max(B)       = ceil(B * s * (T - C) / (10_000 * 1 hour))
 C(A)          = ceil(A * r / 10_000)
-F_max(A)      = floor(A * f / U)
-R_stake(A)    = max(G_max(A), C(A))
-R_deferred(A) = max(G_max(A), F_max(A))
+F_max(A)      = floor(A * f / P)
+R_stake(A)    = max(G_max(B), C(A))
+R_deferred(A) = max(G_max(B), F_max(A))
 ```
 
 Cancellation charges only elapsed time after the cliff, capped by the snapshotted intent period. All
 mutable liability inputs are snapshotted at admission. Multiple concurrent intents are allowed whenever
 their aggregate reservations fit the stake owner's free stake; there is no intent-count capacity tier.
+Non-chargebackable methods may configure a stateless base that applies to every intent; only the excess
+enters the griefing curve. Chargebackable methods require a zero base. Stable-account or Sybil gating is
+an upstream admission concern, not wallet-local usage state in `RiskManager`.
 Griefing and post-settlement fee-gap coverage are mutually exclusive, so deferred admission reserves
 their maximum, never their sum. For gross release `R` and independently rounded exact fees `F`, the hook
 records net deferred proceeds `D = R - F` and retains exact stake `S = F`, proving `D + S = R`.

@@ -44,8 +44,7 @@ contract RiskManagerMathFuzzTest is Test {
             IRiskManager.GriefingConfig({
                 griefingCliff: cliff,
                 griefingPenaltyBpsPerHour: slope,
-                freeTakeCount: 0,
-                freeTakeAmount: 0
+                baseUnbondedAmount: 0
             })
         );
         (uint256 penalty,) = manager.calculateGriefingPenalty(
@@ -113,8 +112,7 @@ contract RiskManagerMathFuzzTest is Test {
             griefing: IRiskManager.GriefingConfig({
                 griefingCliff: 15 minutes,
                 griefingPenaltyBpsPerHour: slope,
-                freeTakeCount: 0,
-                freeTakeAmount: 0
+                baseUnbondedAmount: 0
             })
         });
 

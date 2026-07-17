@@ -177,8 +177,8 @@ The current repository source builds additional exports for the merged v3 archit
 
 - `@zkp2p/contracts-v2/abis/contracts`: source ABIs for `OrchestratorV3`, `RiskManager`, `StakeVault`,
   and `DeferredPayoutHook`, independent of a network deployment.
-- `@zkp2p/contracts-v2/utils/riskMath`: exact `bigint` helpers for affine reservation, hybrid deferred
-  fee-gap reservation, capacity, and elapsed cancellation-penalty calculations.
+- `@zkp2p/contracts-v2/utils/riskMath`: exact `bigint` helpers for reusable-base subtraction, excess-only
+  griefing reservation, hybrid deferred fee-gap reservation, capacity, and cancellation penalties.
 
 These paths are development source until a later package version is built, validated, and published.
 They must not be imported from npm `0.3.0`. Network-specific v3 address exports describe the recorded

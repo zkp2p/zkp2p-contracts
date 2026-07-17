@@ -1,12 +1,13 @@
 import {
   calculateBondedTakingCapacity,
+  calculateBondedAmount,
   calculateChargebackReserve,
   calculateDeferredFeeGapUpperBound,
-  calculateFreeTakeCapacity,
   calculateGriefingPenalty,
   calculateHybridDeferredReservation,
   calculateMaxGriefingBond,
   calculateRequiredReservation,
+  calculateTotalTakingCapacity,
 } from "../utils/riskMath";
 
 const HOUR = 3_600n;
@@ -17,6 +18,12 @@ const terms = {
 };
 
 describe("riskMath", () => {
+  it("subtracts the reusable base without underflow", () => {
+    expect(calculateBondedAmount(700_000_000n, 500_000_000n)).toBe(200_000_000n);
+    expect(calculateBondedAmount(500_000_000n, 500_000_000n)).toBe(0n);
+    expect(calculateBondedAmount(400_000_000n, 500_000_000n)).toBe(0n);
+  });
+
   it("rounds the maximum griefing bond upward", () => {
     expect(calculateMaxGriefingBond(1_000_000_001n, terms)).toBe(5_750_001n);
   });
@@ -34,7 +41,7 @@ describe("riskMath", () => {
   });
 
   it("takes the maximum of griefing and chargeback requirements", () => {
-    expect(calculateRequiredReservation(1_000_000_000n, terms, 10_000)).toBe(1_000_000_000n);
+    expect(calculateRequiredReservation(1_000_000_000n, terms, 10_000, 0)).toBe(1_000_000_000n);
   });
 
   it("floors the aggregate deferred fee-gap upper bound in token units", () => {
@@ -98,15 +105,9 @@ describe("riskMath", () => {
     });
   });
 
-  it("computes remaining free intents without underflow", () => {
-    expect(calculateFreeTakeCapacity(3, 1, 20_000_000)).toEqual({
-      remainingFreeTakes: 2n,
-      freeTakingCapacity: 40_000_000n,
-    });
-    expect(calculateFreeTakeCapacity(3, 5, 20_000_000)).toEqual({
-      remainingFreeTakes: 0n,
-      freeTakingCapacity: 0n,
-    });
+  it("adds the reusable base to finite bonded capacity", () => {
+    expect(calculateTotalTakingCapacity(200_000_000n, 500_000_000n)).toBe(700_000_000n);
+    expect(calculateTotalTakingCapacity(null, 500_000_000n)).toBeNull();
   });
 
   it("rejects unsafe number inputs", () => {

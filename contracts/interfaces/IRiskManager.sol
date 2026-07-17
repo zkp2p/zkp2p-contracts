@@ -17,7 +17,7 @@ interface IRiskManager is IIntentRiskHook {
     /** @notice Economic source backing a position. */
     enum RiskMode {
         NONE,
-        FREE,
+        UNBONDED,
         STAKE_BACKED,
         DEFERRED_PAYOUT
     }
@@ -46,16 +46,14 @@ interface IRiskManager is IIntentRiskHook {
         uint64 riskWindow;
     }
 
-    /// @notice Controls pending-intent liquidity-lock penalties and onboarding free intents.
+    /// @notice Controls pending-intent liquidity-lock penalties and the reusable unbonded base tranche.
     struct GriefingConfig {
         /// @notice Cancellation grace period after signaling during which the accrued penalty is zero.
         uint64 griefingCliff;
         /// @notice Time-linear penalty slope applied after the cliff, in basis points per hour.
         uint32 griefingPenaltyBpsPerHour;
-        /// @notice Lifetime number of whole unbonded intents available to each stake owner on this platform.
-        uint32 freeTakeCount;
-        /// @notice Maximum amount of each whole free intent; no portion is applied to a larger intent.
-        uint256 freeTakeAmount;
+        /// @notice Reusable per-intent amount excluded from the griefing bond on non-chargebackable platforms.
+        uint256 baseUnbondedAmount;
     }
 
     /// @notice Combines admission status with the independent chargeback and griefing policies for a platform.
@@ -64,7 +62,7 @@ interface IRiskManager is IIntentRiskHook {
         bool enabled;
         /// @notice Post-settlement reversal policy, independent of pending-intent griefing exposure.
         ChargebackConfig chargeback;
-        /// @notice Pending cancellation and lifetime onboarding-subsidy policy.
+        /// @notice Pending cancellation and reusable base-unbonded policy.
         GriefingConfig griefing;
     }
 
@@ -76,7 +74,7 @@ interface IRiskManager is IIntentRiskHook {
     struct RiskPosition {
         /// @notice Intent owner whose action created the position.
         address taker;
-        /// @notice Portfolio owner whose shared stake or free allowance backs the position.
+        /// @notice Portfolio owner whose shared stake backs any amount above the unbonded base.
         address stakeOwner;
         /// @notice Escrow depositor compensated by griefing penalties and valid chargebacks.
         address lp;
@@ -86,8 +84,6 @@ interface IRiskManager is IIntentRiskHook {
         RiskMode mode;
         /// @notice Current lifecycle state; terminal transitions never return to pending.
         PositionStatus status;
-        /// @notice Whether admission permanently consumed one lifetime free allowance.
-        bool consumedFreeTake;
         /// @notice Canonical deferred hook snapshotted only for a deferred-payout position.
         address deferredPayoutHook;
         /// @notice Original intent recipient entitled to unslashed deferred proceeds.
@@ -112,6 +108,8 @@ interface IRiskManager is IIntentRiskHook {
         uint64 coverageDeadline;
         /// @notice Original locked amount on which maximum pending liabilities were calculated.
         uint256 intentAmount;
+        /// @notice Portion of the intent amount exposed to the griefing curve after subtracting the base tranche.
+        uint256 bondedAmount;
         /// @notice Maximum time-capped griefing penalty at admission.
         uint256 maxGriefingBond;
         /// @notice Stake reserved at admission before terminal resizing or release.
@@ -152,8 +150,7 @@ interface IRiskManager is IIntentRiskHook {
         uint64 riskWindow,
         uint64 griefingCliff,
         uint32 griefingPenaltyBpsPerHour,
-        uint32 freeTakeCount,
-        uint256 freeTakeAmount
+        uint256 baseUnbondedAmount
     );
     event RiskPositionCreated(
         bytes32 indexed intentHash,
@@ -163,6 +160,7 @@ interface IRiskManager is IIntentRiskHook {
         bytes32 paymentMethod,
         RiskMode mode,
         uint256 intentAmount,
+        uint256 bondedAmount,
         uint64 createdAt,
         uint64 maxIntentPeriod,
         uint64 griefingCliff,
@@ -172,14 +170,6 @@ interface IRiskManager is IIntentRiskHook {
         uint256 maxGriefingBond,
         uint256 chargebackReserve,
         uint256 initialReservation
-    );
-    event FreeTakeConsumed(
-        bytes32 indexed intentHash,
-        address indexed stakeOwner,
-        bytes32 indexed paymentMethod,
-        uint256 amount,
-        uint32 freeTakesUsed,
-        uint32 freeTakeCount
     );
     event GriefingPenaltyCharged(
         bytes32 indexed intentHash,
@@ -316,22 +306,22 @@ interface IRiskManager is IIntentRiskHook {
     function getPlatformRiskConfig(bytes32 _paymentMethod) external view returns (PlatformRiskConfig memory);
     /** @notice Returns the complete immutable snapshot and mutable lifecycle accounting for an intent. */
     function getRiskPosition(bytes32 _intentHash) external view returns (RiskPosition memory);
-    /** @notice Returns lifetime free intents consumed by one stake owner on one platform. */
-    function freeTakesUsed(address _stakeOwner, bytes32 _paymentMethod) external view returns (uint32);
     /** @notice Returns the delegated portfolio owner and current aggregate stake capacity for a taker. */
     function getTakerState(address _taker)
         external
         view
         returns (address stakeOwner, uint256 totalStake, uint256 reserved, uint256 free, bool exiting);
-    /** @notice Returns ceil(amount * slope * (period - cliff) / (10_000 * 1 hour)). */
+    /** @notice Returns max(intent amount - base unbonded amount, 0). */
+    function calculateBondedAmount(uint256 _amount, uint256 _baseUnbondedAmount) external pure returns (uint256);
+    /** @notice Returns ceil(bonded amount * slope * (period - cliff) / (10_000 * 1 hour)). */
     function calculateMaxGriefingBond(
-        uint256 _amount,
+        uint256 _intentAmount,
         uint64 _maxIntentPeriod,
         GriefingConfig calldata _config
     ) external pure returns (uint256);
-    /** @notice Returns the time-capped, upward-rounded penalty and effective elapsed time at cancellation. */
+    /** @notice Returns the time-capped penalty for a bonded amount and effective elapsed time at cancellation. */
     function calculateGriefingPenalty(
-        uint256 _amount,
+        uint256 _bondedAmount,
         uint64 _createdAt,
         uint64 _cancelledAt,
         uint64 _maxIntentPeriod,
@@ -342,7 +332,7 @@ interface IRiskManager is IIntentRiskHook {
     function calculateChargebackReserve(uint256 _amount, uint16 _reserveBps) external pure returns (uint256);
     /** @notice Returns both mutually exclusive liabilities and their maximum admission reservation. */
     function calculateRequiredReservation(
-        uint256 _amount,
+        uint256 _intentAmount,
         uint64 _maxIntentPeriod,
         PlatformRiskConfig calldata _config
     ) external pure returns (uint256 maxGriefingBond, uint256 chargebackReserve, uint256 requiredReservation);

@@ -82,8 +82,7 @@ contract RiskManagerInvariantHandler is Test {
                 IRiskManager.GriefingConfig({
                     griefingCliff: 15 minutes,
                     griefingPenaltyBpsPerHour: 10,
-                    freeTakeCount: 0,
-                    freeTakeAmount: 0
+                    baseUnbondedAmount: 0
                 })
             );
             uint256 hybridReservation = feeGapUpperBound > maxGriefingBond
@@ -230,8 +229,7 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
         IRiskManager.GriefingConfig memory griefing = IRiskManager.GriefingConfig({
             griefingCliff: 15 minutes,
             griefingPenaltyBpsPerHour: 10,
-            freeTakeCount: 0,
-            freeTakeAmount: 0
+            baseUnbondedAmount: 0
         });
         manager.setPlatformRiskConfig(PAYPAL, IRiskManager.PlatformRiskConfig({
             enabled: true,
@@ -244,8 +242,7 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
             griefing: griefing
         }));
         manager.setDeferredPayoutHook(address(handler));
-        griefing.freeTakeCount = 2;
-        griefing.freeTakeAmount = 20e6;
+        griefing.baseUnbondedAmount = 20e6;
         manager.setPlatformRiskConfig(ZELLE, IRiskManager.PlatformRiskConfig({
             enabled: true,
             chargeback: IRiskManager.ChargebackConfig({
@@ -298,10 +295,10 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
         assertEq(positionReservations, vault.reservedStake(stakeOwner));
     }
 
-    function invariant_FreePositionsNeverReserveOrSlashStake() public view {
+    function invariant_UnbondedPositionsNeverReserveOrSlashStake() public view {
         for (uint256 index = 0; index < handler.hashCount(); index++) {
             IRiskManager.RiskPosition memory position = manager.getRiskPosition(handler.hashAt(index));
-            if (position.mode == IRiskManager.RiskMode.FREE) {
+            if (position.mode == IRiskManager.RiskMode.UNBONDED) {
                 assertEq(position.initialReservation, 0);
                 assertEq(position.reservedAmount, 0);
                 assertEq(position.slashedAmount, 0);
