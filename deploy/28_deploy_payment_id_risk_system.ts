@@ -1,7 +1,12 @@
 import "module-alias/register";
 
 import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { Deployment, DeploymentSubmission, DeployFunction } from "hardhat-deploy/types";
+import {
+  Deployment,
+  DeploymentSubmission,
+  DeployFunction,
+  DeployOptions,
+} from "hardhat-deploy/types";
 import { ethers } from "hardhat";
 
 import {
@@ -58,22 +63,29 @@ export const BASE_STAGING_FINAL_CANONICAL_ALIASES = [
   ["DeferredPayoutHook", "DeferredPayoutHookPaymentId", "DeferredPayoutHookPreFinalAffine"],
 ] as const;
 
-export async function assertFreshNonLocalPaymentIdRiskDeployment(
+type ExistingDeploymentStatus = "missing" | "matching" | "different";
+
+export async function assertResumableNonLocalPaymentIdRiskDeployment(
   network: string,
-  getDeployment: (name: string) => Promise<unknown | null>,
-  allowCompleteRerun = false,
+  inspectDeployment: (name: typeof PAYMENT_ID_RISK_DEPLOYMENT_NAMES[number]) =>
+    Promise<ExistingDeploymentStatus>,
 ) {
   if (network === "localhost" || network === "hardhat") return;
-  const existing: string[] = [];
+  let missingDependency = false;
   for (const name of PAYMENT_ID_RISK_DEPLOYMENT_NAMES) {
-    if (await getDeployment(name)) existing.push(name);
-  }
-  if (allowCompleteRerun && existing.length === PAYMENT_ID_RISK_DEPLOYMENT_NAMES.length) return;
-  if (existing.length !== 0) {
-    throw new Error(
-      `${network} already has payment-ID risk deployment records (${existing.join(", ")}); `
-      + "use a new governance-reviewed version",
-    );
+    const status = await inspectDeployment(name);
+    if (status === "missing") {
+      missingDependency = true;
+      continue;
+    }
+    if (missingDependency) {
+      throw new Error(`${network} has an impossible non-prefix payment-ID deployment record at ${name}`);
+    }
+    if (status === "different") {
+      throw new Error(
+        `${network} payment-ID deployment record ${name} differs from the reviewed bytecode, libraries, or arguments`,
+      );
+    }
   }
 }
 
@@ -104,6 +116,38 @@ export function paymentIdRiskPlatformPolicyForNetwork(network: string) {
   };
 }
 
+export function assertCanonicalHardCutAuthorizations(state: {
+  orchestratorRegistered: boolean;
+  newVerifierWriter: boolean;
+  legacyVerifierWriter: boolean;
+  orchestratorVerifierRegistryMatches: boolean;
+  orchestratorEscrowRegistryMatches: boolean;
+  escrowAuthorized: boolean;
+  escrowOrchestratorRegistryMatches: boolean;
+}) {
+  if (!state.orchestratorRegistered) {
+    throw new Error("Payment-ID OrchestratorV3 registry admission must be executed before canonical hard-cut");
+  }
+  if (!state.newVerifierWriter) {
+    throw new Error("UnifiedPaymentVerifierV3 write permission must be executed before canonical hard-cut");
+  }
+  if (!state.legacyVerifierWriter) {
+    throw new Error("Legacy UnifiedPaymentVerifierV2 must remain a shared nullifier writer");
+  }
+  if (!state.orchestratorVerifierRegistryMatches) {
+    throw new Error("Payment-ID OrchestratorV3 verifier registry mismatch");
+  }
+  if (!state.orchestratorEscrowRegistryMatches) {
+    throw new Error("Payment-ID OrchestratorV3 escrow registry mismatch");
+  }
+  if (!state.escrowAuthorized) {
+    throw new Error("EscrowV2 must remain authorized before canonical hard-cut");
+  }
+  if (!state.escrowOrchestratorRegistryMatches) {
+    throw new Error("EscrowV2 orchestrator registry mismatch");
+  }
+}
+
 export async function saveCanonicalBaseStagingAliases(
   network: string,
   getDeployment: (name: string) => Promise<Deployment>,
@@ -112,18 +156,55 @@ export async function saveCanonicalBaseStagingAliases(
 ) {
   if (network !== "base_staging") return;
 
+  const aliases: Array<{
+    canonicalName: string;
+    finalDeployment: Deployment;
+    archiveName: string;
+    canonicalDeployment: Deployment | null;
+    archivedDeployment: Deployment | null;
+  }> = [];
   for (const [canonicalName, finalName, archiveName] of BASE_STAGING_FINAL_CANONICAL_ALIASES) {
     const finalDeployment = await getDeployment(finalName);
     const canonicalDeployment = await getDeploymentOrNull(canonicalName);
+    const archivedDeployment = archiveName ? await getDeploymentOrNull(archiveName) : null;
     if (
       archiveName
       && canonicalDeployment
       && canonicalDeployment.address.toLowerCase() !== finalDeployment.address.toLowerCase()
     ) {
+      if (archivedDeployment && !sameDeploymentRecord(archivedDeployment, canonicalDeployment)) {
+        throw new Error(`${archiveName} already preserves a different historical deployment`);
+      }
+    }
+    aliases.push({ canonicalName, finalDeployment, archiveName, canonicalDeployment, archivedDeployment });
+  }
+
+  for (const { canonicalName, finalDeployment, archiveName, canonicalDeployment, archivedDeployment } of aliases) {
+    if (
+      archiveName
+      && canonicalDeployment
+      && canonicalDeployment.address.toLowerCase() !== finalDeployment.address.toLowerCase()
+      && !archivedDeployment
+    ) {
       await saveDeployment(archiveName, canonicalDeployment);
     }
     await saveDeployment(canonicalName, finalDeployment);
   }
+}
+
+function sameDeploymentRecord(left: Deployment, right: Deployment): boolean {
+  const identity = (deployment: Deployment) => JSON.stringify({
+    address: deployment.address.toLowerCase(),
+    transactionHash: deployment.transactionHash?.toLowerCase() ?? null,
+    args: deployment.args ?? [],
+    libraries: Object.entries(deployment.libraries ?? {})
+      .map(([name, address]) => [name, address.toLowerCase()])
+      .sort(([leftName], [rightName]) => leftName.localeCompare(rightName)),
+    solcInputHash: deployment.solcInputHash ?? null,
+    bytecode: deployment.bytecode ?? null,
+    deployedBytecode: deployment.deployedBytecode ?? null,
+  });
+  return identity(left) === identity(right);
 }
 
 function normalize(values: string[]): string[] {
@@ -221,11 +302,6 @@ async function assertRegistryParity(
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deploy } = hre.deployments;
   const network = hre.deployments.getNetworkName();
-  await assertFreshNonLocalPaymentIdRiskDeployment(
-    network,
-    hre.deployments.getOrNull.bind(hre.deployments),
-    true,
-  );
   const { reversible: reversibleConfig, nonChargebackable: nonChargebackableConfig } =
     paymentIdRiskPlatformPolicyForNetwork(network);
   const legacy = await loadLegacyPaymentConfiguration(network);
@@ -248,19 +324,143 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   );
   const stakeTokenAddress = USDC[network] || getDeployedContractAddress(network, "USDCMock");
 
-  const paymentVerifierRegistryV3 = await deploy("PaymentVerifierRegistryV3", {
-    contract: "PaymentVerifierRegistry",
-    from: deployer,
-    args: [],
+  type DeploymentName = typeof PAYMENT_ID_RISK_DEPLOYMENT_NAMES[number];
+  type AddressOf = (name: DeploymentName) => string;
+  const optionsFor: Record<DeploymentName, (addressOf: AddressOf) => DeployOptions> = {
+    PaymentVerifierRegistryV3: () => ({
+      contract: "PaymentVerifierRegistry",
+      from: deployer,
+      args: [],
+    }),
+    UnifiedPaymentVerifierV3: () => ({
+      contract: "UnifiedPaymentVerifierV3",
+      from: deployer,
+      args: [
+        orchestratorRegistryAddress,
+        nullifierRegistryAddress,
+        legacy.paymentAttestationVerifierAddress,
+      ],
+    }),
+    BoundedCallPaymentId: () => ({
+      contract: "BoundedCall",
+      from: deployer,
+      args: [],
+    }),
+    OrchestratorV3ValidationPaymentId: () => ({
+      contract: "OrchestratorV3Validation",
+      from: deployer,
+      args: [],
+    }),
+    OrchestratorV3FeeLibPaymentId: () => ({
+      contract: "OrchestratorV3FeeLib",
+      from: deployer,
+      args: [],
+    }),
+    RiskCallbackRecorderPaymentId: () => ({
+      contract: "RiskCallbackRecorder",
+      from: deployer,
+      args: [],
+    }),
+    OrchestratorV3RiskLibPaymentId: (addressOf) => ({
+      contract: "OrchestratorV3RiskLib",
+      from: deployer,
+      libraries: {
+        BoundedCall: addressOf("BoundedCallPaymentId"),
+        RiskCallbackRecorder: addressOf("RiskCallbackRecorderPaymentId"),
+      },
+      args: [],
+    }),
+    OrchestratorV3PaymentId: (addressOf) => ({
+      contract: "OrchestratorV3",
+      from: deployer,
+      libraries: {
+        BoundedCall: addressOf("BoundedCallPaymentId"),
+        PostIntentHookExecutor: postIntentHookExecutorAddress,
+        OrchestratorV3Validation: addressOf("OrchestratorV3ValidationPaymentId"),
+        OrchestratorV3FeeLib: addressOf("OrchestratorV3FeeLibPaymentId"),
+        OrchestratorV3RiskLib: addressOf("OrchestratorV3RiskLibPaymentId"),
+      },
+      args: [
+        deployer,
+        chainId,
+        escrowRegistryAddress,
+        addressOf("PaymentVerifierRegistryV3"),
+        relayerRegistryAddress,
+        ORCHESTRATOR_V2_PROTOCOL_FEE[network],
+        ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT[network] || deployer,
+        RISK_CALLBACK_GAS_LIMIT,
+      ],
+    }),
+    StakeVaultPaymentId: () => ({
+      contract: "StakeVault",
+      from: deployer,
+      args: [
+        deployer,
+        stakeTokenAddress,
+        ethers.constants.AddressZero,
+        STAKE_VAULT_BASE_EXIT_DELAY,
+        STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
+      ],
+    }),
+    ChargebackAttestationVerifierPaymentId: () => ({
+      contract: "MultiAttestationVerifier",
+      from: deployer,
+      args: [chargebackWitnessConfig.witnesses, chargebackWitnessConfig.threshold],
+    }),
+    RiskManagerPaymentId: (addressOf) => ({
+      contract: "RiskManager",
+      from: deployer,
+      args: [
+        deployer,
+        addressOf("OrchestratorV3PaymentId"),
+        addressOf("StakeVaultPaymentId"),
+        addressOf("ChargebackAttestationVerifierPaymentId"),
+      ],
+    }),
+    DeferredPayoutHookPaymentId: (addressOf) => ({
+      contract: "DeferredPayoutHook",
+      from: deployer,
+      args: [
+        stakeTokenAddress,
+        addressOf("StakeVaultPaymentId"),
+        addressOf("RiskManagerPaymentId"),
+        orchestratorRegistryAddress,
+      ],
+    }),
+  };
+
+  const existingDeployments = new Map<DeploymentName, Deployment>();
+  for (const name of PAYMENT_ID_RISK_DEPLOYMENT_NAMES) {
+    const deployment = await hre.deployments.getOrNull(name);
+    if (deployment) existingDeployments.set(name, deployment);
+  }
+  await assertResumableNonLocalPaymentIdRiskDeployment(network, async (name) => {
+    const deployment = existingDeployments.get(name);
+    if (!deployment) return "missing";
+    const diff = await hre.deployments.fetchIfDifferent(name, optionsFor[name]((dependency) => {
+      const dependencyDeployment = existingDeployments.get(dependency);
+      if (!dependencyDeployment) {
+        throw new Error(`${network} deployment record ${name} is missing dependency ${dependency}`);
+      }
+      return dependencyDeployment.address;
+    }));
+    return diff.differences ? "different" : "matching";
   });
-  const unifiedPaymentVerifierV3 = await deploy("UnifiedPaymentVerifierV3", {
-    from: deployer,
-    args: [
-      orchestratorRegistryAddress,
-      nullifierRegistryAddress,
-      legacy.paymentAttestationVerifierAddress,
-    ],
-  });
+
+  const resolvedDeployments = new Map<DeploymentName, Deployment>(existingDeployments);
+  const addressOf: AddressOf = (name) => {
+    const deployment = resolvedDeployments.get(name);
+    if (!deployment) throw new Error(`Payment-ID deployment dependency ${name} is unavailable`);
+    return deployment.address;
+  };
+  const deployOne = async (name: DeploymentName) => {
+    const deployment = await deploy(name, optionsFor[name](addressOf));
+    resolvedDeployments.set(name, deployment);
+    return deployment;
+  };
+
+  const paymentVerifierRegistryV3 = await deployOne("PaymentVerifierRegistryV3");
+  const unifiedPaymentVerifierV3 = await deployOne("UnifiedPaymentVerifierV3");
   const newRegistry = await ethers.getContractAt("PaymentVerifierRegistry", paymentVerifierRegistryV3.address);
   const newVerifier = await ethers.getContractAt("UnifiedPaymentVerifierV3", unifiedPaymentVerifierV3.address);
   for (const { method, currencies } of legacy.configurations) {
@@ -269,82 +469,16 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   }
   await assertRegistryParity(legacy.configurations, newRegistry, newVerifier);
 
-  const boundedCall = await deploy("BoundedCallPaymentId", {
-    contract: "BoundedCall",
-    from: deployer,
-    args: [],
-  });
-  const orchestratorV3Validation = await deploy("OrchestratorV3ValidationPaymentId", {
-    contract: "OrchestratorV3Validation",
-    from: deployer,
-    args: [],
-  });
-  const orchestratorV3FeeLib = await deploy("OrchestratorV3FeeLibPaymentId", {
-    contract: "OrchestratorV3FeeLib",
-    from: deployer,
-    args: [],
-  });
-  const riskCallbackRecorder = await deploy("RiskCallbackRecorderPaymentId", {
-    contract: "RiskCallbackRecorder",
-    from: deployer,
-    args: [],
-  });
-  const orchestratorV3RiskLib = await deploy("OrchestratorV3RiskLibPaymentId", {
-    contract: "OrchestratorV3RiskLib",
-    from: deployer,
-    libraries: {
-      BoundedCall: boundedCall.address,
-      RiskCallbackRecorder: riskCallbackRecorder.address,
-    },
-    args: [],
-  });
-  const orchestratorV3 = await deploy("OrchestratorV3PaymentId", {
-    contract: "OrchestratorV3",
-    from: deployer,
-    libraries: {
-      BoundedCall: boundedCall.address,
-      PostIntentHookExecutor: postIntentHookExecutorAddress,
-      OrchestratorV3Validation: orchestratorV3Validation.address,
-      OrchestratorV3FeeLib: orchestratorV3FeeLib.address,
-      OrchestratorV3RiskLib: orchestratorV3RiskLib.address,
-    },
-    args: [
-      deployer,
-      chainId,
-      escrowRegistryAddress,
-      paymentVerifierRegistryV3.address,
-      relayerRegistryAddress,
-      ORCHESTRATOR_V2_PROTOCOL_FEE[network],
-      ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT[network] || deployer,
-      RISK_CALLBACK_GAS_LIMIT,
-    ],
-  });
-  const stakeVault = await deploy("StakeVaultPaymentId", {
-    contract: "StakeVault",
-    from: deployer,
-    args: [
-      deployer,
-      stakeTokenAddress,
-      ethers.constants.AddressZero,
-      STAKE_VAULT_BASE_EXIT_DELAY,
-      STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
-    ],
-  });
-  const chargebackAttestationVerifier = await deploy("ChargebackAttestationVerifierPaymentId", {
-    contract: "MultiAttestationVerifier",
-    from: deployer,
-    args: [chargebackWitnessConfig.witnesses, chargebackWitnessConfig.threshold],
-  });
-  const riskManager = await deploy("RiskManagerPaymentId", {
-    contract: "RiskManager",
-    from: deployer,
-    args: [deployer, orchestratorV3.address, stakeVault.address, chargebackAttestationVerifier.address],
-  });
-  const deferredPayoutHook = await deploy("DeferredPayoutHookPaymentId", {
-    contract: "DeferredPayoutHook",
-    from: deployer,
-    args: [stakeTokenAddress, stakeVault.address, riskManager.address, orchestratorRegistryAddress],
-  });
+  await deployOne("BoundedCallPaymentId");
+  await deployOne("OrchestratorV3ValidationPaymentId");
+  await deployOne("OrchestratorV3FeeLibPaymentId");
+  await deployOne("RiskCallbackRecorderPaymentId");
+  await deployOne("OrchestratorV3RiskLibPaymentId");
+  const orchestratorV3 = await deployOne("OrchestratorV3PaymentId");
+  const stakeVault = await deployOne("StakeVaultPaymentId");
+  const chargebackAttestationVerifier = await deployOne("ChargebackAttestationVerifierPaymentId");
+  const riskManager = await deployOne("RiskManagerPaymentId");
+  const deferredPayoutHook = await deployOne("DeferredPayoutHookPaymentId");
 
   const vault = await ethers.getContractAt("StakeVault", stakeVault.address);
   const manager = await ethers.getContractAt("RiskManager", riskManager.address);
@@ -376,11 +510,25 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
   const nullifierRegistry = await ethers.getContractAt("NullifierRegistry", nullifierRegistryAddress);
+  const escrowRegistry = await ethers.getContractAt("EscrowRegistry", escrowRegistryAddress);
   await addOrchestratorToRegistry(hre, orchestratorRegistry, orchestrator.address);
   await addWritePermission(hre, nullifierRegistry, newVerifier.address);
-  if (!(await nullifierRegistry.isWriter(legacy.legacyVerifierAddress))) {
-    throw new Error("Legacy UnifiedPaymentVerifierV2 must remain a shared nullifier writer");
-  }
+  const escrowV2Address = getDeployedContractAddress(network, "EscrowV2");
+  const escrowV2 = await ethers.getContractAt("EscrowV2", escrowV2Address);
+  assertCanonicalHardCutAuthorizations({
+    orchestratorRegistered: await orchestratorRegistry.isOrchestrator(orchestrator.address),
+    newVerifierWriter: await nullifierRegistry.isWriter(newVerifier.address),
+    legacyVerifierWriter: await nullifierRegistry.isWriter(legacy.legacyVerifierAddress),
+    orchestratorVerifierRegistryMatches:
+      (await orchestrator.paymentVerifierRegistry()).toLowerCase() === newRegistry.address.toLowerCase(),
+    orchestratorEscrowRegistryMatches:
+      (await orchestrator.escrowRegistry()).toLowerCase() === escrowRegistry.address.toLowerCase(),
+    escrowAuthorized:
+      await escrowRegistry.isWhitelistedEscrow(escrowV2Address)
+      || await escrowRegistry.isAcceptingAllEscrows(),
+    escrowOrchestratorRegistryMatches:
+      (await escrowV2.orchestratorRegistry()).toLowerCase() === orchestratorRegistry.address.toLowerCase(),
+  });
 
   await setNewOwner(hre, newRegistry, multiSig);
   await setNewOwner(hre, newVerifier, multiSig);
@@ -404,11 +552,6 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   if (network === "localhost" || network === "hardhat") return false;
   if (process.env.DEPLOY_PAYMENT_ID_RISK_SYSTEM !== "true") return true;
   paymentIdRiskPlatformPolicyForNetwork(network);
-  await assertFreshNonLocalPaymentIdRiskDeployment(
-    network,
-    hre.deployments.getOrNull.bind(hre.deployments),
-    true,
-  );
   return false;
 };
 

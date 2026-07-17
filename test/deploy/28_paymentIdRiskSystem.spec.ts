@@ -4,7 +4,8 @@ import { expect } from "chai";
 import hre, { deployments, ethers } from "hardhat";
 
 import deployPaymentIdRiskSystem, {
-  assertFreshNonLocalPaymentIdRiskDeployment,
+  assertCanonicalHardCutAuthorizations,
+  assertResumableNonLocalPaymentIdRiskDeployment,
   BASE_STAGING_FINAL_CANONICAL_ALIASES,
   paymentIdRiskPlatformPolicyForNetwork,
   PAYMENT_ID_RISK_DEPLOYMENT_NAMES,
@@ -114,6 +115,8 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
     expect(await newVerifier.orchestratorRegistry()).to.eq(orchestratorRegistry.address);
     expect(await orchestratorRegistry.isOrchestrator(orchestrator.address)).to.eq(true);
     expect(await orchestrator.paymentVerifierRegistry()).to.eq(deployedAddress("PaymentVerifierRegistryV3"));
+    const escrowV2 = await ethers.getContractAt("EscrowV2", deployedAddress("EscrowV2"));
+    expect(await escrowV2.orchestratorRegistry()).to.eq(orchestratorRegistry.address);
   });
 
   it("wires and owns the versioned risk components", async () => {
@@ -168,23 +171,33 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
     expect(config.chargeback.reserveBps).to.eq(0);
   });
 
-  it("rejects any existing versioned coordinate before a nonlocal deployment", async () => {
-    await expect(assertFreshNonLocalPaymentIdRiskDeployment("base_staging", async (name) => (
-      name === "UnifiedPaymentVerifierV3" ? { address: ethers.constants.AddressZero } : null
-    ))).to.be.rejectedWith("use a new governance-reviewed version");
+  it("allows a fresh nonlocal deployment and exact complete reruns", async () => {
+    await expect(assertResumableNonLocalPaymentIdRiskDeployment(
+      "base_staging",
+      async () => "missing",
+    )).not.to.be.rejected;
+    await expect(assertResumableNonLocalPaymentIdRiskDeployment(
+      "base_staging",
+      async () => "matching",
+    )).not.to.be.rejected;
   });
 
-  it("allows an idempotent nonlocal rerun only when every versioned coordinate exists", async () => {
-    await expect(assertFreshNonLocalPaymentIdRiskDeployment(
+  it("resumes an exact deployment prefix but rejects drift and impossible ordering", async () => {
+    await expect(assertResumableNonLocalPaymentIdRiskDeployment(
       "base_staging",
-      async (name) => ({ address: name }),
-      true,
+      async (name) => PAYMENT_ID_RISK_DEPLOYMENT_NAMES.indexOf(name) < 5 ? "matching" : "missing",
     )).not.to.be.rejected;
-    await expect(assertFreshNonLocalPaymentIdRiskDeployment(
+    await expect(assertResumableNonLocalPaymentIdRiskDeployment(
       "base_staging",
-      async (name) => (name === "UnifiedPaymentVerifierV3" ? null : { address: name }),
-      true,
-    )).to.be.rejectedWith("use a new governance-reviewed version");
+      async (name) => {
+        if (name === "PaymentVerifierRegistryV3") return "matching";
+        return name === "UnifiedPaymentVerifierV3" ? "different" : "missing";
+      },
+    )).to.be.rejectedWith("differs from the reviewed bytecode, libraries, or arguments");
+    await expect(assertResumableNonLocalPaymentIdRiskDeployment(
+      "base_staging",
+      async (name) => name === "PaymentVerifierRegistryV3" ? "missing" : "matching",
+    )).to.be.rejectedWith("impossible non-prefix");
   });
 
   it("fails descriptively when the historical settlement executor prerequisite is absent", async () => {
@@ -194,7 +207,7 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
 
   it("hard-cuts Base staging canonical aliases while archiving the pre-final affine records", async () => {
     const records = new Map<string, any>();
-    const saved = new Map<string, any>();
+    const saveCounts = new Map<string, number>();
     for (const [canonicalName, finalName] of BASE_STAGING_FINAL_CANONICAL_ALIASES) {
       records.set(canonicalName, { address: ethers.Wallet.createRandom().address });
       records.set(finalName, { address: ethers.Wallet.createRandom().address });
@@ -204,15 +217,77 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
       "base_staging",
       async (name) => records.get(name),
       async (name) => records.get(name) ?? null,
-      async (name, deployment) => { saved.set(name, deployment); },
+      async (name, deployment) => {
+        records.set(name, deployment);
+        saveCounts.set(name, (saveCounts.get(name) ?? 0) + 1);
+      },
     );
 
     for (const [canonicalName, finalName, archiveName] of BASE_STAGING_FINAL_CANONICAL_ALIASES) {
-      expect(saved.get(canonicalName).address).to.eq(records.get(finalName).address);
-      if (archiveName) {
-        expect(saved.get(archiveName).address).to.eq(records.get(canonicalName).address);
-      }
+      expect(records.get(canonicalName).address).to.eq(records.get(finalName).address);
+      expect(records.get(archiveName).address).not.to.eq(records.get(finalName).address);
+      expect(saveCounts.get(archiveName)).to.eq(1);
     }
+
+    await saveCanonicalBaseStagingAliases(
+      "base_staging",
+      async (name) => records.get(name),
+      async (name) => records.get(name) ?? null,
+      async (name, deployment) => {
+        records.set(name, deployment);
+        saveCounts.set(name, (saveCounts.get(name) ?? 0) + 1);
+      },
+    );
+    for (const [, , archiveName] of BASE_STAGING_FINAL_CANONICAL_ALIASES) {
+      expect(saveCounts.get(archiveName)).to.eq(1);
+    }
+
+    const [canonicalName] = BASE_STAGING_FINAL_CANONICAL_ALIASES[
+      BASE_STAGING_FINAL_CANONICAL_ALIASES.length - 1
+    ];
+    records.set(canonicalName, { address: ethers.Wallet.createRandom().address });
+    const writesBeforeConflict = Array.from(saveCounts.values()).reduce((total, count) => total + count, 0);
+    await expect(saveCanonicalBaseStagingAliases(
+      "base_staging",
+      async (name) => records.get(name),
+      async (name) => records.get(name) ?? null,
+      async (name, deployment) => {
+        records.set(name, deployment);
+        saveCounts.set(name, (saveCounts.get(name) ?? 0) + 1);
+      },
+    )).to.be.rejectedWith("already preserves a different historical deployment");
+    expect(Array.from(saveCounts.values()).reduce((total, count) => total + count, 0))
+      .to.eq(writesBeforeConflict);
+  });
+
+  it("fails closed when Safe-owned registry authorizations are only queued", () => {
+    expect(() => assertCanonicalHardCutAuthorizations({
+      orchestratorRegistered: false,
+      newVerifierWriter: true,
+      legacyVerifierWriter: true,
+      orchestratorVerifierRegistryMatches: true,
+      orchestratorEscrowRegistryMatches: true,
+      escrowAuthorized: true,
+      escrowOrchestratorRegistryMatches: true,
+    })).to.throw("registry admission must be executed");
+    expect(() => assertCanonicalHardCutAuthorizations({
+      orchestratorRegistered: true,
+      newVerifierWriter: false,
+      legacyVerifierWriter: true,
+      orchestratorVerifierRegistryMatches: true,
+      orchestratorEscrowRegistryMatches: true,
+      escrowAuthorized: true,
+      escrowOrchestratorRegistryMatches: true,
+    })).to.throw("write permission must be executed");
+    expect(() => assertCanonicalHardCutAuthorizations({
+      orchestratorRegistered: true,
+      newVerifierWriter: true,
+      legacyVerifierWriter: true,
+      orchestratorVerifierRegistryMatches: true,
+      orchestratorEscrowRegistryMatches: true,
+      escrowAuthorized: true,
+      escrowOrchestratorRegistryMatches: false,
+    })).to.throw("EscrowV2 orchestrator registry mismatch");
   });
 
   it("reruns locally without changing versioned addresses or wiring", async function () {
