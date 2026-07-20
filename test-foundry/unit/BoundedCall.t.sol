@@ -5,6 +5,8 @@ pragma solidity ^0.8.18;
 import { Test } from "forge-std/Test.sol";
 
 import { BoundedCall } from "../../contracts/lib/BoundedCall.sol";
+import { IIntentRiskHook } from "../../contracts/interfaces/IIntentRiskHook.sol";
+import { IntentRiskHookMock } from "../../contracts/mocks/IntentRiskHookMock.sol";
 
 contract BoundedCallHarness {
     function execute(
@@ -19,6 +21,13 @@ contract BoundedCallHarness {
             _maxReturnDataSize,
             _callData
         );
+    }
+
+    function executeCancellation(
+        IIntentRiskHook _hook,
+        uint256 _gasLimit
+    ) external returns (bool success) {
+        return BoundedCall.executeRiskCancellation(_hook, bytes32(uint256(1)), _gasLimit, 2_048);
     }
 }
 
@@ -43,10 +52,12 @@ contract BoundedCallTarget {
 contract BoundedCallTest is Test {
     BoundedCallHarness internal harness;
     BoundedCallTarget internal target;
+    IntentRiskHookMock internal riskHook;
 
     function setUp() public {
         harness = new BoundedCallHarness();
         target = new BoundedCallTarget();
+        riskHook = new IntentRiskHookMock();
     }
 
     function test_ReturnsSuccessfulBoundedCallData() public {
@@ -84,5 +95,19 @@ contract BoundedCallTest is Test {
 
         assertFalse(success);
         assertEq(revertData.length, 0);
+    }
+
+    function test_CancellationRevertsInsteadOfFailingOpenWhenOuterGasCannotFundAllowance() public {
+        (bool success, bytes memory revertData) = address(harness).call{ gas: 100_000 }(
+            abi.encodeCall(BoundedCallHarness.executeCancellation, (riskHook, 200_000))
+        );
+
+        assertFalse(success);
+        assertEq(bytes4(revertData), BoundedCall.InsufficientGasForRiskCallback.selector);
+    }
+
+    function test_CancellationForwardsConfiguredGasWhenSufficient() public {
+        assertTrue(harness.executeCancellation(riskHook, 200_000));
+        assertEq(riskHook.cancelledCalls(), 1);
     }
 }

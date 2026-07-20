@@ -493,57 +493,117 @@ describe("StakeVault", () => {
     });
   });
 
-  describe("deferred payouts", () => {
-    it("accounts for tokens transferred into the vault after deferred admission authorization", async () => {
-      const { controller, staker, token, vault } = await deployFixture();
+  describe("deferred stake", () => {
+    it("converts the full gross settlement into fully reserved taker stake", async () => {
+      const { controller, staker, maker: protocol, recipient: referrer, token, vault } = await deployFixture();
       const intentHash = ethers.utils.id("deferred");
       const releaseTime = (await time.latest()) + DAY;
-      await vault.connect(controller).authorizeDeferredPayout(intentHash, staker.address, releaseTime);
+      const fees = [
+        { feeType: 0, recipient: protocol.address, amount: usdc(2) },
+        { feeType: 1, recipient: referrer.address, amount: usdc(1) },
+      ];
+      await vault.connect(controller).authorizeDeferredStake(intentHash, staker.address, releaseTime);
       await token.transfer(vault.address, usdc(100));
 
       await expect(
-        vault.connect(controller).recordDeferredPayout(intentHash, staker.address, usdc(100), releaseTime),
-      ).to.emit(vault, "DeferredPayoutRecorded");
+        vault.connect(controller).recordDeferredStake(intentHash, staker.address, usdc(100), releaseTime, fees),
+      )
+        .to.emit(vault, "DeferredStakeFunded")
+        .withArgs(intentHash, staker.address, usdc(100), usdc(3), usdc(97), releaseTime);
 
-      expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(usdc(100));
+      const deferredStake = await vault.getDeferredStake(intentHash);
+      expect(deferredStake.grossAmount).to.eq(usdc(100));
+      expect(deferredStake.feeAmount).to.eq(usdc(3));
+      expect(await vault.stakeBalance(staker.address)).to.eq(usdc(100));
+      expect(await vault.reservedStake(staker.address)).to.eq(usdc(100));
+      expect(await vault.freeStake(staker.address)).to.eq(0);
+      expect(await vault.totalDeferredFees()).to.eq(usdc(3));
       expect(await vault.totalLiabilities()).to.eq(usdc(100));
+      expect((await vault.getDeferredFeeAllocations(intentHash)).length).to.eq(2);
     });
 
     it("rejects deferred accounting without unaccounted backing tokens", async () => {
       const { controller, staker, vault } = await deployFixture();
       const intentHash = ethers.utils.id("deferred");
-      await vault.connect(controller).authorizeDeferredPayout(intentHash, staker.address, 0);
+      await vault.connect(controller).authorizeDeferredStake(intentHash, staker.address, 0);
 
       await expect(
-        vault.connect(controller).recordDeferredPayout(intentHash, staker.address, usdc(1), 0),
+        vault.connect(controller).recordDeferredStake(intentHash, staker.address, usdc(1), 0, []),
       ).to.be.revertedWithCustomError(vault, "InsufficientUnaccountedTokens");
     });
 
-    it("lets the beneficiary withdraw unslashed proceeds at maturity", async () => {
-      const { controller, staker, recipient, token, vault } = await deployFixture();
+    it("vests fee claims and leaves the net amount as reusable stake at maturity", async () => {
+      const { controller, staker, maker: protocol, recipient: referrer, token, vault } = await deployFixture();
       const intentHash = ethers.utils.id("deferred");
       const releaseTime = (await time.latest()) + DAY;
-      await vault.connect(controller).authorizeDeferredPayout(intentHash, staker.address, releaseTime);
+      const fees = [
+        { feeType: 0, recipient: protocol.address, amount: usdc(2) },
+        { feeType: 1, recipient: referrer.address, amount: usdc(1) },
+      ];
+      await vault.connect(controller).authorizeDeferredStake(intentHash, staker.address, releaseTime);
       await token.transfer(vault.address, usdc(100));
-      await vault.connect(controller).recordDeferredPayout(intentHash, staker.address, usdc(100), releaseTime);
+      await vault.connect(controller).recordDeferredStake(intentHash, staker.address, usdc(100), releaseTime, fees);
+
+      await expect(vault.connect(controller).releaseDeferredStake(intentHash)).to.be.revertedWithCustomError(
+        vault,
+        "DeferredStakeNotMature",
+      );
       await time.increase(DAY);
+      await vault.connect(controller).releaseDeferredStake(intentHash);
 
-      await vault.connect(staker).withdrawDeferredPayout(intentHash, recipient.address);
+      expect(await vault.stakeBalance(staker.address)).to.eq(usdc(97));
+      expect(await vault.reservedStake(staker.address)).to.eq(0);
+      expect(await vault.freeStake(staker.address)).to.eq(usdc(97));
+      expect(await vault.claimableFees(protocol.address)).to.eq(usdc(2));
+      expect(await vault.claimableFees(referrer.address)).to.eq(usdc(1));
+      expect(await vault.totalDeferredFees()).to.eq(0);
+      expect(await vault.totalLiabilities()).to.eq(usdc(100));
 
-      expect(await token.balanceOf(recipient.address)).to.eq(usdc(100));
+      await vault.connect(staker).withdrawFeeClaimFor(protocol.address);
+      await vault.connect(staker).withdrawFeeClaimFor(referrer.address);
+      expect(await token.balanceOf(protocol.address)).to.eq(usdc(2));
+      expect(await token.balanceOf(referrer.address)).to.eq(usdc(1));
+      expect(await vault.totalLiabilities()).to.eq(usdc(97));
     });
 
-    it("credits a partial deferred slash and leaves the remainder for the taker", async () => {
-      const { controller, staker, maker, token, vault } = await deployFixture();
-      const intentHash = ethers.utils.id("deferred");
-      await vault.connect(controller).authorizeDeferredPayout(intentHash, staker.address, 0);
+    it("aggregates duplicate fee recipients without changing total liabilities", async () => {
+      const { controller, staker, maker: feeRecipient, token, vault } = await deployFixture();
+      const intentHash = ethers.utils.id("duplicate-fee-recipient");
+      const releaseTime = (await time.latest()) + DAY;
+      await vault.connect(controller).authorizeDeferredStake(intentHash, staker.address, releaseTime);
       await token.transfer(vault.address, usdc(100));
-      await vault.connect(controller).recordDeferredPayout(intentHash, staker.address, usdc(100), 0);
+      await vault.connect(controller).recordDeferredStake(intentHash, staker.address, usdc(100), releaseTime, [
+        { feeType: 0, recipient: feeRecipient.address, amount: usdc(2) },
+        { feeType: 1, recipient: feeRecipient.address, amount: usdc(1) },
+      ]);
 
-      await vault.connect(controller).slashDeferredPayout(intentHash, maker.address, usdc(40));
+      await time.increaseTo(releaseTime);
+      await vault.connect(controller).releaseDeferredStake(intentHash);
 
-      expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(usdc(60));
-      expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(40));
+      expect(await vault.claimableFees(feeRecipient.address)).to.eq(usdc(3));
+      expect(await vault.totalClaimableFees()).to.eq(usdc(3));
+      expect(await vault.stakeBalance(staker.address)).to.eq(usdc(97));
+      expect(await vault.totalLiabilities()).to.eq(usdc(100));
+    });
+
+    it("slashes the full gross stake to the maker and cancels every contingent fee", async () => {
+      const { controller, staker, maker, recipient: feeRecipient, token, vault } = await deployFixture();
+      const intentHash = ethers.utils.id("deferred");
+      await vault.connect(controller).authorizeDeferredStake(intentHash, staker.address, 0);
+      await token.transfer(vault.address, usdc(100));
+      await vault.connect(controller).recordDeferredStake(intentHash, staker.address, usdc(100), 0, [
+        { feeType: 0, recipient: feeRecipient.address, amount: usdc(2) },
+      ]);
+
+      await vault.connect(controller).slashDeferredStake(intentHash, maker.address);
+
+      expect((await vault.getDeferredStake(intentHash)).grossAmount).to.eq(0);
+      expect(await vault.stakeBalance(staker.address)).to.eq(0);
+      expect(await vault.reservedStake(staker.address)).to.eq(0);
+      expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(100));
+      expect(await vault.claimableFees(feeRecipient.address)).to.eq(0);
+      expect(await vault.totalDeferredFees()).to.eq(0);
+      expect(await vault.totalLiabilities()).to.eq(usdc(100));
     });
 
     it("rejects new deferred authorizations while reservations are paused", async () => {
@@ -551,75 +611,20 @@ describe("StakeVault", () => {
       await vault.connect(owner).setStakeOperationsPaused(false, true);
 
       await expect(
-        vault.connect(controller).authorizeDeferredPayout(ethers.utils.id("deferred"), staker.address, 0),
+        vault.connect(controller).authorizeDeferredStake(ethers.utils.id("deferred"), staker.address, 0),
       ).to.be.revertedWithCustomError(vault, "StakeActionPaused");
     });
 
-    it("records an already-authorized deferred payout while new reservations are paused", async () => {
+    it("funds an already-authorized deferred stake while new reservations are paused", async () => {
       const { owner, controller, staker, token, vault } = await deployFixture();
       const intentHash = ethers.utils.id("deferred");
-      await vault.connect(controller).authorizeDeferredPayout(intentHash, staker.address, DAY);
+      await vault.connect(controller).authorizeDeferredStake(intentHash, staker.address, DAY);
       await vault.connect(owner).setStakeOperationsPaused(false, true);
       await token.transfer(vault.address, usdc(100));
 
-      await vault.connect(controller).recordDeferredPayout(intentHash, staker.address, usdc(100), 2 * DAY);
+      await vault.connect(controller).recordDeferredStake(intentHash, staker.address, usdc(100), 2 * DAY, []);
 
-      expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(usdc(100));
-    });
-
-    it("withdraws several matured deferred payouts with one aggregate transfer", async () => {
-      const { controller, staker, recipient, token, vault } = await deployFixture();
-      const firstIntent = ethers.utils.id("first-deferred");
-      const secondIntent = ethers.utils.id("second-deferred");
-      const releaseTime = (await time.latest()) + DAY;
-      await vault.connect(controller).authorizeDeferredPayout(firstIntent, staker.address, releaseTime);
-      await vault.connect(controller).authorizeDeferredPayout(secondIntent, staker.address, releaseTime);
-      await token.transfer(vault.address, usdc(300));
-      await vault.connect(controller).recordDeferredPayout(firstIntent, staker.address, usdc(100), releaseTime);
-      await vault.connect(controller).recordDeferredPayout(secondIntent, staker.address, usdc(200), releaseTime);
-      await time.increase(DAY);
-
-      expect(
-        await vault
-          .connect(staker)
-          .callStatic.withdrawDeferredPayouts([firstIntent, secondIntent], recipient.address),
-      ).to.eq(usdc(300));
-      await expect(
-        vault.connect(staker).withdrawDeferredPayouts([firstIntent, secondIntent], recipient.address),
-      ).to.emit(vault, "DeferredPayoutWithdrawn");
-
-      expect(await token.balanceOf(recipient.address)).to.eq(usdc(300));
-      expect((await vault.getDeferredPayout(firstIntent)).amount).to.eq(0);
-      expect((await vault.getDeferredPayout(secondIntent)).amount).to.eq(0);
-    });
-
-    it("rolls back a deferred payout batch containing an immature payout", async () => {
-      const { controller, staker, recipient, token, vault } = await deployFixture();
-      const firstIntent = ethers.utils.id("first-deferred");
-      const secondIntent = ethers.utils.id("second-deferred");
-      const firstReleaseTime = (await time.latest()) + DAY;
-      const secondReleaseTime = firstReleaseTime + DAY;
-      await vault.connect(controller).authorizeDeferredPayout(firstIntent, staker.address, firstReleaseTime);
-      await vault.connect(controller).authorizeDeferredPayout(secondIntent, staker.address, secondReleaseTime);
-      await token.transfer(vault.address, usdc(200));
-      await vault.connect(controller).recordDeferredPayout(firstIntent, staker.address, usdc(100), firstReleaseTime);
-      await vault.connect(controller).recordDeferredPayout(secondIntent, staker.address, usdc(100), secondReleaseTime);
-      await time.increase(DAY);
-
-      await expect(
-        vault.connect(staker).withdrawDeferredPayouts([firstIntent, secondIntent], recipient.address),
-      ).to.be.revertedWithCustomError(vault, "DeferredPayoutNotMature");
-
-      expect((await vault.getDeferredPayout(firstIntent)).amount).to.eq(usdc(100));
-      expect((await vault.getDeferredPayout(secondIntent)).amount).to.eq(usdc(100));
-    });
-
-    it("rejects an empty deferred payout batch", async () => {
-      const { staker, recipient, vault } = await deployFixture();
-
-      await expect(
-        vault.connect(staker).withdrawDeferredPayouts([], recipient.address),
-      ).to.be.revertedWithCustomError(vault, "EmptyBatch");
+      expect((await vault.getDeferredStake(intentHash)).grossAmount).to.eq(usdc(100));
     });
   });
 
@@ -662,18 +667,18 @@ describe("StakeVault", () => {
     it("lets the previous controller fund its deferred authorization after handover", async () => {
       const { owner, controller, nextController, staker, token, vault } = await deployFixture();
       const intentHash = ethers.utils.id("old-deferred-intent");
-      await vault.connect(controller).authorizeDeferredPayout(intentHash, staker.address, DAY);
+      await vault.connect(controller).authorizeDeferredStake(intentHash, staker.address, DAY);
       await vault.connect(owner).proposeController(nextController.address);
       await time.increase(DAY);
       await vault.connect(nextController).acceptController();
       await token.transfer(vault.address, usdc(100));
 
       await expect(
-        vault.connect(nextController).recordDeferredPayout(intentHash, staker.address, usdc(100), 2 * DAY),
+        vault.connect(nextController).recordDeferredStake(intentHash, staker.address, usdc(100), 2 * DAY, []),
       ).to.be.revertedWithCustomError(vault, "UnauthorizedPositionController");
-      await vault.connect(controller).recordDeferredPayout(intentHash, staker.address, usdc(100), 2 * DAY);
+      await vault.connect(controller).recordDeferredStake(intentHash, staker.address, usdc(100), 2 * DAY, []);
 
-      expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(usdc(100));
+      expect((await vault.getDeferredStake(intentHash)).grossAmount).to.eq(usdc(100));
     });
   });
 });

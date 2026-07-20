@@ -15,6 +15,10 @@ For non-chargebackable payment methods, every intent receives a reusable base-un
 
 For chargebackable payment methods, the base must be zero and the full intent amount remains subject to the existing chargeback policy.
 
+Settlement ownership is a hard cut. The depositor selects a risk hook for future intents; Orchestrator snapshots that hook at admission and calls it after Escrow funds arrive but before any fee or taker payout. The hook receives the exact fee plan plus a temporary allowance for the gross release. It may consume zero or all of the gross amount—never a partial amount. Ordinary post-intent hooks remain selected by the onramper and are independent of risk policy.
+
+Risk hooks are intentionally not governed by an on-chain registry. A consuming hook can take the full gross release and a reverting hook can block settlement, so onramper clients must accept only the canonical hook addresses surfaced by the curator before signaling. Because the depositor can change its deposit hook while a signal transaction is pending, the client must also verify the emitted or stored per-intent hook snapshot after signal confirmation and before paying fiat; a mismatch is cancelled within the grace period. The snapshotted hook is visible on-chain for independent verification.
+
 ## Security Boundary
 
 The reusable base is economic policy, not identity or Sybil protection. The contract intentionally does not approximate account identity with wallet-local counters.
@@ -26,6 +30,9 @@ The model therefore accepts that base-only capacity can be reused without contra
 ## Terminology
 
 - `A`: complete intent amount.
+- `R`: gross amount actually released by Escrow for fulfillment or manual release.
+- `E`: executable settlement amount after protocol, referral, and manager fees.
+- `F`: total independently rounded protocol, referral, and manager fees, `R - E`.
 - `U`: reusable base-unbonded amount configured for the payment method.
 - `B`: bonded amount, `max(A - U, 0)`.
 - `S`: currently free stake for the selected stake owner.
@@ -107,31 +114,37 @@ Rounding is upward. If `B == 0`, both values are zero at every timestamp.
 
 ## Chargeback Curve
 
-For a chargebackable method:
+For stake-backed coverage on a chargebackable method:
 
 ```text
-Q = ceil(A * r / 10_000)
+Qstake = ceil(R * r / 10_000)
 ```
 
-Chargeback coverage is calculated from the complete intent amount. The base-unbonded policy never reduces post-settlement chargeback coverage.
+For deferred-stake coverage:
+
+```text
+Qdeferred = ceil(R * r / 10_000)
+```
+
+V1 policy requires `r = 10_000`, so both stake-backed and deferred coverage equal the gross Escrow release. The base-unbonded policy never reduces post-settlement chargeback coverage.
 
 ## Admission Reservation
 
 For an ordinary position:
 
 ```text
-requiredReservation = max(Gmax, Q)
+requiredReservation = max(Gmax, ceil(A * r / 10_000))
 ```
 
 Cancellation and settlement are mutually exclusive outcomes, so the liabilities are not added.
 
-For deferred payout, the existing chargeback policy remains unchanged. Because chargebackable methods require `U = 0`, the reusable base does not alter deferred admission or settlement accounting.
+This admission value determines whether membership stake can fully back the intent. If it cannot, deferred mode may be selected when enabled and the stake owner can still cover `Gmax`. Deferred proceeds do not exist at admission; only after fulfillment does the gross release become new, fully reserved stake owned by the taker.
 
 ## Modes
 
 - `UNBONDED`: `B == 0`; reserves and slashes no stake.
 - `STAKE_BACKED`: `B > 0` and ordinary stake backs the position.
-- `DEFERRED_PAYOUT`: the configured deferred hook backs settlement while pending stake covers the griefing exposure.
+- `DEFERRED_PAYOUT`: RiskManager pulls the gross release from Orchestrator into StakeVault and converts it into fully reserved taker stake. The fee slice remains contingent until clean maturity.
 
 There is no count-based or lifetime-subsidy mode.
 
@@ -191,9 +204,34 @@ The reusable base itself is not reserved and does not create a portfolio counter
 ### Chargebackable intent
 
 - Requires `U = 0`, so `B = A`.
-- Uses the existing stake-backed or deferred-payout lifecycle.
+- Uses the stake-backed or risk-manager-funded deferred-payout lifecycle selected at admission.
 - Cancellation charges only accrued griefing exposure.
-- Settlement transitions to the configured chargeback coverage.
+- Stake-backed settlement consumes zero payout funds and covers `R`.
+- Deferred settlement consumes `R`, records it as fully reserved taker stake, and defers both `E` and `F`.
+- Manual release uses the same settlement callback and custody invariant as verified fulfillment.
+- Deferred admission requires `intent.to == intent.owner`, so an incompatible third-party payout is rejected before the taker can pay fiat. A consuming risk hook deliberately supersedes ordinary post-intent execution.
+
+## Settlement Flow and Fee Invariant
+
+For both fulfillment and manual release:
+
+```text
+Escrow -> Orchestrator: R
+E = R - fees(R)
+Orchestrator -> snapshotted risk hook: fee plan + temporary allowance(R), settleIntent(context)
+```
+
+The hook may consume either zero or exactly `R`. Orchestrator clears the allowance after a successful callback and checks its token balance delta:
+
+- zero consumption pays the exact fee plan and continues ordinary payout handling with `E`;
+- exact gross consumption marks risk settlement complete and skips every immediate fee, post-intent-hook, and direct-payout transfer;
+- partial consumption, over-pull, balance increase, missing hook code, callback failure, or allowance failure reverts the complete release transaction.
+
+RiskManager consumes zero for unbonded and stake-backed positions. In deferred mode it transfers exactly `R` directly from Orchestrator to StakeVault, credits `R` to the taker's `stakeBalance`, and reserves all of it. Until the chargeback window closes, no taker or fee recipient can withdraw any portion.
+
+On chargeback, the complete gross reservation is slashed and credited to the LP; all contingent fees are cancelled. On clean maturity, the reservation is released, `F` is removed from taker stake and credited as exact claimable fee balances, and `E` becomes free reusable taker stake. Fee withdrawals are pull-based so a blocked fee recipient cannot prevent position maturity.
+
+Proof-based fulfillment chargebacks require the bidirectional payment-nullifier binding written by UnifiedPaymentVerifierV3. Manual release never invokes a payment verifier, so its dedicated chargeback witnesses are the binding authority: their EIP-712 signature commits to the exact intent hash and evidence data, and the dispute nullifier remains globally single-use.
 
 ## Position and Event Surface
 
@@ -204,7 +242,13 @@ The hard-cut ABI:
 - removes `freeTakesUsed` and the consumption event;
 - removes the consumed-allowance flag from positions;
 - adds snapshotted `bondedAmount` to positions and `RiskPositionCreated`;
-- emits `baseUnbondedAmount` in platform configuration updates.
+- emits `baseUnbondedAmount` in platform configuration updates;
+- removes risk-admission return values and every `requiresPostIntentHook` / deferred-hook coupling;
+- snapshots only the depositor-selected risk hook for each intent;
+- adds `settleIntent(RiskSettlementContext)` and `IntentRiskSettlementExecuted`;
+- replaces deferred-hook registration events with `DeferredSettlementFunded` emitted by RiskManager;
+- adds `DeferredStakeFunded`, `DeferredStakeSlashed`, `DeferredStakeReleased`, `DeferredFeeVested`, and `FeeClaimWithdrawn` to StakeVault;
+- records and emits gross, executable, contingent fee, and covered amounts.
 
 Indexers must derive unbonded versus bonded exposure from the position mode and `bondedAmount`. They must not reconstruct removed usage counters.
 
@@ -220,6 +264,11 @@ Indexers must derive unbonded versus bonded exposure from the position mode and 
 8. A chargeback never consumes more than the remaining position coverage.
 9. Governance changes affect only future positions.
 10. All stake-backed positions share the same stake-owner portfolio balance.
+11. Risk settlement consumes either zero or exactly the gross amount, and its allowance is zero afterward.
+12. Before deferred maturity, `stakeBalance increase == reservedStake increase == gross release` and free stake does not increase.
+13. Deferred chargeback credits the LP exactly the gross release and vests no fees.
+14. Clean maturity leaves `net free stake + claimable fees == gross release`, with fee claims matching the original independently rounded fee plan.
+15. Token-bearing settlement failures revert fulfillment or manual release; cancellation reconciliation remains independently fail-open and timestamp-safe.
 
 ## Illustrative Non-Chargebackable Policy
 
@@ -261,15 +310,17 @@ griefing:
 Escrow maximum intent period:    6 hours
 ```
 
-For a 1,000 USDC intent, the maximum griefing bond is 5.75 USDC and ordinary chargeback coverage is 1,000 USDC, so ordinary admission reserves 1,000 USDC.
+For a 1,000 USDC intent, the maximum griefing bond is 5.75 USDC and ordinary chargeback coverage is 1,000 USDC, so ordinary admission reserves 1,000 USDC. If deferred mode is selected and settlement fees total 1.5 USDC, StakeVault receives and reserves the full 1,000 USDC. Chargeback returns 1,000 USDC to the LP; clean maturity produces 998.5 USDC of free taker stake plus 1.5 USDC of fee claims.
 
 ## Rollout
 
 This ABI is a hard cut. A release requires:
 
-1. A fresh `RiskManager` deployment and explicit platform configuration.
-2. A contracts package release containing the new ABI and risk math.
-3. Indexer migration to the new config and position event shapes.
-4. Curator and client migration from usage-based capacity to `base + bonded capacity`.
+1. A fresh `NullifierRegistryV2`, `UnifiedPaymentVerifierV3`, OrchestratorV3, StakeVault, and RiskManager deployment, plus a governance-ratified chargeback witness set that is disjoint from payment-attestation witnesses.
+2. A one-way governance batch that removes every legacy-registry writer and routes the shared payment registry to UPV3; rollback to a legacy writer/verifier is forbidden.
+3. Depositors explicitly select RiskManager as their risk hook for deposits that require this policy. They continue selecting ordinary post-intent hooks independently.
+4. A contracts package release containing the hard-cut ABIs and risk math.
+5. Indexer migration to the new intent-risk snapshot, settlement, and position event shapes.
+6. Curator and client migration from usage-based capacity to `base + bonded capacity`, with no DeferredPayoutHook selection.
 
 Historical deployment artifacts remain immutable. No legacy fields, aliases, or dual event decoding are added to the active contract.

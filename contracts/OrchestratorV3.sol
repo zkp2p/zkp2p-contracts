@@ -10,26 +10,25 @@ import { IIntentRiskHook } from "./interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV2 } from "./interfaces/IOrchestratorV2.sol";
 import { IOrchestratorV3 } from "./interfaces/IOrchestratorV3.sol";
 import { BoundedCall } from "./lib/BoundedCall.sol";
-import { PostIntentHookExecutor } from "./lib/PostIntentHookExecutor.sol";
+import { FeeSettlementLib } from "./lib/FeeSettlementLib.sol";
 
 /**
  * @title OrchestratorV3
  * @notice Extends the V2 intent lifecycle with snapshotted depositor-selected risk callbacks.
  * @dev V2 remains the canonical lifecycle implementation. V3 adds risk admission, terminal
- *      callbacks, and recovery data for settlement callbacks that fail open.
+ *      settlement, and durable recovery data for cancellation callbacks that fail open.
  */
 contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
+
     /* ============ Constants ============ */
 
-    uint256 public constant MIN_RISK_CALLBACK_GAS_LIMIT = 750_000;
-    uint256 public constant MAX_RISK_CALLBACK_RETURN_DATA = 2_048;
+    uint256 internal constant MIN_RISK_CALLBACK_GAS_LIMIT = 750_000;
+    uint256 internal constant MAX_RISK_CALLBACK_RETURN_DATA = 2_048;
 
     /* ============ State Variables ============ */
 
     mapping(address => mapping(uint256 => IIntentRiskHook)) internal depositRiskHooks;
     mapping(bytes32 => IIntentRiskHook) internal intentRiskHooks;
-    mapping(bytes32 => bool) public override intentRequiresPostIntentHook;
-    mapping(bytes32 => IntentSettlement) internal failedIntentSettlements;
     mapping(bytes32 => IntentCancellation) internal failedIntentCancellations;
 
     uint256 public riskCallbackGasLimit;
@@ -161,37 +160,8 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             depositId: intent.depositId,
             amount: intent.amount,
             paymentMethod: intent.paymentMethod,
-            postIntentHook: address(intent.postIntentHook),
             createdAt: uint64(intent.timestamp)
         });
-    }
-
-    /**
-     * @notice Returns the number of unresolved intents for an account in constant time.
-     */
-    function getAccountIntentCount(address _account) external view override returns (uint256) {
-        return accountIntents[_account].length;
-    }
-
-    /**
-     * @notice Returns recovery data for a settlement callback that failed open.
-     * @dev Successful callbacks intentionally leave this record empty.
-     */
-    function getIntentSettlement(
-        bytes32 _intentHash
-    ) external view override returns (uint256 releasedAmount, uint64 settledAt, bool isManualRelease) {
-        bytes32 intentHash = _intentHash;
-        // Relies on IntentSettlement's declared storage order: amount in slot 0, then uint64/bool packed in slot 1.
-        // Exact getter tests lock this layout; update this read if the struct's fields or order ever change.
-        assembly {
-            mstore(0x00, intentHash)
-            mstore(0x20, failedIntentSettlements.slot)
-            let settlementSlot := keccak256(0x00, 0x40)
-            releasedAmount := sload(settlementSlot)
-            let packedLifecycle := sload(add(settlementSlot, 1))
-            settledAt := and(packedLifecycle, 0xffffffffffffffff)
-            isManualRelease := and(shr(64, packedLifecycle), 1)
-        }
     }
 
     /**
@@ -211,15 +181,13 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         IIntentRiskHook riskHook = depositRiskHooks[intent.escrow][intent.depositId];
         intentRiskHooks[_intentHash] = riskHook;
 
-        bool requiresPostIntentHook = BoundedCall.executeRiskAdmission(
+        BoundedCall.executeRiskAdmission(
             riskHook,
             _intentHash,
-            address(intent.postIntentHook),
             riskCallbackGasLimit,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
-        intentRequiresPostIntentHook[_intentHash] = requiresPostIntentHook;
-        emit IntentRiskHookSnapshotted(_intentHash, address(riskHook), requiresPostIntentHook);
+        emit IntentRiskHookSnapshotted(_intentHash, address(riskHook));
     }
 
     /**
@@ -230,59 +198,38 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         IntentResolution _resolution,
         uint256 _releasedAmount
     ) internal override {
-        bool isSettlement = _resolution != IntentResolution.CANCELLED;
-        uint64 settledAt;
-        uint64 cancelledAt;
-
-        if (isSettlement) {
-            settledAt = uint64(block.timestamp);
-            emit IntentSettlementRecorded(_intentHash, _releasedAmount, settledAt);
-        } else {
-            cancelledAt = uint64(block.timestamp);
+        if (_resolution != IntentResolution.CANCELLED) {
+            super._resolveIntent(_intentHash, _resolution, _releasedAmount);
+            return;
         }
 
+        uint64 cancelledAt = uint64(block.timestamp);
         IIntentRiskHook riskHook = intentRiskHooks[_intentHash];
-
         super._resolveIntent(_intentHash, _resolution, _releasedAmount);
         delete intentRiskHooks[_intentHash];
-        delete intentRequiresPostIntentHook[_intentHash];
 
-        bool callbackSucceeded = BoundedCall.executeTerminalRiskCallback(
+        bool callbackSucceeded = BoundedCall.executeRiskCancellation(
             riskHook,
             _intentHash,
-            uint8(_resolution),
-            _releasedAmount,
             riskCallbackGasLimit,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
-        if (isSettlement && !callbackSucceeded) {
-            failedIntentSettlements[_intentHash] = IntentSettlement({
-                releasedAmount: _releasedAmount,
-                settledAt: settledAt,
-                isManualRelease: _resolution == IntentResolution.RELEASED
-            });
-        } else if (!isSettlement && !callbackSucceeded) {
+        if (!callbackSucceeded) {
             failedIntentCancellations[_intentHash] = IntentCancellation({ cancelledAt: cancelledAt });
             emit IntentCancellationRecorded(_intentHash, cancelledAt);
         }
     }
 
     /**
-     * @notice Enforces deferred payout execution for manual releases that required it at admission.
+     * @notice Routes every manual release through the shared post-funds risk-settlement gate.
      */
     function _shouldExecutePostIntentHookOnManualRelease(
-        bytes32 _intentHash
-    ) internal view override returns (bool) {
-        bool requiresPostIntentHook = intentRequiresPostIntentHook[_intentHash];
-        if (requiresPostIntentHook && address(intents[_intentHash].postIntentHook) == address(0)) {
-            revert RequiredPostIntentHookMissing(_intentHash);
-        }
-        return requiresPostIntentHook;
+        bytes32
+    ) internal pure override returns (bool) {
+        return true;
     }
 
-    /**
-     * @notice Executes the V2 settlement transfer through the shared external executor.
-     */
+    /** @notice Gives risk settlement first refusal over gross funds, then executes the exact fee plan on zero consumption. */
     function _collectFeesTransferFundsAndExecuteAction(
         IERC20 _token,
         bytes32 _intentHash,
@@ -293,22 +240,24 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         uint256 _managerFee,
         bool _isManualRelease
     ) internal override {
-        uint256 netFees = _calculateAndTransferFees(
+        IIntentRiskHook riskHook = intentRiskHooks[_intentHash];
+        (address fundsTransferredTo, uint256 netAmount) = FeeSettlementLib.executeSettlement(
             _token,
+            riskHook,
             _intentHash,
             _intent,
             _releaseAmount,
-            _managerFeeRecipient,
-            _managerFee
+            _postIntentHookData,
+            FeeSettlementLib.FeeConfig({
+                protocolFeeRecipient: protocolFeeRecipient,
+                protocolFee: protocolFee,
+                managerFeeRecipient: _managerFeeRecipient,
+                managerFee: _managerFee
+            }),
+            _isManualRelease,
+            riskCallbackGasLimit
         );
-        uint256 netAmount = _releaseAmount - netFees;
-        address fundsTransferredTo = PostIntentHookExecutor.transferOrExecute(
-            _token,
-            _intentHash,
-            _intent,
-            netAmount,
-            _postIntentHookData
-        );
+        delete intentRiskHooks[_intentHash];
 
         emit IntentFulfilled(_intentHash, fundsTransferredTo, netAmount, _isManualRelease);
     }

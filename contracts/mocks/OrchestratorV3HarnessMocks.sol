@@ -1,35 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import { OrchestratorV3 } from "../OrchestratorV3.sol";
 import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
-
-/** @notice State harness for defensive branches that valid admission keeps unreachable. */
-contract OrchestratorV3StateHarness is OrchestratorV3 {
-    constructor(
-        address _owner,
-        uint256 _chainId,
-        address _escrowRegistry,
-        address _paymentVerifierRegistry,
-        address _relayerRegistry,
-        uint256 _protocolFee,
-        address _protocolFeeRecipient,
-        uint256 _riskCallbackGasLimit
-    ) OrchestratorV3(
-        _owner,
-        _chainId,
-        _escrowRegistry,
-        _paymentVerifierRegistry,
-        _relayerRegistry,
-        _protocolFee,
-        _protocolFeeRecipient,
-        _riskCallbackGasLimit
-    ) { }
-
-    function clearPostIntentHook(bytes32 _intentHash) external {
-        delete intents[_intentHash].postIntentHook;
-    }
-}
 
 interface IOrchestratorV3ReentryTarget {
     function cancelIntent(bytes32 _intentHash) external;
@@ -55,13 +27,12 @@ contract OrchestratorV3ReentrantRiskHook is IIntentRiskHook {
         reenterOnCreate = _enabled;
     }
 
-    function onIntentCreated(bytes32) external override returns (bool) {
+    function onIntentCreated(bytes32) external override {
         if (reenterOnCreate) {
             try orchestrator.setDepositRiskHook(escrow, 0, this) {
                 setterReentrySucceeded = true;
             } catch { }
         }
-        return false;
     }
 
     function onIntentCancelled(bytes32 _intentHash) external override {
@@ -75,6 +46,17 @@ contract OrchestratorV3ReentrantRiskHook is IIntentRiskHook {
         } catch { }
     }
 
-    function onIntentFulfilled(bytes32, uint256) external override { }
-    function onIntentReleased(bytes32, uint256) external override { }
+    function settleIntent(RiskSettlementContext calldata _context) external override {
+        try orchestrator.cancelIntent(_context.intentHash) {
+            cancelReentrySucceeded = true;
+        } catch { }
+        bytes32[] memory intentHashes = new bytes32[](1);
+        intentHashes[0] = _context.intentHash;
+        try orchestrator.cleanupOrphanedIntents(intentHashes) {
+            cleanupReentrySucceeded = true;
+        } catch { }
+        try orchestrator.setDepositRiskHook(escrow, 0, this) {
+            setterReentrySucceeded = true;
+        } catch { }
+    }
 }

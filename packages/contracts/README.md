@@ -33,8 +33,8 @@ import type { Escrow, Orchestrator } from "@zkp2p/contracts-v2/types"
 // Import utility functions
 import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils/protocolUtils"
 
-// Import the stable, not-yet-deployed risk-system ABI and exact bigint math helpers
-import { RiskManager } from "@zkp2p/contracts-v2/abis/contracts"
+// Import stable source ABIs for the hard-cut risk-settlement boundary and exact bigint math helpers
+import { IIntentRiskHook, OrchestratorV3, RiskManager } from "@zkp2p/contracts-v2/abis/contracts"
 import { calculateRequiredReservation } from "@zkp2p/contracts-v2/utils/riskMath"
 
 // Example: Create contract instance with ethers

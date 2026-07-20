@@ -19,63 +19,81 @@ library BoundedCall {
     );
 
     error RiskHookAdmissionFailed(bytes32 intentHash, address hook, bytes revertData);
-    error InvalidRiskHookResponse(address hook, bytes response);
-    error RequiredPostIntentHookMissing(bytes32 intentHash);
+    error RiskHookSettlementFailed(bytes32 intentHash, address hook, bytes revertData);
+    error InsufficientGasForRiskCallback(uint256 availableGas, uint256 requiredGas);
 
     /**
      * @notice Executes a fail-closed risk admission callback.
-     * @return requiresPostIntentHook Whether settlement must use the snapshotted post-intent hook.
      */
     function executeRiskAdmission(
         IIntentRiskHook _riskHook,
         bytes32 _intentHash,
-        address _postIntentHook,
         uint256 _gasLimit,
         uint256 _maxReturnDataSize
-    ) public returns (bool requiresPostIntentHook) {
-        if (address(_riskHook) == address(0)) return false;
+    ) public {
+        if (address(_riskHook) == address(0)) return;
+        if (address(_riskHook).code.length == 0) {
+            revert RiskHookAdmissionFailed(_intentHash, address(_riskHook), bytes(""));
+        }
 
-        (bool success, bytes memory response) = callWithBoundedReturnData(
+        (bool success, bytes memory revertData) = callWithBoundedReturnData(
             address(_riskHook),
             _gasLimit,
             _maxReturnDataSize,
             abi.encodeCall(IIntentRiskHook.onIntentCreated, (_intentHash))
         );
-        if (!success) revert RiskHookAdmissionFailed(_intentHash, address(_riskHook), response);
-        if (response.length != 32) revert InvalidRiskHookResponse(address(_riskHook), response);
+        if (!success) revert RiskHookAdmissionFailed(_intentHash, address(_riskHook), revertData);
+    }
 
-        requiresPostIntentHook = abi.decode(response, (bool));
-        if (requiresPostIntentHook && _postIntentHook == address(0)) {
-            revert RequiredPostIntentHookMissing(_intentHash);
+    /**
+     * @notice Executes a fail-closed settlement callback with bounded return data.
+     */
+    function executeRiskSettlement(
+        IIntentRiskHook _riskHook,
+        IIntentRiskHook.RiskSettlementContext memory _context,
+        uint256 _gasLimit,
+        uint256 _maxReturnDataSize
+    ) public {
+        (bool success, bytes memory revertData) = callWithBoundedReturnData(
+            address(_riskHook),
+            _gasLimit,
+            _maxReturnDataSize,
+            abi.encodeCall(IIntentRiskHook.settleIntent, (_context))
+        );
+        if (!success) {
+            revert RiskHookSettlementFailed(_context.intentHash, address(_riskHook), revertData);
         }
     }
 
     /**
-     * @notice Executes a fail-open terminal risk callback.
-     * @param _resolution Zero for cancellation, one for fulfillment, and two for manual release.
+     * @notice Executes the fail-open cancellation callback.
      * @return success Whether the callback completed successfully.
      */
-    function executeTerminalRiskCallback(
+    function executeRiskCancellation(
         IIntentRiskHook _riskHook,
         bytes32 _intentHash,
-        uint8 _resolution,
-        uint256 _releasedAmount,
         uint256 _gasLimit,
         uint256 _maxReturnDataSize
     ) public returns (bool success) {
         if (address(_riskHook) == address(0)) return true;
+        if (address(_riskHook).code.length == 0) {
+            emit RiskHookCallbackFailed(
+                _intentHash,
+                address(_riskHook),
+                IIntentRiskHook.onIntentCancelled.selector,
+                bytes("")
+            );
+            return false;
+        }
 
-        bytes4 callbackSelector;
-        bytes memory callData;
-        if (_resolution == 0) {
-            callbackSelector = IIntentRiskHook.onIntentCancelled.selector;
-            callData = abi.encodeCall(IIntentRiskHook.onIntentCancelled, (_intentHash));
-        } else if (_resolution == 1) {
-            callbackSelector = IIntentRiskHook.onIntentFulfilled.selector;
-            callData = abi.encodeCall(IIntentRiskHook.onIntentFulfilled, (_intentHash, _releasedAmount));
-        } else {
-            callbackSelector = IIntentRiskHook.onIntentReleased.selector;
-            callData = abi.encodeCall(IIntentRiskHook.onIntentReleased, (_intentHash, _releasedAmount));
+        // EIP-150 retains one sixty-fourth of the caller's gas. Revert the outer cancellation
+        // instead of recording a false callback failure when the transaction cannot forward the
+        // configured allowance. The small fixed margin covers call setup before the assembly call.
+        uint256 availableGas = gasleft();
+        uint256 gasAfterMargin = availableGas > 5_000 ? availableGas - 5_000 : 0;
+        uint256 forwardableGas = gasAfterMargin - (gasAfterMargin / 64);
+        if (forwardableGas < _gasLimit) {
+            revert InsufficientGasForRiskCallback(availableGas, _gasLimit);
         }
 
         bytes memory revertData;
@@ -83,10 +101,15 @@ library BoundedCall {
             address(_riskHook),
             _gasLimit,
             _maxReturnDataSize,
-            callData
+            abi.encodeCall(IIntentRiskHook.onIntentCancelled, (_intentHash))
         );
         if (!success) {
-            emit RiskHookCallbackFailed(_intentHash, address(_riskHook), callbackSelector, revertData);
+            emit RiskHookCallbackFailed(
+                _intentHash,
+                address(_riskHook),
+                IIntentRiskHook.onIntentCancelled.selector,
+                revertData
+            );
         }
     }
 

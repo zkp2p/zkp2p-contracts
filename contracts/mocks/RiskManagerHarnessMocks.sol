@@ -38,7 +38,6 @@ contract RiskManagerStateHarness is RiskManager {
         bytes32 _intentHash,
         RiskMode _mode,
         PositionStatus _status,
-        address _deferredPayoutHook,
         bytes32 _paymentMethod,
         uint16 _chargebackReserveBps,
         uint64 _coverageDeadline
@@ -46,7 +45,6 @@ contract RiskManagerStateHarness is RiskManager {
         RiskPosition storage position = riskPositions[_intentHash];
         position.mode = _mode;
         position.status = _status;
-        position.deferredPayoutHook = _deferredPayoutHook;
         position.paymentMethod = _paymentMethod;
         position.chargebackReserveBps = _chargebackReserveBps;
         position.coverageDeadline = _coverageDeadline;
@@ -56,16 +54,24 @@ contract RiskManagerStateHarness is RiskManager {
         riskPositions[_intentHash] = _position;
     }
 
-    function exposedReleaseManualPosition(
+    function exposedSettlePosition(
         bytes32 _intentHash,
-        uint256 _releasedAmount,
-        uint64 _settledAt
+        IERC20 _token,
+        uint256 _grossAmount,
+        uint256 _executableAmount,
+        uint64 _settledAt,
+        bool _isManualRelease,
+        FeeAllocation[] calldata _feeAllocations
     ) external {
-        _releaseManualPosition(_intentHash, _releasedAmount, _settledAt);
-    }
-
-    function exposedSynchronizeSettlement(bytes32 _intentHash) external {
-        _synchronizeSettlement(_intentHash);
+        _settlePosition(
+            _intentHash,
+            _token,
+            _grossAmount,
+            _executableAmount,
+            _settledAt,
+            _isManualRelease,
+            _feeAllocations
+        );
     }
 
     /** @notice Calls a target while this manager's inherited reentrancy guard is entered. */
@@ -90,28 +96,18 @@ contract NullifierRegistryV2StateHarness is NullifierRegistryV2 {
 /**
  * @title RiskManagerOrchestratorHarness
  * @notice Minimal lifecycle source used to exercise RiskManager's isolated recovery and error paths.
- * @dev This mock deliberately exposes setters for durable cancellation and settlement records. Production
+ * @dev This mock deliberately exposes a setter for durable cancellation records. Production
  *      integration behavior remains covered against OrchestratorV3 in `riskManager.spec.ts`.
  */
 contract RiskManagerOrchestratorHarness {
     mapping(bytes32 => IOrchestratorV3.RiskIntentData) internal riskIntents;
     mapping(bytes32 => uint64) internal cancellationTimes;
-    mapping(bytes32 => IOrchestratorV3.IntentSettlement) internal settlements;
     function setRiskIntent(bytes32 _intentHash, IOrchestratorV3.RiskIntentData calldata _intent) external {
         riskIntents[_intentHash] = _intent;
     }
 
     function setIntentCancellation(bytes32 _intentHash, uint64 _cancelledAt) external {
         cancellationTimes[_intentHash] = _cancelledAt;
-    }
-
-    function setIntentSettlement(
-        bytes32 _intentHash,
-        uint256 _releasedAmount,
-        uint64 _settledAt,
-        bool _isManualRelease
-    ) external {
-        settlements[_intentHash] = IOrchestratorV3.IntentSettlement(_releasedAmount, _settledAt, _isManualRelease);
     }
 
     function getRiskIntent(bytes32 _intentHash) external view returns (IOrchestratorV3.RiskIntentData memory) {
@@ -122,34 +118,23 @@ contract RiskManagerOrchestratorHarness {
         return cancellationTimes[_intentHash];
     }
 
-    function getIntentSettlement(bytes32 _intentHash) external view returns (uint256, uint64, bool) {
-        IOrchestratorV3.IntentSettlement memory settlement = settlements[_intentHash];
-        return (settlement.releasedAmount, settlement.settledAt, settlement.isManualRelease);
-    }
-
-    function createPosition(IIntentRiskHook _hook, bytes32 _intentHash) external returns (bool) {
-        return _hook.onIntentCreated(_intentHash);
+    function createPosition(IIntentRiskHook _hook, bytes32 _intentHash) external {
+        _hook.onIntentCreated(_intentHash);
     }
 
     function cancelPosition(IIntentRiskHook _hook, bytes32 _intentHash) external {
         _hook.onIntentCancelled(_intentHash);
     }
 
-    function fulfillPosition(IIntentRiskHook _hook, bytes32 _intentHash, uint256 _releasedAmount) external {
-        _hook.onIntentFulfilled(_intentHash, _releasedAmount);
-    }
-
-    function releasePosition(IIntentRiskHook _hook, bytes32 _intentHash, uint256 _releasedAmount) external {
-        _hook.onIntentReleased(_intentHash, _releasedAmount);
-    }
-
-    function registerDeferredPayout(
-        IRiskManager _manager,
-        bytes32 _intentHash,
-        address _beneficiary,
-        uint256 _amount
+    function settlePosition(
+        IIntentRiskHook _hook,
+        IIntentRiskHook.RiskSettlementContext calldata _context
     ) external {
-        _manager.registerDeferredPayout(_intentHash, _beneficiary, _amount);
+        IERC20 token = IERC20(_context.token);
+        token.approve(address(_hook), 0);
+        token.approve(address(_hook), _context.grossAmount);
+        _hook.settleIntent(_context);
+        token.approve(address(_hook), 0);
     }
 }
 
@@ -198,11 +183,13 @@ contract RiskManagerVaultHarness {
         uint64 releaseTime;
     }
 
-    struct DeferredPayout {
-        address beneficiary;
-        uint256 amount;
+    struct DeferredStake {
+        address staker;
+        uint256 grossAmount;
+        uint256 feeAmount;
         uint64 releaseTime;
         bool authorized;
+        bool funded;
     }
 
     mapping(address => uint256) public stakeBalance;
@@ -212,7 +199,9 @@ contract RiskManagerVaultHarness {
     mapping(address => bool) public isExiting;
     mapping(address => uint256) public claimableCompensation;
     mapping(bytes32 => Reservation) public reservations;
-    mapping(bytes32 => DeferredPayout) public deferredPayouts;
+    mapping(bytes32 => DeferredStake) public deferredStakes;
+    mapping(bytes32 => IIntentRiskHook.FeeAllocation[]) internal deferredFeeAllocations;
+    mapping(address => uint256) public claimableFees;
     uint256 public acceptControllerCalls;
     IERC20 public stakeToken = IERC20(address(0xbeef));
 
@@ -271,30 +260,58 @@ contract RiskManagerVaultHarness {
         claimableCompensation[_maker] += _amount;
     }
 
-    function authorizeDeferredPayout(bytes32 _intentHash, address _beneficiary, uint64 _releaseTime) external {
-        deferredPayouts[_intentHash] = DeferredPayout(_beneficiary, 0, _releaseTime, true);
+    function authorizeDeferredStake(bytes32 _intentHash, address _staker, uint64 _releaseTime) external {
+        deferredStakes[_intentHash] = DeferredStake(_staker, 0, 0, _releaseTime, true, false);
     }
 
-    function releaseDeferredPayoutAuthorization(bytes32 _intentHash) external {
-        delete deferredPayouts[_intentHash];
+    function releaseDeferredStakeAuthorization(bytes32 _intentHash) external {
+        delete deferredStakes[_intentHash];
     }
 
-    function recordDeferredPayout(
+    function recordDeferredStake(
         bytes32 _intentHash,
-        address _beneficiary,
-        uint256 _amount,
-        uint64 _releaseTime
+        address _staker,
+        uint256 _grossAmount,
+        uint64 _releaseTime,
+        IIntentRiskHook.FeeAllocation[] calldata _feeAllocations
     ) external {
-        DeferredPayout storage payout = deferredPayouts[_intentHash];
-        require(payout.authorized, "not authorized");
-        payout.beneficiary = _beneficiary;
-        payout.amount = _amount;
-        payout.releaseTime = _releaseTime;
+        DeferredStake storage deferredStake = deferredStakes[_intentHash];
+        require(deferredStake.authorized, "not authorized");
+        deferredStake.staker = _staker;
+        deferredStake.grossAmount = _grossAmount;
+        deferredStake.releaseTime = _releaseTime;
+        deferredStake.funded = true;
+        for (uint256 index = 0; index < _feeAllocations.length; index++) {
+            deferredStake.feeAmount += _feeAllocations[index].amount;
+            deferredFeeAllocations[_intentHash].push(_feeAllocations[index]);
+        }
+        stakeBalance[_staker] += _grossAmount;
+        reservedStake[_staker] += _grossAmount;
+        reservations[_intentHash] = Reservation(_staker, _grossAmount, _releaseTime);
     }
 
-    function slashDeferredPayout(bytes32 _intentHash, address _maker, uint256 _amount) external {
-        deferredPayouts[_intentHash].amount -= _amount;
-        claimableCompensation[_maker] += _amount;
+    function releaseDeferredStake(bytes32 _intentHash) external {
+        DeferredStake memory deferredStake = deferredStakes[_intentHash];
+        reservedStake[deferredStake.staker] -= deferredStake.grossAmount;
+        stakeBalance[deferredStake.staker] -= deferredStake.feeAmount;
+        freeStake[deferredStake.staker] += deferredStake.grossAmount - deferredStake.feeAmount;
+        IIntentRiskHook.FeeAllocation[] storage allocations = deferredFeeAllocations[_intentHash];
+        for (uint256 index = 0; index < allocations.length; index++) {
+            claimableFees[allocations[index].recipient] += allocations[index].amount;
+        }
+        delete reservations[_intentHash];
+        delete deferredFeeAllocations[_intentHash];
+        delete deferredStakes[_intentHash];
+    }
+
+    function slashDeferredStake(bytes32 _intentHash, address _maker) external {
+        DeferredStake memory deferredStake = deferredStakes[_intentHash];
+        reservedStake[deferredStake.staker] -= deferredStake.grossAmount;
+        stakeBalance[deferredStake.staker] -= deferredStake.grossAmount;
+        claimableCompensation[_maker] += deferredStake.grossAmount;
+        delete reservations[_intentHash];
+        delete deferredFeeAllocations[_intentHash];
+        delete deferredStakes[_intentHash];
     }
 
     function acceptController() external {

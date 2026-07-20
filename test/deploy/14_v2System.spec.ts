@@ -216,9 +216,9 @@ describe("V2 System Deployment", () => {
     // MultiAttestationVerifier (localhost/base_staging: wired in deploy script 24; base:
     // wired via multisig Safe batch). Coverage lives in test/deploy/24_multiAttestationVerifier.spec.ts.
 
-    it("should have write permission on NullifierRegistry", async () => {
+    it("should revoke the retired V2 verifier's legacy NullifierRegistry permission after the V3 cutover", async () => {
       const hasPermission = await nullifierRegistry.isWriter(unifiedPaymentVerifierV2.address);
-      expect(hasPermission).to.be.true;
+      expect(hasPermission).to.be.false;
     });
   });
 });
