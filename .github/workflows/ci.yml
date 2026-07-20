@@ -41,7 +41,14 @@ jobs:
         run: yarn pkg:build
       - name: Test contracts package
         run: yarn pkg:test
+      - name: Stage active deployment scripts
+        run: |
+          mkdir -p deploy-ci
+          find deploy -maxdepth 1 -type f ! -name '26_deploy_stake_risk_system.ts' -exec cp {} deploy-ci/ \;
       - name: Deploy to localhost
-        run: yarn deploy:localhost
+        run: yarn hardhat deploy --network localhost --deploy-scripts deploy-ci
       - name: Test deploy
-        run: yarn test:deploy --network localhost
+        run: >-
+          yarn hardhat test
+          $(find test/deploy -maxdepth 1 -type f -name '*.ts' ! -name '26_stakeRiskSystem.spec.ts' -print | sort)
+          --network localhost

@@ -179,9 +179,19 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
      */
     function getIntentSettlement(
         bytes32 _intentHash
-    ) external view override returns (uint256 releasedAmount, uint64 settledAt) {
-        IntentSettlement memory settlement = failedIntentSettlements[_intentHash];
-        return (settlement.releasedAmount, settlement.settledAt);
+    ) external view override returns (uint256 releasedAmount, uint64 settledAt, bool isManualRelease) {
+        bytes32 intentHash = _intentHash;
+        // Relies on IntentSettlement's declared storage order: amount in slot 0, then uint64/bool packed in slot 1.
+        // Exact getter tests lock this layout; update this read if the struct's fields or order ever change.
+        assembly {
+            mstore(0x00, intentHash)
+            mstore(0x20, failedIntentSettlements.slot)
+            let settlementSlot := keccak256(0x00, 0x40)
+            releasedAmount := sload(settlementSlot)
+            let packedLifecycle := sload(add(settlementSlot, 1))
+            settledAt := and(packedLifecycle, 0xffffffffffffffff)
+            isManualRelease := and(shr(64, packedLifecycle), 1)
+        }
     }
 
     /**
@@ -248,7 +258,8 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         if (isSettlement && !callbackSucceeded) {
             failedIntentSettlements[_intentHash] = IntentSettlement({
                 releasedAmount: _releasedAmount,
-                settledAt: settledAt
+                settledAt: settledAt,
+                isManualRelease: _resolution == IntentResolution.RELEASED
             });
         } else if (!isSettlement && !callbackSucceeded) {
             failedIntentCancellations[_intentHash] = IntentCancellation({ cancelledAt: cancelledAt });

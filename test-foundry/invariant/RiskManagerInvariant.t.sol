@@ -10,6 +10,7 @@ import { RiskManager } from "../../contracts/RiskManager.sol";
 import { StakeVault } from "../../contracts/StakeVault.sol";
 import { IEscrowV2 } from "../../contracts/interfaces/IEscrowV2.sol";
 import { IOrchestratorV3 } from "../../contracts/interfaces/IOrchestratorV3.sol";
+import { INullifierRegistryV2 } from "../../contracts/interfaces/INullifierRegistryV2.sol";
 import { IRiskManager } from "../../contracts/interfaces/IRiskManager.sol";
 import { IStakeVault } from "../../contracts/interfaces/IStakeVault.sol";
 import { AttestationVerifierMock } from "../../contracts/mocks/AttestationVerifierMock.sol";
@@ -138,7 +139,8 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
             address(this),
             IOrchestratorV3(address(handler)),
             IStakeVault(address(vault)),
-            verifier
+            verifier,
+            INullifierRegistryV2(address(this))
         );
         handler.setManager(manager);
         vault.initializeController(address(manager));
