@@ -37,6 +37,7 @@ describe("Generic Zelle Payment Method Configuration", () => {
   let legacyUnifiedPaymentVerifier: UnifiedPaymentVerifier;
   let unifiedPaymentVerifierV2: UnifiedPaymentVerifier;
   let v2VerifierAddress: string;
+  let activeVerifierAddress: string;
 
   const network: string = deployments.getNetworkName();
 
@@ -54,6 +55,7 @@ describe("Generic Zelle Payment Method Configuration", () => {
     legacyUnifiedPaymentVerifier = new UnifiedPaymentVerifier__factory(deployer.wallet).attach(legacyVerifierAddress);
 
     v2VerifierAddress = getDeployedContractAddress(network, "UnifiedPaymentVerifierV2");
+    activeVerifierAddress = getDeployedContractAddress(network, "UnifiedPaymentVerifierV3");
     unifiedPaymentVerifierV2 = new UnifiedPaymentVerifier__factory(deployer.wallet).attach(v2VerifierAddress);
   });
 
@@ -61,13 +63,13 @@ describe("Generic Zelle Payment Method Configuration", () => {
     expect(ZELLE_PROVIDER_CONFIG.paymentMethodHash).to.eq(EXPECTED_ZELLE_PAYMENT_METHOD_HASH);
   });
 
-  it("registers generic Zelle in PaymentVerifierRegistry with V2 verifier", async () => {
+  it("registers generic Zelle in PaymentVerifierRegistry with the active V3 verifier", async () => {
     const isPaymentMethod = await paymentVerifierRegistry.isPaymentMethod(ZELLE_PROVIDER_CONFIG.paymentMethodHash);
     const verifier = await paymentVerifierRegistry.getVerifier(ZELLE_PROVIDER_CONFIG.paymentMethodHash);
     const currencies = await paymentVerifierRegistry.getCurrencies(ZELLE_PROVIDER_CONFIG.paymentMethodHash);
 
     expect(isPaymentMethod).to.be.true;
-    expect(verifier).to.eq(v2VerifierAddress);
+    expect(verifier).to.eq(activeVerifierAddress);
     expect(currencies).to.deep.eq(ZELLE_PROVIDER_CONFIG.currencies);
   });
 

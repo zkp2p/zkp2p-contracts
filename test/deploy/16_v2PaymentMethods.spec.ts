@@ -51,6 +51,7 @@ describe("V2 Payment Methods Configuration", () => {
   let paymentVerifierRegistry: PaymentVerifierRegistry;
   let unifiedPaymentVerifierV2: UnifiedPaymentVerifier;
   let v2VerifierAddress: string;
+  let activeVerifierAddress: string;
 
   const network: string = deployments.getNetworkName();
 
@@ -65,6 +66,7 @@ describe("V2 Payment Methods Configuration", () => {
     paymentVerifierRegistry = new PaymentVerifierRegistry__factory(deployer.wallet).attach(paymentVerifierRegistryAddress);
 
     v2VerifierAddress = getDeployedContractAddress(network, "UnifiedPaymentVerifierV2");
+    activeVerifierAddress = getDeployedContractAddress(network, "UnifiedPaymentVerifierV3");
     unifiedPaymentVerifierV2 = new UnifiedPaymentVerifier__factory(deployer.wallet).attach(v2VerifierAddress);
   });
 
@@ -75,9 +77,9 @@ describe("V2 Payment Methods Configuration", () => {
         expect(isPaymentMethod).to.be.true;
       });
 
-      it("should point to V2 verifier", async () => {
+      it("should point to the active V3 verifier", async () => {
         const verifier = await paymentVerifierRegistry.getVerifier(config.paymentMethodHash);
-        expect(verifier).to.eq(v2VerifierAddress);
+        expect(verifier).to.eq(activeVerifierAddress);
       });
 
       it("should have correct currencies", async () => {

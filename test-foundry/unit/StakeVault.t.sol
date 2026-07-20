@@ -407,7 +407,7 @@ contract StakeVaultTest is Test {
             abi.encodeWithSelector(
                 StakeVault.DeferredPayoutNotMature.selector,
                 secondReleaseTime,
-                uint64(block.timestamp)
+                firstReleaseTime
             )
         );
         vm.prank(staker);

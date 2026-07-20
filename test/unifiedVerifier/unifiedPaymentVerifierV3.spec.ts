@@ -57,9 +57,17 @@ describe("UnifiedPaymentVerifierV3 payment-to-intent bindings", () => {
     );
     const boundedCall = await (await ethers.getContractFactory("BoundedCall", owner.wallet)).deploy();
     const executor = await (await ethers.getContractFactory("PostIntentHookExecutor", owner.wallet)).deploy();
+    const riskSettlementExecutor = await (await ethers.getContractFactory("RiskSettlementExecutor", {
+      signer: owner.wallet,
+      libraries: { BoundedCall: boundedCall.address },
+    })).deploy();
     const orchestratorV3 = await (await ethers.getContractFactory("OrchestratorV3", {
       signer: owner.wallet,
-      libraries: { BoundedCall: boundedCall.address, PostIntentHookExecutor: executor.address },
+      libraries: {
+        BoundedCall: boundedCall.address,
+        PostIntentHookExecutor: executor.address,
+        RiskSettlementExecutor: riskSettlementExecutor.address,
+      },
     })).deploy(
       owner.address,
       chainId,

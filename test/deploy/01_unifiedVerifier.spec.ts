@@ -103,9 +103,9 @@ describe("UnifiedPaymentVerifier Deployment", () => {
   });
 
   describe("Write Permissions", async () => {
-    it("should add write permissions to the NullifierRegistry", async () => {
+    it("should revoke the retired verifier's legacy NullifierRegistry permission after the V3 cutover", async () => {
       const hasWritePermission = await nullifierRegistry.isWriter(unifiedPaymentVerifier.address);
-      expect(hasWritePermission).to.be.true;
+      expect(hasWritePermission).to.be.false;
     });
   });
 });

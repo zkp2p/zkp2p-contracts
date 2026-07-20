@@ -380,7 +380,7 @@ describe("Deployed Zelle payment method state", () => {
 
     expect(await paymentVerifierRegistry.isPaymentMethod(GENERIC_ZELLE_PAYMENT_METHOD_HASH)).to.be.true;
     expect(await paymentVerifierRegistry.getVerifier(GENERIC_ZELLE_PAYMENT_METHOD_HASH)).to.eq(
-      getDeployedContractAddress("UnifiedPaymentVerifierV2")
+      getDeployedContractAddress("UnifiedPaymentVerifierV3")
     );
     expect(v2PaymentMethods).to.include(GENERIC_ZELLE_PAYMENT_METHOD_HASH);
   });
