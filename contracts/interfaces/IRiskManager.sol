@@ -41,7 +41,7 @@ interface IRiskManager is IIntentRiskHook {
         bool chargebackable;
         /// @notice Whether held settlement proceeds may replace membership stake as post-settlement coverage.
         bool deferredPayoutEnabled;
-        /// @notice Portion of the exact released amount retained as coverage; chargebackable v1 policy requires 10_000.
+        /// @notice Portion retained as coverage; chargebackable v1 policy requires 10_000.
         uint16 reserveBps;
         /// @notice Half-open period after settlement during which authenticated chargebacks may slash coverage.
         uint64 riskWindow;
@@ -85,11 +85,9 @@ interface IRiskManager is IIntentRiskHook {
         RiskMode mode;
         /// @notice Current lifecycle state; terminal transitions never return to pending.
         PositionStatus status;
-        /// @notice Canonical deferred hook snapshotted only for a deferred-payout position.
-        address deferredPayoutHook;
-        /// @notice Original intent recipient entitled to unslashed deferred proceeds.
+        /// @notice Original intent recipient used to validate settlement context.
         address payoutRecipient;
-        /// @notice Snapshotted chargeback reserve ratio applied to the exact released amount.
+        /// @notice Snapshotted reserve ratio applied to gross stake or gross deferred coverage.
         uint16 chargebackReserveBps;
         /// @notice Snapshotted hourly slope used by the time-linear cancellation formula.
         uint32 griefingPenaltyBpsPerHour;
@@ -107,6 +105,8 @@ interface IRiskManager is IIntentRiskHook {
         uint64 settledAt;
         /// @notice First timestamp excluded from the half-open chargeback window.
         uint64 coverageDeadline;
+        /// @notice Whether settlement was authorized by the maker without payment-proof nullification.
+        bool isManualRelease;
         /// @notice Original locked amount on which maximum pending liabilities were calculated.
         uint256 intentAmount;
         /// @notice Portion of the intent amount exposed to the griefing curve after subtracting the base tranche.
@@ -115,12 +115,18 @@ interface IRiskManager is IIntentRiskHook {
         uint256 maxGriefingBond;
         /// @notice Stake reserved at admission before terminal resizing or release.
         uint256 initialReservation;
-        /// @notice Remaining slashable membership-stake coverage for this position.
+        /// @notice Remaining slashable stake or deferred proceeds for this position.
         uint256 reservedAmount;
-        /// @notice Exact amount released from Escrow at settlement before post-hook fees.
-        uint256 releasedAmount;
-        /// @notice Total net proceeds recorded in StakeVault for a deferred payout.
-        uint256 deferredPayoutAmount;
+        /// @notice Exact gross amount released from Escrow before protocol, referral, and manager fees.
+        uint256 grossReleasedAmount;
+        /// @notice Exact post-fee amount reserved for the taker after the hook sees the gross settlement plan.
+        uint256 executableAmount;
+        /// @notice Exact gross amount compensable by chargeback for either backed mode.
+        uint256 coveredAmount;
+        /// @notice Gross proceeds converted into fully reserved taker stake for deferred settlement.
+        uint256 deferredStakeAmount;
+        /// @notice Contingent fee portion that vests only after clean maturity.
+        uint256 deferredFeeAmount;
         /// @notice Cumulative compensation already charged against this position.
         uint256 slashedAmount;
     }
@@ -206,54 +212,48 @@ interface IRiskManager is IIntentRiskHook {
         address indexed lp,
         RiskMode mode,
         uint256 grossReleasedAmount,
-        uint256 stakeCoverage,
-        uint256 releasedStakeReservation,
+        uint256 executableAmount,
+        uint256 chargebackCoverage,
+        uint256 releasedReservation,
         uint64 settledAt,
-        uint64 coverageDeadline
+        uint64 coverageDeadline,
+        bool isManualRelease
     );
-    event DeferredPayoutRegistered(
+    event DeferredSettlementFunded(
         bytes32 indexed intentHash,
-        address indexed beneficiary,
-        uint256 deferredCoverage,
-        uint256 stakeCoverage,
+        address indexed staker,
+        uint256 grossAmount,
+        uint256 executableAmount,
+        uint256 feeAmount,
+        uint256 chargebackCoverage,
         uint64 coverageDeadline
-    );
-    event HybridCoverageSlashed(
-        bytes32 indexed intentHash,
-        uint256 deferredCoverage,
-        uint256 stakeCoverage,
-        uint256 grossCompensation,
-        uint256 remainingCoverage
     );
     event RiskPositionReleased(
         bytes32 indexed intentHash,
         address indexed stakeOwner,
         RiskMode mode,
-        uint256 releasedStakeCoverage
+        uint256 releasedCoverage
     );
     event ChargebackSettled(
         bytes32 indexed intentHash,
         address indexed stakeOwner,
         address indexed lp,
         RiskMode mode,
-        uint256 releasedAmount,
+        uint256 grossReleasedAmount,
         uint256 compensatedAmount,
         uint256 totalCompensated,
         uint256 remainingCoverage,
         bytes32 disputeId
     );
     event AttestationVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
-    event DeferredPayoutHookUpdated(address indexed previousHook, address indexed newHook);
     event AdmissionPausedUpdated(bool paused);
 
     /* ============ Errors ============ */
 
     error ZeroAddress();
-    error InvalidContract(address account);
     error ZeroAmount();
     error EmptyBatch();
     error UnauthorizedOrchestrator(address caller);
-    error UnauthorizedDeferredPayoutHook(address caller);
     error AdmissionPaused();
     error InvalidPlatformConfig(bytes32 paymentMethod);
     error PlatformDisabled(bytes32 paymentMethod);
@@ -261,18 +261,18 @@ interface IRiskManager is IIntentRiskHook {
     error GriefingPenaltyExceedsIntentAmount(bytes32 paymentMethod);
     error StakeOwnerExiting(address taker, address stakeOwner);
     error InsufficientCollateral(address stakeOwner, uint256 available, uint256 required);
-    error DeferredPayoutHookRequired(address expectedHook, address actualHook);
-    error DeferredPayoutHookNotAllowed(address hook);
     error PositionAlreadyExists(bytes32 intentHash);
     error PositionNotPending(bytes32 intentHash, PositionStatus status);
     error PositionNotSettled(bytes32 intentHash, PositionStatus status);
     error PositionModeMismatch(bytes32 intentHash, RiskMode mode);
     error IntentStateMismatch(bytes32 intentHash);
     error CancellationNotRecorded(bytes32 intentHash);
-    error SettlementNotRecorded(bytes32 intentHash);
     error IntentTokenMismatch(address expectedToken, address actualToken);
-    error DeferredPayoutAlreadyRegistered(bytes32 intentHash);
-    error DeferredPayoutExceedsReleasedAmount(uint256 payoutAmount, uint256 releasedAmount);
+    error InvalidSettlementAmounts(uint256 grossAmount, uint256 executableAmount);
+    error DeferredStakeRecipientMismatch(address taker, address recipient);
+    error DeferredStakeTransferMismatch(uint256 expectedAmount, uint256 actualAmount);
+    error InvalidFeeAllocationCount(uint256 count, uint256 maximum);
+    error InvalidFeeAllocations(uint256 expectedAmount, uint256 actualAmount);
     error PositionNotMature(uint64 coverageDeadline, uint64 currentTime);
     error InvalidAttestation();
     error InvalidPaymentBinding(bytes32 intentHash, bytes32 nullifier);
@@ -288,8 +288,6 @@ interface IRiskManager is IIntentRiskHook {
     function setPlatformRiskConfig(bytes32 _paymentMethod, PlatformRiskConfig calldata _config) external;
     /** @notice Replaces the evidence verifier used for subsequently submitted chargeback attestations. */
     function setAttestationVerifier(address _verifier) external;
-    /** @notice Sets the canonical deferred hook snapshotted by future deferred-payout positions. */
-    function setDeferredPayoutHook(address _hook) external;
     /** @notice Pauses or resumes new admission while leaving terminal accounting and withdrawals available. */
     function setAdmissionPaused(bool _paused) external;
     /** @notice Accepts a previously proposed delayed StakeVault controller handover on behalf of this manager. */
@@ -297,21 +295,15 @@ interface IRiskManager is IIntentRiskHook {
 
     /* ============ Lifecycle Functions ============ */
 
-    /** @notice Records exact net deferred coverage and resizes stake coverage to the gross-release gap. */
-    function registerDeferredPayout(bytes32 _intentHash, address _beneficiary, uint256 _amount) external;
     /** @notice Permissionlessly applies one durable failed-cancellation record using its original timestamp. */
     function reconcileCancellation(bytes32 _intentHash) external;
     /** @notice Atomically reconciles several durable failed-cancellation records. */
     function reconcileCancellations(bytes32[] calldata _intentHashes) external;
-    /** @notice Permissionlessly applies one durable failed-settlement record. */
-    function reconcileSettlement(bytes32 _intentHash) external;
-    /** @notice Atomically reconciles several durable failed-settlement records. */
-    function reconcileSettlements(bytes32[] calldata _intentHashes) external;
     /** @notice Ends slashability and releases remaining stake coverage at or after its deadline. */
     function releaseMaturedPosition(bytes32 _intentHash) external;
     /** @notice Atomically matures several settled positions. */
     function releaseMaturedPositions(bytes32[] calldata _intentHashes) external;
-    /** @notice Authenticates chargeback evidence and compensates the LP for the full gross released amount. */
+    /** @notice Authenticates chargeback evidence and compensates the LP for the full covered amount. */
     function submitChargeback(ChargebackAttestation calldata _attestation) external;
 
     /* ============ View and Math Functions ============ */

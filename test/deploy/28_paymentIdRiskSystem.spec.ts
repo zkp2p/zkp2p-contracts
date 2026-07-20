@@ -49,10 +49,6 @@ describe("Payment-ID-bound final risk system deployment", () => {
       ),
       vault: await ethers.getContractAt("StakeVault", deployedAddress("StakeVaultPaymentId")),
       manager: await ethers.getContractAt("RiskManager", deployedAddress("RiskManagerPaymentId")),
-      deferredHook: await ethers.getContractAt(
-        "DeferredPayoutHook",
-        deployedAddress("DeferredPayoutHookPaymentId"),
-      ),
       chargebackVerifier: await ethers.getContractAt(
         "MultiAttestationVerifier",
         deployedAddress("ChargebackAttestationVerifierPaymentId"),
@@ -120,7 +116,7 @@ describe("Payment-ID-bound final risk system deployment", () => {
 
   it("wires and owns the versioned risk components", async () => {
     const [deployer] = await ethers.getSigners();
-    const { newVerifier, orchestrator, vault, manager, deferredHook, chargebackVerifier, nullifierRegistryV2 } =
+    const { newVerifier, orchestrator, vault, manager, chargebackVerifier, nullifierRegistryV2 } =
       await contracts();
     const expectedOwner = MULTI_SIG[network] || deployer.address;
     for (const owned of [nullifierRegistryV2, newVerifier, orchestrator, vault, manager, chargebackVerifier]) {
@@ -132,8 +128,9 @@ describe("Payment-ID-bound final risk system deployment", () => {
     expect(await manager.orchestrator()).to.eq(orchestrator.address);
     expect(await manager.stakeVault()).to.eq(vault.address);
     expect(await manager.nullifierRegistry()).to.eq(nullifierRegistryV2.address);
-    expect(await manager.deferredPayoutHook()).to.eq(deferredHook.address);
-    expect(await deferredHook.riskManager()).to.eq(manager.address);
+    const functions = manager.interface.functions as Record<string, unknown>;
+    expect(functions["deferredPayoutHook()"]).to.eq(undefined);
+    expect(functions["setDeferredPayoutHook(address)"]).to.eq(undefined);
   });
 
   it("uses a dedicated 2-of-3 chargeback witness set disjoint from live payment witnesses", async () => {
@@ -264,7 +261,7 @@ describe("Payment-ID-bound final risk system deployment", () => {
     expect(() => assertCanonicalHardCutAuthorizations({
       orchestratorRegistered: false,
       newVerifierWriter: true,
-      legacyVerifierRevoked: true,
+      legacyWritersRevoked: true,
       paymentMethodsRouted: true,
       nullifierPredecessorMatches: true,
       managerNullifierRegistryMatches: true,
@@ -276,7 +273,7 @@ describe("Payment-ID-bound final risk system deployment", () => {
     expect(() => assertCanonicalHardCutAuthorizations({
       orchestratorRegistered: true,
       newVerifierWriter: false,
-      legacyVerifierRevoked: true,
+      legacyWritersRevoked: true,
       paymentMethodsRouted: true,
       nullifierPredecessorMatches: true,
       managerNullifierRegistryMatches: true,
@@ -288,7 +285,7 @@ describe("Payment-ID-bound final risk system deployment", () => {
     expect(() => assertCanonicalHardCutAuthorizations({
       orchestratorRegistered: true,
       newVerifierWriter: true,
-      legacyVerifierRevoked: true,
+      legacyWritersRevoked: true,
       paymentMethodsRouted: true,
       nullifierPredecessorMatches: true,
       managerNullifierRegistryMatches: true,

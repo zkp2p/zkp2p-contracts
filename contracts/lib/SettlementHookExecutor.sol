@@ -65,4 +65,9 @@ library PostIntentHookExecutor {
         _token.safeApprove(address(_intent.settlementHook), 0);
         return address(_intent.settlementHook);
     }
+
+    /** @notice Safely transfers a manual-release payout without executing its optional post hook. */
+    function transferTo(IERC20 _token, address _recipient, uint256 _amount) public {
+        _token.safeTransfer(_recipient, _amount);
+    }
 }

@@ -6,9 +6,6 @@ import { IEscrow } from "../interfaces/IEscrow.sol";
 import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
 import { IOrchestratorV3 } from "../interfaces/IOrchestratorV3.sol";
-import { BoundedCall } from "./BoundedCall.sol";
-import { OrchestratorV3FeeLib } from "./OrchestratorV3FeeLib.sol";
-import { RiskCallbackRecorder } from "./RiskCallbackRecorder.sol";
 
 /**
  * @title OrchestratorV3RiskLib
@@ -18,8 +15,6 @@ import { RiskCallbackRecorder } from "./RiskCallbackRecorder.sol";
  */
 library OrchestratorV3RiskLib {
     event DepositRiskHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
-    event IntentRiskHookSnapshotted(bytes32 indexed intentHash, address indexed riskHook, bool requiresSettlementHook);
-    event IntentSettlementRecorded(bytes32 indexed intentHash, uint256 releasedAmount, uint64 settledAt);
 
     error ZeroAddress();
     error InvalidContract(address account);
@@ -65,78 +60,7 @@ library OrchestratorV3RiskLib {
             depositId: intent.depositId,
             amount: intent.amount,
             paymentMethod: intent.paymentMethod,
-            settlementHook: address(intent.settlementHook),
             createdAt: uint64(intent.timestamp)
         });
-    }
-
-    /** @notice Snapshots the selected hook and executes fail-closed intent admission. */
-    function snapshotAndAdmit(
-        mapping(address => mapping(uint256 => IIntentRiskHook)) storage _depositRiskHooks,
-        mapping(bytes32 => IIntentRiskHook) storage _intentRiskHooks,
-        mapping(bytes32 => bool) storage _intentRequiresSettlementHook,
-        mapping(bytes32 => IOrchestratorV2.Intent) storage _intents,
-        bytes32 _intentHash,
-        uint256 _callbackGasLimit,
-        uint256 _postCallGasReserve,
-        uint256 _maxReturnData
-    ) external {
-        IOrchestratorV2.Intent storage intent = _intents[_intentHash];
-        IIntentRiskHook riskHook = _depositRiskHooks[intent.escrow][intent.depositId];
-        _intentRiskHooks[_intentHash] = riskHook;
-
-        bool requiresSettlementHook = BoundedCall.executeRiskAdmission(
-            riskHook,
-            _intentHash,
-            address(intent.settlementHook),
-            _callbackGasLimit,
-            _postCallGasReserve,
-            _maxReturnData
-        );
-        _intentRequiresSettlementHook[_intentHash] = requiresSettlementHook;
-        emit IntentRiskHookSnapshotted(_intentHash, address(riskHook), requiresSettlementHook);
-    }
-
-    /** @notice Clears terminal snapshots, invokes the bounded callback, and stores retry data on failure. */
-    function executeTerminalCallback(
-        mapping(bytes32 => IIntentRiskHook) storage _intentRiskHooks,
-        mapping(bytes32 => bool) storage _intentRequiresSettlementHook,
-        mapping(bytes32 => OrchestratorV3FeeLib.IntentFeeSnapshot) storage _intentFeeSnapshots,
-        mapping(bytes32 => IOrchestratorV3.IntentSettlement) storage _failedSettlements,
-        mapping(bytes32 => IOrchestratorV3.IntentCancellation) storage _failedCancellations,
-        bytes32 _intentHash,
-        uint8 _resolution,
-        uint256 _releasedAmount,
-        uint256 _callbackGasLimit,
-        uint256 _postCallGasReserve,
-        uint256 _maxReturnData
-    ) external {
-        bool isSettlement = _resolution != 0;
-        uint64 resolvedAt = uint64(block.timestamp);
-        if (isSettlement) emit IntentSettlementRecorded(_intentHash, _releasedAmount, resolvedAt);
-
-        IIntentRiskHook riskHook = _intentRiskHooks[_intentHash];
-        delete _intentRiskHooks[_intentHash];
-        delete _intentRequiresSettlementHook[_intentHash];
-        if (!isSettlement) delete _intentFeeSnapshots[_intentHash];
-
-        bool callbackSucceeded = BoundedCall.executeTerminalRiskCallback(
-            riskHook,
-            _intentHash,
-            _resolution,
-            _releasedAmount,
-            _callbackGasLimit,
-            _postCallGasReserve,
-            _maxReturnData
-        );
-        RiskCallbackRecorder.recordFailure(
-            _failedSettlements,
-            _failedCancellations,
-            _intentHash,
-            _resolution,
-            _releasedAmount,
-            resolvedAt,
-            callbackSucceeded
-        );
     }
 }

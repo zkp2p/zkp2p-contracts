@@ -1,11 +1,6 @@
 # @zkp2p/contracts-v2
 
-Official npm package source for ZKP2P smart contract interfaces, ABIs, addresses, and utilities.
-
-> **Release status:** the latest npm release is `0.3.0`, published before the merged affine-risk and
-> direct-chargeback source changes. It does not contain the new `abis/contracts` or `utils/riskMath`
-> exports described under [Unpublished Source Exports](#unpublished-source-exports). Do not use the
-> source manifest's unchanged `0.3.0` version as evidence that those paths are available from npm.
+Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
 ## Installation
 
@@ -37,6 +32,10 @@ import type { Escrow, Orchestrator } from "@zkp2p/contracts-v2/types"
 
 // Import utility functions
 import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils/protocolUtils"
+
+// Import stable source ABIs for the hard-cut risk-settlement boundary and exact bigint math helpers
+import { IIntentRiskHook, OrchestratorV3, RiskManager } from "@zkp2p/contracts-v2/abis/contracts"
+import { calculateRequiredReservation } from "@zkp2p/contracts-v2/utils/riskMath"
 
 // Example: Create contract instance with ethers
 import { ethers } from 'ethers';
@@ -165,24 +164,13 @@ All modules are directly accessible via subpath exports:
 
 - `@zkp2p/contracts-v2/addresses` - Contract addresses for all networks
 - `@zkp2p/contracts-v2/abis/<network>` - Contract ABIs per network (e.g., `/abis/baseStaging`)
+- `@zkp2p/contracts-v2/abis/contracts` - Stable source ABIs for approved but not-yet-deployed contracts
 - `@zkp2p/contracts-v2/abis/<network>/<contract>.json` - Direct JSON import for specific contracts
 - `@zkp2p/contracts-v2/constants/<network>` - Constants per network
 - `@zkp2p/contracts-v2/paymentMethods` - Payment method configs
 - `@zkp2p/contracts-v2/utils/protocolUtils` - Protocol utilities
+- `@zkp2p/contracts-v2/utils/riskMath` - Exact bigint capacity, reservation, and penalty formulas
 - `@zkp2p/contracts-v2/types` - TypeScript types
-
-## Unpublished Source Exports
-
-The current repository source builds additional exports for the merged v3 architecture:
-
-- `@zkp2p/contracts-v2/abis/contracts`: source ABIs for `OrchestratorV3`, `RiskManager`, `StakeVault`,
-  and `DeferredPayoutHook`, independent of a network deployment.
-- `@zkp2p/contracts-v2/utils/riskMath`: exact `bigint` helpers for affine reservation, hybrid deferred
-  fee-gap reservation, capacity, and elapsed cancellation-penalty calculations.
-
-These paths are development source until a later package version is built, validated, and published.
-They must not be imported from npm `0.3.0`. Network-specific v3 address exports describe the recorded
-Base staging affine deployment and do not imply that the final hybrid direct-chargeback implementation is live.
 
 ### Export Format Details
 
@@ -207,31 +195,9 @@ Each network export provides:
 
 ## Version
 
-Source manifest version: `0.3.0`
-
-Latest npm version: `0.3.0` (does not include the unpublished source exports above)
+Current version: `0.0.1-rc5`
 
 ## Development
-
-### OrchestratorV3 gating-signature migration
-
-`OrchestratorV3` treats a deposit gating signature as a single-intent authorization. The
-`SignalIntentParams` tuple is unchanged, but legacy reusable V2 signatures are not valid on V3.
-Curator and client signers must:
-
-1. Build the final `SignalIntentParams`, leaving `gatingServiceSignature` empty.
-2. Read `getIntentGatingNonce(taker, escrow, depositId, paymentMethod)` if the nonce is needed for
-   observability or caching.
-3. Call `getIntentGatingMessageHash(params, taker)` on the exact orchestrator that will receive the
-   intent.
-4. Sign the returned 32-byte hash with EIP-191 `personal_sign`/`signMessage` and place the result in
-   `gatingServiceSignature`.
-
-The signed hash binds the taker, recipient, amount, escrow, deposit, payment method, fiat currency,
-conversion rate, referral fees, settlement hook, pre-intent hook data, persisted signal hook data,
-expiry, chain id, verifying orchestrator, and current scoped nonce. A successful gated intent
-increments the nonce. Failed transactions roll it back, and deposits without a gating service do not
-consume a nonce. Nonces are independent per `(taker, escrow, depositId, paymentMethod)`.
 
 ### Build & Publish
 
@@ -248,6 +214,6 @@ MIT
 
 ## Links
 
-- [GitHub Repository](https://github.com/zkp2p/zkp2p-contracts)
+- [GitHub Repository](https://github.com/zkp2p/zkp2p-v2-contracts)
 - [Documentation](https://docs.zkp2p.xyz)
 - [Website](https://zkp2p.xyz)

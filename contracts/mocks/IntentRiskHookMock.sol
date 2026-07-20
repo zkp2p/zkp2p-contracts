@@ -3,91 +3,77 @@
 pragma solidity ^0.8.18;
 
 import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title IntentRiskHookMock
  * @notice Configurable lifecycle hook used to exercise OrchestratorV3 callback behavior.
  */
 contract IntentRiskHookMock is IIntentRiskHook {
-    bool public requiresSettlementHook;
+    using SafeERC20 for IERC20;
+
     bool public revertOnCreate;
-    bool public consumeAllCreateGas;
-    bool public revertOnTerminal;
-    bool public consumeAllTerminalGas;
-    uint256 public terminalRevertDataSize;
+    bool public revertOnCallback;
+    uint256 public callbackRevertDataSize;
+    uint256 public settlementPullAmount;
+    uint256 public settlementTransferAmount;
     bytes32 public lastIntentHash;
-    uint256 public lastReleasedAmount;
+    RiskSettlementContext public lastSettlementContext;
     uint256 public createdCalls;
     uint256 public cancelledCalls;
-    uint256 public fulfilledCalls;
-    uint256 public releasedCalls;
-
-    function setRequiresSettlementHook(bool _required) external {
-        requiresSettlementHook = _required;
-    }
+    uint256 public settlementCalls;
 
     function setRevertOnCreate(bool _shouldRevert) external {
         revertOnCreate = _shouldRevert;
     }
 
-    function setConsumeAllCreateGas(bool _shouldConsume) external {
-        consumeAllCreateGas = _shouldConsume;
+    function setRevertOnCallback(bool _shouldRevert) external {
+        revertOnCallback = _shouldRevert;
     }
 
-    function setRevertOnTerminal(bool _shouldRevert) external {
-        revertOnTerminal = _shouldRevert;
+    function setCallbackRevertDataSize(uint256 _size) external {
+        callbackRevertDataSize = _size;
     }
 
-    function setConsumeAllTerminalGas(bool _shouldConsume) external {
-        consumeAllTerminalGas = _shouldConsume;
+    function setSettlementPullAmount(uint256 _amount) external {
+        settlementPullAmount = _amount;
     }
 
-    function setTerminalRevertDataSize(uint256 _size) external {
-        terminalRevertDataSize = _size;
+    function setSettlementTransferAmount(uint256 _amount) external {
+        settlementTransferAmount = _amount;
     }
 
-    function onIntentCreated(bytes32 _intentHash) external override returns (bool) {
-        if (consumeAllCreateGas) {
-            assembly ("memory-safe") {
-                invalid()
-            }
-        }
+    function onIntentCreated(bytes32 _intentHash) external override {
         if (revertOnCreate) revert("risk admission failed");
         lastIntentHash = _intentHash;
         createdCalls++;
-        return requiresSettlementHook;
     }
 
     function onIntentCancelled(bytes32 _intentHash) external override {
         _revertWithConfiguredData();
-        if (revertOnTerminal) revert("risk cancellation failed");
+        if (revertOnCallback) revert("risk cancellation failed");
         lastIntentHash = _intentHash;
         cancelledCalls++;
     }
 
-    function onIntentFulfilled(bytes32 _intentHash, uint256 _releasedAmount) external override {
+    function settleIntent(RiskSettlementContext calldata _context) external override {
         _revertWithConfiguredData();
-        if (revertOnTerminal) revert("risk fulfillment failed");
-        lastIntentHash = _intentHash;
-        lastReleasedAmount = _releasedAmount;
-        fulfilledCalls++;
-    }
+        if (revertOnCallback) revert("risk settlement failed");
+        lastIntentHash = _context.intentHash;
+        lastSettlementContext = _context;
+        settlementCalls++;
 
-    function onIntentReleased(bytes32 _intentHash, uint256 _releasedAmount) external override {
-        _revertWithConfiguredData();
-        if (revertOnTerminal) revert("risk release failed");
-        lastIntentHash = _intentHash;
-        lastReleasedAmount = _releasedAmount;
-        releasedCalls++;
+        if (settlementPullAmount != 0) {
+            IERC20(_context.token).safeTransferFrom(msg.sender, address(this), settlementPullAmount);
+        }
+        if (settlementTransferAmount != 0) {
+            IERC20(_context.token).safeTransfer(msg.sender, settlementTransferAmount);
+        }
     }
 
     function _revertWithConfiguredData() internal view {
-        if (consumeAllTerminalGas) {
-            assembly ("memory-safe") {
-                invalid()
-            }
-        }
-        uint256 revertDataSize = terminalRevertDataSize;
+        uint256 revertDataSize = callbackRevertDataSize;
         if (revertDataSize == 0) return;
 
         assembly ("memory-safe") {

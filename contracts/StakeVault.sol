@@ -7,11 +7,12 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
+import { IIntentRiskHook } from "./interfaces/IIntentRiskHook.sol";
 import { IStakeVault } from "./interfaces/IStakeVault.sol";
 
 /**
  * @title StakeVault
- * @notice Stable, policy-agnostic USDC accounting for taker stake, reservations, and deferred payouts.
+ * @notice Stable, policy-agnostic USDC accounting for taker stake, reservations, and deferred fee claims.
  * @dev The controller decides why funds are reserved or slashed. The vault only enforces accounting,
  *      exit, maturity, and solvency rules. User and maker withdrawals remain available while stake
  *      admission is paused.
@@ -44,12 +45,15 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     mapping(address => ExitRequest) internal exitRequests;
     mapping(address => StakeWithdrawalRequest) internal stakeWithdrawalRequests;
     mapping(bytes32 => Reservation) internal reservations;
-    mapping(bytes32 => DeferredPayout) internal deferredPayouts;
+    mapping(bytes32 => DeferredStake) internal deferredStakes;
+    mapping(bytes32 => IIntentRiskHook.FeeAllocation[]) internal deferredFeeAllocations;
     mapping(address => uint256) public override claimableCompensation;
+    mapping(address => uint256) public override claimableFees;
 
     uint256 public totalStaked;
-    uint256 public totalDeferredPayouts;
+    uint256 public override totalDeferredFees;
     uint256 public totalClaimableCompensation;
+    uint256 public override totalClaimableFees;
 
     /* ============ Errors ============ */
 
@@ -77,12 +81,12 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     error ReservationAlreadyExists(bytes32 intentHash);
     error ReservationNotFound(bytes32 intentHash);
     error InvalidReservationAmount(uint256 amount, uint256 reservedAmount);
-    error DeferredPayoutAlreadyExists(bytes32 intentHash);
-    error DeferredPayoutNotFound(bytes32 intentHash);
-    error DeferredPayoutAlreadyFunded(bytes32 intentHash, uint256 amount);
-    error DeferredPayoutBeneficiaryMismatch(address expected, address actual);
-    error DeferredPayoutNotMature(uint64 releaseTime, uint64 currentTime);
-    error UnauthorizedBeneficiary(address caller, address beneficiary);
+    error DeferredStakeAlreadyExists(bytes32 intentHash);
+    error DeferredStakeNotFound(bytes32 intentHash);
+    error DeferredStakeAlreadyFunded(bytes32 intentHash, uint256 amount);
+    error DeferredStakeOwnerMismatch(address expected, address actual);
+    error DeferredStakeNotMature(uint64 releaseTime, uint64 currentTime);
+    error InvalidDeferredFeeTotal(uint256 grossAmount, uint256 feeAmount);
     error InsufficientUnaccountedTokens(uint256 available, uint256 required);
     error UnexpectedTokenAmount(uint256 expected, uint256 received);
     error InvalidControllerChangeDelay(uint64 delay);
@@ -373,56 +377,27 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         emit CompensationWithdrawn(msg.sender, _recipient, amount);
     }
 
-    /**
-     * @notice Withdraws matured deferred proceeds owned by the caller.
-     * @param _intentHash Intent whose proceeds are being withdrawn.
-     * @param _recipient Address receiving the stake token.
-     */
-    function withdrawDeferredPayout(bytes32 _intentHash, address _recipient) external override nonReentrant {
-        if (_recipient == address(0)) revert ZeroAddress();
+    /** @notice Withdraws every matured deferred fee claim owned by the caller. */
+    function withdrawFeeClaim(address _recipient) external override nonReentrant {
+        _withdrawFeeClaim(msg.sender, _recipient);
+    }
 
-        uint256 amount = _consumeDeferredPayout(_intentHash, msg.sender, _recipient);
+    /** @notice Permissionlessly transfers a beneficiary's matured fee claims to that beneficiary. */
+    function withdrawFeeClaimFor(address _beneficiary) external override nonReentrant {
+        _withdrawFeeClaim(_beneficiary, _beneficiary);
+    }
+
+    function _withdrawFeeClaim(address _beneficiary, address _recipient) internal {
+        if (_beneficiary == address(0) || _recipient == address(0)) revert ZeroAddress();
+
+        uint256 amount = claimableFees[_beneficiary];
+        if (amount == 0) revert ZeroAmount();
+
+        delete claimableFees[_beneficiary];
+        totalClaimableFees -= amount;
         stakeToken.safeTransfer(_recipient, amount);
-    }
 
-    /**
-     * @notice Withdraws multiple matured deferred payouts owned by the caller.
-     * @dev The batch is atomic and transfers the aggregate amount once.
-     * @param _intentHashes Intents whose proceeds are being withdrawn.
-     * @param _recipient Address receiving the stake token.
-     * @return totalAmount Aggregate amount withdrawn.
-     */
-    function withdrawDeferredPayouts(
-        bytes32[] calldata _intentHashes,
-        address _recipient
-    ) external override nonReentrant returns (uint256 totalAmount) {
-        if (_recipient == address(0)) revert ZeroAddress();
-        if (_intentHashes.length == 0) revert EmptyBatch();
-
-        for (uint256 intentIndex = 0; intentIndex < _intentHashes.length; intentIndex++) {
-            totalAmount += _consumeDeferredPayout(_intentHashes[intentIndex], msg.sender, _recipient);
-        }
-
-        stakeToken.safeTransfer(_recipient, totalAmount);
-    }
-
-    function _consumeDeferredPayout(
-        bytes32 _intentHash,
-        address _beneficiary,
-        address _recipient
-    ) internal returns (uint256 amount) {
-        DeferredPayout memory payout = deferredPayouts[_intentHash];
-        if (payout.beneficiary == address(0) || payout.amount == 0) revert DeferredPayoutNotFound(_intentHash);
-        if (_beneficiary != payout.beneficiary) revert UnauthorizedBeneficiary(_beneficiary, payout.beneficiary);
-        if (block.timestamp < payout.releaseTime) {
-            revert DeferredPayoutNotMature(payout.releaseTime, uint64(block.timestamp));
-        }
-
-        delete deferredPayouts[_intentHash];
-        totalDeferredPayouts -= payout.amount;
-
-        emit DeferredPayoutWithdrawn(_intentHash, payout.beneficiary, _recipient, payout.amount);
-        return payout.amount;
+        emit FeeClaimWithdrawn(_beneficiary, _recipient, amount);
     }
 
     /* ============ Controller Functions ============ */
@@ -557,99 +532,208 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
      * @dev Admission is blocked while reservations are paused. Later terminal accounting remains
      *      available to the snapshotted controller even after a pause or controller handover.
      */
-    function authorizeDeferredPayout(
+    function authorizeDeferredStake(
         bytes32 _intentHash,
-        address _beneficiary,
+        address _staker,
         uint64 _releaseTime
     ) external override onlyController {
         if (reservationsPaused) revert StakeActionPaused();
-        if (_beneficiary == address(0)) revert ZeroAddress();
-        if (deferredPayouts[_intentHash].beneficiary != address(0)) revert DeferredPayoutAlreadyExists(_intentHash);
+        if (_staker == address(0)) revert ZeroAddress();
+        if (deferredStakes[_intentHash].staker != address(0)) revert DeferredStakeAlreadyExists(_intentHash);
 
-        deferredPayouts[_intentHash] = DeferredPayout({
-            beneficiary: _beneficiary,
+        deferredStakes[_intentHash] = DeferredStake({
+            staker: _staker,
             controller: msg.sender,
-            amount: 0,
-            releaseTime: _releaseTime
+            grossAmount: 0,
+            feeAmount: 0,
+            releaseTime: _releaseTime,
+            funded: false
         });
 
-        emit DeferredPayoutAuthorized(_intentHash, _beneficiary, msg.sender, _releaseTime);
+        emit DeferredStakeAuthorized(_intentHash, _staker, msg.sender, _releaseTime);
     }
 
     /**
      * @notice Removes an unfunded deferred-position authorization after cancellation.
      */
-    function releaseDeferredPayoutAuthorization(bytes32 _intentHash) external override {
-        DeferredPayout memory payout = deferredPayouts[_intentHash];
-        if (payout.beneficiary == address(0)) revert DeferredPayoutNotFound(_intentHash);
-        _requirePositionController(payout.controller);
-        if (payout.amount != 0) revert DeferredPayoutAlreadyFunded(_intentHash, payout.amount);
+    function releaseDeferredStakeAuthorization(bytes32 _intentHash) external override {
+        DeferredStake memory deferredStake = deferredStakes[_intentHash];
+        if (deferredStake.staker == address(0)) revert DeferredStakeNotFound(_intentHash);
+        _requirePositionController(deferredStake.controller);
+        if (deferredStake.funded) revert DeferredStakeAlreadyFunded(_intentHash, deferredStake.grossAmount);
 
-        delete deferredPayouts[_intentHash];
-        emit DeferredPayoutAuthorizationReleased(_intentHash, payout.beneficiary, payout.controller);
+        delete deferredStakes[_intentHash];
+        emit DeferredStakeAuthorizationReleased(_intentHash, deferredStake.staker, deferredStake.controller);
     }
 
     /**
-     * @notice Accounts for deferred proceeds already transferred into the vault.
+     * @notice Converts a gross deferred settlement already transferred into the vault into fully reserved stake.
+     * @dev The gross amount is immediately part of `stakeBalance`, while the full amount remains reserved until
+     *      chargeback or maturity. Fee allocations vest only at clean maturity; before then the maker can receive
+     *      the full gross amount through a slash.
      */
-    function recordDeferredPayout(
+    function recordDeferredStake(
         bytes32 _intentHash,
-        address _beneficiary,
-        uint256 _amount,
-        uint64 _releaseTime
+        address _staker,
+        uint256 _grossAmount,
+        uint64 _releaseTime,
+        IIntentRiskHook.FeeAllocation[] calldata _feeAllocations
     ) external override {
-        if (_beneficiary == address(0)) revert ZeroAddress();
-        if (_amount == 0) revert ZeroAmount();
+        if (_staker == address(0)) revert ZeroAddress();
+        if (_grossAmount == 0) revert ZeroAmount();
 
-        DeferredPayout storage payout = deferredPayouts[_intentHash];
-        if (payout.beneficiary == address(0)) revert DeferredPayoutNotFound(_intentHash);
-        _requirePositionController(payout.controller);
-        if (payout.amount != 0) revert DeferredPayoutAlreadyFunded(_intentHash, payout.amount);
-        if (_beneficiary != payout.beneficiary) {
-            revert DeferredPayoutBeneficiaryMismatch(payout.beneficiary, _beneficiary);
+        DeferredStake storage deferredStake = deferredStakes[_intentHash];
+        if (deferredStake.staker == address(0)) revert DeferredStakeNotFound(_intentHash);
+        _requirePositionController(deferredStake.controller);
+        if (deferredStake.funded) revert DeferredStakeAlreadyFunded(_intentHash, deferredStake.grossAmount);
+        if (_staker != deferredStake.staker) {
+            revert DeferredStakeOwnerMismatch(deferredStake.staker, _staker);
         }
+        if (reservations[_intentHash].active) revert ReservationAlreadyExists(_intentHash);
+
+        uint256 feeAmount;
+        for (uint256 allocationIndex = 0; allocationIndex < _feeAllocations.length; allocationIndex++) {
+            IIntentRiskHook.FeeAllocation calldata allocation = _feeAllocations[allocationIndex];
+            if (allocation.recipient == address(0)) revert ZeroAddress();
+            feeAmount += allocation.amount;
+        }
+        if (feeAmount >= _grossAmount) revert InvalidDeferredFeeTotal(_grossAmount, feeAmount);
 
         uint256 accountedBefore = totalLiabilities();
         uint256 vaultBalance = stakeToken.balanceOf(address(this));
         uint256 unaccounted = vaultBalance > accountedBefore ? vaultBalance - accountedBefore : 0;
-        if (_amount > unaccounted) revert InsufficientUnaccountedTokens(unaccounted, _amount);
+        if (_grossAmount > unaccounted) revert InsufficientUnaccountedTokens(unaccounted, _grossAmount);
 
-        payout.amount = _amount;
-        payout.releaseTime = _releaseTime;
-        totalDeferredPayouts += _amount;
+        deferredStake.grossAmount = _grossAmount;
+        deferredStake.feeAmount = feeAmount;
+        deferredStake.releaseTime = _releaseTime;
+        deferredStake.funded = true;
+        for (uint256 allocationIndex = 0; allocationIndex < _feeAllocations.length; allocationIndex++) {
+            deferredFeeAllocations[_intentHash].push(_feeAllocations[allocationIndex]);
+        }
 
-        emit DeferredPayoutRecorded(_intentHash, _beneficiary, _amount, _releaseTime);
+        reservations[_intentHash] = Reservation({
+            staker: _staker,
+            controller: deferredStake.controller,
+            amount: _grossAmount,
+            releaseTime: _releaseTime,
+            active: true
+        });
+        stakeBalance[_staker] += _grossAmount;
+        reservedStake[_staker] += _grossAmount;
+        totalStaked += _grossAmount;
+        totalDeferredFees += feeAmount;
+
+        emit StakeReserved(
+            _intentHash,
+            _staker,
+            deferredStake.controller,
+            _grossAmount,
+            reservedStake[_staker],
+            _releaseTime
+        );
+        emit DeferredStakeFunded(
+            _intentHash,
+            _staker,
+            _grossAmount,
+            feeAmount,
+            _grossAmount - feeAmount,
+            _releaseTime
+        );
     }
 
-    /**
-     * @notice Slashes deferred proceeds and credits maker compensation.
-     */
-    function slashDeferredPayout(
-        bytes32 _intentHash,
-        address _maker,
-        uint256 _amount
-    ) external override {
-        if (_maker == address(0)) revert ZeroAddress();
-        if (_amount == 0) revert ZeroAmount();
+    /** @notice Vests deferred fee claims and releases the remaining net amount as reusable stake. */
+    function releaseDeferredStake(bytes32 _intentHash) external override {
+        DeferredStake memory deferredStake = deferredStakes[_intentHash];
+        if (deferredStake.staker == address(0) || !deferredStake.funded) {
+            revert DeferredStakeNotFound(_intentHash);
+        }
+        _requirePositionController(deferredStake.controller);
+        if (block.timestamp < deferredStake.releaseTime) {
+            revert DeferredStakeNotMature(deferredStake.releaseTime, uint64(block.timestamp));
+        }
 
-        DeferredPayout storage payout = deferredPayouts[_intentHash];
-        if (payout.beneficiary == address(0) || payout.amount == 0) revert DeferredPayoutNotFound(_intentHash);
-        _requirePositionController(payout.controller);
-        if (_amount > payout.amount) revert InvalidReservationAmount(_amount, payout.amount);
+        Reservation memory reservation = reservations[_intentHash];
+        if (!reservation.active || reservation.amount != deferredStake.grossAmount) {
+            revert InvalidReservationAmount(reservation.amount, deferredStake.grossAmount);
+        }
 
-        address beneficiary = payout.beneficiary;
-        payout.amount -= _amount;
-        uint256 remainingAmount = payout.amount;
-        if (remainingAmount == 0) delete deferredPayouts[_intentHash];
-        totalDeferredPayouts -= _amount;
-        _creditCompensation(_intentHash, _maker, _amount);
+        delete reservations[_intentHash];
+        reservedStake[deferredStake.staker] -= deferredStake.grossAmount;
+        stakeBalance[deferredStake.staker] -= deferredStake.feeAmount;
+        totalStaked -= deferredStake.feeAmount;
+        totalDeferredFees -= deferredStake.feeAmount;
 
-        emit DeferredPayoutSlashed(
+        IIntentRiskHook.FeeAllocation[] storage allocations = deferredFeeAllocations[_intentHash];
+        for (uint256 allocationIndex = 0; allocationIndex < allocations.length; allocationIndex++) {
+            IIntentRiskHook.FeeAllocation storage allocation = allocations[allocationIndex];
+            claimableFees[allocation.recipient] += allocation.amount;
+            totalClaimableFees += allocation.amount;
+            emit DeferredFeeVested(
+                _intentHash,
+                allocation.recipient,
+                allocation.feeType,
+                allocation.amount,
+                claimableFees[allocation.recipient]
+            );
+        }
+
+        delete deferredFeeAllocations[_intentHash];
+        delete deferredStakes[_intentHash];
+
+        emit StakeReservationReleased(
             _intentHash,
-            beneficiary,
+            deferredStake.staker,
+            deferredStake.grossAmount,
+            reservedStake[deferredStake.staker]
+        );
+        emit DeferredStakeReleased(
+            _intentHash,
+            deferredStake.staker,
+            deferredStake.grossAmount,
+            deferredStake.feeAmount,
+            deferredStake.grossAmount - deferredStake.feeAmount
+        );
+    }
+
+    /** @notice Slashes the full gross deferred stake and cancels every contingent fee allocation. */
+    function slashDeferredStake(bytes32 _intentHash, address _maker) external override {
+        if (_maker == address(0)) revert ZeroAddress();
+
+        DeferredStake memory deferredStake = deferredStakes[_intentHash];
+        if (deferredStake.staker == address(0) || !deferredStake.funded) {
+            revert DeferredStakeNotFound(_intentHash);
+        }
+        _requirePositionController(deferredStake.controller);
+
+        Reservation memory reservation = reservations[_intentHash];
+        if (!reservation.active || reservation.amount != deferredStake.grossAmount) {
+            revert InvalidReservationAmount(reservation.amount, deferredStake.grossAmount);
+        }
+
+        delete reservations[_intentHash];
+        delete deferredFeeAllocations[_intentHash];
+        delete deferredStakes[_intentHash];
+        reservedStake[deferredStake.staker] -= deferredStake.grossAmount;
+        stakeBalance[deferredStake.staker] -= deferredStake.grossAmount;
+        totalStaked -= deferredStake.grossAmount;
+        totalDeferredFees -= deferredStake.feeAmount;
+        _creditCompensation(_intentHash, _maker, deferredStake.grossAmount);
+
+        emit StakeSlashed(
+            _intentHash,
+            deferredStake.staker,
             _maker,
-            _amount,
-            remainingAmount
+            deferredStake.grossAmount,
+            stakeBalance[deferredStake.staker],
+            0
+        );
+        emit DeferredStakeSlashed(
+            _intentHash,
+            deferredStake.staker,
+            _maker,
+            deferredStake.grossAmount,
+            deferredStake.feeAmount
         );
     }
 
@@ -783,18 +867,23 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         return reservations[_intentHash];
     }
 
-    /**
-     * @notice Returns one deferred payout record.
-     */
-    function getDeferredPayout(bytes32 _intentHash) external view override returns (DeferredPayout memory) {
-        return deferredPayouts[_intentHash];
+    /** @notice Returns one deferred-stake authorization or funded position. */
+    function getDeferredStake(bytes32 _intentHash) external view override returns (DeferredStake memory) {
+        return deferredStakes[_intentHash];
+    }
+
+    /** @notice Returns the exact fee plan that remains contingent until maturity. */
+    function getDeferredFeeAllocations(
+        bytes32 _intentHash
+    ) external view override returns (IIntentRiskHook.FeeAllocation[] memory) {
+        return deferredFeeAllocations[_intentHash];
     }
 
     /**
      * @notice Returns all token-denominated vault liabilities.
      */
     function totalLiabilities() public view override returns (uint256) {
-        return totalStaked + totalDeferredPayouts + totalClaimableCompensation;
+        return totalStaked + totalClaimableCompensation + totalClaimableFees;
     }
 
     /* ============ Internal Functions ============ */

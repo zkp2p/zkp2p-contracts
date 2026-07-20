@@ -7,12 +7,17 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 
 import { IDeferredPayoutHook } from "../interfaces/IDeferredPayoutHook.sol";
 import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
-import { IRiskManager } from "../interfaces/IRiskManager.sol";
 import { IStakeVault } from "../interfaces/IStakeVault.sol";
+
+/** @dev Retired ABI retained only so immutable historical deployment scripts remain reproducible. */
+interface ILegacyDeferredRiskManager {
+    function orchestrator() external view returns (address);
+    function registerDeferredPayout(bytes32 _intentHash, address _beneficiary, uint256 _amount) external;
+}
 
 /**
  * @title DeferredPayoutHook
- * @notice Moves fulfilled net proceeds directly from an authorized orchestrator into StakeVault.
+ * @notice RETIRED: historical post-intent adapter superseded by direct risk-manager settlement.
  * @dev Tokens never pass through RiskManager. The transfer and risk accounting are atomic: if the
  *      manager rejects registration, the complete hook execution reverts.
  */
@@ -23,7 +28,7 @@ contract DeferredPayoutHook is IDeferredPayoutHook {
 
     IERC20 public immutable payoutToken;
     IStakeVault public immutable stakeVault;
-    IRiskManager public immutable riskManager;
+    ILegacyDeferredRiskManager public immutable riskManager;
     IOrchestratorRegistry public immutable orchestratorRegistry;
 
     /* ============ Constructor ============ */
@@ -38,7 +43,7 @@ contract DeferredPayoutHook is IDeferredPayoutHook {
     constructor(
         IERC20 _payoutToken,
         IStakeVault _stakeVault,
-        IRiskManager _riskManager,
+        ILegacyDeferredRiskManager _riskManager,
         IOrchestratorRegistry _orchestratorRegistry
     ) {
         if (
@@ -49,18 +54,9 @@ contract DeferredPayoutHook is IDeferredPayoutHook {
         ) {
             revert ZeroAddress();
         }
-        _requireContract(address(_payoutToken));
-        _requireContract(address(_stakeVault));
-        _requireContract(address(_riskManager));
-        _requireContract(address(_orchestratorRegistry));
-
         address vaultToken = address(_stakeVault.stakeToken());
         if (address(_payoutToken) != vaultToken) {
             revert InvalidPayoutToken(vaultToken, address(_payoutToken));
-        }
-        address managerVault = address(_riskManager.stakeVault());
-        if (managerVault != address(_stakeVault)) {
-            revert RiskManagerStakeVaultMismatch(managerVault, address(_stakeVault));
         }
 
         payoutToken = _payoutToken;
@@ -79,7 +75,7 @@ contract DeferredPayoutHook is IDeferredPayoutHook {
         HookExecutionContext calldata _ctx,
         bytes calldata
     ) external override {
-        address canonicalOrchestrator = address(riskManager.orchestrator());
+        address canonicalOrchestrator = riskManager.orchestrator();
         if (msg.sender != canonicalOrchestrator || !orchestratorRegistry.isOrchestrator(msg.sender)) {
             revert UnauthorizedOrchestrator(msg.sender);
         }
@@ -95,10 +91,5 @@ contract DeferredPayoutHook is IDeferredPayoutHook {
             address(stakeVault),
             _ctx.executableAmount
         );
-    }
-
-    /** @dev Rejects an address that cannot execute the expected dependency interface. */
-    function _requireContract(address _account) internal view {
-        if (_account.code.length == 0) revert InvalidContract(_account);
     }
 }

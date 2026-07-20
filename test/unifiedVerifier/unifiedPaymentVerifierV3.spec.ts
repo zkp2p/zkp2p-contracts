@@ -57,23 +57,28 @@ describe("UnifiedPaymentVerifierV3 payment-to-intent bindings", () => {
     );
     const boundedCall = await (await ethers.getContractFactory("BoundedCall", owner.wallet)).deploy();
     const executor = await (await ethers.getContractFactory("PostIntentHookExecutor", owner.wallet)).deploy();
-    const validation = await (await ethers.getContractFactory("OrchestratorV3Validation", owner.wallet)).deploy();
-    const feeLib = await (await ethers.getContractFactory("OrchestratorV3FeeLib", owner.wallet)).deploy();
-    const callbackRecorder = await (await ethers.getContractFactory("RiskCallbackRecorder", owner.wallet)).deploy();
-    const riskLib = await (await ethers.getContractFactory("OrchestratorV3RiskLib", {
+    const riskSettlementExecutor = await (await ethers.getContractFactory("RiskSettlementExecutor", {
       signer: owner.wallet,
-      libraries: {
-        BoundedCall: boundedCall.address,
-        RiskCallbackRecorder: callbackRecorder.address,
-      },
+      libraries: { BoundedCall: boundedCall.address },
     })).deploy();
-    const orchestratorV3 = await (await ethers.getContractFactory("OrchestratorV3", {
+    const feeSettlementLib = await (await ethers.getContractFactory("FeeSettlementLib", {
       signer: owner.wallet,
       libraries: {
         PostIntentHookExecutor: executor.address,
-        OrchestratorV3Validation: validation.address,
-        OrchestratorV3FeeLib: feeLib.address,
-        OrchestratorV3RiskLib: riskLib.address,
+        RiskSettlementExecutor: riskSettlementExecutor.address,
+      },
+    })).deploy();
+    const orchestratorFeeLib = await (await ethers.getContractFactory("OrchestratorV3FeeLib", owner.wallet)).deploy();
+    const orchestratorRiskLib = await (await ethers.getContractFactory("OrchestratorV3RiskLib", owner.wallet)).deploy();
+    const orchestratorValidation = await (await ethers.getContractFactory("OrchestratorV3Validation", owner.wallet)).deploy();
+    const orchestratorV3 = await (await ethers.getContractFactory("OrchestratorV3", {
+      signer: owner.wallet,
+      libraries: {
+        BoundedCall: boundedCall.address,
+        FeeSettlementLib: feeSettlementLib.address,
+        OrchestratorV3FeeLib: orchestratorFeeLib.address,
+        OrchestratorV3RiskLib: orchestratorRiskLib.address,
+        OrchestratorV3Validation: orchestratorValidation.address,
       },
     })).deploy(
       owner.address,

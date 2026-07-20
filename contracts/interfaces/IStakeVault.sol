@@ -3,10 +3,11 @@
 pragma solidity ^0.8.18;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IIntentRiskHook } from "./IIntentRiskHook.sol";
 
 /**
  * @title IStakeVault
- * @notice Policy-agnostic interface for membership stake and deferred payouts.
+ * @notice Policy-agnostic interface for membership stake, reservations, and deferred fee claims.
  */
 interface IStakeVault {
     /* ============ Errors ============ */
@@ -35,11 +36,13 @@ interface IStakeVault {
         bool active;
     }
 
-    struct DeferredPayout {
-        address beneficiary;
+    struct DeferredStake {
+        address staker;
         address controller;
-        uint256 amount;
+        uint256 grossAmount;
+        uint256 feeAmount;
         uint64 releaseTime;
+        bool funded;
     }
 
     /* ============ Events ============ */
@@ -92,32 +95,47 @@ interface IStakeVault {
         uint256 newClaimableBalance
     );
     event CompensationWithdrawn(address indexed maker, address indexed recipient, uint256 amount);
-    event DeferredPayoutAuthorized(
+    event DeferredStakeAuthorized(
         bytes32 indexed intentHash,
-        address indexed beneficiary,
+        address indexed staker,
         address indexed controller,
         uint64 releaseTime
     );
-    event DeferredPayoutAuthorizationReleased(
+    event DeferredStakeAuthorizationReleased(
         bytes32 indexed intentHash,
-        address indexed beneficiary,
+        address indexed staker,
         address indexed controller
     );
-    event DeferredPayoutRecorded(
+    event DeferredStakeFunded(
         bytes32 indexed intentHash,
-        address indexed beneficiary,
-        uint256 amount,
+        address indexed staker,
+        uint256 grossAmount,
+        uint256 feeAmount,
+        uint256 netAmount,
         uint64 releaseTime
     );
-    event DeferredPayoutSlashed(
+    event DeferredStakeSlashed(
         bytes32 indexed intentHash,
-        address indexed beneficiary,
+        address indexed staker,
         address indexed maker,
-        uint256 amount,
-        uint256 remainingAmount
+        uint256 grossAmount,
+        uint256 feeAmount
     );
-    event DeferredPayoutWithdrawn(
+    event DeferredStakeReleased(
         bytes32 indexed intentHash,
+        address indexed staker,
+        uint256 grossAmount,
+        uint256 feeAmount,
+        uint256 netStakeReleased
+    );
+    event DeferredFeeVested(
+        bytes32 indexed intentHash,
+        address indexed recipient,
+        IIntentRiskHook.FeeType indexed feeType,
+        uint256 amount,
+        uint256 newClaimableBalance
+    );
+    event FeeClaimWithdrawn(
         address indexed beneficiary,
         address indexed recipient,
         uint256 amount
@@ -146,11 +164,8 @@ interface IStakeVault {
     function cancelExit() external;
     function withdrawStake(address _recipient) external;
     function withdrawCompensation(address _recipient) external;
-    function withdrawDeferredPayout(bytes32 _intentHash, address _recipient) external;
-    function withdrawDeferredPayouts(
-        bytes32[] calldata _intentHashes,
-        address _recipient
-    ) external returns (uint256 totalAmount);
+    function withdrawFeeClaim(address _recipient) external;
+    function withdrawFeeClaimFor(address _beneficiary) external;
 
     /* ============ Controller Functions ============ */
 
@@ -158,10 +173,17 @@ interface IStakeVault {
     function updateReservation(bytes32 _intentHash, uint256 _newAmount, uint64 _releaseTime) external;
     function releaseReservation(bytes32 _intentHash) external;
     function slashReservation(bytes32 _intentHash, address _maker, uint256 _amount) external;
-    function authorizeDeferredPayout(bytes32 _intentHash, address _beneficiary, uint64 _releaseTime) external;
-    function releaseDeferredPayoutAuthorization(bytes32 _intentHash) external;
-    function recordDeferredPayout(bytes32 _intentHash, address _beneficiary, uint256 _amount, uint64 _releaseTime) external;
-    function slashDeferredPayout(bytes32 _intentHash, address _maker, uint256 _amount) external;
+    function authorizeDeferredStake(bytes32 _intentHash, address _staker, uint64 _releaseTime) external;
+    function releaseDeferredStakeAuthorization(bytes32 _intentHash) external;
+    function recordDeferredStake(
+        bytes32 _intentHash,
+        address _staker,
+        uint256 _grossAmount,
+        uint64 _releaseTime,
+        IIntentRiskHook.FeeAllocation[] calldata _feeAllocations
+    ) external;
+    function releaseDeferredStake(bytes32 _intentHash) external;
+    function slashDeferredStake(bytes32 _intentHash, address _maker) external;
 
     /* ============ Governance Functions ============ */
 
@@ -185,7 +207,13 @@ interface IStakeVault {
     function getExitRequest(address _staker) external view returns (ExitRequest memory);
     function getStakeWithdrawalRequest(address _staker) external view returns (StakeWithdrawalRequest memory);
     function getReservation(bytes32 _intentHash) external view returns (Reservation memory);
-    function getDeferredPayout(bytes32 _intentHash) external view returns (DeferredPayout memory);
+    function getDeferredStake(bytes32 _intentHash) external view returns (DeferredStake memory);
+    function getDeferredFeeAllocations(
+        bytes32 _intentHash
+    ) external view returns (IIntentRiskHook.FeeAllocation[] memory);
     function claimableCompensation(address _maker) external view returns (uint256);
+    function claimableFees(address _beneficiary) external view returns (uint256);
+    function totalDeferredFees() external view returns (uint256);
+    function totalClaimableFees() external view returns (uint256);
     function totalLiabilities() external view returns (uint256);
 }

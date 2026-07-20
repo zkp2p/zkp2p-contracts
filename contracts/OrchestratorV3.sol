@@ -8,24 +8,25 @@ import { OrchestratorV2 } from "./OrchestratorV2.sol";
 import { IIntentRiskHook } from "./interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV2 } from "./interfaces/IOrchestratorV2.sol";
 import { IOrchestratorV3 } from "./interfaces/IOrchestratorV3.sol";
+import { BoundedCall } from "./lib/BoundedCall.sol";
+import { FeeSettlementLib } from "./lib/FeeSettlementLib.sol";
 import { OrchestratorV3FeeLib } from "./lib/OrchestratorV3FeeLib.sol";
 import { OrchestratorV3RiskLib } from "./lib/OrchestratorV3RiskLib.sol";
-import { PostIntentHookExecutor as SettlementHookExecutor } from "./lib/SettlementHookExecutor.sol";
 import { OrchestratorV3Validation } from "./lib/OrchestratorV3Validation.sol";
 
 /**
  * @title OrchestratorV3
  * @notice Extends the V2 intent lifecycle with snapshotted depositor-selected risk callbacks.
  * @dev V2 remains the canonical lifecycle implementation. V3 adds risk admission, terminal
- *      callbacks, and recovery data for settlement callbacks that fail open.
+ *      settlement, and durable recovery data for cancellation callbacks that fail open.
  */
 contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
+
     /* ============ Constants ============ */
 
     uint256 public constant MIN_RISK_CALLBACK_GAS_LIMIT = 750_000;
     uint256 public constant MAX_RISK_CALLBACK_GAS_LIMIT = 2_000_000;
     uint256 public constant MAX_RISK_CALLBACK_RETURN_DATA = 2_048;
-    uint256 public constant RISK_CALLBACK_POST_CALL_GAS_RESERVE = 250_000;
 
     /* ============ State Variables ============ */
 
@@ -33,9 +34,6 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
     mapping(bytes32 => IIntentRiskHook) internal intentRiskHooks;
     mapping(bytes32 => uint256) internal intentGatingNonces;
     mapping(bytes32 => OrchestratorV3FeeLib.IntentFeeSnapshot) internal intentFeeSnapshots;
-    // Historical ABI name retained so existing V3 consumers keep the deployed getter selector.
-    mapping(bytes32 => bool) public override intentRequiresPostIntentHook;
-    mapping(bytes32 => IntentSettlement) internal failedIntentSettlements;
     mapping(bytes32 => IntentCancellation) internal failedIntentCancellations;
 
     uint256 public riskCallbackGasLimit;
@@ -190,32 +188,9 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         return OrchestratorV3RiskLib.getRiskIntent(intents, _intentHash);
     }
 
-    /**
-     * @notice Returns the number of unresolved intents for an account in constant time.
-     */
+    /** @notice Returns the number of unresolved intents for an account in constant time. */
     function getAccountIntentCount(address _account) external view override returns (uint256) {
         return accountIntents[_account].length;
-    }
-
-    /**
-     * @notice Returns recovery data for a settlement callback that failed open.
-     * @dev Successful callbacks intentionally leave this record empty.
-     */
-    function getIntentSettlement(
-        bytes32 _intentHash
-    ) external view override returns (uint256 releasedAmount, uint64 settledAt, bool isManualRelease) {
-        bytes32 intentHash = _intentHash;
-        // Relies on IntentSettlement's declared storage order: amount in slot 0, then uint64/bool packed in slot 1.
-        // Exact getter tests lock this layout; update this read if the struct's fields or order ever change.
-        assembly {
-            mstore(0x00, intentHash)
-            mstore(0x20, failedIntentSettlements.slot)
-            let settlementSlot := keccak256(0x00, 0x40)
-            releasedAmount := sload(settlementSlot)
-            let packedLifecycle := sload(add(settlementSlot, 1))
-            settledAt := and(packedLifecycle, 0xffffffffffffffff)
-            isManualRelease := and(shr(64, packedLifecycle), 1)
-        }
     }
 
     /**
@@ -227,11 +202,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
 
     /* ============ Internal Lifecycle Extensions ============ */
 
-    /**
-     * @dev Consumes one nonce before checking the gating service. A failed signature or any later
-     *      signalIntent revert rolls the nonce back with the transaction. Deposits without a gating
-     *      service never enter this hook and therefore never consume a nonce.
-     */
+    /** @dev Consumes one nonce before validating the gating service authorization. */
     function _validateIntentGatingAuthorization(
         SignalIntentParams calldata _params,
         address _intentGatingService,
@@ -261,16 +232,17 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             protocolFee
         );
 
-        OrchestratorV3RiskLib.snapshotAndAdmit(
-            depositRiskHooks,
-            intentRiskHooks,
-            intentRequiresPostIntentHook,
-            intents,
+        Intent storage intent = intents[_intentHash];
+        IIntentRiskHook riskHook = depositRiskHooks[intent.escrow][intent.depositId];
+        intentRiskHooks[_intentHash] = riskHook;
+
+        BoundedCall.executeRiskAdmission(
+            riskHook,
             _intentHash,
             riskCallbackGasLimit,
-            RISK_CALLBACK_POST_CALL_GAS_RESERVE,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
+        emit IntentRiskHookSnapshotted(_intentHash, address(riskHook));
     }
 
     /**
@@ -281,38 +253,39 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         IntentResolution _resolution,
         uint256 _releasedAmount
     ) internal override {
+        if (_resolution != IntentResolution.CANCELLED) {
+            super._resolveIntent(_intentHash, _resolution, _releasedAmount);
+            return;
+        }
+
+        uint64 cancelledAt = uint64(block.timestamp);
+        IIntentRiskHook riskHook = intentRiskHooks[_intentHash];
         super._resolveIntent(_intentHash, _resolution, _releasedAmount);
-        OrchestratorV3RiskLib.executeTerminalCallback(
-            intentRiskHooks,
-            intentRequiresPostIntentHook,
-            intentFeeSnapshots,
-            failedIntentSettlements,
-            failedIntentCancellations,
+        delete intentRiskHooks[_intentHash];
+        delete intentFeeSnapshots[_intentHash];
+
+        bool callbackSucceeded = BoundedCall.executeRiskCancellation(
+            riskHook,
             _intentHash,
-            uint8(_resolution),
-            _releasedAmount,
             riskCallbackGasLimit,
-            RISK_CALLBACK_POST_CALL_GAS_RESERVE,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
+        if (!callbackSucceeded) {
+            failedIntentCancellations[_intentHash] = IntentCancellation({ cancelledAt: cancelledAt });
+            emit IntentCancellationRecorded(_intentHash, cancelledAt);
+        }
     }
 
     /**
-     * @notice Enforces the snapshotted settlement-hook requirement on maker manual releases.
+     * @notice Routes every manual release through the shared post-funds risk-settlement gate.
      */
     function _shouldExecuteSettlementHookOnManualRelease(
-        bytes32 _intentHash
-    ) internal view override returns (bool) {
-        bool requiresSettlementHook = intentRequiresPostIntentHook[_intentHash];
-        if (requiresSettlementHook && address(intents[_intentHash].settlementHook) == address(0)) {
-            revert RequiredSettlementHookMissing(_intentHash);
-        }
-        return requiresSettlementHook;
+        bytes32
+    ) internal pure override returns (bool) {
+        return true;
     }
 
-    /**
-     * @notice Executes the V2 settlement transfer through the shared external executor.
-     */
+    /** @notice Gives risk settlement first refusal over gross funds, then executes the exact fee plan on zero consumption. */
     function _collectFeesTransferFundsAndExecuteAction(
         IERC20 _token,
         bytes32 _intentHash,
@@ -323,44 +296,28 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         uint256 _managerFee,
         bool _isManualRelease
     ) internal override {
-        uint256 netFees = _calculateAndTransferFees(
+        OrchestratorV3FeeLib.IntentFeeSnapshot memory feeSnapshot = intentFeeSnapshots[_intentHash];
+        IIntentRiskHook riskHook = intentRiskHooks[_intentHash];
+        (address fundsTransferredTo, uint256 netAmount) = FeeSettlementLib.executeSettlement(
             _token,
+            riskHook,
             _intentHash,
             _intent,
             _releaseAmount,
-            _managerFeeRecipient,
-            _managerFee
+            _settlementHookData,
+            FeeSettlementLib.FeeConfig({
+                protocolFeeRecipient: feeSnapshot.protocolFeeRecipient,
+                protocolFee: feeSnapshot.protocolFeeRate,
+                managerFeeRecipient: _managerFeeRecipient,
+                managerFee: _managerFee
+            }),
+            _isManualRelease,
+            riskCallbackGasLimit
         );
-        uint256 netAmount = _releaseAmount - netFees;
-        address fundsTransferredTo = SettlementHookExecutor.transferOrExecute(
-            _token,
-            _intentHash,
-            _intent,
-            netAmount,
-            _settlementHookData
-        );
+        delete intentRiskHooks[_intentHash];
+        delete intentFeeSnapshots[_intentHash];
 
         emit IntentFulfilled(_intentHash, fundsTransferredTo, netAmount, _isManualRelease);
-    }
-
-    /** @dev Distributes fees using the terms snapshotted before risk admission. */
-    function _calculateAndTransferFees(
-        IERC20 _token,
-        bytes32 _intentHash,
-        Intent memory _intent,
-        uint256 _releaseAmount,
-        address _managerFeeRecipient,
-        uint256 _managerFee
-    ) internal override returns (uint256 netFees) {
-        return OrchestratorV3FeeLib.calculateAndTransferFees(
-            intentFeeSnapshots,
-            _token,
-            _intentHash,
-            _intent,
-            _releaseAmount,
-            _managerFeeRecipient,
-            _managerFee
-        );
     }
 
     function _setRiskCallbackGasLimit(uint256 _gasLimit) internal {
@@ -370,6 +327,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         if (_gasLimit > MAX_RISK_CALLBACK_GAS_LIMIT) {
             revert RiskCallbackGasLimitTooHigh(_gasLimit, MAX_RISK_CALLBACK_GAS_LIMIT);
         }
+
         riskCallbackGasLimit = _gasLimit;
         emit RiskCallbackGasLimitUpdated(_gasLimit);
     }

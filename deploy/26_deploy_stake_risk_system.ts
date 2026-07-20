@@ -264,8 +264,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     throw new Error(`StakeVault controller mismatch: expected ${riskManager.address}, found ${currentController}`);
   }
 
-  if ((await riskManagerContract.deferredPayoutHook()).toLowerCase() !== deferredPayoutHook.address.toLowerCase()) {
-    await (await riskManagerContract.setDeferredPayoutHook(deferredPayoutHook.address)).wait();
+  // Historical deployment only: the active runner excludes script 26 after the gross-first
+  // settlement migration removed these methods from the current RiskManager ABI.
+  const historicalRiskManager = riskManagerContract as any;
+  if ((await historicalRiskManager.deferredPayoutHook()).toLowerCase() !== deferredPayoutHook.address.toLowerCase()) {
+    await (await historicalRiskManager.setDeferredPayoutHook(deferredPayoutHook.address)).wait();
     await waitForDeploymentDelay(hre);
   }
 

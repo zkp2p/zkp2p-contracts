@@ -3,6 +3,7 @@
 pragma solidity ^0.8.18;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
@@ -51,12 +52,11 @@ import { IStakeVault } from "./interfaces/IStakeVault.sol";
  *      - Only the amount above that base enters the griefing curve and reserves stake.
  *      - Cancellation slashes only the accrued griefing penalty and releases every unused unit.
  *      - Non-chargebackable settlement releases the full pending reservation immediately.
- *      - Chargebackable settlement resizes stake coverage to the exact released amount and starts the
- *        snapshotted coverage window.
- *      - Deferred payout is an explicit hybrid: pending stake covers the greater of maximum griefing
- *        and a safe upper bound on settlement fees, then exact net proceeds plus the retained fee-gap
- *        stake cover the complete gross release.
- *      - Maturity releases coverage; a valid chargeback consumes the exact gross released amount.
+ *      - Stake-backed settlement resizes coverage to the gross Escrow release and consumes no payout funds.
+ *      - Deferred settlement pulls the complete gross release directly into StakeVault and converts it
+ *        into taker-owned stake that remains fully reserved through the chargeback window.
+ *      - Deferred fees remain contingent inside that reservation. Clean maturity vests fee claims and
+ *        releases the net amount as reusable stake; chargeback cancels the fee plan and compensates gross.
  *
  * @dev SECURITY INVARIANTS AND RATIONALE
  *      1. Mutable platform and Escrow policy is snapshotted at admission; governance cannot rewrite
@@ -65,30 +65,26 @@ import { IStakeVault } from "./interfaces/IStakeVault.sol";
  *         takers and platforms without a protocol-wide exposure gate.
  *      3. The base unbonded amount is stateless contract policy. Sybil-resistant account gating is a
  *         separate admission concern and is not approximated with wallet-local usage state.
- *      4. Terminal callbacks are intentionally fail-open in OrchestratorV3 for liquidity liveness.
- *         Failed cancellations retain the full reservation and use the orchestrator-recorded unlock
- *         timestamp during permissionless reconciliation, preventing delay-based overcharging and
- *         callback failure from escaping liability.
- *      5. Chargeback compensation is full-only: the remaining reservation must equal the exact gross
- *         released amount, otherwise the claim fails closed.
- *      6. This contract never holds tokens. StakeVault is the sole accounting and custody boundary.
+ *      4. Token-bearing settlement is fail-closed. Cancellation alone is fail-open for liquidity
+ *         liveness: failed cancellations retain the full reservation and reconcile against the durable
+ *         original unlock timestamp, preventing delay-based overcharging or escaped liability.
+ *      5. Chargeback compensation is full-only: remaining coverage must equal the gross Escrow release,
+ *         whether backed by pre-existing stake or newly converted deferred stake.
+ *      6. This contract never retains tokens. Deferred proceeds move directly from OrchestratorV3 to
+ *         StakeVault, which is the sole accounting and custody boundary.
  *      7. Escrow intent amounts and StakeVault liabilities must use the same immutable token, otherwise
  *         raw units, griefing penalties, base limits, and chargeback ratios would have no shared meaning.
- *      8. Deferred admission reserves max(maxGriefingBond, floor(A * aggregateFeeRate / 1e18)).
- *         Independently rounded fee components can never exceed that aggregate-floor upper bound.
- *         At registration, exact net proceeds D resize retained stake to S = R - D, proving D + S = R
- *         without ever increasing stake after the off-chain payment.
- *      9. Chargeback evidence must resolve the supplied payment ID to this exact intent in both binding
- *         directions, preventing a valid payment from being replayed as evidence for another intent.
+ *      8. Proof-based chargeback evidence must resolve the supplied payment ID to this exact intent in
+ *         both binding directions. Manual releases have no payment nullifier, so their dedicated witness
+ *         signature binds evidence to the exact intent while the dispute identifier remains single-use.
  */
 contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
+    using SafeERC20 for IERC20;
+
     /* ============ Constants ============ */
 
     /// @notice Basis-point denominator shared by both affine curves.
     uint256 public constant BPS_DENOMINATOR = 10_000;
-
-    /// @notice Denominator used by Orchestrator fee rates.
-    uint256 public constant PRECISE_UNIT = 1e18;
 
     /// @notice Seconds per hour used to convert the configured hourly griefing slope.
     uint256 public constant SECONDS_PER_HOUR = 1 hours;
@@ -100,6 +96,9 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     /// @dev One year is deliberately far above the approved illustrative 30-day window while keeping
     ///      settlement deadline construction safe for every realistic EVM timestamp horizon.
     uint64 public constant MAX_RISK_WINDOW = 365 days;
+
+    /// @notice Protocol + up to five referrals + manager fee.
+    uint256 public constant MAX_FEE_ALLOCATIONS = 7;
 
     /// @notice Minimal EIP-712 type hash; chain and manager binding live in the EIP-712 domain.
     bytes32 public constant CHARGEBACK_ATTESTATION_TYPEHASH = keccak256(
@@ -122,9 +121,6 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     /// @notice Dedicated verifier that authenticates typed chargeback attestations.
     /// @dev Deployments must use credentials independent from payment-attestation witnesses.
     IAttestationVerifier public attestationVerifier;
-
-    /// @notice Canonical settlement hook used only by deferred-payout positions.
-    address public deferredPayoutHook;
 
     /// @notice Emergency admission switch; terminal accounting remains available while paused.
     bool public admissionPaused;
@@ -165,13 +161,21 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         IAttestationVerifier _attestationVerifier,
         INullifierRegistryV2 _nullifierRegistry
     ) Ownable() EIP712("ZKP2P RiskManager", "1") {
-        if (_owner == address(0)) {
+        if (
+            _owner == address(0)
+                || address(_orchestrator) == address(0)
+                || address(_stakeVault) == address(0)
+                || address(_attestationVerifier) == address(0)
+                || address(_nullifierRegistry) == address(0)
+        ) {
             revert ZeroAddress();
         }
-        _requireContract(address(_orchestrator));
-        _requireContract(address(_stakeVault));
-        _requireContract(address(_attestationVerifier));
-        _requireContract(address(_nullifierRegistry));
+        if (
+            address(_orchestrator).code.length == 0
+                || address(_stakeVault).code.length == 0
+                || address(_attestationVerifier).code.length == 0
+                || address(_nullifierRegistry).code.length == 0
+        ) revert ZeroAddress();
 
         orchestrator = _orchestrator;
         stakeVault = _stakeVault;
@@ -193,7 +197,6 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         override
         onlyOrchestrator
         nonReentrant
-        returns (bool requiresSettlementHook)
     {
         if (admissionPaused) revert AdmissionPaused();
         if (riskPositions[_intentHash].status != PositionStatus.NONE) revert PositionAlreadyExists(_intentHash);
@@ -214,14 +217,6 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
         (uint256 maxGriefingBond, uint256 chargebackReserve, uint256 requiredReservation) =
             _calculateRequiredReservation(intent.amount, maxIntentPeriod, config);
-        uint256 deferredRequiredReservation = maxGriefingBond;
-        if (config.chargeback.chargebackable && config.chargeback.deferredPayoutEnabled) {
-            uint256 maximumFeeGap = _calculateDeferredFeeGapUpperBound(
-                intent.amount,
-                orchestrator.getIntentTotalFeeRate(_intentHash)
-            );
-            deferredRequiredReservation = _max(maxGriefingBond, maximumFeeGap);
-        }
 
         RiskMode mode;
         uint256 initialReservation;
@@ -230,30 +225,19 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             mode = RiskMode.UNBONDED;
         } else {
             uint256 available = stakeVault.freeStake(stakeOwner);
-            bool deferredPayoutRequested = config.chargeback.chargebackable
-                && config.chargeback.deferredPayoutEnabled
-                && deferredPayoutHook != address(0)
-                && intent.settlementHook == deferredPayoutHook;
-            if (deferredPayoutRequested) {
-                if (available < deferredRequiredReservation) {
-                    revert InsufficientCollateral(stakeOwner, available, deferredRequiredReservation);
-                }
-                mode = RiskMode.DEFERRED_PAYOUT;
-                initialReservation = deferredRequiredReservation;
-                requiresSettlementHook = true;
-            } else if (available >= requiredReservation) {
+            if (available >= requiredReservation) {
                 mode = RiskMode.STAKE_BACKED;
                 initialReservation = requiredReservation;
-            } else if (config.chargeback.chargebackable && config.chargeback.deferredPayoutEnabled) {
-                if (available < deferredRequiredReservation) {
-                    revert InsufficientCollateral(stakeOwner, available, deferredRequiredReservation);
-                }
-                if (deferredPayoutHook == address(0) || intent.settlementHook != deferredPayoutHook) {
-                    revert DeferredPayoutHookRequired(deferredPayoutHook, intent.settlementHook);
+            } else if (
+                config.chargeback.chargebackable
+                    && config.chargeback.deferredPayoutEnabled
+                    && available >= maxGriefingBond
+            ) {
+                if (intent.to != intent.owner) {
+                    revert DeferredStakeRecipientMismatch(intent.owner, intent.to);
                 }
                 mode = RiskMode.DEFERRED_PAYOUT;
-                initialReservation = deferredRequiredReservation;
-                requiresSettlementHook = true;
+                initialReservation = maxGriefingBond;
             } else {
                 revert InsufficientCollateral(stakeOwner, available, requiredReservation);
             }
@@ -263,14 +247,6 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             }
         }
 
-        if (
-            mode != RiskMode.DEFERRED_PAYOUT
-                && deferredPayoutHook != address(0)
-                && intent.settlementHook == deferredPayoutHook
-        ) {
-            revert DeferredPayoutHookNotAllowed(deferredPayoutHook);
-        }
-
         RiskPosition storage position = riskPositions[_intentHash];
         position.taker = intent.owner;
         position.stakeOwner = stakeOwner;
@@ -278,7 +254,6 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         position.paymentMethod = intent.paymentMethod;
         position.mode = mode;
         position.status = PositionStatus.PENDING;
-        position.deferredPayoutHook = mode == RiskMode.DEFERRED_PAYOUT ? deferredPayoutHook : address(0);
         position.payoutRecipient = intent.to;
         position.chargebackReserveBps = config.chargeback.reserveBps;
         position.griefingPenaltyBpsPerHour = config.griefing.griefingPenaltyBpsPerHour;
@@ -296,7 +271,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             stakeVault.reserveStake(stakeOwner, _intentHash, initialReservation, 0);
         }
         if (mode == RiskMode.DEFERRED_PAYOUT) {
-            stakeVault.authorizeDeferredPayout(_intentHash, intent.to, 0);
+            stakeVault.authorizeDeferredStake(_intentHash, intent.owner, 0);
         }
 
         _emitRiskPositionCreated(_intentHash, position, chargebackReserve);
@@ -339,25 +314,47 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /**
      * @inheritdoc IIntentRiskHook
+     * @dev This callback runs before distribution. Stake-backed settlement consumes zero tokens.
+     *      Deferred settlement pulls gross funds and preserves the independently rounded fee plan
+     *      inside fully reserved taker stake until chargeback or clean maturity.
      */
-    function onIntentFulfilled(
-        bytes32 _intentHash,
-        uint256 _releasedAmount
+    function settleIntent(
+        RiskSettlementContext calldata _context
     ) external override onlyOrchestrator nonReentrant {
-        _settlePosition(_intentHash, _releasedAmount, uint64(block.timestamp));
-    }
+        if (_context.token != address(stakeVault.stakeToken())) {
+            revert IntentTokenMismatch(address(stakeVault.stakeToken()), _context.token);
+        }
+        if (
+            _context.grossAmount == 0
+                || _context.executableAmount == 0
+                || _context.executableAmount > _context.grossAmount
+        ) {
+            revert InvalidSettlementAmounts(_context.grossAmount, _context.executableAmount);
+        }
+        if (_context.feeAllocations.length > MAX_FEE_ALLOCATIONS) {
+            revert InvalidFeeAllocationCount(_context.feeAllocations.length, MAX_FEE_ALLOCATIONS);
+        }
 
-    /**
-     * @inheritdoc IIntentRiskHook
-     */
-    function onIntentReleased(
-        bytes32 _intentHash,
-        uint256 _releasedAmount
-    ) external override onlyOrchestrator nonReentrant {
-        _releaseManualPosition(
-            _intentHash,
-            _releasedAmount,
-            uint64(block.timestamp)
+        uint256 allocatedFees;
+        for (uint256 allocationIndex = 0; allocationIndex < _context.feeAllocations.length; allocationIndex++) {
+            FeeAllocation calldata allocation = _context.feeAllocations[allocationIndex];
+            if (allocation.recipient == address(0)) revert ZeroAddress();
+            allocatedFees += allocation.amount;
+        }
+        uint256 expectedFees = _context.grossAmount - _context.executableAmount;
+        if (allocatedFees != expectedFees) revert InvalidFeeAllocations(expectedFees, allocatedFees);
+
+        RiskPosition storage position = riskPositions[_context.intentHash];
+        if (position.payoutRecipient != _context.recipient) revert IntentStateMismatch(_context.intentHash);
+
+        _settlePosition(
+            _context.intentHash,
+            IERC20(_context.token),
+            _context.grossAmount,
+            _context.executableAmount,
+            uint64(block.timestamp),
+            _context.isManualRelease,
+            _context.feeAllocations
         );
     }
 
@@ -385,95 +382,11 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     /**
      * @inheritdoc IRiskManager
      */
-    function reconcileSettlement(bytes32 _intentHash) external override nonReentrant {
-        _reconcileSettlement(_intentHash);
-    }
-
-    /**
-     * @inheritdoc IRiskManager
-     */
-    function reconcileSettlements(bytes32[] calldata _intentHashes) external override nonReentrant {
-        if (_intentHashes.length == 0) revert EmptyBatch();
-        for (uint256 intentIndex = 0; intentIndex < _intentHashes.length; intentIndex++) {
-            _reconcileSettlement(_intentHashes[intentIndex]);
-        }
-    }
-
     /** @dev Reads and applies one failed cancellation record. */
     function _reconcileCancellation(bytes32 _intentHash) internal {
         uint64 cancelledAt = orchestrator.getIntentCancellation(_intentHash);
         if (cancelledAt == 0) revert CancellationNotRecorded(_intentHash);
         _cancelPosition(_intentHash, cancelledAt);
-    }
-
-    /** @dev Reads and applies one failed settlement record. */
-    function _reconcileSettlement(bytes32 _intentHash) internal {
-        (uint256 releasedAmount, uint64 settledAt, bool isManualRelease) =
-            orchestrator.getIntentSettlement(_intentHash);
-        if (releasedAmount == 0 || settledAt == 0) revert SettlementNotRecorded(_intentHash);
-        if (isManualRelease) {
-            _releaseManualPosition(_intentHash, releasedAmount, settledAt);
-            return;
-        }
-
-        _settlePosition(_intentHash, releasedAmount, settledAt);
-    }
-
-    /* ============ Deferred Payout ============ */
-
-    /**
-     * @inheritdoc IRiskManager
-     * @dev The canonical hook transfers exact net proceeds D into StakeVault before calling this
-     *      function. Exact stake coverage is S = R - D. Admission already reserved an upper bound on S,
-     *      so registration can only retain or reduce stake after the off-chain payment. The combined
-     *      coverage is therefore exactly D + S = R and matures on one deadline.
-     */
-    function registerDeferredPayout(
-        bytes32 _intentHash,
-        address _beneficiary,
-        uint256 _amount
-    ) external override nonReentrant {
-        if (_amount == 0) revert ZeroAmount();
-
-        RiskPosition storage position = riskPositions[_intentHash];
-        if (msg.sender != position.deferredPayoutHook) revert UnauthorizedDeferredPayoutHook(msg.sender);
-        if (position.mode != RiskMode.DEFERRED_PAYOUT) revert PositionModeMismatch(_intentHash, position.mode);
-        if (position.status == PositionStatus.PENDING) _synchronizeSettlement(_intentHash);
-        if (position.status != PositionStatus.SETTLED) revert PositionNotSettled(_intentHash, position.status);
-        if (position.payoutRecipient != _beneficiary) revert IntentStateMismatch(_intentHash);
-        if (position.deferredPayoutAmount != 0) revert DeferredPayoutAlreadyRegistered(_intentHash);
-        if (_amount > position.releasedAmount) {
-            revert DeferredPayoutExceedsReleasedAmount(_amount, position.releasedAmount);
-        }
-
-        uint256 stakeCoverage = position.releasedAmount - _amount;
-        uint256 provisionalStakeCoverage = position.reservedAmount;
-        if (stakeCoverage > provisionalStakeCoverage) {
-            revert IncompleteChargebackCoverage(
-                _amount + provisionalStakeCoverage,
-                position.releasedAmount
-            );
-        }
-
-        position.deferredPayoutAmount = _amount;
-        position.reservedAmount = stakeCoverage;
-
-        if (provisionalStakeCoverage != 0) {
-            if (stakeCoverage == 0) {
-                stakeVault.releaseReservation(_intentHash);
-            } else {
-                stakeVault.updateReservation(_intentHash, stakeCoverage, position.coverageDeadline);
-            }
-        }
-        stakeVault.recordDeferredPayout(_intentHash, _beneficiary, _amount, position.coverageDeadline);
-
-        emit DeferredPayoutRegistered(
-            _intentHash,
-            _beneficiary,
-            _amount,
-            stakeCoverage,
-            position.coverageDeadline
-        );
     }
 
     /* ============ Chargebacks and Maturity ============ */
@@ -495,13 +408,9 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         }
     }
 
-    /**
-     * @dev Releases only remaining stake coverage. Deferred proceeds stay in StakeVault until their
-     *      beneficiary withdraws them; marking the risk position released merely ends slashability.
-     */
+    /** @dev Releases stake-backed coverage or vests deferred fee claims and frees the taker's net stake. */
     function _releaseMaturedPosition(bytes32 _intentHash) internal {
         RiskPosition storage position = riskPositions[_intentHash];
-        if (position.status == PositionStatus.PENDING) _synchronizeSettlement(_intentHash);
         if (position.status != PositionStatus.SETTLED) revert PositionNotSettled(_intentHash, position.status);
         if (position.coverageDeadline == 0 || block.timestamp < position.coverageDeadline) {
             revert PositionNotMature(position.coverageDeadline, uint64(block.timestamp));
@@ -511,21 +420,25 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         position.status = PositionStatus.RELEASED;
         position.reservedAmount = 0;
 
-        if (releasedCoverage != 0) {
+        address releasedStakeOwner = position.stakeOwner;
+        if (position.mode == RiskMode.STAKE_BACKED && releasedCoverage != 0) {
             stakeVault.releaseReservation(_intentHash);
+        } else if (position.mode == RiskMode.DEFERRED_PAYOUT && releasedCoverage != 0) {
+            releasedStakeOwner = position.taker;
+            stakeVault.releaseDeferredStake(_intentHash);
         }
 
-        emit RiskPositionReleased(_intentHash, position.stakeOwner, position.mode, releasedCoverage);
+        emit RiskPositionReleased(_intentHash, releasedStakeOwner, position.mode, releasedCoverage);
     }
 
     /**
      * @inheritdoc IRiskManager
      * @dev V1 is deliberately full-only: a valid attestation consumes the dispute nullifier and
-     *      compensates exactly the gross released token amount derived from settlement state.
+     *      compensates exactly the covered amount derived from settlement state. That amount is gross
+     *      for both stake-backed and deferred-stake positions.
      */
     function submitChargeback(ChargebackAttestation calldata _attestation) external override nonReentrant {
         RiskPosition storage position = riskPositions[_attestation.intentHash];
-        if (position.status == PositionStatus.PENDING) _synchronizeSettlement(_attestation.intentHash);
         if (position.status != PositionStatus.SETTLED) {
             revert PositionNotSettled(_attestation.intentHash, position.status);
         }
@@ -539,45 +452,28 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             revert AttestationVerificationFailed();
         }
 
-        uint256 compensatedAmount = position.releasedAmount;
-        uint256 deferredCoverage;
-        uint256 stakeCoverage = position.reservedAmount;
-        if (position.mode == RiskMode.DEFERRED_PAYOUT) {
-            deferredCoverage = position.deferredPayoutAmount;
-        }
-        uint256 totalCoverage = deferredCoverage + stakeCoverage;
-        if (totalCoverage != compensatedAmount) {
-            revert IncompleteChargebackCoverage(totalCoverage, compensatedAmount);
+        uint256 compensatedAmount = position.coveredAmount;
+        if (position.reservedAmount != compensatedAmount) {
+            revert IncompleteChargebackCoverage(position.reservedAmount, compensatedAmount);
         }
 
         usedChargebackNullifiers[nullifier] = true;
         position.slashedAmount = compensatedAmount;
         position.reservedAmount = 0;
-        position.deferredPayoutAmount = 0;
         position.status = PositionStatus.SLASHED;
 
         if (position.mode == RiskMode.STAKE_BACKED) {
-            stakeVault.slashReservation(_attestation.intentHash, position.lp, stakeCoverage);
+            stakeVault.slashReservation(_attestation.intentHash, position.lp, compensatedAmount);
         } else {
-            stakeVault.slashDeferredPayout(_attestation.intentHash, position.lp, deferredCoverage);
-            if (stakeCoverage != 0) {
-                stakeVault.slashReservation(_attestation.intentHash, position.lp, stakeCoverage);
-            }
-            emit HybridCoverageSlashed(
-                _attestation.intentHash,
-                deferredCoverage,
-                stakeCoverage,
-                compensatedAmount,
-                0
-            );
+            stakeVault.slashDeferredStake(_attestation.intentHash, position.lp);
         }
 
         emit ChargebackSettled(
             _attestation.intentHash,
-            position.stakeOwner,
+            position.mode == RiskMode.DEFERRED_PAYOUT ? position.taker : position.stakeOwner,
             position.lp,
             position.mode,
-            compensatedAmount,
+            position.grossReleasedAmount,
             compensatedAmount,
             position.slashedAmount,
             position.reservedAmount,
@@ -616,20 +512,10 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
      * @inheritdoc IRiskManager
      */
     function setAttestationVerifier(address _verifier) external override onlyOwner {
-        _requireContract(_verifier);
+        if (_verifier == address(0) || _verifier.code.length == 0) revert ZeroAddress();
         address previousVerifier = address(attestationVerifier);
         attestationVerifier = IAttestationVerifier(_verifier);
         emit AttestationVerifierUpdated(previousVerifier, _verifier);
-    }
-
-    /**
-     * @inheritdoc IRiskManager
-     */
-    function setDeferredPayoutHook(address _hook) external override onlyOwner {
-        if (_hook != address(0)) _requireContract(_hook);
-        address previousHook = deferredPayoutHook;
-        deferredPayoutHook = _hook;
-        emit DeferredPayoutHookUpdated(previousHook, _hook);
     }
 
     /**
@@ -801,7 +687,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             if (releasedReservation != 0) stakeVault.releaseReservation(_intentHash);
         }
         if (position.mode == RiskMode.DEFERRED_PAYOUT) {
-            stakeVault.releaseDeferredPayoutAuthorization(_intentHash);
+            stakeVault.releaseDeferredStakeAuthorization(_intentHash);
         }
 
         emit GriefingPenaltyCharged(
@@ -823,24 +709,28 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /**
      * @dev Transitions a pending position at settlement. Griefing liability disappears without penalty.
-     *      Stake-backed coverage is resized to the exact released amount. Deferred mode retains its
-     *      admission reservation until the mandatory hook atomically registers exact net proceeds and
-     *      can safely shrink the reservation to the exact fee gap.
+     *      Stake-backed coverage is resized against the gross release and consumes no funds. Deferred
+     *      settlement transfers gross into fully reserved taker stake and keeps fee claims contingent.
      */
     function _settlePosition(
         bytes32 _intentHash,
-        uint256 _releasedAmount,
-        uint64 _settledAt
+        IERC20 _token,
+        uint256 _grossAmount,
+        uint256 _executableAmount,
+        uint64 _settledAt,
+        bool _isManualRelease,
+        FeeAllocation[] calldata _feeAllocations
     ) internal {
-        if (_releasedAmount == 0) revert ZeroAmount();
         RiskPosition storage position = riskPositions[_intentHash];
         if (position.status != PositionStatus.PENDING) {
             revert PositionNotPending(_intentHash, position.status);
         }
 
         uint256 pendingReservation = position.reservedAmount;
-        position.releasedAmount = _releasedAmount;
+        position.grossReleasedAmount = _grossAmount;
+        position.executableAmount = _executableAmount;
         position.settledAt = _settledAt;
+        position.isManualRelease = _isManualRelease;
 
         if (position.chargebackReserveBps == 0) {
             position.status = PositionStatus.RELEASED;
@@ -852,11 +742,13 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
                 position.stakeOwner,
                 position.lp,
                 position.mode,
-                _releasedAmount,
+                _grossAmount,
+                _executableAmount,
                 0,
                 pendingReservation,
                 _settledAt,
-                0
+                0,
+                _isManualRelease
             );
             return;
         }
@@ -869,15 +761,59 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         uint256 releasedReservation;
         if (position.mode == RiskMode.STAKE_BACKED) {
             chargebackCoverage = _calculateChargebackReserve(
-                _releasedAmount,
+                _grossAmount,
                 position.chargebackReserveBps
             );
             releasedReservation = pendingReservation - chargebackCoverage;
             position.reservedAmount = chargebackCoverage;
+            position.coveredAmount = chargebackCoverage;
             stakeVault.updateReservation(_intentHash, chargebackCoverage, coverageDeadline);
         } else if (position.mode == RiskMode.DEFERRED_PAYOUT) {
-            chargebackCoverage = pendingReservation;
-            position.reservedAmount = pendingReservation;
+            // Admission already enforces this before fiat payment; retain the settlement check as
+            // defense-in-depth against corrupted or non-canonical orchestrator state.
+            if (position.payoutRecipient != position.taker) {
+                revert DeferredStakeRecipientMismatch(position.taker, position.payoutRecipient);
+            }
+            chargebackCoverage = _calculateChargebackReserve(
+                _grossAmount,
+                position.chargebackReserveBps
+            );
+            if (chargebackCoverage != _grossAmount) {
+                revert IncompleteChargebackCoverage(chargebackCoverage, _grossAmount);
+            }
+            releasedReservation = pendingReservation;
+            if (pendingReservation != 0) stakeVault.releaseReservation(_intentHash);
+
+            uint256 vaultBalanceBefore = _token.balanceOf(address(stakeVault));
+            _token.safeTransferFrom(msg.sender, address(stakeVault), _grossAmount);
+            uint256 vaultBalanceAfter = _token.balanceOf(address(stakeVault));
+            uint256 receivedAmount = vaultBalanceAfter > vaultBalanceBefore
+                ? vaultBalanceAfter - vaultBalanceBefore
+                : 0;
+            if (receivedAmount != _grossAmount) {
+                revert DeferredStakeTransferMismatch(_grossAmount, receivedAmount);
+            }
+
+            position.reservedAmount = chargebackCoverage;
+            position.coveredAmount = chargebackCoverage;
+            position.deferredStakeAmount = _grossAmount;
+            position.deferredFeeAmount = _grossAmount - _executableAmount;
+            stakeVault.recordDeferredStake(
+                _intentHash,
+                position.taker,
+                _grossAmount,
+                coverageDeadline,
+                _feeAllocations
+            );
+            emit DeferredSettlementFunded(
+                _intentHash,
+                position.taker,
+                _grossAmount,
+                _executableAmount,
+                position.deferredFeeAmount,
+                chargebackCoverage,
+                coverageDeadline
+            );
         } else {
             revert PositionModeMismatch(_intentHash, position.mode);
         }
@@ -887,67 +823,14 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             position.stakeOwner,
             position.lp,
             position.mode,
-            _releasedAmount,
+            _grossAmount,
+            _executableAmount,
             chargebackCoverage,
             releasedReservation,
             _settledAt,
-            coverageDeadline
+            coverageDeadline,
+            _isManualRelease
         );
-    }
-
-    /**
-     * @dev A maker manual release proves no off-chain payment. It therefore ends both pending
-     *      griefing liability and chargeback slashability immediately, including a deferred-payout
-     *      authorization that must not capture the manually released proceeds.
-     */
-    function _releaseManualPosition(
-        bytes32 _intentHash,
-        uint256 _releasedAmount,
-        uint64 _settledAt
-    ) internal {
-        if (_releasedAmount == 0) revert ZeroAmount();
-        RiskPosition storage position = riskPositions[_intentHash];
-        if (position.status != PositionStatus.PENDING) {
-            revert PositionNotPending(_intentHash, position.status);
-        }
-
-        uint256 releasedReservation = position.reservedAmount;
-        position.status = PositionStatus.RELEASED;
-        position.releasedAmount = _releasedAmount;
-        position.settledAt = _settledAt;
-        position.coverageDeadline = 0;
-        position.reservedAmount = 0;
-
-        if (releasedReservation != 0) stakeVault.releaseReservation(_intentHash);
-        if (position.mode == RiskMode.DEFERRED_PAYOUT) {
-            stakeVault.releaseDeferredPayoutAuthorization(_intentHash);
-        }
-
-        emit RiskPositionSettled(
-            _intentHash,
-            position.stakeOwner,
-            position.lp,
-            position.mode,
-            _releasedAmount,
-            0,
-            releasedReservation,
-            _settledAt,
-            0
-        );
-    }
-
-    /** @dev Applies a durable failed-settlement record only when the position remains pending. */
-    function _synchronizeSettlement(bytes32 _intentHash) internal {
-        (uint256 releasedAmount, uint64 settledAt, bool isManualRelease) =
-            orchestrator.getIntentSettlement(_intentHash);
-        if (releasedAmount == 0) revert SettlementNotRecorded(_intentHash);
-        if (settledAt == 0) revert SettlementNotRecorded(_intentHash);
-        if (isManualRelease) {
-            _releaseManualPosition(_intentHash, releasedAmount, settledAt);
-            return;
-        }
-
-        _settlePosition(_intentHash, releasedAmount, settledAt);
     }
 
     /* ============ Internal Validation ============ */
@@ -999,24 +882,12 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     }
 
     /**
-     * @dev Returns a safe fee-gap upper bound for every release up to `_amount`. For component rates
-     *      `f_i` and aggregate rate `F`, sum(floor(R * f_i / U)) <= floor(R * F / U), and the right
-     *      side is monotonic for R <= A. Exact component rounding is reconciled from hook proceeds.
+     * @dev Binds signed dispute details to settlement state and the half-open coverage window.
+     *      Proof-based fulfillment additionally requires the canonical payment-nullifier binding.
+     *      Manual release has no payment-verifier call, so its dedicated chargeback witnesses are
+     *      the binding authority: their EIP-712 signature already commits to this exact intent hash
+     *      and data hash, while the dispute nullifier remains globally single-use.
      */
-    function _calculateDeferredFeeGapUpperBound(
-        uint256 _amount,
-        uint256 _totalFeeRate
-    ) internal pure returns (uint256) {
-        if (_totalFeeRate == 0) return 0;
-        return Math.mulDiv(_amount, _totalFeeRate, PRECISE_UNIT);
-    }
-
-    /** @dev Distinguishes an unset dependency from an address without deployed code. */
-    function _requireContract(address _account) internal view {
-        if (_account == address(0)) revert ZeroAddress();
-        if (_account.code.length == 0) revert InvalidContract(_account);
-    }
-    /** @dev Binds signed dispute details to verified settlement state and the half-open coverage window. */
     function _validateAttestation(
         ChargebackAttestation calldata _attestation,
         RiskPosition storage _position
@@ -1032,13 +903,15 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         if (details.originalPaymentId == bytes32(0)) revert InvalidAttestation();
         if (details.disputeId == bytes32(0)) revert InvalidAttestation();
         if (details.paymentAmount == 0 || details.paymentCurrency == bytes32(0)) revert InvalidAttestation();
-        bytes32 paymentNullifier = keccak256(
-            abi.encodePacked(details.paymentMethod, details.originalPaymentId)
-        );
-        if (
-            nullifierRegistry.intentHashByNullifier(paymentNullifier) != _attestation.intentHash
-                || nullifierRegistry.nullifierByIntentHash(_attestation.intentHash) != paymentNullifier
-        ) revert InvalidPaymentBinding(_attestation.intentHash, paymentNullifier);
+        if (!_position.isManualRelease) {
+            bytes32 paymentNullifier = keccak256(
+                abi.encodePacked(details.paymentMethod, details.originalPaymentId)
+            );
+            if (
+                nullifierRegistry.intentHashByNullifier(paymentNullifier) != _attestation.intentHash
+                    || nullifierRegistry.nullifierByIntentHash(_attestation.intentHash) != paymentNullifier
+            ) revert InvalidPaymentBinding(_attestation.intentHash, paymentNullifier);
+        }
 
         nullifier = keccak256(abi.encodePacked(details.paymentMethod, details.disputeId));
         if (usedChargebackNullifiers[nullifier]) revert ChargebackEvidenceUsed(nullifier);

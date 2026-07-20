@@ -15,6 +15,14 @@ function tryGetAddress(network: string, contractName: string): string {
   try { return getDeployedContractAddress(network, contractName); } catch (e) { return "NOT DEPLOYED"; }
 }
 
+function tryGetFirstAddress(network: string, ...contractNames: string[]): string {
+  for (const contractName of contractNames) {
+    const address = tryGetAddress(network, contractName);
+    if (address !== "NOT DEPLOYED") return address;
+  }
+  return "NOT DEPLOYED";
+}
+
 // Deployment Scripts
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deploy } = await hre.deployments
@@ -59,22 +67,17 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     ProtocolViewerV2:                   ${tryGetAddress(network, "ProtocolViewerV2")}
     ----------------------------------------------------------------------
     Stake Risk Contracts:
-    BoundedCall:                        ${tryGetAddress(network, "BoundedCall")}
+    BoundedCall:                        ${tryGetFirstAddress(network, "BoundedCall", "BoundedCallPaymentId")}
     PostIntentHookExecutor:             ${tryGetAddress(network, "PostIntentHookExecutor")}
-    OrchestratorV3:                     ${tryGetAddress(network, "OrchestratorV3")}
-    StakeVault:                         ${tryGetAddress(network, "StakeVault")}
-    RiskManager:                        ${tryGetAddress(network, "RiskManager")}
-    DeferredPayoutHook:                 ${tryGetAddress(network, "DeferredPayoutHook")}
-    ----------------------------------------------------------------------
-    Payment-ID Risk Contracts:
+    RiskSettlementExecutor:             ${tryGetFirstAddress(network, "RiskSettlementExecutor", "RiskSettlementExecutorPaymentId")}
+    FeeSettlementLib:                   ${tryGetFirstAddress(network, "FeeSettlementLib", "FeeSettlementLibPaymentId")}
+    OrchestratorV3:                     ${tryGetFirstAddress(network, "OrchestratorV3", "OrchestratorV3PaymentId")}
+    StakeVault:                         ${tryGetFirstAddress(network, "StakeVault", "StakeVaultPaymentId")}
+    RiskManager:                        ${tryGetFirstAddress(network, "RiskManager", "RiskManagerPaymentId")}
+    RiskAttestationVerifier:            ${tryGetFirstAddress(network, "RiskAttestationVerifier", "ChargebackAttestationVerifierPaymentId")}
+    Versioned Risk Attestation Verifier:${tryGetAddress(network, "ChargebackAttestationVerifierPaymentId")}
     NullifierRegistryV2:                ${tryGetAddress(network, "NullifierRegistryV2")}
     UnifiedPaymentVerifierV3:           ${tryGetAddress(network, "UnifiedPaymentVerifierV3")}
-    BoundedCallPaymentId:               ${tryGetAddress(network, "BoundedCallPaymentId")}
-    OrchestratorV3PaymentId:            ${tryGetAddress(network, "OrchestratorV3PaymentId")}
-    StakeVaultPaymentId:                ${tryGetAddress(network, "StakeVaultPaymentId")}
-    ChargebackVerifierPaymentId:        ${tryGetAddress(network, "ChargebackAttestationVerifierPaymentId")}
-    RiskManagerPaymentId:               ${tryGetAddress(network, "RiskManagerPaymentId")}
-    DeferredPayoutHookPaymentId:        ${tryGetAddress(network, "DeferredPayoutHookPaymentId")}
     `
   );
 

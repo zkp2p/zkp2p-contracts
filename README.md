@@ -14,9 +14,9 @@ settlement stack and the merged v3 stake-risk extension:
 - `StakeVault`: shared stake custody, delegation, reservations, exits, and compensation accounting.
 
 The repository retains v1 and v2 contracts because deployed systems and the v3 extension reuse that
-infrastructure. V3 source is merged and an affine-risk stack is deployed on Base staging, but the final
-direct-chargeback implementation is not publicly rolled out. See [Deployment Status](#deployment-status)
-before treating source behavior or package exports as live-network behavior.
+infrastructure. V3 hard-cut source is merged, but its fresh final Base staging deployment is still
+pending the approved chargeback witness set. See [Deployment Status](#deployment-status) before
+treating source behavior or source-only package ABIs as live-network behavior.
 
 ## Table of Contents
 
@@ -46,11 +46,12 @@ The current v3 risk architecture landed in July 2026:
 - `2026-07-15`: the tier-based risk design was replaced by an affine `RiskManager`. It has no
   contract-level tiers, stake thresholds, amount caps, cooldowns, stake-derived concurrency limit,
   or protocol-wide exposure ceiling.
-- `2026-07-16`: `OrchestratorV3`, `RiskManager`, `StakeVault`, and `DeferredPayoutHook` were deployed
-  to Base staging for integration work. This was not a production rollout.
+- `2026-07-16`: a pre-final `OrchestratorV3`, `RiskManager`, `StakeVault`, and `DeferredPayoutHook`
+  stack was deployed to Base staging for integration work. It predates the current hard-cut ABI.
 - `2026-07-17`: verified fulfillment was bound to exact payment details for direct chargeback
-  authentication. Chargebackable v1 policies retain 100% gross maker compensation and now support a
-  hybrid deferred path backed by exact net proceeds plus retained fee-gap stake.
+  authentication through `NullifierRegistryV2` and `UnifiedPaymentVerifierV3`.
+- `2026-07-20`: deferred settlement moved into `RiskManager`: gross Escrow proceeds become fully
+  reserved taker stake, all fees remain contingent, and `DeferredPayoutHook` left the active path.
 
 The v2 surface was built out rapidly between February 20, 2026 and March 11, 2026. The main additions in that window are:
 
@@ -97,74 +98,68 @@ The diagrams above describe the v2 settlement base. V3 adds the risk path docume
 ## V3 Affine Stake-Risk Architecture
 
 `OrchestratorV3` preserves the v2 intent lifecycle and snapshots the depositor-selected risk hook when
-an intent is admitted. Admission callbacks fail closed; terminal callbacks are gas-bounded and may fail
-open so escrow liquidity is not trapped. `OrchestratorV3` retains durable recovery data so `RiskManager`
-can reconcile a failed terminal callback permissionlessly using the original lifecycle timestamp.
+an intent is admitted. Admission and token-bearing settlement fail closed. Cancellation is gas-bounded,
+may fail open so escrow liquidity is not trapped, and records durable recovery data that `RiskManager`
+can reconcile permissionlessly using the original lifecycle timestamp.
 
-For intent amount `A`, hourly griefing slope `s`, intent period `T`, griefing cliff `C`, chargeback
-reserve ratio `r`, aggregate snapshotted fee rate `f`, and fee precise unit `U = 1e18`, admission uses:
+For intent amount `A`, reusable base `U`, hourly griefing slope `s`, intent period `T`, griefing cliff
+`C`, and chargeback reserve ratio `r`, admission uses:
 
 ```text
-G_max(A)      = ceil(A * s * (T - C) / (10_000 * 1 hour))
+B(A)          = max(A - U, 0)
+G_max(A)      = ceil(B(A) * s * (T - C) / (10_000 * 1 hour))
 C(A)          = ceil(A * r / 10_000)
-F_max(A)      = floor(A * f / U)
 R_stake(A)    = max(G_max(A), C(A))
-R_deferred(A) = max(G_max(A), F_max(A))
+R_deferred(A) = G_max(A)
 ```
 
 Cancellation charges only elapsed time after the cliff, capped by the snapshotted intent period. All
 mutable liability inputs are snapshotted at admission. Multiple concurrent intents are allowed whenever
 their aggregate reservations fit the stake owner's free stake; there is no intent-count capacity tier.
-Griefing and post-settlement fee-gap coverage are mutually exclusive, so deferred admission reserves
-their maximum, never their sum. For gross release `R` and independently rounded exact fees `F`, the hook
-records net deferred proceeds `D = R - F` and retains exact stake `S = F`, proving `D + S = R`.
+For gross release `R`, executable amount `E`, and independently rounded exact fees `F = R - E`,
+deferred settlement converts all `R` into fully reserved taker stake. Chargeback slashes `R` and cancels
+`F`; clean maturity releases `E` as reusable stake and vests `F` as pull-based fee claims.
 
 The merged contracts have these roles:
 
-- `OrchestratorV3`: v2 lifecycle plus risk-hook selection, snapshots, bounded callbacks, and settlement
-  recovery records.
+- `OrchestratorV3`: v2 lifecycle plus risk-hook selection, snapshots, bounded cancellation, and atomic
+  gross-first settlement.
 - `RiskManager`: platform policy, exact reservation math, cancellation penalties, chargeback validation,
   maturity, reconciliation, and slashing instructions.
 - `StakeVault`: the sole stake-token custody and portfolio-accounting boundary.
-- `DeferredPayoutHook`: canonical verified-settlement hook that transfers exact net proceeds into
-  `StakeVault` and resizes the admission reservation to the exact fee gap.
+- `RiskSettlementExecutor` and `FeeSettlementLib`: enforce the zero-or-gross risk callback boundary,
+  then execute fees and ordinary payout only when risk settlement consumes zero.
 
 ## Direct Chargeback Model
 
 The current merged chargeback path is deliberately narrow and fail closed:
 
 - Chargebackable platform configs require `reserveBps == 10_000`, preserving full gross compensation.
-  If stake can cover the gross amount, admission uses ordinary stake backing. Otherwise, an enabled
-  deferred policy requires the canonical hook and enough stake for `R_deferred(A)`.
-- Protocol, manager, and referral fees are distributed immediately from snapshotted terms. The hook
-  defers the exact net amount and retains exact fee-gap stake; settlement never asks for unreserved stake.
-- `UnifiedPaymentVerifierV3` returns the provider payment ID already authenticated inside the signed
-  `PaymentDetails`. `OrchestratorV3` passes that value through its fulfillment callback and
-  `RiskManager` stores it with the settled position; no payment verifier is snapshotted at admission.
-- A maker manual release records no payment ID, releases the reservation, starts no coverage
-  window, and cannot be charged back.
+  If stake can cover the gross amount, admission uses ordinary stake backing. Otherwise, enabled
+  deferred mode requires enough stake for the griefing bond and requires `intent.to == intent.owner`.
+- `UnifiedPaymentVerifierV3` atomically creates an immutable bidirectional binding between the payment
+  nullifier and intent hash in `NullifierRegistryV2`.
+- Maker manual release uses the same risk settlement and chargeback window. Because it has no payment
+  proof, the dedicated chargeback witnesses bind their evidence directly to the exact intent hash.
 - Chargeback evidence uses the EIP-712 domain `ZKP2P RiskManager`, version `1`, current chain ID, and
   the `RiskManager` address. The signed type is
-  `ChargebackAttestation(bytes32 intentHash,bytes32 originalPaymentId,bytes32 disputeId)`.
-- `originalPaymentId` must exactly match the identifier stored from verified fulfillment, and
-  `disputeId` must be nonzero. The payment method and gross token amount come from the position rather
-  than witness-supplied chargeback fields.
+  `ChargebackAttestation(bytes32 intentHash,bytes32 dataHash)`. The hashed data decodes as payment
+  method, original payment ID, dispute ID, fiat amount, and fiat currency.
+- Proof-based fulfillment requires that evidence to match the immutable payment-nullifier binding.
+  Manual release relies on the same intent-bound witness authorization without inventing a payment proof.
 - A valid claim inside the half-open interval `settledAt <= now < coverageDeadline` compensates the LP
-  for the full gross `releasedAmount`. Deferred positions slash net proceeds plus the exact retained
-  fee gap atomically. Partial chargebacks are not supported by this v1 policy.
-- At maturity, unslashed deferred proceeds become withdrawable by the beneficiary and the exact retained
-  stake gap unlocks. Cancellation pays only griefing; maker manual release bypasses deferred capture.
+  for the full gross `releasedAmount`. Deferred positions slash the fully reserved gross stake and
+  cancel every contingent fee atomically. Partial chargebacks are not supported by this v1 policy.
+- At maturity, executable proceeds become reusable taker stake and exact contingent fees vest as
+  pull-based claims. A blocked fee recipient cannot block position maturity.
 - Replay protection consumes `keccak256(paymentMethod, disputeId)` globally.
-- Fresh deployments require a dedicated three-witness chargeback verifier with a 2-of-3 threshold and
-  a witness set disjoint from payment-attestation witnesses, plus a `DeferredPayoutHook` bound to the
-  new `RiskManager`, `StakeVault`, and registered `OrchestratorV3`.
+- Fresh deployments require exactly three dedicated chargeback witnesses, a 2-of-3 threshold, and a
+  witness set that is unique and disjoint from the live payment-attestation witnesses.
 
-The payment-ID lane is deployed in parallel with the legacy lane. It has a separate
-`PaymentVerifierRegistryV3`, `UnifiedPaymentVerifierV3`, `OrchestratorV3`, and risk stack, while both
-unified verifiers use the same `NullifierRegistry`. Deployment mirrors the legacy registry's exact live
-method/currency set and leaves all legacy routes and writers intact. Although the payment-attestation
-input schema is unchanged, its EIP-712 domain binds each signature to the selected verifier address.
-Subsequent payment-method and currency governance changes must update both registries atomically.
+The payment-ID rollout is a one-way hard cut. It deploys a fresh `NullifierRegistryV2`,
+`UnifiedPaymentVerifierV3`, `OrchestratorV3`, and risk stack; removes every writer from the legacy
+nullifier registry; and routes the shared payment registry's exact live method/currency set to UPV3.
+Rollback to a legacy writer or verifier is forbidden.
 
 The witness/threshold configuration remains immediately mutable and open positions do not snapshot a
 witness epoch. Delayed two-step governance and epoch snapshotting, followed by real provider E2E, are
@@ -660,13 +655,14 @@ The deployment pipeline is layered because v2 reuses shared protocol infrastruct
 
 ### V3 Stake-Risk Deployment
 
-`deploy/26_deploy_stake_risk_system.ts` performs a fresh deployment of the linked v3 orchestrator,
-`StakeVault`, the dedicated chargeback verifier, `RiskManager`, and `DeferredPayoutHook`, then wires
-ownership, controller, hook, registry, and platform-policy state. It refuses to mutate an existing
-nonlocal stake-risk deployment; upgrades require a separately reviewed governance migration.
+`deploy/28_deploy_payment_id_risk_system.ts` is the active hard-cut deployment. It deploys the fresh
+payment-binding and risk-settlement stack under versioned names, verifies resumable nonlocal deployment
+records against exact bytecode/libraries/arguments, rotates the shared registry to UPV3, revokes every
+legacy nullifier writer, verifies wiring and ownership, and only then saves canonical Base staging aliases.
 
-This script describes the current merged source architecture. It has not been run against the canonical
-Base staging deployment recorded by PR #171 after the direct-chargeback changes in PR #175.
+Nonlocal execution requires `DEPLOY_PAYMENT_ID_RISK_SYSTEM=true` and exactly three approved addresses in
+`CHARGEBACK_WITNESS_ADDRESSES`; the script checks that they are valid, unique, and disjoint from the live
+payment witnesses before deploying anything. Script 26 is historical and is excluded by the active runner.
 
 ### Legacy Base System
 
@@ -831,7 +827,7 @@ These parameters live in `deployments/parameters.ts`.
 
 ## Deployment Status
 
-The repository records the affine-risk Base staging deployment from PR #171:
+The repository records this pre-final affine-risk Base staging deployment from PR #171:
 
 | Contract | Base staging address |
 | --- | --- |
@@ -840,12 +836,12 @@ The repository records the affine-risk Base staging deployment from PR #171:
 | `RiskManager` | `0x57E4b9046EA5ABCe1fc688b77D846aE67222b998` |
 | `DeferredPayoutHook` | `0xd279997e057b22ecC4660C7bBaD82FF0017B08A9` |
 
-Use block `48667836` as the common indexer start block for that deployment. These addresses predate the
-direct-chargeback changes merged in PR #175 and must not be presented as a public chargeback rollout.
+Use block `48667836` as the common indexer start block for that historical deployment. These addresses
+predate the current payment-binding and gross-first settlement ABI. They must not be used as coordinates
+for the final rollout or presented as a public chargeback deployment.
 
-Draft PR #177 uses a separate, isolated Base staging fixture to exercise the new direct path. Its runner,
-addresses, and temporary permissions are test-only, are not merged source, and are not canonical network
-coordinates. Production policy remains unset.
+The fresh final Base staging coordinates do not exist until the approved, disjoint three-witness set is
+available and the reviewed script 28 hard cut completes. Production policy remains unset.
 
 ## Security Notes
 

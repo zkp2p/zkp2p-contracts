@@ -11,9 +11,6 @@ import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
  *      copy unbounded return data and exhaust gas during memory expansion.
  */
 library BoundedCall {
-    /// @dev Conservative allowance for CALL base/cold-access cost and local argument bookkeeping.
-    uint256 internal constant CALL_OVERHEAD_GAS = 10_000;
-
     event RiskHookCallbackFailed(
         bytes32 indexed intentHash,
         address indexed riskHook,
@@ -22,80 +19,97 @@ library BoundedCall {
     );
 
     error RiskHookAdmissionFailed(bytes32 intentHash, address hook, bytes revertData);
-    error InvalidRiskHookResponse(address hook, bytes response);
-    error RequiredSettlementHookMissing(bytes32 intentHash);
+    error RiskHookSettlementFailed(bytes32 intentHash, address hook, bytes revertData);
+    error InsufficientGasForRiskCallback(uint256 availableGas, uint256 requiredGas);
+
     /**
      * @notice Executes a fail-closed risk admission callback.
-     * @return requiresSettlementHook Whether settlement must use the snapshotted settlement hook.
      */
     function executeRiskAdmission(
         IIntentRiskHook _riskHook,
         bytes32 _intentHash,
-        address _settlementHook,
         uint256 _gasLimit,
-        uint256 _postCallGasReserve,
         uint256 _maxReturnDataSize
-    ) public returns (bool requiresSettlementHook) {
-        if (address(_riskHook) == address(0)) return false;
+    ) public {
+        if (address(_riskHook) == address(0)) return;
+        if (address(_riskHook).code.length == 0) {
+            revert RiskHookAdmissionFailed(_intentHash, address(_riskHook), bytes(""));
+        }
 
-        (bool success, bytes memory response) = callWithBoundedReturnData(
+        (bool success, bytes memory revertData) = callWithBoundedReturnData(
             address(_riskHook),
             _gasLimit,
-            _postCallGasReserve,
             _maxReturnDataSize,
             abi.encodeCall(IIntentRiskHook.onIntentCreated, (_intentHash))
         );
-        if (!success) revert RiskHookAdmissionFailed(_intentHash, address(_riskHook), response);
-        if (response.length != 32) revert InvalidRiskHookResponse(address(_riskHook), response);
+        if (!success) revert RiskHookAdmissionFailed(_intentHash, address(_riskHook), revertData);
+    }
 
-        requiresSettlementHook = abi.decode(response, (bool));
-        if (requiresSettlementHook && _settlementHook == address(0)) {
-            revert RequiredSettlementHookMissing(_intentHash);
+    /**
+     * @notice Executes a fail-closed settlement callback with bounded return data.
+     */
+    function executeRiskSettlement(
+        IIntentRiskHook _riskHook,
+        IIntentRiskHook.RiskSettlementContext memory _context,
+        uint256 _gasLimit,
+        uint256 _maxReturnDataSize
+    ) public {
+        (bool success, bytes memory revertData) = callWithBoundedReturnData(
+            address(_riskHook),
+            _gasLimit,
+            _maxReturnDataSize,
+            abi.encodeCall(IIntentRiskHook.settleIntent, (_context))
+        );
+        if (!success) {
+            revert RiskHookSettlementFailed(_context.intentHash, address(_riskHook), revertData);
         }
     }
 
     /**
-     * @notice Executes a fail-open terminal risk callback.
-     * @param _resolution Zero for cancellation, one for fulfillment, and two for manual release.
+     * @notice Executes the fail-open cancellation callback.
      * @return success Whether the callback completed successfully.
      */
-    function executeTerminalRiskCallback(
+    function executeRiskCancellation(
         IIntentRiskHook _riskHook,
         bytes32 _intentHash,
-        uint8 _resolution,
-        uint256 _releasedAmount,
         uint256 _gasLimit,
-        uint256 _postCallGasReserve,
         uint256 _maxReturnDataSize
     ) public returns (bool success) {
         if (address(_riskHook) == address(0)) return true;
-
-        bytes4 callbackSelector;
-        bytes memory callData;
-        if (_resolution == 0) {
-            callbackSelector = IIntentRiskHook.onIntentCancelled.selector;
-            callData = abi.encodeCall(IIntentRiskHook.onIntentCancelled, (_intentHash));
-        } else if (_resolution == 1) {
-            callbackSelector = IIntentRiskHook.onIntentFulfilled.selector;
-            callData = abi.encodeCall(
-                IIntentRiskHook.onIntentFulfilled,
-                (_intentHash, _releasedAmount)
+        if (address(_riskHook).code.length == 0) {
+            emit RiskHookCallbackFailed(
+                _intentHash,
+                address(_riskHook),
+                IIntentRiskHook.onIntentCancelled.selector,
+                bytes("")
             );
-        } else {
-            callbackSelector = IIntentRiskHook.onIntentReleased.selector;
-            callData = abi.encodeCall(IIntentRiskHook.onIntentReleased, (_intentHash, _releasedAmount));
+            return false;
+        }
+
+        // EIP-150 retains one sixty-fourth of the caller's gas. Revert the outer cancellation
+        // instead of recording a false callback failure when the transaction cannot forward the
+        // configured allowance. The small fixed margin covers call setup before the assembly call.
+        uint256 availableGas = gasleft();
+        uint256 gasAfterMargin = availableGas > 5_000 ? availableGas - 5_000 : 0;
+        uint256 forwardableGas = gasAfterMargin - (gasAfterMargin / 64);
+        if (forwardableGas < _gasLimit) {
+            revert InsufficientGasForRiskCallback(availableGas, _gasLimit);
         }
 
         bytes memory revertData;
         (success, revertData) = callWithBoundedReturnData(
             address(_riskHook),
             _gasLimit,
-            _postCallGasReserve,
             _maxReturnDataSize,
-            callData
+            abi.encodeCall(IIntentRiskHook.onIntentCancelled, (_intentHash))
         );
         if (!success) {
-            emit RiskHookCallbackFailed(_intentHash, address(_riskHook), callbackSelector, revertData);
+            emit RiskHookCallbackFailed(
+                _intentHash,
+                address(_riskHook),
+                IIntentRiskHook.onIntentCancelled.selector,
+                revertData
+            );
         }
     }
 
@@ -103,7 +117,6 @@ library BoundedCall {
      * @notice Calls a target with a fixed gas allowance and copies at most `_maxReturnDataSize` bytes.
      * @param _target Address receiving the call.
      * @param _gasLimit Maximum gas forwarded to the target.
-     * @param _postCallGasReserve Gas retained for caller-side reconciliation after the call.
      * @param _maxReturnDataSize Maximum number of return-data bytes copied into memory.
      * @param _callData Encoded calldata sent to the target.
      * @return success Whether the target call succeeded.
@@ -112,16 +125,12 @@ library BoundedCall {
     function callWithBoundedReturnData(
         address _target,
         uint256 _gasLimit,
-        uint256 _postCallGasReserve,
         uint256 _maxReturnDataSize,
         bytes memory _callData
     ) internal returns (bool success, bytes memory returnData) {
-        uint256 callGas = _calculateCallGas(gasleft(), _gasLimit, _postCallGasReserve);
-        if (callGas == 0) return (false, bytes(""));
-
         assembly ("memory-safe") {
             success := call(
-                callGas,
+                _gasLimit,
                 _target,
                 0,
                 add(_callData, 0x20),
@@ -141,26 +150,6 @@ library BoundedCall {
                 add(add(returnData, 0x20), and(add(copySize, 0x1f), not(0x1f)))
             )
         }
-    }
-
-    /**
-     * @dev Caps forwarded gas by the configured allowance, EIP-150's 63/64 rule, and the
-     *      amount that leaves the requested reconciliation reserve after conservative CALL overhead.
-     */
-    function _calculateCallGas(
-        uint256 _availableGas,
-        uint256 _gasLimit,
-        uint256 _postCallGasReserve
-    ) internal pure returns (uint256 callGas) {
-        if (_availableGas <= CALL_OVERHEAD_GAS + _postCallGasReserve) return 0;
-
-        uint256 afterOverhead = _availableGas - CALL_OVERHEAD_GAS;
-        uint256 eip150Maximum = afterOverhead - (afterOverhead / 64);
-        uint256 reserveMaximum = afterOverhead - _postCallGasReserve;
-
-        callGas = _gasLimit;
-        if (callGas > eip150Maximum) callGas = eip150Maximum;
-        if (callGas > reserveMaximum) callGas = reserveMaximum;
     }
 
 }

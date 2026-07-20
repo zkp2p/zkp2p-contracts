@@ -15,21 +15,27 @@ describe("OrchestratorV3 constructor validation", () => {
     const boundedCall = await (await ethers.getContractFactory("BoundedCall")).deploy();
     const feeLib = await (await ethers.getContractFactory("OrchestratorV3FeeLib")).deploy();
     const postIntentHookExecutor = await (await ethers.getContractFactory("PostIntentHookExecutor")).deploy();
-    const riskCallbackRecorder = await (await ethers.getContractFactory("RiskCallbackRecorder")).deploy();
-    const riskLib = await (await ethers.getContractFactory("OrchestratorV3RiskLib", {
+    const riskSettlementExecutor = await (await ethers.getContractFactory("RiskSettlementExecutor", {
       libraries: {
         BoundedCall: boundedCall.address,
-        RiskCallbackRecorder: riskCallbackRecorder.address,
       },
     })).deploy();
+    const feeSettlementLib = await (await ethers.getContractFactory("FeeSettlementLib", {
+      libraries: {
+        PostIntentHookExecutor: postIntentHookExecutor.address,
+        RiskSettlementExecutor: riskSettlementExecutor.address,
+      },
+    })).deploy();
+    const riskLib = await (await ethers.getContractFactory("OrchestratorV3RiskLib")).deploy();
     const validation = await (await ethers.getContractFactory("OrchestratorV3Validation")).deploy();
     const escrowRegistry = await (await ethers.getContractFactory("EscrowRegistry")).deploy();
     const paymentVerifierRegistry = await (await ethers.getContractFactory("PaymentVerifierRegistry")).deploy();
     const relayerRegistry = await (await ethers.getContractFactory("RelayerRegistry")).deploy();
     const factory = await ethers.getContractFactory("OrchestratorV3", {
       libraries: {
+        BoundedCall: boundedCall.address,
+        FeeSettlementLib: feeSettlementLib.address,
         OrchestratorV3FeeLib: feeLib.address,
-        PostIntentHookExecutor: postIntentHookExecutor.address,
         OrchestratorV3RiskLib: riskLib.address,
         OrchestratorV3Validation: validation.address,
       },

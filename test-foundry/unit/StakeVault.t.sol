@@ -5,6 +5,7 @@ pragma solidity ^0.8.18;
 import { Test } from "forge-std/Test.sol";
 
 import { StakeVault } from "../../contracts/StakeVault.sol";
+import { IIntentRiskHook } from "../../contracts/interfaces/IIntentRiskHook.sol";
 import { IStakeVault } from "../../contracts/interfaces/IStakeVault.sol";
 import { USDCMock } from "../../contracts/mocks/USDCMock.sol";
 
@@ -350,97 +351,89 @@ contract StakeVaultTest is Test {
         assertEq(vault.stakeBalance(staker), 0);
     }
 
-    function test_DeferredPayoutCanBePartiallySlashed() public {
+    function test_DeferredGrossBecomesFullyReservedStake() public {
         bytes32 intentHash = keccak256("deferred");
         deal(address(token), address(vault), 100e6);
+        IIntentRiskHook.FeeAllocation[] memory fees = new IIntentRiskHook.FeeAllocation[](1);
+        fees[0] = IIntentRiskHook.FeeAllocation({
+            feeType: IIntentRiskHook.FeeType.PROTOCOL,
+            recipient: recipient,
+            amount: 2e6
+        });
 
         vm.prank(controller);
-        vault.authorizeDeferredPayout(intentHash, staker, uint64(block.timestamp + DAY));
+        vault.authorizeDeferredStake(intentHash, staker, uint64(block.timestamp + DAY));
         vm.prank(controller);
-        vault.recordDeferredPayout(intentHash, staker, 100e6, uint64(block.timestamp + DAY));
-        vm.prank(controller);
-        vault.slashDeferredPayout(intentHash, maker, 40e6);
+        vault.recordDeferredStake(intentHash, staker, 100e6, uint64(block.timestamp + DAY), fees);
 
-        IStakeVault.DeferredPayout memory payout = vault.getDeferredPayout(intentHash);
-        assertEq(payout.amount, 60e6);
-        assertEq(vault.claimableCompensation(maker), 40e6);
+        IStakeVault.DeferredStake memory deferredStake = vault.getDeferredStake(intentHash);
+        assertEq(deferredStake.grossAmount, 100e6);
+        assertEq(deferredStake.feeAmount, 2e6);
+        assertEq(vault.stakeBalance(staker), 100e6);
+        assertEq(vault.reservedStake(staker), 100e6);
+        assertEq(vault.freeStake(staker), 0);
+        assertEq(vault.totalDeferredFees(), 2e6);
         assertEq(token.balanceOf(address(vault)), vault.totalLiabilities());
     }
 
-    function test_WithdrawDeferredPayoutOnlyAfterMaturity() public {
+    function test_ReleaseDeferredStakeVestsFeesAndLeavesNetFreeStake() public {
         bytes32 intentHash = keccak256("deferred");
         deal(address(token), address(vault), 100e6);
         uint64 releaseTime = uint64(block.timestamp + DAY);
+        IIntentRiskHook.FeeAllocation[] memory fees = new IIntentRiskHook.FeeAllocation[](1);
+        fees[0] = IIntentRiskHook.FeeAllocation({
+            feeType: IIntentRiskHook.FeeType.PROTOCOL,
+            recipient: recipient,
+            amount: 2e6
+        });
         vm.prank(controller);
-        vault.authorizeDeferredPayout(intentHash, staker, releaseTime);
+        vault.authorizeDeferredStake(intentHash, staker, releaseTime);
         vm.prank(controller);
-        vault.recordDeferredPayout(intentHash, staker, 100e6, releaseTime);
+        vault.recordDeferredStake(intentHash, staker, 100e6, releaseTime, fees);
 
         vm.expectRevert(
-            abi.encodeWithSelector(StakeVault.DeferredPayoutNotMature.selector, releaseTime, uint64(block.timestamp))
+            abi.encodeWithSelector(StakeVault.DeferredStakeNotMature.selector, releaseTime, uint64(block.timestamp))
         );
-        vm.prank(staker);
-        vault.withdrawDeferredPayout(intentHash, recipient);
+        vm.prank(controller);
+        vault.releaseDeferredStake(intentHash);
 
         vm.warp(releaseTime);
-        vm.prank(staker);
-        vault.withdrawDeferredPayout(intentHash, recipient);
-        assertEq(token.balanceOf(recipient), 100e6);
+        vm.prank(controller);
+        vault.releaseDeferredStake(intentHash);
+
+        assertEq(vault.stakeBalance(staker), 98e6);
+        assertEq(vault.reservedStake(staker), 0);
+        assertEq(vault.freeStake(staker), 98e6);
+        assertEq(vault.claimableFees(recipient), 2e6);
+        assertEq(vault.totalDeferredFees(), 0);
+        assertEq(token.balanceOf(address(vault)), vault.totalLiabilities());
+
+        vault.withdrawFeeClaimFor(recipient);
+        assertEq(token.balanceOf(recipient), 2e6);
+        assertEq(token.balanceOf(address(vault)), vault.totalLiabilities());
     }
 
-    function test_BatchWithdrawDeferredPayoutsTransfersAggregateAmount() public {
-        bytes32 firstIntent = keccak256("first-deferred");
-        bytes32 secondIntent = keccak256("second-deferred");
-        uint64 releaseTime = uint64(block.timestamp + DAY);
-        deal(address(token), address(vault), 300e6);
+    function test_SlashDeferredStakeCreditsFullGrossAndCancelsFees() public {
+        bytes32 intentHash = keccak256("deferred");
+        deal(address(token), address(vault), 100e6);
+        IIntentRiskHook.FeeAllocation[] memory fees = new IIntentRiskHook.FeeAllocation[](1);
+        fees[0] = IIntentRiskHook.FeeAllocation({
+            feeType: IIntentRiskHook.FeeType.PROTOCOL,
+            recipient: recipient,
+            amount: 2e6
+        });
         vm.startPrank(controller);
-        vault.authorizeDeferredPayout(firstIntent, staker, releaseTime);
-        vault.authorizeDeferredPayout(secondIntent, staker, releaseTime);
-        vault.recordDeferredPayout(firstIntent, staker, 100e6, releaseTime);
-        vault.recordDeferredPayout(secondIntent, staker, 200e6, releaseTime);
+        vault.authorizeDeferredStake(intentHash, staker, uint64(block.timestamp + DAY));
+        vault.recordDeferredStake(intentHash, staker, 100e6, uint64(block.timestamp + DAY), fees);
+        vault.slashDeferredStake(intentHash, maker);
         vm.stopPrank();
-        vm.warp(releaseTime);
-        bytes32[] memory intentHashes = new bytes32[](2);
-        intentHashes[0] = firstIntent;
-        intentHashes[1] = secondIntent;
 
-        vm.prank(staker);
-        uint256 totalAmount = vault.withdrawDeferredPayouts(intentHashes, recipient);
-
-        assertEq(totalAmount, 300e6);
-        assertEq(token.balanceOf(recipient), 300e6);
-        assertEq(vault.totalDeferredPayouts(), 0);
-    }
-
-    function test_ImmatureDeferredPayoutRollsBackEntireBatch() public {
-        bytes32 firstIntent = keccak256("first-deferred");
-        bytes32 secondIntent = keccak256("second-deferred");
-        uint64 firstReleaseTime = uint64(block.timestamp + DAY);
-        uint64 secondReleaseTime = uint64(block.timestamp + 2 * DAY);
-        deal(address(token), address(vault), 200e6);
-        vm.startPrank(controller);
-        vault.authorizeDeferredPayout(firstIntent, staker, firstReleaseTime);
-        vault.authorizeDeferredPayout(secondIntent, staker, secondReleaseTime);
-        vault.recordDeferredPayout(firstIntent, staker, 100e6, firstReleaseTime);
-        vault.recordDeferredPayout(secondIntent, staker, 100e6, secondReleaseTime);
-        vm.stopPrank();
-        vm.warp(firstReleaseTime);
-        bytes32[] memory intentHashes = new bytes32[](2);
-        intentHashes[0] = firstIntent;
-        intentHashes[1] = secondIntent;
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                StakeVault.DeferredPayoutNotMature.selector,
-                secondReleaseTime,
-                uint64(block.timestamp)
-            )
-        );
-        vm.prank(staker);
-        vault.withdrawDeferredPayouts(intentHashes, recipient);
-
-        assertEq(vault.getDeferredPayout(firstIntent).amount, 100e6);
-        assertEq(vault.getDeferredPayout(secondIntent).amount, 100e6);
+        assertEq(vault.stakeBalance(staker), 0);
+        assertEq(vault.reservedStake(staker), 0);
+        assertEq(vault.claimableCompensation(maker), 100e6);
+        assertEq(vault.claimableFees(recipient), 0);
+        assertEq(vault.totalDeferredFees(), 0);
+        assertEq(token.balanceOf(address(vault)), vault.totalLiabilities());
     }
 
     function test_ControllerHandoverIsDelayedAndTwoStep() public {
@@ -495,7 +488,7 @@ contract StakeVaultTest is Test {
         vm.etch(nextController, hex"00");
         bytes32 intentHash = keccak256("deferred");
         vm.prank(controller);
-        vault.authorizeDeferredPayout(intentHash, staker, uint64(block.timestamp + DAY));
+        vault.authorizeDeferredStake(intentHash, staker, uint64(block.timestamp + DAY));
 
         vm.prank(owner);
         vault.proposeController(nextController);
@@ -507,8 +500,9 @@ contract StakeVaultTest is Test {
         deal(address(token), address(vault), 100e6);
 
         vm.prank(controller);
-        vault.recordDeferredPayout(intentHash, staker, 100e6, uint64(block.timestamp + 2 * DAY));
-        assertEq(vault.getDeferredPayout(intentHash).amount, 100e6);
+        IIntentRiskHook.FeeAllocation[] memory noFees = new IIntentRiskHook.FeeAllocation[](0);
+        vault.recordDeferredStake(intentHash, staker, 100e6, uint64(block.timestamp + 2 * DAY), noFees);
+        assertEq(vault.getDeferredStake(intentHash).grossAmount, 100e6);
     }
 
     function testFuzz_ReservationNeverExceedsStake(uint96 rawStake, uint96 rawReservation) public {

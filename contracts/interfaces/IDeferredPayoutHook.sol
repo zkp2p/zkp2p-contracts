@@ -6,7 +6,7 @@ import { ISettlementHook } from "./ISettlementHook.sol";
 
 /**
  * @title IDeferredPayoutHook
- * @notice Required settlement action for intents using deferred-payout risk mode.
+ * @notice RETIRED historical post-intent adapter retained for immutable deployment reproduction.
  */
 interface IDeferredPayoutHook is ISettlementHook {
     /* ============ Errors ============ */
