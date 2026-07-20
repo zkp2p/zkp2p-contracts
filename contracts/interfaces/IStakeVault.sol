@@ -71,6 +71,13 @@ interface IStakeVault {
         uint256 remainingStake,
         uint256 remainingReservation
     );
+    event FreeStakeSpent(
+        bytes32 indexed intentHash,
+        address indexed staker,
+        address indexed beneficiary,
+        uint256 amount,
+        uint256 remainingFreeStake
+    );
     event ExitRequested(address indexed staker, uint64 requestedAt, uint64 availableAt);
     event ExitCancelled(address indexed staker);
     event StakeWithdrawalRequested(
@@ -119,6 +126,7 @@ interface IStakeVault {
         uint256 amount
     );
     event TakerAuthorizationUpdated(address indexed stakeOwner, address indexed taker, bool authorized);
+    event ExtensionFeeAuthorizationUpdated(address indexed stakeOwner, address indexed taker, bool authorized);
     event StakeDelegationEnabledUpdated(address indexed taker, bool enabled);
     event AllowedStakeOwnerUpdated(address indexed taker, address indexed allowedStakeOwner);
     event ControllerProposed(address indexed currentController, address indexed pendingController, uint64 validAt);
@@ -132,6 +140,7 @@ interface IStakeVault {
     function depositStakeFor(address _taker, uint256 _amount) external;
     function setTakerAuthorization(address _taker, bool _authorized) external;
     function setTakerAuthorizations(address[] calldata _takers, bool _authorized) external;
+    function setExtensionFeeAuthorization(address _taker, bool _authorized) external;
     function clearStakeOwner() external;
     function setStakeDelegationEnabled(bool _enabled) external;
     function setAllowedStakeOwner(address _stakeOwner) external;
@@ -154,6 +163,7 @@ interface IStakeVault {
     function updateReservation(bytes32 _intentHash, uint256 _newAmount, uint64 _releaseTime) external;
     function releaseReservation(bytes32 _intentHash) external;
     function slashReservation(bytes32 _intentHash, address _maker, uint256 _amount) external;
+    function spendFreeStake(bytes32 _intentHash, address _staker, address _beneficiary, uint256 _amount) external;
     function authorizeDeferredPayout(bytes32 _intentHash, address _beneficiary, uint64 _releaseTime) external;
     function releaseDeferredPayoutAuthorization(bytes32 _intentHash) external;
     function recordDeferredPayout(bytes32 _intentHash, address _beneficiary, uint256 _amount, uint64 _releaseTime) external;
@@ -175,6 +185,7 @@ interface IStakeVault {
     function eligibleStake(address _staker) external view returns (uint256);
     function freeStake(address _staker) external view returns (uint256);
     function stakeOwnerOf(address _taker) external view returns (address);
+    function isExtensionFeeAuthorized(address _stakeOwner, address _taker) external view returns (bool);
     function stakeDelegationEnabled(address _taker) external view returns (bool);
     function allowedStakeOwner(address _taker) external view returns (address);
     function isExiting(address _staker) external view returns (bool);

@@ -39,6 +39,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     mapping(address => uint256) public override stakeBalance;
     mapping(address => uint256) public override reservedStake;
     mapping(address => address) internal delegatedStakeOwners;
+    mapping(address => mapping(address => bool)) public override isExtensionFeeAuthorized;
     mapping(address => bool) internal stakeDelegationDisabled;
     mapping(address => address) internal allowedStakeOwners;
     mapping(address => ExitRequest) internal exitRequests;
@@ -171,6 +172,16 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         for (uint256 takerIndex = 0; takerIndex < _takers.length; takerIndex++) {
             _setTakerAuthorization(msg.sender, _takers[takerIndex], _authorized);
         }
+    }
+
+    /**
+     * @notice Separately authorizes a delegated taker to spend the caller's free stake on extensions.
+     * @dev Ordinary reservation delegation does not imply permission to consume stake.
+     */
+    function setExtensionFeeAuthorization(address _taker, bool _authorized) external override {
+        if (_taker == address(0) || _taker == msg.sender) revert InvalidTaker(_taker);
+        isExtensionFeeAuthorized[msg.sender][_taker] = _authorized;
+        emit ExtensionFeeAuthorizationUpdated(msg.sender, _taker, _authorized);
     }
 
     /**
@@ -548,6 +559,30 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
             stakeBalance[staker],
             remainingReservation
         );
+    }
+
+    /**
+     * @notice Spends unreserved stake and credits a beneficiary without changing a reservation.
+     * @dev Pending withdrawals, active reservations, and exiting stake are excluded.
+     */
+    function spendFreeStake(
+        bytes32 _intentHash,
+        address _staker,
+        address _beneficiary,
+        uint256 _amount
+    ) external override onlyController {
+        if (_staker == address(0) || _beneficiary == address(0)) revert ZeroAddress();
+        if (_amount == 0) revert ZeroAmount();
+        if (exitRequests[_staker].exiting) revert AlreadyExiting(_staker);
+
+        uint256 available = freeStake(_staker);
+        if (_amount > available) revert InsufficientFreeStake(_staker, available, _amount);
+
+        stakeBalance[_staker] -= _amount;
+        totalStaked -= _amount;
+        _creditCompensation(_intentHash, _beneficiary, _amount);
+
+        emit FreeStakeSpent(_intentHash, _staker, _beneficiary, _amount, available - _amount);
     }
 
     /**

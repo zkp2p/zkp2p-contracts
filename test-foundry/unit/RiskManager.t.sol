@@ -85,6 +85,15 @@ contract RiskOrchestratorHarness {
         delete intents[_intentHash];
     }
 
+    function extendPosition(
+        IRiskManager _manager,
+        bytes32 _intentHash,
+        uint256 _extensionSeconds,
+        uint256 _newExpiry
+    ) external returns (uint256) {
+        return _manager.onIntentExpiryExtension(_intentHash, _extensionSeconds, _newExpiry);
+    }
+
     function fulfillPosition(IIntentRiskHook _manager, bytes32 _intentHash, uint256 _amount) external {
         _manager.onIntentFulfilled(_intentHash, _amount);
         delete intents[_intentHash];
@@ -109,8 +118,8 @@ contract RiskManagerTest is Test {
     bytes32 internal constant ZELLE = keccak256("zelle");
     uint64 internal constant DAY = 1 days;
     uint64 internal constant MAX_INTENT_PERIOD = 6 hours;
-    uint64 internal constant GRIEFING_CLIFF = 15 minutes;
-    uint32 internal constant GRIEFING_SLOPE = 10;
+    uint16 internal constant EXTENSION_FEE_BPS = 2_000;
+    uint64 internal constant MAX_INTENT_LIFETIME = 5 days;
 
     address internal owner = makeAddr("owner");
     address internal taker = makeAddr("taker");
@@ -147,7 +156,7 @@ contract RiskManagerTest is Test {
 
         vm.startPrank(owner);
         manager.setPlatformRiskConfig(PAYPAL, _chargebackConfig(10_000, 30 days, true));
-        manager.setPlatformRiskConfig(ZELLE, _nonChargebackableConfig(20e6));
+        manager.setPlatformRiskConfig(ZELLE, _nonChargebackableConfig());
         manager.setDeferredPayoutHook(address(verifier));
         vm.stopPrank();
 
@@ -172,17 +181,14 @@ contract RiskManagerTest is Test {
                 reserveBps: _reserveBps,
                 riskWindow: _riskWindow
             }),
-            griefing: IRiskManager.GriefingConfig({
-                griefingCliff: GRIEFING_CLIFF,
-                griefingPenaltyBpsPerHour: GRIEFING_SLOPE,
-                baseUnbondedAmount: 0
+            extension: IRiskManager.IntentExtensionConfig({
+                feeBps: EXTENSION_FEE_BPS,
+                maxIntentLifetime: MAX_INTENT_LIFETIME
             })
         });
     }
 
-    function _nonChargebackableConfig(
-        uint256 _baseUnbondedAmount
-    ) internal pure returns (IRiskManager.PlatformRiskConfig memory) {
+    function _nonChargebackableConfig() internal pure returns (IRiskManager.PlatformRiskConfig memory) {
         return IRiskManager.PlatformRiskConfig({
             enabled: true,
             chargeback: IRiskManager.ChargebackConfig({
@@ -191,10 +197,9 @@ contract RiskManagerTest is Test {
                 reserveBps: 0,
                 riskWindow: 0
             }),
-            griefing: IRiskManager.GriefingConfig({
-                griefingCliff: GRIEFING_CLIFF,
-                griefingPenaltyBpsPerHour: GRIEFING_SLOPE,
-                baseUnbondedAmount: _baseUnbondedAmount
+            extension: IRiskManager.IntentExtensionConfig({
+                feeBps: EXTENSION_FEE_BPS,
+                maxIntentLifetime: MAX_INTENT_LIFETIME
             })
         });
     }
@@ -244,7 +249,7 @@ contract RiskManagerTest is Test {
         });
     }
 
-    function test_AdmissionReservesMaximumOfBothCurves() public {
+    function test_AdmissionReservesChargebackCoverageOnly() public {
         _stake(taker, 1_000e6);
         bytes32 intentHash = keccak256("max-reservation");
         _setIntent(intentHash, taker, 1_000e6, PAYPAL, address(0));
@@ -252,65 +257,19 @@ contract RiskManagerTest is Test {
         _createPosition(intentHash);
 
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
-        assertEq(position.maxGriefingBond, 5.75e6);
         assertEq(position.initialReservation, 1_000e6);
         assertEq(vault.reservedStake(taker), 1_000e6);
     }
 
-    function test_BaseAmountIsUnbondedWithoutReservation() public {
-        bytes32 intentHash = keccak256("base-unbonded");
+    function test_NonChargebackableIntentIsUnbondedWithoutReservation() public {
+        bytes32 intentHash = keccak256("non-chargebackable-unbonded");
         _setIntent(intentHash, taker, 20e6, ZELLE, address(0));
 
         _createPosition(intentHash);
 
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
         assertEq(uint256(position.mode), uint256(IRiskManager.RiskMode.UNBONDED));
-        assertEq(position.bondedAmount, 0);
         assertEq(vault.reservedStake(taker), 0);
-    }
-
-    function test_BaseAmountIsReusableAfterCancellation() public {
-        bytes32 firstIntentHash = keccak256("cancelled-base");
-        _setIntent(firstIntentHash, taker, 20e6, ZELLE, address(0));
-        _createPosition(firstIntentHash);
-
-        orchestrator.cancelPosition(manager, firstIntentHash);
-
-        bytes32 secondIntentHash = keccak256("reused-base");
-        _setIntent(secondIntentHash, taker, 20e6, ZELLE, address(0));
-        _createPosition(secondIntentHash);
-        assertEq(uint256(manager.getRiskPosition(secondIntentHash).mode), uint256(IRiskManager.RiskMode.UNBONDED));
-        assertEq(vault.reservedStake(taker), 0);
-    }
-
-    function test_BaseAmountCancellationAfterCliffNeverChargesStake() public {
-        bytes32 intentHash = keccak256("cancelled-base-after-cliff");
-        _setIntent(intentHash, taker, 20e6, ZELLE, address(0));
-        _createPosition(intentHash);
-        uint64 createdAt = manager.getRiskPosition(intentHash).createdAt;
-        vm.warp(createdAt + 2 hours);
-
-        orchestrator.cancelPosition(manager, intentHash);
-
-        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
-        assertEq(uint256(position.status), uint256(IRiskManager.PositionStatus.CANCELLED));
-        assertEq(position.slashedAmount, 0);
-        assertEq(vault.claimableCompensation(maker), 0);
-    }
-
-    function test_BaseAmountCancellationReconciliationAfterCliffNeverChargesStake() public {
-        bytes32 intentHash = keccak256("reconciled-base-after-cliff");
-        _setIntent(intentHash, taker, 20e6, ZELLE, address(0));
-        _createPosition(intentHash);
-        uint64 createdAt = manager.getRiskPosition(intentHash).createdAt;
-        orchestrator.recordCancellationWithoutCallback(intentHash, createdAt + 2 hours);
-
-        manager.reconcileCancellation(intentHash);
-
-        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
-        assertEq(uint256(position.status), uint256(IRiskManager.PositionStatus.CANCELLED));
-        assertEq(position.slashedAmount, 0);
-        assertEq(vault.claimableCompensation(maker), 0);
     }
 
     function test_AdmissionRejectsIntentTokenUnitMismatch() public {
@@ -355,13 +314,13 @@ contract RiskManagerTest is Test {
         assertEq(vault.reservedStake(stakeOwner), 1_000e6);
     }
 
-    function test_CancellationAtCliffChargesZero() public {
+    function test_CancellationReleasesReservationWithoutChargingStake() public {
         _stake(taker, 1_000e6);
         bytes32 intentHash = keccak256("cliff");
         _setIntent(intentHash, taker, 1_000e6, PAYPAL, address(0));
         _createPosition(intentHash);
         uint64 createdAt = manager.getRiskPosition(intentHash).createdAt;
-        vm.warp(createdAt + GRIEFING_CLIFF);
+        vm.warp(createdAt + 2 hours);
 
         orchestrator.cancelPosition(manager, intentHash);
 
@@ -369,7 +328,7 @@ contract RiskManagerTest is Test {
         assertEq(vault.reservedStake(taker), 0);
     }
 
-    function test_CancellationAfterTwoHoursChargesLinearPenalty() public {
+    function test_CancellationAfterTwoHoursRemainsFree() public {
         _stake(taker, 1_000e6);
         bytes32 intentHash = keccak256("two-hours");
         _setIntent(intentHash, taker, 1_000e6, PAYPAL, address(0));
@@ -379,22 +338,27 @@ contract RiskManagerTest is Test {
 
         orchestrator.cancelPosition(manager, intentHash);
 
-        assertEq(vault.claimableCompensation(maker), 1.75e6);
-        assertEq(vault.stakeBalance(taker), 998.25e6);
-        assertEq(manager.getRiskPosition(intentHash).slashedAmount, 1.75e6);
+        assertEq(vault.claimableCompensation(maker), 0);
+        assertEq(vault.stakeBalance(taker), 1_000e6);
+        assertEq(manager.getRiskPosition(intentHash).slashedAmount, 0);
     }
 
-    function test_CancellationPenaltyCapsAtSnapshottedIntentPeriod() public {
+    function test_ExtensionChargesAnnualizedFeeFromFreeStake() public {
         _stake(taker, 10e6);
         bytes32 intentHash = keccak256("extended");
         _setIntent(intentHash, taker, 1_000e6, ZELLE, address(0));
         _createPosition(intentHash);
         uint64 createdAt = manager.getRiskPosition(intentHash).createdAt;
-        vm.warp(createdAt + 2 days);
 
-        orchestrator.cancelPosition(manager, intentHash);
+        uint256 fee = orchestrator.extendPosition(
+            manager,
+            intentHash,
+            1 hours,
+            createdAt + MAX_INTENT_PERIOD + 1 hours
+        );
 
-        assertEq(vault.claimableCompensation(maker), 5.635e6);
+        assertEq(fee, manager.calculateIntentExtensionFee(1_000e6, EXTENSION_FEE_BPS, 1 hours));
+        assertEq(vault.claimableCompensation(maker), fee);
     }
 
     function test_ReconcileCancellationUsesRecordedTimestamp() public {
@@ -408,7 +372,7 @@ contract RiskManagerTest is Test {
 
         manager.reconcileCancellation(intentHash);
 
-        assertEq(vault.claimableCompensation(maker), 1.75e6);
+        assertEq(vault.claimableCompensation(maker), 0);
         assertEq(manager.getRiskPosition(intentHash).cancelledAt, createdAt + 2 hours);
     }
 
@@ -424,7 +388,7 @@ contract RiskManagerTest is Test {
         assertEq(vault.reservedStake(taker), 600e6);
     }
 
-    function test_NonChargebackableSettlementReleasesBond() public {
+    function test_NonChargebackableSettlementReleasesPosition() public {
         _stake(taker, 10e6);
         bytes32 intentHash = keccak256("irreversible-settlement");
         _setIntent(intentHash, taker, 1_000e6, ZELLE, address(0));
@@ -494,7 +458,7 @@ contract RiskManagerTest is Test {
         assertEq(uint256(manager.getRiskPosition(intentHash).status), uint256(IRiskManager.PositionStatus.RELEASED));
     }
 
-    function test_DeferredAdmissionReservesOnlyGriefingBond() public {
+    function test_DeferredAdmissionDoesNotReserveCancellationBond() public {
         _stake(taker, 10e6);
         bytes32 intentHash = keccak256("deferred");
         _setIntent(intentHash, taker, 700e6, PAYPAL, address(verifier));
@@ -504,8 +468,8 @@ contract RiskManagerTest is Test {
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
         assertTrue(requiresHook);
         assertEq(uint256(position.mode), uint256(IRiskManager.RiskMode.DEFERRED_PAYOUT));
-        assertEq(position.initialReservation, 4.025e6);
-        assertEq(vault.reservedStake(taker), 4.025e6);
+        assertEq(position.initialReservation, 0);
+        assertEq(vault.reservedStake(taker), 0);
     }
 
     function test_DeferredRegistrationRejectsCoverageBelowConfiguredReserve() public {
@@ -540,6 +504,8 @@ contract RiskManagerTest is Test {
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
         assertEq(position.chargebackReserveBps, 5_000);
         assertEq(position.riskWindow, 10 days);
+        assertEq(position.extensionFeeBps, EXTENSION_FEE_BPS);
+        assertEq(position.maxIntentLifetime, MAX_INTENT_LIFETIME);
         assertEq(position.initialReservation, 250e6);
     }
 }

@@ -5,7 +5,6 @@ pragma solidity ^0.8.18;
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { OrchestratorV2 } from "./OrchestratorV2.sol";
-import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IIntentRiskHook } from "./interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV2 } from "./interfaces/IOrchestratorV2.sol";
 import { IOrchestratorV3 } from "./interfaces/IOrchestratorV3.sol";
@@ -23,6 +22,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
 
     uint256 public constant MIN_RISK_CALLBACK_GAS_LIMIT = 750_000;
     uint256 public constant MAX_RISK_CALLBACK_RETURN_DATA = 2_048;
+    uint256 public constant MAX_INTENT_LIFETIME = 5 days;
 
     /* ============ State Variables ============ */
 
@@ -103,22 +103,29 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         uint256 _depositId,
         IIntentRiskHook _hook
     ) external override nonReentrant {
-        if (_escrow == address(0)) revert ZeroAddress();
+        BoundedCall.setDepositRiskHook(depositRiskHooks, _escrow, _depositId, _hook);
+    }
 
-        address hookAddress = address(_hook);
-        if (hookAddress != address(0) && hookAddress.code.length == 0) {
-            revert InvalidRiskHook(hookAddress);
-        }
+    /* ============ Intent Owner Functions ============ */
 
-        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
-        bool isDepositorOrDelegate = msg.sender == deposit.depositor
-            || (deposit.delegate != address(0) && msg.sender == deposit.delegate);
-        if (!isDepositorOrDelegate) {
-            revert UnauthorizedCallerOrDelegate(msg.sender, deposit.depositor, deposit.delegate);
-        }
-
-        depositRiskHooks[_escrow][_depositId] = _hook;
-        emit DepositRiskHookSet(_escrow, _depositId, hookAddress, msg.sender);
+    /**
+     * @inheritdoc IOrchestratorV3
+     * @dev The snapshotted hook charges before Escrow mutates the expiry. Any later failure rolls
+     *      the charge back with the transaction.
+     */
+    function extendIntentExpiry(
+        bytes32 _intentHash,
+        uint256 _extensionSeconds
+    ) external override nonReentrant whenNotPaused {
+        BoundedCall.extendIntentExpiry(
+            intents,
+            intentRiskHooks,
+            _intentHash,
+            _extensionSeconds,
+            MAX_INTENT_LIFETIME,
+            riskCallbackGasLimit,
+            MAX_RISK_CALLBACK_RETURN_DATA
+        );
     }
 
     /* ============ Governance Functions ============ */
@@ -153,17 +160,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
      * @notice Returns the scalar intent fields required by a risk hook without copying dynamic intent data.
      */
     function getRiskIntent(bytes32 _intentHash) external view override returns (RiskIntentData memory riskIntent) {
-        Intent storage intent = intents[_intentHash];
-        riskIntent = RiskIntentData({
-            owner: intent.owner,
-            to: intent.to,
-            escrow: intent.escrow,
-            depositId: intent.depositId,
-            amount: intent.amount,
-            paymentMethod: intent.paymentMethod,
-            postIntentHook: address(intent.postIntentHook),
-            createdAt: uint64(intent.timestamp)
-        });
+        return BoundedCall.getRiskIntent(intents, _intentHash);
     }
 
     /**
@@ -197,19 +194,15 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
      * @notice Snapshots and executes risk admission after V2 stores the intent.
      */
     function _afterIntentSignaled(bytes32 _intentHash) internal override {
-        Intent storage intent = intents[_intentHash];
-        IIntentRiskHook riskHook = depositRiskHooks[intent.escrow][intent.depositId];
-        intentRiskHooks[_intentHash] = riskHook;
-
-        bool requiresPostIntentHook = BoundedCall.executeRiskAdmission(
-            riskHook,
+        BoundedCall.snapshotAndAdmit(
+            depositRiskHooks,
+            intentRiskHooks,
+            intentRequiresPostIntentHook,
+            intents,
             _intentHash,
-            address(intent.postIntentHook),
             riskCallbackGasLimit,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
-        intentRequiresPostIntentHook[_intentHash] = requiresPostIntentHook;
-        emit IntentRiskHookSnapshotted(_intentHash, address(riskHook), requiresPostIntentHook);
     }
 
     /**

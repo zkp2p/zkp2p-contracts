@@ -35,7 +35,7 @@ import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils
 
 // Import the stable, not-yet-deployed risk-system ABI and exact bigint math helpers
 import { RiskManager } from "@zkp2p/contracts-v2/abis/contracts"
-import { calculateRequiredReservation } from "@zkp2p/contracts-v2/utils/riskMath"
+import { calculateIntentExtensionFee } from "@zkp2p/contracts-v2/utils/riskMath"
 
 // Example: Create contract instance with ethers
 import { ethers } from 'ethers';
@@ -169,7 +169,7 @@ All modules are directly accessible via subpath exports:
 - `@zkp2p/contracts-v2/constants/<network>` - Constants per network
 - `@zkp2p/contracts-v2/paymentMethods` - Payment method configs
 - `@zkp2p/contracts-v2/utils/protocolUtils` - Protocol utilities
-- `@zkp2p/contracts-v2/utils/riskMath` - Exact bigint capacity, reservation, and penalty formulas
+- `@zkp2p/contracts-v2/utils/riskMath` - Exact bigint chargeback-capacity and extension-fee formulas
 - `@zkp2p/contracts-v2/types` - TypeScript types
 
 ### Export Format Details

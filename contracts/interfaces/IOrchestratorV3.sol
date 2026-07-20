@@ -45,6 +45,15 @@ interface IOrchestratorV3 is IOrchestratorV2 {
     event RiskCallbackGasLimitUpdated(uint256 gasLimit);
     event IntentSettlementRecorded(bytes32 indexed intentHash, uint256 releasedAmount, uint64 settledAt);
     event IntentCancellationRecorded(bytes32 indexed intentHash, uint64 cancelledAt);
+    event IntentExpiryExtended(
+        bytes32 indexed intentHash,
+        address indexed owner,
+        address indexed riskHook,
+        uint256 extensionSeconds,
+        uint256 fee,
+        uint256 previousExpiry,
+        uint256 newExpiry
+    );
 
     /* ============ Errors ============ */
 
@@ -53,11 +62,17 @@ interface IOrchestratorV3 is IOrchestratorV2 {
     error InvalidRiskHookResponse(address hook, bytes response);
     error RequiredPostIntentHookMissing(bytes32 intentHash);
     error RiskCallbackGasLimitTooLow(uint256 gasLimit, uint256 minimum);
+    error InvalidIntentExtensionDuration(uint256 extensionSeconds);
+    error IntentAlreadyExpired(bytes32 intentHash, uint256 expiry, uint256 currentTime);
+    error IntentExtensionCapExceeded(bytes32 intentHash, uint256 requestedExpiry, uint256 maximumExpiry);
+    error IntentExtensionRiskHookMissing(bytes32 intentHash);
+    error RiskHookExtensionFailed(bytes32 intentHash, address hook, bytes revertData);
 
     /* ============ External Functions ============ */
 
     function setDepositRiskHook(address _escrow, uint256 _depositId, IIntentRiskHook _hook) external;
     function setRiskCallbackGasLimit(uint256 _gasLimit) external;
+    function extendIntentExpiry(bytes32 _intentHash, uint256 _extensionSeconds) external;
 
     /* ============ View Functions ============ */
 

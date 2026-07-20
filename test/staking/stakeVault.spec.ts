@@ -275,6 +275,36 @@ describe("StakeVault", () => {
   });
 
   describe("slashing and compensation", () => {
+    it("spends only free stake and leaves active reservations unchanged", async () => {
+      const { controller, staker, maker, vault } = await deployFixture();
+      const intentHash = ethers.utils.id("extension");
+      await vault.connect(staker).depositStake(usdc(1_000));
+      await vault.connect(controller).reserveStake(staker.address, intentHash, usdc(600), 0);
+
+      await expect(vault.connect(controller).spendFreeStake(intentHash, staker.address, maker.address, usdc(100)))
+        .to.emit(vault, "FreeStakeSpent")
+        .withArgs(intentHash, staker.address, maker.address, usdc(100), usdc(300));
+
+      expect(await vault.stakeBalance(staker.address)).to.eq(usdc(900));
+      expect(await vault.reservedStake(staker.address)).to.eq(usdc(600));
+      expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(100));
+    });
+
+    it("does not spend stake isolated for a pending withdrawal", async () => {
+      const { controller, staker, maker, vault } = await deployFixture();
+      await vault.connect(staker).depositStake(usdc(1_000));
+      await vault.connect(staker).requestStakeWithdrawal(usdc(900));
+
+      await expect(
+        vault.connect(controller).spendFreeStake(
+          ethers.utils.id("extension"),
+          staker.address,
+          maker.address,
+          usdc(101),
+        ),
+      ).to.be.revertedWithCustomError(vault, "InsufficientFreeStake");
+    });
+
     it("slashes no more than requested and retains the remaining reservation", async () => {
       const { controller, staker, maker, vault } = await deployFixture();
       const intentHash = ethers.utils.id("intent");

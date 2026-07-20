@@ -41,7 +41,6 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
     uint256 internal constant BPS = 10_000;
     int256 internal constant SIGNED_BPS = 10_000;
     uint256 internal constant MAX_DUST_THRESHOLD = 1e6;            // 1 USDC
-    uint256 internal constant MAX_TOTAL_INTENT_EXPIRATION_PERIOD = 86400 * 5; // 5 days
     uint256 internal constant PRUNE_ALL_EXPIRED_INTENTS = type(uint256).max;
     uint256 internal constant MAX_ADAPTER_CONFIG_BYTES = 256;
     
@@ -865,12 +864,11 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         token.safeTransfer(_to, _transferAmount);
     }
 
-    /* ============ Intent Guardian Only (External Functions) ============ */
+    /* ============ Orchestrator Only (Expiry Extension) ============ */
 
     /**
-     * @notice INTENT GUARDIAN ONLY: Extends the expiry time of an existing intent. Only callable by intent guardian.
-     * This function reverts if the total intent expiry period is greater than the maximum allowed to prevent griefing
-     * by extending the intent expiry period indefinitely.
+     * @notice Extends an active intent after its owning orchestrator applies extension policy.
+     * @dev The same registered orchestrator that created the lock must call this function.
      * 
      * @param _depositId The deposit ID containing the intent
      * @param _intentHash The intent hash to extend expiry for
@@ -881,7 +879,8 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         bytes32 _intentHash,
         uint256 _additionalTime
     ) 
-        external 
+        external
+        onlyOrchestrator
     {
         // Checks
         Deposit storage deposit = deposits[_depositId];
@@ -889,10 +888,11 @@ contract EscrowV2 is Ownable, Pausable, ReentrancyGuard, IEscrowV2 {
         
         if (deposit.depositor == address(0)) revert DepositNotFound(_depositId);
         if (intent.intentHash == bytes32(0)) revert IntentNotFound(_intentHash);
-        if (deposit.intentGuardian != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.intentGuardian);
+        address intentOwnerOrchestrator = intentOrchestrator[_intentHash];
+        if (intentOwnerOrchestrator != msg.sender) revert UnauthorizedCaller(msg.sender, intentOwnerOrchestrator);
         if (_additionalTime == 0) revert ZeroValue();
-        if (intent.expiryTime + _additionalTime > intent.timestamp + MAX_TOTAL_INTENT_EXPIRATION_PERIOD) {
-            revert AmountAboveMax(_additionalTime, MAX_TOTAL_INTENT_EXPIRATION_PERIOD);
+        if (intent.expiryTime <= block.timestamp) {
+            revert IntentAlreadyExpired(_intentHash, intent.expiryTime, block.timestamp);
         }
         
         // Effects

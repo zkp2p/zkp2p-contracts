@@ -57,6 +57,14 @@ contract OrchestratorMock {
     ) external {
         escrow.unlockAndTransferFunds(_depositId, _intentHash, _transferAmount, _to);
     }
+
+    function extendIntentExpiry(
+        uint256 _depositId,
+        bytes32 _intentHash,
+        uint256 _additionalTime
+    ) external {
+        escrow.extendIntentExpiry(_depositId, _intentHash, _additionalTime);
+    }
     
     // Getter for testing
     function getLastPrunedIntents() external view returns (bytes32[] memory) {

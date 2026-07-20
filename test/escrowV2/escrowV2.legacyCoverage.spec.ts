@@ -934,21 +934,21 @@ describe("EscrowV2", () => {
   });
 
   describe("#extendIntentExpiry", () => {
-    it("extends expiry when called by intent guardian", async () => {
+    it("extends expiry when called by the intent's owning orchestrator", async () => {
       const intentHash = await createIntentWith(orchestratorMock, usdc(20));
       const beforeIntent = await escrow.getDepositIntent(depositId, intentHash);
       await expect(
-        escrow.connect(intentGuardian.wallet).extendIntentExpiry(depositId, intentHash, 120)
+        orchestratorMock.connect(owner.wallet).extendIntentExpiry(depositId, intentHash, 120)
       ).to.emit(escrow, "IntentExpiryExtended");
       const afterIntent = await escrow.getDepositIntent(depositId, intentHash);
       expect(afterIntent.expiryTime.sub(beforeIntent.expiryTime)).to.eq(120);
     });
 
-    it("reverts when extension exceeds maximum horizon", async () => {
+    it("rejects a different allowlisted orchestrator", async () => {
       const intentHash = await createIntentWith(orchestratorMock, usdc(20));
       await expect(
-        escrow.connect(intentGuardian.wallet).extendIntentExpiry(depositId, intentHash, 86400 * 6)
-      ).to.be.revertedWithCustomError(escrow, "AmountAboveMax");
+        secondaryOrchestratorMock.connect(owner.wallet).extendIntentExpiry(depositId, intentHash, 120)
+      ).to.be.revertedWithCustomError(escrow, "UnauthorizedCaller");
     });
   });
 

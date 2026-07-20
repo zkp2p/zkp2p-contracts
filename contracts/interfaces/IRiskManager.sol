@@ -2,19 +2,19 @@
 
 pragma solidity ^0.8.18;
 
+import { IIntentExtensionHook } from "./IIntentExtensionHook.sol";
 import { IIntentRiskHook } from "./IIntentRiskHook.sol";
 import { IOrchestratorV3 } from "./IOrchestratorV3.sol";
 import { IStakeVault } from "./IStakeVault.sol";
 
 /**
  * @title IRiskManager
- * @notice Continuous stake-risk policy for pending-intent griefing and post-settlement chargebacks.
- * @dev Implementations must snapshot mutable platform and Escrow terms when an intent is admitted.
+ * @notice Stake policy for paid intent extensions and post-settlement chargebacks.
+ * @dev Implementations snapshot mutable platform terms when an intent is admitted.
  */
-interface IRiskManager is IIntentRiskHook {
+interface IRiskManager is IIntentRiskHook, IIntentExtensionHook {
     /* ============ Enums ============ */
 
-    /** @notice Economic source backing a position. */
     enum RiskMode {
         NONE,
         UNBONDED,
@@ -22,7 +22,6 @@ interface IRiskManager is IIntentRiskHook {
         DEFERRED_PAYOUT
     }
 
-    /** @notice Lifecycle state of a snapshotted risk position. */
     enum PositionStatus {
         NONE,
         PENDING,
@@ -34,117 +33,63 @@ interface IRiskManager is IIntentRiskHook {
 
     /* ============ Structs ============ */
 
-    /// @notice Controls post-settlement chargeback protection for a payment platform.
     struct ChargebackConfig {
-        /// @notice Whether a fulfilled payment can later reverse and create LP loss.
         bool chargebackable;
-        /// @notice Whether held settlement proceeds may replace membership stake as post-settlement coverage.
         bool deferredPayoutEnabled;
-        /// @notice Upward-rounded portion of the exact released amount retained as coverage, in basis points.
         uint16 reserveBps;
-        /// @notice Half-open period after settlement during which authenticated chargebacks may slash coverage.
         uint64 riskWindow;
     }
 
-    /// @notice Controls pending-intent liquidity-lock penalties and the reusable unbonded base tranche.
-    struct GriefingConfig {
-        /// @notice Cancellation grace period after signaling during which the accrued penalty is zero.
-        uint64 griefingCliff;
-        /// @notice Time-linear penalty slope applied after the cliff, in basis points per hour.
-        uint32 griefingPenaltyBpsPerHour;
-        /// @notice Reusable per-intent amount excluded from the griefing bond on non-chargebackable platforms.
-        uint256 baseUnbondedAmount;
+    struct IntentExtensionConfig {
+        /// @notice Annualized extension price in basis points. Zero disables extensions.
+        uint16 feeBps;
+        /// @notice Maximum total lifetime from creation. Zero disables extensions.
+        uint64 maxIntentLifetime;
     }
 
-    /// @notice Combines admission status with the independent chargeback and griefing policies for a platform.
     struct PlatformRiskConfig {
-        /// @notice Whether new positions may snapshot this policy; disabling never mutates existing positions.
         bool enabled;
-        /// @notice Post-settlement reversal policy, independent of pending-intent griefing exposure.
         ChargebackConfig chargeback;
-        /// @notice Pending cancellation and reusable base-unbonded policy.
-        GriefingConfig griefing;
+        IntentExtensionConfig extension;
     }
 
-    /**
-     * @notice Immutable admission terms plus mutable lifecycle accounting for one intent.
-     * @dev Fields through `initialReservation` are snapshots. Later governance and Escrow changes cannot
-     *      alter the position's liability. `reservedAmount` is the remaining slashable amount.
-     */
     struct RiskPosition {
-        /// @notice Intent owner whose action created the position.
         address taker;
-        /// @notice Portfolio owner whose shared stake backs any amount above the unbonded base.
         address stakeOwner;
-        /// @notice Escrow depositor compensated by griefing penalties and valid chargebacks.
         address lp;
-        /// @notice Payment platform whose policy was snapshotted at admission.
         bytes32 paymentMethod;
-        /// @notice Economic backing source selected once at admission.
         RiskMode mode;
-        /// @notice Current lifecycle state; terminal transitions never return to pending.
         PositionStatus status;
-        /// @notice Canonical deferred hook snapshotted only for a deferred-payout position.
         address deferredPayoutHook;
-        /// @notice Original intent recipient entitled to unslashed deferred proceeds.
         address payoutRecipient;
-        /// @notice Snapshotted chargeback reserve ratio applied to the exact released amount.
         uint16 chargebackReserveBps;
-        /// @notice Snapshotted hourly slope used by the time-linear cancellation formula.
-        uint32 griefingPenaltyBpsPerHour;
-        /// @notice Snapshotted duration of post-settlement chargeback coverage.
+        uint16 extensionFeeBps;
         uint64 riskWindow;
-        /// @notice Canonical Orchestrator intent-creation timestamp.
         uint64 createdAt;
-        /// @notice Escrow intent period at admission, which caps griefing liability.
-        uint64 maxIntentPeriod;
-        /// @notice Snapshotted zero-penalty cancellation interval.
-        uint64 griefingCliff;
-        /// @notice Liquidity-unlock timestamp used for cancellation accounting.
+        uint64 maxIntentLifetime;
+        uint64 purchasedExtensionSeconds;
         uint64 cancelledAt;
-        /// @notice Fulfillment or manual-release timestamp that starts coverage.
         uint64 settledAt;
-        /// @notice First timestamp excluded from the half-open chargeback window.
         uint64 coverageDeadline;
-        /// @notice Original locked amount on which maximum pending liabilities were calculated.
         uint256 intentAmount;
-        /// @notice Portion of the intent amount exposed to the griefing curve after subtracting the base tranche.
-        uint256 bondedAmount;
-        /// @notice Maximum time-capped griefing penalty at admission.
-        uint256 maxGriefingBond;
-        /// @notice Stake reserved at admission before terminal resizing or release.
         uint256 initialReservation;
-        /// @notice Remaining slashable stake or deferred proceeds for this position.
         uint256 reservedAmount;
-        /// @notice Exact amount released from Escrow at settlement before post-hook fees.
         uint256 releasedAmount;
-        /// @notice Total net proceeds recorded in StakeVault for a deferred payout.
         uint256 deferredPayoutAmount;
-        /// @notice Cumulative compensation already charged against this position.
         uint256 slashedAmount;
+        uint256 extensionFeesPaid;
     }
 
-    /** @notice Signed evidence authorizing compensation from an active chargeback position. */
     struct ChargebackAttestation {
-        /// @notice Chain domain preventing cross-chain replay.
         uint256 chainId;
-        /// @notice RiskManager domain preventing replay across manager replacements.
         address riskManager;
-        /// @notice Orchestrator domain preventing replay across intent namespaces.
         address orchestrator;
-        /// @notice Position whose remaining coverage may be consumed.
         bytes32 intentHash;
-        /// @notice Payment platform bound to the position snapshot.
         bytes32 paymentMethod;
-        /// @notice LP loss requested; compensation is capped at remaining coverage.
         uint256 chargebackAmount;
-        /// @notice Nonzero off-chain evidence identifier emitted for audit correlation.
         bytes32 evidenceId;
-        /// @notice Manager-wide one-time nonce preventing attestation replay.
         uint256 nonce;
-        /// @notice First timestamp at which the attestation is valid.
         uint64 validAfter;
-        /// @notice Last timestamp at which the attestation itself is valid.
         uint64 validUntil;
     }
 
@@ -157,9 +102,8 @@ interface IRiskManager is IIntentRiskHook {
         bool deferredPayoutEnabled,
         uint16 reserveBps,
         uint64 riskWindow,
-        uint64 griefingCliff,
-        uint32 griefingPenaltyBpsPerHour,
-        uint256 baseUnbondedAmount
+        uint16 extensionFeeBps,
+        uint64 maxIntentLifetime
     );
     event RiskPositionCreated(
         bytes32 indexed intentHash,
@@ -169,30 +113,28 @@ interface IRiskManager is IIntentRiskHook {
         bytes32 paymentMethod,
         RiskMode mode,
         uint256 intentAmount,
-        uint256 bondedAmount,
         uint64 createdAt,
-        uint64 maxIntentPeriod,
-        uint64 griefingCliff,
-        uint32 griefingPenaltyBpsPerHour,
         uint16 chargebackReserveBps,
         uint64 riskWindow,
-        uint256 maxGriefingBond,
+        uint16 extensionFeeBps,
+        uint64 maxIntentLifetime,
         uint256 chargebackReserve,
         uint256 initialReservation
     );
-    event GriefingPenaltyCharged(
+    event IntentExtensionFeeCharged(
         bytes32 indexed intentHash,
         address indexed stakeOwner,
         address indexed lp,
-        uint256 penalty,
-        uint256 elapsedTime
+        uint256 extensionSeconds,
+        uint256 fee,
+        uint256 newExpiry,
+        uint256 cumulativeFees
     );
     event RiskPositionCancelled(
         bytes32 indexed intentHash,
         address indexed stakeOwner,
         address indexed lp,
         uint64 cancelledAt,
-        uint256 penalty,
         uint256 releasedReservation
     );
     event RiskPositionSettled(
@@ -244,8 +186,11 @@ interface IRiskManager is IIntentRiskHook {
     error AdmissionPaused();
     error InvalidPlatformConfig(bytes32 paymentMethod);
     error PlatformDisabled(bytes32 paymentMethod);
-    error InvalidPositionPolicy(bytes32 paymentMethod, uint64 griefingCliff, uint64 maxIntentPeriod);
-    error GriefingPenaltyExceedsIntentAmount(bytes32 paymentMethod);
+    error InvalidIntentExtensionConfig(bytes32 paymentMethod);
+    error IntentExtensionsDisabled(bytes32 intentHash);
+    error IntentExtensionLifetimeExceeded(bytes32 intentHash, uint256 requestedExpiry, uint256 maximumExpiry);
+    error ExtensionFeeAuthorizationRequired(bytes32 intentHash, address stakeOwner, address taker);
+    error InsufficientExtensionFeeStake(address stakeOwner, uint256 available, uint256 required);
     error StakeOwnerExiting(address taker, address stakeOwner);
     error InsufficientCollateral(address stakeOwner, uint256 available, uint256 required);
     error DeferredPayoutHookRequired(address expectedHook, address actualHook);
@@ -272,34 +217,21 @@ interface IRiskManager is IIntentRiskHook {
 
     /* ============ Governance Functions ============ */
 
-    /** @notice Sets policy for future positions on a payment method without rewriting existing snapshots. */
     function setPlatformRiskConfig(bytes32 _paymentMethod, PlatformRiskConfig calldata _config) external;
-    /** @notice Replaces the evidence verifier used for subsequently submitted chargeback attestations. */
     function setAttestationVerifier(address _verifier) external;
-    /** @notice Sets the canonical deferred hook snapshotted by future deferred-payout positions. */
     function setDeferredPayoutHook(address _hook) external;
-    /** @notice Pauses or resumes new admission while leaving terminal accounting and withdrawals available. */
     function setAdmissionPaused(bool _paused) external;
-    /** @notice Accepts a previously proposed delayed StakeVault controller handover on behalf of this manager. */
     function acceptVaultController() external;
 
     /* ============ Lifecycle Functions ============ */
 
-    /** @notice Records net proceeds already transferred to StakeVault by the snapshotted canonical hook. */
     function registerDeferredPayout(bytes32 _intentHash, address _beneficiary, uint256 _amount) external;
-    /** @notice Permissionlessly applies one durable failed-cancellation record using its original timestamp. */
     function reconcileCancellation(bytes32 _intentHash) external;
-    /** @notice Atomically reconciles several durable failed-cancellation records. */
     function reconcileCancellations(bytes32[] calldata _intentHashes) external;
-    /** @notice Permissionlessly applies one durable failed-settlement record. */
     function reconcileSettlement(bytes32 _intentHash) external;
-    /** @notice Atomically reconciles several durable failed-settlement records. */
     function reconcileSettlements(bytes32[] calldata _intentHashes) external;
-    /** @notice Ends slashability and releases remaining stake coverage at or after its deadline. */
     function releaseMaturedPosition(bytes32 _intentHash) external;
-    /** @notice Atomically matures several settled positions. */
     function releaseMaturedPositions(bytes32[] calldata _intentHashes) external;
-    /** @notice Authenticates chargeback evidence and compensates the LP up to remaining coverage. */
     function submitChargeback(
         ChargebackAttestation calldata _attestation,
         bytes[] calldata _signatures,
@@ -308,44 +240,19 @@ interface IRiskManager is IIntentRiskHook {
 
     /* ============ View and Math Functions ============ */
 
-    /** @notice Returns policy used only by future admissions for a payment method. */
     function getPlatformRiskConfig(bytes32 _paymentMethod) external view returns (PlatformRiskConfig memory);
-    /** @notice Returns the complete immutable snapshot and mutable lifecycle accounting for an intent. */
     function getRiskPosition(bytes32 _intentHash) external view returns (RiskPosition memory);
-    /** @notice Returns the delegated portfolio owner and current aggregate stake capacity for a taker. */
     function getTakerState(address _taker)
         external
         view
         returns (address stakeOwner, uint256 totalStake, uint256 reserved, uint256 free, bool exiting);
-    /** @notice Returns max(intent amount - base unbonded amount, 0). */
-    function calculateBondedAmount(uint256 _amount, uint256 _baseUnbondedAmount) external pure returns (uint256);
-    /** @notice Returns ceil(bonded amount * slope * (period - cliff) / (10_000 * 1 hour)). */
-    function calculateMaxGriefingBond(
-        uint256 _intentAmount,
-        uint64 _maxIntentPeriod,
-        GriefingConfig calldata _config
-    ) external pure returns (uint256);
-    /** @notice Returns the time-capped penalty for a bonded amount and effective elapsed time at cancellation. */
-    function calculateGriefingPenalty(
-        uint256 _bondedAmount,
-        uint64 _createdAt,
-        uint64 _cancelledAt,
-        uint64 _maxIntentPeriod,
-        uint64 _griefingCliff,
-        uint32 _griefingPenaltyBpsPerHour
-    ) external pure returns (uint256 penalty, uint256 effectiveElapsed);
-    /** @notice Returns ceil(amount * reserveBps / 10_000). */
     function calculateChargebackReserve(uint256 _amount, uint16 _reserveBps) external pure returns (uint256);
-    /** @notice Returns both mutually exclusive liabilities and their maximum admission reservation. */
-    function calculateRequiredReservation(
-        uint256 _intentAmount,
-        uint64 _maxIntentPeriod,
-        PlatformRiskConfig calldata _config
-    ) external pure returns (uint256 maxGriefingBond, uint256 chargebackReserve, uint256 requiredReservation);
-    /** @notice Returns the complete EIP-712 digest that an attestation verifier authenticates. */
+    function calculateIntentExtensionFee(
+        uint256 _amount,
+        uint16 _annualFeeBps,
+        uint256 _extensionSeconds
+    ) external pure returns (uint256);
     function hashChargebackAttestation(ChargebackAttestation calldata _attestation) external view returns (bytes32);
-    /** @notice Returns the immutable canonical lifecycle source authorized to call position callbacks. */
     function orchestrator() external view returns (IOrchestratorV3);
-    /** @notice Returns the immutable policy-agnostic custody and reservation vault. */
     function stakeVault() external view returns (IStakeVault);
 }

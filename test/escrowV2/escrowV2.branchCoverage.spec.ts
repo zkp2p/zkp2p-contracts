@@ -1365,7 +1365,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
     describe("when deposit does not exist", () => {
       async function subject() {
         const intentHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("phantom-extend"));
-        return escrow.connect(intentGuardian.wallet).extendIntentExpiry(BigNumber.from(999), intentHash, 120);
+        return orchestratorMock.connect(owner.wallet).extendIntentExpiry(BigNumber.from(999), intentHash, 120);
       }
 
       it("reverts with DepositNotFound", async () => {
@@ -1376,7 +1376,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
     describe("when intent does not exist", () => {
       async function subject() {
         const intentHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("missing-extend-intent"));
-        return escrow.connect(intentGuardian.wallet).extendIntentExpiry(depositId, intentHash, 120);
+        return orchestratorMock.connect(owner.wallet).extendIntentExpiry(depositId, intentHash, 120);
       }
 
       it("reverts with IntentNotFound", async () => {
@@ -1384,7 +1384,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
       });
     });
 
-    describe("when caller is not intentGuardian", () => {
+    describe("when caller is not a registered orchestrator", () => {
       let intentHash: BytesLike;
 
       async function subject() {
@@ -1404,7 +1404,7 @@ describe("EscrowV2 -- Branch Coverage", () => {
       let intentHash: BytesLike;
 
       async function subject() {
-        return escrow.connect(intentGuardian.wallet).extendIntentExpiry(depositId, intentHash, 0);
+        return orchestratorMock.connect(owner.wallet).extendIntentExpiry(depositId, intentHash, 0);
       }
 
       beforeEach(async () => {

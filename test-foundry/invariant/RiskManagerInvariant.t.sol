@@ -143,10 +143,9 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
         handler.setManager(manager);
         vault.initializeController(address(manager));
 
-        IRiskManager.GriefingConfig memory griefing = IRiskManager.GriefingConfig({
-            griefingCliff: 15 minutes,
-            griefingPenaltyBpsPerHour: 10,
-            baseUnbondedAmount: 0
+        IRiskManager.IntentExtensionConfig memory extension = IRiskManager.IntentExtensionConfig({
+            feeBps: 2_000,
+            maxIntentLifetime: 5 days
         });
         manager.setPlatformRiskConfig(PAYPAL, IRiskManager.PlatformRiskConfig({
             enabled: true,
@@ -156,9 +155,8 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
                 reserveBps: 10_000,
                 riskWindow: 30 days
             }),
-            griefing: griefing
+            extension: extension
         }));
-        griefing.baseUnbondedAmount = 20e6;
         manager.setPlatformRiskConfig(ZELLE, IRiskManager.PlatformRiskConfig({
             enabled: true,
             chargeback: IRiskManager.ChargebackConfig({
@@ -167,7 +165,7 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
                 reserveBps: 0,
                 riskWindow: 0
             }),
-            griefing: griefing
+            extension: extension
         }));
 
         deal(address(token), stakeOwner, 1_000_000e6);

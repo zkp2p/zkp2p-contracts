@@ -181,6 +181,7 @@ interface IEscrowV2 {
     // Not found errors
     error DepositNotFound(uint256 depositId);
     error IntentNotFound(bytes32 intentHash);
+    error IntentAlreadyExpired(bytes32 intentHash, uint256 expiry, uint256 currentTime);
     error PaymentMethodNotActive(uint256 depositId, bytes32 paymentMethod);
     error PaymentMethodNotListed(uint256 depositId, bytes32 paymentMethod);
     error CurrencyNotFound(bytes32 paymentMethod, bytes32 currency);

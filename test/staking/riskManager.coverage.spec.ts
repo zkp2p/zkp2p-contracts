@@ -8,8 +8,8 @@ const MINUTE = 60;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const MAX_INTENT_PERIOD = 6 * HOUR;
-const CLIFF = 15 * MINUTE;
-const SLOPE = 10;
+const EXTENSION_FEE_BPS = 2_000;
+const MAX_INTENT_LIFETIME = 5 * DAY;
 const PAYPAL = ethers.utils.id("coverage-paypal");
 const ZELLE = ethers.utils.id("coverage-zelle");
 const OTHER_METHOD = ethers.utils.id("coverage-other");
@@ -25,13 +25,12 @@ function chargebackConfig(overrides: Record<string, unknown> = {}) {
       riskWindow: DAY,
       ...((overrides.chargeback as Record<string, unknown>) ?? {}),
     },
-    griefing: {
-      griefingCliff: CLIFF,
-      griefingPenaltyBpsPerHour: SLOPE,
-      baseUnbondedAmount: 0,
-      ...((overrides.griefing as Record<string, unknown>) ?? {}),
+    extension: {
+      feeBps: EXTENSION_FEE_BPS,
+      maxIntentLifetime: MAX_INTENT_LIFETIME,
+      ...((overrides.extension as Record<string, unknown>) ?? {}),
     },
-    ...Object.fromEntries(Object.entries(overrides).filter(([key]) => key !== "chargeback" && key !== "griefing")),
+    ...Object.fromEntries(Object.entries(overrides).filter(([key]) => key !== "chargeback" && key !== "extension")),
   };
 }
 
@@ -45,13 +44,12 @@ function nonChargebackConfig(overrides: Record<string, unknown> = {}) {
       riskWindow: 0,
       ...((overrides.chargeback as Record<string, unknown>) ?? {}),
     },
-    griefing: {
-      griefingCliff: CLIFF,
-      griefingPenaltyBpsPerHour: SLOPE,
-      baseUnbondedAmount: 0,
-      ...((overrides.griefing as Record<string, unknown>) ?? {}),
+    extension: {
+      feeBps: EXTENSION_FEE_BPS,
+      maxIntentLifetime: MAX_INTENT_LIFETIME,
+      ...((overrides.extension as Record<string, unknown>) ?? {}),
     },
-    ...Object.fromEntries(Object.entries(overrides).filter(([key]) => key !== "chargeback" && key !== "griefing")),
+    ...Object.fromEntries(Object.entries(overrides).filter(([key]) => key !== "chargeback" && key !== "extension")),
   };
 }
 
@@ -72,9 +70,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
 
     await manager.setDeferredPayoutHook(orchestrator.address);
     await manager.setPlatformRiskConfig(PAYPAL, chargebackConfig());
-    await manager.setPlatformRiskConfig(ZELLE, nonChargebackConfig({
-      griefing: { baseUnbondedAmount: usdc(20) },
-    }));
+    await manager.setPlatformRiskConfig(ZELLE, nonChargebackConfig());
     await vault.setTakerState(taker.address, taker.address, usdc(100_000), usdc(100_000), false);
 
     return { owner, taker, maker, beneficiary, other, orchestrator, vault, escrow, verifier, manager };
@@ -274,11 +270,11 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
         .to.be.revertedWithCustomError(manager, "InvalidPlatformConfig");
     });
 
-    it("rejects a base unbonded amount on a chargebackable platform", async () => {
+    it("rejects a partially configured extension policy", async () => {
       const { manager } = await loadFixture(deployHarnessFixture);
       await expect(manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig({
-        griefing: { baseUnbondedAmount: 1 },
-      }))).to.be.revertedWithCustomError(manager, "InvalidPlatformConfig");
+        extension: { feeBps: EXTENSION_FEE_BPS, maxIntentLifetime: 0 },
+      }))).to.be.revertedWithCustomError(manager, "InvalidIntentExtensionConfig");
     });
 
     it("rejects a chargebackable platform with a zero reserve", async () => {
@@ -333,44 +329,24 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
   });
 
   describe("public formula and hashing helpers", () => {
-    it("returns zero maximum griefing bond for a zero slope", async () => {
+    it("returns zero extension fee for a zero rate", async () => {
       const { manager } = await loadFixture(deployHarnessFixture);
-      expect(await manager.calculateMaxGriefingBond(100, MAX_INTENT_PERIOD, {
-        griefingCliff: CLIFF, griefingPenaltyBpsPerHour: 0, baseUnbondedAmount: 0,
-      })).to.eq(0);
+      expect(await manager.calculateIntentExtensionFee(100, 0, HOUR)).to.eq(0);
     });
 
-    it("returns zero maximum griefing bond when the cliff reaches the period", async () => {
+    it("returns zero extension fee for zero time", async () => {
       const { manager } = await loadFixture(deployHarnessFixture);
-      expect(await manager.calculateMaxGriefingBond(100, MAX_INTENT_PERIOD, {
-        griefingCliff: MAX_INTENT_PERIOD, griefingPenaltyBpsPerHour: SLOPE, baseUnbondedAmount: 0,
-      })).to.eq(0);
+      expect(await manager.calculateIntentExtensionFee(100, EXTENSION_FEE_BPS, 0)).to.eq(0);
     });
 
-    it("returns zero cancellation penalty at or before creation", async () => {
+    it("rounds a nonzero extension fee upward", async () => {
       const { manager } = await loadFixture(deployHarnessFixture);
-      const result = await manager.calculateGriefingPenalty(100, 10, 10, MAX_INTENT_PERIOD, CLIFF, SLOPE);
-      expect(result.penalty).to.eq(0);
-      expect(result.effectiveElapsed).to.eq(0);
-    });
-
-    it("returns elapsed time with zero penalty when the slope is zero", async () => {
-      const { manager } = await loadFixture(deployHarnessFixture);
-      const result = await manager.calculateGriefingPenalty(100, 10, 10 + HOUR, MAX_INTENT_PERIOD, CLIFF, 0);
-      expect(result.penalty).to.eq(0);
-      expect(result.effectiveElapsed).to.eq(HOUR);
+      expect(await manager.calculateIntentExtensionFee(1, 1, 1)).to.eq(1);
     });
 
     it("returns zero chargeback reserve for a zero ratio", async () => {
       const { manager } = await loadFixture(deployHarnessFixture);
       expect(await manager.calculateChargebackReserve(100, 0)).to.eq(0);
-    });
-
-    it("returns griefing coverage when it exceeds chargeback coverage", async () => {
-      const { manager } = await loadFixture(deployHarnessFixture);
-      const result = await manager.calculateRequiredReservation(1_000_000, MAX_INTENT_PERIOD, nonChargebackConfig());
-      expect(result.requiredReservation).to.eq(result.maxGriefingBond);
-      expect(result.requiredReservation).to.be.gt(0);
     });
 
     it("hashes a scoped EIP-712 chargeback attestation", async () => {
@@ -470,29 +446,29 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       await fixture.escrow.setIntentExpirationPeriod(0);
       await setRiskIntent(fixture, intentHash);
       await expect(fixture.orchestrator.createPosition(fixture.manager.address, intentHash))
-        .to.be.revertedWithCustomError(fixture.manager, "InvalidPositionPolicy");
+        .to.be.revertedWithCustomError(fixture.manager, "InvalidIntentExtensionConfig");
     });
 
-    it("rejects a griefing cliff equal to the Escrow period", async () => {
+    it("rejects an extension lifetime equal to the Escrow period", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("cliff-equals-period");
+      const intentHash = ethers.utils.id("extension-equals-period");
       await fixture.manager.setPlatformRiskConfig(OTHER_METHOD, nonChargebackConfig({
-        griefing: { griefingCliff: MAX_INTENT_PERIOD },
+        extension: { feeBps: EXTENSION_FEE_BPS, maxIntentLifetime: MAX_INTENT_PERIOD },
       }));
       await setRiskIntent(fixture, intentHash, { paymentMethod: OTHER_METHOD });
       await expect(fixture.orchestrator.createPosition(fixture.manager.address, intentHash))
-        .to.be.revertedWithCustomError(fixture.manager, "InvalidPositionPolicy");
+        .to.be.revertedWithCustomError(fixture.manager, "InvalidIntentExtensionConfig");
     });
 
-    it("rejects a maximum griefing penalty above the intent amount", async () => {
+    it("rejects an extension lifetime shorter than the Escrow period", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("penalty-too-high");
+      const intentHash = ethers.utils.id("extension-too-short");
       await fixture.manager.setPlatformRiskConfig(OTHER_METHOD, nonChargebackConfig({
-        griefing: { griefingCliff: 0, griefingPenaltyBpsPerHour: 10_000 },
+        extension: { feeBps: EXTENSION_FEE_BPS, maxIntentLifetime: MAX_INTENT_PERIOD - 1 },
       }));
       await setRiskIntent(fixture, intentHash, { paymentMethod: OTHER_METHOD });
       await expect(fixture.orchestrator.createPosition(fixture.manager.address, intentHash))
-        .to.be.revertedWithCustomError(fixture.manager, "GriefingPenaltyExceedsIntentAmount");
+        .to.be.revertedWithCustomError(fixture.manager, "InvalidIntentExtensionConfig");
     });
 
     it("rejects insufficient collateral when deferred payout is disabled", async () => {
@@ -571,23 +547,19 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
         .to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutHookNotAllowed");
     });
 
-    it("admits a zero-reservation stake-backed position", async () => {
+    it("admits a zero-reservation non-chargebackable position", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("zero-stake-reservation");
-      await fixture.manager.setPlatformRiskConfig(OTHER_METHOD, nonChargebackConfig({
-        griefing: { griefingPenaltyBpsPerHour: 0 },
-      }));
+      await fixture.manager.setPlatformRiskConfig(OTHER_METHOD, nonChargebackConfig());
       await fixture.vault.setTakerState(fixture.taker.address, fixture.taker.address, 0, 0, true);
       await createPosition(fixture, intentHash, { paymentMethod: OTHER_METHOD });
       expect((await fixture.manager.getRiskPosition(intentHash)).initialReservation).to.eq(0);
     });
 
-    it("admits a zero-griefing deferred position", async () => {
+    it("admits a deferred position without a cancellation bond", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("zero-griefing-deferred");
-      await fixture.manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig({
-        griefing: { griefingPenaltyBpsPerHour: 0 },
-      }));
+      const intentHash = ethers.utils.id("zero-cancellation-bond-deferred");
+      await fixture.manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig());
       await fixture.vault.setTakerState(fixture.taker.address, fixture.taker.address, 0, 0, false);
       await createPosition(fixture, intentHash, {
         paymentMethod: OTHER_METHOD, postIntentHook: fixture.orchestrator.address,
@@ -597,12 +569,10 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       expect(position.initialReservation).to.eq(0);
     });
 
-    it("settles a zero-griefing deferred position without releasing stake", async () => {
+    it("settles a deferred position without releasing pending stake", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("zero-griefing-deferred-settlement");
-      await fixture.manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig({
-        griefing: { griefingPenaltyBpsPerHour: 0 },
-      }));
+      const intentHash = ethers.utils.id("zero-cancellation-bond-deferred-settlement");
+      await fixture.manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig());
       await fixture.vault.setTakerState(fixture.taker.address, fixture.taker.address, 0, 0, false);
       await createPosition(fixture, intentHash, {
         paymentMethod: OTHER_METHOD, postIntentHook: fixture.orchestrator.address,
@@ -671,19 +641,19 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       const intentHash = ethers.utils.id("single-cancellation");
       await createPosition(fixture, intentHash);
       const createdAt = (await fixture.manager.getRiskPosition(intentHash)).createdAt.toNumber();
-      await fixture.orchestrator.setIntentCancellation(intentHash, createdAt + CLIFF);
+      await fixture.orchestrator.setIntentCancellation(intentHash, createdAt + MINUTE);
       await fixture.manager.reconcileCancellation(intentHash);
       expect((await fixture.manager.getRiskPosition(intentHash)).status).to.eq(2);
     });
 
-    it("reconciles an unbonded cancellation after the cliff without a penalty", async () => {
+    it("reconciles an unbonded cancellation without a penalty", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("free-cancel-reconciliation");
       await createPosition(fixture, intentHash, { amount: usdc(20), paymentMethod: ZELLE });
       const position = await fixture.manager.getRiskPosition(intentHash);
       await fixture.orchestrator.setIntentCancellation(
         intentHash,
-        position.createdAt.toNumber() + CLIFF + 1,
+        position.createdAt.toNumber() + MINUTE,
       );
       await fixture.manager.reconcileCancellation(intentHash);
       const cancelled = await fixture.manager.getRiskPosition(intentHash);
@@ -704,8 +674,8 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       await createPosition(fixture, first);
       await createPosition(fixture, second);
       const createdAt = (await fixture.manager.getRiskPosition(first)).createdAt.toNumber();
-      await fixture.orchestrator.setIntentCancellation(first, createdAt + CLIFF);
-      await fixture.orchestrator.setIntentCancellation(second, createdAt + CLIFF);
+      await fixture.orchestrator.setIntentCancellation(first, createdAt + MINUTE);
+      await fixture.orchestrator.setIntentCancellation(second, createdAt + MINUTE);
       await fixture.manager.reconcileCancellations([first, second]);
       expect((await fixture.manager.getRiskPosition(second)).status).to.eq(2);
     });
