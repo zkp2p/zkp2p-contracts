@@ -20,7 +20,7 @@ function chargebackConfig(overrides: Record<string, unknown> = {}) {
     enabled: true,
     chargeback: {
       chargebackable: true,
-      deferredPayoutEnabled: true,
+      deferredPayoutEnabled: false,
       reserveBps: 10_000,
       riskWindow: DAY,
       ...((overrides.chargeback as Record<string, unknown>) ?? {}),
@@ -63,12 +63,18 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
     const escrow = await (await ethers.getContractFactory("RiskManagerEscrowHarness"))
       .deploy(MAX_INTENT_PERIOD, maker.address);
     const verifier = await (await ethers.getContractFactory("AttestationVerifierMock")).deploy();
+    const legacyNullifierRegistry = await (await ethers.getContractFactory("NullifierRegistry")).deploy();
+    const nullifierRegistry = await (await ethers.getContractFactory("NullifierRegistryV2"))
+      .deploy(legacyNullifierRegistry.address);
     const manager = await (await ethers.getContractFactory("RiskManager")).deploy(
       owner.address,
       orchestrator.address,
       vault.address,
       verifier.address,
+      nullifierRegistry.address,
     );
+    await nullifierRegistry.addWritePermission(owner.address);
+    await legacyNullifierRegistry.addWritePermission(owner.address);
 
     await manager.setDeferredPayoutHook(orchestrator.address);
     await manager.setPlatformRiskConfig(PAYPAL, chargebackConfig());
@@ -77,7 +83,10 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
     }));
     await vault.setTakerState(taker.address, taker.address, usdc(100_000), usdc(100_000), false);
 
-    return { owner, taker, maker, beneficiary, other, orchestrator, vault, escrow, verifier, manager };
+    return {
+      owner, taker, maker, beneficiary, other, orchestrator, vault, escrow, verifier, manager,
+      legacyNullifierRegistry, nullifierRegistry,
+    };
   }
 
   async function setRiskIntent(
@@ -113,75 +122,150 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
     await fixture.orchestrator.createPosition(fixture.manager.address, intentHash);
   }
 
-  async function createDeferredPosition(
-    fixture: Awaited<ReturnType<typeof deployHarnessFixture>>,
-    intentHash: string,
-    amount = usdc(100),
-  ) {
-    await fixture.vault.setTakerState(fixture.taker.address, fixture.taker.address, usdc(1), usdc(1), false);
-    await createPosition(fixture, intentHash, {
-      amount,
-      paymentMethod: PAYPAL,
-      postIntentHook: fixture.orchestrator.address,
-    });
-  }
-
   async function validAttestation(
     fixture: Awaited<ReturnType<typeof deployHarnessFixture>>,
     intentHash: string,
+    options: {
+      paymentMethod?: string;
+      originalPaymentId?: string;
+      disputeId?: string;
+      paymentAmount?: BigNumber;
+      paymentCurrency?: string;
+      data?: string;
+      dataHash?: string;
+      bindPayment?: boolean;
+    } = {},
+  ) {
+    const paymentId = options.originalPaymentId ?? ethers.utils.keccak256(
+      ethers.utils.solidityPack(["string", "bytes32"], ["payment", intentHash]),
+    );
+    const canonicalPaymentId = ethers.utils.keccak256(
+      ethers.utils.solidityPack(["string", "bytes32"], ["payment", intentHash]),
+    );
+    const canonicalNullifier = ethers.utils.keccak256(
+      ethers.utils.solidityPack(["bytes32", "bytes32"], [PAYPAL, canonicalPaymentId]),
+    );
+    if (
+      options.bindPayment !== false
+        && intentHash !== ethers.constants.HashZero
+        && (await fixture.nullifierRegistry.intentHashByNullifier(canonicalNullifier)) === ethers.constants.HashZero
+    ) {
+      await fixture.nullifierRegistry.addNullifier(canonicalNullifier, intentHash);
+    }
+    const data = options.data ?? ethers.utils.defaultAbiCoder.encode(
+      ["tuple(bytes32 paymentMethod,bytes32 originalPaymentId,bytes32 disputeId,uint256 paymentAmount,bytes32 paymentCurrency)"],
+      [{
+        paymentMethod: options.paymentMethod ?? PAYPAL,
+        originalPaymentId: paymentId,
+        disputeId: options.disputeId ?? ethers.utils.id(`evidence-${intentHash}`),
+        paymentAmount: options.paymentAmount ?? usdc(50),
+        paymentCurrency: options.paymentCurrency ?? ethers.utils.id("USD"),
+      }],
+    );
+    return {
+      intentHash,
+      dataHash: options.dataHash ?? ethers.utils.keccak256(data),
+      signatures: [],
+      data,
+      metadata: "0x",
+    };
+  }
+
+  async function forcedRiskPosition(
+    fixture: Awaited<ReturnType<typeof deployHarnessFixture>>,
     overrides: Record<string, unknown> = {},
   ) {
     const now = await time.latest();
-    const { chainId } = await ethers.provider.getNetwork();
     return {
-      chainId,
-      riskManager: fixture.manager.address,
-      orchestrator: fixture.orchestrator.address,
-      intentHash,
+      taker: fixture.taker.address,
+      stakeOwner: fixture.taker.address,
+      lp: fixture.maker.address,
       paymentMethod: PAYPAL,
-      chargebackAmount: usdc(10),
-      evidenceId: ethers.utils.id(`evidence-${intentHash}`),
-      nonce: 1,
-      validAfter: now - 1,
-      validUntil: now + DAY,
+      mode: 2,
+      status: 3,
+      deferredPayoutHook: ZERO,
+      payoutRecipient: fixture.beneficiary.address,
+      chargebackReserveBps: 10_000,
+      griefingPenaltyBpsPerHour: SLOPE,
+      riskWindow: DAY,
+      createdAt: now,
+      maxIntentPeriod: MAX_INTENT_PERIOD,
+      griefingCliff: CLIFF,
+      cancelledAt: 0,
+      settledAt: now,
+      coverageDeadline: now + DAY,
+      intentAmount: usdc(50),
+      bondedAmount: usdc(50),
+      maxGriefingBond: 0,
+      initialReservation: 0,
+      reservedAmount: usdc(50),
+      releasedAmount: usdc(50),
+      deferredPayoutAmount: 0,
+      slashedAmount: 0,
       ...overrides,
     };
   }
 
   describe("constructor and governance", () => {
     it("rejects a zero owner", async () => {
-      const { orchestrator, vault, verifier } = await loadFixture(deployHarnessFixture);
+      const { orchestrator, vault, nullifierRegistry, verifier } = await loadFixture(deployHarnessFixture);
       await expect((await ethers.getContractFactory("RiskManager")).deploy(
-        ZERO, orchestrator.address, vault.address, verifier.address,
-      )).to.be.revertedWithCustomError(await ethers.getContractFactory("RiskManager"), "ZeroAddress");
+        ZERO, orchestrator.address, vault.address, verifier.address, nullifierRegistry.address,
+      )).to.be.reverted;
     });
 
     it("rejects a zero orchestrator", async () => {
-      const { owner, vault, verifier } = await loadFixture(deployHarnessFixture);
+      const { owner, vault, nullifierRegistry, verifier } = await loadFixture(deployHarnessFixture);
       await expect((await ethers.getContractFactory("RiskManager")).deploy(
-        owner.address, ZERO, vault.address, verifier.address,
+        owner.address, ZERO, vault.address, verifier.address, nullifierRegistry.address,
       )).to.be.reverted;
     });
 
     it("rejects a zero vault", async () => {
-      const { owner, orchestrator, verifier } = await loadFixture(deployHarnessFixture);
+      const { owner, orchestrator, nullifierRegistry, verifier } = await loadFixture(deployHarnessFixture);
       await expect((await ethers.getContractFactory("RiskManager")).deploy(
-        owner.address, orchestrator.address, ZERO, verifier.address,
+        owner.address, orchestrator.address, ZERO, verifier.address, nullifierRegistry.address,
       )).to.be.reverted;
     });
 
     it("rejects a zero attestation verifier", async () => {
-      const { owner, orchestrator, vault } = await loadFixture(deployHarnessFixture);
+      const { owner, orchestrator, vault, nullifierRegistry } = await loadFixture(deployHarnessFixture);
       await expect((await ethers.getContractFactory("RiskManager")).deploy(
-        owner.address, orchestrator.address, vault.address, ZERO,
+        owner.address, orchestrator.address, vault.address, ZERO, nullifierRegistry.address,
       )).to.be.reverted;
     });
 
     it("rejects an EOA attestation verifier", async () => {
-      const { owner, other, orchestrator, vault } = await loadFixture(deployHarnessFixture);
+      const { owner, other, orchestrator, vault, nullifierRegistry } = await loadFixture(deployHarnessFixture);
       await expect((await ethers.getContractFactory("RiskManager")).deploy(
-        owner.address, orchestrator.address, vault.address, other.address,
+        owner.address, orchestrator.address, vault.address, other.address, nullifierRegistry.address,
       )).to.be.reverted;
+    });
+
+    it("rejects EOA orchestrator and vault dependencies", async () => {
+      const { owner, other, orchestrator, vault, nullifierRegistry, verifier } =
+        await loadFixture(deployHarnessFixture);
+      const factory = await ethers.getContractFactory("RiskManager");
+      await expect(factory.deploy(
+        owner.address, other.address, vault.address, verifier.address, nullifierRegistry.address,
+      )).to.be.revertedWithCustomError(factory, "ZeroAddress");
+      await expect(factory.deploy(
+        owner.address, orchestrator.address, other.address, verifier.address, nullifierRegistry.address,
+      )).to.be.revertedWithCustomError(factory, "ZeroAddress");
+    });
+
+    it("uses the immutable binding registry", async () => {
+      const { manager, nullifierRegistry } = await loadFixture(deployHarnessFixture);
+      expect(await manager.nullifierRegistry()).to.eq(nullifierRegistry.address);
+    });
+
+    it("rejects a zero or non-contract binding registry", async () => {
+      const { owner, other, orchestrator, vault, verifier } = await loadFixture(deployHarnessFixture);
+      const factory = await ethers.getContractFactory("RiskManager");
+      await expect(factory.deploy(owner.address, orchestrator.address, vault.address, verifier.address, ZERO))
+        .to.be.revertedWithCustomError(factory, "ZeroAddress");
+      await expect(factory.deploy(owner.address, orchestrator.address, vault.address, verifier.address, other.address))
+        .to.be.revertedWithCustomError(factory, "ZeroAddress");
     });
 
     it("updates the attestation verifier", async () => {
@@ -321,6 +405,13 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
     it("rejects deferred payout on a non-chargebackable platform", async () => {
       const { manager } = await loadFixture(deployHarnessFixture);
       await expect(manager.setPlatformRiskConfig(OTHER_METHOD, nonChargebackConfig({
+        chargeback: { deferredPayoutEnabled: true },
+      }))).to.be.revertedWithCustomError(manager, "InvalidPlatformConfig");
+    });
+
+    it("rejects deferred payout on a chargebackable platform in v1", async () => {
+      const { manager } = await loadFixture(deployHarnessFixture);
+      await expect(manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig({
         chargeback: { deferredPayoutEnabled: true },
       }))).to.be.revertedWithCustomError(manager, "InvalidPlatformConfig");
     });
@@ -513,37 +604,6 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
         .to.be.revertedWithCustomError(fixture.manager, "InsufficientCollateral");
     });
 
-    it("requires the canonical hook for deferred payout admission", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("deferred-hook-required");
-      await fixture.vault.setTakerState(
-        fixture.taker.address,
-        fixture.taker.address,
-        usdc(1),
-        usdc(1),
-        false,
-      );
-      await setRiskIntent(fixture, intentHash);
-      await expect(fixture.orchestrator.createPosition(fixture.manager.address, intentHash))
-        .to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutHookRequired");
-    });
-
-    it("requires a configured canonical hook for deferred payout admission", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("deferred-hook-unconfigured");
-      await fixture.manager.setDeferredPayoutHook(ZERO);
-      await fixture.vault.setTakerState(
-        fixture.taker.address,
-        fixture.taker.address,
-        usdc(1),
-        usdc(1),
-        false,
-      );
-      await setRiskIntent(fixture, intentHash);
-      await expect(fixture.orchestrator.createPosition(fixture.manager.address, intentHash))
-        .to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutHookRequired");
-    });
-
     it("rejects a bonded position for an exiting stake owner", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("exiting-stake-owner");
@@ -561,7 +621,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
         .to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutHookNotAllowed");
     });
 
-    it("rejects the deferred hook for an unbonded position", async () => {
+    it("rejects the deferred hook for a free position", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("deferred-hook-with-free");
       await setRiskIntent(fixture, intentHash, {
@@ -582,34 +642,6 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       expect((await fixture.manager.getRiskPosition(intentHash)).initialReservation).to.eq(0);
     });
 
-    it("admits a zero-griefing deferred position", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("zero-griefing-deferred");
-      await fixture.manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig({
-        griefing: { griefingPenaltyBpsPerHour: 0 },
-      }));
-      await fixture.vault.setTakerState(fixture.taker.address, fixture.taker.address, 0, 0, false);
-      await createPosition(fixture, intentHash, {
-        paymentMethod: OTHER_METHOD, postIntentHook: fixture.orchestrator.address,
-      });
-      const position = await fixture.manager.getRiskPosition(intentHash);
-      expect(position.mode).to.eq(3);
-      expect(position.initialReservation).to.eq(0);
-    });
-
-    it("settles a zero-griefing deferred position without releasing stake", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("zero-griefing-deferred-settlement");
-      await fixture.manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig({
-        griefing: { griefingPenaltyBpsPerHour: 0 },
-      }));
-      await fixture.vault.setTakerState(fixture.taker.address, fixture.taker.address, 0, 0, false);
-      await createPosition(fixture, intentHash, {
-        paymentMethod: OTHER_METHOD, postIntentHook: fixture.orchestrator.address,
-      });
-      await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(50));
-      expect((await fixture.manager.getRiskPosition(intentHash)).status).to.eq(3);
-    });
   });
 
   describe("terminal callbacks and reconciliation", () => {
@@ -644,20 +676,12 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       expect((await fixture.manager.getRiskPosition(intentHash)).releasedAmount).to.eq(usdc(50));
     });
 
-    it("settles an unbonded non-chargebackable position without a vault release", async () => {
+    it("settles a free non-chargebackable position without a vault release", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("free-settlement");
       await createPosition(fixture, intentHash, { amount: usdc(20), paymentMethod: ZELLE });
       await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(20));
       expect((await fixture.manager.getRiskPosition(intentHash)).status).to.eq(4);
-    });
-
-    it("releases deferred authorization on cancellation", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("deferred-cancellation");
-      await createDeferredPosition(fixture, intentHash);
-      await fixture.orchestrator.cancelPosition(fixture.manager.address, intentHash);
-      expect((await fixture.vault.deferredPayouts(intentHash)).authorized).to.eq(false);
     });
 
     it("rejects cancellation reconciliation without a durable record", async () => {
@@ -676,7 +700,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       expect((await fixture.manager.getRiskPosition(intentHash)).status).to.eq(2);
     });
 
-    it("reconciles an unbonded cancellation after the cliff without a penalty", async () => {
+    it("reconciles a free cancellation after the cliff without a penalty", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("free-cancel-reconciliation");
       await createPosition(fixture, intentHash, { amount: usdc(20), paymentMethod: ZELLE });
@@ -713,7 +737,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
     it("rejects settlement reconciliation without a released amount", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("missing-settlement-amount");
-      await fixture.orchestrator.setIntentSettlement(intentHash, 0, await time.latest());
+      await fixture.orchestrator.setIntentSettlement(intentHash, 0, await time.latest(), false);
       await expect(fixture.manager.reconcileSettlement(intentHash))
         .to.be.revertedWithCustomError(fixture.manager, "SettlementNotRecorded");
     });
@@ -721,7 +745,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
     it("rejects settlement reconciliation without a settlement timestamp", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("missing-settlement-time");
-      await fixture.orchestrator.setIntentSettlement(intentHash, 1, 0);
+      await fixture.orchestrator.setIntentSettlement(intentHash, 1, 0, false);
       await expect(fixture.manager.reconcileSettlement(intentHash))
         .to.be.revertedWithCustomError(fixture.manager, "SettlementNotRecorded");
     });
@@ -730,9 +754,34 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("single-settlement");
       await createPosition(fixture, intentHash);
-      await fixture.orchestrator.setIntentSettlement(intentHash, usdc(50), await time.latest());
+      await fixture.orchestrator.setIntentSettlement(intentHash, usdc(50), await time.latest(), false);
       await fixture.manager.reconcileSettlement(intentHash);
       expect((await fixture.manager.getRiskPosition(intentHash)).releasedAmount).to.eq(usdc(50));
+    });
+
+    it("reconciles a failed manual release by releasing stake immediately", async () => {
+      const fixture = await loadFixture(deployHarnessFixture);
+      const intentHash = ethers.utils.id("failed-manual-release");
+      await createPosition(fixture, intentHash);
+      await fixture.orchestrator.setIntentSettlement(intentHash, usdc(50), await time.latest(), true);
+      await fixture.manager.reconcileSettlement(intentHash);
+
+      const position = await fixture.manager.getRiskPosition(intentHash);
+      expect(position.status).to.eq(4);
+      expect(position.coverageDeadline).to.eq(0);
+      expect(position.reservedAmount).to.eq(0);
+      expect(await fixture.vault.reservedStake(fixture.taker.address)).to.eq(0);
+    });
+
+    it("reconciles a failed verified fulfillment without transporting payment evidence", async () => {
+      const fixture = await loadFixture(deployHarnessFixture);
+      const intentHash = ethers.utils.id("failed-verified-without-evidence");
+      await createPosition(fixture, intentHash);
+      await fixture.orchestrator.setIntentSettlement(intentHash, usdc(50), await time.latest(), false);
+      await fixture.manager.reconcileSettlement(intentHash);
+      const position = await fixture.manager.getRiskPosition(intentHash);
+      expect(position.status).to.eq(3);
+      expect(position.reservedAmount).to.eq(usdc(50));
     });
 
     it("rejects an empty settlement reconciliation batch", async () => {
@@ -747,8 +796,8 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       await createPosition(fixture, first);
       await createPosition(fixture, second);
       const now = await time.latest();
-      await fixture.orchestrator.setIntentSettlement(first, usdc(40), now);
-      await fixture.orchestrator.setIntentSettlement(second, usdc(50), now);
+      await fixture.orchestrator.setIntentSettlement(first, usdc(40), now, false);
+      await fixture.orchestrator.setIntentSettlement(second, usdc(50), now, false);
       await fixture.manager.reconcileSettlements([first, second]);
       expect((await fixture.manager.getRiskPosition(second)).status).to.eq(3);
     });
@@ -757,133 +806,20 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("coverage-overflow");
       await createPosition(fixture, intentHash);
-      await fixture.orchestrator.setIntentSettlement(intentHash, usdc(50), BigNumber.from(2).pow(64).sub(1));
+      await fixture.orchestrator.setIntentSettlement(
+        intentHash, usdc(50), BigNumber.from(2).pow(64).sub(1), false,
+      );
       await expect(fixture.manager.reconcileSettlement(intentHash))
         .to.be.revertedWithCustomError(fixture.manager, "TimestampOverflow");
     });
   });
 
-  describe("deferred payout registration", () => {
-    it("rejects a zero deferred payout", async () => {
+  describe("settlement policy", () => {
+    it("rejects partial chargeback coverage in the full-only v1 policy", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
-      await expect(fixture.orchestrator.registerDeferredPayout(
-        fixture.manager.address, ethers.utils.id("zero-deferred"), fixture.beneficiary.address, 0,
-      )).to.be.revertedWithCustomError(fixture.manager, "ZeroAmount");
-    });
-
-    it("rejects an unauthorized deferred payout hook", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("unauthorized-deferred");
-      await createDeferredPosition(fixture, intentHash);
-      await expect(fixture.manager.connect(fixture.other).registerDeferredPayout(
-        intentHash, fixture.beneficiary.address, usdc(10),
-      )).to.be.revertedWithCustomError(fixture.manager, "UnauthorizedDeferredPayoutHook");
-    });
-
-    it("requires a failed-settlement record before synchronizing a pending payout", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("deferred-no-settlement");
-      await createDeferredPosition(fixture, intentHash);
-      await expect(fixture.orchestrator.registerDeferredPayout(
-        fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(10),
-      )).to.be.revertedWithCustomError(fixture.manager, "SettlementNotRecorded");
-    });
-
-    it("rejects a failed-settlement record without its original timestamp", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("deferred-settlement-without-time");
-      await createDeferredPosition(fixture, intentHash);
-      await fixture.orchestrator.setIntentSettlement(intentHash, usdc(50), 0);
-      await expect(fixture.orchestrator.registerDeferredPayout(
-        fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(10),
-      )).to.be.revertedWithCustomError(fixture.manager, "SettlementNotRecorded");
-    });
-
-    it("synchronizes a failed settlement before registering proceeds", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("deferred-sync");
-      await createDeferredPosition(fixture, intentHash);
-      await fixture.orchestrator.setIntentSettlement(intentHash, usdc(50), await time.latest());
-      await fixture.orchestrator.registerDeferredPayout(
-        fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(50),
-      );
-      expect((await fixture.manager.getRiskPosition(intentHash)).deferredPayoutAmount).to.eq(usdc(50));
-    });
-
-    it("rejects registration after a deferred position is cancelled", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("deferred-cancelled-register");
-      await createDeferredPosition(fixture, intentHash);
-      await fixture.orchestrator.cancelPosition(fixture.manager.address, intentHash);
-      await expect(fixture.orchestrator.registerDeferredPayout(
-        fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(10),
-      )).to.be.revertedWithCustomError(fixture.manager, "PositionNotSettled");
-    });
-
-    it("rejects a beneficiary that differs from the snapshotted recipient", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("deferred-wrong-beneficiary");
-      await createDeferredPosition(fixture, intentHash);
-      await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(50));
-      await expect(fixture.orchestrator.registerDeferredPayout(
-        fixture.manager.address, intentHash, fixture.other.address, usdc(50),
-      )).to.be.revertedWithCustomError(fixture.manager, "IntentStateMismatch");
-    });
-
-    it("rejects deferred proceeds above the released amount", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("deferred-too-large");
-      await createDeferredPosition(fixture, intentHash);
-      await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(50));
-      await expect(fixture.orchestrator.registerDeferredPayout(
-        fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(51),
-      )).to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutExceedsReleasedAmount");
-    });
-
-    it("rejects registering deferred proceeds twice", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("deferred-twice");
-      await createDeferredPosition(fixture, intentHash);
-      await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(50));
-      await fixture.orchestrator.registerDeferredPayout(
-        fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(50),
-      );
-      await expect(fixture.orchestrator.registerDeferredPayout(
-        fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(50),
-      )).to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutAlreadyRegistered");
-    });
-
-    it("rejects deferred proceeds below the configured coverage", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("deferred-less-than-coverage");
-      await createDeferredPosition(fixture, intentHash);
-      await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(50));
-      await expect(fixture.orchestrator.registerDeferredPayout(
-        fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(20),
-      )).to.be.revertedWithCustomError(fixture.manager, "InsufficientDeferredPayoutCoverage");
-    });
-
-    it("caps coverage at the configured ratio when proceeds are larger", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("deferred-more-than-coverage");
-      await fixture.manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig({
+      await expect(fixture.manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig({
         chargeback: { reserveBps: 5_000 },
-      }));
-      await fixture.vault.setTakerState(
-        fixture.taker.address,
-        fixture.taker.address,
-        usdc(1),
-        usdc(1),
-        false,
-      );
-      await createPosition(fixture, intentHash, {
-        paymentMethod: OTHER_METHOD, postIntentHook: fixture.orchestrator.address,
-      });
-      await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(50));
-      await fixture.orchestrator.registerDeferredPayout(
-        fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(50),
-      );
-      expect((await fixture.manager.getRiskPosition(intentHash)).reservedAmount).to.eq(usdc(25));
+      }))).to.be.revertedWithCustomError(fixture.manager, "InvalidPlatformConfig");
     });
 
     it("settles at the maximum supported chargeback risk window", async () => {
@@ -932,7 +868,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       const intentHash = ethers.utils.id("maturity-sync");
       await fixture.manager.setPlatformRiskConfig(OTHER_METHOD, chargebackConfig({ chargeback: { riskWindow: 1 } }));
       await createPosition(fixture, intentHash, { paymentMethod: OTHER_METHOD });
-      await fixture.orchestrator.setIntentSettlement(intentHash, usdc(50), (await time.latest()) - 2);
+      await fixture.orchestrator.setIntentSettlement(intentHash, usdc(50), (await time.latest()) - 2, false);
       await fixture.manager.releaseMaturedPosition(intentHash);
       expect((await fixture.manager.getRiskPosition(intentHash)).status).to.eq(4);
     });
@@ -956,19 +892,6 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       expect((await fixture.manager.getRiskPosition(second)).status).to.eq(4);
     });
 
-    it("marks matured deferred coverage released without touching stake", async () => {
-      const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("maturity-deferred");
-      await createDeferredPosition(fixture, intentHash);
-      await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(50));
-      await fixture.orchestrator.registerDeferredPayout(
-        fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(50),
-      );
-      const deadline = (await fixture.manager.getRiskPosition(intentHash)).coverageDeadline.toNumber();
-      await time.increaseTo(deadline);
-      await fixture.manager.releaseMaturedPosition(intentHash);
-      expect((await fixture.manager.getRiskPosition(intentHash)).status).to.eq(4);
-    });
   });
 
   describe("chargeback evidence validation", () => {
@@ -984,9 +907,9 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       const fixture = await loadFixture(deployHarnessFixture);
       const intentHash = ethers.utils.id("claim-sync");
       await createPosition(fixture, intentHash);
-      await fixture.orchestrator.setIntentSettlement(intentHash, usdc(50), await time.latest());
-      await fixture.manager.submitChargeback(await validAttestation(fixture, intentHash), [], "0x");
-      expect((await fixture.manager.getRiskPosition(intentHash)).slashedAmount).to.eq(usdc(10));
+      await fixture.orchestrator.setIntentSettlement(intentHash, usdc(50), await time.latest(), false);
+      await fixture.manager.submitChargeback(await validAttestation(fixture, intentHash));
+      expect((await fixture.manager.getRiskPosition(intentHash)).slashedAmount).to.eq(usdc(50));
     });
 
     it("rejects a claim against a released non-chargebackable position", async () => {
@@ -994,84 +917,327 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       const intentHash = ethers.utils.id("claim-free-position");
       await createPosition(fixture, intentHash, { amount: usdc(20), paymentMethod: ZELLE });
       await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(20));
-      await expect(fixture.manager.submitChargeback(await validAttestation(fixture, intentHash), [], "0x"))
+      await expect(fixture.manager.submitChargeback(await validAttestation(fixture, intentHash)))
         .to.be.revertedWithCustomError(fixture.manager, "PositionNotSettled");
     });
 
-    it("rejects a claim scoped to another chain", async () => {
+    it("rejects a mismatched payment method", async () => {
       const fixture = await loadFixture(settledFixture);
       await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { chainId: 1 }), [], "0x",
+        await validAttestation(fixture, fixture.intentHash, { paymentMethod: OTHER_METHOD }),
       )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
     });
 
-    it("rejects a claim scoped to another risk manager", async () => {
+    it("rejects a mismatched original payment identifier", async () => {
       const fixture = await loadFixture(settledFixture);
       await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { riskManager: fixture.other.address }), [], "0x",
+        await validAttestation(fixture, fixture.intentHash, { originalPaymentId: ethers.utils.id("wrong") }),
+      )).to.be.revertedWithCustomError(fixture.manager, "InvalidPaymentBinding");
+    });
+
+    it("rejects a predecessor-only nullifier because it has no intent binding", async () => {
+      const fixture = await loadFixture(settledFixture);
+      const paymentId = ethers.utils.keccak256(
+        ethers.utils.solidityPack(["string", "bytes32"], ["payment", fixture.intentHash]),
+      );
+      const nullifier = ethers.utils.keccak256(
+        ethers.utils.solidityPack(["bytes32", "bytes32"], [PAYPAL, paymentId]),
+      );
+      await fixture.legacyNullifierRegistry.addNullifier(nullifier);
+      await expect(fixture.manager.submitChargeback(await validAttestation(fixture, fixture.intentHash, {
+        bindPayment: false,
+      }))).to.be.revertedWithCustomError(fixture.manager, "InvalidPaymentBinding");
+    });
+
+    it("accepts nonzero witness-attested fiat metadata without a false token comparison", async () => {
+      const fixture = await loadFixture(settledFixture);
+      await fixture.manager.submitChargeback(await validAttestation(fixture, fixture.intentHash, {
+        paymentAmount: BigNumber.from(1),
+        paymentCurrency: ethers.utils.id("EUR"),
+      }));
+      expect((await fixture.manager.getRiskPosition(fixture.intentHash)).status).to.eq(5);
+    });
+
+    it("rejects zero witness-attested fiat metadata", async () => {
+      const fixture = await loadFixture(settledFixture);
+      await expect(fixture.manager.submitChargeback(
+        await validAttestation(fixture, fixture.intentHash, { paymentAmount: BigNumber.from(0) }),
+      )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
+      await expect(fixture.manager.submitChargeback(
+        await validAttestation(fixture, fixture.intentHash, { paymentCurrency: ethers.constants.HashZero }),
       )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
     });
 
-    it("rejects a claim scoped to another orchestrator", async () => {
+    it("rejects a zero dispute identifier and a data hash mismatch", async () => {
       const fixture = await loadFixture(settledFixture);
       await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { orchestrator: fixture.other.address }), [], "0x",
+        await validAttestation(fixture, fixture.intentHash, { disputeId: ethers.constants.HashZero }),
+      )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
+      await expect(fixture.manager.submitChargeback(
+        await validAttestation(fixture, fixture.intentHash, { dataHash: ethers.utils.id("wrong-data") }),
       )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
     });
 
-    it("rejects a claim for another payment method", async () => {
+    it("rejects a zero intent hash and zero original payment identifier", async () => {
       const fixture = await loadFixture(settledFixture);
-      await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { paymentMethod: OTHER_METHOD }), [], "0x",
-      )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
+      const stateManager = await (await ethers.getContractFactory("RiskManagerStateHarness")).deploy(
+        fixture.owner.address,
+        fixture.orchestrator.address,
+        fixture.vault.address,
+        fixture.verifier.address,
+        fixture.nullifierRegistry.address,
+      );
+      await stateManager.forceRiskPosition(ethers.constants.HashZero, await forcedRiskPosition(fixture));
+      await expect(stateManager.submitChargeback(
+        await validAttestation({ ...fixture, manager: stateManager } as any, ethers.constants.HashZero),
+      )).to.be.revertedWithCustomError(stateManager, "InvalidAttestation");
+
+      await expect(fixture.manager.submitChargeback(await validAttestation(fixture, fixture.intentHash, {
+        originalPaymentId: ethers.constants.HashZero,
+      }))).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
     });
 
-    it("rejects a zero chargeback amount", async () => {
+    it("checks the reverse intent-to-nullifier binding independently", async () => {
       const fixture = await loadFixture(settledFixture);
-      await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { chargebackAmount: 0 }), [], "0x",
-      )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
+      const registry = await (await ethers.getContractFactory("NullifierRegistryV2StateHarness"))
+        .deploy(fixture.legacyNullifierRegistry.address);
+      await registry.addWritePermission(fixture.owner.address);
+      const manager = await (await ethers.getContractFactory("RiskManagerStateHarness")).deploy(
+        fixture.owner.address,
+        fixture.orchestrator.address,
+        fixture.vault.address,
+        fixture.verifier.address,
+        registry.address,
+      );
+      const intentHash = ethers.utils.id("reverse-binding-defense");
+      await manager.forceRiskPosition(intentHash, await forcedRiskPosition(fixture));
+      const scopedFixture = { ...fixture, manager, nullifierRegistry: registry } as any;
+      const attestation = await validAttestation(scopedFixture, intentHash);
+      await registry.forceNullifierByIntentHash(intentHash, ethers.utils.id("corrupt-reverse-binding"));
+      await expect(manager.submitChargeback(attestation))
+        .to.be.revertedWithCustomError(manager, "InvalidPaymentBinding");
     });
 
-    it("rejects an empty evidence identifier", async () => {
+    it("rejects incomplete full-only coverage before slashing", async () => {
       const fixture = await loadFixture(settledFixture);
-      await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { evidenceId: ethers.constants.HashZero }), [], "0x",
-      )).to.be.revertedWithCustomError(fixture.manager, "InvalidAttestation");
-    });
-
-    it("rejects an attestation before validAfter", async () => {
-      const fixture = await loadFixture(settledFixture);
-      const now = await time.latest();
-      await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { validAfter: now + DAY, validUntil: now + 2 * DAY }), [], "0x",
-      )).to.be.revertedWithCustomError(fixture.manager, "AttestationNotYetValid");
-    });
-
-    it("rejects an expired attestation", async () => {
-      const fixture = await loadFixture(settledFixture);
-      const now = await time.latest();
-      await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash, { validAfter: now - DAY, validUntil: now - 1 }), [], "0x",
-      )).to.be.revertedWithCustomError(fixture.manager, "AttestationExpired");
+      const manager = await (await ethers.getContractFactory("RiskManagerStateHarness")).deploy(
+        fixture.owner.address,
+        fixture.orchestrator.address,
+        fixture.vault.address,
+        fixture.verifier.address,
+        fixture.nullifierRegistry.address,
+      );
+      const intentHash = ethers.utils.id("incomplete-full-coverage");
+      await manager.forceRiskPosition(intentHash, await forcedRiskPosition(fixture, {
+        reservedAmount: usdc(49),
+      }));
+      await expect(manager.submitChargeback(
+        await validAttestation({ ...fixture, manager } as any, intentHash),
+      )).to.be.revertedWithCustomError(manager, "IncompleteChargebackCoverage");
     });
 
     it("rejects an attestation that fails verification", async () => {
       const fixture = await loadFixture(settledFixture);
       await fixture.verifier.setResult(false);
       await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, fixture.intentHash), [], "0x",
+        await validAttestation(fixture, fixture.intentHash),
       )).to.be.revertedWithCustomError(fixture.manager, "AttestationVerificationFailed");
     });
 
-    it("rejects a claim before deferred proceeds establish coverage", async () => {
+    it("rejects maker manual release evidence", async () => {
       const fixture = await loadFixture(deployHarnessFixture);
-      const intentHash = ethers.utils.id("claim-zero-deferred-coverage");
-      await createDeferredPosition(fixture, intentHash);
-      await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(50));
+      const intentHash = ethers.utils.id("claim-manual-release");
+      await createPosition(fixture, intentHash);
+      await fixture.orchestrator.releasePosition(fixture.manager.address, intentHash, usdc(50));
       await expect(fixture.manager.submitChargeback(
-        await validAttestation(fixture, intentHash), [], "0x",
+        await validAttestation(fixture, intentHash),
+      )).to.be.revertedWithCustomError(fixture.manager, "PositionNotSettled");
+    });
+
+  });
+
+  describe("deferred-payout defensive lifecycle", () => {
+    async function deferredFixture() {
+      const fixture = await deployHarnessFixture();
+      const manager = await (await ethers.getContractFactory("RiskManagerStateHarness")).deploy(
+        fixture.owner.address,
+        fixture.orchestrator.address,
+        fixture.vault.address,
+        fixture.verifier.address,
+        fixture.nullifierRegistry.address,
+      );
+      await manager.setDeferredPayoutHook(fixture.orchestrator.address);
+      await manager.forcePlatformRiskConfig(PAYPAL, chargebackConfig({
+        chargeback: { deferredPayoutEnabled: true },
+      }));
+      await fixture.vault.setTakerState(
+        fixture.taker.address,
+        fixture.taker.address,
+        usdc(100_000),
+        usdc(1),
+        false,
+      );
+      return { ...fixture, manager };
+    }
+
+    async function createDeferredPosition(
+      fixture: Awaited<ReturnType<typeof deferredFixture>>,
+      intentHash: string,
+    ) {
+      await createPosition(fixture as any, intentHash, {
+        postIntentHook: fixture.orchestrator.address,
+      });
+    }
+
+    it("admits, synchronizes, validates, and registers exact deferred coverage", async () => {
+      const fixture = await loadFixture(deferredFixture);
+      const intentHash = ethers.utils.id("deferred-registration");
+      await createDeferredPosition(fixture, intentHash);
+      const position = await fixture.manager.getRiskPosition(intentHash);
+      expect(position.mode).to.eq(3);
+      await fixture.orchestrator.setIntentSettlement(intentHash, usdc(50), await time.latest(), false);
+
+      await expect(fixture.orchestrator.registerDeferredPayout(
+        fixture.manager.address, intentHash, fixture.beneficiary.address, 0,
       )).to.be.revertedWithCustomError(fixture.manager, "ZeroAmount");
+      await expect(fixture.manager.registerDeferredPayout(intentHash, fixture.beneficiary.address, usdc(50)))
+        .to.be.revertedWithCustomError(fixture.manager, "UnauthorizedDeferredPayoutHook");
+      await expect(fixture.orchestrator.registerDeferredPayout(
+        fixture.manager.address, intentHash, fixture.other.address, usdc(50),
+      )).to.be.revertedWithCustomError(fixture.manager, "IntentStateMismatch");
+      await expect(fixture.orchestrator.registerDeferredPayout(
+        fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(51),
+      )).to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutExceedsReleasedAmount");
+      await expect(fixture.orchestrator.registerDeferredPayout(
+        fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(49),
+      )).to.be.revertedWithCustomError(fixture.manager, "InsufficientDeferredPayoutCoverage");
+      await expect(fixture.orchestrator.registerDeferredPayout(
+        fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(50),
+      )).to.emit(fixture.manager, "DeferredPayoutRegistered");
+      await expect(fixture.orchestrator.registerDeferredPayout(
+        fixture.manager.address, intentHash, fixture.beneficiary.address, usdc(50),
+      )).to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutAlreadyRegistered");
+    });
+
+    it("rejects registration when a forced deferred position is not settled", async () => {
+      const fixture = await loadFixture(deferredFixture);
+      const intentHash = ethers.utils.id("deferred-not-settled");
+      await fixture.manager.forceRiskPosition(intentHash, await forcedRiskPosition(fixture as any, {
+        mode: 3,
+        status: 2,
+        deferredPayoutHook: fixture.orchestrator.address,
+      }));
+      await expect(fixture.orchestrator.registerDeferredPayout(
+        fixture.manager.address, intentHash, fixture.beneficiary.address, 1,
+      )).to.be.revertedWithCustomError(fixture.manager, "PositionNotSettled");
+    });
+
+    it("releases deferred authorization on cancellation and manual release", async () => {
+      const fixture = await loadFixture(deferredFixture);
+      const cancelled = ethers.utils.id("deferred-cancel");
+      await createDeferredPosition(fixture, cancelled);
+      await fixture.orchestrator.cancelPosition(fixture.manager.address, cancelled);
+      expect((await fixture.vault.deferredPayouts(cancelled)).authorized).to.eq(false);
+
+      const manual = ethers.utils.id("deferred-manual");
+      await createDeferredPosition(fixture, manual);
+      await fixture.orchestrator.releasePosition(fixture.manager.address, manual, usdc(50));
+      expect((await fixture.vault.deferredPayouts(manual)).authorized).to.eq(false);
+
+      const zeroReservation = ethers.utils.id("deferred-manual-zero-reservation");
+      await fixture.manager.forceRiskPosition(zeroReservation, await forcedRiskPosition(fixture as any, {
+        mode: 3,
+        status: 1,
+        deferredPayoutHook: fixture.orchestrator.address,
+        reservedAmount: 0,
+        initialReservation: 0,
+      }));
+      await fixture.orchestrator.releasePosition(fixture.manager.address, zeroReservation, usdc(1));
+    });
+
+    it("slashes deferred proceeds and releases deferred positions at maturity", async () => {
+      const fixture = await loadFixture(deferredFixture);
+      const slashed = ethers.utils.id("deferred-slash");
+      await createDeferredPosition(fixture, slashed);
+      await fixture.orchestrator.setIntentSettlement(slashed, usdc(50), await time.latest(), false);
+      await fixture.orchestrator.registerDeferredPayout(
+        fixture.manager.address, slashed, fixture.beneficiary.address, usdc(50),
+      );
+      await fixture.manager.submitChargeback(await validAttestation(fixture as any, slashed));
+      expect((await fixture.manager.getRiskPosition(slashed)).status).to.eq(5);
+
+      const matured = ethers.utils.id("deferred-matured");
+      await createDeferredPosition(fixture, matured);
+      await fixture.orchestrator.setIntentSettlement(matured, usdc(50), await time.latest(), false);
+      await fixture.orchestrator.registerDeferredPayout(
+        fixture.manager.address, matured, fixture.beneficiary.address, usdc(50),
+      );
+      const deadline = (await fixture.manager.getRiskPosition(matured)).coverageDeadline.toNumber();
+      await time.increaseTo(deadline);
+      await fixture.manager.releaseMaturedPosition(matured);
+      expect((await fixture.manager.getRiskPosition(matured)).status).to.eq(4);
+    });
+
+    it("settles a forced zero-reservation deferred position", async () => {
+      const fixture = await loadFixture(deferredFixture);
+      const intentHash = ethers.utils.id("deferred-zero-reservation-settlement");
+      await fixture.manager.forceRiskPosition(intentHash, await forcedRiskPosition(fixture as any, {
+        mode: 3,
+        status: 1,
+        reservedAmount: 0,
+        initialReservation: 0,
+      }));
+      await fixture.orchestrator.fulfillPosition(fixture.manager.address, intentHash, usdc(1));
+      expect((await fixture.manager.getRiskPosition(intentHash)).status).to.eq(3);
+    });
+
+    it("requires the deferred hook for both zero-hook and mismatched-hook admission", async () => {
+      const fixture = await loadFixture(deferredFixture);
+      const mismatched = ethers.utils.id("deferred-mismatched-hook");
+      await setRiskIntent(fixture as any, mismatched, { postIntentHook: ZERO });
+      await expect(fixture.orchestrator.createPosition(fixture.manager.address, mismatched))
+        .to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutHookRequired");
+
+      await fixture.manager.setDeferredPayoutHook(ZERO);
+      const missing = ethers.utils.id("deferred-zero-hook");
+      await setRiskIntent(fixture as any, missing, { postIntentHook: ZERO });
+      await expect(fixture.orchestrator.createPosition(fixture.manager.address, missing))
+        .to.be.revertedWithCustomError(fixture.manager, "DeferredPayoutHookRequired");
+    });
+
+    it("covers manual-release guards and durable manual synchronization directly", async () => {
+      const fixture = await loadFixture(deferredFixture);
+      const now = await time.latest();
+      const zeroRelease = ethers.utils.id("manual-zero-release");
+      await fixture.manager.forceRiskPosition(zeroRelease, await forcedRiskPosition(fixture as any, {
+        status: 1,
+      }));
+      await expect(fixture.manager.exposedReleaseManualPosition(zeroRelease, 0, now))
+        .to.be.revertedWithCustomError(fixture.manager, "ZeroAmount");
+
+      const nonPending = ethers.utils.id("manual-non-pending");
+      await fixture.manager.forceRiskPosition(nonPending, await forcedRiskPosition(fixture as any, {
+        status: 2,
+      }));
+      await expect(fixture.manager.exposedReleaseManualPosition(nonPending, 1, now))
+        .to.be.revertedWithCustomError(fixture.manager, "PositionNotPending");
+
+      const zeroTimestamp = ethers.utils.id("manual-zero-timestamp");
+      await fixture.manager.forceRiskPosition(zeroTimestamp, await forcedRiskPosition(fixture as any, {
+        status: 1,
+      }));
+      await fixture.orchestrator.setIntentSettlement(zeroTimestamp, 1, 0, true);
+      await expect(fixture.manager.exposedSynchronizeSettlement(zeroTimestamp))
+        .to.be.revertedWithCustomError(fixture.manager, "SettlementNotRecorded");
+
+      const synchronized = ethers.utils.id("manual-synchronized");
+      await fixture.manager.forceRiskPosition(synchronized, await forcedRiskPosition(fixture as any, {
+        status: 1,
+        reservedAmount: 0,
+      }));
+      await fixture.orchestrator.setIntentSettlement(synchronized, 1, now, true);
+      await fixture.manager.exposedSynchronizeSettlement(synchronized);
+      expect((await fixture.manager.getRiskPosition(synchronized)).status).to.eq(4);
     });
   });
 
@@ -1083,6 +1249,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
         fixture.orchestrator.address,
         fixture.vault.address,
         fixture.verifier.address,
+        fixture.nullifierRegistry.address,
       );
       return { ...fixture, manager };
     }
@@ -1200,7 +1367,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       const attestation = await validAttestation(fixture, ethers.constants.HashZero);
       await expectGuardRevert(
         fixture,
-        fixture.manager.interface.encodeFunctionData("submitChargeback", [attestation, [], "0x"]),
+        fixture.manager.interface.encodeFunctionData("submitChargeback", [attestation]),
       );
     });
   });
@@ -1213,6 +1380,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
         fixture.orchestrator.address,
         fixture.vault.address,
         fixture.verifier.address,
+        fixture.nullifierRegistry.address,
       );
       return { ...fixture, manager };
     }
@@ -1229,7 +1397,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       )).to.be.revertedWithCustomError(fixture.manager, "PositionModeMismatch");
     });
 
-    it("rejects settlement for an impossible chargebackable unbonded position", async () => {
+    it("rejects settlement for an impossible chargebackable free position", async () => {
       const fixture = await loadFixture(deployStateHarnessFixture);
       const intentHash = ethers.utils.id("forced-settlement-mode");
       await fixture.manager.forcePosition(intentHash, 1, 1, ZERO, PAYPAL, 1, 0);
@@ -1237,7 +1405,7 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
         .to.be.revertedWithCustomError(fixture.manager, "PositionModeMismatch");
     });
 
-    it("rejects chargeback evidence for an impossible settled unbonded position", async () => {
+    it("rejects chargeback evidence for an impossible settled free position", async () => {
       const fixture = await loadFixture(deployStateHarnessFixture);
       const intentHash = ethers.utils.id("forced-claim-mode");
       await fixture.manager.forcePosition(
@@ -1251,8 +1419,6 @@ describe("RiskManager -- exhaustive policy and recovery coverage", () => {
       );
       await expect(fixture.manager.submitChargeback(
         await validAttestation(fixture, intentHash),
-        [],
-        "0x",
       )).to.be.revertedWithCustomError(fixture.manager, "PositionModeMismatch");
     });
 

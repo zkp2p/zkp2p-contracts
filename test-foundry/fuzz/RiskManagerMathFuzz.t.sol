@@ -7,6 +7,7 @@ import { Test } from "forge-std/Test.sol";
 import { RiskManager } from "../../contracts/RiskManager.sol";
 import { IAttestationVerifier } from "../../contracts/interfaces/IAttestationVerifier.sol";
 import { IOrchestratorV3 } from "../../contracts/interfaces/IOrchestratorV3.sol";
+import { INullifierRegistryV2 } from "../../contracts/interfaces/INullifierRegistryV2.sol";
 import { IRiskManager } from "../../contracts/interfaces/IRiskManager.sol";
 import { IStakeVault } from "../../contracts/interfaces/IStakeVault.sol";
 
@@ -18,7 +19,8 @@ contract RiskManagerMathFuzzTest is Test {
             address(this),
             IOrchestratorV3(address(this)),
             IStakeVault(address(this)),
-            IAttestationVerifier(address(this))
+            IAttestationVerifier(address(this)),
+            INullifierRegistryV2(address(this))
         );
     }
 

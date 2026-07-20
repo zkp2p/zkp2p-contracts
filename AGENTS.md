@@ -9,6 +9,17 @@
 - `tasks/`: Custom Hardhat tasks (e.g., Etherscan verification with delay).
 - `typechain/`, `artifacts/`, `out/`, `dist/`: Generated output; do not edit by hand.
 
+## Staging Deployment Status
+
+- `RiskManager` and `OrchestratorV3` have only been deployed to staging. That staging lane is disposable and may be
+  removed, abandoned, or redeployed non-incrementally.
+- Write final deployment scripts fresh after the payment-binding and chargeback design stabilizes. Do not treat the
+  current staging deployment as immutable production history.
+- The payment-verifier cutover is one-way. In the same governance batch, authorize UPV3 on `NullifierRegistryV2`,
+  permanently revoke the retired verifier's legacy-registry write permission, and route the shared
+  `PaymentVerifierRegistry` to UPV3. Never route a payment method back to the retired verifier: the legacy registry
+  cannot observe V2 writes, so a rollback would reopen payment replay.
+
 ## Architecture Overview (v2.1)
 - Core: `Escrow` holds maker deposits and per-deposit config (methods, currencies, min rates, intent limits/expiry); `Orchestrator` manages intents, routes to verifiers, collects protocol/referrer fees; `ProtocolViewer` provides aggregated read views.
 - Registries: `PaymentVerifierRegistry` maps `paymentMethod` → verifier + currencies; `EscrowRegistry` whitelists escrows; `RelayerRegistry` whitelists relayers; `PostIntentHookRegistry` whitelists post‑intent hooks; `NullifierRegistry` records consumed nullifiers.

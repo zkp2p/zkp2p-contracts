@@ -3,6 +3,7 @@
 pragma solidity ^0.8.18;
 
 import { IIntentRiskHook } from "./IIntentRiskHook.sol";
+import { INullifierRegistryV2 } from "./INullifierRegistryV2.sol";
 import { IOrchestratorV3 } from "./IOrchestratorV3.sol";
 import { IStakeVault } from "./IStakeVault.sol";
 
@@ -40,7 +41,7 @@ interface IRiskManager is IIntentRiskHook {
         bool chargebackable;
         /// @notice Whether held settlement proceeds may replace membership stake as post-settlement coverage.
         bool deferredPayoutEnabled;
-        /// @notice Upward-rounded portion of the exact released amount retained as coverage, in basis points.
+        /// @notice Portion of the exact released amount retained as coverage; chargebackable v1 policy requires 10_000.
         uint16 reserveBps;
         /// @notice Half-open period after settlement during which authenticated chargebacks may slash coverage.
         uint64 riskWindow;
@@ -124,28 +125,32 @@ interface IRiskManager is IIntentRiskHook {
         uint256 slashedAmount;
     }
 
-    /** @notice Signed evidence authorizing compensation from an active chargeback position. */
+    /** @notice Signed evidence authorizing full compensation from an active chargeback position. */
     struct ChargebackAttestation {
-        /// @notice Chain domain preventing cross-chain replay.
-        uint256 chainId;
-        /// @notice RiskManager domain preventing replay across manager replacements.
-        address riskManager;
-        /// @notice Orchestrator domain preventing replay across intent namespaces.
-        address orchestrator;
-        /// @notice Position whose remaining coverage may be consumed.
+        /// @notice Position whose full released amount may be consumed.
         bytes32 intentHash;
-        /// @notice Payment platform bound to the position snapshot.
+        /// @notice Hash of `data`, binding all chargeback details to the witness signatures.
+        bytes32 dataHash;
+        /// @notice Signatures from the dedicated chargeback witness set.
+        bytes[] signatures;
+        /// @notice ABI-encoded `ChargebackDetails` authenticated by `dataHash`.
+        bytes data;
+        /// @notice Optional unsigned metadata for off-chain correlation.
+        bytes metadata;
+    }
+
+    /** @notice Verifier-derived dispute details bound to the original fulfilled payment. */
+    struct ChargebackDetails {
+        /// @notice Payment-method hash recorded by the payment verifier.
         bytes32 paymentMethod;
-        /// @notice LP loss requested; compensation is capped at remaining coverage.
-        uint256 chargebackAmount;
-        /// @notice Nonzero off-chain evidence identifier emitted for audit correlation.
-        bytes32 evidenceId;
-        /// @notice Manager-wide one-time nonce preventing attestation replay.
-        uint256 nonce;
-        /// @notice First timestamp at which the attestation is valid.
-        uint64 validAfter;
-        /// @notice Last timestamp at which the attestation itself is valid.
-        uint64 validUntil;
+        /// @notice Hashed provider payment identifier recorded by the payment verifier.
+        bytes32 originalPaymentId;
+        /// @notice Nonzero provider dispute identifier used for global replay protection.
+        bytes32 disputeId;
+        /// @notice Original fiat amount in the payment method's minor unit (for example, cents).
+        uint256 paymentAmount;
+        /// @notice Fiat-currency hash recorded by the payment verifier.
+        bytes32 paymentCurrency;
     }
 
     /* ============ Events ============ */
@@ -224,11 +229,11 @@ interface IRiskManager is IIntentRiskHook {
         address indexed stakeOwner,
         address indexed lp,
         RiskMode mode,
-        uint256 requestedAmount,
+        uint256 releasedAmount,
         uint256 compensatedAmount,
         uint256 totalCompensated,
         uint256 remainingCoverage,
-        bytes32 evidenceId
+        bytes32 disputeId
     );
     event AttestationVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
     event DeferredPayoutHookUpdated(address indexed previousHook, address indexed newHook);
@@ -263,10 +268,10 @@ interface IRiskManager is IIntentRiskHook {
     error InsufficientDeferredPayoutCoverage(uint256 availableCoverage, uint256 requiredCoverage);
     error PositionNotMature(uint64 coverageDeadline, uint64 currentTime);
     error InvalidAttestation();
-    error AttestationNotYetValid(uint64 validAfter, uint64 currentTime);
-    error AttestationExpired(uint64 validUntil, uint64 currentTime);
+    error InvalidPaymentBinding(bytes32 intentHash, bytes32 nullifier);
     error ChargebackWindowClosed(uint64 coverageDeadline, uint64 currentTime);
-    error AttestationNonceUsed(uint256 nonce);
+    error ChargebackEvidenceUsed(bytes32 nullifier);
+    error IncompleteChargebackCoverage(uint256 available, uint256 required);
     error AttestationVerificationFailed();
     error TimestampOverflow(uint256 timestamp);
 
@@ -299,12 +304,8 @@ interface IRiskManager is IIntentRiskHook {
     function releaseMaturedPosition(bytes32 _intentHash) external;
     /** @notice Atomically matures several settled positions. */
     function releaseMaturedPositions(bytes32[] calldata _intentHashes) external;
-    /** @notice Authenticates chargeback evidence and compensates the LP up to remaining coverage. */
-    function submitChargeback(
-        ChargebackAttestation calldata _attestation,
-        bytes[] calldata _signatures,
-        bytes calldata _verificationData
-    ) external;
+    /** @notice Authenticates chargeback evidence and compensates the LP for the full gross released amount. */
+    function submitChargeback(ChargebackAttestation calldata _attestation) external;
 
     /* ============ View and Math Functions ============ */
 
@@ -348,4 +349,6 @@ interface IRiskManager is IIntentRiskHook {
     function orchestrator() external view returns (IOrchestratorV3);
     /** @notice Returns the immutable policy-agnostic custody and reservation vault. */
     function stakeVault() external view returns (IStakeVault);
+    /** @notice Returns the immutable registry that binds verified payment nullifiers to intents. */
+    function nullifierRegistry() external view returns (INullifierRegistryV2);
 }
