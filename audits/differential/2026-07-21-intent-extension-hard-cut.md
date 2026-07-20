@@ -4,10 +4,9 @@
 |-------|-------|
 | Date | 2026-07-21 |
 | Base | `origin/main` at `8fb117e` |
-| Head | uncommitted working tree on `codex/intent-extension-risk-manager` |
+| Head | working tree on `codex/intent-extension-risk-manager` |
 | PR | n/a (pre-PR working-tree review) |
-| Files Changed | 20 |
-| Lines Changed | +1,361 / -1,177 |
+| Files Changed | 23 |
 
 ## Scope and Method
 
@@ -19,8 +18,9 @@ liabilities, extension+chargeback and extension+deferred composition, delegation
 pause/controller-handover, rounding/boundary behavior, reentrancy and nonstandard-ERC20
 behavior, callback-failure reconciliation, indexer ABI surface, and EIP-170.
 
-Verification executed: `forge build --sizes`, Foundry unit (15 pass), fuzz (7 pass),
-invariant (7 pass) suites, and Hardhat staking suites (126 pass).
+Verification executed during review: `forge build --sizes`, Foundry unit, fuzz, and
+invariant suites, plus focused Hardhat staking suites. Repository-wide verification and
+coverage were rerun after the final review fixes.
 
 ## Risk Classification
 
@@ -108,6 +108,34 @@ None.
   that Escrow, including flows that do not use RiskManager. Intended for this rollout,
   but confirm downstream clients/quotes on the target network before executing the batch.
 
+## Resolution and Final Re-review
+
+Fable 5 completed two follow-up reviews after the initial findings. The final review approved
+the branch with no Critical, High, Medium, or Low findings and re-verified every token,
+reservation, compensation, fee, cancellation, fulfillment, manual-release, pause, exit,
+controller-handover, and deployment-migration path.
+
+- **M-1 resolved:** extension cost is calculated on the full locked `intentAmount`; enabled
+  policies require a nonzero slope; sponsored zero-increment extensions revert.
+- **L-1 resolved:** RiskManager checks the same inclusive five-day lifetime boundary as
+  EscrowV2 before reserving stake, and both unit and invariant mocks enforce it.
+- **L-2 resolved:** the new `increaseReservation` path enforces reservation pause, exit,
+  current-controller, snapshotted-controller, and free-stake gates while terminal
+  `updateReservation` remains pause-exempt.
+- **L-3 resolved:** `RiskPositionCancelled.extensionPenalty` breaks stale generated bindings
+  loudly, while `IntentExtensionCharged` is the canonical charge record.
+- **L-4 resolved operationally:** the spec calls out the global expiry blast radius, immutable
+  guardian migration, coordinated rollout, and ABI publishing order.
+- **ABI pipeline resolved:** `deploy:base` and `deploy:base_staging` export the freshly deployed
+  network bundle and regenerate the contracts package in the same successful command. Historical
+  pre-deployment artifacts remain immutable.
+- **Coverage gaps resolved:** tests now cover mutated Escrow timestamps, first-time and sponsored
+  pause failures, reservation-not-found, insufficient free stake, controller snapshot mismatch,
+  zero-increment sponsorship, and manual-release extension parity.
+
+Final EIP-170 measurements: RiskManager 21,829 B (Hardhat deploy profile) / 22,118 B
+(Foundry profile); StakeVault 17,680 B / 17,871 B. Both remain below 24,576 B.
+
 ## Fund-Flow Invariants Verified
 
 1. `stakeAndExtendIntent` pulls exactly `additionalReservation` from the sponsor via
@@ -149,14 +177,26 @@ None.
 
 ## Test Coverage
 
-Strong: extension/cancel/settle parity, sponsorship atomic rollback, isolation from
-chargeback coverage, reconcile-with-recorded-timestamp, cumulative rounding, invariant
-solvency and per-staker deposit/slash ledgers. Gaps: no test exercises the EscrowV2
-5-day lifetime cap against extensions (mocks omit it — L-1), and no test covers top-up
-extensions while reservations are paused or the taker is exiting (L-2).
+Strong: extension/cancel/settle/manual-release parity, sponsorship atomic rollback,
+isolation from chargeback coverage, reconcile-with-recorded-timestamp, cumulative rounding,
+the real EscrowV2 five-day boundary, pause/exit/controller negative paths, invariant solvency,
+and per-staker deposit/slash ledgers.
+
+Final local verification:
+
+- Hardhat suite: 1,292 passing, 5 pending.
+- Hardhat coverage suite: 1,325 passing; RiskManager 96.65% statements / 71.03% branches /
+  97.56% functions / 92.36% lines; StakeVault 93.13% / 58.94% / 90.00% / 91.20%.
+- Foundry non-fork suite: 135 passing across 14 suites.
+- Foundry coverage: RiskManager 81.92% lines / 79.08% statements / 31.25% branches /
+  85.37% functions; StakeVault 84.78% / 79.58% / 41.00% / 94.00%.
+- Deployment integration suite: 175 passing after the full local deployment sequence.
+- Contracts package: build passed; 7 tests passed.
+- Solidity/TypeScript build, TypeScript no-emit check, and `git diff --check`: passed.
+- Production-only Foundry size gate: RiskManager 22,195 B, StakeVault 17,871 B, and
+  OrchestratorV3 22,745 B; all below EIP-170.
 
 ## Recommendation
 
-**REQUEST CHANGES** — no fund-loss path found; accounting, isolation, and atomicity are
-sound and well-tested. Address M-1 (economic griefing pricing) before deployment and the
-L-1/L-2 hardening plus L-3 indexer note alongside it.
+**APPROVE** — all findings and follow-up suggestions are resolved. No fund-loss, accounting,
+solvency, isolation, or atomicity defect remains in the reviewed diff.

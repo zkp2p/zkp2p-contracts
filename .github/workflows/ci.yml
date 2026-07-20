@@ -46,5 +46,5 @@ jobs:
       - name: Test deploy
         run: >-
           yarn hardhat test
-          $(find test/deploy -maxdepth 1 -type f -name '*.ts' ! -name '26_stakeRiskSystem.spec.ts' -print | sort)
+          $(find test/deploy -maxdepth 1 -type f -name '*.ts' -print | sort)
           --network localhost

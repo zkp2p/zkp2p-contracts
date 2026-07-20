@@ -6,8 +6,7 @@ import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 const usdc = (amount: string | number) => ethers.utils.parseUnits(String(amount), 6);
 const HOUR = 60 * 60;
 const DAY = 24 * HOUR;
-const PERIOD = 6 * HOUR;
-const CLIFF = 15 * 60;
+const PERIOD = HOUR;
 const PAYPAL = ethers.utils.id("coverage-paypal");
 const ZELLE = ethers.utils.id("coverage-zelle");
 const ZERO = ethers.constants.AddressZero;
@@ -21,15 +20,15 @@ function chargebackConfig(deferredPayoutEnabled = false) {
       reserveBps: 10_000,
       riskWindow: DAY,
     },
-    griefing: { griefingCliff: CLIFF, griefingPenaltyBpsPerHour: 10, baseUnbondedAmount: 0 },
+    intentExtension: { extensionPenaltyBpsPerHour: 10 },
   };
 }
 
-function nonChargebackConfig(baseUnbondedAmount: BigNumber | number = 0) {
+function nonChargebackConfig() {
   return {
     enabled: true,
     chargeback: { chargebackable: false, deferredPayoutEnabled: false, reserveBps: 0, riskWindow: 0 },
-    griefing: { griefingCliff: CLIFF, griefingPenaltyBpsPerHour: 10, baseUnbondedAmount },
+    intentExtension: { extensionPenaltyBpsPerHour: 10 },
   };
 }
 
@@ -56,8 +55,9 @@ describe("RiskManager -- hard-cut branch coverage", () => {
 
     await vault.setStakeToken(token.address);
     await escrow.setToken(token.address);
+    await escrow.setIntentGuardian(manager.address);
     await manager.setPlatformRiskConfig(PAYPAL, chargebackConfig());
-    await manager.setPlatformRiskConfig(ZELLE, nonChargebackConfig(usdc(20)));
+    await manager.setPlatformRiskConfig(ZELLE, nonChargebackConfig());
     await vault.setTakerState(taker.address, taker.address, usdc(100_000), usdc(100_000), false);
     await token.transfer(orchestrator.address, usdc(10_000));
 
@@ -78,6 +78,7 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       recipient?: string;
     } = {},
   ) {
+    const createdAt = options.createdAt ?? await time.latest();
     await fixture.orchestrator.setRiskIntent(intentHash, {
       owner: options.owner ?? fixture.taker.address,
       to: options.recipient ?? fixture.beneficiary.address,
@@ -85,8 +86,9 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       depositId: 0,
       amount: options.amount ?? usdc(100),
       paymentMethod: options.paymentMethod ?? PAYPAL,
-      createdAt: options.createdAt ?? await time.latest(),
+      createdAt,
     });
+    await fixture.escrow.setIntent(intentHash, createdAt);
   }
 
   async function createPosition(
@@ -172,12 +174,9 @@ describe("RiskManager -- hard-cut branch coverage", () => {
 
     it("covers zero and upward-rounded formula branches", async () => {
       const f = await loadFixture(deployFixture);
-      expect(await f.manager.calculateBondedAmount(10, 20)).to.eq(0);
       expect(await f.manager.calculateChargebackReserve(101, 5_000)).to.eq(51);
-      expect(await f.manager.calculateMaxGriefingBond(100, PERIOD, {
-        griefingCliff: CLIFF, griefingPenaltyBpsPerHour: 0, baseUnbondedAmount: 0,
-      })).to.eq(0);
-      const penalty = await f.manager.calculateGriefingPenalty(100, 10, 10, PERIOD, CLIFF, 10);
+      expect(await f.manager.calculateIntentExtensionCost(100, PERIOD, 0)).to.eq(0);
+      const penalty = await f.manager.calculateIntentExtensionPenalty(100, 10, 10, PERIOD, 10);
       expect(penalty.penalty).to.eq(0);
     });
   });
@@ -242,6 +241,27 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       await setRiskIntent(f, exiting);
       await expect(f.orchestrator.createPosition(f.manager.address, exiting))
         .to.be.revertedWithCustomError(f.manager, "StakeOwnerExiting");
+    });
+
+    it("requires RiskManager to be the deposit's intent guardian", async () => {
+      const f = await loadFixture(deployFixture);
+      await f.escrow.setIntentGuardian(f.other.address);
+      const intentHash = ethers.utils.id("wrong-intent-guardian");
+      await setRiskIntent(f, intentHash);
+
+      await expect(f.orchestrator.createPosition(f.manager.address, intentHash))
+        .to.be.revertedWithCustomError(f.manager, "InvalidIntentGuardian");
+    });
+
+    it("rejects an Escrow intent timestamp that no longer matches the admission snapshot", async () => {
+      const f = await loadFixture(deployFixture);
+      const intentHash = ethers.utils.id("mutated-escrow-timestamp");
+      const createdAt = await time.latest();
+      await createPosition(f, intentHash, { createdAt, paymentMethod: ZELLE });
+      await f.escrow.setIntentState(intentHash, createdAt + 1, createdAt + PERIOD);
+
+      await expect(f.manager.connect(f.taker).extendIntent(intentHash, HOUR))
+        .to.be.revertedWithCustomError(f.manager, "IntentStateMismatch");
     });
 
     it("records and reconciles cancellation with the original timestamp", async () => {

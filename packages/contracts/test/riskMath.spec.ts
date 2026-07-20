@@ -1,95 +1,52 @@
 import {
-  calculateBondedTakingCapacity,
-  calculateBondedAmount,
   calculateChargebackReserve,
-  calculateGriefingPenalty,
-  calculateMaxGriefingBond,
+  calculateIntentExtensionCost,
+  calculateIntentExtensionPenalty,
   calculateRequiredReservation,
-  calculateTotalTakingCapacity,
-} from "../utils/riskMath";
+  calculateTakingCapacity,
+} from "../../../utils/riskMath";
 
 const HOUR = 3_600n;
-const terms = {
-  maxIntentPeriod: 6n * HOUR,
-  griefingCliff: 15n * 60n,
-  griefingPenaltyBpsPerHour: 10n,
-};
 
-describe("riskMath", () => {
-  it("subtracts the reusable base without underflow", () => {
-    expect(calculateBondedAmount(700_000_000n, 500_000_000n)).toBe(200_000_000n);
-    expect(calculateBondedAmount(500_000_000n, 500_000_000n)).toBe(0n);
-    expect(calculateBondedAmount(400_000_000n, 500_000_000n)).toBe(0n);
+describe("risk math", () => {
+  it("calculates cumulative extension collateral with upward rounding", () => {
+    expect(calculateIntentExtensionCost(1_000_000_000n, 23n * HOUR, 10n)).toBe(23_000_000n);
+    expect(calculateIntentExtensionCost(1n, 1n, 1n)).toBe(1n);
+    expect(calculateIntentExtensionCost(1_000_000n, HOUR, 0n)).toBe(0n);
   });
 
-  it("rounds the maximum griefing bond upward", () => {
-    expect(calculateMaxGriefingBond(1_000_000_001n, terms)).toBe(5_750_001n);
+  it("charges only elapsed purchased time after the original expiry", () => {
+    expect(calculateIntentExtensionPenalty(1_000_000_000n, 10_000n, 9_999n, 2n * HOUR, 10n))
+      .toEqual({ penalty: 0n, chargeableTime: 0n });
+    expect(calculateIntentExtensionPenalty(1_000_000_000n, 10_000n, 10_000n + HOUR, 2n * HOUR, 10n))
+      .toEqual({ penalty: 1_000_000n, chargeableTime: HOUR });
+    expect(calculateIntentExtensionPenalty(1_000_000_000n, 10_000n, 10_000n + 3n * HOUR, 2n * HOUR, 10n))
+      .toEqual({ penalty: 2_000_000n, chargeableTime: 2n * HOUR });
   });
 
-  it("returns zero maximum griefing bond for a disabled slope", () => {
-    expect(calculateMaxGriefingBond(1_000_000n, { ...terms, griefingPenaltyBpsPerHour: 0 })).toBe(0n);
+  it("prices extensions on the full locked intent amount", () => {
+    expect(calculateIntentExtensionCost(500_000_000n, HOUR, 10n)).toBe(500_000n);
   });
 
-  it("rounds chargeback coverage upward", () => {
-    expect(calculateChargebackReserve(101n, 5_000)).toBe(51n);
+  it("reserves chargeback coverage only at admission", () => {
+    expect(calculateChargebackReserve(1_000_000_001n, 10_000n)).toBe(1_000_000_001n);
+    expect(calculateRequiredReservation(1_000_000_001n, 10_000n)).toBe(1_000_000_001n);
+    expect(calculateRequiredReservation(1_000_000_001n, 0n)).toBe(0n);
   });
 
-  it("rejects an invalid chargeback reserve ratio", () => {
-    expect(() => calculateChargebackReserve(100n, 10_001)).toThrow("reserveBps");
-  });
-
-  it("takes the maximum of griefing and chargeback requirements", () => {
-    expect(calculateRequiredReservation(1_000_000_000n, terms, 10_000, 0)).toBe(1_000_000_000n);
-  });
-
-  it("charges nothing at the griefing cliff", () => {
-    expect(calculateGriefingPenalty(1_000_000_000n, 1_000, 1_000n + 15n * 60n, terms)).toEqual({
-      penalty: 0n,
-      effectiveElapsed: 15n * 60n,
+  it("derives admission capacity only from chargeback reserve", () => {
+    expect(calculateTakingCapacity(1_000_000n, 10_000n)).toEqual({
+      chargebackCapacity: 1_000_000n,
+      totalTakingCapacity: 1_000_000n,
     });
-  });
-
-  it("charges one smallest unit immediately after the cliff when division has a remainder", () => {
-    expect(calculateGriefingPenalty(1n, 1_000, 1_000n + 15n * 60n + 1n, terms).penalty).toBe(1n);
-  });
-
-  it("caps grievance accrual at the maximum intent period", () => {
-    const late = calculateGriefingPenalty(1_000_000_000n, 1_000, 1_000n + 30n * HOUR, terms);
-    expect(late.effectiveElapsed).toBe(6n * HOUR);
-    expect(late.penalty).toBe(5_750_000n);
-  });
-
-  it("returns zero for a cancellation timestamp before creation", () => {
-    expect(calculateGriefingPenalty(1_000n, 2_000, 1_000, terms)).toEqual({
-      penalty: 0n,
-      effectiveElapsed: 0n,
-    });
-  });
-
-  it("uses the constraining chargeback curve for bonded capacity", () => {
-    const capacity = calculateBondedTakingCapacity(1_000_000_000n, terms, 10_000);
-    expect(capacity.chargebackCapacity).toBe(1_000_000_000n);
-    expect(capacity.bondedTakingCapacity).toBe(1_000_000_000n);
-  });
-
-  it("treats disabled curves as unbounded", () => {
-    const capacity = calculateBondedTakingCapacity(1_000n, {
-      ...terms,
-      griefingPenaltyBpsPerHour: 0,
-    }, 0);
-    expect(capacity).toEqual({
-      griefingCapacity: null,
+    expect(calculateTakingCapacity(1_000_000n, 0n)).toEqual({
       chargebackCapacity: null,
-      bondedTakingCapacity: null,
+      totalTakingCapacity: null,
     });
   });
 
-  it("adds the reusable base to finite bonded capacity", () => {
-    expect(calculateTotalTakingCapacity(200_000_000n, 500_000_000n)).toBe(700_000_000n);
-    expect(calculateTotalTakingCapacity(null, 500_000_000n)).toBeNull();
-  });
-
-  it("rejects unsafe number inputs", () => {
-    expect(() => calculateChargebackReserve(Number.MAX_VALUE, 100)).toThrow("safe integer");
+  it("rejects unsafe numbers and reserve ratios", () => {
+    expect(() => calculateIntentExtensionCost(Number.MAX_SAFE_INTEGER + 1, HOUR, 1)).toThrow(RangeError);
+    expect(() => calculateChargebackReserve(1n, 10_001n)).toThrow(RangeError);
   });
 });

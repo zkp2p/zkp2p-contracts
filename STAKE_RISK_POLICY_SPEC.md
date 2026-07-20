@@ -1,44 +1,41 @@
-# Stake Risk Curves and Reusable Base-Unbonded Capacity
+# Stake-Funded Intent Extensions and Chargeback Coverage
 
 ## Status
 
-Hard-cut contract specification. The contract implementation follows this model; deployment and downstream consumers must migrate to the new ABI without compatibility aliases.
+Hard-cut contract specification. The active ABI uses `IntentExtensionConfig`; deployment and downstream consumers must not retain compatibility fields or accounting from the removed pending-intent bond model.
 
 ## Summary
 
-The protocol uses stake for two independent risks:
+Stake now funds two independent liabilities:
 
-1. A griefing bond compensates an LP when a taker locks liquidity and later cancels or lets the intent expire.
-2. Chargeback coverage protects an LP for a configured period after a chargebackable payment settles.
+1. A taker can purchase additional intent time after the Escrow's initial free expiry. The maximum charge for the purchased time is reserved when the intent is extended, and the elapsed charge is paid to the LP whether the intent is fulfilled or cancelled.
+2. A chargebackable payment reserves coverage after settlement. Coverage comes from existing membership stake or from gross deferred settlement proceeds converted into taker-owned stake.
 
-For non-chargebackable payment methods, every intent receives a reusable base-unbonded tranche. Only the amount above that base enters the griefing curve. The base is stateless: there is no lifetime count, usage mapping, or consumed allowance.
+Admission reserves only chargeback coverage. Merely signaling an intent does not reserve a pending-intent penalty. The Escrow's initial expiration period is the free interval; an intent must explicitly purchase any additional time before its current expiry.
 
-For chargebackable payment methods, the base must be zero and the full intent amount remains subject to the existing chargeback policy.
+The two liabilities use different StakeVault reservation identifiers and are never netted against each other.
 
-Settlement ownership is a hard cut. The depositor selects a risk hook for future intents; Orchestrator snapshots that hook at admission and calls it after Escrow funds arrive but before any fee or taker payout. The hook receives the exact fee plan plus a temporary allowance for the gross release. It may consume zero or all of the gross amount—never a partial amount. Ordinary post-intent hooks remain selected by the onramper and are independent of risk policy.
+## Trust and Custody Boundaries
 
-Risk hooks are intentionally not governed by an on-chain registry. A consuming hook can take the full gross release and a reverting hook can block settlement, so onramper clients must accept only the canonical hook addresses surfaced by the curator before signaling. Because the depositor can change its deposit hook while a signal transaction is pending, the client must also verify the emitted or stored per-intent hook snapshot after signal confirmation and before paying fiat; a mismatch is cancelled within the grace period. The snapshotted hook is visible on-chain for independent verification.
+- The depositor selects `RiskManager` as both the intent risk hook and the Escrow `intentGuardian`.
+- Orchestrator snapshots the selected risk hook when the intent is admitted.
+- RiskManager is the only contract allowed to extend the Escrow intent expiry.
+- StakeVault is the only token custody and accounting boundary. RiskManager never retains tokens.
+- Ordinary post-intent hooks remain selected by the onramper and are independent of the risk policy.
+- Curator and onramper clients must accept only known RiskManager addresses before paying fiat.
 
-## Security Boundary
-
-The reusable base is economic policy, not identity or Sybil protection. The contract intentionally does not approximate account identity with wallet-local counters.
-
-If admission must be limited to one stable platform account, that constraint belongs in the platform-account gating or proof layer. Once an intent reaches `RiskManager`, the contract applies the configured base to every eligible intent, including concurrent intents.
-
-The model therefore accepts that base-only capacity can be reused without contract state. LPs and admission systems must price or gate that exposure explicitly.
+RiskManager rejects admission unless the deposit's `intentGuardian` is the same RiskManager. This binds the quoted extension policy to the only contract able to change the on-chain expiry.
 
 ## Terminology
 
 - `A`: complete intent amount.
-- `R`: gross amount actually released by Escrow for fulfillment or manual release.
+- `R`: gross amount actually released by Escrow at settlement.
 - `E`: executable settlement amount after protocol, referral, and manager fees.
-- `F`: total independently rounded protocol, referral, and manager fees, `R - E`.
-- `U`: reusable base-unbonded amount configured for the payment method.
-- `B`: bonded amount, `max(A - U, 0)`.
-- `S`: currently free stake for the selected stake owner.
-- `T`: snapshotted maximum intent period.
-- `C`: snapshotted griefing cliff.
-- `s`: griefing penalty slope in basis points per hour.
+- `F`: independently rounded contingent fees, `R - E`.
+- `s`: extension charge in basis points per hour.
+- `Tbase`: original Escrow intent expiry snapshotted at admission.
+- `Tpurchased`: cumulative additional time purchased for the intent.
+- `Tterminal`: fulfillment, manual-release, or cancellation timestamp.
 - `r`: chargeback reserve ratio in basis points.
 
 ## Platform Configuration
@@ -51,276 +48,251 @@ struct ChargebackConfig {
     uint64 riskWindow;
 }
 
-struct GriefingConfig {
-    uint64 griefingCliff;
-    uint32 griefingPenaltyBpsPerHour;
-    uint256 baseUnbondedAmount;
+struct IntentExtensionConfig {
+    uint32 extensionPenaltyBpsPerHour;
 }
 
 struct PlatformRiskConfig {
     bool enabled;
     ChargebackConfig chargeback;
-    GriefingConfig griefing;
+    IntentExtensionConfig intentExtension;
 }
 ```
 
 Configuration rules:
 
 - `chargeback.reserveBps` is between `0` and `10_000`.
-- A chargebackable method requires a nonzero reserve ratio, a nonzero bounded risk window, and `griefing.baseUnbondedAmount == 0`.
+- A chargebackable method requires `reserveBps == 10_000` and a nonzero bounded risk window.
 - A non-chargebackable method requires `reserveBps == 0` and disables deferred payout.
-- The griefing cliff must be shorter than the Escrow intent period.
-- The maximum griefing rate cannot exceed 100% of the bonded amount.
-- A zero griefing slope disables the griefing curve.
+- Across the five-day total intent-lifetime ceiling, the configured slope cannot charge more than 100% of `A`.
+- An enabled platform requires a nonzero extension slope, preventing accidental free extensions.
 
-## Bonded Amount
+Governance changes affect only future admissions. Each position snapshots its full intent amount, extension slope, chargeback ratio, and risk window.
 
-For every admission:
+## Initial Expiry and Extension Curve
+
+At admission:
 
 ```text
-B = max(A - U, 0)
+Tbase = createdAt + Escrow.intentExpirationPeriod()
 ```
 
-Because chargebackable methods require `U = 0`, their bonded amount is the full intent amount.
+No extension stake is reserved at admission.
 
-The position snapshots both `intentAmount` and `bondedAmount`. Later policy changes cannot alter the amount used for cancellation accounting.
-
-## Griefing Curve
-
-The maximum griefing bond is:
+For cumulative purchased time `Tpurchased`, the required extension reservation is:
 
 ```text
-chargeableMaximum = max(T - C, 0)
-
-Gmax = ceil(
-    B * s * chargeableMaximum
+Qextension = ceil(
+    A * s * Tpurchased
     / (10_000 * 1 hour)
 )
 ```
 
-At cancellation:
+Each extension reserves only the increase from the previously required cumulative reservation. Computing from cumulative time avoids rounding drift across repeated small extensions.
+
+At any terminal outcome:
 
 ```text
-effectiveElapsed = min(cancelledAt - createdAt, T)
-chargeableElapsed = max(effectiveElapsed - C, 0)
+elapsedAfterBase = max(Tterminal - Tbase, 0)
+chargeableTime = min(elapsedAfterBase, Tpurchased)
 
-Gcancel = ceil(
-    B * s * chargeableElapsed
+Pextension = ceil(
+    A * s * chargeableTime
     / (10_000 * 1 hour)
 )
 ```
 
-Rounding is upward. If `B == 0`, both values are zero at every timestamp.
+`Pextension` is slashed to LP compensation. Every unused unit of the extension reservation is immediately released as reusable taker stake.
 
-## Chargeback Curve
+Consequences:
 
-For stake-backed coverage on a chargebackable method:
+- Fulfillment and cancellation at the same timestamp produce the same extension charge.
+- A terminal outcome at or before `Tbase` charges zero even if time was purchased early.
+- A terminal outcome after the purchased interval cannot charge more than `Qextension`.
+- Reconciliation uses Orchestrator's durable original cancellation timestamp, not the later reconciliation timestamp.
 
-```text
-Qstake = ceil(R * r / 10_000)
-```
+## Extension Calls
 
-For deferred-stake coverage:
+### `extendIntent(intentHash, additionalTime)`
 
-```text
-Qdeferred = ceil(R * r / 10_000)
-```
+- Callable only by the intent taker.
+- Uses the taker's existing free membership stake.
+- Creates or increases the isolated extension reservation.
+- Calls Escrow as the intent guardian only after the reservation succeeds.
 
-V1 policy requires `r = 10_000`, so both stake-backed and deferred coverage equal the gross Escrow release. The base-unbonded policy never reduces post-settlement chargeback coverage.
+### `stakeAndExtendIntent(intentHash, additionalTime)`
 
-## Admission Reservation
+- Callable by the taker or any sponsor.
+- Pulls exactly the incremental reservation amount directly from the caller into StakeVault.
+- Credits the deposited amount to the intent taker's `stakeBalance` and reserves it atomically.
+- Never consumes pre-existing taker stake on behalf of a third party.
+- Any amount not charged at terminal resolution remains reusable stake owned by the taker; sponsorship is a stake contribution, not a refundable loan.
 
-For an ordinary position:
+Both calls:
 
-```text
-requiredReservation = max(Gmax, ceil(A * r / 10_000))
-```
+- require a pending, unexpired intent;
+- fail closed while StakeVault reservations are paused or the taker's direct stake is exiting;
+- require stake deposits to be unpaused when `stakeAndExtendIntent` supplies new collateral;
+- validate that Escrow's current expiry equals `Tbase + Tpurchased`;
+- reject zero added time and any extension that would move final expiry beyond five days from the original intent timestamp;
+- cannot revive an already-expired intent;
+- update RiskManager state only if the StakeVault reservation and Escrow guardian call both succeed.
 
-Cancellation and settlement are mutually exclusive outcomes, so the liabilities are not added.
+## Isolated Reservations
 
-This admission value determines whether membership stake can fully back the intent. If it cannot, deferred mode may be selected when enabled and the stake owner can still cover `Gmax`. Deferred proceeds do not exist at admission; only after fulfillment does the gross release become new, fully reserved stake owned by the taker.
-
-## Modes
-
-- `UNBONDED`: `B == 0`; reserves and slashes no stake.
-- `STAKE_BACKED`: `B > 0` and ordinary stake backs the position.
-- `DEFERRED_PAYOUT`: RiskManager pulls the gross release from Orchestrator into StakeVault and converts it into fully reserved taker stake. The fee slice remains contingent until clean maturity.
-
-There is no count-based or lifetime-subsidy mode.
-
-## Capacity Math
-
-For a non-chargebackable method with a nonzero griefing rate:
+Chargeback coverage uses the intent hash as its StakeVault position identifier. Extension collateral uses:
 
 ```text
-griefingRateNumerator = s * (T - C)
-
-bondedTakingCapacity(S) = floor(
-    S * 10_000 * 1 hour
-    / griefingRateNumerator
-)
-
-maximumIntentAmount(S) = U + bondedTakingCapacity(S)
-```
-
-For a chargebackable method, `U = 0` and the existing chargeback capacity also constrains admission:
-
-```text
-chargebackCapacity(S) = floor(S * 10_000 / r)
-
-maximumIntentAmount(S) = min(
-    griefingCapacity(S),
-    chargebackCapacity(S)
+extensionReservationId = keccak256(
+    abi.encode(EXTENSION_RESERVATION_NAMESPACE, intentHash)
 )
 ```
 
-A disabled curve does not constrain capacity. If every applicable curve is disabled, capacity is unbounded by `RiskManager`; other protocol and LP limits still apply.
-
-Across multiple active positions, admission remains subject to the shared portfolio invariant:
+This domain separation is mandatory. A payment method may require both liabilities at once:
 
 ```text
-sum(active stake reservations) <= eligible stake
+active reservation under intentHash
+    = chargeback coverage
+
+active reservation under extensionReservationId(intentHash)
+    = maximum purchased-time charge
 ```
 
-The reusable base itself is not reserved and does not create a portfolio counter. Multiple base-only intents can be open concurrently.
+Charging or releasing one reservation cannot resize, release, or slash the other.
 
-## Lifecycle
+## Chargeback Coverage
 
-### Base-only non-chargebackable intent
+For chargebackable settlement:
 
-- Snapshots `bondedAmount = 0` and mode `UNBONDED`.
-- Reserves no stake.
-- Cancellation or expiry charges zero.
-- Settlement creates no chargeback position.
-- A later intent receives the same configured base.
+```text
+Qchargeback = ceil(R * r / 10_000)
+```
 
-### Partially bonded non-chargebackable intent
+Current policy requires `r = 10_000`, so coverage equals the gross Escrow release.
 
-- Snapshots `bondedAmount = A - U`.
-- Reserves `Gmax` calculated only from that excess.
-- Cancellation slashes the accrued excess-only penalty and releases the remainder.
-- Settlement releases the complete pending reservation.
+### Stake-backed mode
 
-### Chargebackable intent
+- Admission reserves `ceil(A * r / 10_000)` from the delegated stake owner.
+- Settlement first charges the taker's extension reservation.
+- The independent chargeback reservation is then resized to `Qchargeback`.
+- No settlement tokens are consumed by RiskManager.
 
-- Requires `U = 0`, so `B = A`.
-- Uses the stake-backed or risk-manager-funded deferred-payout lifecycle selected at admission.
-- Cancellation charges only accrued griefing exposure.
-- Stake-backed settlement consumes zero payout funds and covers `R`.
-- Deferred settlement consumes `R`, records it as fully reserved taker stake, and defers both `E` and `F`.
-- Manual release uses the same settlement callback and custody invariant as verified fulfillment.
-- Deferred admission requires `intent.to == intent.owner`, so an incompatible third-party payout is rejected before the taker can pay fiat. A consuming risk hook deliberately supersedes ordinary post-intent execution.
+### Deferred-payout mode
 
-## Settlement Flow and Fee Invariant
+- Admission authorizes future deferred stake but reserves no nonexistent proceeds.
+- Settlement first charges the taker's extension reservation.
+- RiskManager then pulls the complete gross release directly from Orchestrator into StakeVault.
+- StakeVault credits `R` to the taker and reserves the full amount through the chargeback window.
+- The fee slice `F` remains contingent; no taker or fee recipient can withdraw it while coverage is live.
 
-For both fulfillment and manual release:
+On a valid chargeback, the complete gross reservation compensates the LP and all contingent fees are cancelled. On clean maturity, `F` becomes pull-based fee claims and `E` becomes free reusable taker stake.
+
+Deferred payment therefore becomes stake at settlement. It is not a separate balance class: gross proceeds increase `stakeBalance`, remain fully reserved during the risk window, and leave net proceeds as ordinary reusable stake after clean maturity.
+
+## Admission and Capacity
+
+Admission computes chargeback capacity only:
+
+```text
+chargebackAdmissionReserve = ceil(A * r / 10_000)
+```
+
+- If it is zero, the position is `UNBONDED`.
+- If existing delegated stake covers it, the position is `STAKE_BACKED`.
+- If existing stake is insufficient and deferred payout is enabled, the position is `DEFERRED_PAYOUT`.
+- Otherwise admission fails.
+
+Extension capacity is not pre-reserved and does not constrain initial quote capacity. Additional time succeeds only when its caller can fund the incremental extension reservation.
+
+For non-chargebackable methods, RiskManager therefore places no stake-derived limit on the initial intent amount. Escrow deposit limits and off-chain admission policy continue to bound the quote. Any extension is priced on the complete amount of LP liquidity that remains locked.
+
+## Settlement Ordering
+
+For fulfillment and manual release:
 
 ```text
 Escrow -> Orchestrator: R
-E = R - fees(R)
-Orchestrator -> snapshotted risk hook: fee plan + temporary allowance(R), settleIntent(context)
+Orchestrator -> RiskManager.settleIntent(fee plan, R, E)
+RiskManager -> StakeVault: charge elapsed extension time, release unused extension reserve
+RiskManager -> StakeVault: establish chargeback coverage, or release/no-op if non-chargebackable
 ```
 
-The hook may consume either zero or exactly `R`. Orchestrator clears the allowance after a successful callback and checks its token balance delta:
+After the risk callback:
 
-- zero consumption pays the exact fee plan and continues ordinary payout handling with `E`;
-- exact gross consumption marks risk settlement complete and skips every immediate fee, post-intent-hook, and direct-payout transfer;
-- partial consumption, over-pull, balance increase, missing hook code, callback failure, or allowance failure reverts the complete release transaction.
+- a zero-consumption stake-backed or unbonded callback lets Orchestrator execute fees and ordinary payout handling;
+- an exact-gross deferred callback skips immediate fees, post-intent-hook execution, and direct payout because the entire fee plan is contingent in StakeVault.
 
-RiskManager consumes zero for unbonded and stake-backed positions. In deferred mode it transfers exactly `R` directly from Orchestrator to StakeVault, credits `R` to the taker's `stakeBalance`, and reserves all of it. Until the chargeback window closes, no taker or fee recipient can withdraw any portion.
-
-On chargeback, the complete gross reservation is slashed and credited to the LP; all contingent fees are cancelled. On clean maturity, the reservation is released, `F` is removed from taker stake and credited as exact claimable fee balances, and `E` becomes free reusable taker stake. Fee withdrawals are pull-based so a blocked fee recipient cannot prevent position maturity.
-
-Proof-based fulfillment chargebacks require the bidirectional payment-nullifier binding written by UnifiedPaymentVerifierV3. Manual release never invokes a payment verifier, so its dedicated chargeback witnesses are the binding authority: their EIP-712 signature commits to the exact intent hash and evidence data, and the dispute nullifier remains globally single-use.
+Partial token consumption, token mismatch, amount mismatch, callback failure, or allowance mismatch reverts the complete settlement.
 
 ## Position and Event Surface
 
 The hard-cut ABI:
 
-- replaces risk mode `FREE` with `UNBONDED`;
-- replaces `freeTakeCount` and `freeTakeAmount` with `baseUnbondedAmount`;
-- removes `freeTakesUsed` and the consumption event;
-- removes the consumed-allowance flag from positions;
-- adds snapshotted `bondedAmount` to positions and `RiskPositionCreated`;
-- emits `baseUnbondedAmount` in platform configuration updates;
-- removes risk-admission return values and every `requiresPostIntentHook` / deferred-hook coupling;
-- snapshots only the depositor-selected risk hook for each intent;
-- adds `settleIntent(RiskSettlementContext)` and `IntentRiskSettlementExecuted`;
-- replaces deferred-hook registration events with `DeferredSettlementFunded` emitted by RiskManager;
-- adds `DeferredStakeFunded`, `DeferredStakeSlashed`, `DeferredStakeReleased`, `DeferredFeeVested`, and `FeeClaimWithdrawn` to StakeVault;
-- records and emits gross, executable, contingent fee, and covered amounts.
+- uses `IntentExtensionConfig` in `PlatformRiskConfig`;
+- snapshots `intentAmount`, `baseIntentExpiry`, and `extensionPenaltyBpsPerHour`;
+- tracks `totalExtensionTime`, `extensionReservation`, and terminal `extensionPenalty`;
+- exposes `extendIntent`, `stakeAndExtendIntent`, extension cost/penalty math, and `extensionReservationId`;
+- emits `IntentExtended` for each purchase and `IntentExtensionCharged` at every extended intent's terminal outcome;
+- emits `StakeSponsoredAndReserved` when new stake funds an extension;
+- keeps extension events separate from chargeback and deferred-settlement events.
 
-Indexers must derive unbonded versus bonded exposure from the position mode and `bondedAmount`. They must not reconstruct removed usage counters.
+Indexers must use the emitted extension reservation identifier and must not combine extension collateral with `reservedAmount`, which remains chargeback coverage.
 
 ## Core Invariants
 
-1. Chargebackable methods configure a zero base-unbonded amount.
-2. `bondedAmount == max(intentAmount - baseUnbondedAmount, 0)` at admission.
-3. An unbonded position reserves and slashes zero stake.
-4. A pending ordinary position reserves exactly `max(Gmax, Q)`.
-5. Cancellation penalty never exceeds the snapshotted maximum griefing bond.
-6. Cancellation uses the snapshotted bonded amount and maximum intent period.
-7. Fulfillment never charges a griefing penalty.
-8. A chargeback never consumes more than the remaining position coverage.
-9. Governance changes affect only future positions.
-10. All stake-backed positions share the same stake-owner portfolio balance.
-11. Risk settlement consumes either zero or exactly the gross amount, and its allowance is zero afterward.
-12. Before deferred maturity, `stakeBalance increase == reservedStake increase == gross release` and free stake does not increase.
-13. Deferred chargeback credits the LP exactly the gross release and vests no fees.
-14. Clean maturity leaves `net free stake + claimable fees == gross release`, with fee claims matching the original independently rounded fee plan.
-15. Token-bearing settlement failures revert fulfillment or manual release; cancellation reconciliation remains independently fail-open and timestamp-safe.
+1. Admission requires `deposit.intentGuardian == RiskManager`.
+2. Every extension cost is calculated from the full `intentAmount`.
+3. Admission reserves chargeback coverage only; `extensionReservation == 0` initially.
+4. The active extension reservation equals the position's `extensionReservation` and is keyed by the domain-separated identifier.
+5. The extension reservation staker is the intent taker, independent of delegated chargeback stake ownership.
+6. Cumulative extension reservation is monotonic and uses one upward rounding over cumulative purchased time.
+7. Terminal extension charge is identical for cancellation, proof fulfillment, and manual release at the same timestamp.
+8. Terminal extension charge never exceeds the purchased-time reservation; all excess is released.
+9. A chargeback reservation and extension reservation can coexist without either operation mutating the other.
+10. Third-party extension sponsorship increases taker stake and reserved stake by exactly the token amount received.
+11. Deferred settlement increases taker stake and chargeback reservation by exactly the gross release.
+12. Every slash decreases stake and reserved stake by the same amount and increases LP compensation by that amount.
+13. Clean deferred maturity leaves `net free stake + claimable fees == gross release`.
+14. Across every lifecycle transition, `token balance in StakeVault == total liabilities`.
 
-## Illustrative Non-Chargebackable Policy
-
-```text
-chargeback:
-  chargebackable:                false
-  deferredPayoutEnabled:         false
-  reserveBps:                    0
-  riskWindow:                    0
-griefing:
-  griefingCliff:                 15 minutes
-  griefingPenaltyBpsPerHour:     10
-  baseUnbondedAmount:            500 USDC
-Escrow maximum intent period:    6 hours
-```
-
-Examples:
+## Illustrative Policy
 
 ```text
-A = 500 USDC  => B =   0 USDC => Gmax = 0
-A = 700 USDC  => B = 200 USDC => Gmax = 1.15 USDC
-A = 1,000 USDC => B = 500 USDC => Gmax = 2.875 USDC
+Escrow initial intent period:             1 hour
+intentExtension.extensionPenaltyBpsPerHour: 10
+maximum total intent lifetime:             5 days
 ```
 
-The 500 USDC base is reusable for every admitted intent. It is not a one-time allowance and is not Sybil resistance.
-
-## Illustrative Chargebackable Policy
+For a 1,000 USDC intent:
 
 ```text
-chargeback:
-  chargebackable:                true
-  deferredPayoutEnabled:         true
-  reserveBps:                    10,000
-  riskWindow:                    30 days
-griefing:
-  griefingCliff:                 15 minutes
-  griefingPenaltyBpsPerHour:     10
-  baseUnbondedAmount:            0
-Escrow maximum intent period:    6 hours
+purchase 1 hour  => reserve 1.00 USDC
+purchase 3 hours => cumulative reserve 3.00 USDC
+
+terminal 30 minutes after initial expiry => charge 0.50 USDC, release 2.50 USDC
+terminal 2 hours after initial expiry     => charge 2.00 USDC, release 1.00 USDC
+terminal after all 3 purchased hours      => charge 3.00 USDC, release 0
 ```
 
-For a 1,000 USDC intent, the maximum griefing bond is 5.75 USDC and ordinary chargeback coverage is 1,000 USDC, so ordinary admission reserves 1,000 USDC. If deferred mode is selected and settlement fees total 1.5 USDC, StakeVault receives and reserves the full 1,000 USDC. Chargeback returns 1,000 USDC to the LP; clean maturity produces 998.5 USDC of free taker stake plus 1.5 USDC of fee claims.
+The same table applies whether the terminal action is fulfillment or cancellation.
 
 ## Rollout
 
-This ABI is a hard cut. A release requires:
+1. Deploy/configure RiskManager and set it as the deposit risk hook and intent guardian.
+2. Set the Escrow initial expiration period to the intended free interval (one hour for the initial rollout).
+3. Configure `IntentExtensionConfig` and chargeback policy per payment method.
+4. Publish the hard-cut ABI and risk math.
+5. Migrate the indexer to extension snapshots, reservations, charges, and sponsorship events.
+6. Update curator and quote clients to recognize only approved risk hooks and the new extension fields.
 
-1. A fresh `NullifierRegistryV2`, `UnifiedPaymentVerifierV3`, OrchestratorV3, StakeVault, and RiskManager deployment, plus a governance-ratified chargeback witness set that is disjoint from payment-attestation witnesses.
-2. A one-way governance batch that removes every legacy-registry writer and routes the shared payment registry to UPV3; rollback to a legacy writer/verifier is forbidden.
-3. Depositors explicitly select RiskManager as their risk hook for deposits that require this policy. They continue selecting ordinary post-intent hooks independently.
-4. A contracts package release containing the hard-cut ABIs and risk math.
-5. Indexer migration to the new intent-risk snapshot, settlement, and position event shapes.
-6. Curator and client migration from usage-based capacity to `base + bonded capacity`, with no DeferredPayoutHook selection.
+`EscrowV2.setIntentExpirationPeriod` is a global Escrow setting, not a per-deposit or
+per-payment-method policy. Executing step 2 shortens the initial window for every existing
+deposit on that Escrow, including deposits that do not use RiskManager. The Safe batch must be
+coordinated with quote clients, curators, indexers, and operators before execution. Existing
+deposits must also be recreated if they need RiskManager as their immutable intent guardian.
 
-Historical deployment artifacts remain immutable. No legacy fields, aliases, or dual event decoding are added to the active contract.
+The deployment command must export the freshly deployed ABI bundle and regenerate the contracts
+package in the same successful pipeline. Consumers must not publish or ingest an older exported
+`RiskManager` ABI after deploy 28 has executed.
+
+Historical deployment artifacts remain immutable. Active contracts and downstream consumers do not expose legacy aliases or dual accounting.

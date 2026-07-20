@@ -3,10 +3,6 @@ import { mkdtempSync, readdirSync, rmSync, symlinkSync } from "fs";
 import { tmpdir } from "os";
 import { basename, join, resolve } from "path";
 
-const IMMUTABLE_HISTORICAL_SCRIPTS = new Set([
-  "26_deploy_stake_risk_system.ts",
-]);
-
 function main() {
   const network = process.argv[2];
   if (!network) throw new Error("usage: deployActive <network>");
@@ -17,7 +13,7 @@ function main() {
 
   try {
     for (const filename of readdirSync(sourceDirectory)) {
-      if (!filename.endsWith(".ts") || IMMUTABLE_HISTORICAL_SCRIPTS.has(filename)) continue;
+      if (!filename.endsWith(".ts")) continue;
       symlinkSync(join(sourceDirectory, filename), join(activeDirectory, basename(filename)), "file");
     }
 

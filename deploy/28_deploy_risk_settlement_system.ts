@@ -3,6 +3,7 @@ import "module-alias/register";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 import { ethers } from "hardhat";
+import { ONE_HOUR_IN_SECONDS } from "../utils/constants";
 
 import {
   MULTI_SIG,
@@ -55,11 +56,8 @@ function platformRiskConfigMatches(actual: any, expected: any): boolean {
     && actual.chargeback.deferredPayoutEnabled === expected.chargeback.deferredPayoutEnabled
     && ethers.BigNumber.from(actual.chargeback.reserveBps).eq(expected.chargeback.reserveBps)
     && ethers.BigNumber.from(actual.chargeback.riskWindow).eq(expected.chargeback.riskWindow)
-    && ethers.BigNumber.from(actual.griefing.griefingCliff).eq(expected.griefing.griefingCliff)
-    && ethers.BigNumber.from(actual.griefing.griefingPenaltyBpsPerHour)
-      .eq(expected.griefing.griefingPenaltyBpsPerHour)
-    && ethers.BigNumber.from(actual.griefing.baseUnbondedAmount)
-      .eq(expected.griefing.baseUnbondedAmount);
+    && ethers.BigNumber.from(actual.intentExtension.extensionPenaltyBpsPerHour)
+      .eq(expected.intentExtension.extensionPenaltyBpsPerHour);
 }
 
 export function riskSettlementPlatformPolicyForNetwork(network: string): any {
@@ -82,9 +80,10 @@ export function riskWitnessConfigForNetwork(network: string): { witnesses: strin
 /**
  * Fresh, one-way payment-binding and risk-settlement cutover.
  *
- * The historical staging-only script 26 is intentionally left untouched. This script deploys a new
- * vault generation, removes every legacy-nullifier writer, rotates the shared payment registry to
- * UPV3, and installs OrchestratorV3 without the retired DeferredPayoutHook path.
+ * The retired staging-only script 26 has been removed from the active source tree. Historical
+ * deployment artifacts remain immutable. This script deploys a new vault generation, removes every
+ * legacy-nullifier writer, rotates the shared payment registry to UPV3, and installs OrchestratorV3
+ * without the retired DeferredPayoutHook path.
  */
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deploy, getOrNull, save } = hre.deployments;
@@ -101,6 +100,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
   const relayerRegistryAddress = getDeployedContractAddress(network, "RelayerRegistry");
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
+  const escrowV2Address = getDeployedContractAddress(network, "EscrowV2");
   const paymentAttestationVerifierAddress = getDeployedContractAddress(network, "MultiAttestationVerifier");
   const stakeTokenAddress = USDC[network]
     ? USDC[network]
@@ -248,6 +248,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const riskManagerContract = await ethers.getContractAt("RiskManager", riskManager.address);
   const orchestratorV3Contract = await ethers.getContractAt("OrchestratorV3", orchestratorV3.address);
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
+  const escrowV2Contract = await ethers.getContractAt("EscrowV2", escrowV2Address);
   const riskAttestationVerifierContract = await ethers.getContractAt(
     "MultiAttestationVerifier",
     riskAttestationVerifier.address,
@@ -264,6 +265,21 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   if (!(await orchestratorV3Contract.allowMultipleIntents())) {
     await (await orchestratorV3Contract.setAllowMultipleIntents(true)).wait();
     await waitForDeploymentDelay(hre);
+  }
+
+  if (!(await escrowV2Contract.intentExpirationPeriod()).eq(ONE_HOUR_IN_SECONDS)) {
+    const escrowOwner = await escrowV2Contract.owner();
+    const ownerIsLocalSigner = (await hre.getUnnamedAccounts()).includes(escrowOwner);
+    if (ownerIsLocalSigner) {
+      await (await escrowV2Contract.setIntentExpirationPeriod(ONE_HOUR_IN_SECONDS)).wait();
+      await waitForDeploymentDelay(hre);
+    } else {
+      safeBatchCollector.add(
+        escrowV2Contract.address,
+        escrowV2Contract.interface.encodeFunctionData("setIntentExpirationPeriod", [ONE_HOUR_IN_SECONDS]),
+        "EscrowV2.setIntentExpirationPeriod(1 hour)",
+      );
+    }
   }
 
   for (const paymentMethod of [PAYPAL, VENMO]) {

@@ -142,7 +142,9 @@ contract RiskManagerOrchestratorHarness {
 contract RiskManagerEscrowHarness {
     uint256 public intentExpirationPeriod;
     address public depositor;
+    address public intentGuardian;
     IERC20 public token = IERC20(address(0xbeef));
+    mapping(bytes32 => IEscrowV2.Intent) internal intents;
 
     constructor(uint256 _intentExpirationPeriod, address _depositor) {
         intentExpirationPeriod = _intentExpirationPeriod;
@@ -157,6 +159,46 @@ contract RiskManagerEscrowHarness {
         token = _token;
     }
 
+    function setIntentGuardian(address _intentGuardian) external {
+        intentGuardian = _intentGuardian;
+    }
+
+    function setIntent(bytes32 _intentHash, uint256 _createdAt) external {
+        intents[_intentHash] = IEscrowV2.Intent({
+            intentHash: _intentHash,
+            amount: 0,
+            timestamp: _createdAt,
+            expiryTime: _createdAt + intentExpirationPeriod
+        });
+    }
+
+    function setIntentState(
+        bytes32 _intentHash,
+        uint256 _timestamp,
+        uint256 _expiryTime
+    ) external {
+        intents[_intentHash] = IEscrowV2.Intent({
+            intentHash: _intentHash,
+            amount: 0,
+            timestamp: _timestamp,
+            expiryTime: _expiryTime
+        });
+    }
+
+    function getDepositIntent(uint256, bytes32 _intentHash) external view returns (IEscrowV2.Intent memory) {
+        return intents[_intentHash];
+    }
+
+    function extendIntentExpiry(uint256, bytes32 _intentHash, uint256 _additionalTime) external {
+        require(msg.sender == intentGuardian, "not guardian");
+        require(
+            intents[_intentHash].expiryTime + _additionalTime
+                <= intents[_intentHash].timestamp + 5 days,
+            "intent lifetime exceeded"
+        );
+        intents[_intentHash].expiryTime += _additionalTime;
+    }
+
     function getDeposit(uint256) external view returns (IEscrowV2.Deposit memory) {
         return IEscrowV2.Deposit({
             depositor: depositor,
@@ -166,7 +208,7 @@ contract RiskManagerEscrowHarness {
             acceptingIntents: true,
             remainingDeposits: type(uint256).max,
             outstandingIntentAmount: 0,
-            intentGuardian: address(0),
+            intentGuardian: intentGuardian,
             retainOnEmpty: true
         });
     }
@@ -227,6 +269,32 @@ contract RiskManagerVaultHarness {
         freeStake[_staker] -= _amount;
         reservedStake[_staker] += _amount;
         reservations[_intentHash] = Reservation(_staker, _amount, _releaseTime);
+    }
+
+    function depositAndReserveStake(
+        address _funder,
+        address _staker,
+        bytes32 _positionId,
+        uint256 _amount,
+        uint64 _releaseTime
+    ) external {
+        stakeToken.transferFrom(_funder, address(this), _amount);
+        stakeBalance[_staker] += _amount;
+        reservedStake[_staker] += _amount;
+        Reservation storage reservation = reservations[_positionId];
+        reservation.staker = _staker;
+        reservation.amount += _amount;
+        reservation.releaseTime = _releaseTime;
+    }
+
+    function increaseReservation(bytes32 _positionId, uint256 _amount, uint64 _releaseTime) external {
+        Reservation storage reservation = reservations[_positionId];
+        require(!isExiting[reservation.staker], "staker exiting");
+        require(freeStake[reservation.staker] >= _amount, "insufficient free stake");
+        freeStake[reservation.staker] -= _amount;
+        reservedStake[reservation.staker] += _amount;
+        reservation.amount += _amount;
+        reservation.releaseTime = _releaseTime;
     }
 
     function updateReservation(bytes32 _intentHash, uint256 _newAmount, uint64 _releaseTime) external {

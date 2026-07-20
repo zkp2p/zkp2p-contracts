@@ -23,16 +23,47 @@ contract RiskInvariantEscrow {
     uint256 public constant intentExpirationPeriod = 6 hours;
     address public immutable lp;
     IERC20 public immutable token;
+    address public intentGuardian;
+    mapping(bytes32 => IEscrowV2.Intent) internal intents;
 
     constructor(address _lp, IERC20 _token) {
         lp = _lp;
         token = _token;
     }
 
+    function setIntentGuardian(address _intentGuardian) external {
+        require(intentGuardian == address(0), "guardian already set");
+        intentGuardian = _intentGuardian;
+    }
+
+    function recordIntent(bytes32 _intentHash, uint64 _createdAt) external {
+        intents[_intentHash] = IEscrowV2.Intent({
+            intentHash: _intentHash,
+            amount: 0,
+            timestamp: _createdAt,
+            expiryTime: uint256(_createdAt) + intentExpirationPeriod
+        });
+    }
+
+    function getDepositIntent(uint256, bytes32 _intentHash) external view returns (IEscrowV2.Intent memory) {
+        return intents[_intentHash];
+    }
+
+    function extendIntentExpiry(uint256, bytes32 _intentHash, uint256 _additionalTime) external {
+        require(msg.sender == intentGuardian, "not guardian");
+        require(
+            intents[_intentHash].expiryTime + _additionalTime
+                <= intents[_intentHash].timestamp + 5 days,
+            "intent lifetime exceeded"
+        );
+        intents[_intentHash].expiryTime += _additionalTime;
+    }
+
     function getDeposit(uint256) external view returns (IEscrowV2.Deposit memory deposit) {
         deposit.depositor = lp;
         deposit.token = token;
         deposit.acceptingIntents = true;
+        deposit.intentGuardian = intentGuardian;
     }
 }
 
@@ -45,6 +76,7 @@ contract RiskManagerInvariantHandler is Test {
     RiskInvariantEscrow public immutable escrow;
     address public immutable stakeOwner;
     uint256 public nonce;
+    mapping(address => uint256) public sponsoredStake;
 
     mapping(bytes32 => IOrchestratorV3.RiskIntentData) internal intents;
     bytes32[] internal intentHashes;
@@ -58,6 +90,8 @@ contract RiskManagerInvariantHandler is Test {
         require(address(manager) == address(0), "manager already set");
         manager = _manager;
         escrow.token().approve(address(_manager), type(uint256).max);
+        escrow.token().approve(address(_manager.stakeVault()), type(uint256).max);
+        escrow.setIntentGuardian(address(_manager));
     }
 
     function create(uint96 rawAmount, bool chargebackable, bool deferred) external {
@@ -76,8 +110,37 @@ contract RiskManagerInvariantHandler is Test {
 
         try manager.onIntentCreated(intentHash) {
             intentHashes.push(intentHash);
+            escrow.recordIntent(intentHash, uint64(block.timestamp));
         } catch {
             delete intents[intentHash];
+        }
+    }
+
+    function extend(uint256 rawIndex, uint32 rawAdditionalTime, bool sponsor) external {
+        if (intentHashes.length == 0) return;
+        bytes32 intentHash = intentHashes[rawIndex % intentHashes.length];
+        IRiskManager.RiskPosition memory beforeExtension = manager.getRiskPosition(intentHash);
+        if (beforeExtension.status != IRiskManager.PositionStatus.PENDING) return;
+        uint256 currentExpiry = uint256(beforeExtension.baseIntentExpiry) + beforeExtension.totalExtensionTime;
+        if (block.timestamp >= currentExpiry) return;
+
+        uint256 initialPeriod = beforeExtension.baseIntentExpiry - beforeExtension.createdAt;
+        if (initialPeriod >= manager.MAX_TOTAL_INTENT_LIFETIME()) return;
+        uint256 remainingTime = manager.MAX_TOTAL_INTENT_LIFETIME()
+            - initialPeriod
+            - beforeExtension.totalExtensionTime;
+        if (remainingTime == 0) return;
+        uint64 additionalTime = uint64(bound(uint256(rawAdditionalTime), 1, remainingTime));
+
+        if (sponsor) {
+            try manager.stakeAndExtendIntent(intentHash, additionalTime) {
+                IRiskManager.RiskPosition memory afterExtension = manager.getRiskPosition(intentHash);
+                sponsoredStake[afterExtension.taker] +=
+                    afterExtension.extensionReservation - beforeExtension.extensionReservation;
+            } catch { }
+        } else {
+            vm.prank(beforeExtension.taker);
+            try manager.extendIntent(intentHash, additionalTime) { } catch { }
         }
     }
 
@@ -216,10 +279,8 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
         nullifierRegistry.addWritePermission(address(handler));
         vault.initializeController(address(manager));
 
-        IRiskManager.GriefingConfig memory griefing = IRiskManager.GriefingConfig({
-            griefingCliff: 15 minutes,
-            griefingPenaltyBpsPerHour: 0,
-            baseUnbondedAmount: 0
+        IRiskManager.IntentExtensionConfig memory intentExtension = IRiskManager.IntentExtensionConfig({
+            extensionPenaltyBpsPerHour: 10
         });
         manager.setPlatformRiskConfig(PAYPAL, IRiskManager.PlatformRiskConfig({
             enabled: true,
@@ -229,10 +290,8 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
                 reserveBps: 10_000,
                 riskWindow: 30 days
             }),
-            griefing: griefing
+            intentExtension: intentExtension
         }));
-        griefing.griefingPenaltyBpsPerHour = 10;
-        griefing.baseUnbondedAmount = 20e6;
         manager.setPlatformRiskConfig(ZELLE, IRiskManager.PlatformRiskConfig({
             enabled: true,
             chargeback: IRiskManager.ChargebackConfig({
@@ -241,7 +300,7 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
                 reserveBps: 0,
                 riskWindow: 0
             }),
-            griefing: griefing
+            intentExtension: intentExtension
         }));
 
         deal(address(token), stakeOwner, 1_000_000e6);
@@ -251,35 +310,47 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
         vm.stopPrank();
         deal(address(token), address(handler), 100_000_000e6);
 
-        bytes4[] memory selectors = new bytes4[](5);
+        bytes4[] memory selectors = new bytes4[](6);
         selectors[0] = RiskManagerInvariantHandler.create.selector;
-        selectors[1] = RiskManagerInvariantHandler.cancel.selector;
-        selectors[2] = RiskManagerInvariantHandler.settle.selector;
-        selectors[3] = RiskManagerInvariantHandler.mature.selector;
-        selectors[4] = RiskManagerInvariantHandler.chargeback.selector;
+        selectors[1] = RiskManagerInvariantHandler.extend.selector;
+        selectors[2] = RiskManagerInvariantHandler.cancel.selector;
+        selectors[3] = RiskManagerInvariantHandler.settle.selector;
+        selectors[4] = RiskManagerInvariantHandler.mature.selector;
+        selectors[5] = RiskManagerInvariantHandler.chargeback.selector;
         targetSelector(FuzzSelector({ addr: address(handler), selectors: selectors }));
     }
 
     function invariant_PortfolioReservationsNeverExceedStake() public view {
         assertLe(vault.reservedStake(stakeOwner), vault.stakeBalance(stakeOwner));
         assertEq(vault.freeStake(stakeOwner) + vault.reservedStake(stakeOwner), vault.eligibleStake(stakeOwner));
+        assertLe(vault.reservedStake(address(handler)), vault.stakeBalance(address(handler)));
+        assertEq(
+            vault.freeStake(address(handler)) + vault.reservedStake(address(handler)),
+            vault.eligibleStake(address(handler))
+        );
     }
 
     function invariant_PositionReservationsEqualVaultPortfolioReservation() public view {
-        uint256 positionReservations;
+        uint256 stakeOwnerReservations;
+        uint256 handlerReservations;
         for (uint256 index = 0; index < handler.hashCount(); index++) {
-            IRiskManager.RiskPosition memory position = manager.getRiskPosition(handler.hashAt(index));
-            if (
-                position.mode == IRiskManager.RiskMode.STAKE_BACKED
-                    && (
-                        position.status == IRiskManager.PositionStatus.PENDING
-                            || position.status == IRiskManager.PositionStatus.SETTLED
-                    )
-            ) {
-                positionReservations += position.reservedAmount;
+            bytes32 intentHash = handler.hashAt(index);
+            IStakeVault.Reservation memory mainReservation = vault.getReservation(intentHash);
+            IStakeVault.Reservation memory extensionReservation =
+                vault.getReservation(manager.extensionReservationId(intentHash));
+            if (mainReservation.active && mainReservation.staker == stakeOwner) {
+                stakeOwnerReservations += mainReservation.amount;
+            } else if (mainReservation.active && mainReservation.staker == address(handler)) {
+                handlerReservations += mainReservation.amount;
+            }
+            if (extensionReservation.active && extensionReservation.staker == stakeOwner) {
+                stakeOwnerReservations += extensionReservation.amount;
+            } else if (extensionReservation.active && extensionReservation.staker == address(handler)) {
+                handlerReservations += extensionReservation.amount;
             }
         }
-        assertEq(positionReservations, vault.reservedStake(stakeOwner));
+        assertEq(stakeOwnerReservations, vault.reservedStake(stakeOwner));
+        assertEq(handlerReservations, vault.reservedStake(address(handler)));
     }
 
     function invariant_UnbondedPositionsNeverReserveOrSlashStake() public view {
@@ -293,10 +364,48 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
         }
     }
 
+    function invariant_ExtensionReservationsAreIsolatedAndTerminalChargesAreExact() public view {
+        for (uint256 index = 0; index < handler.hashCount(); index++) {
+            bytes32 intentHash = handler.hashAt(index);
+            IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+            IStakeVault.Reservation memory extensionReservation =
+                vault.getReservation(manager.extensionReservationId(intentHash));
+            uint256 maximumCharge = manager.calculateIntentExtensionCost(
+                position.intentAmount,
+                position.totalExtensionTime,
+                position.extensionPenaltyBpsPerHour
+            );
+
+            assertLe(
+                uint256(position.baseIntentExpiry - position.createdAt) + position.totalExtensionTime,
+                manager.MAX_TOTAL_INTENT_LIFETIME()
+            );
+            assertLe(position.extensionPenalty, maximumCharge);
+            if (position.status == IRiskManager.PositionStatus.PENDING) {
+                assertEq(extensionReservation.amount, position.extensionReservation);
+                assertEq(extensionReservation.active, position.extensionReservation != 0);
+                if (extensionReservation.active) assertEq(extensionReservation.staker, position.taker);
+                assertEq(position.extensionPenalty, 0);
+            } else {
+                assertEq(position.extensionReservation, 0);
+                assertFalse(extensionReservation.active);
+                uint64 terminalAt = position.status == IRiskManager.PositionStatus.CANCELLED
+                    ? position.cancelledAt
+                    : position.settledAt;
+                (uint256 expectedPenalty,) = manager.calculateIntentExtensionPenalty(
+                    position.intentAmount,
+                    position.baseIntentExpiry,
+                    terminalAt,
+                    position.totalExtensionTime,
+                    position.extensionPenaltyBpsPerHour
+                );
+                assertEq(position.extensionPenalty, expectedPenalty);
+            }
+        }
+    }
+
     function invariant_DeferredCustodyIsFullyReservedMembershipStake() public view {
-        uint256 deferredGross;
         uint256 deferredFees;
-        uint256 deferredStakeBalance;
         uint256 vestedFees;
         for (uint256 index = 0; index < handler.hashCount(); index++) {
             bytes32 intentHash = handler.hashAt(index);
@@ -306,25 +415,53 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
                     && position.status == IRiskManager.PositionStatus.SETTLED
             ) {
                 IStakeVault.DeferredStake memory deferredStake = vault.getDeferredStake(intentHash);
-                deferredGross += deferredStake.grossAmount;
                 deferredFees += deferredStake.feeAmount;
-                deferredStakeBalance += deferredStake.grossAmount;
                 assertEq(vault.getReservation(intentHash).staker, address(handler));
                 assertEq(vault.getReservation(intentHash).amount, deferredStake.grossAmount);
             } else if (
                 position.mode == IRiskManager.RiskMode.DEFERRED_PAYOUT
                     && position.status == IRiskManager.PositionStatus.RELEASED
             ) {
-                deferredStakeBalance += position.executableAmount;
                 vestedFees += position.deferredFeeAmount;
             }
         }
 
-        assertEq(deferredGross, vault.reservedStake(address(handler)));
-        assertEq(deferredStakeBalance, vault.stakeBalance(address(handler)));
         assertEq(deferredFees, vault.totalDeferredFees());
         assertEq(vestedFees, vault.totalClaimableFees());
         assertEq(vestedFees, vault.claimableFees(address(0xFEE)));
+    }
+
+    function invariant_StakeBalancesEqualDepositsMinusEverySlash() public view {
+        uint256 stakeOwnerSlashes;
+        uint256 handlerSlashes;
+        for (uint256 index = 0; index < handler.hashCount(); index++) {
+            IRiskManager.RiskPosition memory position = manager.getRiskPosition(handler.hashAt(index));
+            if (position.taker == stakeOwner) stakeOwnerSlashes += position.extensionPenalty;
+            else if (position.taker == address(handler)) handlerSlashes += position.extensionPenalty;
+            if (position.stakeOwner == stakeOwner) stakeOwnerSlashes += position.slashedAmount;
+            else if (position.stakeOwner == address(handler)) handlerSlashes += position.slashedAmount;
+        }
+
+        uint256 handlerDeferredDeposits;
+        uint256 vestedDeferredFees;
+        for (uint256 index = 0; index < handler.hashCount(); index++) {
+            IRiskManager.RiskPosition memory position = manager.getRiskPosition(handler.hashAt(index));
+            if (position.mode != IRiskManager.RiskMode.DEFERRED_PAYOUT) continue;
+            handlerDeferredDeposits += position.deferredStakeAmount;
+            if (position.status == IRiskManager.PositionStatus.RELEASED) {
+                vestedDeferredFees += position.deferredFeeAmount;
+            }
+        }
+
+        assertEq(
+            vault.stakeBalance(stakeOwner),
+            1_000_000e6 + handler.sponsoredStake(stakeOwner) - stakeOwnerSlashes
+        );
+        assertEq(
+            vault.stakeBalance(address(handler)),
+            handler.sponsoredStake(address(handler)) + handlerDeferredDeposits
+                - handlerSlashes - vestedDeferredFees
+        );
     }
 
     function invariant_VaultAccountingRemainsSolvent() public view {

@@ -158,10 +158,8 @@ const INITIAL_STAKE_RISK_PLATFORM_POLICY = {
       reserveBps: 10_000,
       riskWindow: ONE_DAY_IN_SECONDS.mul(30),
     },
-    griefing: {
-      griefingCliff: 15 * 60,
-      griefingPenaltyBpsPerHour: 10,
-      baseUnbondedAmount: 0,
+    intentExtension: {
+      extensionPenaltyBpsPerHour: 10,
     },
   },
   nonChargebackable: {
@@ -172,10 +170,8 @@ const INITIAL_STAKE_RISK_PLATFORM_POLICY = {
       reserveBps: 0,
       riskWindow: 0,
     },
-    griefing: {
-      griefingCliff: 15 * 60,
-      griefingPenaltyBpsPerHour: 10,
-      baseUnbondedAmount: usdc(500),
+    intentExtension: {
+      extensionPenaltyBpsPerHour: 10,
     },
   },
 };
