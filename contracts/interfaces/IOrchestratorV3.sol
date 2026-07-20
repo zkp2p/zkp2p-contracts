@@ -53,8 +53,9 @@ interface IOrchestratorV3 is IOrchestratorV2 {
     error InvalidRiskHook(address hook);
     error RiskHookAdmissionFailed(bytes32 intentHash, address hook, bytes revertData);
     error RiskHookSettlementFailed(bytes32 intentHash, address hook, bytes revertData);
+    error InsufficientGasForRiskCallback(uint256 availableGas, uint256 requiredGas);
     error RiskHookSettlementBalanceIncreased(bytes32 intentHash, uint256 beforeBalance, uint256 afterBalance);
-    error InvalidRiskHookSettlementConsumption(bytes32 intentHash, uint256 consumed, uint256 executableAmount);
+    error InvalidRiskHookSettlementConsumption(bytes32 intentHash, uint256 consumed, uint256 grossAmount);
     error RiskCallbackGasLimitTooLow(uint256 gasLimit, uint256 minimum);
 
     /* ============ External Functions ============ */

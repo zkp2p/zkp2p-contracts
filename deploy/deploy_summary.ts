@@ -62,6 +62,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     BoundedCall:                        ${tryGetAddress(network, "BoundedCall")}
     PostIntentHookExecutor:             ${tryGetAddress(network, "PostIntentHookExecutor")}
     RiskSettlementExecutor:             ${tryGetAddress(network, "RiskSettlementExecutor")}
+    FeeSettlementLib:                   ${tryGetAddress(network, "FeeSettlementLib")}
     OrchestratorV3:                     ${tryGetAddress(network, "OrchestratorV3")}
     StakeVault:                         ${tryGetAddress(network, "StakeVault")}
     RiskManager:                        ${tryGetAddress(network, "RiskManager")}

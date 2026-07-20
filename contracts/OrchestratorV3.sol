@@ -10,8 +10,7 @@ import { IIntentRiskHook } from "./interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV2 } from "./interfaces/IOrchestratorV2.sol";
 import { IOrchestratorV3 } from "./interfaces/IOrchestratorV3.sol";
 import { BoundedCall } from "./lib/BoundedCall.sol";
-import { PostIntentHookExecutor } from "./lib/PostIntentHookExecutor.sol";
-import { RiskSettlementExecutor } from "./lib/RiskSettlementExecutor.sol";
+import { FeeSettlementLib } from "./lib/FeeSettlementLib.sol";
 
 /**
  * @title OrchestratorV3
@@ -20,6 +19,7 @@ import { RiskSettlementExecutor } from "./lib/RiskSettlementExecutor.sol";
  *      settlement, and durable recovery data for cancellation callbacks that fail open.
  */
 contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
+
     /* ============ Constants ============ */
 
     uint256 internal constant MIN_RISK_CALLBACK_GAS_LIMIT = 750_000;
@@ -229,9 +229,7 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         return true;
     }
 
-    /**
-     * @notice Executes the V2 settlement transfer through the shared external executor.
-     */
+    /** @notice Gives risk settlement first refusal over gross funds, then executes the exact fee plan on zero consumption. */
     function _collectFeesTransferFundsAndExecuteAction(
         IERC20 _token,
         bytes32 _intentHash,
@@ -242,47 +240,24 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         uint256 _managerFee,
         bool _isManualRelease
     ) internal override {
-        uint256 netFees = _calculateAndTransferFees(
+        IIntentRiskHook riskHook = intentRiskHooks[_intentHash];
+        (address fundsTransferredTo, uint256 netAmount) = FeeSettlementLib.executeSettlement(
             _token,
+            riskHook,
             _intentHash,
             _intent,
             _releaseAmount,
-            _managerFeeRecipient,
-            _managerFee
-        );
-        uint256 netAmount = _releaseAmount - netFees;
-        IIntentRiskHook riskHook = intentRiskHooks[_intentHash];
-        bool fundsConsumed = RiskSettlementExecutor.execute(
-            riskHook,
-            _token,
-            IIntentRiskHook.RiskSettlementContext({
-                intentHash: _intentHash,
-                token: address(_token),
-                recipient: _intent.to,
-                grossAmount: _releaseAmount,
-                executableAmount: netAmount,
-                isManualRelease: _isManualRelease
+            _postIntentHookData,
+            FeeSettlementLib.FeeConfig({
+                protocolFeeRecipient: protocolFeeRecipient,
+                protocolFee: protocolFee,
+                managerFeeRecipient: _managerFeeRecipient,
+                managerFee: _managerFee
             }),
-            riskCallbackGasLimit,
-            MAX_RISK_CALLBACK_RETURN_DATA
+            _isManualRelease,
+            riskCallbackGasLimit
         );
         delete intentRiskHooks[_intentHash];
-
-        address fundsTransferredTo;
-        if (fundsConsumed) {
-            fundsTransferredTo = address(riskHook);
-        } else if (_isManualRelease) {
-            PostIntentHookExecutor.transferTo(_token, _intent.to, netAmount);
-            fundsTransferredTo = _intent.to;
-        } else {
-            fundsTransferredTo = PostIntentHookExecutor.transferOrExecute(
-                _token,
-                _intentHash,
-                _intent,
-                netAmount,
-                _postIntentHookData
-            );
-        }
 
         emit IntentFulfilled(_intentHash, fundsTransferredTo, netAmount, _isManualRelease);
     }

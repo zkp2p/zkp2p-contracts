@@ -20,6 +20,7 @@ library BoundedCall {
 
     error RiskHookAdmissionFailed(bytes32 intentHash, address hook, bytes revertData);
     error RiskHookSettlementFailed(bytes32 intentHash, address hook, bytes revertData);
+    error InsufficientGasForRiskCallback(uint256 availableGas, uint256 requiredGas);
 
     /**
      * @notice Executes a fail-closed risk admission callback.
@@ -83,6 +84,16 @@ library BoundedCall {
                 bytes("")
             );
             return false;
+        }
+
+        // EIP-150 retains one sixty-fourth of the caller's gas. Revert the outer cancellation
+        // instead of recording a false callback failure when the transaction cannot forward the
+        // configured allowance. The small fixed margin covers call setup before the assembly call.
+        uint256 availableGas = gasleft();
+        uint256 gasAfterMargin = availableGas > 5_000 ? availableGas - 5_000 : 0;
+        uint256 forwardableGas = gasAfterMargin - (gasAfterMargin / 64);
+        if (forwardableGas < _gasLimit) {
+            revert InsufficientGasForRiskCallback(availableGas, _gasLimit);
         }
 
         bytes memory revertData;

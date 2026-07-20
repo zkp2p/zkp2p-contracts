@@ -103,7 +103,7 @@ describe("RiskManager -- hard-cut branch coverage", () => {
     intentHash: string,
     overrides: Record<string, unknown> = {},
   ) {
-    return {
+    const context: any = {
       intentHash,
       token: fixture.token.address,
       recipient: fixture.beneficiary.address,
@@ -112,6 +112,14 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       isManualRelease: false,
       ...overrides,
     };
+    const grossAmount = BigNumber.from(context.grossAmount);
+    const executableAmount = BigNumber.from(context.executableAmount);
+    context.feeAllocations = overrides.feeAllocations ?? (
+      executableAmount.gt(0) && grossAmount.gt(executableAmount)
+        ? [{ feeType: 0, recipient: fixture.beneficiary.address, amount: grossAmount.sub(executableAmount) }]
+        : []
+    );
+    return context;
   }
 
   describe("constructor and governance", () => {
@@ -203,9 +211,9 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       await f.manager.setPlatformRiskConfig(PAYPAL, chargebackConfig(true));
       await f.vault.setTakerState(f.taker.address, f.taker.address, usdc(1), usdc(1), false);
       const deferred = ethers.utils.id("deferred");
-      await createPosition(f, deferred);
+      await createPosition(f, deferred, { recipient: f.taker.address });
       expect((await f.manager.getRiskPosition(deferred)).mode).to.eq(3);
-      expect((await f.vault.deferredPayouts(deferred)).authorized).to.eq(true);
+      expect((await f.vault.deferredStakes(deferred)).authorized).to.eq(true);
     });
 
     it("rejects duplicate admission, token mismatch, insufficient collateral, and exiting stake", async () => {
@@ -263,6 +271,17 @@ describe("RiskManager -- hard-cut branch coverage", () => {
         .to.be.revertedWithCustomError(f.manager, "IntentTokenMismatch");
       await expect(f.orchestrator.settlePosition(f.manager.address, settlementContext(f, intentHash, { executableAmount: 0 })))
         .to.be.revertedWithCustomError(f.manager, "InvalidSettlementAmounts");
+      await expect(f.orchestrator.settlePosition(f.manager.address, settlementContext(f, intentHash, {
+        feeAllocations: [],
+      }))).to.be.revertedWithCustomError(f.manager, "InvalidFeeAllocations");
+      await expect(f.orchestrator.settlePosition(f.manager.address, settlementContext(f, intentHash, {
+        feeAllocations: [{ feeType: 0, recipient: ZERO, amount: usdc(2) }],
+      }))).to.be.revertedWithCustomError(f.manager, "ZeroAddress");
+      await expect(f.orchestrator.settlePosition(f.manager.address, settlementContext(f, intentHash, {
+        feeAllocations: Array.from({ length: 8 }, () => ({
+          feeType: 0, recipient: f.beneficiary.address, amount: 0,
+        })),
+      }))).to.be.revertedWithCustomError(f.manager, "InvalidFeeAllocationCount");
       await expect(f.orchestrator.settlePosition(f.manager.address, settlementContext(f, intentHash, { recipient: f.other.address })))
         .to.be.revertedWithCustomError(f.manager, "IntentStateMismatch");
     });
@@ -281,25 +300,42 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       expect(await f.token.balanceOf(f.orchestrator.address)).to.eq(before);
     });
 
-    it("pulls and accounts the exact net amount for deferred settlement", async () => {
+    it("pulls and accounts for gross deferred stake and contingent fees", async () => {
       const f = await loadFixture(deployFixture);
       await f.manager.setPlatformRiskConfig(PAYPAL, chargebackConfig(true));
       await f.vault.setTakerState(f.taker.address, f.taker.address, usdc(1), usdc(1), false);
       const intentHash = ethers.utils.id("deferred-settlement");
-      await createPosition(f, intentHash);
+      await createPosition(f, intentHash, { recipient: f.taker.address });
       const vaultBefore = await f.token.balanceOf(f.vault.address);
 
-      await f.orchestrator.settlePosition(f.manager.address, settlementContext(f, intentHash, { isManualRelease: true }));
+      await f.orchestrator.settlePosition(f.manager.address, settlementContext(f, intentHash, {
+        recipient: f.taker.address,
+        isManualRelease: true,
+      }));
 
       const position = await f.manager.getRiskPosition(intentHash);
-      const payout = await f.vault.deferredPayouts(intentHash);
+      const deferredStake = await f.vault.deferredStakes(intentHash);
       expect(position.grossReleasedAmount).to.eq(usdc(100));
       expect(position.executableAmount).to.eq(usdc(98));
-      expect(position.coveredAmount).to.eq(usdc(98));
-      expect(position.deferredPayoutAmount).to.eq(usdc(98));
-      expect(payout.amount).to.eq(usdc(98));
-      expect(await f.token.balanceOf(f.vault.address)).to.eq(vaultBefore.add(usdc(98)));
+      expect(position.coveredAmount).to.eq(usdc(100));
+      expect(position.deferredStakeAmount).to.eq(usdc(100));
+      expect(position.deferredFeeAmount).to.eq(usdc(2));
+      expect(position.isManualRelease).to.eq(true);
+      expect(deferredStake.grossAmount).to.eq(usdc(100));
+      expect(deferredStake.feeAmount).to.eq(usdc(2));
+      expect(await f.token.balanceOf(f.vault.address)).to.eq(vaultBefore.add(usdc(100)));
       expect(await f.token.allowance(f.orchestrator.address, f.manager.address)).to.eq(0);
+    });
+
+    it("rejects deferred admission when payout recipient differs from the taker", async () => {
+      const f = await loadFixture(deployFixture);
+      await f.manager.setPlatformRiskConfig(PAYPAL, chargebackConfig(true));
+      await f.vault.setTakerState(f.taker.address, f.taker.address, usdc(1), usdc(1), false);
+      const intentHash = ethers.utils.id("deferred-third-party-recipient");
+      await setRiskIntent(f, intentHash, { recipient: f.other.address });
+
+      await expect(f.orchestrator.createPosition(f.manager.address, intentHash))
+        .to.be.revertedWithCustomError(f.manager, "DeferredStakeRecipientMismatch");
     });
 
     it("releases non-chargebackable reservations and rejects repeated settlement", async () => {

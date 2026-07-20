@@ -39,6 +39,7 @@ contract RiskInvariantEscrow {
 contract RiskManagerInvariantHandler is Test {
     bytes32 internal constant PAYPAL = keccak256("paypal");
     bytes32 internal constant ZELLE = keccak256("zelle");
+    address internal constant FEE_RECIPIENT = address(0xFEE);
 
     RiskManager public manager;
     RiskInvariantEscrow public immutable escrow;
@@ -96,13 +97,24 @@ contract RiskManagerInvariantHandler is Test {
         if (position.status != IRiskManager.PositionStatus.PENDING) return;
         uint256 releasedAmount = bound(uint256(rawReleasedAmount), 1, position.intentAmount);
         IOrchestratorV3.RiskIntentData memory intent = intents[intentHash];
+        uint256 feeAmount = releasedAmount / 100;
+        IIntentRiskHook.FeeAllocation[] memory feeAllocations =
+            new IIntentRiskHook.FeeAllocation[](feeAmount == 0 ? 0 : 1);
+        if (feeAmount != 0) {
+            feeAllocations[0] = IIntentRiskHook.FeeAllocation({
+                feeType: IIntentRiskHook.FeeType.PROTOCOL,
+                recipient: FEE_RECIPIENT,
+                amount: feeAmount
+            });
+        }
         manager.settleIntent(IIntentRiskHook.RiskSettlementContext({
             intentHash: intentHash,
             token: address(escrow.token()),
             recipient: intent.to,
             grossAmount: releasedAmount,
-            executableAmount: releasedAmount,
-            isManualRelease: false
+            executableAmount: releasedAmount - feeAmount,
+            isManualRelease: false,
+            feeAllocations: feeAllocations
         }));
         delete intents[intentHash];
     }
@@ -115,10 +127,6 @@ contract RiskManagerInvariantHandler is Test {
         if (block.timestamp < position.coverageDeadline) vm.warp(position.coverageDeadline);
 
         manager.releaseMaturedPosition(intentHash);
-        if (position.mode == IRiskManager.RiskMode.DEFERRED_PAYOUT) {
-            IStakeVault vault = manager.stakeVault();
-            vault.withdrawDeferredPayout(intentHash, address(this));
-        }
     }
 
     function chargeback(uint256 rawIndex) external {
@@ -223,6 +231,7 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
             }),
             griefing: griefing
         }));
+        griefing.griefingPenaltyBpsPerHour = 10;
         griefing.baseUnbondedAmount = 20e6;
         manager.setPlatformRiskConfig(ZELLE, IRiskManager.PlatformRiskConfig({
             enabled: true,
@@ -284,19 +293,38 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
         }
     }
 
-    function invariant_DeferredCustodyNeverBecomesMembershipStake() public view {
-        uint256 deferredLiabilities;
+    function invariant_DeferredCustodyIsFullyReservedMembershipStake() public view {
+        uint256 deferredGross;
+        uint256 deferredFees;
+        uint256 deferredStakeBalance;
+        uint256 vestedFees;
         for (uint256 index = 0; index < handler.hashCount(); index++) {
             bytes32 intentHash = handler.hashAt(index);
             IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
-            if (position.mode == IRiskManager.RiskMode.DEFERRED_PAYOUT) {
-                deferredLiabilities += vault.getDeferredPayout(intentHash).amount;
+            if (
+                position.mode == IRiskManager.RiskMode.DEFERRED_PAYOUT
+                    && position.status == IRiskManager.PositionStatus.SETTLED
+            ) {
+                IStakeVault.DeferredStake memory deferredStake = vault.getDeferredStake(intentHash);
+                deferredGross += deferredStake.grossAmount;
+                deferredFees += deferredStake.feeAmount;
+                deferredStakeBalance += deferredStake.grossAmount;
+                assertEq(vault.getReservation(intentHash).staker, address(handler));
+                assertEq(vault.getReservation(intentHash).amount, deferredStake.grossAmount);
+            } else if (
+                position.mode == IRiskManager.RiskMode.DEFERRED_PAYOUT
+                    && position.status == IRiskManager.PositionStatus.RELEASED
+            ) {
+                deferredStakeBalance += position.executableAmount;
+                vestedFees += position.deferredFeeAmount;
             }
         }
 
-        assertEq(vault.stakeBalance(address(handler)), 0);
-        assertEq(vault.freeStake(address(handler)), 0);
-        assertEq(deferredLiabilities, vault.totalDeferredPayouts());
+        assertEq(deferredGross, vault.reservedStake(address(handler)));
+        assertEq(deferredStakeBalance, vault.stakeBalance(address(handler)));
+        assertEq(deferredFees, vault.totalDeferredFees());
+        assertEq(vestedFees, vault.totalClaimableFees());
+        assertEq(vestedFees, vault.claimableFees(address(0xFEE)));
     }
 
     function invariant_VaultAccountingRemainsSolvent() public view {

@@ -24,9 +24,9 @@ library RiskSettlementExecutor {
 
     error InvalidRiskHook(address hook);
     error RiskHookSettlementBalanceIncreased(bytes32 intentHash, uint256 beforeBalance, uint256 afterBalance);
-    error InvalidRiskHookSettlementConsumption(bytes32 intentHash, uint256 consumed, uint256 executableAmount);
+    error InvalidRiskHookSettlementConsumption(bytes32 intentHash, uint256 consumed, uint256 grossAmount);
 
-    /** @return fundsConsumed Whether the hook consumed the exact executable amount. */
+    /** @return fundsConsumed Whether the hook consumed the exact gross amount before distribution. */
     function execute(
         IIntentRiskHook _riskHook,
         IERC20 _token,
@@ -51,7 +51,7 @@ library RiskSettlementExecutor {
 
         uint256 balanceBefore = _token.balanceOf(address(this));
         _token.safeApprove(riskHookAddress, 0);
-        _token.safeApprove(riskHookAddress, _context.executableAmount);
+        _token.safeApprove(riskHookAddress, _context.grossAmount);
 
         BoundedCall.executeRiskSettlement(_riskHook, _context, _gasLimit, _maxReturnDataSize);
 
@@ -62,14 +62,14 @@ library RiskSettlementExecutor {
         }
 
         uint256 consumedAmount = balanceBefore - balanceAfter;
-        if (consumedAmount != 0 && consumedAmount != _context.executableAmount) {
+        if (consumedAmount != 0 && consumedAmount != _context.grossAmount) {
             revert InvalidRiskHookSettlementConsumption(
                 _context.intentHash,
                 consumedAmount,
-                _context.executableAmount
+                _context.grossAmount
             );
         }
-        fundsConsumed = consumedAmount == _context.executableAmount;
+        fundsConsumed = consumedAmount == _context.grossAmount;
 
         emit IntentRiskSettlementExecuted(
             _context.intentHash,

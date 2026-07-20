@@ -61,6 +61,7 @@ describe("Risk-manager-owned settlement deployment", () => {
     expect(deployedAddress("BoundedCall")).to.properAddress;
     expect(deployedAddress("PostIntentHookExecutor")).to.properAddress;
     expect(deployedAddress("RiskSettlementExecutor")).to.properAddress;
+    expect(deployedAddress("FeeSettlementLib")).to.properAddress;
     expect(deployedAddress("OrchestratorV3")).to.properAddress;
     expect(deployedAddress("StakeVault")).to.properAddress;
     expect(deployedAddress("RiskManager")).to.properAddress;

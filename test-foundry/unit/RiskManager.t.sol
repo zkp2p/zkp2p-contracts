@@ -96,7 +96,8 @@ contract RiskManagerTest is Test {
 
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
         assertEq(uint256(position.mode), uint256(IRiskManager.RiskMode.DEFERRED_PAYOUT));
-        (,,, bool authorized) = vault.deferredPayouts(intentHash);
+        (address deferredStaker,,,, bool authorized,) = vault.deferredStakes(intentHash);
+        assertEq(deferredStaker, taker);
         assertTrue(authorized);
     }
 
@@ -116,7 +117,7 @@ contract RiskManagerTest is Test {
         assertEq(token.allowance(address(orchestrator), address(manager)), 0);
     }
 
-    function test_DeferredSettlementPullsAndCoversExactExecutableAmount() public {
+    function test_DeferredSettlementPullsAndCoversGrossWithContingentFees() public {
         manager.setPlatformRiskConfig(PAYPAL, _chargebackConfig(true, 0));
         vault.setTakerState(taker, taker, 0, 0, false);
         bytes32 intentHash = keccak256("deferred-settle");
@@ -128,12 +129,14 @@ contract RiskManagerTest is Test {
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
         assertEq(position.grossReleasedAmount, 100e6);
         assertEq(position.executableAmount, 98e6);
-        assertEq(position.coveredAmount, 98e6);
-        assertEq(position.deferredPayoutAmount, 98e6);
-        assertEq(position.reservedAmount, 98e6);
-        assertEq(token.balanceOf(address(vault)) - vaultBalanceBefore, 98e6);
-        (, uint256 amount,,) = vault.deferredPayouts(intentHash);
-        assertEq(amount, 98e6);
+        assertEq(position.coveredAmount, 100e6);
+        assertEq(position.deferredStakeAmount, 100e6);
+        assertEq(position.deferredFeeAmount, 2e6);
+        assertEq(position.reservedAmount, 100e6);
+        assertEq(token.balanceOf(address(vault)) - vaultBalanceBefore, 100e6);
+        (, uint256 grossAmount, uint256 feeAmount,,,) = vault.deferredStakes(intentHash);
+        assertEq(grossAmount, 100e6);
+        assertEq(feeAmount, 2e6);
         assertEq(token.allowance(address(orchestrator), address(manager)), 0);
     }
 
@@ -146,8 +149,9 @@ contract RiskManagerTest is Test {
         orchestrator.settlePosition(manager, _context(intentHash, 100e6, 99e6, true));
 
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
-        assertEq(position.coveredAmount, 99e6);
-        assertEq(position.deferredPayoutAmount, 99e6);
+        assertEq(position.coveredAmount, 100e6);
+        assertEq(position.deferredStakeAmount, 100e6);
+        assertEq(position.deferredFeeAmount, 1e6);
     }
 
     function test_NonChargebackSettlementReleasesPendingReservation() public {
@@ -169,8 +173,8 @@ contract RiskManagerTest is Test {
 
         orchestrator.cancelPosition(manager, intentHash);
 
-        (address payoutBeneficiary,,,) = vault.deferredPayouts(intentHash);
-        assertEq(payoutBeneficiary, address(0));
+        (address deferredStaker,,,,,) = vault.deferredStakes(intentHash);
+        assertEq(deferredStaker, address(0));
         assertEq(
             uint256(manager.getRiskPosition(intentHash).status),
             uint256(IRiskManager.PositionStatus.CANCELLED)
@@ -235,7 +239,7 @@ contract RiskManagerTest is Test {
         manager.settleIntent(_context(intentHash, 1, 1, false));
     }
 
-    function testFuzz_DeferredCoverageEqualsExecutableAmount(
+    function testFuzz_DeferredCoverageEqualsGrossAndTracksFees(
         uint96 rawGrossAmount,
         uint96 rawFeeAmount,
         bool isManualRelease
@@ -247,7 +251,7 @@ contract RiskManagerTest is Test {
         vault.setTakerState(taker, taker, 0, 0, false);
         bytes32 intentHash = keccak256(abi.encode(grossAmount, feeAmount, isManualRelease));
         _create(intentHash, grossAmount, PAYPAL);
-        deal(address(token), address(orchestrator), executableAmount);
+        deal(address(token), address(orchestrator), grossAmount);
 
         orchestrator.settlePosition(
             manager,
@@ -255,9 +259,10 @@ contract RiskManagerTest is Test {
         );
 
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
-        assertEq(position.coveredAmount, executableAmount);
-        assertEq(position.deferredPayoutAmount, executableAmount);
-        assertEq(position.reservedAmount, executableAmount);
+        assertEq(position.coveredAmount, grossAmount);
+        assertEq(position.deferredStakeAmount, grossAmount);
+        assertEq(position.deferredFeeAmount, feeAmount);
+        assertEq(position.reservedAmount, grossAmount);
     }
 
     function _create(bytes32 _intentHash, uint256 _amount, bytes32 _paymentMethod) internal {
@@ -268,7 +273,7 @@ contract RiskManagerTest is Test {
     function _setIntent(bytes32 _intentHash, uint256 _amount, bytes32 _paymentMethod) internal {
         orchestrator.setRiskIntent(_intentHash, IOrchestratorV3.RiskIntentData({
             owner: taker,
-            to: beneficiary,
+            to: taker,
             escrow: address(escrow),
             depositId: 0,
             amount: _amount,
@@ -283,12 +288,24 @@ contract RiskManagerTest is Test {
         uint256 _executableAmount,
         bool _isManualRelease
     ) internal view returns (IIntentRiskHook.RiskSettlementContext memory) {
+        uint256 feeAmount = _grossAmount - _executableAmount;
+        IIntentRiskHook.FeeAllocation[] memory feeAllocations = new IIntentRiskHook.FeeAllocation[](
+            feeAmount == 0 ? 0 : 1
+        );
+        if (feeAmount != 0) {
+            feeAllocations[0] = IIntentRiskHook.FeeAllocation({
+                feeType: IIntentRiskHook.FeeType.PROTOCOL,
+                recipient: beneficiary,
+                amount: feeAmount
+            });
+        }
         return IIntentRiskHook.RiskSettlementContext({
             intentHash: _intentHash,
             token: address(token),
-            recipient: beneficiary,
+            recipient: taker,
             grossAmount: _grossAmount,
             executableAmount: _executableAmount,
+            feeAllocations: feeAllocations,
             isManualRelease: _isManualRelease
         });
     }

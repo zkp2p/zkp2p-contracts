@@ -183,12 +183,22 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("RiskSettlementExecutor deployed at", riskSettlementExecutor.address);
   if (riskSettlementExecutor.newlyDeployed) await waitForDeploymentDelay(hre);
 
+  const feeSettlementLib = await deploy("FeeSettlementLib", {
+    from: deployer,
+    libraries: {
+      PostIntentHookExecutor: postIntentHookExecutor.address,
+      RiskSettlementExecutor: riskSettlementExecutor.address,
+    },
+    args: [],
+  });
+  console.log("FeeSettlementLib deployed at", feeSettlementLib.address);
+  if (feeSettlementLib.newlyDeployed) await waitForDeploymentDelay(hre);
+
   const orchestratorV3 = await deploy("OrchestratorV3", {
     from: deployer,
     libraries: {
       BoundedCall: boundedCall.address,
-      PostIntentHookExecutor: postIntentHookExecutor.address,
-      RiskSettlementExecutor: riskSettlementExecutor.address,
+      FeeSettlementLib: feeSettlementLib.address,
     },
     args: [
       deployer,

@@ -85,9 +85,9 @@ interface IRiskManager is IIntentRiskHook {
         RiskMode mode;
         /// @notice Current lifecycle state; terminal transitions never return to pending.
         PositionStatus status;
-        /// @notice Original intent recipient entitled to unslashed deferred proceeds.
+        /// @notice Original intent recipient used to validate settlement context.
         address payoutRecipient;
-        /// @notice Snapshotted reserve ratio applied to gross stake coverage or net deferred custody.
+        /// @notice Snapshotted reserve ratio applied to gross stake or gross deferred coverage.
         uint16 chargebackReserveBps;
         /// @notice Snapshotted hourly slope used by the time-linear cancellation formula.
         uint32 griefingPenaltyBpsPerHour;
@@ -105,6 +105,8 @@ interface IRiskManager is IIntentRiskHook {
         uint64 settledAt;
         /// @notice First timestamp excluded from the half-open chargeback window.
         uint64 coverageDeadline;
+        /// @notice Whether settlement was authorized by the maker without payment-proof nullification.
+        bool isManualRelease;
         /// @notice Original locked amount on which maximum pending liabilities were calculated.
         uint256 intentAmount;
         /// @notice Portion of the intent amount exposed to the griefing curve after subtracting the base tranche.
@@ -117,12 +119,14 @@ interface IRiskManager is IIntentRiskHook {
         uint256 reservedAmount;
         /// @notice Exact gross amount released from Escrow before protocol, referral, and manager fees.
         uint256 grossReleasedAmount;
-        /// @notice Exact post-fee amount offered to risk settlement and then ordinary payout execution.
+        /// @notice Exact post-fee amount reserved for the taker after the hook sees the gross settlement plan.
         uint256 executableAmount;
-        /// @notice Exact amount compensable by chargeback: gross for stake-backed, net for deferred.
+        /// @notice Exact gross amount compensable by chargeback for either backed mode.
         uint256 coveredAmount;
-        /// @notice Total net proceeds recorded in StakeVault for a deferred payout.
-        uint256 deferredPayoutAmount;
+        /// @notice Gross proceeds converted into fully reserved taker stake for deferred settlement.
+        uint256 deferredStakeAmount;
+        /// @notice Contingent fee portion that vests only after clean maturity.
+        uint256 deferredFeeAmount;
         /// @notice Cumulative compensation already charged against this position.
         uint256 slashedAmount;
     }
@@ -215,10 +219,12 @@ interface IRiskManager is IIntentRiskHook {
         uint64 coverageDeadline,
         bool isManualRelease
     );
-    event DeferredPayoutFunded(
+    event DeferredSettlementFunded(
         bytes32 indexed intentHash,
-        address indexed beneficiary,
-        uint256 deferredAmount,
+        address indexed staker,
+        uint256 grossAmount,
+        uint256 executableAmount,
+        uint256 feeAmount,
         uint256 chargebackCoverage,
         uint64 coverageDeadline
     );
@@ -263,7 +269,10 @@ interface IRiskManager is IIntentRiskHook {
     error CancellationNotRecorded(bytes32 intentHash);
     error IntentTokenMismatch(address expectedToken, address actualToken);
     error InvalidSettlementAmounts(uint256 grossAmount, uint256 executableAmount);
-    error DeferredPayoutTransferMismatch(uint256 expectedAmount, uint256 actualAmount);
+    error DeferredStakeRecipientMismatch(address taker, address recipient);
+    error DeferredStakeTransferMismatch(uint256 expectedAmount, uint256 actualAmount);
+    error InvalidFeeAllocationCount(uint256 count, uint256 maximum);
+    error InvalidFeeAllocations(uint256 expectedAmount, uint256 actualAmount);
     error PositionNotMature(uint64 coverageDeadline, uint64 currentTime);
     error InvalidAttestation();
     error InvalidPaymentBinding(bytes32 intentHash, bytes32 nullifier);
