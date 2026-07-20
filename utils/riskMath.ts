@@ -2,29 +2,25 @@
 
 export type IntegerLike = bigint | number | string | { toString(): string };
 
-export interface GriefingTerms {
-  maxIntentPeriod: IntegerLike;
-  griefingCliff: IntegerLike;
-  griefingPenaltyBpsPerHour: IntegerLike;
+export interface IntentExtensionTerms {
+  extensionPenaltyBpsPerHour: IntegerLike;
 }
 
 export interface RiskCapacity {
-  /** null means this disabled curve does not constrain capacity. */
-  griefingCapacity: bigint | null;
-  /** null means this disabled curve does not constrain capacity. */
+  /** null means chargeback coverage is disabled and admission is unbounded by stake. */
   chargebackCapacity: bigint | null;
-  /** null means both curves are disabled and bonded capacity is unbounded. */
-  bondedTakingCapacity: bigint | null;
+  /** Admission capacity equals chargeback capacity; extensions are funded only when purchased. */
+  totalTakingCapacity: bigint | null;
 }
 
-export interface GriefingPenalty {
+export interface IntentExtensionPenalty {
   penalty: bigint;
-  effectiveElapsed: bigint;
+  chargeableTime: bigint;
 }
 
 export const RISK_BPS_DENOMINATOR = 10_000n;
 export const RISK_SECONDS_PER_HOUR = 3_600n;
-export const RISK_GRIEFING_DENOMINATOR = RISK_BPS_DENOMINATOR * RISK_SECONDS_PER_HOUR;
+export const RISK_EXTENSION_DENOMINATOR = RISK_BPS_DENOMINATOR * RISK_SECONDS_PER_HOUR;
 
 function integer(value: IntegerLike, label: string): bigint {
   if (typeof value === "number" && (!Number.isSafeInteger(value) || value < 0)) {
@@ -41,114 +37,67 @@ function ceilDiv(numerator: bigint, denominator: bigint): bigint {
   return ((numerator - 1n) / denominator) + 1n;
 }
 
-/** max(intent amount - reusable base unbonded amount, 0). */
-export function calculateBondedAmount(amount: IntegerLike, baseUnbondedAmount: IntegerLike): bigint {
-  const intentAmount = integer(amount, "amount");
-  const baseAmount = integer(baseUnbondedAmount, "baseUnbondedAmount");
-  return intentAmount > baseAmount ? intentAmount - baseAmount : 0n;
+/** ceil(A * s * T / (10_000 * 1 hour)); returns zero when the curve is disabled. */
+export function calculateIntentExtensionCost(
+  intentAmount: IntegerLike,
+  extensionTime: IntegerLike,
+  extensionPenaltyBpsPerHour: IntegerLike,
+): bigint {
+  const amount = integer(intentAmount, "intentAmount");
+  const duration = integer(extensionTime, "extensionTime");
+  const slope = integer(extensionPenaltyBpsPerHour, "extensionPenaltyBpsPerHour");
+  return ceilDiv(amount * slope * duration, RISK_EXTENSION_DENOMINATOR);
 }
 
-/** ceil(A * s * (T - C) / (10_000 * 1 hour)); returns zero when the curve is disabled. */
-export function calculateMaxGriefingBond(amount: IntegerLike, terms: GriefingTerms): bigint {
-  const bondedAmount = integer(amount, "amount");
-  const maxIntentPeriod = integer(terms.maxIntentPeriod, "maxIntentPeriod");
-  const griefingCliff = integer(terms.griefingCliff, "griefingCliff");
-  const slope = integer(terms.griefingPenaltyBpsPerHour, "griefingPenaltyBpsPerHour");
-  if (slope === 0n || maxIntentPeriod <= griefingCliff) return 0n;
-  return ceilDiv(
-    bondedAmount * slope * (maxIntentPeriod - griefingCliff),
-    RISK_GRIEFING_DENOMINATOR,
-  );
+/** Charges elapsed post-expiry time, capped by the exact duration purchased. */
+export function calculateIntentExtensionPenalty(
+  intentAmount: IntegerLike,
+  baseIntentExpiry: IntegerLike,
+  terminalAt: IntegerLike,
+  totalExtensionTime: IntegerLike,
+  extensionPenaltyBpsPerHour: IntegerLike,
+): IntentExtensionPenalty {
+  const baseExpiry = integer(baseIntentExpiry, "baseIntentExpiry");
+  const terminal = integer(terminalAt, "terminalAt");
+  const purchasedTime = integer(totalExtensionTime, "totalExtensionTime");
+  if (terminal <= baseExpiry || purchasedTime === 0n) return { penalty: 0n, chargeableTime: 0n };
+
+  const elapsed = terminal - baseExpiry;
+  const chargeableTime = elapsed < purchasedTime ? elapsed : purchasedTime;
+  return {
+    penalty: calculateIntentExtensionCost(
+      intentAmount,
+      chargeableTime,
+      extensionPenaltyBpsPerHour,
+    ),
+    chargeableTime,
+  };
 }
 
 /** ceil(A * r / 10_000); returns zero when chargeback coverage is disabled. */
 export function calculateChargebackReserve(amount: IntegerLike, reserveBps: IntegerLike): bigint {
-  const bondedAmount = integer(amount, "amount");
+  const intentAmount = integer(amount, "amount");
   const reserveRatio = integer(reserveBps, "reserveBps");
   if (reserveRatio > RISK_BPS_DENOMINATOR) throw new RangeError("reserveBps cannot exceed 10,000");
-  return ceilDiv(bondedAmount * reserveRatio, RISK_BPS_DENOMINATOR);
+  return ceilDiv(intentAmount * reserveRatio, RISK_BPS_DENOMINATOR);
 }
 
-/** max(maxGriefingBond, chargebackReserve), never their sum. */
-export function calculateRequiredReservation(
-  amount: IntegerLike,
-  terms: GriefingTerms,
-  reserveBps: IntegerLike,
-  baseUnbondedAmount: IntegerLike,
-): bigint {
-  const griefingBond = calculateMaxGriefingBond(calculateBondedAmount(amount, baseUnbondedAmount), terms);
-  const chargebackReserve = calculateChargebackReserve(amount, reserveBps);
-  return griefingBond > chargebackReserve ? griefingBond : chargebackReserve;
+/** Admission reserves chargeback coverage only; extension collateral is added when time is purchased. */
+export function calculateRequiredReservation(amount: IntegerLike, reserveBps: IntegerLike): bigint {
+  return calculateChargebackReserve(amount, reserveBps);
 }
 
-/** Capped, upward-rounded time-linear penalty used for cancellation and reconciliation. */
-export function calculateGriefingPenalty(
-  amount: IntegerLike,
-  createdAt: IntegerLike,
-  cancelledAt: IntegerLike,
-  terms: GriefingTerms,
-): GriefingPenalty {
-  const bondedAmount = integer(amount, "amount");
-  const created = integer(createdAt, "createdAt");
-  const cancelled = integer(cancelledAt, "cancelledAt");
-  const maxIntentPeriod = integer(terms.maxIntentPeriod, "maxIntentPeriod");
-  const griefingCliff = integer(terms.griefingCliff, "griefingCliff");
-  const slope = integer(terms.griefingPenaltyBpsPerHour, "griefingPenaltyBpsPerHour");
-  if (cancelled <= created) return { penalty: 0n, effectiveElapsed: 0n };
-
-  const elapsed = cancelled - created;
-  const effectiveElapsed = elapsed < maxIntentPeriod ? elapsed : maxIntentPeriod;
-  if (slope === 0n || effectiveElapsed <= griefingCliff) {
-    return { penalty: 0n, effectiveElapsed };
-  }
-
-  const chargeableTime = effectiveElapsed - griefingCliff;
-  return {
-    penalty: ceilDiv(bondedAmount * slope * chargeableTime, RISK_GRIEFING_DENOMINATOR),
-    effectiveElapsed,
-  };
-}
-
-/**
- * Inverts the exact rounded reservation curves. A null capacity denotes a disabled constraint.
- * Because ceil(A*n/d) <= S iff A*n <= S*d, each inverse uses floor(S*d/n).
- */
-export function calculateBondedTakingCapacity(
+/** Inverts the exact rounded admission reserve. A null capacity is unbounded. */
+export function calculateTakingCapacity(
   freeStake: IntegerLike,
-  terms: GriefingTerms,
   reserveBps: IntegerLike,
 ): RiskCapacity {
   const available = integer(freeStake, "freeStake");
-  const maxIntentPeriod = integer(terms.maxIntentPeriod, "maxIntentPeriod");
-  const griefingCliff = integer(terms.griefingCliff, "griefingCliff");
-  const slope = integer(terms.griefingPenaltyBpsPerHour, "griefingPenaltyBpsPerHour");
   const reserveRatio = integer(reserveBps, "reserveBps");
   if (reserveRatio > RISK_BPS_DENOMINATOR) throw new RangeError("reserveBps cannot exceed 10,000");
 
-  const griefingRateNumerator = maxIntentPeriod > griefingCliff
-    ? slope * (maxIntentPeriod - griefingCliff)
-    : 0n;
-  const griefingCapacity = griefingRateNumerator === 0n
-    ? null
-    : (available * RISK_GRIEFING_DENOMINATOR) / griefingRateNumerator;
   const chargebackCapacity = reserveRatio === 0n
     ? null
     : (available * RISK_BPS_DENOMINATOR) / reserveRatio;
-
-  let bondedTakingCapacity: bigint | null;
-  if (griefingCapacity === null) bondedTakingCapacity = chargebackCapacity;
-  else if (chargebackCapacity === null) bondedTakingCapacity = griefingCapacity;
-  else bondedTakingCapacity = griefingCapacity < chargebackCapacity ? griefingCapacity : chargebackCapacity;
-
-  return { griefingCapacity, chargebackCapacity, bondedTakingCapacity };
-}
-
-/** Adds the reusable base tranche to a finite bonded capacity; null remains unbounded. */
-export function calculateTotalTakingCapacity(
-  bondedTakingCapacity: IntegerLike | null,
-  baseUnbondedAmount: IntegerLike,
-): bigint | null {
-  if (bondedTakingCapacity === null) return null;
-  return integer(bondedTakingCapacity, "bondedTakingCapacity")
-    + integer(baseUnbondedAmount, "baseUnbondedAmount");
+  return { chargebackCapacity, totalTakingCapacity: chargebackCapacity };
 }

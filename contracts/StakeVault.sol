@@ -431,6 +431,123 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     }
 
     /**
+     * @notice Atomically deposits newly supplied stake for a staker and adds it to one reservation.
+     * @dev This is the only path by which a third party can sponsor a reservation: the caller selected
+     *      by the controller must provide every newly reserved token. Existing free stake is never
+     *      consumed on a third party's behalf.
+     */
+    function depositAndReserveStake(
+        address _funder,
+        address _staker,
+        bytes32 _positionId,
+        uint256 _amount,
+        uint64 _releaseTime
+    ) external override onlyController nonReentrant {
+        if (depositsPaused || reservationsPaused) revert StakeActionPaused();
+        if (_funder == address(0) || _staker == address(0)) revert ZeroAddress();
+        if (_amount == 0) revert ZeroAmount();
+        if (exitRequests[_staker].exiting) revert AlreadyExiting(_staker);
+
+        Reservation storage reservation = reservations[_positionId];
+        uint256 previousReservation;
+        if (reservation.active) {
+            _requirePositionController(reservation.controller);
+            if (reservation.staker != _staker) {
+                revert InvalidTaker(_staker);
+            }
+            previousReservation = reservation.amount;
+        }
+
+        uint256 balanceBefore = stakeToken.balanceOf(address(this));
+        stakeToken.safeTransferFrom(_funder, address(this), _amount);
+        uint256 received = stakeToken.balanceOf(address(this)) - balanceBefore;
+        if (received != _amount) revert UnexpectedTokenAmount(_amount, received);
+
+        stakeBalance[_staker] += _amount;
+        totalStaked += _amount;
+        reservedStake[_staker] += _amount;
+
+        uint256 newReservation = previousReservation + _amount;
+        if (previousReservation == 0) {
+            reservations[_positionId] = Reservation({
+                staker: _staker,
+                controller: msg.sender,
+                amount: newReservation,
+                releaseTime: _releaseTime,
+                active: true
+            });
+            emit StakeReserved(
+                _positionId,
+                _staker,
+                msg.sender,
+                newReservation,
+                reservedStake[_staker],
+                _releaseTime
+            );
+        } else {
+            reservation.amount = newReservation;
+            reservation.releaseTime = _releaseTime;
+            emit StakeReservationUpdated(
+                _positionId,
+                _staker,
+                previousReservation,
+                newReservation,
+                reservedStake[_staker],
+                _releaseTime
+            );
+        }
+
+        emit StakeDeposited(_staker, _amount, stakeBalance[_staker]);
+        emit StakeSponsoredAndReserved(
+            _positionId,
+            _funder,
+            _staker,
+            _amount,
+            newReservation,
+            _releaseTime
+        );
+    }
+
+    /**
+     * @notice Adds free stake to an active reservation while enforcing admission pause and exit gates.
+     * @dev Settlement uses `updateReservation`, which intentionally remains available during a pause.
+     *      New paid extension exposure must use this function instead.
+     */
+    function increaseReservation(
+        bytes32 _positionId,
+        uint256 _amount,
+        uint64 _releaseTime
+    ) external override onlyController {
+        if (reservationsPaused) revert StakeActionPaused();
+        if (_amount == 0) revert ZeroAmount();
+
+        Reservation storage reservation = reservations[_positionId];
+        if (!reservation.active) revert ReservationNotFound(_positionId);
+        _requirePositionController(reservation.controller);
+        if (exitRequests[reservation.staker].exiting) revert AlreadyExiting(reservation.staker);
+
+        uint256 available = freeStake(reservation.staker);
+        if (_amount > available) {
+            revert InsufficientFreeStake(reservation.staker, available, _amount);
+        }
+
+        uint256 previousAmount = reservation.amount;
+        uint256 newAmount = previousAmount + _amount;
+        reservation.amount = newAmount;
+        reservation.releaseTime = _releaseTime;
+        reservedStake[reservation.staker] += _amount;
+
+        emit StakeReservationUpdated(
+            _positionId,
+            reservation.staker,
+            previousAmount,
+            newAmount,
+            reservedStake[reservation.staker],
+            _releaseTime
+        );
+    }
+
+    /**
      * @notice Replaces a reservation amount and maturity after exact release accounting is known.
      */
     function updateReservation(

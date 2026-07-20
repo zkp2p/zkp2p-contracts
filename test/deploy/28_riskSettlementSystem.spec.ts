@@ -12,6 +12,7 @@ import {
   RISK_CALLBACK_GAS_LIMIT,
   STAKE_VAULT_BASE_EXIT_DELAY,
 } from "../../deployments/parameters";
+import { ONE_HOUR_IN_SECONDS } from "../../utils/constants";
 
 const PAYPAL = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("paypal"));
 const VENMO = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
@@ -54,6 +55,7 @@ describe("Risk-manager-owned settlement deployment", () => {
         "OrchestratorRegistry",
         deployedAddress("OrchestratorRegistry"),
       ),
+      escrow: await ethers.getContractAt("EscrowV2", deployedAddress("EscrowV2")),
     };
   }
 
@@ -133,8 +135,9 @@ describe("Risk-manager-owned settlement deployment", () => {
   });
 
   it("sets the configured vault exit delay", async () => {
-    const { vault } = await contracts();
+    const { vault, escrow } = await contracts();
     expect(await vault.baseExitDelay()).to.eq(STAKE_VAULT_BASE_EXIT_DELAY);
+    expect(await escrow.intentExpirationPeriod()).to.eq(ONE_HOUR_IN_SECONDS);
   });
 
   for (const [label, paymentMethod] of [["PayPal", PAYPAL], ["Venmo", VENMO]] as const) {
@@ -146,19 +149,20 @@ describe("Risk-manager-owned settlement deployment", () => {
       expect(config.chargeback.deferredPayoutEnabled).to.eq(true);
       expect(config.chargeback.reserveBps).to.eq(platformPolicy.reversible.chargeback.reserveBps);
       expect(config.chargeback.riskWindow).to.eq(platformPolicy.reversible.chargeback.riskWindow);
-      expect(config.griefing.baseUnbondedAmount).to.eq(0);
+      expect(config.intentExtension.extensionPenaltyBpsPerHour)
+        .to.eq(platformPolicy.reversible.intentExtension.extensionPenaltyBpsPerHour);
     });
   }
 
-  it("configures the reusable unbonded base only for non-chargebackable Zelle", async () => {
+  it("configures the paid extension slope for non-chargebackable Zelle", async () => {
     const { manager } = await contracts();
     const config = await manager.getPlatformRiskConfig(ZELLE);
     expect(config.enabled).to.eq(true);
     expect(config.chargeback.chargebackable).to.eq(false);
     expect(config.chargeback.deferredPayoutEnabled).to.eq(false);
     expect(config.chargeback.reserveBps).to.eq(0);
-    expect(config.griefing.baseUnbondedAmount)
-      .to.eq(platformPolicy.nonChargebackable.griefing.baseUnbondedAmount);
+    expect(config.intentExtension.extensionPenaltyBpsPerHour)
+      .to.eq(platformPolicy.nonChargebackable.intentExtension.extensionPenaltyBpsPerHour);
   });
 
   it("requires an explicit governance-ratified production policy", async () => {

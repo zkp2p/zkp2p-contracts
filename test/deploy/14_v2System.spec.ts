@@ -32,13 +32,13 @@ import {
 
 import {
   MULTI_SIG,
-  ESCROW_V2_INTENT_EXPIRATION_PERIOD,
   ESCROW_V2_MAX_INTENTS_PER_DEPOSIT,
   ESCROW_V2_DUST_THRESHOLD,
   ESCROW_V2_DUST_RECIPIENT,
   ORCHESTRATOR_V2_PROTOCOL_FEE,
   ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT,
 } from "../../deployments/parameters";
+import { ONE_HOUR_IN_SECONDS } from "../../utils/constants";
 
 const expect = getWaffleExpect();
 
@@ -143,7 +143,7 @@ describe("V2 System Deployment", () => {
 
     it("should have the correct intent expiration period", async () => {
       const actualIntentExpirationPeriod = await escrowV2.intentExpirationPeriod();
-      expect(actualIntentExpirationPeriod).to.eq(ESCROW_V2_INTENT_EXPIRATION_PERIOD[network]);
+      expect(actualIntentExpirationPeriod).to.eq(ONE_HOUR_IN_SECONDS);
     });
 
     it("should be whitelisted in EscrowRegistry", async () => {

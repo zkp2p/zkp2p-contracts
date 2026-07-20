@@ -8,7 +8,6 @@ import { RiskManager } from "../../contracts/RiskManager.sol";
 import { IAttestationVerifier } from "../../contracts/interfaces/IAttestationVerifier.sol";
 import { IOrchestratorV3 } from "../../contracts/interfaces/IOrchestratorV3.sol";
 import { INullifierRegistryV2 } from "../../contracts/interfaces/INullifierRegistryV2.sol";
-import { IRiskManager } from "../../contracts/interfaces/IRiskManager.sol";
 import { IStakeVault } from "../../contracts/interfaces/IStakeVault.sol";
 
 contract RiskManagerMathFuzzTest is Test {
@@ -24,66 +23,124 @@ contract RiskManagerMathFuzzTest is Test {
         );
     }
 
-    function testFuzz_GriefingPenaltyNeverExceedsMaximumBond(
+    function testFuzz_ExtensionPenaltyNeverExceedsPurchasedReservation(
         uint96 rawAmount,
-        uint96 rawBaseUnbondedAmount,
-        uint32 rawMaxPeriod,
-        uint32 rawCliff,
+        uint32 rawPurchasedTime,
         uint16 rawSlope,
-        uint48 rawElapsed
+        uint48 rawElapsedAfterBase
     ) public view {
         uint256 amount = bound(uint256(rawAmount), 1, 1_000_000_000e6);
-        uint64 maxPeriod = uint64(bound(uint256(rawMaxPeriod), 2, 365 days));
-        uint64 cliff = uint64(bound(uint256(rawCliff), 0, maxPeriod - 1));
-        uint32 maxSlope = uint32((manager.GRIEFING_DENOMINATOR()) / (maxPeriod - cliff));
+        uint64 purchasedTime = uint64(bound(uint256(rawPurchasedTime), 0, manager.MAX_TOTAL_INTENT_LIFETIME()));
+        uint32 maxSlope = uint32(manager.EXTENSION_DENOMINATOR() / manager.MAX_TOTAL_INTENT_LIFETIME());
         uint32 slope = uint32(bound(uint256(rawSlope), 0, maxSlope));
-        uint64 elapsed = uint64(bound(uint256(rawElapsed), 0, 2 * uint256(maxPeriod)));
-        uint64 createdAt = 1_000_000;
-        uint64 cancelledAt = createdAt + elapsed;
-        uint256 baseUnbondedAmount = uint256(rawBaseUnbondedAmount);
-        uint256 bondedAmount = manager.calculateBondedAmount(amount, baseUnbondedAmount);
+        uint64 elapsedAfterBase = uint64(bound(
+            uint256(rawElapsedAfterBase),
+            0,
+            2 * uint256(manager.MAX_TOTAL_INTENT_LIFETIME())
+        ));
+        uint64 baseExpiry = 1_000_000;
+        uint64 terminalAt = baseExpiry + elapsedAfterBase;
 
-        uint256 maximumBond = manager.calculateMaxGriefingBond(
+        uint256 reservation = manager.calculateIntentExtensionCost(amount, purchasedTime, slope);
+        (uint256 penalty, uint64 chargeableTime) = manager.calculateIntentExtensionPenalty(
             amount,
-            maxPeriod,
-            IRiskManager.GriefingConfig({
-                griefingCliff: cliff,
-                griefingPenaltyBpsPerHour: slope,
-                baseUnbondedAmount: baseUnbondedAmount
-            })
-        );
-        (uint256 penalty,) = manager.calculateGriefingPenalty(
-            bondedAmount,
-            createdAt,
-            cancelledAt,
-            maxPeriod,
-            cliff,
+            baseExpiry,
+            terminalAt,
+            purchasedTime,
             slope
         );
 
-        assertEq(bondedAmount, amount > baseUnbondedAmount ? amount - baseUnbondedAmount : 0);
-        assertLe(penalty, maximumBond);
+        assertLe(chargeableTime, purchasedTime);
+        assertLe(penalty, reservation);
     }
 
-    function testFuzz_AtOrBeforeCliffPenaltyIsZero(
+    function testFuzz_AtOrBeforeBaseExpiryExtensionPenaltyIsZero(
         uint96 rawAmount,
-        uint32 rawCliff,
+        uint32 rawPurchasedTime,
         uint16 rawSlope,
-        uint32 rawElapsed
+        uint32 rawSecondsBeforeExpiry
     ) public view {
         uint256 amount = bound(uint256(rawAmount), 1, type(uint96).max);
-        uint64 cliff = uint64(bound(uint256(rawCliff), 1, 30 days));
-        uint64 elapsed = uint64(bound(uint256(rawElapsed), 0, cliff));
-        uint32 slope = uint32(bound(uint256(rawSlope), 0, 10_000));
-        (uint256 penalty,) = manager.calculateGriefingPenalty(
+        uint64 purchasedTime = uint64(bound(uint256(rawPurchasedTime), 1, 5 days));
+        uint32 slope = uint32(bound(uint256(rawSlope), 0, 83));
+        uint64 baseExpiry = 1_000_000;
+        uint64 secondsBeforeExpiry = uint64(bound(uint256(rawSecondsBeforeExpiry), 0, baseExpiry));
+        uint64 terminalAt = baseExpiry - secondsBeforeExpiry;
+
+        (uint256 penalty, uint64 chargeableTime) = manager.calculateIntentExtensionPenalty(
             amount,
-            1_000_000,
-            uint64(1_000_000 + elapsed),
-            cliff + 1 days,
-            cliff,
+            baseExpiry,
+            terminalAt,
+            purchasedTime,
             slope
         );
+
         assertEq(penalty, 0);
+        assertEq(chargeableTime, 0);
+    }
+
+    function testFuzz_PenaltyCapsAtTheCostOfPurchasedTime(
+        uint96 rawAmount,
+        uint32 rawPurchasedTime,
+        uint16 rawSlope,
+        uint32 rawExcessElapsed
+    ) public view {
+        uint256 amount = bound(uint256(rawAmount), 1, type(uint96).max);
+        uint64 purchasedTime = uint64(bound(uint256(rawPurchasedTime), 1, 5 days));
+        uint32 slope = uint32(bound(uint256(rawSlope), 0, 83));
+        uint64 excessElapsed = uint64(bound(uint256(rawExcessElapsed), 0, 5 days));
+        uint64 baseExpiry = 1_000_000;
+        uint64 terminalAt = baseExpiry + purchasedTime + excessElapsed;
+
+        uint256 reservation = manager.calculateIntentExtensionCost(amount, purchasedTime, slope);
+        (uint256 penalty, uint64 chargeableTime) = manager.calculateIntentExtensionPenalty(
+            amount,
+            baseExpiry,
+            terminalAt,
+            purchasedTime,
+            slope
+        );
+
+        assertEq(chargeableTime, purchasedTime);
+        assertEq(penalty, reservation);
+    }
+
+    function testFuzz_ExtensionCostIsTheSmallestUpwardRoundedCharge(
+        uint96 rawAmount,
+        uint32 rawExtensionTime,
+        uint16 rawSlope
+    ) public view {
+        uint256 amount = bound(uint256(rawAmount), 1, type(uint96).max);
+        uint64 extensionTime = uint64(bound(uint256(rawExtensionTime), 1, 5 days));
+        uint32 slope = uint32(bound(uint256(rawSlope), 1, 83));
+        uint256 numerator = uint256(slope) * extensionTime;
+
+        uint256 cost = manager.calculateIntentExtensionCost(amount, extensionTime, slope);
+
+        assertGe(cost * manager.EXTENSION_DENOMINATOR(), amount * numerator);
+        if (cost > 0) {
+            assertLt((cost - 1) * manager.EXTENSION_DENOMINATOR(), amount * numerator);
+        }
+    }
+
+    function testFuzz_CumulativeExtensionCostIsMonotonic(
+        uint96 rawAmount,
+        uint32 rawFirstTime,
+        uint32 rawSecondTime,
+        uint16 rawSlope
+    ) public view {
+        uint256 amount = bound(uint256(rawAmount), 1, type(uint96).max);
+        uint64 firstTime = uint64(bound(uint256(rawFirstTime), 0, 5 days));
+        uint64 secondTime = uint64(bound(uint256(rawSecondTime), 0, 5 days - firstTime));
+        uint32 slope = uint32(bound(uint256(rawSlope), 0, 83));
+
+        uint256 firstCost = manager.calculateIntentExtensionCost(amount, firstTime, slope);
+        uint256 cumulativeCost = manager.calculateIntentExtensionCost(amount, firstTime + secondTime, slope);
+        uint256 standaloneSecondCost = manager.calculateIntentExtensionCost(amount, secondTime, slope);
+
+        assertGe(cumulativeCost, firstCost);
+        assertLe(cumulativeCost - firstCost, standaloneSecondCost);
+        if (secondTime == 0) assertEq(cumulativeCost, firstCost);
     }
 
     function testFuzz_ChargebackReserveIsTheSmallestUpwardRoundedCoverage(
@@ -99,37 +156,10 @@ contract RiskManagerMathFuzzTest is Test {
         if (reserve > 0) assertLt((reserve - 1) * 10_000, amount * reserveBps);
     }
 
-    function testFuzz_RequiredReservationEqualsMaximumCurve(
-        uint96 rawAmount,
-        uint96 rawBaseUnbondedAmount,
-        uint16 rawReserveBps,
-        uint16 rawSlope
-    ) public view {
-        uint256 amount = bound(uint256(rawAmount), 1, type(uint96).max);
-        uint16 reserveBps = uint16(bound(uint256(rawReserveBps), 0, 10_000));
-        uint32 slope = uint32(bound(uint256(rawSlope), 0, 1_000));
-        uint256 baseUnbondedAmount = reserveBps == 0 ? uint256(rawBaseUnbondedAmount) : 0;
-        uint256 bondedAmount = manager.calculateBondedAmount(amount, baseUnbondedAmount);
-        IRiskManager.PlatformRiskConfig memory config = IRiskManager.PlatformRiskConfig({
-            enabled: true,
-            chargeback: IRiskManager.ChargebackConfig({
-                chargebackable: reserveBps != 0,
-                deferredPayoutEnabled: false,
-                reserveBps: reserveBps,
-                riskWindow: 1 days
-            }),
-            griefing: IRiskManager.GriefingConfig({
-                griefingCliff: 15 minutes,
-                griefingPenaltyBpsPerHour: slope,
-                baseUnbondedAmount: baseUnbondedAmount
-            })
-        });
+    function testFuzz_ExtensionReservationIdIsDomainSeparated(bytes32 intentHash) public view {
+        bytes32 extensionId = manager.extensionReservationId(intentHash);
 
-        (uint256 griefing, uint256 chargeback, uint256 required) =
-            manager.calculateRequiredReservation(amount, 6 hours, config);
-
-        assertEq(required, griefing > chargeback ? griefing : chargeback);
-        assertLe(griefing, bondedAmount);
-        assertLe(chargeback, amount);
+        assertEq(extensionId, keccak256(abi.encode(manager.EXTENSION_RESERVATION_NAMESPACE(), intentHash)));
+        assertEq(extensionId, manager.extensionReservationId(intentHash));
     }
 }

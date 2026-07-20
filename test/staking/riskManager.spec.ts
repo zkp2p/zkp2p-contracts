@@ -8,9 +8,8 @@ const precise = (amount: string | number) => ethers.utils.parseEther(String(amou
 const MINUTE = 60;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
-const MAX_INTENT_PERIOD = 6 * HOUR;
-const GRIEFING_CLIFF = 15 * MINUTE;
-const GRIEFING_SLOPE = 10;
+const BASE_INTENT_PERIOD = HOUR;
+const EXTENSION_SLOPE = 10;
 const PAYPAL = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("paypal"));
 const ZELLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("zelle"));
 const USD = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("USD"));
@@ -45,7 +44,7 @@ describe("RiskManager and OrchestratorV3", () => {
       owner.address,
       0,
       100,
-      MAX_INTENT_PERIOD,
+      BASE_INTENT_PERIOD,
     );
     const boundedCall = await (await ethers.getContractFactory("BoundedCall")).deploy();
     const postIntentHookExecutor = await (await ethers.getContractFactory("PostIntentHookExecutor")).deploy();
@@ -106,10 +105,8 @@ describe("RiskManager and OrchestratorV3", () => {
         reserveBps: 0,
         riskWindow: 0,
       },
-      griefing: {
-        griefingCliff: GRIEFING_CLIFF,
-        griefingPenaltyBpsPerHour: GRIEFING_SLOPE,
-        baseUnbondedAmount: usdc(20),
+      intentExtension: {
+        extensionPenaltyBpsPerHour: EXTENSION_SLOPE,
       },
     });
     await manager.setPlatformRiskConfig(PAYPAL, {
@@ -120,10 +117,8 @@ describe("RiskManager and OrchestratorV3", () => {
         reserveBps: 10_000,
         riskWindow: 30 * DAY,
       },
-      griefing: {
-        griefingCliff: GRIEFING_CLIFF,
-        griefingPenaltyBpsPerHour: GRIEFING_SLOPE,
-        baseUnbondedAmount: 0,
+      intentExtension: {
+        extensionPenaltyBpsPerHour: EXTENSION_SLOPE,
       },
     });
 
@@ -152,7 +147,7 @@ describe("RiskManager and OrchestratorV3", () => {
         } }],
       ],
       delegate: makerDelegate.address,
-      intentGuardian: makerDelegate.address,
+      intentGuardian: manager.address,
       retainOnEmpty: true,
     });
     await orchestrator.connect(maker).setDepositRiskHook(escrow.address, 0, manager.address);
@@ -305,7 +300,7 @@ describe("RiskManager and OrchestratorV3", () => {
       await expect(manager.setPlatformRiskConfig(PAYPAL, {
         enabled: true,
         chargeback: { chargebackable: true, deferredPayoutEnabled: false, reserveBps: 10_001, riskWindow: DAY },
-        griefing: { griefingCliff: 1, griefingPenaltyBpsPerHour: 1, baseUnbondedAmount: 0 },
+        intentExtension: { extensionPenaltyBpsPerHour: 1 },
       })).to.be.revertedWithCustomError(manager, "InvalidPlatformConfig");
     });
 
@@ -314,47 +309,43 @@ describe("RiskManager and OrchestratorV3", () => {
       await manager.setPlatformRiskConfig(PAYPAL, {
         enabled: true,
         chargeback: { chargebackable: true, deferredPayoutEnabled: true, reserveBps: 10_000, riskWindow: DAY },
-        griefing: { griefingCliff: 1, griefingPenaltyBpsPerHour: 1, baseUnbondedAmount: 0 },
+        intentExtension: { extensionPenaltyBpsPerHour: 1 },
       });
       expect((await manager.getPlatformRiskConfig(PAYPAL)).chargeback.deferredPayoutEnabled).to.eq(true);
     });
 
-    it("rejects a base unbonded amount on a chargebackable platform", async () => {
+    it("rejects a zero extension slope on an enabled platform", async () => {
       const { manager } = await loadFixture(deployFixture);
-      await expect(manager.setPlatformRiskConfig(PAYPAL, {
+      await expect(manager.setPlatformRiskConfig(ZELLE, {
         enabled: true,
-        chargeback: { chargebackable: true, deferredPayoutEnabled: false, reserveBps: 10_000, riskWindow: DAY },
-        griefing: { griefingCliff: 1, griefingPenaltyBpsPerHour: 1, baseUnbondedAmount: 1 },
+        chargeback: { chargebackable: false, deferredPayoutEnabled: false, reserveBps: 0, riskWindow: 0 },
+        intentExtension: { extensionPenaltyBpsPerHour: 0 },
       })).to.be.revertedWithCustomError(manager, "InvalidPlatformConfig");
     });
 
-    it("accepts a reusable base unbonded amount on a non-chargebackable platform", async () => {
+    it("calculates cumulative paid-extension collateral", async () => {
       const { manager } = await loadFixture(deployFixture);
-      await manager.setPlatformRiskConfig(ZELLE, {
-        enabled: true,
-        chargeback: { chargebackable: false, deferredPayoutEnabled: false, reserveBps: 0, riskWindow: 0 },
-        griefing: { griefingCliff: 1, griefingPenaltyBpsPerHour: 1, baseUnbondedAmount: usdc(500) },
-      });
-      expect((await manager.getPlatformRiskConfig(ZELLE)).griefing.baseUnbondedAmount).to.eq(usdc(500));
+      expect(await manager.calculateIntentExtensionCost(usdc(1_000), 23 * HOUR, EXTENSION_SLOPE))
+        .to.eq(usdc(23));
     });
 
-    it("calculates the illustrative 5.75 USDC maximum griefing bond", async () => {
+    it("prices extension collateral on the full locked amount", async () => {
       const { manager } = await loadFixture(deployFixture);
-      expect(await manager.calculateMaxGriefingBond(usdc(1_000), MAX_INTENT_PERIOD, {
-        griefingCliff: GRIEFING_CLIFF,
-        griefingPenaltyBpsPerHour: GRIEFING_SLOPE,
-        baseUnbondedAmount: 0,
-      })).to.eq(usdc("5.75"));
+      expect(await manager.calculateIntentExtensionCost(usdc(500), HOUR, EXTENSION_SLOPE))
+        .to.eq(usdc("0.5"));
     });
 
-    it("subtracts the reusable base before calculating the maximum griefing bond", async () => {
+    it("caps terminal charges to purchased time", async () => {
       const { manager } = await loadFixture(deployFixture);
-      expect(await manager.calculateBondedAmount(usdc(700), usdc(500))).to.eq(usdc(200));
-      expect(await manager.calculateMaxGriefingBond(usdc(700), MAX_INTENT_PERIOD, {
-        griefingCliff: GRIEFING_CLIFF,
-        griefingPenaltyBpsPerHour: GRIEFING_SLOPE,
-        baseUnbondedAmount: usdc(500),
-      })).to.eq(usdc("1.15"));
+      const result = await manager.calculateIntentExtensionPenalty(
+        usdc(1_000),
+        10_000,
+        10_000 + 3 * HOUR,
+        2 * HOUR,
+        EXTENSION_SLOPE,
+      );
+      expect(result.penalty).to.eq(usdc(2));
+      expect(result.chargeableTime).to.eq(2 * HOUR);
     });
 
     it("rounds a chargeback reserve upward", async () => {
@@ -362,27 +353,31 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await manager.calculateChargebackReserve(101, 5_000)).to.eq(51);
     });
 
-    it("uses the maximum rather than the sum of both reservations", async () => {
+    it("reserves chargeback coverage only at admission", async () => {
       const { manager } = await loadFixture(deployFixture);
-      const config = await manager.getPlatformRiskConfig(PAYPAL);
-      const result = await manager.calculateRequiredReservation(usdc(1_000), MAX_INTENT_PERIOD, config);
-      expect(result.maxGriefingBond).to.eq(usdc("5.75"));
-      expect(result.chargebackReserve).to.eq(usdc(1_000));
-      expect(result.requiredReservation).to.eq(usdc(1_000));
+      expect(await manager.calculateChargebackReserve(usdc(1_000), 10_000)).to.eq(usdc(1_000));
+    });
+
+    it("rejects a curve that could charge more than the intent amount", async () => {
+      const { manager } = await loadFixture(deployFixture);
+      await expect(manager.setPlatformRiskConfig(ZELLE, {
+        enabled: true,
+        chargeback: { chargebackable: false, deferredPayoutEnabled: false, reserveBps: 0, riskWindow: 0 },
+        intentExtension: { extensionPenaltyBpsPerHour: 84 },
+      })).to.be.revertedWithCustomError(manager, "ExtensionPenaltyExceedsIntentAmount");
     });
   });
 
-  describe("base unbonded tranche", () => {
-    it("admits an intent at the base without stake", async () => {
+  describe("free initial expiry", () => {
+    it("admits a non-chargebackable intent without stake", async () => {
       const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(20), ZELLE);
       const position = await manager.getRiskPosition(intentHash);
       expect(position.mode).to.eq(1);
-      expect(position.bondedAmount).to.eq(0);
       expect(await vault.reservedStake(taker.address)).to.eq(0);
     });
 
-    it("reuses the base after cancellation without counter state", async () => {
+    it("admits another intent after cancellation without a usage counter", async () => {
       const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
       const firstIntentHash = await signalIntent(orchestrator, escrow, taker, usdc(20), ZELLE);
       await orchestrator.connect(taker).cancelIntent(firstIntentHash);
@@ -391,10 +386,10 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await vault.reservedStake(taker.address)).to.eq(0);
     });
 
-    it("cancels an intent at the base after the griefing cliff without charging stake", async () => {
+    it("cancels during the initial expiry period without charging stake", async () => {
       const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(20), ZELLE);
-      await time.increase(GRIEFING_CLIFF + 1);
+      await time.increase(BASE_INTENT_PERIOD - 1);
       await orchestrator.connect(taker).cancelIntent(intentHash);
       const position = await manager.getRiskPosition(intentHash);
       expect(position.status).to.eq(2);
@@ -402,10 +397,10 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await vault.reservedStake(taker.address)).to.eq(0);
     });
 
-    it("expires an intent at the base after the griefing cliff without charging stake", async () => {
+    it("expires after the one-hour base period without charging stake", async () => {
       const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(20), ZELLE);
-      await time.increase(MAX_INTENT_PERIOD + 1);
+      await time.increase(BASE_INTENT_PERIOD + 1);
       await escrow.pruneExpiredIntents(0);
       const position = await manager.getRiskPosition(intentHash);
       expect(position.status).to.eq(2);
@@ -413,18 +408,17 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await vault.reservedStake(taker.address)).to.eq(0);
     });
 
-    it("applies the base tranche to a larger intent and bonds only the excess", async () => {
+    it("snapshots the full intent amount without extension collateral at admission", async () => {
       const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
-      await vault.connect(taker).depositStake(usdc(1));
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(21), ZELLE);
       const position = await manager.getRiskPosition(intentHash);
-      expect(position.mode).to.eq(2);
+      expect(position.mode).to.eq(1);
       expect(position.intentAmount).to.eq(usdc(21));
-      expect(position.bondedAmount).to.eq(usdc(1));
-      expect(position.maxGriefingBond).to.eq(usdc("0.00575"));
+      expect(position.extensionReservation).to.eq(0);
+      expect(await vault.reservedStake(taker.address)).to.eq(0);
     });
 
-    it("reuses the base concurrently across delegated takers", async () => {
+    it("admits non-chargebackable intents concurrently across delegated takers", async () => {
       const { owner: safe, taker, secondTaker, escrow, orchestrator, vault, manager } =
         await loadFixture(deployFixture);
       await vault.connect(safe).setTakerAuthorization(taker.address, true);
@@ -471,10 +465,8 @@ describe("RiskManager and OrchestratorV3", () => {
       await manager.setPlatformRiskConfig(PAYPAL, {
         enabled: true,
         chargeback: { chargebackable: true, deferredPayoutEnabled: false, reserveBps: 10_000, riskWindow: DAY },
-        griefing: {
-          griefingCliff: GRIEFING_CLIFF,
-          griefingPenaltyBpsPerHour: GRIEFING_SLOPE,
-          baseUnbondedAmount: 0,
+        intentExtension: {
+          extensionPenaltyBpsPerHour: EXTENSION_SLOPE,
         },
       });
       await vault.connect(taker).depositStake(usdc(500));
@@ -482,52 +474,208 @@ describe("RiskManager and OrchestratorV3", () => {
       await manager.setPlatformRiskConfig(PAYPAL, {
         enabled: true,
         chargeback: { chargebackable: true, deferredPayoutEnabled: false, reserveBps: 10_000, riskWindow: 30 * DAY },
-        griefing: {
-          griefingCliff: 30 * MINUTE,
-          griefingPenaltyBpsPerHour: 20,
-          baseUnbondedAmount: 0,
+        intentExtension: {
+          extensionPenaltyBpsPerHour: 20,
         },
       });
       const position = await manager.getRiskPosition(intentHash);
       expect(position.chargebackReserveBps).to.eq(10_000);
       expect(position.riskWindow).to.eq(DAY);
-      expect(position.griefingCliff).to.eq(GRIEFING_CLIFF);
+      expect(position.extensionPenaltyBpsPerHour).to.eq(EXTENSION_SLOPE);
     });
   });
 
-  describe("cancellation penalties", () => {
-    it("releases the complete reservation when cancelled at the cliff", async () => {
-      const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
-      await vault.connect(taker).depositStake(usdc(1_000));
-      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), PAYPAL);
-      const createdAt = (await manager.getRiskPosition(intentHash)).createdAt.toNumber();
-      await time.setNextBlockTimestamp(createdAt + GRIEFING_CLIFF);
-      await orchestrator.connect(taker).cancelIntent(intentHash);
-      expect(await vault.reservedStake(taker.address)).to.eq(0);
-      expect(await vault.claimableCompensation((await manager.getRiskPosition(intentHash)).lp)).to.eq(0);
-    });
-
-    it("charges the time-linear penalty after the cliff and releases the remainder", async () => {
+  describe("stake-funded intent extensions", () => {
+    it("uses existing taker stake and charges elapsed extension time on cancellation", async () => {
       const { maker, taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
-      await vault.connect(taker).depositStake(usdc(1_000));
-      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), PAYPAL);
-      const createdAt = (await manager.getRiskPosition(intentHash)).createdAt.toNumber();
-      await time.setNextBlockTimestamp(createdAt + 2 * HOUR);
+      await vault.connect(taker).depositStake(usdc(10));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), ZELLE);
+      const baseExpiry = (await manager.getRiskPosition(intentHash)).baseIntentExpiry.toNumber();
+
+      await expect(manager.connect(taker).extendIntent(intentHash, 2 * HOUR))
+        .to.emit(manager, "IntentExtended");
+      expect((await manager.getRiskPosition(intentHash)).extensionReservation).to.eq(usdc(2));
+      expect(await vault.reservedStake(taker.address)).to.eq(usdc(2));
+
+      await time.setNextBlockTimestamp(baseExpiry + HOUR);
       await orchestrator.connect(taker).cancelIntent(intentHash);
-      expect(await vault.claimableCompensation(maker.address)).to.eq(usdc("1.75"));
-      expect(await vault.stakeBalance(taker.address)).to.eq(usdc("998.25"));
-      expect((await manager.getRiskPosition(intentHash)).slashedAmount).to.eq(usdc("1.75"));
+      const position = await manager.getRiskPosition(intentHash);
+      expect(position.extensionPenalty).to.eq(usdc(1));
+      expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(1));
+      expect(await vault.stakeBalance(taker.address)).to.eq(usdc(9));
+      expect(await vault.reservedStake(taker.address)).to.eq(0);
     });
 
-    it("caps a guardian-extended intent penalty at the snapshotted maximum period", async () => {
-      const { maker, makerDelegate, taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
-      await vault.connect(taker).depositStake(usdc(1_000));
+    it("charges the same elapsed curve on fulfillment", async () => {
+      const { maker, taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(10));
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), ZELLE);
-      await escrow.connect(makerDelegate).extendIntentExpiry(0, intentHash, DAY);
-      const createdAt = (await manager.getRiskPosition(intentHash)).createdAt.toNumber();
-      await time.increaseTo(createdAt + DAY);
+      const baseExpiry = (await manager.getRiskPosition(intentHash)).baseIntentExpiry.toNumber();
+      await manager.connect(taker).extendIntent(intentHash, 2 * HOUR);
+
+      await time.setNextBlockTimestamp(baseExpiry + HOUR);
+      await fulfillIntent(orchestrator, intentHash, usdc(1_000));
+      expect((await manager.getRiskPosition(intentHash)).extensionPenalty).to.eq(usdc(1));
+      expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(1));
+      expect(await vault.stakeBalance(taker.address)).to.eq(usdc(9));
+      expect(await vault.reservedStake(taker.address)).to.eq(0);
+    });
+
+    it("keeps extension collateral isolated from chargeback coverage", async () => {
+      const { maker, taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(2_000));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), PAYPAL);
+      const positionAtAdmission = await manager.getRiskPosition(intentHash);
+      const extensionId = await manager.extensionReservationId(intentHash);
+
+      await manager.connect(taker).extendIntent(intentHash, 2 * HOUR);
+      expect((await vault.getReservation(intentHash)).amount).to.eq(usdc(1_000));
+      expect((await vault.getReservation(extensionId)).amount).to.eq(usdc(2));
+      expect(await vault.reservedStake(taker.address)).to.eq(usdc(1_002));
+
+      await time.setNextBlockTimestamp(positionAtAdmission.baseIntentExpiry.toNumber() + HOUR);
+      await fulfillIntent(orchestrator, intentHash, usdc(600));
+
+      const settled = await manager.getRiskPosition(intentHash);
+      expect(settled.extensionPenalty).to.eq(usdc(1));
+      expect(settled.reservedAmount).to.eq(usdc(600));
+      expect((await vault.getReservation(intentHash)).amount).to.eq(usdc(600));
+      expect((await vault.getReservation(extensionId)).active).to.eq(false);
+      expect(await vault.reservedStake(taker.address)).to.eq(usdc(600));
+      expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(1));
+    });
+
+    it("lets anyone sponsor only with newly supplied taker-owned stake", async () => {
+      const { taker, secondTaker: sponsor, escrow, orchestrator, token, vault, manager } =
+        await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(5));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), ZELLE);
+      const sponsorBefore = await token.balanceOf(sponsor.address);
+
+      await expect(manager.connect(sponsor).stakeAndExtendIntent(intentHash, 2 * HOUR))
+        .to.emit(vault, "StakeSponsoredAndReserved");
+      expect(await token.balanceOf(sponsor.address)).to.eq(sponsorBefore.sub(usdc(2)));
+      expect(await vault.stakeBalance(taker.address)).to.eq(usdc(7));
+      expect(await vault.freeStake(taker.address)).to.eq(usdc(5));
+
       await orchestrator.connect(taker).cancelIntent(intentHash);
-      expect(await vault.claimableCompensation(maker.address)).to.eq(usdc("5.635"));
+      expect(await vault.stakeBalance(taker.address)).to.eq(usdc(7));
+      expect(await vault.freeStake(taker.address)).to.eq(usdc(7));
+    });
+
+    it("atomically rolls back sponsorship when the sponsor has not approved StakeVault", async () => {
+      const { taker, secondTaker: sponsor, escrow, orchestrator, token, vault, manager } =
+        await loadFixture(deployFixture);
+      await token.connect(sponsor).approve(vault.address, 0);
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), ZELLE);
+      const expiryBefore = (await escrow.getDepositIntent(0, intentHash)).expiryTime;
+
+      await expect(manager.connect(sponsor).stakeAndExtendIntent(intentHash, 2 * HOUR)).to.be.reverted;
+
+      const position = await manager.getRiskPosition(intentHash);
+      expect(position.totalExtensionTime).to.eq(0);
+      expect(position.extensionReservation).to.eq(0);
+      expect((await escrow.getDepositIntent(0, intentHash)).expiryTime).to.eq(expiryBefore);
+      expect(await vault.stakeBalance(taker.address)).to.eq(0);
+      expect(await vault.reservedStake(taker.address)).to.eq(0);
+    });
+
+    it("does not let a third party lock the taker's existing stake", async () => {
+      const { taker, secondTaker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(10));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), ZELLE);
+      await expect(manager.connect(secondTaker).extendIntent(intentHash, HOUR))
+        .to.be.revertedWithCustomError(manager, "UnauthorizedStakeExtension");
+      expect(await vault.reservedStake(taker.address)).to.eq(0);
+    });
+
+    it("cannot revive an already expired intent", async () => {
+      const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(10));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), ZELLE);
+      const baseExpiry = (await manager.getRiskPosition(intentHash)).baseIntentExpiry.toNumber();
+      await time.increaseTo(baseExpiry);
+      await expect(manager.connect(taker).extendIntent(intentHash, HOUR))
+        .to.be.revertedWithCustomError(manager, "IntentAlreadyExpired");
+    });
+
+    it("enforces Escrow's five-day total lifetime ceiling before reserving stake", async () => {
+      const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(200));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), ZELLE);
+      const maximumExtension = 5 * DAY - BASE_INTENT_PERIOD;
+
+      await manager.connect(taker).extendIntent(intentHash, maximumExtension);
+      const positionBefore = await manager.getRiskPosition(intentHash);
+      const reservationBefore = positionBefore.extensionReservation;
+
+      await expect(manager.connect(taker).extendIntent(intentHash, 1))
+        .to.be.revertedWithCustomError(manager, "ExtensionExceedsIntentLifetime");
+      const positionAfter = await manager.getRiskPosition(intentHash);
+      expect(positionAfter.totalExtensionTime).to.eq(maximumExtension);
+      expect(positionAfter.extensionReservation).to.eq(reservationBefore);
+    });
+
+    it("blocks existing-stake extension top-ups while reservations are paused", async () => {
+      const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(10));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), ZELLE);
+      await manager.connect(taker).extendIntent(intentHash, HOUR);
+      await vault.setStakeOperationsPaused(false, true);
+
+      await expect(manager.connect(taker).extendIntent(intentHash, HOUR))
+        .to.be.revertedWithCustomError(vault, "StakeActionPaused");
+    });
+
+    it("blocks first-time existing-stake and sponsored extensions while reservations are paused", async () => {
+      const { taker, secondTaker: sponsor, escrow, orchestrator, vault, manager } =
+        await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(10));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), ZELLE);
+      await vault.setStakeOperationsPaused(false, true);
+
+      await expect(manager.connect(taker).extendIntent(intentHash, HOUR))
+        .to.be.revertedWithCustomError(vault, "StakeActionPaused");
+      await expect(manager.connect(sponsor).stakeAndExtendIntent(intentHash, HOUR))
+        .to.be.revertedWithCustomError(vault, "StakeActionPaused");
+      expect((await manager.getRiskPosition(intentHash)).totalExtensionTime).to.eq(0);
+    });
+
+    it("blocks existing-stake extension top-ups after the taker requests exit", async () => {
+      const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(10));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), ZELLE);
+      await manager.connect(taker).extendIntent(intentHash, HOUR);
+      await vault.connect(taker).requestExit();
+
+      await expect(manager.connect(taker).extendIntent(intentHash, HOUR))
+        .to.be.revertedWithCustomError(vault, "AlreadyExiting");
+    });
+
+    it("uses cumulative rounding across repeated extensions", async () => {
+      const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(10);
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1), ZELLE);
+      await manager.connect(taker).extendIntent(intentHash, 1);
+      await manager.connect(taker).extendIntent(intentHash, 1);
+      const position = await manager.getRiskPosition(intentHash);
+      expect(position.totalExtensionTime).to.eq(2);
+      expect(position.extensionReservation).to.eq(1);
+      expect(await vault.reservedStake(taker.address)).to.eq(1);
+    });
+
+    it("rejects sponsored top-ups that add no reservation after cumulative rounding", async () => {
+      const { taker, secondTaker: sponsor, escrow, orchestrator, token, vault, manager } =
+        await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(10);
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1), ZELLE);
+      await manager.connect(taker).extendIntent(intentHash, 1);
+      const sponsorBalance = await token.balanceOf(sponsor.address);
+
+      await expect(manager.connect(sponsor).stakeAndExtendIntent(intentHash, 1))
+        .to.be.revertedWithCustomError(manager, "ZeroAmount");
+      expect(await token.balanceOf(sponsor.address)).to.eq(sponsorBalance);
+      expect((await manager.getRiskPosition(intentHash)).totalExtensionTime).to.eq(1);
     });
 
     it("records the original cancellation time when a terminal callback fails", async () => {
@@ -545,7 +693,7 @@ describe("RiskManager and OrchestratorV3", () => {
   });
 
   describe("settlement and chargeback coverage", () => {
-    it("releases a non-chargebackable griefing bond on fulfillment", async () => {
+    it("settles a non-chargebackable intent without an admission reservation", async () => {
       const { taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
       await vault.connect(taker).depositStake(usdc(10));
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), ZELLE);
@@ -578,6 +726,24 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(position.reservedAmount).to.eq(usdc(500));
       expect(await vault.reservedStake(taker.address)).to.eq(usdc(500));
       expect(await token.balanceOf(taker.address)).to.eq(balanceBefore.add(usdc(500)));
+    });
+
+    it("charges the same elapsed extension penalty on manual release", async () => {
+      const { maker, taker, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
+      await vault.connect(taker).depositStake(usdc(510));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
+      const baseExpiry = (await manager.getRiskPosition(intentHash)).baseIntentExpiry.toNumber();
+      await manager.connect(taker).extendIntent(intentHash, 2 * HOUR);
+
+      await time.setNextBlockTimestamp(baseExpiry + HOUR);
+      await orchestrator.connect(maker).releaseFundsToPayer(intentHash);
+
+      const position = await manager.getRiskPosition(intentHash);
+      expect(position.isManualRelease).to.eq(true);
+      expect(position.extensionPenalty).to.eq(usdc("0.5"));
+      expect(position.reservedAmount).to.eq(usdc(500));
+      expect(await vault.claimableCompensation(maker.address)).to.eq(usdc("0.5"));
+      expect(await vault.reservedStake(taker.address)).to.eq(usdc(500));
     });
 
     it("authenticates the payment-style typed data and compensates the exact gross release", async () => {
@@ -673,10 +839,8 @@ describe("RiskManager and OrchestratorV3", () => {
       await manager.setPlatformRiskConfig(PAYPAL, {
         enabled: true,
         chargeback: { chargebackable: true, deferredPayoutEnabled: true, reserveBps: 10_000, riskWindow: DAY },
-        griefing: {
-          griefingCliff: GRIEFING_CLIFF,
-          griefingPenaltyBpsPerHour: 0,
-          baseUnbondedAmount: 0,
+        intentExtension: {
+          extensionPenaltyBpsPerHour: EXTENSION_SLOPE,
         },
       });
     }

@@ -44,6 +44,14 @@ interface IStakeVault {
     /* ============ Events ============ */
 
     event StakeDeposited(address indexed staker, uint256 amount, uint256 newStakeBalance);
+    event StakeSponsoredAndReserved(
+        bytes32 indexed positionId,
+        address indexed funder,
+        address indexed staker,
+        uint256 amount,
+        uint256 totalReservation,
+        uint64 releaseTime
+    );
     event StakeReserved(
         bytes32 indexed intentHash,
         address indexed staker,
@@ -166,6 +174,14 @@ interface IStakeVault {
     /* ============ Controller Functions ============ */
 
     function reserveStake(address _staker, bytes32 _intentHash, uint256 _amount, uint64 _releaseTime) external;
+    function depositAndReserveStake(
+        address _funder,
+        address _staker,
+        bytes32 _positionId,
+        uint256 _amount,
+        uint64 _releaseTime
+    ) external;
+    function increaseReservation(bytes32 _positionId, uint256 _amount, uint64 _releaseTime) external;
     function updateReservation(bytes32 _intentHash, uint256 _newAmount, uint64 _releaseTime) external;
     function releaseReservation(bytes32 _intentHash) external;
     function slashReservation(bytes32 _intentHash, address _maker, uint256 _amount) external;

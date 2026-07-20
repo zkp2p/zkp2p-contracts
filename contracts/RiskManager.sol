@@ -19,38 +19,26 @@ import { IStakeVault } from "./interfaces/IStakeVault.sol";
 
 /**
  * @title RiskManager
- * @notice Enforces continuous, stake-backed taker risk without tiers, amount caps, cooldowns, or
- *         stake-derived intent-count limits.
+ * @notice Enforces chargeback coverage and stake-funded intent extensions without tiers, cooldowns,
+ *         or stake-derived intent-count limits.
  *
  * @dev ECONOMIC MODEL
- *      A pending bonded intent can end in exactly one of two mutually exclusive ways: cancellation,
- *      which may owe the LP a griefing penalty, or settlement, which may create chargeback exposure.
- *      Admission therefore reserves the maximum of those liabilities instead of their sum:
+ *      Admission reserves chargeback coverage only. The Escrow's original expiry is the free period.
+ *      Additional time is purchased by reserving taker-owned stake under an isolated reservation:
  *
- *        B = max(A - U, 0)
- *        maxGriefingBond = ceil(B * s * (T - C) / (10_000 * 1 hour))
- *        chargebackReserve = ceil(A * r / 10_000)
- *        initialReservation = max(maxGriefingBond, chargebackReserve)
+ *        extensionReserve = ceil(A * s * purchasedTime / (10_000 * 1 hour))
+ *        extensionCharge = ceil(A * s * elapsedPurchasedTime / (10_000 * 1 hour))
  *
- *      where A is intent amount, U is the platform's reusable unbonded base, B is the bonded amount,
- *      s is penalty basis points per hour, T is the Escrow's snapshotted maximum intent period, C is
- *      the griefing cliff, and r is the chargeback reserve ratio. Chargebackable platforms require U=0.
- *
- * @dev CANCELLATION CURVE
- *      At cancellation, elapsed time is capped at T so an intent-guardian extension cannot increase
- *      taker liability. The charged penalty is:
- *
- *        effectiveElapsed = min(cancelledAt - createdAt, T)
- *        chargeableTime = max(effectiveElapsed - C, 0)
- *        penalty = ceil(B * s * chargeableTime / (10_000 * 1 hour))
- *
- *      Rounding is always upward. Every cancellation strictly after the cliff therefore pays at
- *      least one smallest token unit whenever the slope and amount are nonzero.
+ *      where A is the full locked intent amount and s is the extension slope. Pricing the complete
+ *      LP liquidity lock prevents free or dust-priced extensions. The same elapsed-time charge applies
+ *      on fulfillment, manual release, cancellation, or expiry; unused reserved stake becomes free
+ *      taker stake.
  *
  * @dev LIFECYCLE
- *      - Non-chargebackable intents receive the reusable unbonded base on every admission.
- *      - Only the amount above that base enters the griefing curve and reserves stake.
- *      - Cancellation slashes only the accrued griefing penalty and releases every unused unit.
+ *      - Initial Escrow time requires no pending-intent bond.
+ *      - Only purchased time after the original expiry reserves extension stake.
+ *      - Third parties may sponsor only by supplying new stake credited to the taker.
+ *      - Every terminal path charges the same elapsed purchased time and releases every unused unit.
  *      - Non-chargebackable settlement releases the full pending reservation immediately.
  *      - Stake-backed settlement resizes coverage to the gross Escrow release and consumes no payout funds.
  *      - Deferred settlement pulls the complete gross release directly into StakeVault and converts it
@@ -63,8 +51,8 @@ import { IStakeVault } from "./interfaces/IStakeVault.sol";
  *         existing liabilities.
  *      2. All positions for one stake owner share StakeVault.freeStake, so reservations compose across
  *         takers and platforms without a protocol-wide exposure gate.
- *      3. The base unbonded amount is stateless contract policy. Sybil-resistant account gating is a
- *         separate admission concern and is not approximated with wallet-local usage state.
+ *      3. Extension cost is proportional to the full locked amount. There is no reusable free tranche,
+ *         wallet-local usage counter, or pending-intent admission bond.
  *      4. Token-bearing settlement is fail-closed. Cancellation alone is fail-open for liquidity
  *         liveness: failed cancellations retain the full reservation and reconcile against the durable
  *         original unlock timestamp, preventing delay-based overcharging or escaped liability.
@@ -73,7 +61,7 @@ import { IStakeVault } from "./interfaces/IStakeVault.sol";
  *      6. This contract never retains tokens. Deferred proceeds move directly from OrchestratorV3 to
  *         StakeVault, which is the sole accounting and custody boundary.
  *      7. Escrow intent amounts and StakeVault liabilities must use the same immutable token, otherwise
- *         raw units, griefing penalties, base limits, and chargeback ratios would have no shared meaning.
+ *         raw units, extension charges, and chargeback ratios would have no shared meaning.
  *      8. Proof-based chargeback evidence must resolve the supplied payment ID to this exact intent in
  *         both binding directions. Manual releases have no payment nullifier, so their dedicated witness
  *         signature binds evidence to the exact intent while the dispute identifier remains single-use.
@@ -83,14 +71,17 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /* ============ Constants ============ */
 
-    /// @notice Basis-point denominator shared by both affine curves.
+    /// @notice Basis-point denominator shared by extension and chargeback calculations.
     uint256 public constant BPS_DENOMINATOR = 10_000;
 
-    /// @notice Seconds per hour used to convert the configured hourly griefing slope.
+    /// @notice Seconds per hour used to convert the configured hourly extension slope.
     uint256 public constant SECONDS_PER_HOUR = 1 hours;
 
-    /// @notice Combined denominator for the time-linear griefing formula.
-    uint256 public constant GRIEFING_DENOMINATOR = BPS_DENOMINATOR * SECONDS_PER_HOUR;
+    /// @notice Combined denominator for the time-linear extension formula.
+    uint256 public constant EXTENSION_DENOMINATOR = BPS_DENOMINATOR * SECONDS_PER_HOUR;
+
+    /// @notice EscrowV2's ceiling from original intent timestamp through final expiry.
+    uint64 public constant MAX_TOTAL_INTENT_LIFETIME = 5 days;
 
     /// @notice Operational ceiling preventing a governance value that cannot fit in uint64 deadlines.
     /// @dev One year is deliberately far above the approved illustrative 30-day window while keeping
@@ -104,6 +95,9 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     bytes32 public constant CHARGEBACK_ATTESTATION_TYPEHASH = keccak256(
         "ChargebackAttestation(bytes32 intentHash,bytes32 dataHash)"
     );
+
+    /// @notice Domain separator for extension reservations so they never share chargeback position keys.
+    bytes32 public constant EXTENSION_RESERVATION_NAMESPACE = keccak256("ZKP2P_INTENT_EXTENSION");
 
     /* ============ Immutable Dependencies ============ */
 
@@ -189,8 +183,8 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     /**
      * @inheritdoc IIntentRiskHook
      * @dev Admission is fail-closed. This function resolves delegation, validates the current platform
-     *      against the intent's Escrow period, snapshots every liability input, applies the configured
-     *      base tranche, and reserves shared portfolio stake before returning.
+     *      against the intent's Escrow state, snapshots every liability input, and reserves only
+     *      post-settlement chargeback coverage before returning.
      */
     function onIntentCreated(bytes32 _intentHash)
         external
@@ -207,39 +201,38 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         PlatformRiskConfig memory config = platformRiskConfigs[intent.paymentMethod];
         if (!config.enabled) revert PlatformDisabled(intent.paymentMethod);
 
-        uint64 maxIntentPeriod = _toUint64(IEscrowV2(intent.escrow).intentExpirationPeriod());
-        _validatePositionPolicy(intent.paymentMethod, maxIntentPeriod, config.griefing);
-
-        IEscrowV2.Deposit memory deposit = IEscrowV2(intent.escrow).getDeposit(intent.depositId);
+        IEscrowV2 escrow = IEscrowV2(intent.escrow);
+        IEscrowV2.Deposit memory deposit = escrow.getDeposit(intent.depositId);
         _validateIntentToken(deposit.token);
+        if (deposit.intentGuardian != address(this)) {
+            revert InvalidIntentGuardian(address(this), deposit.intentGuardian);
+        }
         address stakeOwner = stakeVault.stakeOwnerOf(intent.owner);
-        uint256 bondedAmount = _calculateBondedAmount(intent.amount, config.griefing.baseUnbondedAmount);
-
-        (uint256 maxGriefingBond, uint256 chargebackReserve, uint256 requiredReservation) =
-            _calculateRequiredReservation(intent.amount, maxIntentPeriod, config);
+        uint256 chargebackReserve = _calculateChargebackReserve(
+            intent.amount,
+            config.chargeback.reserveBps
+        );
 
         RiskMode mode;
         uint256 initialReservation;
 
-        if (bondedAmount == 0) {
+        if (chargebackReserve == 0) {
             mode = RiskMode.UNBONDED;
         } else {
             uint256 available = stakeVault.freeStake(stakeOwner);
-            if (available >= requiredReservation) {
+            if (available >= chargebackReserve) {
                 mode = RiskMode.STAKE_BACKED;
-                initialReservation = requiredReservation;
+                initialReservation = chargebackReserve;
             } else if (
                 config.chargeback.chargebackable
                     && config.chargeback.deferredPayoutEnabled
-                    && available >= maxGriefingBond
             ) {
                 if (intent.to != intent.owner) {
                     revert DeferredStakeRecipientMismatch(intent.owner, intent.to);
                 }
                 mode = RiskMode.DEFERRED_PAYOUT;
-                initialReservation = maxGriefingBond;
             } else {
-                revert InsufficientCollateral(stakeOwner, available, requiredReservation);
+                revert InsufficientCollateral(stakeOwner, available, chargebackReserve);
             }
 
             if (initialReservation != 0 && stakeVault.isExiting(stakeOwner)) {
@@ -256,14 +249,13 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         position.status = PositionStatus.PENDING;
         position.payoutRecipient = intent.to;
         position.chargebackReserveBps = config.chargeback.reserveBps;
-        position.griefingPenaltyBpsPerHour = config.griefing.griefingPenaltyBpsPerHour;
+        position.extensionPenaltyBpsPerHour = config.intentExtension.extensionPenaltyBpsPerHour;
         position.riskWindow = config.chargeback.riskWindow;
         position.createdAt = intent.createdAt;
-        position.maxIntentPeriod = maxIntentPeriod;
-        position.griefingCliff = config.griefing.griefingCliff;
+        position.baseIntentExpiry = _toTimestamp(
+            uint256(intent.createdAt) + escrow.intentExpirationPeriod()
+        );
         position.intentAmount = intent.amount;
-        position.bondedAmount = bondedAmount;
-        position.maxGriefingBond = maxGriefingBond;
         position.initialReservation = initialReservation;
         position.reservedAmount = initialReservation;
 
@@ -291,14 +283,11 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             _position.paymentMethod,
             _position.mode,
             _position.intentAmount,
-            _position.bondedAmount,
             _position.createdAt,
-            _position.maxIntentPeriod,
-            _position.griefingCliff,
-            _position.griefingPenaltyBpsPerHour,
+            _position.baseIntentExpiry,
+            _position.extensionPenaltyBpsPerHour,
             _position.chargebackReserveBps,
             _position.riskWindow,
-            _position.maxGriefingBond,
             _chargebackReserve,
             _position.initialReservation
         );
@@ -355,6 +344,130 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             uint64(block.timestamp),
             _context.isManualRelease,
             _context.feeAllocations
+        );
+    }
+
+    /* ============ Intent Extensions ============ */
+
+    /**
+     * @inheritdoc IRiskManager
+     * @dev Only the intent taker can allocate already-deposited taker stake. This prevents an arbitrary
+     *      caller from locking someone else's reusable stake while keeping the common one-transaction
+     *      extension path available after the taker has deposited once.
+     */
+    function extendIntent(bytes32 _intentHash, uint64 _additionalTime) external override nonReentrant {
+        RiskPosition storage position = riskPositions[_intentHash];
+        if (position.status != PositionStatus.PENDING) {
+            revert PositionNotPending(_intentHash, position.status);
+        }
+        if (msg.sender != position.taker) {
+            revert UnauthorizedStakeExtension(msg.sender, position.taker);
+        }
+        _extendIntent(_intentHash, _additionalTime, msg.sender, true);
+    }
+
+    /**
+     * @inheritdoc IRiskManager
+     * @dev The sponsor approves StakeVault, not RiskManager. Every token added to the extension
+     *      reservation is new stake credited to the taker, so a sponsor can never consume the taker's
+     *      pre-existing free stake. Unused collateral remains reusable taker stake at resolution.
+     */
+    function stakeAndExtendIntent(bytes32 _intentHash, uint64 _additionalTime) external override nonReentrant {
+        RiskPosition storage position = riskPositions[_intentHash];
+        if (position.status != PositionStatus.PENDING) {
+            revert PositionNotPending(_intentHash, position.status);
+        }
+        _extendIntent(_intentHash, _additionalTime, msg.sender, false);
+    }
+
+    /** @dev Purchases time, atomically reserves its maximum charge, then invokes the canonical guardian action. */
+    function _extendIntent(
+        bytes32 _intentHash,
+        uint64 _additionalTime,
+        address _funder,
+        bool _useExistingStake
+    ) internal {
+        if (_additionalTime == 0) revert ZeroAmount();
+
+        RiskPosition storage position = riskPositions[_intentHash];
+        IOrchestratorV3.RiskIntentData memory intent = orchestrator.getRiskIntent(_intentHash);
+        if (intent.owner != position.taker || intent.escrow == address(0)) {
+            revert IntentStateMismatch(_intentHash);
+        }
+
+        IEscrowV2 escrow = IEscrowV2(intent.escrow);
+        IEscrowV2.Intent memory escrowIntent = escrow.getDepositIntent(intent.depositId, _intentHash);
+        uint64 currentExpiry = _toTimestamp(escrowIntent.expiryTime);
+        uint64 currentTime = uint64(block.timestamp);
+        if (escrowIntent.intentHash != _intentHash) revert IntentStateMismatch(_intentHash);
+        if (currentTime >= currentExpiry) {
+            revert IntentAlreadyExpired(_intentHash, currentExpiry, currentTime);
+        }
+
+        uint256 expectedCurrentExpiry = uint256(position.baseIntentExpiry) + position.totalExtensionTime;
+        if (currentExpiry != expectedCurrentExpiry) revert IntentStateMismatch(_intentHash);
+
+        uint256 newTotalExtensionTime = uint256(position.totalExtensionTime) + _additionalTime;
+        if (newTotalExtensionTime > MAX_TOTAL_INTENT_LIFETIME) {
+            revert ExtensionTimeOverflow(newTotalExtensionTime);
+        }
+        uint64 newExpiry = _toTimestamp(uint256(currentExpiry) + _additionalTime);
+        if (escrowIntent.timestamp != position.createdAt) revert IntentStateMismatch(_intentHash);
+        uint64 maximumExpiry = _toTimestamp(
+            uint256(escrowIntent.timestamp) + MAX_TOTAL_INTENT_LIFETIME
+        );
+        if (newExpiry > maximumExpiry) {
+            revert ExtensionExceedsIntentLifetime(newExpiry, maximumExpiry);
+        }
+        uint256 newReservation = _calculateIntentExtensionCost(
+            position.intentAmount,
+            uint64(newTotalExtensionTime),
+            position.extensionPenaltyBpsPerHour
+        );
+        uint256 additionalReservation = newReservation - position.extensionReservation;
+        bytes32 reservationId = _extensionReservationId(_intentHash);
+
+        if (_useExistingStake) {
+            if (additionalReservation != 0) {
+                if (position.extensionReservation == 0) {
+                    stakeVault.reserveStake(
+                        position.taker,
+                        reservationId,
+                        additionalReservation,
+                        newExpiry
+                    );
+                } else {
+                    stakeVault.increaseReservation(
+                        reservationId,
+                        additionalReservation,
+                        newExpiry
+                    );
+                }
+            }
+        } else {
+            if (additionalReservation == 0) revert ZeroAmount();
+            stakeVault.depositAndReserveStake(
+                _funder,
+                position.taker,
+                reservationId,
+                additionalReservation,
+                newExpiry
+            );
+        }
+
+        escrow.extendIntentExpiry(intent.depositId, _intentHash, _additionalTime);
+
+        position.totalExtensionTime = uint64(newTotalExtensionTime);
+        position.extensionReservation = newReservation;
+        emit IntentExtended(
+            _intentHash,
+            _funder,
+            position.taker,
+            _additionalTime,
+            newExpiry,
+            additionalReservation,
+            newReservation,
+            _useExistingStake
         );
     }
 
@@ -485,8 +598,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /**
      * @inheritdoc IRiskManager
-     * @dev Configuration affects future admissions only. Escrow-period-dependent constraints are
-     *      validated again at admission because different Escrows may expose different periods.
+     * @dev Configuration affects future admissions only. Every position snapshots its exact policy.
      */
     function setPlatformRiskConfig(
         bytes32 _paymentMethod,
@@ -502,9 +614,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             _config.chargeback.deferredPayoutEnabled,
             _config.chargeback.reserveBps,
             _config.chargeback.riskWindow,
-            _config.griefing.griefingCliff,
-            _config.griefing.griefingPenaltyBpsPerHour,
-            _config.griefing.baseUnbondedAmount
+            _config.intentExtension.extensionPenaltyBpsPerHour
         );
     }
 
@@ -570,53 +680,37 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /* ============ Public Formula Helpers ============ */
 
-    /**
-     * @inheritdoc IRiskManager
+    /** @inheritdoc IRiskManager
+     * @dev Uses full-precision multiplication and upward rounding.
      */
-    function calculateBondedAmount(
-        uint256 _amount,
-        uint256 _baseUnbondedAmount
-    ) external pure override returns (uint256) {
-        return _calculateBondedAmount(_amount, _baseUnbondedAmount);
-    }
-
-    /**
-     * @inheritdoc IRiskManager
-     * @dev Uses full-precision multiplication and upward rounding. Invalid `cliff >= period` inputs
-     *      return zero here; platform admission separately rejects such a configuration.
-     */
-    function calculateMaxGriefingBond(
+    function calculateIntentExtensionCost(
         uint256 _intentAmount,
-        uint64 _maxIntentPeriod,
-        GriefingConfig calldata _config
+        uint64 _extensionTime,
+        uint32 _extensionPenaltyBpsPerHour
     ) external pure override returns (uint256) {
-        return _calculateMaxGriefingBond(
-            _calculateBondedAmount(_intentAmount, _config.baseUnbondedAmount),
-            _maxIntentPeriod,
-            _config.griefingCliff,
-            _config.griefingPenaltyBpsPerHour
+        return _calculateIntentExtensionCost(
+            _intentAmount,
+            _extensionTime,
+            _extensionPenaltyBpsPerHour
         );
     }
 
     /**
      * @inheritdoc IRiskManager
-     * @dev `effectiveElapsed` is elapsed wall time capped by the snapshotted maximum intent period.
      */
-    function calculateGriefingPenalty(
-        uint256 _bondedAmount,
-        uint64 _createdAt,
-        uint64 _cancelledAt,
-        uint64 _maxIntentPeriod,
-        uint64 _griefingCliff,
-        uint32 _griefingPenaltyBpsPerHour
-    ) external pure override returns (uint256 penalty, uint256 effectiveElapsed) {
-        return _calculateGriefingPenalty(
-            _bondedAmount,
-            _createdAt,
-            _cancelledAt,
-            _maxIntentPeriod,
-            _griefingCliff,
-            _griefingPenaltyBpsPerHour
+    function calculateIntentExtensionPenalty(
+        uint256 _intentAmount,
+        uint64 _baseIntentExpiry,
+        uint64 _terminalAt,
+        uint64 _totalExtensionTime,
+        uint32 _extensionPenaltyBpsPerHour
+    ) external pure override returns (uint256 penalty, uint64 chargeableTime) {
+        return _calculateIntentExtensionPenalty(
+            _intentAmount,
+            _baseIntentExpiry,
+            _terminalAt,
+            _totalExtensionTime,
+            _extensionPenaltyBpsPerHour
         );
     }
 
@@ -633,16 +727,8 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     /**
      * @inheritdoc IRiskManager
      */
-    function calculateRequiredReservation(
-        uint256 _intentAmount,
-        uint64 _maxIntentPeriod,
-        PlatformRiskConfig calldata _config
-    ) external pure override returns (
-        uint256 maxGriefingBond,
-        uint256 chargebackReserve,
-        uint256 requiredReservation
-    ) {
-        return _calculateRequiredReservation(_intentAmount, _maxIntentPeriod, _config);
+    function extensionReservationId(bytes32 _intentHash) external pure override returns (bytes32) {
+        return _extensionReservationId(_intentHash);
     }
 
     /**
@@ -667,48 +753,72 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             revert PositionNotPending(_intentHash, position.status);
         }
 
-        (uint256 penalty, uint256 effectiveElapsed) = _calculateGriefingPenalty(
-            position.bondedAmount,
-            position.createdAt,
-            _cancelledAt,
-            position.maxIntentPeriod,
-            position.griefingCliff,
-            position.griefingPenaltyBpsPerHour
-        );
-        uint256 releasedReservation = position.reservedAmount - penalty;
+        (uint256 extensionPenalty, ) = _chargeIntentExtension(_intentHash, _cancelledAt);
+        uint256 releasedReservation = position.reservedAmount;
 
         position.status = PositionStatus.CANCELLED;
         position.cancelledAt = _cancelledAt;
         position.reservedAmount = 0;
-        position.slashedAmount = penalty;
 
-        if (position.initialReservation != 0) {
-            if (penalty != 0) stakeVault.slashReservation(_intentHash, position.lp, penalty);
-            if (releasedReservation != 0) stakeVault.releaseReservation(_intentHash);
-        }
+        if (releasedReservation != 0) stakeVault.releaseReservation(_intentHash);
         if (position.mode == RiskMode.DEFERRED_PAYOUT) {
             stakeVault.releaseDeferredStakeAuthorization(_intentHash);
         }
 
-        emit GriefingPenaltyCharged(
-            _intentHash,
-            position.stakeOwner,
-            position.lp,
-            penalty,
-            effectiveElapsed
-        );
         emit RiskPositionCancelled(
             _intentHash,
             position.stakeOwner,
             position.lp,
             _cancelledAt,
+            extensionPenalty,
+            releasedReservation
+        );
+    }
+
+    /**
+     * @dev Charges identical elapsed extension time on every terminal path and frees unused collateral.
+     *      The reservation is isolated from chargeback stake so delegated portfolio accounting cannot
+     *      be resized or slashed by extension sponsorship.
+     */
+    function _chargeIntentExtension(
+        bytes32 _intentHash,
+        uint64 _terminalAt
+    ) internal returns (uint256 penalty, uint256 releasedReservation) {
+        RiskPosition storage position = riskPositions[_intentHash];
+        if (position.totalExtensionTime == 0) return (0, 0);
+
+        uint64 chargeableTime;
+        (penalty, chargeableTime) = _calculateIntentExtensionPenalty(
+            position.intentAmount,
+            position.baseIntentExpiry,
+            _terminalAt,
+            position.totalExtensionTime,
+            position.extensionPenaltyBpsPerHour
+        );
+        releasedReservation = position.extensionReservation - penalty;
+        position.extensionReservation = 0;
+        position.extensionPenalty = penalty;
+
+        if (penalty != 0) {
+            stakeVault.slashReservation(_extensionReservationId(_intentHash), position.lp, penalty);
+        }
+        if (releasedReservation != 0) {
+            stakeVault.releaseReservation(_extensionReservationId(_intentHash));
+        }
+
+        emit IntentExtensionCharged(
+            _intentHash,
+            position.taker,
+            position.lp,
+            _terminalAt,
+            chargeableTime,
             penalty,
             releasedReservation
         );
     }
 
     /**
-     * @dev Transitions a pending position at settlement. Griefing liability disappears without penalty.
+     * @dev Transitions a pending position at settlement after charging elapsed purchased time.
      *      Stake-backed coverage is resized against the gross release and consumes no funds. Deferred
      *      settlement transfers gross into fully reserved taker stake and keeps fee claims contingent.
      */
@@ -725,6 +835,8 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         if (position.status != PositionStatus.PENDING) {
             revert PositionNotPending(_intentHash, position.status);
         }
+
+        _chargeIntentExtension(_intentHash, _settledAt);
 
         uint256 pendingReservation = position.reservedAmount;
         position.grossReleasedAmount = _grossAmount;
@@ -839,6 +951,9 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     function _validatePlatformConfig(bytes32 _paymentMethod, PlatformRiskConfig calldata _config) internal pure {
         if (_paymentMethod == bytes32(0)) revert InvalidPlatformConfig(_paymentMethod);
         if (_config.chargeback.reserveBps > BPS_DENOMINATOR) revert InvalidPlatformConfig(_paymentMethod);
+        if (_config.enabled && _config.intentExtension.extensionPenaltyBpsPerHour == 0) {
+            revert InvalidPlatformConfig(_paymentMethod);
+        }
 
         if (_config.chargeback.chargebackable) {
             if (
@@ -848,28 +963,13 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             ) {
                 revert InvalidPlatformConfig(_paymentMethod);
             }
-            if (_config.griefing.baseUnbondedAmount != 0) revert InvalidPlatformConfig(_paymentMethod);
         } else if (_config.chargeback.reserveBps != 0 || _config.chargeback.deferredPayoutEnabled) {
             revert InvalidPlatformConfig(_paymentMethod);
         }
-    }
-
-    /**
-     * @dev Enforces cliff and maximum-liability constraints against the exact Escrow period that will
-     *      be snapshotted. The rate check is amount-independent because both sides scale linearly in A.
-     */
-    function _validatePositionPolicy(
-        bytes32 _paymentMethod,
-        uint64 _maxIntentPeriod,
-        GriefingConfig memory _config
-    ) internal pure {
-        if (_maxIntentPeriod == 0 || _config.griefingCliff >= _maxIntentPeriod) {
-            revert InvalidPositionPolicy(_paymentMethod, _config.griefingCliff, _maxIntentPeriod);
-        }
         uint256 maximumRateNumerator =
-            uint256(_config.griefingPenaltyBpsPerHour) * (_maxIntentPeriod - _config.griefingCliff);
-        if (maximumRateNumerator > GRIEFING_DENOMINATOR) {
-            revert GriefingPenaltyExceedsIntentAmount(_paymentMethod);
+            uint256(_config.intentExtension.extensionPenaltyBpsPerHour) * MAX_TOTAL_INTENT_LIFETIME;
+        if (maximumRateNumerator > EXTENSION_DENOMINATOR) {
+            revert ExtensionPenaltyExceedsIntentAmount(_paymentMethod);
         }
     }
 
@@ -919,44 +1019,33 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /* ============ Internal Formula Helpers ============ */
 
-    /** @dev Returns the reusable base-subtracted amount exposed to the griefing curve. */
-    function _calculateBondedAmount(
-        uint256 _amount,
-        uint256 _baseUnbondedAmount
+    /** @dev Implements ceil(A * s * T / (10_000 * 1 hour)) without intermediate overflow. */
+    function _calculateIntentExtensionCost(
+        uint256 _intentAmount,
+        uint64 _extensionTime,
+        uint32 _extensionPenaltyBpsPerHour
     ) internal pure returns (uint256) {
-        return _amount > _baseUnbondedAmount ? _amount - _baseUnbondedAmount : 0;
+        if (_intentAmount == 0 || _extensionTime == 0 || _extensionPenaltyBpsPerHour == 0) return 0;
+        uint256 rateNumerator = uint256(_extensionPenaltyBpsPerHour) * _extensionTime;
+        return Math.mulDiv(_intentAmount, rateNumerator, EXTENSION_DENOMINATOR, Math.Rounding.Up);
     }
 
-    /** @dev Implements ceil(B * s * (T - C) / (10_000 * 1 hour)) without intermediate overflow. */
-    function _calculateMaxGriefingBond(
-        uint256 _bondedAmount,
-        uint64 _maxIntentPeriod,
-        uint64 _griefingCliff,
-        uint32 _griefingPenaltyBpsPerHour
-    ) internal pure returns (uint256) {
-        if (_griefingPenaltyBpsPerHour == 0 || _maxIntentPeriod <= _griefingCliff) return 0;
-        uint256 rateNumerator =
-            uint256(_griefingPenaltyBpsPerHour) * (_maxIntentPeriod - _griefingCliff);
-        return Math.mulDiv(_bondedAmount, rateNumerator, GRIEFING_DENOMINATOR, Math.Rounding.Up);
-    }
-
-    /** @dev Implements the capped time-linear cancellation formula with exact upward rounding. */
-    function _calculateGriefingPenalty(
-        uint256 _bondedAmount,
-        uint64 _createdAt,
-        uint64 _cancelledAt,
-        uint64 _maxIntentPeriod,
-        uint64 _griefingCliff,
-        uint32 _griefingPenaltyBpsPerHour
-    ) internal pure returns (uint256 penalty, uint256 effectiveElapsed) {
-        if (_cancelledAt <= _createdAt) return (0, 0);
-        effectiveElapsed = _min(uint256(_cancelledAt - _createdAt), _maxIntentPeriod);
-        if (_griefingPenaltyBpsPerHour == 0 || effectiveElapsed <= _griefingCliff) {
-            return (0, effectiveElapsed);
-        }
-        uint256 chargeableTime = effectiveElapsed - _griefingCliff;
-        uint256 rateNumerator = uint256(_griefingPenaltyBpsPerHour) * chargeableTime;
-        penalty = Math.mulDiv(_bondedAmount, rateNumerator, GRIEFING_DENOMINATOR, Math.Rounding.Up);
+    /** @dev Charges only elapsed time after the original expiry, capped by time actually purchased. */
+    function _calculateIntentExtensionPenalty(
+        uint256 _intentAmount,
+        uint64 _baseIntentExpiry,
+        uint64 _terminalAt,
+        uint64 _totalExtensionTime,
+        uint32 _extensionPenaltyBpsPerHour
+    ) internal pure returns (uint256 penalty, uint64 chargeableTime) {
+        if (_terminalAt <= _baseIntentExpiry || _totalExtensionTime == 0) return (0, 0);
+        uint256 elapsedAfterBase = uint256(_terminalAt - _baseIntentExpiry);
+        chargeableTime = uint64(_min(elapsedAfterBase, _totalExtensionTime));
+        penalty = _calculateIntentExtensionCost(
+            _intentAmount,
+            chargeableTime,
+            _extensionPenaltyBpsPerHour
+        );
     }
 
     /** @dev Implements ceil(A * r / 10_000) with full-precision multiplication. */
@@ -965,24 +1054,9 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         return Math.mulDiv(_amount, _reserveBps, BPS_DENOMINATOR, Math.Rounding.Up);
     }
 
-    /** @dev Computes both mutually exclusive liabilities and reserves their maximum. */
-    function _calculateRequiredReservation(
-        uint256 _intentAmount,
-        uint64 _maxIntentPeriod,
-        PlatformRiskConfig memory _config
-    ) internal pure returns (
-        uint256 maxGriefingBond,
-        uint256 chargebackReserve,
-        uint256 requiredReservation
-    ) {
-        maxGriefingBond = _calculateMaxGriefingBond(
-            _calculateBondedAmount(_intentAmount, _config.griefing.baseUnbondedAmount),
-            _maxIntentPeriod,
-            _config.griefing.griefingCliff,
-            _config.griefing.griefingPenaltyBpsPerHour
-        );
-        chargebackReserve = _calculateChargebackReserve(_intentAmount, _config.chargeback.reserveBps);
-        requiredReservation = _max(maxGriefingBond, chargebackReserve);
+    /** @dev Derives a collision-resistant StakeVault key independent of chargeback reservation keys. */
+    function _extensionReservationId(bytes32 _intentHash) internal pure returns (bytes32) {
+        return keccak256(abi.encode(EXTENSION_RESERVATION_NAMESPACE, _intentHash));
     }
 
     /** @dev Produces the EIP-712 struct hash for a chargeback attestation. */
@@ -998,12 +1072,6 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         );
     }
 
-    /** @dev Narrows a duration read from Escrow after rejecting unsafe values. */
-    function _toUint64(uint256 _value) internal pure returns (uint64) {
-        if (_value > type(uint64).max) revert TimestampOverflow(_value);
-        return uint64(_value);
-    }
-
     /** @dev Narrows an absolute timestamp after rejecting unsafe values. */
     function _toTimestamp(uint256 _timestamp) internal pure returns (uint64) {
         if (_timestamp > type(uint64).max) revert TimestampOverflow(_timestamp);
@@ -1015,8 +1083,4 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         return _left < _right ? _left : _right;
     }
 
-    /** @dev Small branch helpers keep formula code explicit and auditable. */
-    function _max(uint256 _left, uint256 _right) internal pure returns (uint256) {
-        return _left > _right ? _left : _right;
-    }
 }
