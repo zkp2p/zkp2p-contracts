@@ -302,6 +302,17 @@ describe("Remove legacy Zelle payment methods", () => {
 
     expect(safeBatchCollector.count()).to.eq(9);
 
+    // The following risk-settlement cutover script observes unchanged on-chain state when these
+    // removals are Safe-owned and may request the same registry calls again. The shared collector
+    // must retain only one copy so the atomic Safe batch cannot revert on the second removal.
+    for (const { hash } of LEGACY_ZELLE_PAYMENT_METHODS) {
+      safeBatchCollector.add(
+        paymentVerifierRegistry.address,
+        paymentVerifierRegistry.interface.encodeFunctionData("removePaymentMethod", [hash]),
+      );
+    }
+    expect(safeBatchCollector.count()).to.eq(9);
+
     const expectedTransactions = [
       ...LEGACY_ZELLE_PAYMENT_METHODS.map(({ hash }) => ({
         to: paymentVerifierRegistry.address,

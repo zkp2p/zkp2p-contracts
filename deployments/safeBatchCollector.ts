@@ -23,10 +23,22 @@ interface SafeBatch {
   transactions: SafeTransaction[];
 }
 
-class SafeBatchCollector {
+export class SafeBatchCollector {
   private transactions: SafeTransaction[] = [];
 
   add(to: string, data: string, description?: string): void {
+    const duplicate = this.transactions.some(
+      (transaction) =>
+        transaction.to.toLowerCase() === to.toLowerCase()
+          && transaction.data.toLowerCase() === data.toLowerCase()
+    );
+    if (duplicate) {
+      if (description) {
+        console.log(`  [Safe Batch] Skipping duplicate ${description}`);
+      }
+      return;
+    }
+
     this.transactions.push({
       to,
       value: "0",
