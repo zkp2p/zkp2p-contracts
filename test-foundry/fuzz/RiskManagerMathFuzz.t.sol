@@ -24,6 +24,7 @@ contract RiskManagerMathFuzzTest is Test {
 
     function testFuzz_GriefingPenaltyNeverExceedsMaximumBond(
         uint96 rawAmount,
+        uint96 rawBaseUnbondedAmount,
         uint32 rawMaxPeriod,
         uint32 rawCliff,
         uint16 rawSlope,
@@ -37,6 +38,8 @@ contract RiskManagerMathFuzzTest is Test {
         uint64 elapsed = uint64(bound(uint256(rawElapsed), 0, 2 * uint256(maxPeriod)));
         uint64 createdAt = 1_000_000;
         uint64 cancelledAt = createdAt + elapsed;
+        uint256 baseUnbondedAmount = uint256(rawBaseUnbondedAmount);
+        uint256 bondedAmount = manager.calculateBondedAmount(amount, baseUnbondedAmount);
 
         uint256 maximumBond = manager.calculateMaxGriefingBond(
             amount,
@@ -44,11 +47,11 @@ contract RiskManagerMathFuzzTest is Test {
             IRiskManager.GriefingConfig({
                 griefingCliff: cliff,
                 griefingPenaltyBpsPerHour: slope,
-                baseUnbondedAmount: 0
+                baseUnbondedAmount: baseUnbondedAmount
             })
         );
         (uint256 penalty,) = manager.calculateGriefingPenalty(
-            amount,
+            bondedAmount,
             createdAt,
             cancelledAt,
             maxPeriod,
@@ -56,6 +59,7 @@ contract RiskManagerMathFuzzTest is Test {
             slope
         );
 
+        assertEq(bondedAmount, amount > baseUnbondedAmount ? amount - baseUnbondedAmount : 0);
         assertLe(penalty, maximumBond);
     }
 
@@ -95,12 +99,15 @@ contract RiskManagerMathFuzzTest is Test {
 
     function testFuzz_RequiredReservationEqualsMaximumCurve(
         uint96 rawAmount,
+        uint96 rawBaseUnbondedAmount,
         uint16 rawReserveBps,
         uint16 rawSlope
     ) public view {
         uint256 amount = bound(uint256(rawAmount), 1, type(uint96).max);
         uint16 reserveBps = uint16(bound(uint256(rawReserveBps), 0, 10_000));
         uint32 slope = uint32(bound(uint256(rawSlope), 0, 1_000));
+        uint256 baseUnbondedAmount = reserveBps == 0 ? uint256(rawBaseUnbondedAmount) : 0;
+        uint256 bondedAmount = manager.calculateBondedAmount(amount, baseUnbondedAmount);
         IRiskManager.PlatformRiskConfig memory config = IRiskManager.PlatformRiskConfig({
             enabled: true,
             chargeback: IRiskManager.ChargebackConfig({
@@ -112,7 +119,7 @@ contract RiskManagerMathFuzzTest is Test {
             griefing: IRiskManager.GriefingConfig({
                 griefingCliff: 15 minutes,
                 griefingPenaltyBpsPerHour: slope,
-                baseUnbondedAmount: 0
+                baseUnbondedAmount: baseUnbondedAmount
             })
         });
 
@@ -120,7 +127,7 @@ contract RiskManagerMathFuzzTest is Test {
             manager.calculateRequiredReservation(amount, 6 hours, config);
 
         assertEq(required, griefing > chargeback ? griefing : chargeback);
-        assertLe(griefing, amount);
+        assertLe(griefing, bondedAmount);
         assertLe(chargeback, amount);
     }
 }
