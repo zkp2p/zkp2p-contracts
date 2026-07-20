@@ -51,7 +51,6 @@ describe("OrchestratorV3 single-use gating authorizations", () => {
     const validation = await (await ethers.getContractFactory("OrchestratorV3Validation")).deploy();
     const orchestratorFactory = await ethers.getContractFactory("OrchestratorV3", {
       libraries: {
-        BoundedCall: boundedCall.address,
         OrchestratorV3FeeLib: feeLib.address,
         PostIntentHookExecutor: postIntentHookExecutor.address,
         OrchestratorV3RiskLib: riskLib.address,

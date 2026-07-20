@@ -18,7 +18,6 @@ library RiskCallbackRecorder {
         bytes32 _intentHash,
         uint8 _resolution,
         uint256 _releasedAmount,
-        bytes32 _paymentId,
         uint64 _resolvedAt,
         bool _callbackSucceeded
     ) external {
@@ -26,8 +25,8 @@ library RiskCallbackRecorder {
         if (_resolution != 0) {
             _failedSettlements[_intentHash] = IOrchestratorV3.IntentSettlement({
                 releasedAmount: _releasedAmount,
-                paymentId: _paymentId,
-                settledAt: _resolvedAt
+                settledAt: _resolvedAt,
+                isManualRelease: _resolution == 2
             });
         } else {
             _failedCancellations[_intentHash] = IOrchestratorV3.IntentCancellation({

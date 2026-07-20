@@ -7,10 +7,13 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IEscrowV2 } from "../interfaces/IEscrowV2.sol";
 import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
 import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
+import { INullifierRegistryV2 } from "../interfaces/INullifierRegistryV2.sol";
 import { IOrchestratorV3 } from "../interfaces/IOrchestratorV3.sol";
 import { IRiskManager } from "../interfaces/IRiskManager.sol";
 import { IStakeVault } from "../interfaces/IStakeVault.sol";
 import { RiskManager } from "../RiskManager.sol";
+import { NullifierRegistryV2 } from "../registries/NullifierRegistryV2.sol";
+import { INullifierRegistry } from "../interfaces/INullifierRegistry.sol";
 
 /**
  * @title RiskManagerStateHarness
@@ -23,8 +26,13 @@ contract RiskManagerStateHarness is RiskManager {
         address _owner,
         IOrchestratorV3 _orchestrator,
         IStakeVault _stakeVault,
-        IAttestationVerifier _attestationVerifier
-    ) RiskManager(_owner, _orchestrator, _stakeVault, _attestationVerifier) { }
+        IAttestationVerifier _attestationVerifier,
+        INullifierRegistryV2 _nullifierRegistry
+    ) RiskManager(_owner, _orchestrator, _stakeVault, _attestationVerifier, _nullifierRegistry) { }
+
+    function forcePlatformRiskConfig(bytes32 _paymentMethod, PlatformRiskConfig calldata _config) external {
+        platformRiskConfigs[_paymentMethod] = _config;
+    }
 
     function forcePosition(
         bytes32 _intentHash,
@@ -44,6 +52,22 @@ contract RiskManagerStateHarness is RiskManager {
         position.coverageDeadline = _coverageDeadline;
     }
 
+    function forceRiskPosition(bytes32 _intentHash, RiskPosition calldata _position) external {
+        riskPositions[_intentHash] = _position;
+    }
+
+    function exposedReleaseManualPosition(
+        bytes32 _intentHash,
+        uint256 _releasedAmount,
+        uint64 _settledAt
+    ) external {
+        _releaseManualPosition(_intentHash, _releasedAmount, _settledAt);
+    }
+
+    function exposedSynchronizeSettlement(bytes32 _intentHash) external {
+        _synchronizeSettlement(_intentHash);
+    }
+
     /** @notice Calls a target while this manager's inherited reentrancy guard is entered. */
     function callWhileEntered(address _target, bytes calldata _data) external nonReentrant {
         (bool success, bytes memory returnData) = _target.call(_data);
@@ -51,6 +75,15 @@ contract RiskManagerStateHarness is RiskManager {
         assembly {
             revert(add(returnData, 0x20), mload(returnData))
         }
+    }
+}
+
+/** @notice Corrupts one binding direction solely to exercise RiskManager's defensive two-way check. */
+contract NullifierRegistryV2StateHarness is NullifierRegistryV2 {
+    constructor(INullifierRegistry _legacyNullifierRegistry) NullifierRegistryV2(_legacyNullifierRegistry) { }
+
+    function forceNullifierByIntentHash(bytes32 _intentHash, bytes32 _nullifier) external {
+        nullifierByIntentHash[_intentHash] = _nullifier;
     }
 }
 
@@ -65,7 +98,6 @@ contract RiskManagerOrchestratorHarness {
     mapping(bytes32 => uint256) internal totalFeeRates;
     mapping(bytes32 => uint64) internal cancellationTimes;
     mapping(bytes32 => IOrchestratorV3.IntentSettlement) internal settlements;
-
     function setRiskIntent(bytes32 _intentHash, IOrchestratorV3.RiskIntentData calldata _intent) external {
         riskIntents[_intentHash] = _intent;
     }
@@ -80,14 +112,7 @@ contract RiskManagerOrchestratorHarness {
         uint64 _settledAt,
         bool _isManualRelease
     ) external {
-        bytes32 paymentId = _isManualRelease
-            ? bytes32(0)
-            : keccak256(abi.encodePacked("payment", _intentHash));
-        settlements[_intentHash] = IOrchestratorV3.IntentSettlement(
-            _releasedAmount,
-            paymentId,
-            _settledAt
-        );
+        settlements[_intentHash] = IOrchestratorV3.IntentSettlement(_releasedAmount, _settledAt, _isManualRelease);
     }
 
     function setIntentTotalFeeRate(bytes32 _intentHash, uint256 _totalFeeRate) external {
@@ -106,13 +131,9 @@ contract RiskManagerOrchestratorHarness {
         return cancellationTimes[_intentHash];
     }
 
-    function getIntentSettlement(bytes32 _intentHash) external view returns (uint256, bytes32, uint64) {
+    function getIntentSettlement(bytes32 _intentHash) external view returns (uint256, uint64, bool) {
         IOrchestratorV3.IntentSettlement memory settlement = settlements[_intentHash];
-        return (
-            settlement.releasedAmount,
-            settlement.paymentId,
-            settlement.settledAt
-        );
+        return (settlement.releasedAmount, settlement.settledAt, settlement.isManualRelease);
     }
 
     function createPosition(IIntentRiskHook _hook, bytes32 _intentHash) external returns (bool) {
@@ -124,8 +145,7 @@ contract RiskManagerOrchestratorHarness {
     }
 
     function fulfillPosition(IIntentRiskHook _hook, bytes32 _intentHash, uint256 _releasedAmount) external {
-        bytes32 paymentId = keccak256(abi.encodePacked("payment", _intentHash));
-        _hook.onIntentFulfilled(_intentHash, _releasedAmount, paymentId);
+        _hook.onIntentFulfilled(_intentHash, _releasedAmount);
     }
 
     function releasePosition(IIntentRiskHook _hook, bytes32 _intentHash, uint256 _releasedAmount) external {
@@ -289,4 +309,5 @@ contract RiskManagerVaultHarness {
     function acceptController() external {
         acceptControllerCalls += 1;
     }
+
 }

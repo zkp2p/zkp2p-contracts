@@ -266,27 +266,35 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         address managerFeeRecipient = intentManagerFeeRecipient[_params.intentHash];
         uint256 managerFee = intentManagerFee[_params.intentHash];
         
-        (uint256 releaseAmount, bytes32 paymentId) = _verifyPayment(_params, intent.paymentMethod);
+        address verifier = paymentVerifierRegistry.getVerifier(intent.paymentMethod);
+        if (verifier == address(0)) revert PaymentMethodDoesNotExist(intent.paymentMethod);
+
+        IPaymentVerifier.PaymentVerificationResult memory verificationResult = IPaymentVerifier(verifier).verifyPayment(
+            IPaymentVerifier.VerifyPaymentData({
+                intentHash: _params.intentHash,
+                paymentProof: _params.paymentProof,
+                data: _params.verificationData
+            })
+        );
+        if (!verificationResult.success) revert PaymentVerificationFailed();
+        if (verificationResult.intentHash != _params.intentHash) {
+            revert HashMismatch(_params.intentHash, verificationResult.intentHash);
+        }
 
         // Enforce snapshot min-at-signal to prevent sub-min partial fulfillments
         uint256 minAtSignal = intentMinAtSignal[_params.intentHash];
-        if (minAtSignal > 0 && releaseAmount < minAtSignal) {
-            revert AmountBelowMin(releaseAmount, minAtSignal);
+        if (minAtSignal > 0 && verificationResult.releaseAmount < minAtSignal) {
+            revert AmountBelowMin(verificationResult.releaseAmount, minAtSignal);
         }
 
         // Effects
-        _resolveIntentWithPaymentId(
-            _params.intentHash,
-            IntentResolution.FULFILLED,
-            releaseAmount,
-            paymentId
-        );
+        _resolveIntent(_params.intentHash, IntentResolution.FULFILLED, verificationResult.releaseAmount);
 
         // Interactions
         IEscrow(intent.escrow).unlockAndTransferFunds(
             intent.depositId,
             _params.intentHash,
-            releaseAmount,
+            verificationResult.releaseAmount,
             address(this)
         );
 
@@ -294,7 +302,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
             deposit.token, 
             _params.intentHash, 
             intent, 
-            releaseAmount,
+            verificationResult.releaseAmount,
             _params.settlementHookData,
             managerFeeRecipient,
             managerFee,
@@ -531,43 +539,6 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         uint256
     ) internal virtual {
         _pruneIntent(_intentHash);
-    }
-
-    /**
-     * @notice Resolves a verified fulfillment with optional verifier-authenticated payment identity.
-     * @dev V2 ignores the identifier because its verifier ABI does not return one. V3 overrides this
-     *      extension point and transports the value to its risk hook and failed-callback record.
-     */
-    function _resolveIntentWithPaymentId(
-        bytes32 _intentHash,
-        IntentResolution _resolution,
-        uint256 _releasedAmount,
-        bytes32
-    ) internal virtual {
-        _resolveIntent(_intentHash, _resolution, _releasedAmount);
-    }
-
-    /** @dev Calls the legacy three-field verifier ABI. */
-    function _verifyPayment(
-        FulfillIntentParams calldata _params,
-        bytes32 _paymentMethod
-    ) internal virtual returns (uint256 releaseAmount, bytes32 paymentId) {
-        address verifier = paymentVerifierRegistry.getVerifier(_paymentMethod);
-        if (verifier == address(0)) revert PaymentMethodDoesNotExist(_paymentMethod);
-
-        IPaymentVerifier.PaymentVerificationResult memory result = IPaymentVerifier(verifier).verifyPayment(
-            IPaymentVerifier.VerifyPaymentData({
-                intentHash: _params.intentHash,
-                paymentProof: _params.paymentProof,
-                data: _params.verificationData
-            })
-        );
-        if (!result.success) revert PaymentVerificationFailed();
-        if (result.intentHash != _params.intentHash) {
-            revert HashMismatch(_params.intentHash, result.intentHash);
-        }
-
-        return (result.releaseAmount, bytes32(0));
     }
 
     /**

@@ -28,7 +28,6 @@ describe("OrchestratorV3 constructor validation", () => {
     const relayerRegistry = await (await ethers.getContractFactory("RelayerRegistry")).deploy();
     const factory = await ethers.getContractFactory("OrchestratorV3", {
       libraries: {
-        BoundedCall: boundedCall.address,
         OrchestratorV3FeeLib: feeLib.address,
         PostIntentHookExecutor: postIntentHookExecutor.address,
         OrchestratorV3RiskLib: riskLib.address,

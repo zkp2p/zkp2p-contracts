@@ -21,7 +21,7 @@ const PAYPAL = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("paypal"));
 const VENMO = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
 const ZELLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("zelle"));
 
-describe("Payment-ID-aware parallel risk system deployment", () => {
+describe("Payment-ID-bound final risk system deployment", () => {
   const network = deployments.getNetworkName();
   const policy = paymentIdRiskPlatformPolicyForNetwork(network);
 
@@ -34,10 +34,6 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
       legacyRegistry: await ethers.getContractAt(
         "PaymentVerifierRegistry",
         deployedAddress("PaymentVerifierRegistry"),
-      ),
-      newRegistry: await ethers.getContractAt(
-        "PaymentVerifierRegistry",
-        deployedAddress("PaymentVerifierRegistryV3"),
       ),
       legacyVerifier: await ethers.getContractAt(
         "UnifiedPaymentVerifier",
@@ -61,9 +57,13 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
         "MultiAttestationVerifier",
         deployedAddress("ChargebackAttestationVerifierPaymentId"),
       ),
-      nullifierRegistry: await ethers.getContractAt(
+      legacyNullifierRegistry: await ethers.getContractAt(
         "NullifierRegistry",
         deployedAddress("NullifierRegistry"),
+      ),
+      nullifierRegistryV2: await ethers.getContractAt(
+        "NullifierRegistryV2",
+        deployedAddress("NullifierRegistryV2"),
       ),
       orchestratorRegistry: await ethers.getContractAt(
         "OrchestratorRegistry",
@@ -72,59 +72,58 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
     };
   }
 
-  it("deploys every versioned coordinate without replacing the legacy lane", async () => {
+  it("deploys every versioned coordinate while preserving the legacy nullifier predecessor", async () => {
     for (const name of PAYMENT_ID_RISK_DEPLOYMENT_NAMES) {
       expect(deployedAddress(name)).to.properAddress;
     }
-    expect(deployedAddress("PaymentVerifierRegistryV3"))
-      .not.to.eq(deployedAddress("PaymentVerifierRegistry"));
+    expect(deployedAddress("NullifierRegistryV2"))
+      .not.to.eq(deployedAddress("NullifierRegistry"));
     expect(deployedAddress("UnifiedPaymentVerifierV3"))
       .not.to.eq(deployedAddress("UnifiedPaymentVerifierV2"));
   });
 
-  it("mirrors exact live payment methods and currencies into the new registry", async () => {
-    const { legacyRegistry, newRegistry, legacyVerifier, newVerifier } = await contracts();
+  it("hard-cuts exact live payment methods and currencies to UPV3 in the shared registry", async () => {
+    const { legacyRegistry, newVerifier } = await contracts();
     const legacyMethods: string[] = await legacyRegistry.getPaymentMethods();
-    const newMethods: string[] = await newRegistry.getPaymentMethods();
     const verifierMethods: string[] = await newVerifier.getPaymentMethods();
-    expect(newMethods.map((value) => value.toLowerCase())).to.have.members(
-      legacyMethods.map((value) => value.toLowerCase()),
-    );
     expect(verifierMethods.map((value) => value.toLowerCase())).to.have.members(
       legacyMethods.map((value) => value.toLowerCase()),
     );
     for (const method of legacyMethods) {
-      expect(await legacyRegistry.getVerifier(method)).to.eq(legacyVerifier.address);
-      expect(await newRegistry.getVerifier(method)).to.eq(newVerifier.address);
-      expect((await newRegistry.getCurrencies(method)).map((value: string) => value.toLowerCase()))
-        .to.have.members((await legacyRegistry.getCurrencies(method)).map((value: string) => value.toLowerCase()));
+      expect(await legacyRegistry.getVerifier(method)).to.eq(newVerifier.address);
+      const currencies = (await legacyRegistry.getCurrencies(method))
+        .map((value: string) => value.toLowerCase());
+      expect(currencies).not.to.be.empty;
+      expect(new Set(currencies).size).to.eq(currencies.length);
     }
   });
 
-  it("shares replay protection while keeping independent registry routing", async () => {
+  it("binds new payments to intents and permanently retires the legacy writer", async () => {
     const {
       legacyVerifier,
       newVerifier,
       orchestrator,
-      nullifierRegistry,
+      legacyNullifierRegistry,
+      nullifierRegistryV2,
       orchestratorRegistry,
     } = await contracts();
-    expect(await nullifierRegistry.isWriter(legacyVerifier.address)).to.eq(true);
-    expect(await nullifierRegistry.isWriter(newVerifier.address)).to.eq(true);
-    expect(await newVerifier.nullifierRegistry()).to.eq(nullifierRegistry.address);
+    expect(await legacyNullifierRegistry.isWriter(legacyVerifier.address)).to.eq(false);
+    expect(await nullifierRegistryV2.isWriter(newVerifier.address)).to.eq(true);
+    expect(await newVerifier.nullifierRegistry()).to.eq(nullifierRegistryV2.address);
+    expect(await nullifierRegistryV2.legacyNullifierRegistry()).to.eq(legacyNullifierRegistry.address);
     expect(await newVerifier.orchestratorRegistry()).to.eq(orchestratorRegistry.address);
     expect(await orchestratorRegistry.isOrchestrator(orchestrator.address)).to.eq(true);
-    expect(await orchestrator.paymentVerifierRegistry()).to.eq(deployedAddress("PaymentVerifierRegistryV3"));
+    expect(await orchestrator.paymentVerifierRegistry()).to.eq(deployedAddress("PaymentVerifierRegistry"));
     const escrowV2 = await ethers.getContractAt("EscrowV2", deployedAddress("EscrowV2"));
     expect(await escrowV2.orchestratorRegistry()).to.eq(orchestratorRegistry.address);
   });
 
   it("wires and owns the versioned risk components", async () => {
     const [deployer] = await ethers.getSigners();
-    const { newRegistry, newVerifier, orchestrator, vault, manager, deferredHook, chargebackVerifier } =
+    const { newVerifier, orchestrator, vault, manager, deferredHook, chargebackVerifier, nullifierRegistryV2 } =
       await contracts();
     const expectedOwner = MULTI_SIG[network] || deployer.address;
-    for (const owned of [newRegistry, newVerifier, orchestrator, vault, manager, chargebackVerifier]) {
+    for (const owned of [nullifierRegistryV2, newVerifier, orchestrator, vault, manager, chargebackVerifier]) {
       expect(await owned.owner()).to.eq(expectedOwner);
     }
     expect(await orchestrator.riskCallbackGasLimit()).to.eq(RISK_CALLBACK_GAS_LIMIT);
@@ -132,6 +131,7 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
     expect(await vault.controller()).to.eq(manager.address);
     expect(await manager.orchestrator()).to.eq(orchestrator.address);
     expect(await manager.stakeVault()).to.eq(vault.address);
+    expect(await manager.nullifierRegistry()).to.eq(nullifierRegistryV2.address);
     expect(await manager.deferredPayoutHook()).to.eq(deferredHook.address);
     expect(await deferredHook.riskManager()).to.eq(manager.address);
   });
@@ -190,13 +190,13 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
     await expect(assertResumableNonLocalPaymentIdRiskDeployment(
       "base_staging",
       async (name) => {
-        if (name === "PaymentVerifierRegistryV3") return "matching";
+        if (name === "NullifierRegistryV2") return "matching";
         return name === "UnifiedPaymentVerifierV3" ? "different" : "missing";
       },
     )).to.be.rejectedWith("differs from the reviewed bytecode, libraries, or arguments");
     await expect(assertResumableNonLocalPaymentIdRiskDeployment(
       "base_staging",
-      async (name) => name === "PaymentVerifierRegistryV3" ? "missing" : "matching",
+      async (name) => name === "NullifierRegistryV2" ? "missing" : "matching",
     )).to.be.rejectedWith("impossible non-prefix");
   });
 
@@ -264,7 +264,10 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
     expect(() => assertCanonicalHardCutAuthorizations({
       orchestratorRegistered: false,
       newVerifierWriter: true,
-      legacyVerifierWriter: true,
+      legacyVerifierRevoked: true,
+      paymentMethodsRouted: true,
+      nullifierPredecessorMatches: true,
+      managerNullifierRegistryMatches: true,
       orchestratorVerifierRegistryMatches: true,
       orchestratorEscrowRegistryMatches: true,
       escrowAuthorized: true,
@@ -273,7 +276,10 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
     expect(() => assertCanonicalHardCutAuthorizations({
       orchestratorRegistered: true,
       newVerifierWriter: false,
-      legacyVerifierWriter: true,
+      legacyVerifierRevoked: true,
+      paymentMethodsRouted: true,
+      nullifierPredecessorMatches: true,
+      managerNullifierRegistryMatches: true,
       orchestratorVerifierRegistryMatches: true,
       orchestratorEscrowRegistryMatches: true,
       escrowAuthorized: true,
@@ -282,7 +288,10 @@ describe("Payment-ID-aware parallel risk system deployment", () => {
     expect(() => assertCanonicalHardCutAuthorizations({
       orchestratorRegistered: true,
       newVerifierWriter: true,
-      legacyVerifierWriter: true,
+      legacyVerifierRevoked: true,
+      paymentMethodsRouted: true,
+      nullifierPredecessorMatches: true,
+      managerNullifierRegistryMatches: true,
       orchestratorVerifierRegistryMatches: true,
       orchestratorEscrowRegistryMatches: true,
       escrowAuthorized: true,

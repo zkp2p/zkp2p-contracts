@@ -16,7 +16,6 @@ contract IntentRiskHookMock is IIntentRiskHook {
     bool public consumeAllTerminalGas;
     uint256 public terminalRevertDataSize;
     bytes32 public lastIntentHash;
-    bytes32 public lastPaymentId;
     uint256 public lastReleasedAmount;
     uint256 public createdCalls;
     uint256 public cancelledCalls;
@@ -66,16 +65,11 @@ contract IntentRiskHookMock is IIntentRiskHook {
         cancelledCalls++;
     }
 
-    function onIntentFulfilled(
-        bytes32 _intentHash,
-        uint256 _releasedAmount,
-        bytes32 _paymentId
-    ) external override {
+    function onIntentFulfilled(bytes32 _intentHash, uint256 _releasedAmount) external override {
         _revertWithConfiguredData();
         if (revertOnTerminal) revert("risk fulfillment failed");
         lastIntentHash = _intentHash;
         lastReleasedAmount = _releasedAmount;
-        lastPaymentId = _paymentId;
         fulfilledCalls++;
     }
 

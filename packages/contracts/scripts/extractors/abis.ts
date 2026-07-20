@@ -19,6 +19,8 @@ const PKG_ROOT = path.resolve(__dirname, '../..');
 const ABIS_DIR = path.join(PKG_ROOT, 'abis');
 
 const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
+  NullifierRegistryV2: 'contracts/registries/NullifierRegistryV2.sol/NullifierRegistryV2.json',
+  UnifiedPaymentVerifierV3: 'contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol/UnifiedPaymentVerifierV3.json',
   RiskManager: 'contracts/RiskManager.sol/RiskManager.json',
   StakeVault: 'contracts/StakeVault.sol/StakeVault.json',
   OrchestratorV3: 'contracts/OrchestratorV3.sol/OrchestratorV3.json',

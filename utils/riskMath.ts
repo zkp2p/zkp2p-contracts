@@ -17,11 +17,6 @@ export interface RiskCapacity {
   bondedTakingCapacity: bigint | null;
 }
 
-export interface FreeTakeCapacity {
-  remainingFreeTakes: bigint;
-  freeTakingCapacity: bigint;
-}
-
 export interface GriefingPenalty {
   penalty: bigint;
   effectiveElapsed: bigint;
@@ -45,6 +40,13 @@ function ceilDiv(numerator: bigint, denominator: bigint): bigint {
   if (denominator <= 0n) throw new RangeError("denominator must be positive");
   if (numerator === 0n) return 0n;
   return ((numerator - 1n) / denominator) + 1n;
+}
+
+/** max(intent amount - reusable base unbonded amount, 0). */
+export function calculateBondedAmount(amount: IntegerLike, baseUnbondedAmount: IntegerLike): bigint {
+  const intentAmount = integer(amount, "amount");
+  const baseAmount = integer(baseUnbondedAmount, "baseUnbondedAmount");
+  return intentAmount > baseAmount ? intentAmount - baseAmount : 0n;
 }
 
 /** ceil(A * s * (T - C) / (10_000 * 1 hour)); returns zero when the curve is disabled. */
@@ -73,8 +75,9 @@ export function calculateRequiredReservation(
   amount: IntegerLike,
   terms: GriefingTerms,
   reserveBps: IntegerLike,
+  baseUnbondedAmount: IntegerLike,
 ): bigint {
-  const griefingBond = calculateMaxGriefingBond(amount, terms);
+  const griefingBond = calculateMaxGriefingBond(calculateBondedAmount(amount, baseUnbondedAmount), terms);
   const chargebackReserve = calculateChargebackReserve(amount, reserveBps);
   return griefingBond > chargebackReserve ? griefingBond : chargebackReserve;
 }
@@ -165,15 +168,12 @@ export function calculateBondedTakingCapacity(
   return { griefingCapacity, chargebackCapacity, bondedTakingCapacity };
 }
 
-/** Computes remaining separate free intents and their aggregate display capacity. */
-export function calculateFreeTakeCapacity(
-  freeTakeCount: IntegerLike,
-  freeTakesUsed: IntegerLike,
-  freeTakeAmount: IntegerLike,
-): FreeTakeCapacity {
-  const count = integer(freeTakeCount, "freeTakeCount");
-  const used = integer(freeTakesUsed, "freeTakesUsed");
-  const amount = integer(freeTakeAmount, "freeTakeAmount");
-  const remainingFreeTakes = used >= count ? 0n : count - used;
-  return { remainingFreeTakes, freeTakingCapacity: remainingFreeTakes * amount };
+/** Adds the reusable base tranche to a finite bonded capacity; null remains unbounded. */
+export function calculateTotalTakingCapacity(
+  bondedTakingCapacity: IntegerLike | null,
+  baseUnbondedAmount: IntegerLike,
+): bigint | null {
+  if (bondedTakingCapacity === null) return null;
+  return integer(bondedTakingCapacity, "bondedTakingCapacity")
+    + integer(baseUnbondedAmount, "baseUnbondedAmount");
 }

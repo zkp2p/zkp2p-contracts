@@ -40,6 +40,7 @@ const STAKE_RISK_DEPLOYMENT_NAMES = [
   "OrchestratorV3",
   "StakeVault",
   "ChargebackAttestationVerifier",
+  "NullifierRegistryV2PreFinalAffine",
   "RiskManager",
   "DeferredPayoutHook",
 ] as const;
@@ -108,8 +109,7 @@ function platformRiskConfigMatches(actual: any, expected: any): boolean {
     && ethers.BigNumber.from(actual.griefing.griefingCliff).eq(expected.griefing.griefingCliff)
     && ethers.BigNumber.from(actual.griefing.griefingPenaltyBpsPerHour)
       .eq(expected.griefing.griefingPenaltyBpsPerHour)
-    && ethers.BigNumber.from(actual.griefing.freeTakeCount).eq(expected.griefing.freeTakeCount)
-    && ethers.BigNumber.from(actual.griefing.freeTakeAmount).eq(expected.griefing.freeTakeAmount);
+    && ethers.BigNumber.from(actual.griefing.baseUnbondedAmount).eq(expected.griefing.baseUnbondedAmount);
 }
 
 export function stakeRiskPlatformPolicyForNetwork(network: string): any {
@@ -139,6 +139,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
   const relayerRegistryAddress = getDeployedContractAddress(network, "RelayerRegistry");
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
+  const legacyNullifierRegistryAddress = getDeployedContractAddress(network, "NullifierRegistry");
   const stakeTokenAddress = USDC[network]
     ? USDC[network]
     : getDeployedContractAddress(network, "USDCMock");
@@ -177,7 +178,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const orchestratorV3 = await deploy("OrchestratorV3", {
     from: deployer,
     libraries: {
-      BoundedCall: boundedCall.address,
       PostIntentHookExecutor: postIntentHookExecutor.address,
       OrchestratorV3Validation: orchestratorV3Validation.address,
       OrchestratorV3FeeLib: orchestratorV3FeeLib.address,
@@ -218,9 +218,23 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("ChargebackAttestationVerifier deployed at", chargebackAttestationVerifier.address);
   if (chargebackAttestationVerifier.newlyDeployed) await waitForDeploymentDelay(hre);
 
+  const nullifierRegistryV2 = await deploy("NullifierRegistryV2PreFinalAffine", {
+    contract: "NullifierRegistryV2",
+    from: deployer,
+    args: [legacyNullifierRegistryAddress],
+  });
+  console.log("NullifierRegistryV2PreFinalAffine deployed at", nullifierRegistryV2.address);
+  if (nullifierRegistryV2.newlyDeployed) await waitForDeploymentDelay(hre);
+
   const riskManager = await deploy("RiskManager", {
     from: deployer,
-    args: [deployer, orchestratorV3.address, stakeVault.address, chargebackAttestationVerifier.address],
+    args: [
+      deployer,
+      orchestratorV3.address,
+      stakeVault.address,
+      chargebackAttestationVerifier.address,
+      nullifierRegistryV2.address,
+    ],
   });
   console.log("RiskManager deployed at", riskManager.address);
   if (riskManager.newlyDeployed) await waitForDeploymentDelay(hre);
@@ -238,6 +252,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     chargebackAttestationVerifier.address,
   );
   const riskManagerContract = await ethers.getContractAt("RiskManager", riskManager.address);
+  const nullifierRegistryV2Contract = await ethers.getContractAt("NullifierRegistryV2", nullifierRegistryV2.address);
   const orchestratorV3Contract = await ethers.getContractAt("OrchestratorV3", orchestratorV3.address);
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
 
@@ -279,6 +294,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await setNewOwner(hre, riskManagerContract, multiSig);
   await setNewOwner(hre, stakeVaultContract, multiSig);
   await setNewOwner(hre, chargebackAttestationVerifierContract, multiSig);
+  await setNewOwner(hre, nullifierRegistryV2Contract, multiSig);
   console.log("Stake risk system ownership transferred to", multiSig);
 };
 

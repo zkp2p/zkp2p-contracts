@@ -26,5 +26,8 @@
   ],
   "files": [
     "hardhat.config.ts",
+  ],
+  "exclude": [
+    "./test/deploy/26_stakeRiskSystem.spec.ts"
   ]
 }

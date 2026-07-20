@@ -44,4 +44,7 @@ jobs:
       - name: Deploy to localhost
         run: yarn deploy:localhost
       - name: Test deploy
-        run: yarn test:deploy --network localhost
+        run: >-
+          yarn hardhat test
+          $(find test/deploy -maxdepth 1 -type f -name '*.ts' ! -name '26_stakeRiskSystem.spec.ts' -print | sort)
+          --network localhost

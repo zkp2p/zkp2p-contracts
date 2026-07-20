@@ -107,7 +107,6 @@ library OrchestratorV3RiskLib {
         bytes32 _intentHash,
         uint8 _resolution,
         uint256 _releasedAmount,
-        bytes32 _paymentId,
         uint256 _callbackGasLimit,
         uint256 _postCallGasReserve,
         uint256 _maxReturnData
@@ -126,7 +125,6 @@ library OrchestratorV3RiskLib {
             _intentHash,
             _resolution,
             _releasedAmount,
-            _paymentId,
             _callbackGasLimit,
             _postCallGasReserve,
             _maxReturnData
@@ -137,7 +135,6 @@ library OrchestratorV3RiskLib {
             _intentHash,
             _resolution,
             _releasedAmount,
-            _paymentId,
             resolvedAt,
             callbackSucceeded
         );

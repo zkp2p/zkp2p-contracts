@@ -24,6 +24,8 @@ import {
   addPaymentMethodToUnifiedVerifier,
   addWritePermission,
   getDeployedContractAddress,
+  removePaymentMethodFromRegistry,
+  removeWritePermission,
   setNewOwner,
   waitForDeploymentDelay,
 } from "../deployments/helpers";
@@ -31,13 +33,14 @@ import {
   chargebackWitnessConfigForNetwork,
   stakeRiskPlatformPolicyForNetwork,
 } from "./26_deploy_stake_risk_system";
+import { safeBatchCollector } from "../deployments/safeBatchCollector";
 
 const PAYPAL = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("paypal"));
 const VENMO = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("venmo"));
 const ZELLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("zelle"));
 
 export const PAYMENT_ID_RISK_DEPLOYMENT_NAMES = [
-  "PaymentVerifierRegistryV3",
+  "NullifierRegistryV2",
   "UnifiedPaymentVerifierV3",
   "BoundedCallPaymentId",
   "OrchestratorV3ValidationPaymentId",
@@ -119,7 +122,10 @@ export function paymentIdRiskPlatformPolicyForNetwork(network: string) {
 export function assertCanonicalHardCutAuthorizations(state: {
   orchestratorRegistered: boolean;
   newVerifierWriter: boolean;
-  legacyVerifierWriter: boolean;
+  legacyVerifierRevoked: boolean;
+  paymentMethodsRouted: boolean;
+  nullifierPredecessorMatches: boolean;
+  managerNullifierRegistryMatches: boolean;
   orchestratorVerifierRegistryMatches: boolean;
   orchestratorEscrowRegistryMatches: boolean;
   escrowAuthorized: boolean;
@@ -131,8 +137,17 @@ export function assertCanonicalHardCutAuthorizations(state: {
   if (!state.newVerifierWriter) {
     throw new Error("UnifiedPaymentVerifierV3 write permission must be executed before canonical hard-cut");
   }
-  if (!state.legacyVerifierWriter) {
-    throw new Error("Legacy UnifiedPaymentVerifierV2 must remain a shared nullifier writer");
+  if (!state.legacyVerifierRevoked) {
+    throw new Error("Retired UnifiedPaymentVerifierV2 legacy-registry write permission must be revoked");
+  }
+  if (!state.paymentMethodsRouted) {
+    throw new Error("Every payment method must be routed to UnifiedPaymentVerifierV3");
+  }
+  if (!state.nullifierPredecessorMatches) {
+    throw new Error("NullifierRegistryV2 predecessor mismatch");
+  }
+  if (!state.managerNullifierRegistryMatches) {
+    throw new Error("RiskManager NullifierRegistryV2 mismatch");
   }
   if (!state.orchestratorVerifierRegistryMatches) {
     throw new Error("Payment-ID OrchestratorV3 verifier registry mismatch");
@@ -227,11 +242,10 @@ function platformRiskConfigMatches(actual: any, expected: any): boolean {
     && ethers.BigNumber.from(actual.griefing.griefingCliff).eq(expected.griefing.griefingCliff)
     && ethers.BigNumber.from(actual.griefing.griefingPenaltyBpsPerHour)
       .eq(expected.griefing.griefingPenaltyBpsPerHour)
-    && ethers.BigNumber.from(actual.griefing.freeTakeCount).eq(expected.griefing.freeTakeCount)
-    && ethers.BigNumber.from(actual.griefing.freeTakeAmount).eq(expected.griefing.freeTakeAmount);
+    && ethers.BigNumber.from(actual.griefing.baseUnbondedAmount).eq(expected.griefing.baseUnbondedAmount);
 }
 
-async function loadLegacyPaymentConfiguration(network: string) {
+async function loadLegacyPaymentConfiguration(network: string, pendingNewVerifierAddress?: string) {
   const registryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
   const legacyVerifierAddress = getDeployedContractAddress(network, "UnifiedPaymentVerifierV2");
   const registry = await ethers.getContractAt("PaymentVerifierRegistry", registryAddress);
@@ -242,11 +256,16 @@ async function loadLegacyPaymentConfiguration(network: string) {
   }
 
   const configurations: Array<{ method: string; currencies: string[] }> = [];
+  const routedVerifiers = new Set<string>();
   for (const method of methods) {
     const verifier = await registry.getVerifier(method);
-    if (verifier.toLowerCase() !== legacyVerifierAddress.toLowerCase()) {
-      throw new Error(`Legacy payment method ${method} is not routed to UnifiedPaymentVerifierV2`);
+    const normalizedVerifier = verifier.toLowerCase();
+    const normalizedLegacyVerifier = legacyVerifierAddress.toLowerCase();
+    const normalizedNewVerifier = pendingNewVerifierAddress?.toLowerCase();
+    if (normalizedVerifier !== normalizedLegacyVerifier && normalizedVerifier !== normalizedNewVerifier) {
+      throw new Error(`Payment method ${method} is routed to an unexpected verifier ${verifier}`);
     }
+    routedVerifiers.add(normalizedVerifier);
     const currencies: string[] = await registry.getCurrencies(method);
     if (
       currencies.length === 0
@@ -256,6 +275,9 @@ async function loadLegacyPaymentConfiguration(network: string) {
       throw new Error(`Legacy payment method ${method} has invalid currencies`);
     }
     configurations.push({ method, currencies });
+  }
+  if (routedVerifiers.size !== 1) {
+    throw new Error("Payment verifier hard cut is partially executed; complete or correct the governance batch");
   }
 
   const paymentAttestationVerifierAddress = await legacyVerifier.attestationVerifier();
@@ -280,23 +302,62 @@ async function loadLegacyPaymentConfiguration(network: string) {
 
 async function assertRegistryParity(
   legacyConfigurations: Array<{ method: string; currencies: string[] }>,
-  newRegistry: any,
+  registry: any,
   newVerifier: any,
 ) {
   const expectedMethods = legacyConfigurations.map(({ method }) => method);
-  const actualRegistryMethods: string[] = await newRegistry.getPaymentMethods();
+  const actualRegistryMethods: string[] = await registry.getPaymentMethods();
   const actualVerifierMethods: string[] = await newVerifier.getPaymentMethods();
   if (!equalValues(actualRegistryMethods, expectedMethods) || !equalValues(actualVerifierMethods, expectedMethods)) {
     throw new Error("Payment-ID lane method set does not match the legacy lane");
   }
   for (const { method, currencies } of legacyConfigurations) {
-    if ((await newRegistry.getVerifier(method)).toLowerCase() !== newVerifier.address.toLowerCase()) {
+    if ((await registry.getVerifier(method)).toLowerCase() !== newVerifier.address.toLowerCase()) {
       throw new Error(`Payment-ID lane verifier mismatch for ${method}`);
     }
-    if (!equalValues(await newRegistry.getCurrencies(method), currencies)) {
+    if (!equalValues(await registry.getCurrencies(method), currencies)) {
       throw new Error(`Payment-ID lane currency mismatch for ${method}`);
     }
   }
+}
+
+async function routePaymentMethodToUnifiedPaymentVerifierV3(
+  hre: HardhatRuntimeEnvironment,
+  registry: any,
+  method: string,
+  currencies: string[],
+  retiredVerifierAddress: string,
+  newVerifierAddress: string,
+) {
+  const currentVerifier: string = await registry.getVerifier(method);
+  if (currentVerifier.toLowerCase() === newVerifierAddress.toLowerCase()) {
+    if (!equalValues(await registry.getCurrencies(method), currencies)) {
+      throw new Error(`Payment method ${method} currencies drifted after the verifier hard cut`);
+    }
+    return;
+  }
+  if (currentVerifier.toLowerCase() !== retiredVerifierAddress.toLowerCase()) {
+    throw new Error(`Payment method ${method} cannot be cut over from unexpected verifier ${currentVerifier}`);
+  }
+
+  const owner: string = await registry.owner();
+  const localAccounts = (await hre.getUnnamedAccounts()).map((address) => address.toLowerCase());
+  if (localAccounts.includes(owner.toLowerCase())) {
+    await removePaymentMethodFromRegistry(hre, registry, method);
+    await addPaymentMethodToRegistry(hre, registry, method, newVerifierAddress, currencies);
+    return;
+  }
+
+  safeBatchCollector.add(
+    registry.address,
+    registry.interface.encodeFunctionData("removePaymentMethod", [method]),
+    `PaymentVerifierRegistry.removePaymentMethod(${method.slice(0, 10)}...)`,
+  );
+  safeBatchCollector.add(
+    registry.address,
+    registry.interface.encodeFunctionData("addPaymentMethod", [method, newVerifierAddress, currencies]),
+    `PaymentVerifierRegistry.addPaymentMethod(${method.slice(0, 10)}..., ${newVerifierAddress})`,
+  );
 }
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
@@ -304,7 +365,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const network = hre.deployments.getNetworkName();
   const { reversible: reversibleConfig, nonChargebackable: nonChargebackableConfig } =
     paymentIdRiskPlatformPolicyForNetwork(network);
-  const legacy = await loadLegacyPaymentConfiguration(network);
+  const pendingNewVerifier = await hre.deployments.getOrNull("UnifiedPaymentVerifierV3");
+  const legacy = await loadLegacyPaymentConfiguration(network, pendingNewVerifier?.address);
   const chargebackWitnessConfig = chargebackWitnessConfigForNetwork(
     network,
     process.env.CHARGEBACK_WITNESS_ADDRESSES,
@@ -315,9 +377,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const chainId = (await ethers.provider.getNetwork()).chainId;
 
   const escrowRegistryAddress = getDeployedContractAddress(network, "EscrowRegistry");
+  const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
   const relayerRegistryAddress = getDeployedContractAddress(network, "RelayerRegistry");
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
-  const nullifierRegistryAddress = getDeployedContractAddress(network, "NullifierRegistry");
+  const legacyNullifierRegistryAddress = getDeployedContractAddress(network, "NullifierRegistry");
   const postIntentHookExecutorAddress = await requireHistoricalPostIntentHookExecutor(
     network,
     hre.deployments.getOrNull.bind(hre.deployments),
@@ -327,17 +390,17 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   type DeploymentName = typeof PAYMENT_ID_RISK_DEPLOYMENT_NAMES[number];
   type AddressOf = (name: DeploymentName) => string;
   const optionsFor: Record<DeploymentName, (addressOf: AddressOf) => DeployOptions> = {
-    PaymentVerifierRegistryV3: () => ({
-      contract: "PaymentVerifierRegistry",
+    NullifierRegistryV2: () => ({
+      contract: "NullifierRegistryV2",
       from: deployer,
-      args: [],
+      args: [legacyNullifierRegistryAddress],
     }),
-    UnifiedPaymentVerifierV3: () => ({
+    UnifiedPaymentVerifierV3: (addressOf) => ({
       contract: "UnifiedPaymentVerifierV3",
       from: deployer,
       args: [
         orchestratorRegistryAddress,
-        nullifierRegistryAddress,
+        addressOf("NullifierRegistryV2"),
         legacy.paymentAttestationVerifierAddress,
       ],
     }),
@@ -374,7 +437,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       contract: "OrchestratorV3",
       from: deployer,
       libraries: {
-        BoundedCall: addressOf("BoundedCallPaymentId"),
         PostIntentHookExecutor: postIntentHookExecutorAddress,
         OrchestratorV3Validation: addressOf("OrchestratorV3ValidationPaymentId"),
         OrchestratorV3FeeLib: addressOf("OrchestratorV3FeeLibPaymentId"),
@@ -384,7 +446,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
         deployer,
         chainId,
         escrowRegistryAddress,
-        addressOf("PaymentVerifierRegistryV3"),
+        paymentVerifierRegistryAddress,
         relayerRegistryAddress,
         ORCHESTRATOR_V2_PROTOCOL_FEE[network],
         ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT[network] || deployer,
@@ -415,6 +477,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
         addressOf("OrchestratorV3PaymentId"),
         addressOf("StakeVaultPaymentId"),
         addressOf("ChargebackAttestationVerifierPaymentId"),
+        addressOf("NullifierRegistryV2"),
       ],
     }),
     DeferredPayoutHookPaymentId: (addressOf) => ({
@@ -459,15 +522,12 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     return deployment;
   };
 
-  const paymentVerifierRegistryV3 = await deployOne("PaymentVerifierRegistryV3");
+  const nullifierRegistryV2Deployment = await deployOne("NullifierRegistryV2");
   const unifiedPaymentVerifierV3 = await deployOne("UnifiedPaymentVerifierV3");
-  const newRegistry = await ethers.getContractAt("PaymentVerifierRegistry", paymentVerifierRegistryV3.address);
   const newVerifier = await ethers.getContractAt("UnifiedPaymentVerifierV3", unifiedPaymentVerifierV3.address);
   for (const { method, currencies } of legacy.configurations) {
     await addPaymentMethodToUnifiedVerifier(hre, newVerifier, method);
-    await addPaymentMethodToRegistry(hre, newRegistry, method, newVerifier.address, currencies);
   }
-  await assertRegistryParity(legacy.configurations, newRegistry, newVerifier);
 
   await deployOne("BoundedCallPaymentId");
   await deployOne("OrchestratorV3ValidationPaymentId");
@@ -483,6 +543,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const vault = await ethers.getContractAt("StakeVault", stakeVault.address);
   const manager = await ethers.getContractAt("RiskManager", riskManager.address);
   const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorV3.address);
+  const nullifierRegistryV2 = await ethers.getContractAt(
+    "NullifierRegistryV2",
+    nullifierRegistryV2Deployment.address,
+  );
   const chargebackVerifier = await ethers.getContractAt(
     "MultiAttestationVerifier",
     chargebackAttestationVerifier.address,
@@ -509,18 +573,38 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   }
 
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
-  const nullifierRegistry = await ethers.getContractAt("NullifierRegistry", nullifierRegistryAddress);
+  const legacyNullifierRegistry = await ethers.getContractAt("NullifierRegistry", legacyNullifierRegistryAddress);
   const escrowRegistry = await ethers.getContractAt("EscrowRegistry", escrowRegistryAddress);
   await addOrchestratorToRegistry(hre, orchestratorRegistry, orchestrator.address);
-  await addWritePermission(hre, nullifierRegistry, newVerifier.address);
+  await addWritePermission(hre, nullifierRegistryV2, newVerifier.address);
+  await removeWritePermission(hre, legacyNullifierRegistry, legacy.legacyVerifierAddress);
+  for (const { method, currencies } of legacy.configurations) {
+    await routePaymentMethodToUnifiedPaymentVerifierV3(
+      hre,
+      legacy.registry,
+      method,
+      currencies,
+      legacy.legacyVerifierAddress,
+      newVerifier.address,
+    );
+  }
+  await assertRegistryParity(legacy.configurations, legacy.registry, newVerifier);
   const escrowV2Address = getDeployedContractAddress(network, "EscrowV2");
   const escrowV2 = await ethers.getContractAt("EscrowV2", escrowV2Address);
   assertCanonicalHardCutAuthorizations({
     orchestratorRegistered: await orchestratorRegistry.isOrchestrator(orchestrator.address),
-    newVerifierWriter: await nullifierRegistry.isWriter(newVerifier.address),
-    legacyVerifierWriter: await nullifierRegistry.isWriter(legacy.legacyVerifierAddress),
+    newVerifierWriter: await nullifierRegistryV2.isWriter(newVerifier.address),
+    legacyVerifierRevoked: !(await legacyNullifierRegistry.isWriter(legacy.legacyVerifierAddress)),
+    paymentMethodsRouted: (await Promise.all(legacy.configurations.map(async ({ method }) =>
+      (await legacy.registry.getVerifier(method)).toLowerCase() === newVerifier.address.toLowerCase()
+    ))).every(Boolean),
+    nullifierPredecessorMatches:
+      (await nullifierRegistryV2.legacyNullifierRegistry()).toLowerCase()
+      === legacyNullifierRegistry.address.toLowerCase(),
+    managerNullifierRegistryMatches:
+      (await manager.nullifierRegistry()).toLowerCase() === nullifierRegistryV2.address.toLowerCase(),
     orchestratorVerifierRegistryMatches:
-      (await orchestrator.paymentVerifierRegistry()).toLowerCase() === newRegistry.address.toLowerCase(),
+      (await orchestrator.paymentVerifierRegistry()).toLowerCase() === legacy.registry.address.toLowerCase(),
     orchestratorEscrowRegistryMatches:
       (await orchestrator.escrowRegistry()).toLowerCase() === escrowRegistry.address.toLowerCase(),
     escrowAuthorized:
@@ -530,7 +614,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       (await escrowV2.orchestratorRegistry()).toLowerCase() === orchestratorRegistry.address.toLowerCase(),
   });
 
-  await setNewOwner(hre, newRegistry, multiSig);
+  await setNewOwner(hre, nullifierRegistryV2, multiSig);
   await setNewOwner(hre, newVerifier, multiSig);
   await setNewOwner(hre, orchestrator, multiSig);
   await setNewOwner(hre, vault, multiSig);

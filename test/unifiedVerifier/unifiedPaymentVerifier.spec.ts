@@ -341,13 +341,16 @@ describe("UnifiedPaymentVerifier", () => {
       expect((result as { paymentId?: string }).paymentId).to.eq(undefined);
     });
 
-    it("returns the signed payment ID through the V3 result without changing the payment attestation", async () => {
+    it("keeps the shared verifier result while binding the signed payment ID in NullifierRegistryV2", async () => {
+      const nullifierRegistryV2 = await (
+        await ethers.getContractFactory("NullifierRegistryV2", owner.wallet)
+      ).deploy(nullifierRegistry.address);
       const verifierV3 = await (await ethers.getContractFactory("UnifiedPaymentVerifierV3", owner.wallet)).deploy(
         orchestratorRegistry.address,
-        nullifierRegistry.address,
+        nullifierRegistryV2.address,
         attestationVerifier.address,
       );
-      await nullifierRegistry.addWritePermission(verifierV3.address);
+      await nullifierRegistryV2.addWritePermission(verifierV3.address);
       await verifierV3.addPaymentMethod(venmoPaymentMethodHash);
       const proofV3 = await buildProof({}, verifierV3.address);
       const verificationData = await buildVerificationDataForIntent(intentHash);
@@ -369,16 +372,37 @@ describe("UnifiedPaymentVerifier", () => {
       expect(result.success).to.eq(true);
       expect(result.intentHash).to.eq(intentHash);
       expect(result.releaseAmount).to.eq(proofV3.attestation.releaseAmount);
-      expect(result.paymentId).to.eq(proofV3.paymentDetails.paymentId);
+      expect(result.paymentId).to.eq(undefined);
+
+      await ethers.provider.send("hardhat_impersonateAccount", [orchestrator.address]);
+      await ethers.provider.send("hardhat_setBalance", [orchestrator.address, "0x1000000000000000000"]);
+      const orchestratorSigner = await ethers.getSigner(orchestrator.address);
+      await verifierV3.connect(orchestratorSigner).verifyPayment({
+        intentHash,
+        paymentProof: proofV3.paymentProof,
+        data: verificationData,
+      });
+      const expectedNullifier = ethers.utils.keccak256(
+        ethers.utils.solidityPack(
+          ["bytes32", "bytes32"],
+          [proofV3.paymentDetails.method, proofV3.paymentDetails.paymentId],
+        ),
+      );
+      expect(await nullifierRegistryV2.intentHashByNullifier(expectedNullifier)).to.eq(intentHash);
+      expect(await nullifierRegistryV2.nullifierByIntentHash(intentHash)).to.eq(expectedNullifier);
+      await ethers.provider.send("hardhat_stopImpersonatingAccount", [orchestrator.address]);
     });
 
-    it("rejects payment replay across legacy and V3 lanes sharing one nullifier registry", async () => {
+    it("rejects payment replay from the predecessor registry in the V3 lane", async () => {
+      const nullifierRegistryV2 = await (
+        await ethers.getContractFactory("NullifierRegistryV2", owner.wallet)
+      ).deploy(nullifierRegistry.address);
       const verifierV3 = await (await ethers.getContractFactory("UnifiedPaymentVerifierV3", owner.wallet)).deploy(
         orchestratorRegistry.address,
-        nullifierRegistry.address,
+        nullifierRegistryV2.address,
         attestationVerifier.address,
       );
-      await nullifierRegistry.addWritePermission(verifierV3.address);
+      await nullifierRegistryV2.addWritePermission(verifierV3.address);
       await verifierV3.addPaymentMethod(venmoPaymentMethodHash);
       const proofV3 = await buildProof({}, verifierV3.address);
       const verificationData = await buildVerificationDataForIntent(intentHash);

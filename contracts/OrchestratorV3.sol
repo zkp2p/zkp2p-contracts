@@ -8,7 +8,6 @@ import { OrchestratorV2 } from "./OrchestratorV2.sol";
 import { IIntentRiskHook } from "./interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV2 } from "./interfaces/IOrchestratorV2.sol";
 import { IOrchestratorV3 } from "./interfaces/IOrchestratorV3.sol";
-import { BoundedCall } from "./lib/BoundedCall.sol";
 import { OrchestratorV3FeeLib } from "./lib/OrchestratorV3FeeLib.sol";
 import { OrchestratorV3RiskLib } from "./lib/OrchestratorV3RiskLib.sol";
 import { PostIntentHookExecutor as SettlementHookExecutor } from "./lib/SettlementHookExecutor.sol";
@@ -204,17 +203,19 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
      */
     function getIntentSettlement(
         bytes32 _intentHash
-    ) external view override returns (
-        uint256 releasedAmount,
-        bytes32 paymentId,
-        uint64 settledAt
-    ) {
-        IntentSettlement memory settlement = failedIntentSettlements[_intentHash];
-        return (
-            settlement.releasedAmount,
-            settlement.paymentId,
-            settlement.settledAt
-        );
+    ) external view override returns (uint256 releasedAmount, uint64 settledAt, bool isManualRelease) {
+        bytes32 intentHash = _intentHash;
+        // Relies on IntentSettlement's declared storage order: amount in slot 0, then uint64/bool packed in slot 1.
+        // Exact getter tests lock this layout; update this read if the struct's fields or order ever change.
+        assembly {
+            mstore(0x00, intentHash)
+            mstore(0x20, failedIntentSettlements.slot)
+            let settlementSlot := keccak256(0x00, 0x40)
+            releasedAmount := sload(settlementSlot)
+            let packedLifecycle := sload(add(settlementSlot, 1))
+            settledAt := and(packedLifecycle, 0xffffffffffffffff)
+            isManualRelease := and(shr(64, packedLifecycle), 1)
+        }
     }
 
     /**
@@ -280,16 +281,6 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         IntentResolution _resolution,
         uint256 _releasedAmount
     ) internal override {
-        _resolveIntentWithPaymentId(_intentHash, _resolution, _releasedAmount, bytes32(0));
-    }
-
-    /** @dev Transports the authenticated payment identifier through terminal risk accounting. */
-    function _resolveIntentWithPaymentId(
-        bytes32 _intentHash,
-        IntentResolution _resolution,
-        uint256 _releasedAmount,
-        bytes32 _paymentId
-    ) internal override {
         super._resolveIntent(_intentHash, _resolution, _releasedAmount);
         OrchestratorV3RiskLib.executeTerminalCallback(
             intentRiskHooks,
@@ -300,27 +291,23 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             _intentHash,
             uint8(_resolution),
             _releasedAmount,
-            _paymentId,
             riskCallbackGasLimit,
             RISK_CALLBACK_POST_CALL_GAS_RESERVE,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
     }
 
-    /** @dev Calls the payment-ID-aware verifier ABI used exclusively by the V3 lane. */
-    function _verifyPayment(
-        FulfillIntentParams calldata _params,
-        bytes32 _paymentMethod
-    ) internal override returns (uint256 releaseAmount, bytes32 paymentId) {
-        address verifier = paymentVerifierRegistry.getVerifier(_paymentMethod);
-        if (verifier == address(0)) revert PaymentMethodDoesNotExist(_paymentMethod);
-
-        return BoundedCall.verifyPaymentV3(
-            verifier,
-            _params.intentHash,
-            _params.paymentProof,
-            _params.verificationData
-        );
+    /**
+     * @notice Enforces the snapshotted settlement-hook requirement on maker manual releases.
+     */
+    function _shouldExecuteSettlementHookOnManualRelease(
+        bytes32 _intentHash
+    ) internal view override returns (bool) {
+        bool requiresSettlementHook = intentRequiresPostIntentHook[_intentHash];
+        if (requiresSettlementHook && address(intents[_intentHash].settlementHook) == address(0)) {
+            revert RequiredSettlementHookMissing(_intentHash);
+        }
+        return requiresSettlementHook;
     }
 
     /**

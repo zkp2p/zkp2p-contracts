@@ -37,6 +37,10 @@ describe("Affine stake risk system deployment", () => {
         "MultiAttestationVerifier",
         deployedAddress("ChargebackAttestationVerifier"),
       ),
+      nullifierRegistry: await ethers.getContractAt(
+        "NullifierRegistryV2",
+        deployedAddress("NullifierRegistryV2PreFinalAffine"),
+      ),
       deferredHook: await ethers.getContractAt("DeferredPayoutHook", deployedAddress("DeferredPayoutHook")),
       orchestratorRegistry: await ethers.getContractAt(
         "OrchestratorRegistry",
@@ -59,16 +63,18 @@ describe("Affine stake risk system deployment", () => {
     expect(deployedAddress("StakeVault")).to.properAddress;
     expect(deployedAddress("RiskManager")).to.properAddress;
     expect(deployedAddress("ChargebackAttestationVerifier")).to.properAddress;
+    expect(deployedAddress("NullifierRegistryV2PreFinalAffine")).to.properAddress;
     expect(deployedAddress("DeferredPayoutHook")).to.properAddress;
   });
 
   it("transfers every owned component to the configured multisig", async () => {
-    const { deployer, orchestrator, vault, manager, chargebackVerifier } = await contracts();
+    const { deployer, orchestrator, vault, manager, chargebackVerifier, nullifierRegistry } = await contracts();
     const expectedOwner = MULTI_SIG[network] || deployer.address;
     expect(await orchestrator.owner()).to.eq(expectedOwner);
     expect(await vault.owner()).to.eq(expectedOwner);
     expect(await manager.owner()).to.eq(expectedOwner);
     expect(await chargebackVerifier.owner()).to.eq(expectedOwner);
+    expect(await nullifierRegistry.owner()).to.eq(expectedOwner);
   });
 
   it("wires RiskManager as the vault controller", async () => {
@@ -77,9 +83,11 @@ describe("Affine stake risk system deployment", () => {
   });
 
   it("wires the immutable orchestrator and vault into RiskManager", async () => {
-    const { orchestrator, vault, manager } = await contracts();
+    const { orchestrator, vault, manager, nullifierRegistry } = await contracts();
     expect(await manager.orchestrator()).to.eq(orchestrator.address);
     expect(await manager.stakeVault()).to.eq(vault.address);
+    expect(await manager.nullifierRegistry()).to.eq(nullifierRegistry.address);
+    expect(await nullifierRegistry.legacyNullifierRegistry()).to.eq(deployedAddress("NullifierRegistry"));
   });
 
   it("wires the canonical deferred payout hook in both directions", async () => {
@@ -121,18 +129,18 @@ describe("Affine stake risk system deployment", () => {
       expect(config.griefing.griefingCliff).to.eq(platformPolicy.reversible.griefing.griefingCliff);
       expect(config.griefing.griefingPenaltyBpsPerHour)
         .to.eq(platformPolicy.reversible.griefing.griefingPenaltyBpsPerHour);
-      expect(config.griefing.freeTakeCount).to.eq(0);
+      expect(config.griefing.baseUnbondedAmount).to.eq(0);
     });
   }
 
-  it("configures Zelle lifetime free takes only on the non-chargebackable platform", async () => {
+  it("configures a reusable Zelle base only on the non-chargebackable platform", async () => {
     const { manager } = await contracts();
     const config = await manager.getPlatformRiskConfig(ZELLE);
     expect(config.enabled).to.eq(true);
     expect(config.chargeback.chargebackable).to.eq(false);
     expect(config.chargeback.reserveBps).to.eq(0);
-    expect(config.griefing.freeTakeCount).to.eq(platformPolicy.nonChargebackable.griefing.freeTakeCount);
-    expect(config.griefing.freeTakeAmount).to.eq(platformPolicy.nonChargebackable.griefing.freeTakeAmount);
+    expect(config.griefing.baseUnbondedAmount)
+      .to.eq(platformPolicy.nonChargebackable.griefing.baseUnbondedAmount);
   });
 
   it("refuses nonlocal deployment without governance-ratified platform policy", async () => {
@@ -175,37 +183,44 @@ describe("Affine stake risk system deployment", () => {
     );
 
     const { chainId } = await ethers.provider.getNetwork();
-    const chargeback = {
-      intentHash: ethers.utils.id("affine-risk-deployment-test"),
+    const details = {
+      paymentMethod: PAYPAL,
       originalPaymentId: ethers.utils.id("deployment-payment"),
       disputeId: ethers.utils.id("deployment-dispute"),
+      paymentAmount: 1,
+      paymentCurrency: ethers.utils.id("USD"),
+    };
+    const data = ethers.utils.defaultAbiCoder.encode(
+      ["tuple(bytes32 paymentMethod,bytes32 originalPaymentId,bytes32 disputeId,uint256 paymentAmount,bytes32 paymentCurrency)"],
+      [details],
+    );
+    const chargeback = {
+      intentHash: ethers.utils.id("affine-risk-deployment-test"),
+      dataHash: ethers.utils.keccak256(data),
       signatures: [],
+      data,
+      metadata: "0x",
     };
     const domain = { name: "ZKP2P RiskManager", version: "1", chainId, verifyingContract: manager.address };
     const types = {
       ChargebackAttestation: [
         { name: "intentHash", type: "bytes32" },
-        { name: "originalPaymentId", type: "bytes32" },
-        { name: "disputeId", type: "bytes32" },
+        { name: "dataHash", type: "bytes32" },
       ],
     };
     const digest = await manager.hashChargebackAttestation(chargeback);
-    expect(digest).to.eq(ethers.utils._TypedDataEncoder.hash(domain, types, chargeback));
+    const value = { intentHash: chargeback.intentHash, dataHash: chargeback.dataHash };
+    expect(digest).to.eq(ethers.utils._TypedDataEncoder.hash(domain, types, value));
 
     if (network === "localhost" || network === "hardhat") {
       const signers = await ethers.getSigners();
       const localWitnesses = signers.filter((signer) => witnessConfig.witnesses
         .map((address) => address.toLowerCase()).includes(signer.address.toLowerCase()));
-      const value = {
-        intentHash: chargeback.intentHash,
-        originalPaymentId: chargeback.originalPaymentId,
-        disputeId: chargeback.disputeId,
-      };
       const signatures = [
         await localWitnesses[0]._signTypedData(domain, types, value),
         await localWitnesses[1]._signTypedData(domain, types, value),
       ];
-      expect(await verifier.verify(digest, signatures, "0x")).to.eq(true);
+      expect(await verifier.verify(digest, signatures, data)).to.eq(true);
     }
   });
 
