@@ -7,12 +7,17 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 
 import { IDeferredPayoutHook } from "../interfaces/IDeferredPayoutHook.sol";
 import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
-import { IRiskManager } from "../interfaces/IRiskManager.sol";
 import { IStakeVault } from "../interfaces/IStakeVault.sol";
+
+/** @dev Retired ABI retained only so immutable historical deployment scripts remain reproducible. */
+interface ILegacyDeferredRiskManager {
+    function orchestrator() external view returns (address);
+    function registerDeferredPayout(bytes32 _intentHash, address _beneficiary, uint256 _amount) external;
+}
 
 /**
  * @title DeferredPayoutHook
- * @notice Moves fulfilled net proceeds directly from an authorized orchestrator into StakeVault.
+ * @notice RETIRED: historical post-intent adapter superseded by direct risk-manager settlement.
  * @dev Tokens never pass through RiskManager. The transfer and risk accounting are atomic: if the
  *      manager rejects registration, the complete hook execution reverts.
  */
@@ -23,7 +28,7 @@ contract DeferredPayoutHook is IDeferredPayoutHook {
 
     IERC20 public immutable payoutToken;
     IStakeVault public immutable stakeVault;
-    IRiskManager public immutable riskManager;
+    ILegacyDeferredRiskManager public immutable riskManager;
     IOrchestratorRegistry public immutable orchestratorRegistry;
 
     /* ============ Errors ============ */
@@ -45,7 +50,7 @@ contract DeferredPayoutHook is IDeferredPayoutHook {
     constructor(
         IERC20 _payoutToken,
         IStakeVault _stakeVault,
-        IRiskManager _riskManager,
+        ILegacyDeferredRiskManager _riskManager,
         IOrchestratorRegistry _orchestratorRegistry
     ) {
         if (
@@ -77,7 +82,7 @@ contract DeferredPayoutHook is IDeferredPayoutHook {
         HookExecutionContext calldata _ctx,
         bytes calldata
     ) external override {
-        address canonicalOrchestrator = address(riskManager.orchestrator());
+        address canonicalOrchestrator = riskManager.orchestrator();
         if (msg.sender != canonicalOrchestrator || !orchestratorRegistry.isOrchestrator(msg.sender)) {
             revert UnauthorizedOrchestrator(msg.sender);
         }

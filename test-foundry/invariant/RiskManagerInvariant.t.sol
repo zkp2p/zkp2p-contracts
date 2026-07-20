@@ -9,6 +9,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { RiskManager } from "../../contracts/RiskManager.sol";
 import { StakeVault } from "../../contracts/StakeVault.sol";
 import { IEscrowV2 } from "../../contracts/interfaces/IEscrowV2.sol";
+import { IIntentRiskHook } from "../../contracts/interfaces/IIntentRiskHook.sol";
 import { IOrchestratorV3 } from "../../contracts/interfaces/IOrchestratorV3.sol";
 import { INullifierRegistryV2 } from "../../contracts/interfaces/INullifierRegistryV2.sol";
 import { IRiskManager } from "../../contracts/interfaces/IRiskManager.sol";
@@ -65,7 +66,6 @@ contract RiskManagerInvariantHandler is Test {
             depositId: 0,
             amount: amount,
             paymentMethod: chargebackable ? PAYPAL : ZELLE,
-            postIntentHook: address(0),
             createdAt: uint64(block.timestamp)
         });
 
@@ -91,16 +91,19 @@ contract RiskManagerInvariantHandler is Test {
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
         if (position.status != IRiskManager.PositionStatus.PENDING) return;
         uint256 releasedAmount = bound(uint256(rawReleasedAmount), 1, position.intentAmount);
-        manager.onIntentFulfilled(intentHash, releasedAmount);
+        manager.settleIntent(IIntentRiskHook.RiskSettlementContext({
+            intentHash: intentHash,
+            token: address(escrow.token()),
+            recipient: stakeOwner,
+            grossAmount: releasedAmount,
+            executableAmount: releasedAmount,
+            isManualRelease: false
+        }));
         delete intents[intentHash];
     }
 
     function getRiskIntent(bytes32 _intentHash) external view returns (IOrchestratorV3.RiskIntentData memory) {
         return intents[_intentHash];
-    }
-
-    function getIntentSettlement(bytes32) external pure returns (uint256, uint64) {
-        return (0, 0);
     }
 
     function getIntentCancellation(bytes32) external pure returns (uint64) {

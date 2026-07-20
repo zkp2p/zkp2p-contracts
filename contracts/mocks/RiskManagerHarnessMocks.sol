@@ -38,7 +38,6 @@ contract RiskManagerStateHarness is RiskManager {
         bytes32 _intentHash,
         RiskMode _mode,
         PositionStatus _status,
-        address _deferredPayoutHook,
         bytes32 _paymentMethod,
         uint16 _chargebackReserveBps,
         uint64 _coverageDeadline
@@ -46,7 +45,6 @@ contract RiskManagerStateHarness is RiskManager {
         RiskPosition storage position = riskPositions[_intentHash];
         position.mode = _mode;
         position.status = _status;
-        position.deferredPayoutHook = _deferredPayoutHook;
         position.paymentMethod = _paymentMethod;
         position.chargebackReserveBps = _chargebackReserveBps;
         position.coverageDeadline = _coverageDeadline;
@@ -56,16 +54,22 @@ contract RiskManagerStateHarness is RiskManager {
         riskPositions[_intentHash] = _position;
     }
 
-    function exposedReleaseManualPosition(
+    function exposedSettlePosition(
         bytes32 _intentHash,
-        uint256 _releasedAmount,
-        uint64 _settledAt
+        IERC20 _token,
+        uint256 _grossAmount,
+        uint256 _executableAmount,
+        uint64 _settledAt,
+        bool _isManualRelease
     ) external {
-        _releaseManualPosition(_intentHash, _releasedAmount, _settledAt);
-    }
-
-    function exposedSynchronizeSettlement(bytes32 _intentHash) external {
-        _synchronizeSettlement(_intentHash);
+        _settlePosition(
+            _intentHash,
+            _token,
+            _grossAmount,
+            _executableAmount,
+            _settledAt,
+            _isManualRelease
+        );
     }
 
     /** @notice Calls a target while this manager's inherited reentrancy guard is entered. */
@@ -90,28 +94,18 @@ contract NullifierRegistryV2StateHarness is NullifierRegistryV2 {
 /**
  * @title RiskManagerOrchestratorHarness
  * @notice Minimal lifecycle source used to exercise RiskManager's isolated recovery and error paths.
- * @dev This mock deliberately exposes setters for durable cancellation and settlement records. Production
+ * @dev This mock deliberately exposes a setter for durable cancellation records. Production
  *      integration behavior remains covered against OrchestratorV3 in `riskManager.spec.ts`.
  */
 contract RiskManagerOrchestratorHarness {
     mapping(bytes32 => IOrchestratorV3.RiskIntentData) internal riskIntents;
     mapping(bytes32 => uint64) internal cancellationTimes;
-    mapping(bytes32 => IOrchestratorV3.IntentSettlement) internal settlements;
     function setRiskIntent(bytes32 _intentHash, IOrchestratorV3.RiskIntentData calldata _intent) external {
         riskIntents[_intentHash] = _intent;
     }
 
     function setIntentCancellation(bytes32 _intentHash, uint64 _cancelledAt) external {
         cancellationTimes[_intentHash] = _cancelledAt;
-    }
-
-    function setIntentSettlement(
-        bytes32 _intentHash,
-        uint256 _releasedAmount,
-        uint64 _settledAt,
-        bool _isManualRelease
-    ) external {
-        settlements[_intentHash] = IOrchestratorV3.IntentSettlement(_releasedAmount, _settledAt, _isManualRelease);
     }
 
     function getRiskIntent(bytes32 _intentHash) external view returns (IOrchestratorV3.RiskIntentData memory) {
@@ -122,34 +116,23 @@ contract RiskManagerOrchestratorHarness {
         return cancellationTimes[_intentHash];
     }
 
-    function getIntentSettlement(bytes32 _intentHash) external view returns (uint256, uint64, bool) {
-        IOrchestratorV3.IntentSettlement memory settlement = settlements[_intentHash];
-        return (settlement.releasedAmount, settlement.settledAt, settlement.isManualRelease);
-    }
-
-    function createPosition(IIntentRiskHook _hook, bytes32 _intentHash) external returns (bool) {
-        return _hook.onIntentCreated(_intentHash);
+    function createPosition(IIntentRiskHook _hook, bytes32 _intentHash) external {
+        _hook.onIntentCreated(_intentHash);
     }
 
     function cancelPosition(IIntentRiskHook _hook, bytes32 _intentHash) external {
         _hook.onIntentCancelled(_intentHash);
     }
 
-    function fulfillPosition(IIntentRiskHook _hook, bytes32 _intentHash, uint256 _releasedAmount) external {
-        _hook.onIntentFulfilled(_intentHash, _releasedAmount);
-    }
-
-    function releasePosition(IIntentRiskHook _hook, bytes32 _intentHash, uint256 _releasedAmount) external {
-        _hook.onIntentReleased(_intentHash, _releasedAmount);
-    }
-
-    function registerDeferredPayout(
-        IRiskManager _manager,
-        bytes32 _intentHash,
-        address _beneficiary,
-        uint256 _amount
+    function settlePosition(
+        IIntentRiskHook _hook,
+        IIntentRiskHook.RiskSettlementContext calldata _context
     ) external {
-        _manager.registerDeferredPayout(_intentHash, _beneficiary, _amount);
+        IERC20 token = IERC20(_context.token);
+        token.approve(address(_hook), 0);
+        token.approve(address(_hook), _context.executableAmount);
+        _hook.settleIntent(_context);
+        token.approve(address(_hook), 0);
     }
 }
 
