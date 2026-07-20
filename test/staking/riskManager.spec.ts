@@ -166,6 +166,8 @@ describe("RiskManager and OrchestratorV3", () => {
       orchestrator,
       vault,
       manager,
+      paymentVerifierRegistry,
+      nullifierRegistry,
       riskSettlementExecutor,
       orchestratorRegistry,
     };
@@ -228,6 +230,21 @@ describe("RiskManager and OrchestratorV3", () => {
       verificationData: "0x",
       postIntentHookData: "0x",
     });
+  }
+
+  async function configureManagerFee(
+    maker: any,
+    feeRecipient: string,
+    escrow: Contract,
+    fee = precise("0.01"),
+  ) {
+    const rateManager = await (await ethers.getContractFactory("RateManagerMock")).deploy();
+    const rateManagerId = ethers.utils.id("risk-settlement-manager");
+    await rateManager.setManager(rateManagerId, true);
+    await rateManager.setFee(rateManagerId, feeRecipient, fee);
+    await rateManager.setRate(rateManagerId, escrow.address, 0, PAYPAL, USD, precise(1));
+    await escrow.connect(maker).setRateManager(0, rateManager.address, rateManagerId);
+    return rateManager;
   }
 
   async function chargebackAttestation(
@@ -669,10 +686,12 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await token.allowance(orchestrator.address, manager.address)).to.eq(0);
     });
 
-    it("defers the exact post-fee amount, including floor-rounding boundaries", async () => {
-      const { owner, taker, other, escrow, orchestrator, token, vault, manager } = await loadFixture(deployFixture);
+    it("defers the exact post-fee amount across protocol, referral, and manager rounding", async () => {
+      const { owner, maker, taker, recipient, other, escrow, orchestrator, token, vault, manager } =
+        await loadFixture(deployFixture);
       await enableDeferred(manager);
       await orchestrator.setProtocolFee(precise("0.01"));
+      await configureManagerFee(maker, recipient.address, escrow);
       const grossAmount = usdc(1).add(1);
       const referralFee = precise("0.01");
       const tx = await orchestrator.connect(taker).signalIntent(signalParams(
@@ -686,18 +705,100 @@ describe("RiskManager and OrchestratorV3", () => {
       const intentHash = intentHashFrom(await tx.wait());
       const protocolBefore = await token.balanceOf(owner.address);
       const referrerBefore = await token.balanceOf(other.address);
+      const managerBefore = await token.balanceOf(recipient.address);
 
       await fulfillIntent(orchestrator, intentHash, grossAmount);
 
       const feeEach = grossAmount.mul(precise("0.01")).div(precise(1));
-      const executableAmount = grossAmount.sub(feeEach.mul(2));
+      const executableAmount = grossAmount.sub(feeEach.mul(3));
       const position = await manager.getRiskPosition(intentHash);
       expect(await token.balanceOf(owner.address)).to.eq(protocolBefore.add(feeEach));
       expect(await token.balanceOf(other.address)).to.eq(referrerBefore.add(feeEach));
+      expect(await token.balanceOf(recipient.address)).to.eq(managerBefore.add(feeEach));
       expect(position.grossReleasedAmount).to.eq(grossAmount);
       expect(position.executableAmount).to.eq(executableAmount);
       expect(position.coveredAmount).to.eq(executableAmount);
       expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(executableAmount);
+    });
+
+    it("converts exact net deferred custody into LP compensation without reusing it as stake", async () => {
+      const { owner, maker, taker, recipient, other, escrow, orchestrator, token, vault, manager } =
+        await loadFixture(deployFixture);
+      await enableDeferred(manager);
+      await orchestrator.setProtocolFee(precise("0.01"));
+      await configureManagerFee(maker, recipient.address, escrow);
+
+      const grossAmount = usdc(100);
+      const fee = precise("0.01");
+      const signalTx = await orchestrator.connect(taker).signalIntent(signalParams(
+        escrow,
+        taker.address,
+        grossAmount,
+        PAYPAL,
+        ZERO,
+        [{ recipient: other.address, fee }],
+      ));
+      const intentHash = intentHashFrom(await signalTx.wait());
+      const protocolBefore = await token.balanceOf(owner.address);
+      const referralBefore = await token.balanceOf(other.address);
+      const managerBefore = await token.balanceOf(recipient.address);
+      const beneficiaryStakeBefore = await vault.stakeBalance(taker.address);
+      const beneficiaryFreeStakeBefore = await vault.freeStake(taker.address);
+
+      await fulfillIntent(orchestrator, intentHash, grossAmount);
+
+      const feeAmount = usdc(1);
+      const executableAmount = usdc(97);
+      expect(await token.balanceOf(owner.address)).to.eq(protocolBefore.add(feeAmount));
+      expect(await token.balanceOf(other.address)).to.eq(referralBefore.add(feeAmount));
+      expect(await token.balanceOf(recipient.address)).to.eq(managerBefore.add(feeAmount));
+      expect((await vault.getDeferredPayout(intentHash)).amount).to.eq(executableAmount);
+      expect(await vault.stakeBalance(taker.address)).to.eq(beneficiaryStakeBefore);
+      expect(await vault.freeStake(taker.address)).to.eq(beneficiaryFreeStakeBefore);
+      expect(await vault.reservedStake(taker.address)).to.eq(0);
+      expect(await token.balanceOf(vault.address)).to.eq(await vault.totalLiabilities());
+
+      await manager.submitChargeback(await chargebackAttestation(manager, intentHash, grossAmount));
+
+      const payout = await vault.getDeferredPayout(intentHash);
+      expect(payout.beneficiary).to.eq(ZERO);
+      expect(payout.amount).to.eq(0);
+      expect(await vault.claimableCompensation(maker.address)).to.eq(executableAmount);
+      await expect(vault.connect(taker).withdrawDeferredPayout(intentHash, taker.address))
+        .to.be.revertedWithCustomError(vault, "DeferredPayoutNotFound");
+      expect(await token.balanceOf(owner.address)).to.eq(protocolBefore.add(feeAmount));
+      expect(await token.balanceOf(other.address)).to.eq(referralBefore.add(feeAmount));
+      expect(await token.balanceOf(recipient.address)).to.eq(managerBefore.add(feeAmount));
+      expect(await token.balanceOf(vault.address)).to.eq(await vault.totalLiabilities());
+
+      const makerBefore = await token.balanceOf(maker.address);
+      await vault.connect(maker).withdrawCompensation(maker.address);
+      expect(await token.balanceOf(maker.address)).to.eq(makerBefore.add(executableAmount));
+      expect(await vault.claimableCompensation(maker.address)).to.eq(0);
+      expect(await token.balanceOf(vault.address)).to.eq(await vault.totalLiabilities());
+      expect(await vault.stakeBalance(taker.address)).to.eq(beneficiaryStakeBefore);
+      expect(await vault.freeStake(taker.address)).to.eq(beneficiaryFreeStakeBefore);
+    });
+
+    it("releases matured deferred custody for beneficiary withdrawal without creating stake", async () => {
+      const { taker, escrow, orchestrator, token, vault, manager } = await loadFixture(deployFixture);
+      await enableDeferred(manager);
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(100), PAYPAL);
+      const stakeBefore = await vault.stakeBalance(taker.address);
+      const beneficiaryBefore = await token.balanceOf(taker.address);
+
+      await fulfillIntent(orchestrator, intentHash, usdc(100));
+      const deadline = (await manager.getRiskPosition(intentHash)).coverageDeadline.toNumber();
+      await time.increaseTo(deadline);
+      await manager.releaseMaturedPosition(intentHash);
+      await vault.connect(taker).withdrawDeferredPayout(intentHash, taker.address);
+
+      expect(await token.balanceOf(taker.address)).to.eq(beneficiaryBefore.add(usdc(100)));
+      expect((await vault.getDeferredPayout(intentHash)).beneficiary).to.eq(ZERO);
+      expect(await vault.stakeBalance(taker.address)).to.eq(stakeBefore);
+      expect(await vault.freeStake(taker.address)).to.eq(stakeBefore);
+      expect(await token.balanceOf(vault.address)).to.eq(await vault.totalLiabilities());
+      expect((await manager.getRiskPosition(intentHash)).status).to.eq(4);
     });
 
     it("applies deferred custody to manual release and skips the ordinary post hook", async () => {
@@ -764,6 +865,66 @@ describe("RiskManager and OrchestratorV3", () => {
       await hook.setRevertOnCallback(true);
       await expect(fulfillIntent(orchestrator, overPull, usdc(20)))
         .to.be.revertedWithCustomError(orchestrator, "RiskHookSettlementFailed");
+    });
+
+    it("atomically rolls back nullification, fees, escrow resolution, and allowance on callback failure", async () => {
+      const {
+        owner,
+        maker,
+        taker,
+        recipient,
+        other,
+        escrow,
+        orchestrator,
+        token,
+        paymentVerifierRegistry,
+        nullifierRegistry,
+      } = await loadFixture(deployFixture);
+      const hook = await (await ethers.getContractFactory("IntentRiskHookMock")).deploy();
+      await hook.setRevertOnCallback(true);
+      await orchestrator.connect(maker).setDepositRiskHook(escrow.address, 0, hook.address);
+      await orchestrator.setProtocolFee(precise("0.01"));
+      await configureManagerFee(maker, recipient.address, escrow);
+
+      const nullifyingVerifier = await (await ethers.getContractFactory("NullifyingPaymentVerifierMock"))
+        .deploy(nullifierRegistry.address, PAYPAL);
+      await nullifierRegistry.addWritePermission(nullifyingVerifier.address);
+      await paymentVerifierRegistry.removePaymentMethod(PAYPAL);
+      await paymentVerifierRegistry.addPaymentMethod(PAYPAL, nullifyingVerifier.address, [USD]);
+
+      const grossAmount = usdc(100);
+      const signalTx = await orchestrator.connect(taker).signalIntent(signalParams(
+        escrow,
+        taker.address,
+        grossAmount,
+        PAYPAL,
+        ZERO,
+        [{ recipient: other.address, fee: precise("0.01") }],
+      ));
+      const intentHash = intentHashFrom(await signalTx.wait());
+      const paymentId = ethers.utils.keccak256(ethers.utils.defaultAbiCoder.encode(["bytes32"], [intentHash]));
+      const nullifier = ethers.utils.keccak256(
+        ethers.utils.solidityPack(["bytes32", "bytes32"], [PAYPAL, paymentId]),
+      );
+      const depositBefore = await escrow.getDeposit(0);
+      const protocolBefore = await token.balanceOf(owner.address);
+      const referralBefore = await token.balanceOf(other.address);
+      const managerBefore = await token.balanceOf(recipient.address);
+
+      await expect(fulfillIntent(orchestrator, intentHash, grossAmount))
+        .to.be.revertedWithCustomError(orchestrator, "RiskHookSettlementFailed");
+
+      const depositAfter = await escrow.getDeposit(0);
+      expect(await nullifierRegistry.intentHashByNullifier(nullifier)).to.eq(ethers.constants.HashZero);
+      expect(await nullifierRegistry.nullifierByIntentHash(intentHash)).to.eq(ethers.constants.HashZero);
+      expect(depositAfter.remainingDeposits).to.eq(depositBefore.remainingDeposits);
+      expect(depositAfter.outstandingIntentAmount).to.eq(depositBefore.outstandingIntentAmount);
+      expect((await orchestrator.getIntent(intentHash)).owner).to.eq(taker.address);
+      expect(await token.balanceOf(owner.address)).to.eq(protocolBefore);
+      expect(await token.balanceOf(other.address)).to.eq(referralBefore);
+      expect(await token.balanceOf(recipient.address)).to.eq(managerBefore);
+      expect(await token.allowance(orchestrator.address, hook.address)).to.eq(0);
+      expect(await token.balanceOf(orchestrator.address)).to.eq(0);
     });
 
     it("rejects a settlement balance increase", async () => {
