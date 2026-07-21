@@ -36,6 +36,8 @@ jobs:
         run: |
           corepack enable
           corepack yarn install --immutable
+      - name: Prepare local environment
+        run: cp .env.default .env
       - name: Verify pinned tools
         run: |
           forge --version
@@ -119,6 +121,8 @@ jobs:
         run: |
           corepack enable
           corepack yarn install --immutable
+      - name: Prepare local environment
+        run: cp .env.default .env
       - name: Run complete Foundry coverage and enforce baseline gates
         run: corepack yarn coverage
       - name: Upload Foundry LCOV to Codecov with OIDC
