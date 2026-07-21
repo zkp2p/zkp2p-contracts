@@ -11,6 +11,7 @@ const oracleFile = "test-foundry/deterministic/oracles/OracleAdapterParity.t.sol
 const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifierParity.t.sol";
 const thresholdFile = "test-foundry/deterministic/libs/ThresholdSignatureParity.t.sol";
 const baseUnifiedFile = "test-foundry/deterministic/verifiers/BaseUnifiedVerifierParity.t.sol";
+const unifiedFile = "test-foundry/deterministic/verifiers/UnifiedPaymentVerifierParity.t.sol";
 const unifiedV3File = "test-foundry/deterministic/verifiers/UnifiedPaymentVerifierV3Parity.t.sol";
 
 function csv(value) {
@@ -250,13 +251,32 @@ function unifiedV3Destination(test) {
     return mapping ? target(mapping[1]) : "";
 }
 
+function unifiedDestination(test) {
+    if (test.sourceFile !== "test/unifiedVerifier/unifiedPaymentVerifier.spec.ts") return "";
+    const scenario = test.scenario;
+    const target = (testName) => `${unifiedFile}:UnifiedPaymentVerifierParityTest::${testName}`;
+    if (scenario.includes("verifies witness signature")) return target("test_VerifiesWitnessSignatureAndReturnsExactResult");
+    if (scenario.includes("emits PaymentVerified")) return target("test_EmitsCompletePaymentVerifiedEvent");
+    if (scenario.includes("nullify the payment")) return target("test_NullifiesCollisionResistantMethodAndPaymentIdentifier");
+    if (scenario.includes("snapshot validation failures")) return target("test_RejectsEveryMismatchedSnapshotFieldAndExcessiveTimestampBuffer");
+    if (scenario.includes("payment method is not registered")) return target("test_RejectsUnregisteredPaymentMethod");
+    if (scenario.includes("witness signature is not")) return target("test_RejectsSignatureFromNonWitness");
+    if (scenario.includes("attestation verifier returns false")) return target("test_RejectsFalseAttestationVerifierResult");
+    if (scenario.includes("release amount exceeds")) return target("test_CapsReleaseAmountToIntentAmount");
+    if (scenario.includes("payment has already been verified")) return target("test_RejectsReusedPaymentAcrossDifferentIntents");
+    if (scenario.includes("caller is not orchestrator")) return target("test_RejectsCallerOutsideOrchestratorRegistry");
+    if (scenario.includes("attestation data hash")) return target("test_RejectsAttestationDataHashMismatch");
+    if (scenario.includes("signature digest is tampered")) return target("test_RejectsTamperedSignatureDigest");
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -275,6 +295,9 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/unifiedVerifier/unifiedPaymentVerifierV3.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped unified verifier V3 behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/unifiedVerifier/unifiedPaymentVerifier.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped unified verifier behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
     let evidence = "";
     if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
@@ -282,6 +305,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(attestationFile)) evidence = "AttestationVerifierParity.t.sol: 24 passed, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(thresholdFile)) evidence = "ThresholdSignatureParity.t.sol: 16 passed, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(baseUnifiedFile)) evidence = "BaseUnifiedVerifierParity.t.sol: 8 passed, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(unifiedFile)) evidence = "UnifiedPaymentVerifierParity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(unifiedV3File)) evidence = "UnifiedPaymentVerifierV3Parity.t.sol: 11 passed individually and together, 0 failed, 0 skipped";
     return [
         test.id,
