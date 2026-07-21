@@ -117,12 +117,6 @@ interface IRiskManager is IIntentRiskHook {
         uint256 grossReleasedAmount;
         /// @notice Exact post-fee amount reserved for the taker after the hook sees the gross settlement plan.
         uint256 executableAmount;
-        /// @notice Exact gross amount compensable by chargeback for either backed mode.
-        uint256 coveredAmount;
-        /// @notice Gross proceeds converted into fully reserved taker stake for deferred settlement.
-        uint256 deferredStakeAmount;
-        /// @notice Contingent fee portion that vests only after clean maturity.
-        uint256 deferredFeeAmount;
         /// @notice Cumulative compensation already charged against this position.
         uint256 slashedAmount;
     }

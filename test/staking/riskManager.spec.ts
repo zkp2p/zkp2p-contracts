@@ -858,9 +858,6 @@ describe("RiskManager and OrchestratorV3", () => {
       const deferredStake = await vault.getDeferredStake(intentHash);
       expect(position.grossReleasedAmount).to.eq(usdc(100));
       expect(position.executableAmount).to.eq(usdc(100));
-      expect(position.coveredAmount).to.eq(usdc(100));
-      expect(position.deferredStakeAmount).to.eq(usdc(100));
-      expect(position.deferredFeeAmount).to.eq(0);
       expect(deferredStake.grossAmount).to.eq(usdc(100));
       expect(await vault.stakeBalance(taker.address)).to.eq(usdc(100));
       expect(await vault.reservedStake(taker.address)).to.eq(usdc(100));
@@ -914,9 +911,10 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await token.balanceOf(recipient.address)).to.eq(managerBefore);
       expect(position.grossReleasedAmount).to.eq(grossAmount);
       expect(position.executableAmount).to.eq(executableAmount);
-      expect(position.coveredAmount).to.eq(grossAmount);
-      expect(position.deferredStakeAmount).to.eq(grossAmount);
-      expect(position.deferredFeeAmount).to.eq(feeEach.mul(3));
+      expect(Object.prototype.hasOwnProperty.call(position, "coveredAmount")).to.eq(false);
+      expect(Object.prototype.hasOwnProperty.call(position, "deferredStakeAmount")).to.eq(false);
+      expect(Object.prototype.hasOwnProperty.call(position, "deferredFeeAmount")).to.eq(false);
+      expect(position.grossReleasedAmount.sub(position.executableAmount)).to.eq(feeEach.mul(3));
       expect((await vault.getDeferredStake(intentHash)).grossAmount).to.eq(grossAmount);
       const allocations = await vault.getDeferredFeeAllocations(intentHash);
       expect(allocations.map((allocation: any) => allocation.amount)).to.deep.eq([feeEach, feeEach, feeEach]);
@@ -1048,7 +1046,7 @@ describe("RiskManager and OrchestratorV3", () => {
       await orchestrator.connect(maker).releaseFundsToPayer(intentHash);
       const position = await manager.getRiskPosition(intentHash);
       expect(position.isManualRelease).to.eq(true);
-      expect(position.deferredFeeAmount).to.eq(usdc(1));
+      expect(position.grossReleasedAmount.sub(position.executableAmount)).to.eq(usdc(1));
 
       await manager.submitChargeback(
         await chargebackAttestation(manager, intentHash, usdc(100), undefined, {}, false),

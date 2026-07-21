@@ -565,7 +565,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             revert AttestationVerificationFailed();
         }
 
-        uint256 compensatedAmount = position.coveredAmount;
+        uint256 compensatedAmount = position.grossReleasedAmount;
         if (position.reservedAmount != compensatedAmount) {
             revert IncompleteChargebackCoverage(position.reservedAmount, compensatedAmount);
         }
@@ -878,7 +878,6 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             );
             releasedReservation = pendingReservation - chargebackCoverage;
             position.reservedAmount = chargebackCoverage;
-            position.coveredAmount = chargebackCoverage;
             stakeVault.updateReservation(_intentHash, chargebackCoverage, coverageDeadline);
         } else if (position.mode == RiskMode.DEFERRED_PAYOUT) {
             // Admission already enforces this before fiat payment; retain the settlement check as
@@ -907,9 +906,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             }
 
             position.reservedAmount = chargebackCoverage;
-            position.coveredAmount = chargebackCoverage;
-            position.deferredStakeAmount = _grossAmount;
-            position.deferredFeeAmount = _grossAmount - _executableAmount;
+            uint256 deferredFeeAmount = _grossAmount - _executableAmount;
             stakeVault.recordDeferredStake(
                 _intentHash,
                 position.taker,
@@ -922,7 +919,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
                 position.taker,
                 _grossAmount,
                 _executableAmount,
-                position.deferredFeeAmount,
+                deferredFeeAmount,
                 chargebackCoverage,
                 coverageDeadline
             );

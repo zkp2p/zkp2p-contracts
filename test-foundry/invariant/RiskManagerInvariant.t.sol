@@ -422,7 +422,7 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
                 position.mode == IRiskManager.RiskMode.DEFERRED_PAYOUT
                     && position.status == IRiskManager.PositionStatus.RELEASED
             ) {
-                vestedFees += position.deferredFeeAmount;
+                vestedFees += position.grossReleasedAmount - position.executableAmount;
             }
         }
 
@@ -447,9 +447,9 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
         for (uint256 index = 0; index < handler.hashCount(); index++) {
             IRiskManager.RiskPosition memory position = manager.getRiskPosition(handler.hashAt(index));
             if (position.mode != IRiskManager.RiskMode.DEFERRED_PAYOUT) continue;
-            handlerDeferredDeposits += position.deferredStakeAmount;
+            handlerDeferredDeposits += position.grossReleasedAmount;
             if (position.status == IRiskManager.PositionStatus.RELEASED) {
-                vestedDeferredFees += position.deferredFeeAmount;
+                vestedDeferredFees += position.grossReleasedAmount - position.executableAmount;
             }
         }
 

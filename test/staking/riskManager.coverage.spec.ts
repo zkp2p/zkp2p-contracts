@@ -315,7 +315,6 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       const position = await f.manager.getRiskPosition(intentHash);
       expect(position.grossReleasedAmount).to.eq(usdc(100));
       expect(position.executableAmount).to.eq(usdc(98));
-      expect(position.coveredAmount).to.eq(usdc(100));
       expect(position.reservedAmount).to.eq(usdc(100));
       expect(await f.token.balanceOf(f.orchestrator.address)).to.eq(before);
     });
@@ -337,9 +336,6 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       const deferredStake = await f.vault.deferredStakes(intentHash);
       expect(position.grossReleasedAmount).to.eq(usdc(100));
       expect(position.executableAmount).to.eq(usdc(98));
-      expect(position.coveredAmount).to.eq(usdc(100));
-      expect(position.deferredStakeAmount).to.eq(usdc(100));
-      expect(position.deferredFeeAmount).to.eq(usdc(2));
       expect(position.isManualRelease).to.eq(true);
       expect(deferredStake.grossAmount).to.eq(usdc(100));
       expect(deferredStake.feeAmount).to.eq(usdc(2));

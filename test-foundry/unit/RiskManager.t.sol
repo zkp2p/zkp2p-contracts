@@ -111,7 +111,6 @@ contract RiskManagerTest is Test {
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
         assertEq(position.grossReleasedAmount, 100e6);
         assertEq(position.executableAmount, 98e6);
-        assertEq(position.coveredAmount, 100e6);
         assertEq(position.reservedAmount, 100e6);
         assertEq(token.balanceOf(address(orchestrator)), balanceBefore);
         assertEq(token.allowance(address(orchestrator), address(manager)), 0);
@@ -129,9 +128,6 @@ contract RiskManagerTest is Test {
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
         assertEq(position.grossReleasedAmount, 100e6);
         assertEq(position.executableAmount, 98e6);
-        assertEq(position.coveredAmount, 100e6);
-        assertEq(position.deferredStakeAmount, 100e6);
-        assertEq(position.deferredFeeAmount, 2e6);
         assertEq(position.reservedAmount, 100e6);
         assertEq(token.balanceOf(address(vault)) - vaultBalanceBefore, 100e6);
         (, uint256 grossAmount, uint256 feeAmount,,,) = vault.deferredStakes(intentHash);
@@ -149,9 +145,8 @@ contract RiskManagerTest is Test {
         orchestrator.settlePosition(manager, _context(intentHash, 100e6, 99e6, true));
 
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
-        assertEq(position.coveredAmount, 100e6);
-        assertEq(position.deferredStakeAmount, 100e6);
-        assertEq(position.deferredFeeAmount, 1e6);
+        assertEq(position.grossReleasedAmount, 100e6);
+        assertEq(position.grossReleasedAmount - position.executableAmount, 1e6);
     }
 
     function test_NonChargebackSettlementChargesAndReleasesExtensionReservation() public {
@@ -353,9 +348,8 @@ contract RiskManagerTest is Test {
         );
 
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
-        assertEq(position.coveredAmount, grossAmount);
-        assertEq(position.deferredStakeAmount, grossAmount);
-        assertEq(position.deferredFeeAmount, feeAmount);
+        assertEq(position.grossReleasedAmount, grossAmount);
+        assertEq(position.grossReleasedAmount - position.executableAmount, feeAmount);
         assertEq(position.reservedAmount, grossAmount);
     }
 
