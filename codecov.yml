@@ -4,8 +4,16 @@ coverage:
   status:
     project:
       default:
-        target: 99%
+        target: 99.39%
         threshold: 0%
+        flags:
+          - foundry
+    patch:
+      default:
+        target: 100%
+        threshold: 0%
+        flags:
+          - foundry
 ignore:
   - contracts/mocks/**
   - contracts/**/mocks/**

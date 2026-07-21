@@ -1,50 +1,131 @@
-name: Hardhat Full Suite
+name: Foundry CI
 
 on:
   push:
-    branches:
-      - main
-      - codex/foundry-main
   pull_request:
     branches:
       - main
-      - codex/foundry-main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+env:
+  FOUNDRY_VERSION: v1.7.1
+  NODE_VERSION: 20.20.2
+
 jobs:
-  run-tests:
+  test:
+    name: Complete Foundry suite
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           submodules: recursive
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-      - name: Specify node version...
-        uses: actions/setup-node@v3
+      - name: Install pinned Foundry
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a
         with:
-          node-version: '18.15.0'
-      - name: Enable Corepack
-        run: corepack enable
-      - name: Install Dependencies
-        run: yarn install
-      - name: Set up env variables...
+          version: ${{ env.FOUNDRY_VERSION }}
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+      - name: Install dependencies reproducibly
+        run: |
+          corepack enable
+          corepack yarn install --immutable
+      - name: Verify pinned tools
+        run: |
+          forge --version
+          node --version
+          corepack yarn --version
+      - name: Restore incremental Foundry build cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            out
+            cache_forge
+          key: ${{ runner.os }}-foundry-${{ env.FOUNDRY_VERSION }}-${{ hashFiles('foundry.toml', 'contracts/**/*.sol', 'test-foundry/**/*.sol', 'lib/forge-std/src/**/*.sol') }}
+          restore-keys: |
+            ${{ runner.os }}-foundry-${{ env.FOUNDRY_VERSION }}-
+      - name: Run every deterministic, fuzz, invariant, integration, and deployment test
+        run: corepack yarn test
+
+  build-and-deploy:
+    name: Build, package, and localhost deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: recursive
+      - name: Install pinned Foundry
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+      - name: Install dependencies reproducibly
+        run: |
+          corepack enable
+          corepack yarn install --immutable
+      - name: Prepare local environment
         run: cp .env.default .env
-      - name: Set-up chain...
-        run: yarn chain &
-        env:
-          PORT: 8545
-      - name: Run tests
-        run: yarn test
-      - name: Build contracts package
-        run: yarn pkg:build
-      - name: Test contracts package
-        run: yarn pkg:test
-      - name: Deploy to localhost
-        run: yarn deploy:localhost
-      - name: Test deploy
-        run: >-
-          yarn hardhat test
-          $(find test/deploy -maxdepth 1 -type f -name '*.ts' -print | sort)
-          --network localhost
+      - name: Compile deployment contracts and package
+        run: |
+          corepack yarn compile
+          corepack yarn pkg:build
+          corepack yarn pkg:test
+      - name: Start local chain
+        run: |
+          corepack yarn chain > /tmp/zkp2p-hardhat-node.log 2>&1 &
+          for attempt in {1..60}; do
+            if node -e "const socket=require('net').connect(8545,'127.0.0.1');socket.on('connect',()=>process.exit(0));socket.on('error',()=>process.exit(1))"; then
+              exit 0
+            fi
+            sleep 1
+          done
+          tail -200 /tmp/zkp2p-hardhat-node.log
+          exit 1
+      - name: Deploy production scripts to localhost
+        run: corepack yarn deploy:localhost
+
+  coverage:
+    name: Foundry coverage and Codecov
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: recursive
+      - name: Install pinned Foundry
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+      - name: Install dependencies reproducibly
+        run: |
+          corepack enable
+          corepack yarn install --immutable
+      - name: Run complete Foundry coverage and enforce baseline gates
+        run: corepack yarn coverage
+      - name: Upload Foundry LCOV to Codecov with OIDC
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac
+        with:
+          use_oidc: true
+          files: ./coverage/lcov.info
+          flags: foundry
+          disable_search: true
+          fail_ci_if_error: true
