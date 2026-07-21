@@ -8,6 +8,7 @@ const inventory = require(path.join(repositoryRoot, "foundry-migration/baseline/
 const outputPath = path.join(repositoryRoot, "foundry-migration/hardhat-to-foundry-manifest.csv");
 const registryFile = "test-foundry/deterministic/registries/RegistryParity.t.sol";
 const escrowV2PythFile = "test-foundry/deterministic/escrow/EscrowV2PythOracleParity.t.sol";
+const escrowV2CurrencyRateFile = "test-foundry/deterministic/escrow/EscrowV2CurrencyRateParity.t.sol";
 const oracleFile = "test-foundry/deterministic/oracles/OracleAdapterParity.t.sol";
 const orchestratorV2File = "test-foundry/deterministic/orchestrator/OrchestratorV2RateManagerParity.t.sol";
 const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifierParity.t.sol";
@@ -302,13 +303,32 @@ function escrowV2PythDestination(test) {
     return "";
 }
 
+function escrowV2CurrencyRateDestination(test) {
+    if (test.sourceFile !== "test/escrowV2/escrowV2.getDepositCurrencyMinRate.spec.ts") return "";
+    const scenario = test.scenario;
+    const target = (testName) => `${escrowV2CurrencyRateFile}:EscrowV2CurrencyRateParityTest::${testName}`;
+    if (scenario.includes("returns fixed rate when only fixed")) return target("test_ReturnsFixedRateWhenOnlyFixedSourceConfigured");
+    if (scenario.includes("returns spread rate when fixed floor is zero")) return target("test_ReturnsSpreadRateWhenFixedFloorIsZero");
+    if (scenario.includes("returns max(fixed, spread)")) return target("test_ReturnsMaximumOfFixedAndSpreadRates");
+    if (scenario.includes("below-market oracle floor")) return target("test_ReturnsBelowMarketFloorForNegativeSpread");
+    if (scenario.includes("oracle configured but stale")) return target("test_StaleConfiguredOracleHaltsRateAtZero");
+    if (scenario.includes("fixed floor when no oracle")) return target("test_ReturnsUpdatedFixedFloorWithoutOracle");
+    if (scenario.includes("returns zero when currency is deactivated")) return target("test_DeactivatedCurrencyReturnsZero");
+    if (scenario.includes("clears fixed and oracle")) return target("test_DeactivateClearsFixedAndOracleConfigAndEmitsBothEvents");
+    if (scenario.includes("re-enable by setting fixed")) return target("test_DeactivatedCurrencyCanBeReenabledByFixedFloor");
+    if (scenario.includes("re-enable by setting oracle")) return target("test_DeactivatedCurrencyCanBeReenabledByOracleConfig");
+    if (scenario.includes("fixed floor is set to zero but oracle")) return target("test_ZeroFixedFloorKeepsCurrencyActiveWhileOracleRemains");
+    if (scenario.includes("oracle config is removed but fixed")) return target("test_RemovingOracleKeepsCurrencyActiveWhileFixedFloorRemains");
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || orchestratorV2Destination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || orchestratorV2Destination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -339,10 +359,14 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/escrowV2/escrowV2.pythOracle.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped EscrowV2 Pyth behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/escrowV2/escrowV2.getDepositCurrencyMinRate.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped EscrowV2 currency-rate behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
     let evidence = "";
     if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(escrowV2PythFile)) evidence = "EscrowV2PythOracleParity.t.sol: 5 passed individually and together, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(escrowV2CurrencyRateFile)) evidence = "EscrowV2CurrencyRateParity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(oracleFile)) evidence = "OracleAdapterParity.t.sol: 25 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(orchestratorV2File)) evidence = "OrchestratorV2RateManagerParity.t.sol: 4 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(attestationFile)) evidence = "AttestationVerifierParity.t.sol: 24 passed, 0 failed, 0 skipped";
