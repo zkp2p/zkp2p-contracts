@@ -654,6 +654,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     ) external override onlyController {
         if (reservationsPaused) revert StakeActionPaused();
         if (_staker == address(0)) revert ZeroAddress();
+        if (exitRequests[_staker].exiting) revert AlreadyExiting(_staker);
         if (deferredStakes[_intentHash].staker != address(0)) revert DeferredStakeAlreadyExists(_intentHash);
 
         deferredStakes[_intentHash] = DeferredStake({

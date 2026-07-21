@@ -233,7 +233,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
                 revert InsufficientCollateral(stakeOwner, available, chargebackReserve);
             }
 
-            if (initialReservation != 0 && stakeVault.isExiting(stakeOwner)) {
+            if (stakeVault.isExiting(stakeOwner)) {
                 revert StakeOwnerExiting(intent.owner, stakeOwner);
             }
         }

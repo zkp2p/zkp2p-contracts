@@ -729,6 +729,16 @@ describe("StakeVault", () => {
       ).to.be.revertedWithCustomError(vault, "StakeActionPaused");
     });
 
+    it("rejects new deferred authorizations for an exiting staker", async () => {
+      const { controller, staker, vault } = await deployFixture();
+      await vault.connect(staker).depositStake(usdc(1));
+      await vault.connect(staker).requestExit();
+
+      await expect(
+        vault.connect(controller).authorizeDeferredStake(ethers.utils.id("deferred"), staker.address, 0),
+      ).to.be.revertedWithCustomError(vault, "AlreadyExiting").withArgs(staker.address);
+    });
+
     it("funds an already-authorized deferred stake while new reservations are paused", async () => {
       const { owner, controller, staker, token, vault } = await deployFixture();
       const intentHash = ethers.utils.id("deferred");

@@ -360,6 +360,19 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       expect(deferredStake.staker).to.eq(f.other.address);
     });
 
+    it("rejects deferred authorization for an exiting payout recipient", async () => {
+      const f = await loadFixture(deployFixture);
+      await f.manager.setPlatformRiskConfig(PAYPAL, chargebackConfig(true));
+      await f.vault.setTakerState(f.taker.address, f.taker.address, usdc(1), usdc(1), false);
+      await f.vault.setTakerState(f.other.address, f.other.address, 0, 0, true);
+      const intentHash = ethers.utils.id("deferred-exiting-recipient");
+      await setRiskIntent(f, intentHash, { recipient: f.other.address });
+
+      await expect(f.orchestrator.createPosition(f.manager.address, intentHash))
+        .to.be.revertedWithCustomError(f.manager, "StakeOwnerExiting")
+        .withArgs(f.taker.address, f.other.address);
+    });
+
     it("releases non-chargebackable reservations and rejects repeated settlement", async () => {
       const f = await loadFixture(deployFixture);
       const intentHash = ethers.utils.id("ordinary-settlement");
