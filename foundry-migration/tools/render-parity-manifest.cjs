@@ -34,6 +34,9 @@ const escrowDelegateFile = "test-foundry/deterministic/escrow/EscrowDelegatePari
 const escrowAcceptingRetainFile = "test-foundry/deterministic/escrow/EscrowAcceptingRetainParity.t.sol";
 const escrowPruningFile = "test-foundry/deterministic/escrow/EscrowPruningParity.t.sol";
 const escrowLockFundsFile = "test-foundry/deterministic/escrow/EscrowLockFundsParity.t.sol";
+const escrowUnlockFundsFile = "test-foundry/deterministic/escrow/EscrowUnlockFundsParity.t.sol";
+const escrowUnlockTransferFile = "test-foundry/deterministic/escrow/EscrowUnlockTransferParity.t.sol";
+const escrowIntentExpiryFile = "test-foundry/deterministic/escrow/EscrowIntentExpiryParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -1067,8 +1070,48 @@ const escrowLegacyDestinations = [
         "test_LockFundsAllowsNewIntentAfterCancellation",
         "test_LockFundsAllowsNewIntentAfterAutomaticExpiryPruning",
     ].map((testName) => [escrowLockFundsFile, "EscrowLockFundsParityTest", testName]),
+    ...[
+        "test_UnlockFundsRestoresDepositAccounting",
+        "test_UnlockFundsDeletesIntent",
+        "test_UnlockFundsRemovesIntentHash",
+        "test_UnlockFundsEmitsUnlockedAmount",
+        "test_UnlockFundsRejectsCallerThatIsNoLongerOrchestrator",
+        "test_UnlockFundsRejectsMissingDeposit",
+        "test_UnlockFundsRejectsMissingIntent",
+    ].map((testName) => [escrowUnlockFundsFile, "EscrowUnlockFundsParityTest", testName]),
+    ...[
+        "test_UnlockAndTransferTransfersFullAmount",
+        "test_UnlockAndTransferUpdatesAccountingForFullTransfer",
+        "test_UnlockAndTransferDeletesIntent",
+        "test_UnlockAndTransferEmitsSettlementAmounts",
+        "test_UnlockAndTransferRemovesIntentHash",
+        "test_UnlockAndTransferTransfersPartialAmount",
+        "test_UnlockAndTransferReturnsUnusedAmountToAvailableLiquidity",
+        "test_UnlockAndTransferRejectsZeroTransfer",
+        "test_UnlockAndTransferClosesEmptyDeposit",
+        "test_UnlockAndTransferEmitsDepositClosed",
+        "test_UnlockAndTransferRetainOnEmptyPreservesDepositConfiguration",
+        "test_UnlockAndTransferRetainOnEmptyKeepsAcceptingIntentsDisabled",
+        "test_UnlockAndTransferRetainOnEmptyDoesNotEmitDepositClosed",
+        "test_UnlockAndTransferSweepsDustAndClosesDeposit",
+        "test_UnlockAndTransferRejectsAmountAboveIntent",
+        "test_UnlockAndTransferRejectsCallerThatIsNoLongerOrchestrator",
+        "test_UnlockAndTransferRejectsMissingDeposit",
+        "test_UnlockAndTransferRejectsMissingIntent",
+    ].map((testName) => [escrowUnlockTransferFile, "EscrowUnlockTransferParityTest", testName]),
+    ...[
+        "test_ExtendIntentExpiryAddsRequestedTime",
+        "test_ExtendIntentExpiryEmitsNewExpiry",
+        "test_ExtendIntentExpiryRejectsNonGuardian",
+        "test_ExtendIntentExpiryRejectsMissingIntent",
+        "test_ExtendIntentExpiryRejectsDepositWithoutGuardian",
+        "test_ExtendIntentExpiryRejectsExtensionBeyondMaximumTotalPeriod",
+        "test_ExtendIntentExpiryAllowsMultipleExtensionsWithinAggregateCap",
+        "test_ExtendIntentExpiryRejectsMissingDeposit",
+        "test_ExtendIntentExpiryRejectsZeroAdditionalTime",
+    ].map((testName) => [escrowIntentExpiryFile, "EscrowIntentExpiryParityTest", testName]),
 ];
-if (escrowLegacySourceTests.length !== 276 || escrowLegacyDestinations.length !== 205) {
+if (escrowLegacySourceTests.length !== 276 || escrowLegacyDestinations.length !== 239) {
     throw new Error(
         `Escrow legacy mapping count mismatch: ${escrowLegacySourceTests.length} source / ${escrowLegacyDestinations.length} translated destinations`
     );
@@ -1233,7 +1276,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(escrowV2OracleConfigFile)) evidence = "EscrowV2OracleRateConfigParity.t.sol: 29 passed individually and together, 0 failed, 0 skipped";
     if ([escrowV2LegacyManagementFile, escrowV2LegacyLifecycleFile, escrowV2LegacyConfigurationFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 management + lifecycle + configuration parity: 70 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 70/70";
     if ([escrowV2BranchAuthorizationFile, escrowV2BranchValidationFile, escrowV2BranchGovernanceLifecycleFile, escrowV2BranchStatePauseFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 branch parity: 108 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 108/108";
-    if ([escrowCreateDepositFile, escrowFundingFile, escrowWithdrawFile, escrowRateRangeFile, escrowPaymentMethodFile, escrowCurrencyFile, escrowDelegateFile, escrowAcceptingRetainFile, escrowPruningFile, escrowLockFundsFile].some((file) => foundryDestination.startsWith(file))) evidence = "Escrow constructor/create/funding/withdraw/configuration/delegate/state/pruning/locking parity slice: 205 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat suites: 204 passed plus 1 baseline-pending case resolved in Foundry";
+    if ([escrowCreateDepositFile, escrowFundingFile, escrowWithdrawFile, escrowRateRangeFile, escrowPaymentMethodFile, escrowCurrencyFile, escrowDelegateFile, escrowAcceptingRetainFile, escrowPruningFile, escrowLockFundsFile, escrowUnlockFundsFile, escrowUnlockTransferFile, escrowIntentExpiryFile].some((file) => foundryDestination.startsWith(file))) evidence = "Escrow constructor/create/funding/withdraw/configuration/delegate/state/pruning/lock/unlock/settlement/expiry parity slice: 239 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat suites: 238 passed plus 1 baseline-pending case resolved in Foundry";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
