@@ -37,7 +37,8 @@ This ledger is the durable source of truth for the Hardhat-to-Foundry migration 
 
 ## Phase 0 inventory
 
-- Tracked TypeScript files under `test/`: 61 (includes tests and helpers; exact classification pending).
+- Runtime-expanded Hardhat inventory: 61 spec files, 977 suites, 1,514 named behaviors, 693 hooks, 531 imported dependency records, and 302 named local callables. Every source file is SHA-256 pinned in the inventory.
+- Canonical group: 36 files / 1,305 behaviors (1,300 executable, 5 pending). Patch-coverage group: 1 file / 33 executable behaviors. Deployment group: 24 files / 176 executable behaviors.
 - Foundry test implementations under `test-foundry/`: 16.
 - Production and test-support Solidity files under `contracts/`: 103 (exact coverage denominator will follow `.solcover.js`).
 - Test entry points discovered in `package.json`: `test`, `test:integration`, `test:deploy`, `coverage`, `test:forge`, `test:forge:fuzz`, `test:forge:invariant`, `test:forge:fork`, `test:forge:coverage`, and package tests.
@@ -103,7 +104,7 @@ Machine-readable evidence is committed in [hardhat-coverage-summary.json](./base
 
 ## Parity status
 
-The machine-auditable manifest is [hardhat-to-foundry-manifest.csv](./hardhat-to-foundry-manifest.csv). No row is verified until its Foundry destination passes alone and in the complete repeated suite.
+The machine-auditable [migration manifest](./hardhat-to-foundry-manifest.csv) contains all 1,514 runtime-expanded named behaviors with unique stable hash IDs, source file, suite path, scenario, expected-behavior category, inherited hook/helper dependencies, one-to-one translation shape, and baseline status. The underlying [Hardhat inventory](./baseline/hardhat-inventory.json) preserves suites, hooks, imports, named local callables, source hashes, group totals, and the five pending cases. Runtime enumeration expands parameterized test construction rather than relying on a text-only `it()` search. No row is verified until its Foundry destination passes alone and in the complete repeated suite.
 
 ## Fuzz and invariant catalog
 
