@@ -77,6 +77,7 @@ const pythOracleDeploymentFile = "test-foundry/deterministic/deployment/PythOrac
 const multiAttestationVerifierDeploymentFile = "test-foundry/deterministic/deployment/MultiAttestationVerifierDeploymentParity.t.sol";
 const safeBatchCollectorDeploymentFile = "test-foundry/deterministic/deployment/SafeBatchCollectorParity.t.sol";
 const v2PaymentMethodDeploymentFile = "test-foundry/deterministic/deployment/V2PaymentMethodDeploymentParity.t.sol";
+const riskSettlementDeploymentFile = "test-foundry/deterministic/deployment/RiskSettlementDeploymentParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -1771,6 +1772,20 @@ function v2CoreDeploymentDestination(test) {
 }
 
 const peripheryDeploymentMappings = new Map([
+    ["test/deploy/28_riskSettlementSystem.spec.ts", [riskSettlementDeploymentFile, "RiskSettlementDeploymentParityTest", [
+        "test_DeploysCompleteLinkedBoundaryWithoutDeferredHook",
+        "test_RetiredDeferredHookIsExcludedFromSourceAndTypeExports",
+        "test_WiresCanonicalVaultAndImmutableManagerDependencies",
+        "test_TransfersEveryOwnedComponentToMultisig",
+        "test_UsesIndependentGovernanceRatifiedRiskWitnessDomain",
+        "test_PerformsOneWayPaymentNullifierCutover",
+        "test_RegistersRiskManagedOrchestratorWithoutRetiredPrivileges",
+        "test_SetsVaultExitDelayAndEscrowIntentExpiration",
+        "test_ConfiguresPayPalForStakeBackedOrDeferredSettlement",
+        "test_ConfiguresVenmoForStakeBackedOrDeferredSettlement",
+        "test_ConfiguresPaidExtensionForNonChargebackableZelle",
+        "test_RequiresExplicitGovernanceRatifiedProductionPolicy",
+    ]]],
     ["test/deploy/25_genericZellePaymentMethod.spec.ts", [v2PaymentMethodDeploymentFile, "V2PaymentMethodDeploymentParityTest", [
         "test_GenericZelleUsesCanonicalKeccakHash",
         "test_GenericZelleRegistryRoutesActiveV3WithUsd",
@@ -2040,6 +2055,7 @@ const rows = inventory.tests.map((test) => {
     if ([acrossBridgeHookDeploymentFile, v2SystemDeploymentFile].some((file) => foundryDestination.startsWith(file))) evidence = "Across and V2 core deployment parity: 26 passed individually and together, 0 failed, 0 skipped; same-commit localhost Hardhat sources 26/26";
     if ([v2PeripheryDeploymentFile, pythOracleDeploymentFile, multiAttestationVerifierDeploymentFile, safeBatchCollectorDeploymentFile].some((file) => foundryDestination.startsWith(file))) evidence = "V2 periphery, Pyth, multi-witness, and real SafeBatchCollector parity: 24 passed independently, 0 failed, 0 skipped; same-commit localhost Hardhat sources 24/24";
     if (foundryDestination.startsWith(v2PaymentMethodDeploymentFile)) evidence = "V2 payment-method and generic-Zelle cutover parity: 45 passed together, 0 failed, 0 skipped; registry routes every active method to V3, V2 retains configured membership, and removed N26/Luxon methods are absent from every surface";
+    if (foundryDestination.startsWith(riskSettlementDeploymentFile)) evidence = "Risk settlement deployment parity: 12 passed together, 0 failed, 0 skipped; real linked topology plus source/type and governance-policy checks through Foundry FFI";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
