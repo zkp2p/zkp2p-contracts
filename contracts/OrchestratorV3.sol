@@ -359,8 +359,8 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     /**
      * @notice Allows depositor to release funds to the payer in case of a failed fulfill intent or because of some other arrangement
      * between the two parties. Upon submission we check to make sure the msg.sender is the depositor, the intent is removed, and
-     * escrow state is updated. Manual release routes through the shared post-funds risk-settlement gate before the deposit token
-     * is transferred to the payer.
+     * escrow state is updated. Manual release routes through the shared post-funds risk-settlement gate, then executes the
+     * configured post-intent hook or transfers the deposit token directly to the payer when no hook is configured.
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
      */

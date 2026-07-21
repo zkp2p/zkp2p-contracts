@@ -200,6 +200,7 @@ interface IOrchestratorV3 {
 
     function fulfillIntent(FulfillIntentParams calldata params) external;
 
+    /** @notice Manually releases an intent through risk settlement and its configured post-intent hook, if any. */
     function releaseFundsToPayer(bytes32 intentHash) external;
 
     /** @notice Clears durable recovery data after the failed risk hook completes reconciliation. */

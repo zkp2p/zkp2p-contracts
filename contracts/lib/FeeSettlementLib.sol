@@ -72,11 +72,6 @@ library FeeSettlementLib {
         if (fundsConsumed) return (address(_riskHook), netAmount);
 
         _transferFeeAllocations(_token, _intentHash, feeAllocations);
-        if (_isManualRelease) {
-            PostIntentHookExecutor.transferTo(_token, _intent.to, netAmount);
-            return (_intent.to, netAmount);
-        }
-
         fundsTransferredTo = PostIntentHookExecutor.transferOrExecute(
             _token,
             _intentHash,
