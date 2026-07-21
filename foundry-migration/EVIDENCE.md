@@ -89,6 +89,10 @@ These receive no exemption from migration and must become executable assertions:
 - `test-foundry/fuzz/RiskManagerMathFuzz.t.sol` contains arithmetic-focused properties that require re-derivation against production contract behavior; no old fuzz assertion receives parity or additive-assurance credit.
 - Repository scans found no `.only`, `xit`, or `xdescribe`; the five known Hardhat omissions are implemented through one `it.skip` and one `describe.skip` containing four tests.
 
+## Phase 1 nuclear reset
+
+After committing the full Hardhat baseline, coverage artifacts, runtime inventory, and 1,514-row manifest, all 16 pre-existing `.t.sol` implementations under `test-foundry/` were deleted. No test assertion, fixture, handler, fork implementation, fuzz property, invariant, or placeholder was retained. The independently versioned `lib/forge-std` dependency remains as generic test infrastructure; it contains no repository-specific test behavior and will underpin the re-derived suite.
+
 ## Coverage comparison
 
 The authoritative baseline instruments all 35 production files selected by `.solcover.js`. Exact totals are:
