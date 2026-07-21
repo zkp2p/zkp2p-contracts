@@ -63,6 +63,10 @@ const riskManagerExtensionLifecycleFile = "test-foundry/deterministic/staking/Ri
 const riskManagerExtensionBoundaryFile = "test-foundry/deterministic/staking/RiskManagerExtensionBoundaryParity.t.sol";
 const riskManagerSettlementFile = "test-foundry/deterministic/staking/RiskManagerSettlementParity.t.sol";
 const riskManagerChargebackFile = "test-foundry/deterministic/staking/RiskManagerChargebackParity.t.sol";
+const riskManagerDeferredCustodyFile = "test-foundry/deterministic/staking/RiskManagerDeferredCustodyParity.t.sol";
+const riskManagerSettlementRoutingFile = "test-foundry/deterministic/staking/RiskManagerSettlementRoutingParity.t.sol";
+const orchestratorV3SettlementSafetyFile = "test-foundry/deterministic/staking/OrchestratorV3SettlementSafetyParity.t.sol";
+const orchestratorV3ControlRecoveryFile = "test-foundry/deterministic/staking/OrchestratorV3ControlRecoveryParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -1560,8 +1564,38 @@ const riskManagerDestinations = [
         "test_MaturityReleasesRemainingCoverage",
         "test_ChargebackRejectsCompensationAtExactCoverageDeadline",
     ].map((testName) => [riskManagerChargebackFile, "RiskManagerChargebackParityTest", testName]),
+    ...[
+        "test_DeferredSettlementPullsGrossIntoVaultAndClearsAllowance",
+        "test_RelayedDeferredSettlementCreditsPayoutRecipient",
+        "test_DeferredSettlementPreservesExactFeePlanUntilMaturity",
+        "test_DeferredSettlementHandlesTenReferralsWithinGasBounds",
+        "test_ChargebackSlashesGrossDeferredStakeAndCancelsFees",
+        "test_MaturedDeferredCustodyBecomesReusableRecipientStake",
+    ].map((testName) => [riskManagerDeferredCustodyFile, "RiskManagerDeferredCustodyParityTest", testName]),
+    ...[
+        "test_ManualReleaseUsesDeferredCustodyAndSkipsOrdinaryPostHook",
+        "test_ManualDeferredChargebackSlashesGrossWithoutVestingFees",
+        "test_ZeroConsumptionPreservesOrdinaryPostIntentHook",
+        "test_ZeroConsumptionPaysExactFeePlanBeforeOrdinaryPayout",
+    ].map((testName) => [riskManagerSettlementRoutingFile, "RiskManagerSettlementRoutingParityTest", testName]),
+    ...[
+        "test_SettlementRejectsPartialPullAndRollsBackEscrow",
+        "test_SettlementRejectsOverpullAndCallbackFailure",
+        "test_CallbackFailureAtomicallyRollsBackNullificationFeesEscrowAndAllowance",
+        "test_SettlementRejectsBalanceIncrease",
+        "test_SettlementFailsClosedWhenSnapshottedHookLosesCode",
+        "test_AdmissionFailsClosedWhenSelectedHookLosesCode",
+        "test_CancellationRecordsRecoveryWhenSnapshottedHookLosesCode",
+        "test_OnlyFailedRiskHookCanAcknowledgeCancellationRecovery",
+    ].map((testName) => [orchestratorV3SettlementSafetyFile, "OrchestratorV3SettlementSafetyParityTest", testName]),
+    ...[
+        "test_OrchestratorV3ExposesHookSnapshotsAndGuardedGovernance",
+        "test_OrchestratorV3FailsClosedWhenVerifiedOrManualSettlementReverts",
+        "test_OrchestratorV3UsesSnapshottedHookAfterDepositHookChanges",
+        "test_OrchestratorV3BlocksReentryAcrossGuardedLifecycleEntrypoints",
+    ].map((testName) => [orchestratorV3ControlRecoveryFile, "OrchestratorV3ControlRecoveryParityTest", testName]),
 ];
-if (riskManagerSourceTests.length !== 70 || riskManagerDestinations.length !== 48) {
+if (riskManagerSourceTests.length !== 70 || riskManagerDestinations.length !== 70) {
     throw new Error(
         `RiskManager integration mapping count mismatch: ${riskManagerSourceTests.length} source / ${riskManagerDestinations.length} translated destinations`
     );
@@ -1739,7 +1773,7 @@ const rows = inventory.tests.map((test) => {
     if ([orchestratorLegacySignalFile, orchestratorLegacyCancelFile, orchestratorLegacyFulfillCoreFile, orchestratorLegacyFulfillAccountingFile, orchestratorLegacyFulfillHookFile, orchestratorLegacyFulfillPartialReentryFile, orchestratorLegacyManualReleaseFile, orchestratorLegacyPruneFile, orchestratorLegacyGovernanceFile, orchestratorLegacyViewsFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete legacy Orchestrator parity: 141 passed individually and together, 0 failed, 0 skipped; all 4 baseline-pending cases resolved in Foundry";
     if ([stakeVaultDepositDelegationFile, stakeVaultReservationFile, stakeVaultExitFile, stakeVaultDeferredFile, stakeVaultControllerHandoverFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete StakeVault parity: 56 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 56/56";
     if ([riskManagerHarnessGovernanceFile, riskManagerHarnessAdmissionFile, riskManagerHarnessSettlementFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete RiskManager hard-cut branch parity: 18 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 18/18";
-    if ([riskManagerIntegrationConfigFile, riskManagerAdmissionFile, riskManagerExtensionLifecycleFile, riskManagerExtensionBoundaryFile, riskManagerSettlementFile, riskManagerChargebackFile].some((file) => foundryDestination.startsWith(file))) evidence = "RiskManager real-system configuration/admission/extension/chargeback parity: 48 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat groups 48/48";
+    if ([riskManagerIntegrationConfigFile, riskManagerAdmissionFile, riskManagerExtensionLifecycleFile, riskManagerExtensionBoundaryFile, riskManagerSettlementFile, riskManagerChargebackFile, riskManagerDeferredCustodyFile, riskManagerSettlementRoutingFile, orchestratorV3SettlementSafetyFile, orchestratorV3ControlRecoveryFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete RiskManager real-system parity: 70 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 70/70";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
