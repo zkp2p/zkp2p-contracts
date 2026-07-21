@@ -15,6 +15,7 @@ import {
   OrchestratorV2,
   OrchestratorRegistry,
   PaymentVerifierRegistry,
+  RelayerRegistry,
   EscrowRegistry,
   USDCMock,
   PaymentVerifierMock,
@@ -41,6 +42,7 @@ describe("OrchestratorV2 - PreIntentHook", () => {
   let orchestrator: OrchestratorV2;
   let orchestratorRegistry: OrchestratorRegistry;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
+  let relayerRegistry: RelayerRegistry;
   let escrowRegistry: EscrowRegistry;
   let verifier: PaymentVerifierMock;
   let preIntentHookMock: PreIntentHookMock;
@@ -66,6 +68,7 @@ describe("OrchestratorV2 - PreIntentHook", () => {
 
     escrowRegistry = await deployer.deployEscrowRegistry();
     paymentVerifierRegistry = await deployer.deployPaymentVerifierRegistry();
+    relayerRegistry = await deployer.deployRelayerRegistry();
     orchestratorRegistry = await deployer.deployOrchestratorRegistry();
 
     escrow = await deployer.deployEscrowV2(
@@ -85,6 +88,7 @@ describe("OrchestratorV2 - PreIntentHook", () => {
       chainId,
       escrowRegistry.address,
       paymentVerifierRegistry.address,
+      relayerRegistry.address,
       ZERO,
       feeRecipient.address
     );
@@ -314,7 +318,7 @@ describe("OrchestratorV2 - PreIntentHook", () => {
       expect(await preIntentHookMock.callCount()).to.eq(0);
     });
 
-    it("prevents hook-driven reentrant signalIntent", async () => {
+    it("prevents hook-driven reentrant signalIntent from bypassing one-active-intent rule", async () => {
       await orchestrator.connect(depositor.wallet).setDepositPreIntentHook(
         escrow.address,
         ZERO,

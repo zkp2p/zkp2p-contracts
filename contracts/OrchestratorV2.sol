@@ -20,6 +20,7 @@ import { IPostIntentHookV2 } from "./interfaces/IPostIntentHookV2.sol";
 import { IPreIntentHook } from "./interfaces/IPreIntentHook.sol";
 import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
+import { IRelayerRegistry } from "./interfaces/IRelayerRegistry.sol";
 import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
 
 /**
@@ -41,14 +42,6 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     uint256 constant CIRCOM_PRIME_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
     uint256 constant MAX_PROTOCOL_FEE = 5e16;      // 5% max protocol fee
     uint256 constant MAX_MANAGER_FEE = 5e16;       // 5% max manager fee
-
-    /* ============ Enums ============ */
-
-    enum IntentResolution {
-        CANCELLED,
-        FULFILLED,
-        RELEASED
-    }
 
     /* ============ State Variables ============ */
 
@@ -74,10 +67,13 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
     IPaymentVerifierRegistry public  paymentVerifierRegistry;          // Registry of payment verifiers
+    IRelayerRegistry public relayerRegistry;                           // Registry of relayers
 
     // Protocol fee configuration
     uint256 public protocolFee;                                     // Protocol fee taken from taker (in preciseUnits, 1e16 = 1%)
     address public protocolFeeRecipient;                            // Address that receives protocol fees
+
+    bool public allowMultipleIntents;                               // Whether to allow multiple intents per account
 
     uint256 public intentCounter;                                 // Counter for number of intents created; nonce for unique intent hashes
 
@@ -87,6 +83,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         uint256 _chainId,
         address _escrowRegistry,
         address _paymentVerifierRegistry,
+        address _relayerRegistry,
         uint256 _protocolFee,
         address _protocolFeeRecipient
     )
@@ -95,6 +92,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         chainId = _chainId;
         escrowRegistry = IEscrowRegistry(_escrowRegistry);
         paymentVerifierRegistry = IPaymentVerifierRegistry(_paymentVerifierRegistry);
+        relayerRegistry = IRelayerRegistry(_relayerRegistry);
         protocolFee = _protocolFee;
         protocolFeeRecipient = _protocolFeeRecipient;
 
@@ -112,8 +110,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      * @param _params                   Struct containing all the intent parameters
      */
     function signalIntent(SignalIntentParams calldata _params)
-        public
-        virtual
+        external
         nonReentrant
         whenNotPaused
     {
@@ -180,8 +177,6 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         // Emit manager fee snapshot last for easier indexing
         emit IntentManagerFeeSnapshotted(intentHash, managerFeeRecipient, managerFee);
 
-        _afterIntentSignaled(intentHash);
-
         // Interactions
         IEscrow(_params.escrow).lockFunds(_params.depositId, intentHash, _params.amount);
     }
@@ -192,7 +187,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      *
      * @param _intentHash    Hash of intent being cancelled
      */
-    function cancelIntent(bytes32 _intentHash) public virtual {
+    function cancelIntent(bytes32 _intentHash) external {
         // Checks
         Intent memory intent = intents[_intentHash];
         
@@ -200,7 +195,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         if (intent.owner != msg.sender) revert UnauthorizedCaller(msg.sender, intent.owner);
 
         // Effects
-        _resolveIntent(_intentHash, IntentResolution.CANCELLED, 0);
+        _pruneIntent(_intentHash);
 
         // Interactions
         IEscrow(intent.escrow).unlockFunds(intent.depositId, _intentHash);
@@ -249,7 +244,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      *
      * @param _params               Struct containing all the fulfill intent parameters
      */
-    function fulfillIntent(FulfillIntentParams calldata _params) public virtual nonReentrant whenNotPaused {
+    function fulfillIntent(FulfillIntentParams calldata _params) external nonReentrant whenNotPaused {
         // Checks
         Intent memory intent = intents[_params.intentHash];
         if (intent.paymentMethod == bytes32(0)) revert IntentNotFound(_params.intentHash);
@@ -280,7 +275,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         }
 
         // Effects
-        _resolveIntent(_params.intentHash, IntentResolution.FULFILLED, verificationResult.releaseAmount);
+        _pruneIntent(_params.intentHash);
 
         // Interactions
         IEscrow(intent.escrow).unlockAndTransferFunds(intent.depositId, _params.intentHash, verificationResult.releaseAmount, address(this));
@@ -292,8 +287,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
             verificationResult.releaseAmount,
             _params.postIntentHookData,
             managerFeeRecipient,
-            managerFee,
-            false
+            managerFee
         );
     }
 
@@ -304,7 +298,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
      */
-    function releaseFundsToPayer(bytes32 _intentHash) public virtual nonReentrant {
+    function releaseFundsToPayer(bytes32 _intentHash) external nonReentrant {
         // Checks
         Intent memory intent = intents[_intentHash];
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
@@ -315,35 +309,14 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         // Snapshot manager fee terms before pruning (pruning deletes the mappings).
         address managerFeeRecipient = intentManagerFeeRecipient[_intentHash];
         uint256 managerFee = intentManagerFee[_intentHash];
-        bool executePostIntentHook = _shouldExecutePostIntentHookOnManualRelease(_intentHash);
         
         // Effects
-        _resolveIntent(_intentHash, IntentResolution.RELEASED, intent.amount);
+        _pruneIntent(_intentHash);
 
         // Interactions
         IEscrow(intent.escrow).unlockAndTransferFunds(intent.depositId, _intentHash, intent.amount, address(this));
 
-        if (executePostIntentHook) {
-            _collectFeesTransferFundsAndExecuteAction(
-                deposit.token,
-                _intentHash,
-                intent,
-                intent.amount,
-                "",
-                managerFeeRecipient,
-                managerFee,
-                true
-            );
-        } else {
-            _collectFeesAndTransferFunds(
-                deposit.token,
-                _intentHash,
-                intent,
-                intent.amount,
-                managerFeeRecipient,
-                managerFee
-            );
-        }
+        _collectFeesAndTransferFunds(deposit.token, _intentHash, intent, intent.amount, managerFeeRecipient, managerFee);
     }
 
     /* ============ Escrow Functions ============ */
@@ -354,7 +327,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      * 
      * @param _intents   Array of intent hashes to prune
      */
-    function pruneIntents(bytes32[] calldata _intents) public virtual {
+    function pruneIntents(bytes32[] calldata _intents) external {
         for (uint256 i = 0; i < _intents.length; i++) {
             bytes32 intentHash = _intents[i];
             if (intentHash != bytes32(0)) {
@@ -363,7 +336,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
                     intent.timestamp != 0 && // Only prune if intent exists on this contract; otherwise skip
                     intent.escrow == msg.sender // Ensure only the escrow that owns the intent can prune it; otherwise skip
                 ) {
-                    _resolveIntent(intentHash, IntentResolution.CANCELLED, 0);
+                    _pruneIntent(intentHash);
                 }
             }
         }
@@ -378,7 +351,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      *
      * @param _intentHashes    Array of intent hashes to check and clean up
      */
-    function cleanupOrphanedIntents(bytes32[] calldata _intentHashes) public virtual {
+    function cleanupOrphanedIntents(bytes32[] calldata _intentHashes) external {
         for (uint256 i = 0; i < _intentHashes.length; i++) {
             bytes32 intentHash = _intentHashes[i];
             Intent memory intent = intents[intentHash];
@@ -394,7 +367,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
 
             // If intent doesn't exist on escrow, it's orphaned — prune it
             if (escrowIntent.intentHash == bytes32(0)) {
-                _resolveIntent(intentHash, IntentResolution.CANCELLED, 0);
+                _pruneIntent(intentHash);
             }
         }
     }
@@ -436,6 +409,29 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         
         protocolFeeRecipient = _protocolFeeRecipient;
         emit ProtocolFeeRecipientUpdated(_protocolFeeRecipient);
+    }
+
+    /**
+     * @notice GOVERNANCE ONLY: Sets whether all accounts can signal multiple intents.
+     *
+     * @param _allowMultiple   True to allow all accounts to signal multiple intents, false to restrict to whitelisted relayers only
+     */
+    function setAllowMultipleIntents(bool _allowMultiple) external onlyOwner {
+        allowMultipleIntents = _allowMultiple;
+        
+        emit AllowMultipleIntentsUpdated(_allowMultiple);
+    }
+
+    /**
+     * @notice GOVERNANCE ONLY: Updates the relayer registry address.
+     *
+     * @param _relayerRegistry   New relayer registry address
+     */
+    function setRelayerRegistry(address _relayerRegistry) external onlyOwner {
+        if (_relayerRegistry == address(0)) revert ZeroAddress();
+        
+        relayerRegistry = IRelayerRegistry(_relayerRegistry);
+        emit RelayerRegistryUpdated(_relayerRegistry);
     }
 
     /**
@@ -488,35 +484,15 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     /* ============ Internal Functions ============ */
 
     /**
-     * @notice Extension point invoked after intent state is stored and before escrow funds are locked.
-     * @dev The default implementation intentionally does nothing.
-     */
-    function _afterIntentSignaled(bytes32) internal virtual {}
-
-    /**
-     * @notice Resolves an intent before its escrow interaction executes.
-     * @dev Derived orchestrators may add lifecycle accounting around the canonical V2 prune operation.
-     */
-    function _resolveIntent(
-        bytes32 _intentHash,
-        IntentResolution,
-        uint256
-    ) internal virtual {
-        _pruneIntent(_intentHash);
-    }
-
-    /**
-     * @notice Returns whether manual release should execute the intent's post-intent hook.
-     * @dev V2 manual releases transfer directly to the intent recipient.
-     */
-    function _shouldExecutePostIntentHookOnManualRelease(bytes32) internal view virtual returns (bool) {
-        return false;
-    }
-
-    /**
      * @notice Validates an intent before it is signaled.
      */
     function _validateSignalIntent(SignalIntentParams calldata _intent) internal view {
+        // Check if account can have multiple intents
+        bool canHaveMultipleIntents = relayerRegistry.isWhitelistedRelayer(msg.sender) || allowMultipleIntents;
+        if (!canHaveMultipleIntents && accountIntents[msg.sender].length > 0) {
+            revert AccountHasActiveIntent(msg.sender, accountIntents[msg.sender][0]);
+        }
+
         if (_intent.to == address(0)) revert ZeroAddress();
         
         ReferralFeeLib.validateReferralFees(_intent.referralFees);
@@ -716,9 +692,8 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         uint256 _releaseAmount,
         bytes memory _postIntentHookData,
         address _managerFeeRecipient,
-        uint256 _managerFee,
-        bool _isManualRelease
-    ) internal virtual {
+        uint256 _managerFee
+    ) internal {
         uint256 netFees = _calculateAndTransferFees(
             _token,
             _intentHash,
@@ -776,7 +751,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
             _intentHash, 
             fundsTransferredTo, 
             netAmount, 
-            _isManualRelease
+            false
         );
     }
 

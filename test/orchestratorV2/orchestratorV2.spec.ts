@@ -17,6 +17,7 @@ import {
   PaymentVerifierMock,
   PaymentVerifierRegistry,
   RateManagerMock,
+  RelayerRegistry,
   USDCMock,
 } from "@utils/contracts";
 
@@ -36,6 +37,7 @@ describe("OrchestratorV2", () => {
   let escrowRegistry: EscrowRegistry;
   let orchestratorRegistry: OrchestratorRegistry;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
+  let relayerRegistry: RelayerRegistry;
   let verifier: PaymentVerifierMock;
   let rateManagerMock: RateManagerMock;
 
@@ -51,6 +53,7 @@ describe("OrchestratorV2", () => {
     await usdcToken.transfer(depositor.address, usdc(100_000));
 
     paymentVerifierRegistry = await deployer.deployPaymentVerifierRegistry();
+    relayerRegistry = await deployer.deployRelayerRegistry();
     escrowRegistry = await deployer.deployEscrowRegistry();
     orchestratorRegistry = await deployer.deployOrchestratorRegistry();
 
@@ -81,6 +84,7 @@ describe("OrchestratorV2", () => {
       ONE,
       escrowRegistry.address,
       paymentVerifierRegistry.address,
+      relayerRegistry.address,
       ZERO,
       owner.address
     );
@@ -156,20 +160,6 @@ describe("OrchestratorV2", () => {
 
       expect(feeEvent?.args?.feeRecipient).to.eq(managerFeeRecipient.address);
       expect(feeEvent?.args?.fee).to.eq(ether(0.01));
-    });
-
-    it("allows an ordinary account to keep multiple concurrent intents", async () => {
-      await subject();
-      await subject();
-
-      expect(await orchestrator.getAccountIntents(taker.address)).to.have.length(2);
-    });
-
-    it("does not expose retired relayer or global multiple-intent controls", async () => {
-      expect(orchestrator.interface.functions).not.to.have.property("relayerRegistry()");
-      expect(orchestrator.interface.functions).not.to.have.property("setRelayerRegistry(address)");
-      expect(orchestrator.interface.functions).not.to.have.property("allowMultipleIntents()");
-      expect(orchestrator.interface.functions).not.to.have.property("setAllowMultipleIntents(bool)");
     });
 
     describe("when conversion rate is below delegated manager rate", () => {

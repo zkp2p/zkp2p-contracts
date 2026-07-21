@@ -24,6 +24,7 @@ describe("UnifiedPaymentVerifierV3 payment-to-intent bindings", () => {
     const escrowRegistry = await (await ethers.getContractFactory("EscrowRegistry", owner.wallet)).deploy();
     const orchestratorRegistry = await (await ethers.getContractFactory("OrchestratorRegistry", owner.wallet)).deploy();
     const paymentVerifierRegistry = await (await ethers.getContractFactory("PaymentVerifierRegistry", owner.wallet)).deploy();
+    const relayerRegistry = await (await ethers.getContractFactory("RelayerRegistry", owner.wallet)).deploy();
     const legacyNullifierRegistry = await (await ethers.getContractFactory("NullifierRegistry", owner.wallet)).deploy();
     const nullifierRegistry = await (await ethers.getContractFactory("NullifierRegistryV2", owner.wallet))
       .deploy(legacyNullifierRegistry.address);
@@ -50,6 +51,7 @@ describe("UnifiedPaymentVerifierV3 payment-to-intent bindings", () => {
       chainId,
       escrowRegistry.address,
       paymentVerifierRegistry.address,
+      relayerRegistry.address,
       0,
       owner.address,
     );
@@ -85,6 +87,7 @@ describe("UnifiedPaymentVerifierV3 payment-to-intent bindings", () => {
     await escrowRegistry.addEscrow(escrow.address);
     await orchestratorRegistry.addOrchestrator(orchestratorV2.address);
     await orchestratorRegistry.addOrchestrator(orchestratorV3.address);
+    await orchestratorV2.setAllowMultipleIntents(true);
     await nullifierRegistry.addWritePermission(verifier.address);
     await legacyNullifierRegistry.addWritePermission(owner.address);
     await verifier.addPaymentMethod(METHOD);

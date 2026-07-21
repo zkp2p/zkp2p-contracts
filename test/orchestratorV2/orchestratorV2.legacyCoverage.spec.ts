@@ -25,6 +25,7 @@ import {
   PostIntentHookV2Mock,
   PreIntentHookMock,
   PushPostIntentHookV2Mock,
+  RelayerRegistry,
   USDCMock,
 } from "@utils/contracts";
 
@@ -48,6 +49,7 @@ describe("OrchestratorV2", () => {
   let escrowRegistry: EscrowRegistry;
   let orchestratorRegistry: OrchestratorRegistry;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
+  let relayerRegistry: RelayerRegistry;
   let verifier: PaymentVerifierMock;
   let preIntentHookMock: PreIntentHookMock;
   let whitelistHookMock: PreIntentHookMock;
@@ -176,6 +178,7 @@ describe("OrchestratorV2", () => {
     await usdcToken.transfer(depositor.address, usdc(100_000));
 
     paymentVerifierRegistry = await deployer.deployPaymentVerifierRegistry();
+    relayerRegistry = await deployer.deployRelayerRegistry();
     escrowRegistry = await deployer.deployEscrowRegistry();
     orchestratorRegistry = await deployer.deployOrchestratorRegistry();
 
@@ -206,6 +209,7 @@ describe("OrchestratorV2", () => {
       ONE,
       escrowRegistry.address,
       paymentVerifierRegistry.address,
+      relayerRegistry.address,
       ZERO,
       protocolFeeRecipient.address
     );
@@ -574,6 +578,7 @@ describe("OrchestratorV2", () => {
   describe("governance and views", () => {
     it("updates registry and fee configuration", async () => {
       const newEscrowRegistry = await deployer.deployEscrowRegistry();
+      const newRelayerRegistry = await deployer.deployRelayerRegistry();
 
       await expect(orchestrator.connect(owner.wallet).setEscrowRegistry(newEscrowRegistry.address))
         .to.emit(orchestrator, "EscrowRegistryUpdated")
@@ -584,6 +589,12 @@ describe("OrchestratorV2", () => {
       await expect(orchestrator.connect(owner.wallet).setProtocolFeeRecipient(other.address))
         .to.emit(orchestrator, "ProtocolFeeRecipientUpdated")
         .withArgs(other.address);
+      await expect(orchestrator.connect(owner.wallet).setAllowMultipleIntents(true))
+        .to.emit(orchestrator, "AllowMultipleIntentsUpdated")
+        .withArgs(true);
+      await expect(orchestrator.connect(owner.wallet).setRelayerRegistry(newRelayerRegistry.address))
+        .to.emit(orchestrator, "RelayerRegistryUpdated")
+        .withArgs(newRelayerRegistry.address);
 
       await orchestrator.connect(owner.wallet).pauseOrchestrator();
       expect(await orchestrator.paused()).to.eq(true);
@@ -598,14 +609,18 @@ describe("OrchestratorV2", () => {
         .to.be.revertedWithCustomError(orchestrator, "FeeExceedsMaximum");
       await expect(orchestrator.connect(owner.wallet).setProtocolFeeRecipient(ADDRESS_ZERO))
         .to.be.revertedWithCustomError(orchestrator, "ZeroAddress");
+      await expect(orchestrator.connect(owner.wallet).setRelayerRegistry(ADDRESS_ZERO))
+        .to.be.revertedWithCustomError(orchestrator, "ZeroAddress");
     });
 
     it("reverts governance-only functions for non-owner callers", async () => {
       await expect(orchestrator.connect(other.wallet).pauseOrchestrator()).to.be.revertedWith("Ownable: caller is not the owner");
       await expect(orchestrator.connect(other.wallet).unpauseOrchestrator()).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(orchestrator.connect(other.wallet).setAllowMultipleIntents(true)).to.be.revertedWith("Ownable: caller is not the owner");
       await expect(orchestrator.connect(other.wallet).setEscrowRegistry(escrowRegistry.address)).to.be.revertedWith("Ownable: caller is not the owner");
       await expect(orchestrator.connect(other.wallet).setProtocolFee(ether(0.01))).to.be.revertedWith("Ownable: caller is not the owner");
       await expect(orchestrator.connect(other.wallet).setProtocolFeeRecipient(other.address)).to.be.revertedWith("Ownable: caller is not the owner");
+      await expect(orchestrator.connect(other.wallet).setRelayerRegistry(relayerRegistry.address)).to.be.revertedWith("Ownable: caller is not the owner");
     });
 
     it("returns account intents and min-at-signal snapshot", async () => {
@@ -617,14 +632,12 @@ describe("OrchestratorV2", () => {
   });
 
   describe("signal validations and post-intent hook path", () => {
-    it("allows an account to create multiple active intents", async () => {
-      const firstIntentHash = await signalIntent({ subjectCaller: taker });
-      const secondIntentHash = await signalIntent({ subjectCaller: taker });
+    it("reverts when account already has an active intent", async () => {
+      await signalIntent({ subjectCaller: taker });
 
-      expect(await orchestrator.getAccountIntents(taker.address)).to.deep.eq([
-        firstIntentHash,
-        secondIntentHash,
-      ]);
+      await expect(
+        signalIntent({ subjectCaller: taker })
+      ).to.be.revertedWithCustomError(orchestrator, "AccountHasActiveIntent");
     });
 
     it("reverts when escrow is not whitelisted", async () => {
