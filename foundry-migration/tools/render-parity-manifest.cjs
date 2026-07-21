@@ -12,6 +12,7 @@ const escrowV2CurrencyRateFile = "test-foundry/deterministic/escrow/EscrowV2Curr
 const oracleFile = "test-foundry/deterministic/oracles/OracleAdapterParity.t.sol";
 const orchestratorV2File = "test-foundry/deterministic/orchestrator/OrchestratorV2RateManagerParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
+const protocolViewerFile = "test-foundry/deterministic/periphery/ProtocolViewerParity.t.sol";
 const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifierParity.t.sol";
 const thresholdFile = "test-foundry/deterministic/libs/ThresholdSignatureParity.t.sol";
 const baseUnifiedFile = "test-foundry/deterministic/verifiers/BaseUnifiedVerifierParity.t.sol";
@@ -342,13 +343,35 @@ function protocolViewerV2Destination(test) {
     return "";
 }
 
+function protocolViewerDestination(test) {
+    if (test.sourceFile !== "test/periphery/protocolViewer.spec.ts") return "";
+    const scenario = test.scenario;
+    const target = (testName) => `${protocolViewerFile}:ProtocolViewerParityTest::${testName}`;
+    if (scenario.includes("should set the initial escrow")) return target("test_ConstructorSetsInitialEscrowAndOrchestrator");
+    if (scenario.includes("constructor when escrow is zero")) return target("test_ConstructorRejectsZeroEscrow");
+    if (scenario.includes("constructor when orchestrator is zero")) return target("test_ConstructorRejectsZeroOrchestrator");
+    if (scenario.includes("return the correct deposit details")) return target("test_GetDepositReturnsCompleteDepositDetails");
+    if (scenario.includes("return the correct payment method")) return target("test_GetDepositReturnsCompletePaymentMethodDetails");
+    if (scenario.includes("return the correct available liquidity")) return target("test_GetDepositReturnsAvailableLiquidity");
+    if (scenario.includes("prunable amounts")) return target("test_GetDepositIncludesExpiredIntentAmountInAvailableLiquidity");
+    if (scenario.includes("return empty deposit view")) return target("test_GetDepositReturnsEmptyViewForMissingDeposit");
+    if (scenario.includes("should return correct deposits")) return target("test_GetDepositFromIdsReturnsRequestedDepositsInOrder");
+    if (scenario.includes("zero address depositor")) return target("test_GetDepositFromIdsReturnsEmptyViewForMissingId");
+    if (scenario.includes("#getIntent should return correct")) return target("test_GetIntentReturnsCorrectIntent");
+    if (scenario.includes("#getIntents should return correct")) return target("test_GetIntentsReturnsCorrectIntentList");
+    if (scenario.includes("correct intents for account")) return target("test_GetAccountIntentsReturnsCorrectAccountIntents");
+    if (scenario.includes("account has no intents")) return target("test_GetAccountIntentsReturnsEmptyForAccountWithoutIntents");
+    if (scenario.includes("account has multiple intents")) return target("test_GetAccountIntentsReturnsAllMultipleIntents");
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || orchestratorV2Destination(test) || protocolViewerV2Destination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || orchestratorV2Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -385,6 +408,9 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/periphery/protocolViewerV2.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped ProtocolViewerV2 behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/periphery/protocolViewer.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped ProtocolViewer behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
     let evidence = "";
     if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
@@ -393,6 +419,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(oracleFile)) evidence = "OracleAdapterParity.t.sol: 25 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(orchestratorV2File)) evidence = "OrchestratorV2RateManagerParity.t.sol: 4 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(attestationFile)) evidence = "AttestationVerifierParity.t.sol: 24 passed, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(thresholdFile)) evidence = "ThresholdSignatureParity.t.sol: 16 passed, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(baseUnifiedFile)) evidence = "BaseUnifiedVerifierParity.t.sol: 8 passed, 0 failed, 0 skipped";
