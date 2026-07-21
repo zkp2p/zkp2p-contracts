@@ -969,6 +969,44 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await token.balanceOf(vault.address)).to.eq(await vault.totalLiabilities());
     });
 
+    it("settles and matures ten referrals within bounded gas", async () => {
+      const { maker, taker, recipient, escrow, orchestrator, vault, manager } =
+        await loadFixture(deployFixture);
+      await enableDeferred(manager);
+      await orchestrator.setProtocolFee(precise("0.01"));
+      await configureManagerFee(maker, recipient.address, escrow);
+      const referralRecipients = (await ethers.getSigners()).slice(10, 20);
+      const referralFees = referralRecipients.map((referrer) => ({
+        recipient: referrer.address,
+        fee: precise("0.001"),
+      }));
+      const grossAmount = usdc(100);
+      const signalTx = await orchestrator.connect(taker).signalIntent(signalParams(
+        escrow,
+        taker.address,
+        grossAmount,
+        PAYPAL,
+        ZERO,
+        referralFees,
+      ));
+      const intentHash = intentHashFrom(await signalTx.wait());
+
+      const fulfillmentReceipt = await (await fulfillIntent(orchestrator, intentHash, grossAmount)).wait();
+
+      expect(await manager.MAX_FEE_ALLOCATIONS()).to.eq(12);
+      expect((await vault.getDeferredFeeAllocations(intentHash)).length).to.eq(12);
+      expect(fulfillmentReceipt.gasUsed).to.be.lt(3_000_000);
+
+      const deadline = (await manager.getRiskPosition(intentHash)).coverageDeadline.toNumber();
+      await time.increaseTo(deadline);
+      const maturityReceipt = await (await manager.releaseMaturedPosition(intentHash)).wait();
+
+      expect(maturityReceipt.gasUsed).to.be.lt(1_500_000);
+      for (const referrer of referralRecipients) {
+        expect(await vault.claimableFees(referrer.address)).to.eq(usdc("0.1"));
+      }
+    });
+
     it("slashes gross deferred stake to the LP and cancels all contingent fees", async () => {
       const { owner, maker, taker, recipient, other, escrow, orchestrator, token, vault, manager } =
         await loadFixture(deployFixture);

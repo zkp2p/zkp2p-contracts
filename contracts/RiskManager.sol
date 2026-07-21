@@ -88,8 +88,8 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     ///      settlement deadline construction safe for every realistic EVM timestamp horizon.
     uint64 public constant MAX_RISK_WINDOW = 365 days;
 
-    /// @notice Protocol + up to five referrals + manager fee.
-    uint256 public constant MAX_FEE_ALLOCATIONS = 7;
+    /// @notice Protocol + up to ten referrals + manager fee.
+    uint256 public constant MAX_FEE_ALLOCATIONS = 12;
 
     /// @notice Minimal EIP-712 type hash; chain and manager binding live in the EIP-712 domain.
     bytes32 public constant CHARGEBACK_ATTESTATION_TYPEHASH = keccak256(

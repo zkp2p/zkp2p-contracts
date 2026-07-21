@@ -6,7 +6,7 @@ import { IReferralFee } from "../interfaces/IReferralFee.sol";
 
 library ReferralFeeLib {
     uint256 internal constant MAX_REFERRER_FEE = 5e17;      // 50% max total referral fee
-    uint256 internal constant MAX_REFERRAL_FEE_RECIPIENTS = 5;
+    uint256 internal constant MAX_REFERRAL_FEE_RECIPIENTS = 10;
 
     function hashReferralFees(IReferralFee.ReferralFee[] calldata _referralFees) internal pure returns (bytes32) {
         bytes32[] memory feeHashes = new bytes32[](_referralFees.length);

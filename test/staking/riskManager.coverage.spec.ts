@@ -299,7 +299,7 @@ describe("RiskManager -- hard-cut branch coverage", () => {
         feeAllocations: [{ feeType: 0, recipient: ZERO, amount: usdc(2) }],
       }))).to.be.revertedWithCustomError(f.manager, "ZeroAddress");
       await expect(f.orchestrator.settlePosition(f.manager.address, settlementContext(f, intentHash, {
-        feeAllocations: Array.from({ length: 8 }, () => ({
+        feeAllocations: Array.from({ length: 13 }, () => ({
           feeType: 0, recipient: f.beneficiary.address, amount: 0,
         })),
       }))).to.be.revertedWithCustomError(f.manager, "InvalidFeeAllocationCount");
