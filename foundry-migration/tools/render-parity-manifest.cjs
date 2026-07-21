@@ -16,6 +16,7 @@ const whitelistPreIntentHookFile = "test-foundry/deterministic/hooks/WhitelistPr
 const acrossBridgeHookFile = "test-foundry/deterministic/hooks/AcrossBridgeHookParity.t.sol";
 const rateManagerV1File = "test-foundry/deterministic/rateManager/RateManagerV1Parity.t.sol";
 const escrowV2DelegationFile = "test-foundry/deterministic/escrow/EscrowV2DelegationParity.t.sol";
+const escrowV2OracleConfigFile = "test-foundry/deterministic/escrow/EscrowV2OracleRateConfigParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
 const protocolViewerFile = "test-foundry/deterministic/periphery/ProtocolViewerParity.t.sol";
 const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifierParity.t.sol";
@@ -564,13 +565,49 @@ function escrowV2DelegationDestination(test) {
     return "";
 }
 
+function escrowV2OracleConfigDestination(test) {
+    if (test.sourceFile !== "test/escrowV2/escrowV2.oracleRates.spec.ts") return "";
+    const scenario = test.scenario;
+    const target = (testName) => `${escrowV2OracleConfigFile}:EscrowV2OracleRateConfigParityTest::${testName}`;
+    if (scenario.includes("sets oracle config during createDeposit")) return target("test_CreateDepositStoresInlineOracleConfigAndEmits");
+    if (scenario.includes("allows a zero fixed floor")) return target("test_CreateDepositAllowsZeroFixedFloorWithInlineOracle");
+    if (scenario.includes("skips oracle config")) return target("test_CreateDepositSkipsEmptyInlineOracleConfig");
+    if (scenario.includes("sets oracle config and computes")) return target("test_SetOracleConfigComputesPositiveSpreadFloor");
+    if (scenario.includes("supports negative spreads")) return target("test_SetOracleConfigSupportsNegativeSpread");
+    if (scenario.includes("positive spreads above")) return target("test_SetOracleConfigAllowsInt16MaximumPositiveSpread");
+    if (scenario.includes("returns max(fixed")) return target("test_EffectiveRateReturnsMaximumOfFixedAndSpread");
+    if (scenario.includes("oracle is stale")) return target("test_StaleOracleHaltsRateAtZero");
+    if (scenario.includes("oracle quote is invalid")) return target("test_InvalidZeroOracleQuoteHaltsRateAtZero");
+    if (scenario.includes("oracle timestamp is in the future")) return target("test_FutureOracleTimestampHaltsRateAtZero");
+    if (scenario.includes("oracle adapter reverts")) return target("test_RevertingOracleAdapterHaltsRateAtZero");
+    if (scenario.includes("allows delegate to set config")) return target("test_DelegateCanSetOracleConfig");
+    if (scenario.includes("caller is not depositor or delegate")) return target("test_UnauthorizedCallerCannotSetOracleConfig");
+    if (scenario.includes("adapter config is too long")) return target("test_NormalizedAdapterConfigAbove256BytesIsRejected");
+    if (scenario.includes("spreadBps is at or below")) return target("test_SpreadAtNegativeTenThousandIsRejected");
+    if (scenario.includes("removes config and falls back")) return target("test_RemoveOracleConfigFallsBackToFixedRateAndEmits");
+    if (scenario.includes("#removeOracleRateConfig") && scenario.includes("tuple is not listed")) return target("test_RemoveOracleConfigRejectsUnlistedTuple");
+    if (scenario.includes("sets multiple configs")) return target("test_SetOracleConfigBatchSetsMultipleConfigs");
+    if (scenario.includes("paymentMethods and currencyCodes length")) return target("test_SetOracleConfigBatchRejectsMethodCurrencyLengthMismatch");
+    if (scenario.includes("paymentMethods and configs length")) return target("test_SetOracleConfigBatchRejectsMethodConfigLengthMismatch");
+    if (scenario.includes("nested currencyCodes and configs")) return target("test_SetOracleConfigBatchRejectsNestedLengthMismatch");
+    if (scenario.includes("updates fixed floors and optionally")) return target("test_UpdateCurrencyBatchUpdatesFloorsAndOptionalOracle");
+    if (scenario.includes("removes oracle config when updateOracle")) return target("test_UpdateCurrencyBatchRemovesExistingOracleWhenRequested");
+    if (scenario.includes("does not emit oracle removal")) return target("test_UpdateCurrencyBatchDoesNotEmitRemovalForAbsentOracle");
+    if (scenario.includes("#updateCurrencyConfigBatch") && scenario.includes("length mismatch")) return target("test_UpdateCurrencyBatchRejectsOuterLengthMismatch");
+    if (scenario.includes("deactivates multiple currencies")) return target("test_DeactivateCurrenciesBatchClearsRatesAndOnlyExistingOracle");
+    if (scenario.includes("payment method is not active")) return target("test_DeactivateCurrenciesBatchRejectsInactivePaymentMethod");
+    if (scenario.includes("#deactivateCurrenciesBatch") && scenario.includes("length mismatch")) return target("test_DeactivateCurrenciesBatchRejectsOuterLengthMismatch");
+    if (scenario.includes("unsupported tuple")) return target("test_SetOracleConfigRejectsUnlistedCurrency");
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || orchestratorV2Destination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || orchestratorV2Destination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -625,6 +662,9 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/escrowV2/escrowV2.delegation.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped EscrowV2 delegation behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/escrowV2/escrowV2.oracleRates.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped EscrowV2 oracle-config behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
     let evidence = "";
     if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
@@ -637,6 +677,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(acrossBridgeHookFile)) evidence = "AcrossBridgeHookParity.t.sol: 56 passed individually and together across legacy and V2, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(rateManagerV1File)) evidence = "RateManagerV1Parity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(escrowV2DelegationFile)) evidence = "EscrowV2DelegationParity.t.sol: 21 passed individually and together, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(escrowV2OracleConfigFile)) evidence = "EscrowV2OracleRateConfigParity.t.sol: 29 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(attestationFile)) evidence = "AttestationVerifierParity.t.sol: 24 passed, 0 failed, 0 skipped";
