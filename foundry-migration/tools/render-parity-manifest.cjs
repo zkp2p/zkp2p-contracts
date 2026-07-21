@@ -39,6 +39,7 @@ const escrowUnlockTransferFile = "test-foundry/deterministic/escrow/EscrowUnlock
 const escrowIntentExpiryFile = "test-foundry/deterministic/escrow/EscrowIntentExpiryParity.t.sol";
 const escrowGovernanceFile = "test-foundry/deterministic/escrow/EscrowGovernanceParity.t.sol";
 const escrowExpiredIntentsViewFile = "test-foundry/deterministic/escrow/EscrowExpiredIntentsViewParity.t.sol";
+const orchestratorLegacySignalFile = "test-foundry/deterministic/orchestrator/OrchestratorSignalParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -1168,6 +1169,62 @@ function escrowLegacyDestination(test) {
     return `${file}:${contractName}::${testName}`;
 }
 
+const orchestratorLegacySource = "test/orchestrator/orchestrator.spec.ts";
+const orchestratorLegacySourceTests = inventory.tests.filter((test) => test.sourceFile === orchestratorLegacySource);
+const orchestratorLegacyDestinations = [
+    ...[
+        "test_ConstructorSetsEveryStateVariable",
+        "test_SignalIntentStoresCompleteIntent",
+        "test_SignalIntentLocksEscrowFunds",
+        "test_SignalIntentAddsHashToAccount",
+        "test_SignalIntentSnapshotsMinimumAmount",
+        "test_SignalIntentEmitsCompleteEvent",
+        "test_SignalIntentPrunesExpiredIntentAndUpdatesDeposit",
+        "test_SignalIntentPruningDeletesOriginalOrchestratorIntent",
+        "test_SignalIntentPruningEmitsIntentPruned",
+        "test_SignalIntentRejectsWhenUnexpiredLiquidityCannotCoverAmount",
+        "test_SignalIntentRejectsSecondActiveIntentForOrdinaryAccount",
+        "test_SignalIntentAllowsNewIntentAfterCancellation",
+        "test_SignalIntentAllowsMultipleWhenGovernanceEnablesIt",
+        "test_SignalIntentAllowsMultipleForWhitelistedRelayer",
+        "test_SignalIntentStoresWhitelistedPostHookAndData",
+        "test_SignalIntentRejectsUnwhitelistedPostHook",
+        "test_SignalIntentRejectsMissingDepositAsUnsupportedMethod",
+        "test_SignalIntentRejectsPaymentMethodNotConfiguredOnDeposit",
+        "test_SignalIntentRejectsMethodRemovedFromRegistry",
+        "test_SignalIntentRejectsCurrencyNotConfiguredOnDeposit",
+        "test_SignalIntentRejectsRateBelowMinimum",
+        "test_SignalIntentAllowsRateEqualToMinimum",
+        "test_SignalIntentRejectsUnwhitelistedEscrow",
+        "test_SignalIntentAllowsAnyEscrowWhenRegistryAcceptsAll",
+        "test_SignalIntentRejectsDepositNotAcceptingIntents",
+        "test_SignalIntentRejectsAmountBelowDepositMinimum",
+        "test_SignalIntentRejectsAmountAboveDepositMaximum",
+        "test_SignalIntentRejectsZeroRecipient",
+        "test_SignalIntentRejectsInvalidGatingSignature",
+        "test_SignalIntentAllowsEmptySignatureWithoutGatingService",
+        "test_SignalIntentRejectsExpiredGatingSignature",
+        "test_SignalIntentRejectsWhilePaused",
+        "test_SignalIntentRejectsReferrerFeeAboveMaximum",
+        "test_SignalIntentRejectsFeeWithoutReferrer",
+        "test_SignalIntentStoresValidReferrerAndFee",
+        "test_SignalIntentAllowsMaximumReferrerFee",
+    ].map((testName) => [orchestratorLegacySignalFile, "OrchestratorSignalParityTest", testName]),
+];
+if (orchestratorLegacySourceTests.length !== 141 || orchestratorLegacyDestinations.length !== 36) {
+    throw new Error(
+        `Orchestrator legacy mapping count mismatch: ${orchestratorLegacySourceTests.length} source / ${orchestratorLegacyDestinations.length} translated destinations`
+    );
+}
+
+function orchestratorLegacyDestination(test) {
+    if (test.sourceFile !== orchestratorLegacySource) return "";
+    const sourceIndex = orchestratorLegacySourceTests.findIndex((sourceTest) => sourceTest.id === test.id);
+    if (sourceIndex < 0 || sourceIndex >= orchestratorLegacyDestinations.length) return "";
+    const [file, contractName, testName] = orchestratorLegacyDestinations[sourceIndex];
+    return `${file}:${contractName}::${testName}`;
+}
+
 function orchestratorV2LegacyDestination(test) {
     if (test.sourceFile !== "test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts") return "";
     const scenario = test.scenario;
@@ -1237,7 +1294,7 @@ const header = [
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || escrowLegacyDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || escrowLegacyDestination(test) || orchestratorLegacyDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -1323,6 +1380,7 @@ const rows = inventory.tests.map((test) => {
     if ([escrowV2LegacyManagementFile, escrowV2LegacyLifecycleFile, escrowV2LegacyConfigurationFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 management + lifecycle + configuration parity: 70 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 70/70";
     if ([escrowV2BranchAuthorizationFile, escrowV2BranchValidationFile, escrowV2BranchGovernanceLifecycleFile, escrowV2BranchStatePauseFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 branch parity: 108 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 108/108";
     if ([escrowCreateDepositFile, escrowFundingFile, escrowWithdrawFile, escrowRateRangeFile, escrowPaymentMethodFile, escrowCurrencyFile, escrowDelegateFile, escrowAcceptingRetainFile, escrowPruningFile, escrowLockFundsFile, escrowUnlockFundsFile, escrowUnlockTransferFile, escrowIntentExpiryFile, escrowGovernanceFile, escrowExpiredIntentsViewFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete legacy Escrow parity: 276 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 275 passed plus 1 baseline-pending case resolved in Foundry";
+    if (foundryDestination.startsWith(orchestratorLegacySignalFile)) evidence = "Legacy Orchestrator constructor/signal parity: 36 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat suites: 32 passed plus 4 baseline-pending cases resolved in Foundry";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
@@ -1342,7 +1400,7 @@ const rows = inventory.tests.map((test) => {
         test.fixtureDependencies,
         foundryDestination,
         foundryDestination
-            ? (["test/escrowV2/escrowV2.legacyCoverage.spec.ts", escrowV2BranchSource, escrowLegacySource].includes(test.sourceFile)
+            ? (["test/escrowV2/escrowV2.legacyCoverage.spec.ts", escrowV2BranchSource, escrowLegacySource, orchestratorLegacySource].includes(test.sourceFile)
                 || test.sourceFile.includes("nullifierRegistryV2")
                 ? "one-to-one"
                 : "consolidated-with-explicit-destination")
