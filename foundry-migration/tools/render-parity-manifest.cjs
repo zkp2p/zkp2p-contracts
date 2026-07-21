@@ -7,6 +7,7 @@ const repositoryRoot = path.resolve(__dirname, "../..");
 const inventory = require(path.join(repositoryRoot, "foundry-migration/baseline/hardhat-inventory.json"));
 const outputPath = path.join(repositoryRoot, "foundry-migration/hardhat-to-foundry-manifest.csv");
 const registryFile = "test-foundry/deterministic/registries/RegistryParity.t.sol";
+const escrowV2PythFile = "test-foundry/deterministic/escrow/EscrowV2PythOracleParity.t.sol";
 const oracleFile = "test-foundry/deterministic/oracles/OracleAdapterParity.t.sol";
 const orchestratorV2File = "test-foundry/deterministic/orchestrator/OrchestratorV2RateManagerParity.t.sol";
 const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifierParity.t.sol";
@@ -289,13 +290,25 @@ function orchestratorV2Destination(test) {
     return "";
 }
 
+function escrowV2PythDestination(test) {
+    if (test.sourceFile !== "test/escrowV2/escrowV2.pythOracle.spec.ts") return "";
+    const scenario = test.scenario;
+    const target = (testName) => `${escrowV2PythFile}:EscrowV2PythOracleParityTest::${testName}`;
+    if (scenario.includes("sets Pyth oracle config and returns correct spread")) return target("test_SetPythConfigReturnsRoundedUpSpreadRate");
+    if (scenario.includes("returns max(fixedRate")) return target("test_EffectiveRateReturnsMaximumOfFixedAndPythSpreadRate");
+    if (scenario.includes("returns zero when Pyth price is stale")) return target("test_StalePythPriceHaltsEffectiveRateAtZero");
+    if (scenario.includes("updates effective rate when mock price changes")) return target("test_EffectiveRateTracksFreshPythPriceUpdate");
+    if (scenario.includes("sets oracle config during createDeposit")) return target("test_CreateDepositStoresInlinePythConfigAndEmits");
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || orchestratorV2Destination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || orchestratorV2Destination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -323,9 +336,13 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/orchestratorV2/orchestratorV2.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped orchestrator V2 behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/escrowV2/escrowV2.pythOracle.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped EscrowV2 Pyth behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
     let evidence = "";
     if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(escrowV2PythFile)) evidence = "EscrowV2PythOracleParity.t.sol: 5 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(oracleFile)) evidence = "OracleAdapterParity.t.sol: 25 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(orchestratorV2File)) evidence = "OrchestratorV2RateManagerParity.t.sol: 4 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(attestationFile)) evidence = "AttestationVerifierParity.t.sol: 24 passed, 0 failed, 0 skipped";
