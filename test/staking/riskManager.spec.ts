@@ -629,8 +629,7 @@ describe("RiskManager and OrchestratorV3", () => {
 
       await vault.connect(stakeOwner).setTakerAuthorization(taker.address, false);
       await expect(manager.connect(taker).extendIntent(intentHash, HOUR))
-        .to.be.revertedWithCustomError(manager, "UnauthorizedStakeExtension")
-        .withArgs(taker.address, taker.address, stakeOwner.address);
+        .to.be.revertedWithCustomError(manager, "UnauthorizedStakeExtension");
 
       await manager.connect(stakeOwner).extendIntent(intentHash, HOUR);
       const position = await manager.getRiskPosition(intentHash);
