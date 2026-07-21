@@ -650,6 +650,12 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         for (uint256 allocationIndex = 0; allocationIndex < _feeAllocations.length; allocationIndex++) {
             if (_feeAllocations[allocationIndex].amount != 0) {
                 deferredFeeAllocations[_intentHash].push(_feeAllocations[allocationIndex]);
+                emit DeferredFeeContingent(
+                    _intentHash,
+                    _feeAllocations[allocationIndex].recipient,
+                    _feeAllocations[allocationIndex].feeType,
+                    _feeAllocations[allocationIndex].amount
+                );
             }
         }
 
@@ -753,6 +759,16 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         }
 
         delete reservations[_intentHash];
+        IIntentRiskHook.FeeAllocation[] storage allocations = deferredFeeAllocations[_intentHash];
+        for (uint256 allocationIndex = 0; allocationIndex < allocations.length; allocationIndex++) {
+            IIntentRiskHook.FeeAllocation storage allocation = allocations[allocationIndex];
+            emit DeferredFeeCancelled(
+                _intentHash,
+                allocation.recipient,
+                allocation.feeType,
+                allocation.amount
+            );
+        }
         delete deferredFeeAllocations[_intentHash];
         delete deferredStakes[_intentHash];
         reservedStake[deferredStake.staker] -= deferredStake.grossAmount;

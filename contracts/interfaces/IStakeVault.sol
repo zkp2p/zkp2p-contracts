@@ -131,6 +131,18 @@ interface IStakeVault {
         uint256 amount,
         uint256 newClaimableBalance
     );
+    event DeferredFeeContingent(
+        bytes32 indexed intentHash,
+        address indexed recipient,
+        IIntentRiskHook.FeeType indexed feeType,
+        uint256 amount
+    );
+    event DeferredFeeCancelled(
+        bytes32 indexed intentHash,
+        address indexed recipient,
+        IIntentRiskHook.FeeType indexed feeType,
+        uint256 amount
+    );
     event FeeClaimWithdrawn(
         address indexed beneficiary,
         address indexed recipient,
