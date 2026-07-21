@@ -67,6 +67,7 @@ const riskManagerDeferredCustodyFile = "test-foundry/deterministic/staking/RiskM
 const riskManagerSettlementRoutingFile = "test-foundry/deterministic/staking/RiskManagerSettlementRoutingParity.t.sol";
 const orchestratorV3SettlementSafetyFile = "test-foundry/deterministic/staking/OrchestratorV3SettlementSafetyParity.t.sol";
 const orchestratorV3ControlRecoveryFile = "test-foundry/deterministic/staking/OrchestratorV3ControlRecoveryParity.t.sol";
+const legacySystemDeploymentFile = "test-foundry/deterministic/deployment/LegacySystemDeploymentParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -1609,6 +1610,46 @@ function riskManagerDestination(test) {
     return `${file}:${contractName}::${testName}`;
 }
 
+const legacySystemDeploymentSource = "test/deploy/00_system.spec.ts";
+const legacySystemDeploymentSourceTests = inventory.tests.filter(
+    (test) => test.sourceFile === legacySystemDeploymentSource
+);
+const legacySystemDeploymentDestinations = [
+    "test_EscrowRegistryDeploymentSetsOwner",
+    "test_EscrowDeploymentSetsOwner",
+    "test_EscrowDeploymentSetsPaymentVerifierRegistry",
+    "test_EscrowDeploymentWiresOrchestrator",
+    "test_EscrowDeploymentSetsChainId",
+    "test_EscrowDeploymentWhitelistsEscrow",
+    "test_EscrowDeploymentSetsDustRecipient",
+    "test_EscrowDeploymentSetsDustThreshold",
+    "test_EscrowDeploymentSetsMaximumIntents",
+    "test_EscrowDeploymentSetsIntentExpiration",
+    "test_OrchestratorDeploymentSetsOwner",
+    "test_OrchestratorDeploymentSetsChainId",
+    "test_OrchestratorDeploymentSetsProtocolFeeAndRecipient",
+    "test_OrchestratorDeploymentWiresPostIntentHookRegistry",
+    "test_OrchestratorDeploymentWiresRelayerRegistry",
+    "test_OrchestratorDeploymentWiresEscrowRegistry",
+    "test_NullifierRegistryDeploymentSetsOwner",
+    "test_PaymentVerifierRegistryDeploymentSetsOwner",
+    "test_PostIntentHookRegistryDeploymentSetsOwner",
+    "test_RelayerRegistryDeploymentSetsOwner",
+    "test_ProtocolViewerDeploymentWiresEscrowAndOrchestrator",
+];
+if (legacySystemDeploymentSourceTests.length !== 21 || legacySystemDeploymentDestinations.length !== 21) {
+    throw new Error(
+        `Legacy deployment mapping count mismatch: ${legacySystemDeploymentSourceTests.length} source / ${legacySystemDeploymentDestinations.length} translated destinations`
+    );
+}
+
+function legacySystemDeploymentDestination(test) {
+    if (test.sourceFile !== legacySystemDeploymentSource) return "";
+    const sourceIndex = legacySystemDeploymentSourceTests.findIndex((sourceTest) => sourceTest.id === test.id);
+    if (sourceIndex < 0) return "";
+    return `${legacySystemDeploymentFile}:LegacySystemDeploymentParityTest::${legacySystemDeploymentDestinations[sourceIndex]}`;
+}
+
 function orchestratorV2LegacyDestination(test) {
     if (test.sourceFile !== "test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts") return "";
     const scenario = test.scenario;
@@ -1678,7 +1719,7 @@ const header = [
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || escrowLegacyDestination(test) || orchestratorLegacyDestination(test) || stakeVaultDestination(test) || riskManagerDestination(test) || riskManagerCoverageDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || escrowLegacyDestination(test) || orchestratorLegacyDestination(test) || stakeVaultDestination(test) || riskManagerDestination(test) || riskManagerCoverageDestination(test) || legacySystemDeploymentDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -1711,6 +1752,9 @@ const rows = inventory.tests.map((test) => {
     }
     if (test.sourceFile === riskManagerCoverageSource && !foundryDestination) {
         throw new Error(`Unmapped RiskManager coverage behavior: ${test.id} ${test.scenario}`);
+    }
+    if (test.sourceFile === legacySystemDeploymentSource && !foundryDestination) {
+        throw new Error(`Unmapped legacy deployment behavior: ${test.id} ${test.scenario}`);
     }
     if (test.sourceFile === "test/escrowV2/escrowV2.pythOracle.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped EscrowV2 Pyth behavior: ${test.id} ${test.scenario}`);
@@ -1774,6 +1818,7 @@ const rows = inventory.tests.map((test) => {
     if ([stakeVaultDepositDelegationFile, stakeVaultReservationFile, stakeVaultExitFile, stakeVaultDeferredFile, stakeVaultControllerHandoverFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete StakeVault parity: 56 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 56/56";
     if ([riskManagerHarnessGovernanceFile, riskManagerHarnessAdmissionFile, riskManagerHarnessSettlementFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete RiskManager hard-cut branch parity: 18 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 18/18";
     if ([riskManagerIntegrationConfigFile, riskManagerAdmissionFile, riskManagerExtensionLifecycleFile, riskManagerExtensionBoundaryFile, riskManagerSettlementFile, riskManagerChargebackFile, riskManagerDeferredCustodyFile, riskManagerSettlementRoutingFile, orchestratorV3SettlementSafetyFile, orchestratorV3ControlRecoveryFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete RiskManager real-system parity: 70 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 70/70";
+    if (foundryDestination.startsWith(legacySystemDeploymentFile)) evidence = "Legacy system deployment parity: 21 passed individually and together, 0 failed, 0 skipped; same-commit localhost Hardhat source 21/21";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
