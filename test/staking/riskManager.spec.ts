@@ -751,7 +751,8 @@ describe("RiskManager and OrchestratorV3", () => {
       await vault.connect(taker).depositStake(usdc(500));
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
       await fulfillIntent(orchestrator, intentHash, usdc(500));
-      const claim = await chargebackAttestation(manager, intentHash, usdc(500));
+      const disputeId = ethers.utils.id("chargeback-event-semantics");
+      const claim = await chargebackAttestation(manager, intentHash, usdc(500), disputeId);
       const { chainId } = await ethers.provider.getNetwork();
       expect(await manager.hashChargebackAttestation(claim)).to.eq(ethers.utils._TypedDataEncoder.hash(
         { name: "ZKP2P RiskManager", version: "1", chainId, verifyingContract: manager.address },
@@ -761,7 +762,15 @@ describe("RiskManager and OrchestratorV3", () => {
         ] },
         { intentHash: claim.intentHash, dataHash: claim.dataHash },
       ));
-      await manager.submitChargeback(claim);
+      await expect(manager.submitChargeback(claim)).to.emit(manager, "ChargebackSettled").withArgs(
+        intentHash,
+        taker.address,
+        maker.address,
+        2,
+        usdc(500),
+        usdc(500),
+        disputeId,
+      );
       expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(500));
       expect((await manager.getRiskPosition(intentHash)).status).to.eq(5);
     });
@@ -816,7 +825,12 @@ describe("RiskManager and OrchestratorV3", () => {
       await fulfillIntent(orchestrator, intentHash, usdc(500));
       const deadline = (await manager.getRiskPosition(intentHash)).coverageDeadline.toNumber();
       await time.increaseTo(deadline);
-      await manager.releaseMaturedPosition(intentHash);
+      await expect(manager.releaseMaturedPosition(intentHash)).to.emit(manager, "RiskPositionReleased").withArgs(
+        intentHash,
+        taker.address,
+        2,
+        usdc(500),
+      );
       expect(await vault.reservedStake(taker.address)).to.eq(0);
       expect((await manager.getRiskPosition(intentHash)).status).to.eq(4);
     });
@@ -858,9 +872,6 @@ describe("RiskManager and OrchestratorV3", () => {
       const deferredStake = await vault.getDeferredStake(intentHash);
       expect(position.grossReleasedAmount).to.eq(usdc(100));
       expect(position.executableAmount).to.eq(usdc(100));
-      expect(position.coveredAmount).to.eq(usdc(100));
-      expect(position.deferredStakeAmount).to.eq(usdc(100));
-      expect(position.deferredFeeAmount).to.eq(0);
       expect(deferredStake.grossAmount).to.eq(usdc(100));
       expect(await vault.stakeBalance(taker.address)).to.eq(usdc(100));
       expect(await vault.reservedStake(taker.address)).to.eq(usdc(100));
@@ -869,10 +880,10 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await token.allowance(orchestrator.address, manager.address)).to.eq(0);
     });
 
-    it("rejects a deferred third-party payout at admission before fiat payment", async () => {
-      const { taker, recipient, escrow, orchestrator, manager } = await loadFixture(deployFixture);
+    it("credits relayed deferred settlement to the payout recipient", async () => {
+      const { taker, recipient, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
       await enableDeferred(manager);
-      await expect(signalIntent(
+      const intentHash = await signalIntent(
         orchestrator,
         escrow,
         taker,
@@ -880,7 +891,19 @@ describe("RiskManager and OrchestratorV3", () => {
         PAYPAL,
         ZERO,
         recipient.address,
-      )).to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+      );
+
+      const admittedPosition = await manager.getRiskPosition(intentHash);
+      expect(admittedPosition.taker).to.eq(taker.address);
+      expect(admittedPosition.stakeOwner).to.eq(recipient.address);
+      expect(admittedPosition.payoutRecipient).to.eq(recipient.address);
+      expect((await vault.getDeferredStake(intentHash)).staker).to.eq(recipient.address);
+
+      await fulfillIntent(orchestrator, intentHash, usdc(100));
+
+      expect(await vault.stakeBalance(taker.address)).to.eq(0);
+      expect(await vault.stakeBalance(recipient.address)).to.eq(usdc(100));
+      expect(await vault.reservedStake(recipient.address)).to.eq(usdc(100));
     });
 
     it("defers gross custody and the exact protocol, referral, and manager fee plan", async () => {
@@ -914,9 +937,10 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await token.balanceOf(recipient.address)).to.eq(managerBefore);
       expect(position.grossReleasedAmount).to.eq(grossAmount);
       expect(position.executableAmount).to.eq(executableAmount);
-      expect(position.coveredAmount).to.eq(grossAmount);
-      expect(position.deferredStakeAmount).to.eq(grossAmount);
-      expect(position.deferredFeeAmount).to.eq(feeEach.mul(3));
+      expect(Object.prototype.hasOwnProperty.call(position, "coveredAmount")).to.eq(false);
+      expect(Object.prototype.hasOwnProperty.call(position, "deferredStakeAmount")).to.eq(false);
+      expect(Object.prototype.hasOwnProperty.call(position, "deferredFeeAmount")).to.eq(false);
+      expect(position.grossReleasedAmount.sub(position.executableAmount)).to.eq(feeEach.mul(3));
       expect((await vault.getDeferredStake(intentHash)).grossAmount).to.eq(grossAmount);
       const allocations = await vault.getDeferredFeeAllocations(intentHash);
       expect(allocations.map((allocation: any) => allocation.amount)).to.deep.eq([feeEach, feeEach, feeEach]);
@@ -943,6 +967,44 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await token.balanceOf(other.address)).to.eq(referrerBefore.add(feeEach));
       expect(await token.balanceOf(recipient.address)).to.eq(managerBefore.add(feeEach));
       expect(await token.balanceOf(vault.address)).to.eq(await vault.totalLiabilities());
+    });
+
+    it("settles and matures ten referrals within bounded gas", async () => {
+      const { maker, taker, recipient, escrow, orchestrator, vault, manager } =
+        await loadFixture(deployFixture);
+      await enableDeferred(manager);
+      await orchestrator.setProtocolFee(precise("0.01"));
+      await configureManagerFee(maker, recipient.address, escrow);
+      const referralRecipients = (await ethers.getSigners()).slice(10, 20);
+      const referralFees = referralRecipients.map((referrer) => ({
+        recipient: referrer.address,
+        fee: precise("0.001"),
+      }));
+      const grossAmount = usdc(100);
+      const signalTx = await orchestrator.connect(taker).signalIntent(signalParams(
+        escrow,
+        taker.address,
+        grossAmount,
+        PAYPAL,
+        ZERO,
+        referralFees,
+      ));
+      const intentHash = intentHashFrom(await signalTx.wait());
+
+      const fulfillmentReceipt = await (await fulfillIntent(orchestrator, intentHash, grossAmount)).wait();
+
+      expect(await manager.MAX_FEE_ALLOCATIONS()).to.eq(12);
+      expect((await vault.getDeferredFeeAllocations(intentHash)).length).to.eq(12);
+      expect(fulfillmentReceipt.gasUsed).to.be.lt(3_000_000);
+
+      const deadline = (await manager.getRiskPosition(intentHash)).coverageDeadline.toNumber();
+      await time.increaseTo(deadline);
+      const maturityReceipt = await (await manager.releaseMaturedPosition(intentHash)).wait();
+
+      expect(maturityReceipt.gasUsed).to.be.lt(1_500_000);
+      for (const referrer of referralRecipients) {
+        expect(await vault.claimableFees(referrer.address)).to.eq(usdc("0.1"));
+      }
     });
 
     it("slashes gross deferred stake to the LP and cancels all contingent fees", async () => {
@@ -998,7 +1060,7 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await vault.freeStake(taker.address)).to.eq(0);
     });
 
-    it("releases matured deferred custody as reusable taker stake", async () => {
+    it("releases matured deferred custody as reusable payout-recipient stake", async () => {
       const { taker, escrow, orchestrator, token, vault, manager } = await loadFixture(deployFixture);
       await enableDeferred(manager);
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(100), PAYPAL);
@@ -1048,7 +1110,7 @@ describe("RiskManager and OrchestratorV3", () => {
       await orchestrator.connect(maker).releaseFundsToPayer(intentHash);
       const position = await manager.getRiskPosition(intentHash);
       expect(position.isManualRelease).to.eq(true);
-      expect(position.deferredFeeAmount).to.eq(usdc(1));
+      expect(position.grossReleasedAmount.sub(position.executableAmount)).to.eq(usdc(1));
 
       await manager.submitChargeback(
         await chargebackAttestation(manager, intentHash, usdc(100), undefined, {}, false),
@@ -1243,6 +1305,25 @@ describe("RiskManager and OrchestratorV3", () => {
         .and.to.emit(orchestrator, "IntentCancellationRecorded");
       expect(await orchestrator.getIntentCancellation(intentHash)).to.not.eq(0);
       expect((await orchestrator.getIntent(intentHash)).owner).to.eq(ZERO);
+    });
+
+    it("lets only the failed risk hook clear reconciled cancellation data", async () => {
+      const { maker, taker, other, escrow, orchestrator } = await loadFixture(deployFixture);
+      const hook = await (await ethers.getContractFactory("IntentRiskHookMock")).deploy();
+      await orchestrator.connect(maker).setDepositRiskHook(escrow.address, 0, hook.address);
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(20), ZELLE);
+      await hook.setRevertOnCallback(true);
+      await orchestrator.connect(taker).cancelIntent(intentHash);
+      expect(await orchestrator.getIntentCancellation(intentHash)).to.not.eq(0);
+
+      await expect(orchestrator.connect(other).acknowledgeIntentCancellation(intentHash))
+        .to.be.revertedWithCustomError(orchestrator, "UnauthorizedCancellationAcknowledger");
+      await expect(hook.acknowledgeIntentCancellation(orchestrator.address, intentHash))
+        .to.emit(orchestrator, "IntentCancellationReconciled")
+        .withArgs(intentHash, hook.address);
+      expect(await orchestrator.getIntentCancellation(intentHash)).to.eq(0);
+      await expect(hook.acknowledgeIntentCancellation(orchestrator.address, intentHash))
+        .to.be.revertedWithCustomError(orchestrator, "IntentCancellationNotRecorded");
     });
   });
 

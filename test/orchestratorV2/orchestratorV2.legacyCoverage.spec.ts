@@ -695,16 +695,13 @@ describe("OrchestratorV2", () => {
     });
 
     it("reverts when referral fee recipient count exceeds max", async () => {
+      const referralFees = Array.from({ length: 11 }, (_, index) => ({
+        recipient: ethers.utils.getAddress(ethers.utils.hexZeroPad(BigNumber.from(index + 1).toHexString(), 20)),
+        fee: ether(0.001),
+      }));
       await expect(
         signalIntent({
-          subjectReferralFees: [
-            { recipient: referrer.address, fee: ether(0.001) },
-            { recipient: other.address, fee: ether(0.001) },
-            { recipient: delegate.address, fee: ether(0.001) },
-            { recipient: depositor.address, fee: ether(0.001) },
-            { recipient: protocolFeeRecipient.address, fee: ether(0.001) },
-            { recipient: owner.address, fee: ether(0.001) },
-          ],
+          subjectReferralFees: referralFees,
         })
       ).to.be.revertedWithCustomError(orchestrator, "ReferralFeeCountExceedsMaximum");
     });

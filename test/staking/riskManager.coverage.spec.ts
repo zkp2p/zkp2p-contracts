@@ -272,6 +272,7 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       await f.orchestrator.setIntentCancellation(intentHash, cancelledAt);
       await f.manager.reconcileCancellation(intentHash);
       expect((await f.manager.getRiskPosition(intentHash)).cancelledAt).to.eq(cancelledAt);
+      expect(await f.orchestrator.getIntentCancellation(intentHash)).to.eq(0);
       await expect(f.manager.reconcileCancellations([])).to.be.revertedWithCustomError(f.manager, "EmptyBatch");
       await expect(f.manager.reconcileCancellation(ethers.utils.id("unknown")))
         .to.be.revertedWithCustomError(f.manager, "CancellationNotRecorded");
@@ -298,7 +299,7 @@ describe("RiskManager -- hard-cut branch coverage", () => {
         feeAllocations: [{ feeType: 0, recipient: ZERO, amount: usdc(2) }],
       }))).to.be.revertedWithCustomError(f.manager, "ZeroAddress");
       await expect(f.orchestrator.settlePosition(f.manager.address, settlementContext(f, intentHash, {
-        feeAllocations: Array.from({ length: 8 }, () => ({
+        feeAllocations: Array.from({ length: 13 }, () => ({
           feeType: 0, recipient: f.beneficiary.address, amount: 0,
         })),
       }))).to.be.revertedWithCustomError(f.manager, "InvalidFeeAllocationCount");
@@ -315,7 +316,6 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       const position = await f.manager.getRiskPosition(intentHash);
       expect(position.grossReleasedAmount).to.eq(usdc(100));
       expect(position.executableAmount).to.eq(usdc(98));
-      expect(position.coveredAmount).to.eq(usdc(100));
       expect(position.reservedAmount).to.eq(usdc(100));
       expect(await f.token.balanceOf(f.orchestrator.address)).to.eq(before);
     });
@@ -337,9 +337,6 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       const deferredStake = await f.vault.deferredStakes(intentHash);
       expect(position.grossReleasedAmount).to.eq(usdc(100));
       expect(position.executableAmount).to.eq(usdc(98));
-      expect(position.coveredAmount).to.eq(usdc(100));
-      expect(position.deferredStakeAmount).to.eq(usdc(100));
-      expect(position.deferredFeeAmount).to.eq(usdc(2));
       expect(position.isManualRelease).to.eq(true);
       expect(deferredStake.grossAmount).to.eq(usdc(100));
       expect(deferredStake.feeAmount).to.eq(usdc(2));
@@ -347,15 +344,33 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       expect(await f.token.allowance(f.orchestrator.address, f.manager.address)).to.eq(0);
     });
 
-    it("rejects deferred admission when payout recipient differs from the taker", async () => {
+    it("snapshots the payout recipient as deferred stake owner", async () => {
       const f = await loadFixture(deployFixture);
       await f.manager.setPlatformRiskConfig(PAYPAL, chargebackConfig(true));
       await f.vault.setTakerState(f.taker.address, f.taker.address, usdc(1), usdc(1), false);
       const intentHash = ethers.utils.id("deferred-third-party-recipient");
       await setRiskIntent(f, intentHash, { recipient: f.other.address });
 
+      await f.orchestrator.createPosition(f.manager.address, intentHash);
+
+      const position = await f.manager.getRiskPosition(intentHash);
+      const deferredStake = await f.vault.deferredStakes(intentHash);
+      expect(position.taker).to.eq(f.taker.address);
+      expect(position.stakeOwner).to.eq(f.other.address);
+      expect(position.payoutRecipient).to.eq(f.other.address);
+      expect(deferredStake.staker).to.eq(f.other.address);
+    });
+
+    it("rejects deferred authorization for an exiting payout recipient", async () => {
+      const f = await loadFixture(deployFixture);
+      await f.manager.setPlatformRiskConfig(PAYPAL, chargebackConfig(true));
+      await f.vault.setTakerState(f.taker.address, f.taker.address, usdc(1), usdc(1), false);
+      await f.vault.setTakerState(f.other.address, f.other.address, 0, 0, true);
+      const intentHash = ethers.utils.id("deferred-exiting-recipient");
+      await setRiskIntent(f, intentHash, { recipient: f.other.address });
+
       await expect(f.orchestrator.createPosition(f.manager.address, intentHash))
-        .to.be.revertedWithCustomError(f.manager, "DeferredStakeRecipientMismatch");
+        .to.be.revertedWithCustomError(f.manager, "StakeOwnerExiting");
     });
 
     it("releases non-chargebackable reservations and rejects repeated settlement", async () => {

@@ -654,6 +654,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     ) external override onlyController {
         if (reservationsPaused) revert StakeActionPaused();
         if (_staker == address(0)) revert ZeroAddress();
+        if (exitRequests[_staker].exiting) revert AlreadyExiting(_staker);
         if (deferredStakes[_intentHash].staker != address(0)) revert DeferredStakeAlreadyExists(_intentHash);
 
         deferredStakes[_intentHash] = DeferredStake({
@@ -710,6 +711,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         for (uint256 allocationIndex = 0; allocationIndex < _feeAllocations.length; allocationIndex++) {
             IIntentRiskHook.FeeAllocation calldata allocation = _feeAllocations[allocationIndex];
             if (allocation.recipient == address(0)) revert ZeroAddress();
+            if (allocation.amount == 0) continue;
             feeAmount += allocation.amount;
         }
         if (feeAmount >= _grossAmount) revert InvalidDeferredFeeTotal(_grossAmount, feeAmount);
@@ -724,7 +726,9 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         deferredStake.releaseTime = _releaseTime;
         deferredStake.funded = true;
         for (uint256 allocationIndex = 0; allocationIndex < _feeAllocations.length; allocationIndex++) {
-            deferredFeeAllocations[_intentHash].push(_feeAllocations[allocationIndex]);
+            if (_feeAllocations[allocationIndex].amount != 0) {
+                deferredFeeAllocations[_intentHash].push(_feeAllocations[allocationIndex]);
+            }
         }
 
         reservations[_intentHash] = Reservation({

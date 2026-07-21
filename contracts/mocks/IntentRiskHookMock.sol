@@ -3,6 +3,7 @@
 pragma solidity ^0.8.18;
 
 import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
+import { IOrchestratorV3 } from "../interfaces/IOrchestratorV3.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -42,6 +43,10 @@ contract IntentRiskHookMock is IIntentRiskHook {
 
     function setSettlementTransferAmount(uint256 _amount) external {
         settlementTransferAmount = _amount;
+    }
+
+    function acknowledgeIntentCancellation(IOrchestratorV3 _orchestrator, bytes32 _intentHash) external {
+        _orchestrator.acknowledgeIntentCancellation(_intentHash);
     }
 
     function onIntentCreated(bytes32 _intentHash) external override {
