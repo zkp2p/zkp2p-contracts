@@ -175,10 +175,11 @@ describe("V2 System Deployment", () => {
       expect(actualAddress).to.eq(expectedAddress);
     });
 
-    it("should have the correct relayer registry", async () => {
-      const expectedAddress = getDeployedContractAddress(network, "RelayerRegistry");
-      const actualAddress = await orchestratorV2.relayerRegistry();
-      expect(actualAddress).to.eq(expectedAddress);
+    it("should not expose retired relayer or global multiple-intent controls", async () => {
+      expect(orchestratorV2.interface.functions).not.to.have.property("relayerRegistry()");
+      expect(orchestratorV2.interface.functions).not.to.have.property("setRelayerRegistry(address)");
+      expect(orchestratorV2.interface.functions).not.to.have.property("allowMultipleIntents()");
+      expect(orchestratorV2.interface.functions).not.to.have.property("setAllowMultipleIntents(bool)");
     });
 
     it("should have the correct protocol fee", async () => {

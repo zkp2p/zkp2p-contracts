@@ -13,7 +13,6 @@ import {
   PaymentVerifierMock,
   PaymentVerifierRegistry,
   RateManagerMock,
-  RelayerRegistry,
   USDCMock,
 } from "@utils/contracts";
 import { getAccounts, getWaffleExpect } from "@utils/test";
@@ -37,7 +36,6 @@ describe("ProtocolViewerV2", () => {
   let escrowRegistry: EscrowRegistry;
   let orchestratorRegistry: OrchestratorRegistry;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
-  let relayerRegistry: RelayerRegistry;
   let verifier: PaymentVerifierMock;
   let protocolViewerV2: Contract;
 
@@ -52,7 +50,6 @@ describe("ProtocolViewerV2", () => {
     await usdcToken.transfer(depositor.address, usdc(100_000));
 
     paymentVerifierRegistry = await deployer.deployPaymentVerifierRegistry();
-    relayerRegistry = await deployer.deployRelayerRegistry();
     escrowRegistry = await deployer.deployEscrowRegistry();
     orchestratorRegistry = await deployer.deployOrchestratorRegistry();
 
@@ -81,7 +78,6 @@ describe("ProtocolViewerV2", () => {
       ONE,
       escrowRegistry.address,
       paymentVerifierRegistry.address,
-      relayerRegistry.address,
       ZERO,
       owner.address
     );
@@ -222,8 +218,6 @@ describe("ProtocolViewerV2", () => {
     let intentHash: string;
 
     beforeEach(async () => {
-      await orchestrator.connect(owner.wallet).setAllowMultipleIntents(true);
-
       const paramsOne = await createSignalIntentParams(
         orchestrator.address,
         escrow.address,

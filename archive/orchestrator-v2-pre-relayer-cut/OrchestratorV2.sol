@@ -16,10 +16,11 @@ import { IReferralFee } from "./interfaces/IReferralFee.sol";
 import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
-import { IPostIntentHookV2 } from "./interfaces/IPostIntentHookV2.sol";
+import { ISettlementHook } from "./interfaces/ISettlementHook.sol";
 import { IPreIntentHook } from "./interfaces/IPreIntentHook.sol";
 import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
+import { IRelayerRegistry } from "./interfaces/IRelayerRegistry.sol";
 import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
 
 /**
@@ -74,10 +75,13 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
     IPaymentVerifierRegistry public  paymentVerifierRegistry;          // Registry of payment verifiers
+    IRelayerRegistry public relayerRegistry;                           // Registry of relayers
 
     // Protocol fee configuration
     uint256 public protocolFee;                                     // Protocol fee taken from taker (in preciseUnits, 1e16 = 1%)
     address public protocolFeeRecipient;                            // Address that receives protocol fees
+
+    bool public allowMultipleIntents;                               // Whether to allow multiple intents per account
 
     uint256 public intentCounter;                                 // Counter for number of intents created; nonce for unique intent hashes
 
@@ -87,6 +91,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         uint256 _chainId,
         address _escrowRegistry,
         address _paymentVerifierRegistry,
+        address _relayerRegistry,
         uint256 _protocolFee,
         address _protocolFeeRecipient
     )
@@ -95,6 +100,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         chainId = _chainId;
         escrowRegistry = IEscrowRegistry(_escrowRegistry);
         paymentVerifierRegistry = IPaymentVerifierRegistry(_paymentVerifierRegistry);
+        relayerRegistry = IRelayerRegistry(_relayerRegistry);
         protocolFee = _protocolFee;
         protocolFeeRecipient = _protocolFeeRecipient;
 
@@ -148,7 +154,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         storedIntent.conversionRate = _params.conversionRate;
         storedIntent.payeeId = depData.payeeDetails;
         storedIntent.timestamp = block.timestamp;
-        storedIntent.postIntentHook = _params.postIntentHook;
+        storedIntent.settlementHook = _params.settlementHook;
         storedIntent.data = _params.data;
 
         for (uint256 i = 0; i < _params.referralFees.length; ++i) {
@@ -244,7 +250,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      * @notice Anyone can submit a fulfill intent transaction, even if caller isn't the intent owner. Upon submission the
      * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated.
      * Deposit token is transferred to the intent.to address.
-     * @dev This function adds a reentrancy guard as it's calling the post intent hook contract which itself might call 
+     * @dev This function adds a reentrancy guard as it's calling the settlement hook contract which itself might call
      * malicious contracts.
      *
      * @param _params               Struct containing all the fulfill intent parameters
@@ -260,37 +266,36 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         address managerFeeRecipient = intentManagerFeeRecipient[_params.intentHash];
         uint256 managerFee = intentManagerFee[_params.intentHash];
         
-        address verifier = paymentVerifierRegistry.getVerifier(intent.paymentMethod);
-        if (verifier == address(0)) revert PaymentMethodDoesNotExist(intent.paymentMethod);
-        
-        IPaymentVerifier.PaymentVerificationResult memory verificationResult = IPaymentVerifier(verifier).verifyPayment(
-            IPaymentVerifier.VerifyPaymentData({
-                intentHash: _params.intentHash,
-                paymentProof: _params.paymentProof,
-                data: _params.verificationData
-            })
-        );
-        if (!verificationResult.success) revert PaymentVerificationFailed();
-        if (verificationResult.intentHash != _params.intentHash) revert HashMismatch(_params.intentHash, verificationResult.intentHash);
+        (uint256 releaseAmount, bytes32 paymentId) = _verifyPayment(_params, intent.paymentMethod);
 
         // Enforce snapshot min-at-signal to prevent sub-min partial fulfillments
         uint256 minAtSignal = intentMinAtSignal[_params.intentHash];
-        if (minAtSignal > 0 && verificationResult.releaseAmount < minAtSignal) {
-            revert AmountBelowMin(verificationResult.releaseAmount, minAtSignal);
+        if (minAtSignal > 0 && releaseAmount < minAtSignal) {
+            revert AmountBelowMin(releaseAmount, minAtSignal);
         }
 
         // Effects
-        _resolveIntent(_params.intentHash, IntentResolution.FULFILLED, verificationResult.releaseAmount);
+        _resolveIntentWithPaymentId(
+            _params.intentHash,
+            IntentResolution.FULFILLED,
+            releaseAmount,
+            paymentId
+        );
 
         // Interactions
-        IEscrow(intent.escrow).unlockAndTransferFunds(intent.depositId, _params.intentHash, verificationResult.releaseAmount, address(this));
+        IEscrow(intent.escrow).unlockAndTransferFunds(
+            intent.depositId,
+            _params.intentHash,
+            releaseAmount,
+            address(this)
+        );
 
         _collectFeesTransferFundsAndExecuteAction(
             deposit.token, 
             _params.intentHash, 
             intent, 
-            verificationResult.releaseAmount,
-            _params.postIntentHookData,
+            releaseAmount,
+            _params.settlementHookData,
             managerFeeRecipient,
             managerFee,
             false
@@ -315,7 +320,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         // Snapshot manager fee terms before pruning (pruning deletes the mappings).
         address managerFeeRecipient = intentManagerFeeRecipient[_intentHash];
         uint256 managerFee = intentManagerFee[_intentHash];
-        bool executePostIntentHook = _shouldExecutePostIntentHookOnManualRelease(_intentHash);
+        bool executeSettlementHook = _shouldExecuteSettlementHookOnManualRelease(_intentHash);
         
         // Effects
         _resolveIntent(_intentHash, IntentResolution.RELEASED, intent.amount);
@@ -323,7 +328,7 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         // Interactions
         IEscrow(intent.escrow).unlockAndTransferFunds(intent.depositId, _intentHash, intent.amount, address(this));
 
-        if (executePostIntentHook) {
+        if (executeSettlementHook) {
             _collectFeesTransferFundsAndExecuteAction(
                 deposit.token,
                 _intentHash,
@@ -439,6 +444,29 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     }
 
     /**
+     * @notice GOVERNANCE ONLY: Sets whether all accounts can signal multiple intents.
+     *
+     * @param _allowMultiple   True to allow all accounts to signal multiple intents, false to restrict to whitelisted relayers only
+     */
+    function setAllowMultipleIntents(bool _allowMultiple) external onlyOwner {
+        allowMultipleIntents = _allowMultiple;
+        
+        emit AllowMultipleIntentsUpdated(_allowMultiple);
+    }
+
+    /**
+     * @notice GOVERNANCE ONLY: Updates the relayer registry address.
+     *
+     * @param _relayerRegistry   New relayer registry address
+     */
+    function setRelayerRegistry(address _relayerRegistry) external onlyOwner {
+        if (_relayerRegistry == address(0)) revert ZeroAddress();
+        
+        relayerRegistry = IRelayerRegistry(_relayerRegistry);
+        emit RelayerRegistryUpdated(_relayerRegistry);
+    }
+
+    /**
      * @notice GOVERNANCE ONLY: Pauses intent creation and fulfillment functionality.
      * 
      * Functionalities that are paused:
@@ -506,10 +534,47 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     }
 
     /**
-     * @notice Returns whether manual release should execute the intent's post-intent hook.
+     * @notice Resolves a verified fulfillment with optional verifier-authenticated payment identity.
+     * @dev V2 ignores the identifier because its verifier ABI does not return one. V3 overrides this
+     *      extension point and transports the value to its risk hook and failed-callback record.
+     */
+    function _resolveIntentWithPaymentId(
+        bytes32 _intentHash,
+        IntentResolution _resolution,
+        uint256 _releasedAmount,
+        bytes32
+    ) internal virtual {
+        _resolveIntent(_intentHash, _resolution, _releasedAmount);
+    }
+
+    /** @dev Calls the legacy three-field verifier ABI. */
+    function _verifyPayment(
+        FulfillIntentParams calldata _params,
+        bytes32 _paymentMethod
+    ) internal virtual returns (uint256 releaseAmount, bytes32 paymentId) {
+        address verifier = paymentVerifierRegistry.getVerifier(_paymentMethod);
+        if (verifier == address(0)) revert PaymentMethodDoesNotExist(_paymentMethod);
+
+        IPaymentVerifier.PaymentVerificationResult memory result = IPaymentVerifier(verifier).verifyPayment(
+            IPaymentVerifier.VerifyPaymentData({
+                intentHash: _params.intentHash,
+                paymentProof: _params.paymentProof,
+                data: _params.verificationData
+            })
+        );
+        if (!result.success) revert PaymentVerificationFailed();
+        if (result.intentHash != _params.intentHash) {
+            revert HashMismatch(_params.intentHash, result.intentHash);
+        }
+
+        return (result.releaseAmount, bytes32(0));
+    }
+
+    /**
+     * @notice Returns whether manual release should execute the intent's settlement hook.
      * @dev V2 manual releases transfer directly to the intent recipient.
      */
-    function _shouldExecutePostIntentHookOnManualRelease(bytes32) internal view virtual returns (bool) {
+    function _shouldExecuteSettlementHookOnManualRelease(bytes32) internal view virtual returns (bool) {
         return false;
     }
 
@@ -517,13 +582,19 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
      * @notice Validates an intent before it is signaled.
      */
     function _validateSignalIntent(SignalIntentParams calldata _intent) internal view {
+        // Check if account can have multiple intents
+        bool canHaveMultipleIntents = relayerRegistry.isWhitelistedRelayer(msg.sender) || allowMultipleIntents;
+        if (!canHaveMultipleIntents && accountIntents[msg.sender].length > 0) {
+            revert AccountHasActiveIntent(msg.sender, accountIntents[msg.sender][0]);
+        }
+
         if (_intent.to == address(0)) revert ZeroAddress();
         
         ReferralFeeLib.validateReferralFees(_intent.referralFees);
 
-        if (address(_intent.postIntentHook) != address(0)) {
-            if (address(_intent.postIntentHook).code.length == 0) {
-                revert InvalidPostIntentHook(address(_intent.postIntentHook));
+        if (address(_intent.settlementHook) != address(0)) {
+            if (address(_intent.settlementHook).code.length == 0) {
+                revert InvalidSettlementHook(address(_intent.settlementHook));
             }
         }
 
@@ -707,14 +778,14 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
     }
 
     /**
-     * @notice Handles fee calculations and transfers, then executes any post-intent hooks if present. Called by fulfillIntent.
+     * @notice Handles fee calculations and transfers, then executes any settlement hooks if present. Called by fulfillIntent.
      */
     function _collectFeesTransferFundsAndExecuteAction(
         IERC20 _token, 
         bytes32 _intentHash, 
         Intent memory _intent, 
         uint256 _releaseAmount,
-        bytes memory _postIntentHookData,
+        bytes memory _settlementHookData,
         address _managerFeeRecipient,
         uint256 _managerFee,
         bool _isManualRelease
@@ -730,18 +801,18 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
         uint256 netAmount = _releaseAmount - netFees;
 
         address fundsTransferredTo = _intent.to;
-        if (address(_intent.postIntentHook) != address(0)) {
+        if (address(_intent.settlementHook) != address(0)) {
             // Snapshot balance to enforce exact consumption by the hook
             uint256 preBalance = _token.balanceOf(address(this));
 
-            // Grant exact allowance to the post-intent hook using SafeERC20 with zero-before-set
-            _token.safeApprove(address(_intent.postIntentHook), 0);
-            _token.safeApprove(address(_intent.postIntentHook), netAmount);
-            IPostIntentHookV2.HookExecutionContext memory hookCtx = IPostIntentHookV2.HookExecutionContext({
+            // Grant exact allowance to the settlement hook using SafeERC20 with zero-before-set
+            _token.safeApprove(address(_intent.settlementHook), 0);
+            _token.safeApprove(address(_intent.settlementHook), netAmount);
+            ISettlementHook.HookExecutionContext memory hookCtx = ISettlementHook.HookExecutionContext({
                 intentHash: _intentHash,
                 token: address(_token),
                 executableAmount: netAmount,
-                intent: IPostIntentHookV2.HookIntentContext({
+                intent: ISettlementHook.HookIntentContext({
                     owner: _intent.owner,
                     to: _intent.to,
                     escrow: _intent.escrow,
@@ -755,18 +826,18 @@ contract OrchestratorV2 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV2 {
                     signalHookData: _intent.data
                 })
             });
-            _intent.postIntentHook.execute(hookCtx, _postIntentHookData);
+            _intent.settlementHook.execute(hookCtx, _settlementHookData);
             
             // Enforce that the hook pulled exactly netAmount to prevent stranded funds
             uint256 postBalance = _token.balanceOf(address(this));
-            require(postBalance <= preBalance, "PostIntentHook: unexpected balance increase");
+            require(postBalance <= preBalance, "SettlementHook: unexpected balance increase");
             uint256 spent = preBalance - postBalance;
-            require(spent == netAmount, "PostIntentHook: must pull exact netAmount");
+            require(spent == netAmount, "SettlementHook: must pull exact netAmount");
 
             // Reset allowance to prevent residual balance drainage (and fail closed on non-standard ERC20s)
-            _token.safeApprove(address(_intent.postIntentHook), 0);
+            _token.safeApprove(address(_intent.settlementHook), 0);
 
-            fundsTransferredTo = address(_intent.postIntentHook);
+            fundsTransferredTo = address(_intent.settlementHook);
         } else {
             // Otherwise transfer directly to the intent recipient
             _token.safeTransfer(_intent.to, netAmount);

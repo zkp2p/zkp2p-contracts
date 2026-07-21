@@ -25,7 +25,6 @@ describe("RiskManager and OrchestratorV3", () => {
       .deploy(usdc(1_000_000), "USD Coin", "USDC");
     const paymentVerifierRegistry = await (await ethers.getContractFactory("PaymentVerifierRegistry")).deploy();
     const escrowRegistry = await (await ethers.getContractFactory("EscrowRegistry")).deploy();
-    const relayerRegistry = await (await ethers.getContractFactory("RelayerRegistry")).deploy();
     const orchestratorRegistry = await (await ethers.getContractFactory("OrchestratorRegistry")).deploy();
     const legacyNullifierRegistry = await (await ethers.getContractFactory("NullifierRegistry")).deploy();
     const nullifierRegistry = await (await ethers.getContractFactory("NullifierRegistryV2"))
@@ -67,7 +66,6 @@ describe("RiskManager and OrchestratorV3", () => {
       network.chainId,
       escrowRegistry.address,
       paymentVerifierRegistry.address,
-      relayerRegistry.address,
       0,
       owner.address,
       2_000_000,
@@ -93,10 +91,8 @@ describe("RiskManager and OrchestratorV3", () => {
 
     await escrowRegistry.addEscrow(escrow.address);
     await orchestratorRegistry.addOrchestrator(orchestrator.address);
-    await orchestrator.setAllowMultipleIntents(true);
     await verifier.setShouldVerifyPayment(true);
     await verifier.setVerificationContext(orchestrator.address, escrow.address);
-
     await manager.setPlatformRiskConfig(ZELLE, {
       enabled: true,
       chargeback: {
@@ -432,6 +428,14 @@ describe("RiskManager and OrchestratorV3", () => {
   });
 
   describe("admission and portfolio reservations", () => {
+    it("exposes no relayer or global multiple-intent privilege", async () => {
+      const { orchestrator } = await loadFixture(deployFixture);
+      expect(orchestrator.interface.functions).not.to.have.property("relayerRegistry()");
+      expect(orchestrator.interface.functions).not.to.have.property("setRelayerRegistry(address)");
+      expect(orchestrator.interface.functions).not.to.have.property("allowMultipleIntents()");
+      expect(orchestrator.interface.functions).not.to.have.property("setAllowMultipleIntents(bool)");
+    });
+
     it("uses a delegated Safe as the shared stake owner", async () => {
       const { owner: safe, taker, escrow, orchestrator, token, vault, manager } = await loadFixture(deployFixture);
       await token.connect(safe).approve(vault.address, ethers.constants.MaxUint256);

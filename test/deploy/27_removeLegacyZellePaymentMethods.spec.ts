@@ -14,7 +14,6 @@ import {
   OrchestratorRegistry,
   OrchestratorV2,
   PaymentVerifierRegistry,
-  RelayerRegistry,
   SimpleAttestationVerifier,
   UnifiedPaymentVerifier,
   USDCMock,
@@ -46,7 +45,6 @@ describe("Remove legacy Zelle payment methods", () => {
   let escrowRegistry: EscrowRegistry;
   let orchestratorRegistry: OrchestratorRegistry;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
-  let relayerRegistry: RelayerRegistry;
   let nullifierRegistry: NullifierRegistry;
   let escrow: EscrowV2;
   let orchestrator: OrchestratorV2;
@@ -114,7 +112,6 @@ describe("Remove legacy Zelle payment methods", () => {
     escrowRegistry = await deployer.deployEscrowRegistry();
     orchestratorRegistry = await deployer.deployOrchestratorRegistry();
     paymentVerifierRegistry = await deployer.deployPaymentVerifierRegistry();
-    relayerRegistry = await deployer.deployRelayerRegistry();
     nullifierRegistry = await deployer.deployNullifierRegistry();
 
     escrow = await deployer.deployEscrowV2(
@@ -132,7 +129,6 @@ describe("Remove legacy Zelle payment methods", () => {
       BigNumber.from(chainId),
       escrowRegistry.address,
       paymentVerifierRegistry.address,
-      relayerRegistry.address,
       ZERO,
       owner.address
     );

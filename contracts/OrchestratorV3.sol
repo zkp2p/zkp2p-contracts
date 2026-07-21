@@ -36,12 +36,11 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
     /* ============ Constructor ============ */
 
     /**
-     * @notice Creates a V3 orchestrator while preserving all V2 constructor dependencies.
+     * @notice Creates a V3 orchestrator with risk-managed intent admission.
      * @param _owner Governance owner.
      * @param _chainId Chain identifier used by existing intent signature validation.
      * @param _escrowRegistry Registry of accepted escrow contracts.
      * @param _paymentVerifierRegistry Registry of payment proof verifiers.
-     * @param _relayerRegistry Existing relayer registry retained for compatibility.
      * @param _protocolFee Protocol fee in 1e18 precise units.
      * @param _protocolFeeRecipient Protocol fee recipient.
      * @param _riskCallbackGasLimit Gas forwarded to each risk callback.
@@ -51,7 +50,6 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         uint256 _chainId,
         address _escrowRegistry,
         address _paymentVerifierRegistry,
-        address _relayerRegistry,
         uint256 _protocolFee,
         address _protocolFeeRecipient,
         uint256 _riskCallbackGasLimit
@@ -61,7 +59,6 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             _chainId,
             _escrowRegistry,
             _paymentVerifierRegistry,
-            _relayerRegistry,
             _protocolFee,
             _protocolFeeRecipient
         )

@@ -176,7 +176,6 @@ export default class DeployHelper {
     chainId: BigNumber,
     escrowRegistry: Address,
     paymentVerifierRegistry: Address,
-    relayerRegistry: Address,
     protocolFee: BigNumber,
     protocolFeeRecipient: Address
   ): Promise<OrchestratorV2> {
@@ -185,7 +184,6 @@ export default class DeployHelper {
       chainId.toString(),
       escrowRegistry,
       paymentVerifierRegistry,
-      relayerRegistry,
       protocolFee,
       protocolFeeRecipient
     );
