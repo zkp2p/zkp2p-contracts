@@ -9,6 +9,7 @@ const outputPath = path.join(repositoryRoot, "foundry-migration/hardhat-to-found
 const registryFile = "test-foundry/deterministic/registries/RegistryParity.t.sol";
 const oracleFile = "test-foundry/deterministic/oracles/OracleAdapterParity.t.sol";
 const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifierParity.t.sol";
+const thresholdFile = "test-foundry/deterministic/libs/ThresholdSignatureParity.t.sol";
 
 function csv(value) {
     const stringValue = String(value ?? "");
@@ -187,13 +188,37 @@ function attestationDestination(test) {
     return "";
 }
 
+function thresholdDestination(test) {
+    if (test.sourceFile !== "test/libs/thresholdSigVerifierUtils.spec.ts") return "";
+    const scenario = test.scenario;
+    const target = (testName) => `${thresholdFile}:ThresholdSignatureParityTest::${testName}`;
+    if (scenario.includes("Single witness")) return target("test_SingleWitnessMeetsThresholdOne");
+    if (scenario.includes("Multiple witnesses meeting exact")) return target("test_MultipleWitnessesMeetExactThreshold");
+    if (scenario.includes("More signatures than threshold")) return target("test_ExcessSignaturesAreAcceptedAfterThreshold");
+    if (scenario.includes("Different signature orderings")) return target("test_SignatureOrderDoesNotAffectThreshold");
+    if (scenario.includes("Zero threshold")) return target("test_RejectsZeroThreshold");
+    if (scenario.includes("Threshold exceeds signatures")) return target("test_RejectsThresholdAboveSignatureCount");
+    if (scenario.includes("Threshold exceeds witnesses")) return target("test_RejectsThresholdAboveWitnessCount");
+    if (scenario.includes("Not enough valid signatures")) return target("test_RejectsMixedSignaturesBelowThreshold");
+    if (scenario.includes("Some valid signatures") && scenario.includes("exact failure")) return target("test_ExactFailureScenarioDistinguishesTwoFromThreeValidSigners");
+    if (scenario.includes("Some valid signatures")) return target("test_RejectsMixedSignaturesBelowThreshold");
+    if (scenario.includes("Invalid signatures") || scenario.includes("Duplicate witnesses signing")) return target("test_RejectsInvalidSignerAndDuplicateSigner");
+    if (scenario.includes("Empty signatures") || scenario.includes("Empty witnesses")) return target("test_RejectsEmptySignatureOrWitnessArrays");
+    if (scenario.includes("Maximum practical")) return target("test_HandlesTenWitnessThreshold");
+    if (scenario.includes("Signatures from non-witnesses")) return target("test_IgnoresNonWitnessSignaturesWhenEnoughWitnessesSign");
+    if (scenario.includes("Same witness appearing")) return target("test_DuplicateWitnessEntriesDoNotPreventDistinctSignerThreshold");
+    if (scenario.includes("Early exit optimization")) return target("test_EarlyThresholdSuccessIgnoresUnneededLaterSignatures");
+    if (scenario.includes("Malformed signatures")) return target("test_RejectsMalformedAndEmptySignatureBytes");
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || attestationDestination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || attestationDestination(test) || thresholdDestination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -203,11 +228,15 @@ const rows = inventory.tests.map((test) => {
     if (["test/unifiedVerifier/simpleAttestationVerifier.spec.ts", "test/unifiedVerifier/MultiAttestationVerifier.spec.ts"].includes(test.sourceFile) && !foundryDestination) {
         throw new Error(`Unmapped attestation behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/libs/thresholdSigVerifierUtils.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped threshold-signature behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
     let evidence = "";
     if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(oracleFile)) evidence = "OracleAdapterParity.t.sol: 25 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(attestationFile)) evidence = "AttestationVerifierParity.t.sol: 24 passed, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(thresholdFile)) evidence = "ThresholdSignatureParity.t.sol: 16 passed, 0 failed, 0 skipped";
     return [
         test.id,
         test.sourceFile,
