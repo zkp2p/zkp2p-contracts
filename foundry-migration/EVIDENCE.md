@@ -22,7 +22,8 @@ This ledger is the durable source of truth for the Hardhat-to-Foundry migration 
 | Repository | `zkp2p/zkp2p-contracts` |
 | Isolated worktree | `/Users/sachin/.codex/worktrees/1a3b/zkp2p-v2-contracts` |
 | Branch | `codex/foundry-test-migration` |
-| Starting and current base SHA | `a55b49db180ddf2dee96334bace4e38553cd0943` |
+| Starting SHA | `a55b49db180ddf2dee96334bace4e38553cd0943` |
+| Current rebased base SHA | `659fb603907339e920af07a1355c6473ddcdb223` |
 | Starting commit | `fix: harden deferred settlement accounting and integration (#189)` |
 | Fetch command | `git fetch origin main --prune` |
 | Initial worktree state | Clean detached worktree; branch created directly from fetched `origin/main` |
@@ -41,6 +42,7 @@ This ledger is the durable source of truth for the Hardhat-to-Foundry migration 
 - Production and test-support Solidity files under `contracts/`: 103 (exact coverage denominator will follow `.solcover.js`).
 - Test entry points discovered in `package.json`: `test`, `test:integration`, `test:deploy`, `coverage`, `test:forge`, `test:forge:fuzz`, `test:forge:invariant`, `test:forge:fork`, `test:forge:coverage`, and package tests.
 - Existing CI problems observed before changes: workflow branch allowlists omit ordinary feature branches; Foundry fuzz CI forces 100 runs below configured 256; fork tests are omitted on pull requests and depend on an RPC secret; Codecov upload is skipped when its token is absent; Foundry/action versions are unpinned; suite names and jobs split coverage in ways that can omit tests.
+- `origin/main` advanced during Phase 0 from the starting SHA to `659fb603` (`feat: fund intent extensions with delegated stake (#190)`). The branch was immediately rebased. Upstream changed `RiskManager`, `StakeVault`, their Hardhat tests, and two old Foundry files; affected and complete baselines are being refreshed on the new base while retaining the original cold measurement.
 
 ## Baseline commands and results
 
@@ -53,10 +55,17 @@ Measured results will be appended here before either test suite is deleted.
 | Hardhat integration | `PATH=/opt/homebrew/opt/node@20/bin:$PATH /usr/bin/time -p node .yarn/releases/yarn-4.9.1.cjs test:integration` | Exit 1; no tests executed | real 0.18s; user 0.24s; sys 0.03s | Script references absent `test/integration/*.ts`; obsolete/silently empty baseline group must be resolved, not skipped |
 | Hardhat deployment/default network | `PATH=/opt/homebrew/opt/node@20/bin:$PATH /usr/bin/time -p node .yarn/releases/yarn-4.9.1.cjs test:deploy` | 6 passing; 48 failing; exit 48 | real 3.41s; user 3.47s; sys 2.49s | Expected missing deployment artifacts when invoked without the CI deploy topology |
 | Hardhat deployment/local node | Start `yarn chain`; run `yarn deploy:localhost`; then `yarn hardhat test $(find test/deploy -maxdepth 1 -type f -name '*.ts' -print \| sort) --network localhost` | Deploy exit 0; 176 passing / 0 pending / 0 failing; test exit 0 | deploy 9.11s; assertions 3.54s | Exact current CI topology; tracked localhost timestamp side effects restored after run |
+| Hardhat canonical after rebase | `PATH=/opt/homebrew/opt/node@20/bin:$PATH /usr/bin/time -p node .yarn/releases/yarn-4.9.1.cjs test` | 1,300 passing; 5 pending; exit 0 | real 99.36s; user 41.67s; sys 9.36s | Current `659fb603` base; includes two upstream staking behaviors added after the original baseline |
+| Hardhat affected staking after rebase | `yarn hardhat test test/staking/riskManager.spec.ts test/staking/stakeVault.spec.ts` | 125 passing; 0 pending; exit 0; 5 changed Solidity files compiled | real 27.14s | Targeted validation after rebasing upstream delegated-stake funding changes |
+| Hardhat patch-coverage group | `yarn hardhat test test/patchCoverage/*.ts` | 33 passing; 0 pending; exit 0 | real 5.65s | Separately invoked coverage-only group; behaviors must move into ordinary named deterministic tests |
 | Hardhat coverage | Pending | Pending | Pending | Authoritative parity baseline |
-| Existing Foundry complete | Pending | Pending | Pending | Context only, not parity credit |
-| Existing Foundry fork | Pending | Pending | Pending | Diagnose/pin or replace |
-| Package build/test | Pending | Pending | Pending | Preserve release surface |
+| Existing Foundry cold complete | `yarn test:forge` | 137 passing; 2 failing; 0 skipped across 15 suites / 139 tests; exit 1; 159 files compiled | compile 203.63s; real 207.89s; user 209.69s; sys 5.39s | Context only, not parity credit; default-profile live fork failures changed with live state |
+| Existing Foundry warm complete | `yarn test:forge` | 137 passing; 2 failing; 0 skipped; exit 1 | real 2.07s | Same two live-fork failures: expected Across deposit but observed no spoke-pool increase/fallback |
+| Existing Foundry fuzz | `yarn test:forge:fuzz` | 35 passing; 0 failing; 100 runs forced by script | real 0.51s | Script overrides the configured 256-run default downward |
+| Existing Foundry invariants | `yarn test:forge:invariant` | 24 passing; 0 failing; 3 suites; 256 runs and 3,840 calls per invariant suite | real 1.45s | `fail_on_revert=false`; includes an empty invariant and log-only summaries; separate placeholder file is silently undiscovered |
+| Existing Foundry fork | `FOUNDRY_PROFILE=fork yarn forge test --match-path 'test-foundry/fork/*Fork.t.sol' -vvv` | 3 passing; 0 failing against an unpinned live Base head; exit 0; 144 files compiled | compile 52.28s; real 54.84s | Default and fork-profile runs used different cached live blocks (`48917829` and `48917873`), demonstrating nondeterminism |
+| Package build | `yarn build` | Pass | real 6.19s | Preserves compile and TypeScript release surface |
+| Package tests | `yarn pkg:test` | 2 suites / 7 tests passing | real 2.56s | Package export/import smoke coverage |
 
 ### Baseline pending behaviors
 
@@ -67,6 +76,16 @@ These receive no exemption from migration and must become executable assertions:
 3. Same source/suite — `should delete the original intent from the intents mapping`.
 4. Same source/suite — `should emit an IntentPruned event`.
 5. Same source/suite under `when the reclaimable amount can't cover the new intent` — `should revert`.
+
+### Existing Foundry confidence findings
+
+- `test-foundry/invariant/V2RateFlowInvariantSkeleton.t.sol` is an explicit compile-safe placeholder. Its ten empty `spec_*` functions are deliberately undiscovered, so CI reports no failure or skip.
+- `EscrowInvariant.invariant_FeeBounds()` has an empty body.
+- `EscrowInvariant.invariant_callSummary()` and `OrchestratorInvariant.invariant_callSummary()` only print counters/accounting; they assert no property.
+- Global `fail_on_revert = false` permits handler sequences to revert without failing. Call distributions show substantial reverting traffic, requiring handler-by-handler reachability and exercise review.
+- The fork suite calls `vm.createSelectFork(rpcUrl)` without a block number and depends on mutable Base USDC/Across SpokePool state. It failed under the default profile and passed minutes later under the fork profile at a different live block.
+- `test-foundry/fuzz/RiskManagerMathFuzz.t.sol` contains arithmetic-focused properties that require re-derivation against production contract behavior; no old fuzz assertion receives parity or additive-assurance credit.
+- Repository scans found no `.only`, `xit`, or `xdescribe`; the five known Hardhat omissions are implemented through one `it.skip` and one `describe.skip` containing four tests.
 
 ## Coverage comparison
 
