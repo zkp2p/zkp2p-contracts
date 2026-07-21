@@ -37,6 +37,8 @@ const escrowLockFundsFile = "test-foundry/deterministic/escrow/EscrowLockFundsPa
 const escrowUnlockFundsFile = "test-foundry/deterministic/escrow/EscrowUnlockFundsParity.t.sol";
 const escrowUnlockTransferFile = "test-foundry/deterministic/escrow/EscrowUnlockTransferParity.t.sol";
 const escrowIntentExpiryFile = "test-foundry/deterministic/escrow/EscrowIntentExpiryParity.t.sol";
+const escrowGovernanceFile = "test-foundry/deterministic/escrow/EscrowGovernanceParity.t.sol";
+const escrowExpiredIntentsViewFile = "test-foundry/deterministic/escrow/EscrowExpiredIntentsViewParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -1110,8 +1112,49 @@ const escrowLegacyDestinations = [
         "test_ExtendIntentExpiryRejectsMissingDeposit",
         "test_ExtendIntentExpiryRejectsZeroAdditionalTime",
     ].map((testName) => [escrowIntentExpiryFile, "EscrowIntentExpiryParityTest", testName]),
+    ...[
+        "test_SetOrchestratorUpdatesAddress",
+        "test_SetOrchestratorEmitsUpdate",
+        "test_SetOrchestratorRejectsZeroAddress",
+        "test_SetOrchestratorRejectsNonOwner",
+        "test_SetPaymentVerifierRegistryUpdatesAddress",
+        "test_SetPaymentVerifierRegistryEmitsUpdate",
+        "test_SetPaymentVerifierRegistryRejectsZeroAddress",
+        "test_SetPaymentVerifierRegistryRejectsNonOwner",
+        "test_PauseEscrowSetsPausedState",
+        "test_PauseEscrowEmitsOwner",
+        "test_PauseEscrowRejectsNonOwner",
+        "test_PauseEscrowRejectsAlreadyPaused",
+        "test_UnpauseEscrowClearsPausedState",
+        "test_UnpauseEscrowEmitsOwner",
+        "test_UnpauseEscrowRejectsNonOwner",
+        "test_UnpauseEscrowRejectsWhenNotPaused",
+        "test_SetDustRecipientUpdatesRecipient",
+        "test_SetDustRecipientEmitsUpdate",
+        "test_SetDustRecipientReplacesExistingRecipient",
+        "test_SetDustRecipientRejectsZeroAddress",
+        "test_SetDustRecipientRejectsNonOwner",
+        "test_SetDustThresholdUpdatesThreshold",
+        "test_SetDustThresholdEmitsUpdate",
+        "test_SetDustThresholdAllowsZero",
+        "test_SetDustThresholdRejectsAboveMaximum",
+        "test_SetDustThresholdRejectsNonOwner",
+        "test_SetIntentExpirationPeriodUpdatesPeriod",
+        "test_SetIntentExpirationPeriodEmitsUpdate",
+        "test_SetIntentExpirationPeriodRejectsZero",
+        "test_SetIntentExpirationPeriodRejectsNonOwner",
+        "test_SetMaxIntentsPerDepositUpdatesMaximum",
+        "test_SetMaxIntentsPerDepositEmitsUpdate",
+        "test_SetMaxIntentsPerDepositRejectsZero",
+        "test_SetMaxIntentsPerDepositRejectsNonOwner",
+    ].map((testName) => [escrowGovernanceFile, "EscrowGovernanceParityTest", testName]),
+    ...[
+        "test_GetExpiredIntentsBeforeExpiryReturnsEmpty",
+        "test_GetExpiredIntentsAfterExpiryReturnsHashAndAmount",
+        "test_GetExpiredIntentsWithoutIntentsReturnsEmpty",
+    ].map((testName) => [escrowExpiredIntentsViewFile, "EscrowExpiredIntentsViewParityTest", testName]),
 ];
-if (escrowLegacySourceTests.length !== 276 || escrowLegacyDestinations.length !== 239) {
+if (escrowLegacySourceTests.length !== 276 || escrowLegacyDestinations.length !== 276) {
     throw new Error(
         `Escrow legacy mapping count mismatch: ${escrowLegacySourceTests.length} source / ${escrowLegacyDestinations.length} translated destinations`
     );
@@ -1258,6 +1301,9 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === escrowV2BranchSource && !foundryDestination) {
         throw new Error(`Unmapped EscrowV2 branch behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === escrowLegacySource && !foundryDestination) {
+        throw new Error(`Unmapped Escrow behavior: ${test.id} ${test.scenario}`);
+    }
     if (test.sourceFile === "test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped OrchestratorV2 legacy behavior: ${test.id} ${test.scenario}`);
     }
@@ -1276,7 +1322,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(escrowV2OracleConfigFile)) evidence = "EscrowV2OracleRateConfigParity.t.sol: 29 passed individually and together, 0 failed, 0 skipped";
     if ([escrowV2LegacyManagementFile, escrowV2LegacyLifecycleFile, escrowV2LegacyConfigurationFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 management + lifecycle + configuration parity: 70 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 70/70";
     if ([escrowV2BranchAuthorizationFile, escrowV2BranchValidationFile, escrowV2BranchGovernanceLifecycleFile, escrowV2BranchStatePauseFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 branch parity: 108 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 108/108";
-    if ([escrowCreateDepositFile, escrowFundingFile, escrowWithdrawFile, escrowRateRangeFile, escrowPaymentMethodFile, escrowCurrencyFile, escrowDelegateFile, escrowAcceptingRetainFile, escrowPruningFile, escrowLockFundsFile, escrowUnlockFundsFile, escrowUnlockTransferFile, escrowIntentExpiryFile].some((file) => foundryDestination.startsWith(file))) evidence = "Escrow constructor/create/funding/withdraw/configuration/delegate/state/pruning/lock/unlock/settlement/expiry parity slice: 239 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat suites: 238 passed plus 1 baseline-pending case resolved in Foundry";
+    if ([escrowCreateDepositFile, escrowFundingFile, escrowWithdrawFile, escrowRateRangeFile, escrowPaymentMethodFile, escrowCurrencyFile, escrowDelegateFile, escrowAcceptingRetainFile, escrowPruningFile, escrowLockFundsFile, escrowUnlockFundsFile, escrowUnlockTransferFile, escrowIntentExpiryFile, escrowGovernanceFile, escrowExpiredIntentsViewFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete legacy Escrow parity: 276 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 275 passed plus 1 baseline-pending case resolved in Foundry";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
