@@ -273,7 +273,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
 
     /**
      * @notice Sets or removes the risk hook used by future intents for one deposit.
-     * @dev Existing intents keep their snapshotted hook.
+     * @dev Callable only by the deposit's depositor. Existing intents keep their snapshotted hook.
      *
      * @param _escrow       Escrow address.
      * @param _depositId    Deposit id.
@@ -292,11 +292,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         }
 
         IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
-        bool isDepositorOrDelegate = msg.sender == deposit.depositor
-            || (deposit.delegate != address(0) && msg.sender == deposit.delegate);
-        if (!isDepositorOrDelegate) {
-            revert UnauthorizedCallerOrDelegate(msg.sender, deposit.depositor, deposit.delegate);
-        }
+        if (msg.sender != deposit.depositor) revert UnauthorizedCaller(msg.sender, deposit.depositor);
 
         depositRiskHooks[_escrow][_depositId] = _hook;
         emit DepositRiskHookSet(_escrow, _depositId, hookAddress, msg.sender);
