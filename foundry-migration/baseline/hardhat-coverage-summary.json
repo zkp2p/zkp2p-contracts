@@ -1,0 +1,846 @@
+{
+  "schemaVersion": 1,
+  "source": "solidity-coverage 0.8.17",
+  "sourceCommit": "659fb603907339e920af07a1355c6473ddcdb223",
+  "command": "PATH=/opt/homebrew/opt/node@20/bin:$PATH /usr/bin/time -p node .yarn/releases/yarn-4.9.1.cjs coverage",
+  "testResult": {
+    "passing": 1333,
+    "pending": 5,
+    "failing": 0,
+    "exitCode": 0,
+    "runtimeSeconds": 870.61
+  },
+  "inputs": {
+    "coverageFinalSha256": "ef49ba44575bfe42da3e39d9f0a7f4f539623ea105b538566e184e7570e59d5d",
+    "lcovSha256": "621394bc7ae1639d3bd0f0c4ae78db53afc389864826e05b004b55e3778da62e"
+  },
+  "overall": {
+    "statements": {
+      "covered": 1751,
+      "total": 1775,
+      "pct": 98.65
+    },
+    "branches": {
+      "covered": 1600,
+      "total": 1770,
+      "pct": 90.4
+    },
+    "functions": {
+      "covered": 440,
+      "total": 446,
+      "pct": 98.65
+    },
+    "lines": {
+      "covered": 2327,
+      "total": 2379,
+      "pct": 97.81
+    }
+  },
+  "files": [
+    {
+      "file": "contracts/Escrow.sol",
+      "statements": {
+        "covered": 196,
+        "total": 196,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 220,
+        "total": 220,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 53,
+        "total": 53,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 268,
+        "total": 268,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/EscrowV2.sol",
+      "statements": {
+        "covered": 299,
+        "total": 299,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 336,
+        "total": 336,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 70,
+        "total": 70,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 392,
+        "total": 392,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/Orchestrator.sol",
+      "statements": {
+        "covered": 107,
+        "total": 107,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 96,
+        "total": 96,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 24,
+        "total": 24,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 136,
+        "total": 136,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/OrchestratorV2.sol",
+      "statements": {
+        "covered": 151,
+        "total": 151,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 108,
+        "total": 108,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 33,
+        "total": 33,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 197,
+        "total": 197,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/OrchestratorV3.sol",
+      "statements": {
+        "covered": 38,
+        "total": 38,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 24,
+        "total": 24,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 15,
+        "total": 15,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 50,
+        "total": 50,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/ProtocolViewer.sol",
+      "statements": {
+        "covered": 19,
+        "total": 19,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 4,
+        "total": 4,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 6,
+        "total": 6,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 31,
+        "total": 31,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/ProtocolViewerV2.sol",
+      "statements": {
+        "covered": 26,
+        "total": 26,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 4,
+        "total": 4,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 8,
+        "total": 8,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 41,
+        "total": 41,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/RateManagerV1.sol",
+      "statements": {
+        "covered": 50,
+        "total": 50,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 60,
+        "total": 60,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 15,
+        "total": 15,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 70,
+        "total": 70,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/RiskManager.sol",
+      "statements": {
+        "covered": 201,
+        "total": 208,
+        "pct": 96.63
+      },
+      "branches": {
+        "covered": 174,
+        "total": 246,
+        "pct": 70.73
+      },
+      "functions": {
+        "covered": 39,
+        "total": 40,
+        "pct": 97.5
+      },
+      "lines": {
+        "covered": 273,
+        "total": 295,
+        "pct": 92.54
+      }
+    },
+    {
+      "file": "contracts/StakeVault.sol",
+      "statements": {
+        "covered": 200,
+        "total": 216,
+        "pct": 92.59
+      },
+      "branches": {
+        "covered": 135,
+        "total": 226,
+        "pct": 59.73
+      },
+      "functions": {
+        "covered": 44,
+        "total": 49,
+        "pct": 89.8
+      },
+      "lines": {
+        "covered": 287,
+        "total": 316,
+        "pct": 90.82
+      }
+    },
+    {
+      "file": "contracts/hooks/AcrossBridgeHook.sol",
+      "statements": {
+        "covered": 29,
+        "total": 29,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 28,
+        "total": 28,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 7,
+        "total": 7,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 36,
+        "total": 36,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/hooks/AcrossBridgeHookV2.sol",
+      "statements": {
+        "covered": 31,
+        "total": 31,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 30,
+        "total": 30,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 7,
+        "total": 7,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 39,
+        "total": 39,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/hooks/SignatureGatingPreIntentHook.sol",
+      "statements": {
+        "covered": 15,
+        "total": 15,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 14,
+        "total": 14,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 4,
+        "total": 4,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 21,
+        "total": 21,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/hooks/WhitelistPreIntentHook.sol",
+      "statements": {
+        "covered": 19,
+        "total": 19,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 20,
+        "total": 20,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 6,
+        "total": 6,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 25,
+        "total": 25,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/lib/BoundedCall.sol",
+      "statements": {
+        "covered": 18,
+        "total": 19,
+        "pct": 94.74
+      },
+      "branches": {
+        "covered": 15,
+        "total": 18,
+        "pct": 83.33
+      },
+      "functions": {
+        "covered": 4,
+        "total": 4,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 21,
+        "total": 22,
+        "pct": 95.45
+      }
+    },
+    {
+      "file": "contracts/lib/FeeSettlementLib.sol",
+      "statements": {
+        "covered": 26,
+        "total": 26,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 14,
+        "total": 14,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 3,
+        "total": 3,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 34,
+        "total": 34,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/lib/PostIntentHookExecutor.sol",
+      "statements": {
+        "covered": 13,
+        "total": 13,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 4,
+        "total": 6,
+        "pct": 66.67
+      },
+      "functions": {
+        "covered": 2,
+        "total": 2,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 13,
+        "total": 13,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/lib/ReferralFeeLib.sol",
+      "statements": {
+        "covered": 11,
+        "total": 11,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 10,
+        "total": 10,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 2,
+        "total": 2,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 17,
+        "total": 17,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/lib/RiskSettlementExecutor.sol",
+      "statements": {
+        "covered": 15,
+        "total": 15,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 8,
+        "total": 8,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 1,
+        "total": 1,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 18,
+        "total": 18,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/lib/ThresholdSigVerifierUtils.sol",
+      "statements": {
+        "covered": 14,
+        "total": 14,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 16,
+        "total": 16,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 1,
+        "total": 1,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 21,
+        "total": 21,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/oracles/ChainlinkOracleAdapter.sol",
+      "statements": {
+        "covered": 26,
+        "total": 26,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 18,
+        "total": 18,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 3,
+        "total": 3,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 30,
+        "total": 30,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/oracles/PythOracleAdapter.sol",
+      "statements": {
+        "covered": 23,
+        "total": 23,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 12,
+        "total": 12,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 4,
+        "total": 4,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 29,
+        "total": 29,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/registries/EscrowRegistry.sol",
+      "statements": {
+        "covered": 10,
+        "total": 10,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 12,
+        "total": 12,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 6,
+        "total": 6,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 13,
+        "total": 13,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/registries/NullifierRegistry.sol",
+      "statements": {
+        "covered": 10,
+        "total": 10,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 14,
+        "total": 14,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 6,
+        "total": 6,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 14,
+        "total": 14,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/registries/NullifierRegistryV2.sol",
+      "statements": {
+        "covered": 17,
+        "total": 17,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 26,
+        "total": 26,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 7,
+        "total": 7,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 24,
+        "total": 24,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/registries/OrchestratorRegistry.sol",
+      "statements": {
+        "covered": 6,
+        "total": 6,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 12,
+        "total": 12,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 2,
+        "total": 2,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 8,
+        "total": 8,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/registries/PaymentVerifierRegistry.sol",
+      "statements": {
+        "covered": 31,
+        "total": 31,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 28,
+        "total": 28,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 12,
+        "total": 12,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 36,
+        "total": 36,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/registries/PostIntentHookRegistry.sol",
+      "statements": {
+        "covered": 9,
+        "total": 9,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 10,
+        "total": 10,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 5,
+        "total": 5,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 11,
+        "total": 11,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/registries/RelayerRegistry.sol",
+      "statements": {
+        "covered": 8,
+        "total": 8,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 10,
+        "total": 10,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 4,
+        "total": 4,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 10,
+        "total": 10,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/unifiedVerifier/BaseUnifiedPaymentVerifier.sol",
+      "statements": {
+        "covered": 14,
+        "total": 14,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 18,
+        "total": 18,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 7,
+        "total": 7,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 21,
+        "total": 21,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/unifiedVerifier/BaseUnifiedPaymentVerifierV3.sol",
+      "statements": {
+        "covered": 17,
+        "total": 17,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 24,
+        "total": 24,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 7,
+        "total": 7,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 24,
+        "total": 24,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/unifiedVerifier/MultiAttestationVerifier.sol",
+      "statements": {
+        "covered": 21,
+        "total": 21,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 24,
+        "total": 26,
+        "pct": 92.31
+      },
+      "functions": {
+        "covered": 8,
+        "total": 8,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 24,
+        "total": 24,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/unifiedVerifier/SimpleAttestationVerifier.sol",
+      "statements": {
+        "covered": 5,
+        "total": 5,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 4,
+        "total": 4,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 3,
+        "total": 3,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 9,
+        "total": 9,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/unifiedVerifier/UnifiedPaymentVerifier.sol",
+      "statements": {
+        "covered": 35,
+        "total": 35,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 28,
+        "total": 28,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 11,
+        "total": 11,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 39,
+        "total": 39,
+        "pct": 100
+      }
+    },
+    {
+      "file": "contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol",
+      "statements": {
+        "covered": 41,
+        "total": 41,
+        "pct": 100
+      },
+      "branches": {
+        "covered": 40,
+        "total": 40,
+        "pct": 100
+      },
+      "functions": {
+        "covered": 11,
+        "total": 11,
+        "pct": 100
+      },
+      "lines": {
+        "covered": 45,
+        "total": 45,
+        "pct": 100
+      }
+    }
+  ]
+}

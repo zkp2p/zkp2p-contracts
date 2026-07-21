@@ -58,12 +58,13 @@ Measured results will be appended here before either test suite is deleted.
 | Hardhat canonical after rebase | `PATH=/opt/homebrew/opt/node@20/bin:$PATH /usr/bin/time -p node .yarn/releases/yarn-4.9.1.cjs test` | 1,300 passing; 5 pending; exit 0 | real 99.36s; user 41.67s; sys 9.36s | Current `659fb603` base; includes two upstream staking behaviors added after the original baseline |
 | Hardhat affected staking after rebase | `yarn hardhat test test/staking/riskManager.spec.ts test/staking/stakeVault.spec.ts` | 125 passing; 0 pending; exit 0; 5 changed Solidity files compiled | real 27.14s | Targeted validation after rebasing upstream delegated-stake funding changes |
 | Hardhat patch-coverage group | `yarn hardhat test test/patchCoverage/*.ts` | 33 passing; 0 pending; exit 0 | real 5.65s | Separately invoked coverage-only group; behaviors must move into ordinary named deterministic tests |
-| Hardhat coverage | Pending | Pending | Pending | Authoritative parity baseline |
+| Hardhat coverage | `PATH=/opt/homebrew/opt/node@20/bin:$PATH /usr/bin/time -p node .yarn/releases/yarn-4.9.1.cjs coverage` | 1,333 passing; 5 pending; 0 failing; exit 0 | real 870.61s; user 976.89s; sys 74.13s | Authoritative current-base parity baseline; canonical plus patch-coverage groups |
 | Existing Foundry cold complete | `yarn test:forge` | 137 passing; 2 failing; 0 skipped across 15 suites / 139 tests; exit 1; 159 files compiled | compile 203.63s; real 207.89s; user 209.69s; sys 5.39s | Context only, not parity credit; default-profile live fork failures changed with live state |
 | Existing Foundry warm complete | `yarn test:forge` | 137 passing; 2 failing; 0 skipped; exit 1 | real 2.07s | Same two live-fork failures: expected Across deposit but observed no spoke-pool increase/fallback |
 | Existing Foundry fuzz | `yarn test:forge:fuzz` | 35 passing; 0 failing; 100 runs forced by script | real 0.51s | Script overrides the configured 256-run default downward |
 | Existing Foundry invariants | `yarn test:forge:invariant` | 24 passing; 0 failing; 3 suites; 256 runs and 3,840 calls per invariant suite | real 1.45s | `fail_on_revert=false`; includes an empty invariant and log-only summaries; separate placeholder file is silently undiscovered |
 | Existing Foundry fork | `FOUNDRY_PROFILE=fork yarn forge test --match-path 'test-foundry/fork/*Fork.t.sol' -vvv` | 3 passing; 0 failing against an unpinned live Base head; exit 0; 144 files compiled | compile 52.28s; real 54.84s | Default and fork-profile runs used different cached live blocks (`48917829` and `48917873`), demonstrating nondeterminism |
+| Existing Foundry coverage | `yarn test:forge:coverage` | Exit 1 before tests | real 2.19s; user 1.35s; sys 1.14s | Forge coverage disables optimizer/IR and fails with `stack too deep` at `contracts/OrchestratorV2.sol:802`; no usable old-Foundry coverage artifact |
 | Package build | `yarn build` | Pass | real 6.19s | Preserves compile and TypeScript release surface |
 | Package tests | `yarn pkg:test` | 2 suites / 7 tests passing | real 2.56s | Package export/import smoke coverage |
 
@@ -89,7 +90,16 @@ These receive no exemption from migration and must become executable assertions:
 
 ## Coverage comparison
 
-Pending authoritative Hardhat baseline and final Foundry LCOV metrics, overall and per production file.
+The authoritative baseline instruments all 35 production files selected by `.solcover.js`. Exact totals are:
+
+| Metric | Covered / total | Baseline |
+| --- | ---: | ---: |
+| Statements | 1,751 / 1,775 | 98.65% |
+| Branches | 1,600 / 1,770 | 90.40% |
+| Functions | 440 / 446 | 98.65% |
+| Lines | 2,327 / 2,379 | 97.81% |
+
+Machine-readable evidence is committed in [hardhat-coverage-summary.json](./baseline/hardhat-coverage-summary.json) and [hardhat-coverage-by-file.csv](./baseline/hardhat-coverage-by-file.csv). The extraction tool records SHA-256 hashes of the original `coverage-final.json` and LCOV inputs and reproduces the report totals. Final Foundry comparison remains pending.
 
 ## Parity status
 
