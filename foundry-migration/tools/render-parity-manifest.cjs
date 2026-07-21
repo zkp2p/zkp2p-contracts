@@ -17,6 +17,8 @@ const acrossBridgeHookFile = "test-foundry/deterministic/hooks/AcrossBridgeHookP
 const rateManagerV1File = "test-foundry/deterministic/rateManager/RateManagerV1Parity.t.sol";
 const escrowV2DelegationFile = "test-foundry/deterministic/escrow/EscrowV2DelegationParity.t.sol";
 const escrowV2OracleConfigFile = "test-foundry/deterministic/escrow/EscrowV2OracleRateConfigParity.t.sol";
+const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
+const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
 const protocolViewerFile = "test-foundry/deterministic/periphery/ProtocolViewerParity.t.sol";
 const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifierParity.t.sol";
@@ -601,13 +603,76 @@ function escrowV2OracleConfigDestination(test) {
     return "";
 }
 
+function orchestratorV2LegacyDestination(test) {
+    if (test.sourceFile !== "test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts") return "";
+    const scenario = test.scenario;
+    const lifecycle = (testName) => `${orchestratorV2LifecycleFile}:OrchestratorV2LifecycleParityTest::${testName}`;
+    const hooks = (testName) => `${orchestratorV2HooksFile}:OrchestratorV2HooksGovernanceParityTest::${testName}`;
+    if (scenario.includes("cancels intent and unlocks")) return lifecycle("test_CancelIntentPrunesAndUnlocksFunds");
+    if (scenario.includes("#cancelIntent") && scenario.includes("does not exist")) return lifecycle("test_CancelIntentRejectsMissingIntent");
+    if (scenario.includes("#cancelIntent") && scenario.includes("not intent owner")) return lifecycle("test_CancelIntentRejectsNonOwner");
+    if (scenario.includes("sets pre-intent hook")) return hooks("test_DepositorSetsPreIntentHookAndEmits");
+    if (scenario.includes("sets whitelist hook")) return hooks("test_DepositorSetsWhitelistHookAndEmits");
+    if (scenario.includes("hook setter when caller is unauthorized")) return hooks("test_HookSetterRejectsUnauthorizedCaller");
+    if (scenario.includes("hook setter when escrow is zero")) return hooks("test_HookSetterRejectsZeroEscrow");
+    if (scenario.includes("hook setter when hook is an EOA")) return hooks("test_HookSetterRejectsEoaHook");
+    if (scenario.includes("executes both pre and whitelist")) return hooks("test_SignalExecutesBothHooksWithReferralFeeContext");
+    if (scenario.includes("exposes configured hooks")) return hooks("test_HookGettersExposeIndependentConfiguredHooks");
+    if (scenario.includes("blocks hook reentry into setDeposit")) return hooks("test_PreIntentHookCannotReenterHookSetter");
+    if (scenario.includes("releases funds from depositor")) return lifecycle("test_ManualReleaseTransfersFundsToTakerAndEmits");
+    if (scenario.includes("applies protocol and referrer")) return lifecycle("test_ManualReleaseAppliesProtocolAndReferralFees");
+    if (scenario.includes("splits referral fees")) return lifecycle("test_ManualReleaseSplitsMultipleReferralFeesExactly");
+    if (scenario.includes("#releaseFundsToPayer") && scenario.includes("does not exist")) return lifecycle("test_ManualReleaseRejectsMissingIntent");
+    if (scenario.includes("#releaseFundsToPayer") && scenario.includes("not the depositor")) return lifecycle("test_ManualReleaseRejectsCallerOtherThanDepositor");
+    if (scenario.includes("escrow-triggered reentrant release")) return lifecycle("test_ManualReleaseBlocksEscrowTriggeredReentry");
+    if (scenario.includes("release amount is below min-at-signal")) return lifecycle("test_FulfillRejectsReleaseAmountBelowSignalMinimum");
+    if (scenario.includes("#fulfillIntent") && scenario.includes("does not exist")) return lifecycle("test_FulfillRejectsMissingIntent");
+    if (scenario.includes("payment method is removed after signal")) return lifecycle("test_FulfillRejectsPaymentMethodRemovedAfterSignal");
+    if (scenario.includes("verifier marks payment as failed")) return lifecycle("test_FulfillRejectsFailedPaymentVerification");
+    if (scenario.includes("intent hash mismatch")) return lifecycle("test_FulfillRejectsVerifierIntentHashMismatch");
+    if (scenario.includes("#fulfillIntent") && scenario.includes("orchestrator is paused")) return lifecycle("test_FulfillRejectsWhilePaused");
+    if (scenario.includes("prunes intents when called by escrow")) return lifecycle("test_EscrowPrunesExpiredIntentFromOrchestrator");
+    if (scenario.includes("cleans up orphaned intents")) return lifecycle("test_AnyoneCleansUpIntentOrphanedByEscrow");
+    if (scenario.includes("cleanup when intent hash is unknown")) return lifecycle("test_OrphanCleanupSkipsUnknownIntent");
+    if (scenario.includes("does not prune active intents")) return lifecycle("test_OrphanCleanupPreservesActiveEscrowIntent");
+    if (scenario.includes("ignores zero hashes")) return lifecycle("test_PruneIntentsIgnoresZeroAndNonEscrowCaller");
+    if (scenario.includes("updates registry and fee configuration")) return hooks("test_GovernanceUpdatesRegistriesFeesAndPauseState");
+    if (scenario.includes("governance setters receive invalid")) return hooks("test_GovernanceRejectsInvalidSetterValues");
+    if (scenario.includes("governance-only functions")) return hooks("test_GovernanceRejectsEveryNonOwnerCall");
+    if (scenario.includes("returns account intents and min-at-signal")) return hooks("test_ViewsReturnAccountIntentsAndSignalMinimumSnapshot");
+    if (scenario.includes("allows an account to create multiple")) return hooks("test_AccountCanCreateMultipleActiveIntents");
+    if (scenario.includes("escrow is not whitelisted")) return hooks("test_SignalRejectsUnwhitelistedEscrow");
+    if (scenario.includes("signal validations") && scenario.includes("orchestrator is paused")) return hooks("test_SignalRejectsWhilePaused");
+    if (scenario.includes("recipient is zero")) return hooks("test_SignalRejectsZeroRecipient");
+    if (scenario.includes("referrer fee exceeds max")) return hooks("test_SignalRejectsSingleReferralFeeAboveMaximum");
+    if (scenario.includes("total referral fees exceed")) return hooks("test_SignalRejectsTotalReferralFeesAboveMaximum");
+    if (scenario.includes("referrer is zero")) return hooks("test_SignalRejectsZeroReferralRecipientWithNonzeroFee");
+    if (scenario.includes("recipients contain duplicates")) return hooks("test_SignalRejectsDuplicateReferralRecipients");
+    if (scenario.includes("recipient count exceeds")) return hooks("test_SignalRejectsMoreThanTenReferralRecipients");
+    if (scenario.includes("emits referral fee distribution")) return hooks("test_ManualReleaseEmitsDistributionForEveryReferralRecipient");
+    if (scenario.includes("payment method is removed from registry")) return hooks("test_SignalRejectsRemovedPaymentMethod");
+    if (scenario.includes("payment method is inactive")) return hooks("test_SignalRejectsInactiveDepositPaymentMethod");
+    if (scenario.includes("currency is disabled")) return hooks("test_SignalRejectsDisabledDepositCurrency");
+    if (scenario.includes("post-intent hook is an EOA")) return hooks("test_SignalRejectsEoaPostIntentHook");
+    if (scenario.includes("executes post-intent hook flow")) return hooks("test_FulfillExecutesPostIntentHookAndTransfersNetAmount");
+    if (scenario.includes("hook-driven signalIntent reentrancy")) return hooks("test_PreIntentHookBlocksSignalReentry");
+    if (scenario.includes("hook pulls less")) return hooks("test_FulfillRejectsPostIntentHookThatPullsTooLittle");
+    if (scenario.includes("hook increases orchestrator balance")) return hooks("test_FulfillRejectsPostIntentHookThatIncreasesBalance");
+    if (scenario.includes("reentrant fulfillIntent")) return hooks("test_PostIntentHookCannotReenterFulfill");
+    if (scenario.includes("accepts valid gating")) return hooks("test_GatingAcceptsValidSignature");
+    if (scenario.includes("signature is expired")) return hooks("test_GatingRejectsExpiredSignature");
+    if (scenario.includes("signature signer is invalid")) return hooks("test_GatingRejectsSignatureFromWrongSigner");
+    if (scenario.includes("different sender replays")) return hooks("test_GatingSignatureCannotBeReplayedByDifferentSender");
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || orchestratorV2Destination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -665,6 +730,9 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/escrowV2/escrowV2.oracleRates.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped EscrowV2 oracle-config behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped OrchestratorV2 legacy behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
     let evidence = "";
     if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
@@ -678,6 +746,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(rateManagerV1File)) evidence = "RateManagerV1Parity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(escrowV2DelegationFile)) evidence = "EscrowV2DelegationParity.t.sol: 21 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(escrowV2OracleConfigFile)) evidence = "EscrowV2OracleRateConfigParity.t.sol: 29 passed individually and together, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(attestationFile)) evidence = "AttestationVerifierParity.t.sol: 24 passed, 0 failed, 0 skipped";
