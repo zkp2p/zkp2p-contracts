@@ -12,6 +12,7 @@ const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifie
 const thresholdFile = "test-foundry/deterministic/libs/ThresholdSignatureParity.t.sol";
 const baseUnifiedFile = "test-foundry/deterministic/verifiers/BaseUnifiedVerifierParity.t.sol";
 const unifiedFile = "test-foundry/deterministic/verifiers/UnifiedPaymentVerifierParity.t.sol";
+const unifiedV2CompatibilityFile = "test-foundry/deterministic/integration/UnifiedPaymentVerifierV2CompatibilityParity.t.sol";
 const unifiedV3File = "test-foundry/deterministic/verifiers/UnifiedPaymentVerifierV3Parity.t.sol";
 
 function csv(value) {
@@ -270,13 +271,19 @@ function unifiedDestination(test) {
     return "";
 }
 
+function unifiedV2CompatibilityDestination(test) {
+    if (test.sourceFile !== "test/unifiedVerifier/unifiedPaymentVerifierV2.spec.ts") return "";
+    if (!test.scenario.includes("fulfills a V2 intent using UnifiedPaymentVerifier")) return "";
+    return `${unifiedV2CompatibilityFile}:UnifiedPaymentVerifierV2CompatibilityParityTest::test_FulfillsV2IntentWithUnifiedVerifierAndTransfersExactTokens`;
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -298,6 +305,9 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/unifiedVerifier/unifiedPaymentVerifier.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped unified verifier behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/unifiedVerifier/unifiedPaymentVerifierV2.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped unified verifier V2 compatibility behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
     let evidence = "";
     if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
@@ -306,6 +316,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(thresholdFile)) evidence = "ThresholdSignatureParity.t.sol: 16 passed, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(baseUnifiedFile)) evidence = "BaseUnifiedVerifierParity.t.sol: 8 passed, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(unifiedFile)) evidence = "UnifiedPaymentVerifierParity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(unifiedV2CompatibilityFile)) evidence = "UnifiedPaymentVerifierV2CompatibilityParity.t.sol: 1 end-to-end topology test passed independently, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(unifiedV3File)) evidence = "UnifiedPaymentVerifierV3Parity.t.sol: 11 passed individually and together, 0 failed, 0 skipped";
     return [
         test.id,
