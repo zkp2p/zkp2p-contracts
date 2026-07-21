@@ -14,6 +14,7 @@ const orchestratorV2File = "test-foundry/deterministic/orchestrator/Orchestrator
 const preIntentHookFile = "test-foundry/deterministic/orchestrator/PreIntentHookParity.t.sol";
 const whitelistPreIntentHookFile = "test-foundry/deterministic/hooks/WhitelistPreIntentHookParity.t.sol";
 const acrossBridgeHookFile = "test-foundry/deterministic/hooks/AcrossBridgeHookParity.t.sol";
+const rateManagerV1File = "test-foundry/deterministic/rateManager/RateManagerV1Parity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
 const protocolViewerFile = "test-foundry/deterministic/periphery/ProtocolViewerParity.t.sol";
 const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifierParity.t.sol";
@@ -477,13 +478,70 @@ function acrossBridgeHookDestination(test) {
     return "";
 }
 
+function rateManagerV1Destination(test) {
+    if (test.sourceFile !== "test/rateManager/rateManagerV1.spec.ts") return "";
+    const scenario = test.scenario;
+    const target = (testName) => `${rateManagerV1File}:RateManagerV1ParityTest::${testName}`;
+    if (scenario.includes("creates manager and emits")) return target("test_CreateRateManagerEmitsAndStoresConfig");
+    if (scenario.includes("emits MinLiquidityUpdated when")) return target("test_CreateRateManagerWithMinimumLiquidityEmitsBothEvents");
+    if (scenario.includes("#createRateManager") && scenario.includes("maxFee exceeds")) return target("test_CreateRejectsMaxFeeAboveGlobalCap");
+    if (scenario.includes("#createRateManager") && scenario.includes("manager is zero")) return target("test_CreateRejectsZeroManager");
+    if (scenario.includes("#createRateManager") && scenario.includes("fee recipient is zero")) return target("test_CreateRejectsZeroFeeRecipientForNonzeroFee");
+    if (scenario.includes("#createRateManager") && scenario.includes("fee exceeds maxFee")) return target("test_CreateRejectsFeeAboveManagerMaximum");
+    if (scenario.includes("#setRate") && scenario.includes("sets manager rate")) return target("test_SetRateStoresRateAndEmits");
+    if (scenario.includes("#setRate") && scenario.includes("caller is not manager")) return target("test_SetRateRejectsNonManager");
+    if (scenario.includes("#setRate") && scenario.includes("id does not exist")) return target("test_SetRateRejectsMissingManager");
+    if (scenario.includes("#setRate") && scenario.includes("payment method is zero")) return target("test_SetRateRejectsZeroPaymentMethod");
+    if (scenario.includes("#setRate") && scenario.includes("currency code is zero")) return target("test_SetRateRejectsZeroCurrency");
+    if (scenario.includes("#setFee") && scenario.includes("updates fee")) return target("test_SetFeeUpdatesFeeAndEmits");
+    if (scenario.includes("#setFee") && scenario.includes("exceeds manager maxFee")) return target("test_SetFeeRejectsAboveManagerMaximum");
+    if (scenario.includes("#setFee") && scenario.includes("caller is not manager")) return target("test_SetFeeRejectsNonManager");
+    if (scenario.includes("#setFee") && scenario.includes("id does not exist")) return target("test_SetFeeRejectsMissingManager");
+    if (scenario.includes("#setFee") && scenario.includes("fee recipient is zero")) return target("test_SetFeeRejectsNonzeroFeeAfterRecipientRemoved");
+    if (scenario.includes("#setRateManagerConfig") && scenario.includes("updates rate manager config")) return target("test_SetConfigUpdatesMutableFieldsAndEmits");
+    if (scenario.includes("#setRateManagerConfig") && scenario.includes("manager is zero")) return target("test_SetConfigRejectsZeroManager");
+    if (scenario.includes("#setRateManagerConfig") && scenario.includes("current fee is non-zero")) return target("test_SetConfigRejectsZeroRecipientWhileFeeNonzero");
+    if (scenario.includes("#setRateManagerConfig") && scenario.includes("current fee is zero")) return target("test_SetConfigAllowsZeroRecipientWhenFeeIsZero");
+    if (scenario.includes("#setRateManagerConfig") && scenario.includes("caller is not manager")) return target("test_SetConfigRejectsNonManager");
+    if (scenario.includes("#setRateManagerConfig") && scenario.includes("id does not exist")) return target("test_SetConfigRejectsMissingManager");
+    if (scenario.includes("#setRateBatch") && scenario.includes("sets manager rates")) return target("test_SetRateBatchStoresRateAndEmitsAggregate");
+    if (scenario.includes("#setRateBatch") && scenario.includes("payment methods length does not match currencies")) return target("test_SetRateBatchRejectsMethodCurrencyOuterLengthMismatch");
+    if (scenario.includes("#setRateBatch") && scenario.includes("payment methods length does not match rates")) return target("test_SetRateBatchRejectsMethodRateOuterLengthMismatch");
+    if (scenario.includes("#setRateBatch") && scenario.includes("currency codes length does not match")) return target("test_SetRateBatchRejectsInnerLengthMismatch");
+    if (scenario.includes("#setRateBatch") && scenario.includes("payment method is zero")) return target("test_SetRateBatchRejectsZeroPaymentMethod");
+    if (scenario.includes("#setRateBatch") && scenario.includes("currency code is zero")) return target("test_SetRateBatchRejectsZeroCurrency");
+    if (scenario.includes("#setRateBatch") && scenario.includes("caller is not manager")) return target("test_SetRateBatchRejectsNonManager");
+    if (scenario.includes("#setRateBatch") && scenario.includes("id does not exist")) return target("test_SetRateBatchRejectsMissingManager");
+    if (scenario.includes("#getRate") && scenario.includes("manager rate when set")) return target("test_GetRateReturnsStoredManagerRate");
+    if (scenario.includes("#getRate") && scenario.includes("rate not set")) return target("test_GetRateReturnsZeroForUnsetPair");
+    if (scenario.includes("#getRate") && scenario.includes("manager does not exist")) return target("test_GetRateReturnsZeroForMissingManager");
+    if (scenario.includes("view getters")) return target("test_GetRateManagerReturnsConfig");
+    if (scenario.includes("#setMinLiquidity") && scenario.includes("sets min liquidity")) return target("test_SetMinLiquidityStoresAndEmits");
+    if (scenario.includes("#setMinLiquidity") && scenario.includes("reads back")) return target("test_GetRateManagerReadsMinimumLiquidity");
+    if (scenario.includes("#setMinLiquidity") && scenario.includes("clears min liquidity")) return target("test_SetMinLiquidityZeroClearsRequirement");
+    if (scenario.includes("#setMinLiquidity") && scenario.includes("caller is not manager")) return target("test_SetMinLiquidityRejectsNonManager");
+    if (scenario.includes("#setMinLiquidity") && scenario.includes("id does not exist")) return target("test_SetMinLiquidityRejectsMissingManager");
+    if (scenario.includes("#onDepositOptIn with minLiquidity") && scenario.includes("no min liquidity")) return target("test_OptInPassesWhenMinimumLiquidityDisabled");
+    if (scenario.includes("#onDepositOptIn with minLiquidity") && scenario.includes("meets threshold")) return target("test_OptInPassesWhenDepositMeetsMinimumLiquidity");
+    if (scenario.includes("#onDepositOptIn with minLiquidity") && scenario.includes("below threshold")) return target("test_OptInRejectsDepositBelowMinimumLiquidity");
+    if (scenario.includes("#onDepositOptIn with minLiquidity") && scenario.includes("cleared back")) return target("test_OptInPassesAfterMinimumLiquidityCleared");
+    if (scenario.includes("#onDepositOptIn access control") && scenario.includes("not a whitelisted")) return target("test_OptInRejectsUnlistedEscrow");
+    if (scenario.includes("#onDepositOptIn access control") && scenario.includes("whitelisted escrow")) return target("test_OptInPassesForWhitelistedEscrow");
+    if (scenario.includes("#onDepositOptIn access control") && scenario.includes("acceptAllEscrows")) return target("test_OptInPassesWhenRegistryAcceptsAllEscrows");
+    if (scenario.includes("#setEscrowRegistry") && scenario.includes("updates escrow registry")) return target("test_SetEscrowRegistryUpdatesState");
+    if (scenario.includes("#setEscrowRegistry") && scenario.includes("emits EscrowRegistryUpdated")) return target("test_SetEscrowRegistryEmits");
+    if (scenario.includes("#setEscrowRegistry") && scenario.includes("non-owner")) return target("test_SetEscrowRegistryRejectsNonOwner");
+    if (scenario.includes("#setEscrowRegistry") && scenario.includes("zero address")) return target("test_SetEscrowRegistryRejectsZeroAddress");
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || orchestratorV2Destination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || orchestratorV2Destination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -532,6 +590,9 @@ const rows = inventory.tests.map((test) => {
     if (["test/hooks/acrossBridgeHook.spec.ts", "test/hooks/acrossBridgeHookV2.spec.ts"].includes(test.sourceFile) && !foundryDestination) {
         throw new Error(`Unmapped Across bridge hook behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/rateManager/rateManagerV1.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped RateManagerV1 behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
     let evidence = "";
     if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
@@ -542,6 +603,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(preIntentHookFile)) evidence = "PreIntentHookParity.t.sol: 23 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(whitelistPreIntentHookFile)) evidence = "WhitelistPreIntentHookParity.t.sol: 29 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(acrossBridgeHookFile)) evidence = "AcrossBridgeHookParity.t.sol: 56 passed individually and together across legacy and V2, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(rateManagerV1File)) evidence = "RateManagerV1Parity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(attestationFile)) evidence = "AttestationVerifierParity.t.sol: 24 passed, 0 failed, 0 skipped";
