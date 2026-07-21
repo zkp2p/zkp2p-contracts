@@ -12,6 +12,7 @@ const escrowV2CurrencyRateFile = "test-foundry/deterministic/escrow/EscrowV2Curr
 const oracleFile = "test-foundry/deterministic/oracles/OracleAdapterParity.t.sol";
 const orchestratorV2File = "test-foundry/deterministic/orchestrator/OrchestratorV2RateManagerParity.t.sol";
 const preIntentHookFile = "test-foundry/deterministic/orchestrator/PreIntentHookParity.t.sol";
+const whitelistPreIntentHookFile = "test-foundry/deterministic/hooks/WhitelistPreIntentHookParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
 const protocolViewerFile = "test-foundry/deterministic/periphery/ProtocolViewerParity.t.sol";
 const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifierParity.t.sol";
@@ -398,13 +399,49 @@ function preIntentHookDestination(test) {
     return "";
 }
 
+function whitelistPreIntentHookDestination(test) {
+    if (test.sourceFile !== "test/hooks/whitelistPreIntentHook.spec.ts") return "";
+    const scenario = test.scenario;
+    const target = (testName) => `${whitelistPreIntentHookFile}:WhitelistPreIntentHookParityTest::${testName}`;
+    if (scenario.includes("#constructor") && scenario.includes("zero address")) return target("test_ConstructorRejectsZeroOrchestratorRegistry");
+    if (scenario.includes("#constructor")) return target("test_ConstructorStoresOrchestratorRegistry");
+    if (scenario.includes("#addToWhitelist") && scenario.includes("whitelists takers")) return target("test_DepositorWhitelistsTakersAndEmitsPerTaker");
+    if (scenario.includes("#addToWhitelist") && scenario.includes("allows delegate")) return target("test_DelegateCanWhitelistTakers");
+    if (scenario.includes("#addToWhitelist") && scenario.includes("unauthorized caller")) return target("test_UnauthorizedCallerCannotWhitelistTakers");
+    if (scenario.includes("#addToWhitelist") && scenario.includes("escrow is zero")) return target("test_ZeroEscrowCannotWhitelistTakers");
+    if (scenario.includes("#addToWhitelist") && scenario.includes("array is empty")) return target("test_EmptyArrayCannotWhitelistTakers");
+    if (scenario.includes("#addToWhitelist") && scenario.includes("taker is zero")) return target("test_ZeroTakerRevertsEntireWhitelistBatch");
+    if (scenario.includes("#removeFromWhitelist") && scenario.includes("removes takers")) return target("test_DepositorRemovesTakerAndEmitsWithoutAffectingOthers");
+    if (scenario.includes("#removeFromWhitelist") && scenario.includes("allows delegate")) return target("test_DelegateCanRemoveTaker");
+    if (scenario.includes("#removeFromWhitelist") && scenario.includes("unauthorized caller")) return target("test_UnauthorizedCallerCannotRemoveTaker");
+    if (scenario.includes("#removeFromWhitelist") && scenario.includes("escrow is zero")) return target("test_ZeroEscrowCannotRemoveTaker");
+    if (scenario.includes("#removeFromWhitelist") && scenario.includes("array is empty")) return target("test_EmptyArrayCannotRemoveTakers");
+    if (scenario.includes("#removeFromWhitelist") && scenario.includes("not in whitelist")) return target("test_NonWhitelistedTakerCannotBeRemoved");
+    if (scenario.includes("#setDepositWhitelistHook") && scenario.includes("sets whitelist hook")) return target("test_DepositorSetsWhitelistHookAndEmits");
+    if (scenario.includes("#setDepositWhitelistHook") && scenario.includes("allows delegate")) return target("test_DelegateCanSetWhitelistHook");
+    if (scenario.includes("#setDepositWhitelistHook") && scenario.includes("allows removing")) return target("test_ZeroHookRemovesWhitelistHookAndEmits");
+    if (scenario.includes("#setDepositWhitelistHook") && scenario.includes("unauthorized caller")) return target("test_UnauthorizedCallerCannotSetWhitelistHook");
+    if (scenario.includes("#setDepositWhitelistHook") && scenario.includes("escrow is zero")) return target("test_ZeroEscrowCannotSetWhitelistHook");
+    if (scenario.includes("#setDepositWhitelistHook") && scenario.includes("hook is an EOA")) return target("test_EoaCannotBeConfiguredAsWhitelistHook");
+    if (scenario.includes("dedicated whitelist hook slot") && scenario.includes("when taker is whitelisted")) return target("test_WhitelistedTakerCanSignalAndEmitsIntent");
+    if (scenario.includes("dedicated whitelist hook slot") && scenario.includes("when taker is not whitelisted")) return target("test_NonWhitelistedTakerCannotSignal");
+    if (scenario.includes("dedicated whitelist hook slot") && scenario.includes("whitelisted then removed")) return target("test_RemovedTakerCannotSignal");
+    if (scenario.includes("dedicated whitelist hook slot") && scenario.includes("called directly")) return target("test_DirectValidationCallRejectsNonOrchestrator");
+    if (scenario.includes("both hooks") && scenario.includes("stored independently")) return target("test_GenericAndWhitelistHooksAreStoredIndependently");
+    if (scenario.includes("both hooks") && scenario.includes("whitelisted taker passes")) return target("test_SignalCallsBothHooksWhenTakerIsWhitelisted");
+    if (scenario.includes("both hooks") && scenario.includes("whitelist hook rejects")) return target("test_WhitelistRejectionRevertsGenericHookStateToo");
+    if (scenario.includes("both hooks") && scenario.includes("removing whitelist hook")) return target("test_RemovingWhitelistHookLeavesGenericHookIntact");
+    if (scenario.includes("both hooks") && scenario.includes("removing generic hook")) return target("test_RemovingGenericHookLeavesWhitelistHookIntact");
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || orchestratorV2Destination(test) || preIntentHookDestination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || orchestratorV2Destination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -447,6 +484,9 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/orchestrator/preIntentHook.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped pre-intent hook behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/hooks/whitelistPreIntentHook.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped whitelist pre-intent hook behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
     let evidence = "";
     if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
@@ -455,6 +495,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(oracleFile)) evidence = "OracleAdapterParity.t.sol: 25 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(orchestratorV2File)) evidence = "OrchestratorV2RateManagerParity.t.sol: 6 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(preIntentHookFile)) evidence = "PreIntentHookParity.t.sol: 23 passed individually and together, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(whitelistPreIntentHookFile)) evidence = "WhitelistPreIntentHookParity.t.sol: 29 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(attestationFile)) evidence = "AttestationVerifierParity.t.sol: 24 passed, 0 failed, 0 skipped";
