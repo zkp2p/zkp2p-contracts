@@ -47,6 +47,8 @@ const orchestratorLegacyFulfillHookFile = "test-foundry/deterministic/orchestrat
 const orchestratorLegacyFulfillPartialReentryFile = "test-foundry/deterministic/orchestrator/OrchestratorFulfillPartialReentryParity.t.sol";
 const orchestratorLegacyManualReleaseFile = "test-foundry/deterministic/orchestrator/OrchestratorManualReleaseParity.t.sol";
 const orchestratorLegacyPruneFile = "test-foundry/deterministic/orchestrator/OrchestratorPruneParity.t.sol";
+const orchestratorLegacyGovernanceFile = "test-foundry/deterministic/orchestrator/OrchestratorGovernanceParity.t.sol";
+const orchestratorLegacyViewsFile = "test-foundry/deterministic/orchestrator/OrchestratorViewsParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -1305,8 +1307,43 @@ const orchestratorLegacyDestinations = [
         "test_PruneIntentsEmptyArrayDoesNotRevert",
         "test_PruneIntentsEmptyArrayEmitsNothing",
     ].map((testName) => [orchestratorLegacyPruneFile, "OrchestratorPruneParityTest", testName]),
+    ...[
+        "test_SetEscrowRegistryUpdatesAddress",
+        "test_SetEscrowRegistryEmitsUpdate",
+        "test_SetEscrowRegistryRejectsNonOwner",
+        "test_SetEscrowRegistryRejectsZeroAddress",
+        "test_SetProtocolFeeUpdatesFee",
+        "test_SetProtocolFeeEmitsUpdate",
+        "test_SetProtocolFeeRejectsNonOwner",
+        "test_SetProtocolFeeRejectsAboveMaximum",
+        "test_SetProtocolFeeAcceptsMaximum",
+        "test_SetProtocolFeeRecipientUpdatesRecipient",
+        "test_SetProtocolFeeRecipientEmitsUpdate",
+        "test_SetProtocolFeeRecipientRejectsZeroAddress",
+        "test_SetProtocolFeeRecipientRejectsNonOwner",
+        "test_SetPostIntentHookRegistryUpdatesRegistry",
+        "test_SetPostIntentHookRegistryEmitsUpdate",
+        "test_SetPostIntentHookRegistryRejectsZeroAddress",
+        "test_SetPostIntentHookRegistryRejectsNonOwner",
+        "test_SetRelayerRegistryUpdatesRegistry",
+        "test_SetRelayerRegistryEmitsUpdate",
+        "test_SetRelayerRegistryRejectsZeroAddress",
+        "test_SetRelayerRegistryRejectsNonOwner",
+        "test_SetAllowMultipleIntentsEnablesFlag",
+        "test_SetAllowMultipleIntentsEmitsUpdate",
+        "test_SetAllowMultipleIntentsDisablesFlag",
+        "test_SetAllowMultipleIntentsRejectsNonOwner",
+        "test_PauseOrchestratorSetsPaused",
+        "test_PauseOrchestratorRejectsNonOwner",
+        "test_UnpauseOrchestratorClearsPaused",
+        "test_UnpauseOrchestratorRejectsNonOwner",
+    ].map((testName) => [orchestratorLegacyGovernanceFile, "OrchestratorGovernanceParityTest", testName]),
+    ...[
+        "test_GetAccountIntentsReturnsEmptyArrayForAccountWithoutIntents",
+        "test_GetAccountIntentsReturnsAllIntentsForAccount",
+    ].map((testName) => [orchestratorLegacyViewsFile, "OrchestratorViewsParityTest", testName]),
 ];
-if (orchestratorLegacySourceTests.length !== 141 || orchestratorLegacyDestinations.length !== 110) {
+if (orchestratorLegacySourceTests.length !== 141 || orchestratorLegacyDestinations.length !== 141) {
     throw new Error(
         `Orchestrator legacy mapping count mismatch: ${orchestratorLegacySourceTests.length} source / ${orchestratorLegacyDestinations.length} translated destinations`
     );
@@ -1475,7 +1512,7 @@ const rows = inventory.tests.map((test) => {
     if ([escrowV2LegacyManagementFile, escrowV2LegacyLifecycleFile, escrowV2LegacyConfigurationFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 management + lifecycle + configuration parity: 70 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 70/70";
     if ([escrowV2BranchAuthorizationFile, escrowV2BranchValidationFile, escrowV2BranchGovernanceLifecycleFile, escrowV2BranchStatePauseFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 branch parity: 108 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 108/108";
     if ([escrowCreateDepositFile, escrowFundingFile, escrowWithdrawFile, escrowRateRangeFile, escrowPaymentMethodFile, escrowCurrencyFile, escrowDelegateFile, escrowAcceptingRetainFile, escrowPruningFile, escrowLockFundsFile, escrowUnlockFundsFile, escrowUnlockTransferFile, escrowIntentExpiryFile, escrowGovernanceFile, escrowExpiredIntentsViewFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete legacy Escrow parity: 276 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 275 passed plus 1 baseline-pending case resolved in Foundry";
-    if ([orchestratorLegacySignalFile, orchestratorLegacyCancelFile, orchestratorLegacyFulfillCoreFile, orchestratorLegacyFulfillAccountingFile, orchestratorLegacyFulfillHookFile, orchestratorLegacyFulfillPartialReentryFile, orchestratorLegacyManualReleaseFile, orchestratorLegacyPruneFile].some((file) => foundryDestination.startsWith(file))) evidence = "Legacy Orchestrator constructor/signal/cancel/fulfillment/manual-release/pruning parity: 110 passed individually and together, 0 failed, 0 skipped; 4 baseline-pending cases resolved in Foundry";
+    if ([orchestratorLegacySignalFile, orchestratorLegacyCancelFile, orchestratorLegacyFulfillCoreFile, orchestratorLegacyFulfillAccountingFile, orchestratorLegacyFulfillHookFile, orchestratorLegacyFulfillPartialReentryFile, orchestratorLegacyManualReleaseFile, orchestratorLegacyPruneFile, orchestratorLegacyGovernanceFile, orchestratorLegacyViewsFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete legacy Orchestrator parity: 141 passed individually and together, 0 failed, 0 skipped; all 4 baseline-pending cases resolved in Foundry";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
