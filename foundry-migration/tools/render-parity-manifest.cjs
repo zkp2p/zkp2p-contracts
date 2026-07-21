@@ -44,6 +44,7 @@ const orchestratorLegacyCancelFile = "test-foundry/deterministic/orchestrator/Or
 const orchestratorLegacyFulfillCoreFile = "test-foundry/deterministic/orchestrator/OrchestratorFulfillCoreParity.t.sol";
 const orchestratorLegacyFulfillAccountingFile = "test-foundry/deterministic/orchestrator/OrchestratorFulfillAccountingParity.t.sol";
 const orchestratorLegacyFulfillHookFile = "test-foundry/deterministic/orchestrator/OrchestratorFulfillHookParity.t.sol";
+const orchestratorLegacyFulfillPartialReentryFile = "test-foundry/deterministic/orchestrator/OrchestratorFulfillPartialReentryParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -1259,8 +1260,18 @@ const orchestratorLegacyDestinations = [
         "test_FulfillHookRejectsPartialPull",
         "test_FulfillHookRejectsUnexpectedBalanceIncrease",
     ].map((testName) => [orchestratorLegacyFulfillHookFile, "OrchestratorFulfillHookParityTest", testName]),
+    ...[
+        "test_FulfillPartialPaymentTransfersPartialRelease",
+        "test_FulfillPartialPaymentReturnsUnusedLiquidity",
+        "test_FulfillPartialPaymentEmitsPartialRelease",
+        "test_FulfillPartialPaymentCalculatesFeeFromReleasedAmount",
+        "test_FulfillReentrantHookBlocksNestedFulfillment",
+        "test_FulfillReentrantHookCompletesOriginalFulfillment",
+        "test_FulfillHookWithoutReentryExecutesNormally",
+        "test_FulfillIntentRejectsWhenContractPaused",
+    ].map((testName) => [orchestratorLegacyFulfillPartialReentryFile, "OrchestratorFulfillPartialReentryParityTest", testName]),
 ];
-if (orchestratorLegacySourceTests.length !== 141 || orchestratorLegacyDestinations.length !== 73) {
+if (orchestratorLegacySourceTests.length !== 141 || orchestratorLegacyDestinations.length !== 81) {
     throw new Error(
         `Orchestrator legacy mapping count mismatch: ${orchestratorLegacySourceTests.length} source / ${orchestratorLegacyDestinations.length} translated destinations`
     );
@@ -1429,7 +1440,7 @@ const rows = inventory.tests.map((test) => {
     if ([escrowV2LegacyManagementFile, escrowV2LegacyLifecycleFile, escrowV2LegacyConfigurationFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 management + lifecycle + configuration parity: 70 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 70/70";
     if ([escrowV2BranchAuthorizationFile, escrowV2BranchValidationFile, escrowV2BranchGovernanceLifecycleFile, escrowV2BranchStatePauseFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 branch parity: 108 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 108/108";
     if ([escrowCreateDepositFile, escrowFundingFile, escrowWithdrawFile, escrowRateRangeFile, escrowPaymentMethodFile, escrowCurrencyFile, escrowDelegateFile, escrowAcceptingRetainFile, escrowPruningFile, escrowLockFundsFile, escrowUnlockFundsFile, escrowUnlockTransferFile, escrowIntentExpiryFile, escrowGovernanceFile, escrowExpiredIntentsViewFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete legacy Escrow parity: 276 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 275 passed plus 1 baseline-pending case resolved in Foundry";
-    if ([orchestratorLegacySignalFile, orchestratorLegacyCancelFile, orchestratorLegacyFulfillCoreFile, orchestratorLegacyFulfillAccountingFile, orchestratorLegacyFulfillHookFile].some((file) => foundryDestination.startsWith(file))) evidence = "Legacy Orchestrator constructor/signal/cancel/fulfillment parity slice: 73 passed individually and together, 0 failed, 0 skipped; 4 baseline-pending cases resolved in Foundry";
+    if ([orchestratorLegacySignalFile, orchestratorLegacyCancelFile, orchestratorLegacyFulfillCoreFile, orchestratorLegacyFulfillAccountingFile, orchestratorLegacyFulfillHookFile, orchestratorLegacyFulfillPartialReentryFile].some((file) => foundryDestination.startsWith(file))) evidence = "Legacy Orchestrator constructor/signal/cancel/complete-fulfillment parity: 81 passed individually and together, 0 failed, 0 skipped; 4 baseline-pending cases resolved in Foundry";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
