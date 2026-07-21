@@ -17,6 +17,9 @@ const acrossBridgeHookFile = "test-foundry/deterministic/hooks/AcrossBridgeHookP
 const rateManagerV1File = "test-foundry/deterministic/rateManager/RateManagerV1Parity.t.sol";
 const escrowV2DelegationFile = "test-foundry/deterministic/escrow/EscrowV2DelegationParity.t.sol";
 const escrowV2OracleConfigFile = "test-foundry/deterministic/escrow/EscrowV2OracleRateConfigParity.t.sol";
+const escrowV2LegacyManagementFile = "test-foundry/deterministic/escrow/EscrowV2ManagementParity.t.sol";
+const escrowV2LegacyLifecycleFile = "test-foundry/deterministic/escrow/EscrowV2LifecycleParity.t.sol";
+const escrowV2LegacyConfigurationFile = "test-foundry/deterministic/escrow/EscrowV2ConfigurationParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -603,6 +606,89 @@ function escrowV2OracleConfigDestination(test) {
     return "";
 }
 
+function escrowV2LegacyDestination(test) {
+    if (test.sourceFile !== "test/escrowV2/escrowV2.legacyCoverage.spec.ts") return "";
+    const key = `${test.suitePath}\t${test.hardhatTest}`;
+    const mappings = new Map([
+        ["EscrowV2 > #createDeposit\treverts when min is greater than max", ["management", "test_CreateDepositRejectsMinimumAboveMaximum"]],
+        ["EscrowV2 > #createDeposit\treverts when amount is below min", ["management", "test_CreateDepositRejectsAmountBelowMinimum"]],
+        ["EscrowV2 > #createDeposit\tallows currency min conversion rate to be zero", ["management", "test_CreateDepositAllowsZeroCurrencyFloor"]],
+        ["EscrowV2 > #depositTo\tcreates a deposit for the specified owner while pulling funds from caller", ["management", "test_DepositToPullsFromCallerButAssignsSpecifiedOwner"]],
+        ["EscrowV2 > #addFunds\tadds funds and emits event", ["management", "test_AddFundsUpdatesLiquidityAndEmitsFunder"]],
+        ["EscrowV2 > #addFunds\tdoes not change acceptingIntents when adding funds", ["management", "test_AddFundsDoesNotChangeDisabledAcceptingState"]],
+        ["EscrowV2 > #addFunds > when deposit does not exist\treverts", ["management", "test_AddFundsRejectsMissingDeposit"]],
+        ["EscrowV2 > #addFunds > when amount is zero\treverts", ["management", "test_AddFundsRejectsZeroAmount"]],
+        ["EscrowV2 > #removeFunds\tremoves funds and emits event", ["management", "test_RemoveFundsUpdatesLiquidityAndEmits"]],
+        ["EscrowV2 > #removeFunds\treclaims expired intent liquidity and attempts orchestrator prune", ["management", "test_RemoveFundsReclaimsExpiredIntentAndPrunesOrchestrator"]],
+        ["EscrowV2 > #removeFunds\tdoes not auto-disable acceptingIntents when remaining falls below min", ["management", "test_RemoveFundsDoesNotAutoDisableBelowMinimumLiquidity"]],
+        ["EscrowV2 > #removeFunds\treverts when requested removal exceeds available liquidity", ["management", "test_RemoveFundsRejectsAmountAboveAvailableLiquidity"]],
+        ["EscrowV2 > #removeFunds > when caller is not depositor\treverts", ["management", "test_RemoveFundsRejectsNonDepositor"]],
+        ["EscrowV2 > #withdrawDeposit\twithdraws, prunes expired intents, and closes the deposit", ["management", "test_WithdrawDepositPrunesExpiredIntentsAndCloses"]],
+        ["EscrowV2 > #withdrawDeposit\temits DepositAcceptingIntentsUpdated(false) when transitioning from accepting", ["management", "test_WithdrawDepositDisablesAcceptingStateWhenTransitioning"]],
+        ["EscrowV2 > #withdrawDeposit\tdoes not emit DepositAcceptingIntentsUpdated when already not accepting", ["management", "test_WithdrawDepositDoesNotRepeatAlreadyDisabledEvent"]],
+        ["EscrowV2 > #setDelegate\tsets delegate and emits event", ["management", "test_SetDelegateUpdatesStateAndEmits"]],
+        ["EscrowV2 > #setDelegate > when caller is not depositor\treverts", ["management", "test_SetDelegateRejectsNonDepositor"]],
+        ["EscrowV2 > #removeDelegate\tremoves delegate and emits event", ["management", "test_RemoveDelegateClearsStateAndEmits"]],
+        ["EscrowV2 > #removeDelegate > when no delegate is set\treverts", ["management", "test_RemoveDelegateRejectsWhenNoneConfigured"]],
+        ["EscrowV2 > #setIntentRange\tupdates range and emits event", ["management", "test_SetIntentRangeUpdatesBothBounds"]],
+        ["EscrowV2 > #setIntentRange > when min is zero\treverts", ["management", "test_SetIntentRangeRejectsZeroMinimum"]],
+        ["EscrowV2 > #setIntentRange > when min is greater than max\treverts", ["management", "test_SetIntentRangeRejectsMinimumAboveMaximum"]],
+        ["EscrowV2 > #setCurrencyMinRate\treverts when currency is not listed", ["management", "test_SetCurrencyMinimumRejectsUnlistedCurrency"]],
+        ["EscrowV2 > #addPaymentMethods\tadds payment method to existing deposit", ["management", "test_AddPaymentMethodsAddsWhitelistedMethod"]],
+        ["EscrowV2 > #addPaymentMethods\treverts when payment method is not whitelisted", ["management", "test_AddPaymentMethodsRejectsUnwhitelistedMethod"]],
+        ["EscrowV2 > #setPaymentMethodActive\ttoggles payment method active state", ["management", "test_SetPaymentMethodActiveTogglesAndEmits"]],
+        ["EscrowV2 > #setPaymentMethodActive\treverts when payment method is already in the requested state", ["management", "test_SetPaymentMethodActiveRejectsExistingState"]],
+        ["EscrowV2 > #addCurrencies\tadds additional currencies on active payment method", ["management", "test_AddCurrenciesAddsSupportedCurrency"]],
+        ["EscrowV2 > #addCurrencies\treverts for unsupported currency", ["management", "test_AddCurrenciesRejectsUnsupportedCurrency"]],
+        ["EscrowV2 > #addCurrencies\treverts when currency already exists", ["management", "test_AddCurrenciesRejectsExistingCurrency"]],
+        ["EscrowV2 > #addCurrencies\tallows min conversion rate to be zero", ["management", "test_AddCurrenciesAllowsZeroFixedFloor"]],
+        ["EscrowV2 > #addCurrencies\tsets inline oracle config via addCurrencies", ["management", "test_AddCurrenciesStoresInlineOracleConfig"]],
+        ["EscrowV2 > #setAcceptingIntents\tsets accepting intents flag", ["management", "test_SetAcceptingIntentsUpdatesFlagAndEmits"]],
+        ["EscrowV2 > #setAcceptingIntents\treverts when enabling while liquidity is below minimum", ["management", "test_SetAcceptingIntentsRejectsEnableBelowMinimumLiquidity"]],
+        ["EscrowV2 > #setRetainOnEmpty\tsets retainOnEmpty", ["management", "test_SetRetainOnEmptyUpdatesFlagAndEmits"]],
+        ["EscrowV2 > #pruneExpiredIntents\tprunes expired intents and unlocks liquidity", ["lifecycle", "test_PruneExpiredIntentsUnlocksLiquidityAndEmits"]],
+        ["EscrowV2 > #pruneExpiredIntents\treverts when orchestrator prune reverts", ["lifecycle", "test_PruneExpiredIntentsRevertsWhenOrchestratorPruneReverts"]],
+        ["EscrowV2 > #pruneExpiredIntents\tkeeps intent orchestrator mapping when orchestrator prune reverts", ["lifecycle", "test_PruneExpiredIntentsPreservesOrchestratorMappingOnRevert"]],
+        ["EscrowV2 > #pruneExpiredIntents\tskips orchestrator call when intentOrchestrator is cleared", ["lifecycle", "test_PruneExpiredIntentsSkipsClearedOrchestrator"]],
+        ["EscrowV2 > #pruneExpiredIntents\tprunes each expired intent with a per-intent orchestrator call", ["lifecycle", "test_PruneExpiredIntentsCallsEachOwningOrchestratorPerIntent"]],
+        ["EscrowV2 > #pruneExpiredIntents\tdoes not change acceptingIntents after prune restores free liquidity", ["lifecycle", "test_PruneExpiredIntentsDoesNotChangeAcceptingState"]],
+        ["EscrowV2 > #lockFunds\treclaims expired intents and prunes on orchestrator during a new lock", ["lifecycle", "test_LockFundsReclaimsExpiredIntentAndPrunesOwner"]],
+        ["EscrowV2 > #lockFunds\treverts when caller is not whitelisted orchestrator", ["lifecycle", "test_LockFundsRejectsNonOrchestrator"]],
+        ["EscrowV2 > #lockFunds\treverts on duplicate intent hash", ["lifecycle", "test_LockFundsRejectsDuplicateIntentHash"]],
+        ["EscrowV2 > #lockFunds\treverts when liquidity is insufficient after reclaim", ["lifecycle", "test_LockFundsRejectsInsufficientLiquidityAfterReclaim"]],
+        ["EscrowV2 > #lockFunds\treverts when max intents is exceeded with no prunable intent", ["lifecycle", "test_LockFundsRejectsFourthUnexpiredIntent"]],
+        ["EscrowV2 > #unlockFunds\tunlocks existing intent", ["lifecycle", "test_UnlockFundsUnlocksExistingIntentAndEmits"]],
+        ["EscrowV2 > #unlockFunds\tdoes not change acceptingIntents on unlock", ["lifecycle", "test_UnlockFundsDoesNotChangeAcceptingState"]],
+        ["EscrowV2 > #unlockFunds\treverts when a different allowlisted orchestrator attempts to unlock", ["lifecycle", "test_UnlockFundsRejectsDifferentAllowlistedOrchestrator"]],
+        ["EscrowV2 > #unlockAndTransferFunds\tunlocks and transfers full amount", ["lifecycle", "test_UnlockAndTransferFundsTransfersFullLockedAmount"]],
+        ["EscrowV2 > #unlockAndTransferFunds\treturns unused amount to liquidity on partial transfer", ["lifecycle", "test_UnlockAndTransferFundsReturnsUnusedAmountToLiquidity"]],
+        ["EscrowV2 > #unlockAndTransferFunds\tdoes not change acceptingIntents on partial release", ["lifecycle", "test_UnlockAndTransferFundsDoesNotChangeAcceptingState"]],
+        ["EscrowV2 > #unlockAndTransferFunds\tcollects dust when a partial transfer closes deposit near zero", ["lifecycle", "test_UnlockAndTransferFundsCollectsDustWhenClosingNearZero"]],
+        ["EscrowV2 > #unlockAndTransferFunds\treverts when a different allowlisted orchestrator attempts to unlock and transfer", ["lifecycle", "test_UnlockAndTransferFundsRejectsDifferentAllowlistedOrchestrator"]],
+        ["EscrowV2 > #extendIntentExpiry\textends expiry when called by intent guardian", ["lifecycle", "test_ExtendIntentExpiryAllowsGuardianAndEmits"]],
+        ["EscrowV2 > #extendIntentExpiry\treverts when extension exceeds maximum horizon", ["lifecycle", "test_ExtendIntentExpiryRejectsExtensionBeyondMaximumHorizon"]],
+        ["EscrowV2 > oracle and delegated rate manager coverage paths\tupdates fixed floor and emits event in setCurrencyMinRate", ["configuration", "test_SetCurrencyMinRateUpdatesFixedFloorAndEmits"]],
+        ["EscrowV2 > oracle and delegated rate manager coverage paths\tsets oracle config and computes spread floor", ["configuration", "test_SetOracleRateConfigComputesSpreadFloor"]],
+        ["EscrowV2 > oracle and delegated rate manager coverage paths\tsupports batch oracle config updates", ["configuration", "test_SetOracleRateConfigBatchUpdatesEveryTuple"]],
+        ["EscrowV2 > oracle and delegated rate manager coverage paths\treverts batch oracle config when outer arrays mismatch", ["configuration", "test_SetOracleRateConfigBatchRejectsOuterArrayMismatch"]],
+        ["EscrowV2 > oracle and delegated rate manager coverage paths\tremoves oracle config and deactivates currency with oracle cleanup", ["configuration", "test_RemoveOracleConfigAndDeactivateCurrencyCleanUpOracleAndFloor"]],
+        ["EscrowV2 > oracle and delegated rate manager coverage paths\tcovers delegated rate manager happy and fallback paths", ["configuration", "test_RateManagerProvidesRateAndFeeWithSafeFallbacks"]],
+        ["EscrowV2 > oracle and delegated rate manager coverage paths\tclears delegated rate manager", ["configuration", "test_ClearRateManagerRemovesDelegationAndEmits"]],
+        ["EscrowV2 > oracle and delegated rate manager coverage paths\treturns zero when oracle adapter reverts (oracle halt)", ["configuration", "test_OracleAdapterRevertHaltsRateAtZero"]],
+        ["EscrowV2 > oracle and delegated rate manager coverage paths\treturns zero when oracle quote is invalid (oracle halt)", ["configuration", "test_InvalidOracleQuoteHaltsRateAtZero"]],
+        ["EscrowV2 > oracle and delegated rate manager coverage paths\treturns zero when oracle timestamp is in the future (oracle halt)", ["configuration", "test_FutureOracleTimestampHaltsRateAtZero"]],
+        ["EscrowV2 > oracle and delegated rate manager coverage paths\treturns zero when oracle quote is stale (oracle halt)", ["configuration", "test_StaleOracleTimestampHaltsRateAtZero"]],
+        ["EscrowV2 > governance setters and pause\tupdates all owner-controlled config fields", ["configuration", "test_GovernanceUpdatesEveryOwnerControlledFieldAndPauseState"]],
+        ["EscrowV2 > view getters\treturns stored values from all getter helpers", ["configuration", "test_ViewGettersReturnAllStoredDepositAndIntentValues"]],
+    ]);
+    const mapping = mappings.get(key);
+    if (!mapping) return "";
+    const [domain, testName] = mapping;
+    if (domain === "management") return `${escrowV2LegacyManagementFile}:EscrowV2ManagementParityTest::${testName}`;
+    if (domain === "lifecycle") return `${escrowV2LegacyLifecycleFile}:EscrowV2LifecycleParityTest::${testName}`;
+    return `${escrowV2LegacyConfigurationFile}:EscrowV2ConfigurationParityTest::${testName}`;
+}
+
 function orchestratorV2LegacyDestination(test) {
     if (test.sourceFile !== "test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts") return "";
     const scenario = test.scenario;
@@ -672,7 +758,7 @@ const header = [
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -730,6 +816,9 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/escrowV2/escrowV2.oracleRates.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped EscrowV2 oracle-config behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/escrowV2/escrowV2.legacyCoverage.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped EscrowV2 legacy behavior: ${test.id} ${test.scenario}`);
+    }
     if (test.sourceFile === "test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped OrchestratorV2 legacy behavior: ${test.id} ${test.scenario}`);
     }
@@ -746,6 +835,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(rateManagerV1File)) evidence = "RateManagerV1Parity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(escrowV2DelegationFile)) evidence = "EscrowV2DelegationParity.t.sol: 21 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(escrowV2OracleConfigFile)) evidence = "EscrowV2OracleRateConfigParity.t.sol: 29 passed individually and together, 0 failed, 0 skipped";
+    if ([escrowV2LegacyManagementFile, escrowV2LegacyLifecycleFile, escrowV2LegacyConfigurationFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 management + lifecycle + configuration parity: 70 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 70/70";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
