@@ -166,7 +166,30 @@ Final Phase 2 parity gate: on exact branch commit `405a395`, the canonical Hardh
 
 ## Fuzz and invariant catalog
 
-Pending deterministic parity completion. Foundry-native tests cannot receive parity credit.
+Phase 3 is additive to the locked 1,399-test deterministic parity suite; none of these tests receives parity credit.
+
+### Property fuzzing
+
+The canonical profile runs every property with 512 cases (`[fuzz].runs = 512`) and a 65,536 reject ceiling. All 12 properties passed with three explicit seeds (`0x01`, `0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef`, and `0xffff...ffff`), for 18,432 generated cases across the three repeated runs. Each property calls production contracts and records its added risk directly in NatSpec:
+
+| Domain | Properties beyond deterministic parity |
+| --- | --- |
+| `OrchestratorV2FlowFuzz` | Exact value conservation across arbitrary bounded intent amounts, protocol/referral fees, direct recipients and post-hook routing; wrong-actor cancellation rejection and exact liquidity/index cleanup; both out-of-range amount boundaries; automatic expired-intent reclamation and lifecycle-index consistency. |
+| `StakeVaultAccountingFuzz` | Stake/reservation/compensation/token conservation under arbitrary partial slashes; deferred gross/net/fee conservation including rounding; active-reservation exit blocking; delegated taker use without transferring withdrawal ownership. |
+| `RegistryNullifierFuzz` | Complete payment-method removal across membership/enumeration/currency surfaces for arbitrary keys; bidirectional payment-to-intent uniqueness; legacy-nullifier authority after the one-way V2 cutover; owner/writer authorization across registries. |
+
+Representative command: `forge test --match-path 'test-foundry/fuzz/**/*.t.sol' --fuzz-seed <32-byte-seed>`. Each seeded run passed 12/12 with zero skips at 512 cases/property.
+
+### Stateful invariants
+
+The canonical profile uses 128 runs at depth 64 with `fail_on_revert = true` and call metrics enabled. Expected negative paths are caught and counted inside the handlers, so any unexpected outer handler revert fails the invariant run. Two independent handler systems exercise multiple actors and real production transitions:
+
+| System | Stateful actions | Ghost model and asserted properties |
+| --- | --- | --- |
+| `StakeVault` | 3 funded stakers and 2 makers drive deposits, reserve/increase/update/release/slash, compensation claims, partial withdrawals, full exits, time advances, and unauthorized reserve attempts over 12 position slots. | Tracks per-staker stake/reservations, per-maker compensation, and aggregate token inflow/outflow. Asserts vault balance equals total liabilities and ghost net flow; aggregate/per-actor accounting and every live reservation agree with production state; exit/withdrawal states remain legal; compensation ownership is conserved; no unauthorized controller operation succeeds. |
+| `NullifierRegistryV2` + legacy registry | Arbitrary binding collisions, legacy-first consumption followed by V2 attempts, and unauthorized writes across 16 payment and intent slots. | Tracks both binding directions and legacy consumption. Asserts bijective V2 bindings, replay prevention, legacy authority after cutover, complete success/revert accounting, and zero unauthorized writes. |
+
+For every invariant, each seed executed 128 × 64 = 8,192 stateful calls. Across the three explicit seeds, all 12 StakeVault selectors were exercised 622–748 times per run and all three nullifier selectors 2,681–2,814 times per run; Forge reported zero uncaught reverts. Dedicated deterministic reachability tests additionally force every handler action through successful and expected-revert branches and assert the internal call counters. All eight invariant/reachability tests passed under each seed. The complete suite now contains 1,419 tests (1,399 deterministic, 12 fuzz properties, 6 invariants, and 2 handler reachability tests), all passing with zero skips; a representative warm complete run took 6.41s wall time.
 
 ## Mutation audit
 
