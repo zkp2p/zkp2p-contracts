@@ -75,15 +75,16 @@ contract RiskManagerInvariantHandler is Test {
     RiskManager public manager;
     RiskInvariantEscrow public immutable escrow;
     address public immutable stakeOwner;
+    address public immutable delegatedTaker;
     uint256 public nonce;
-    mapping(address => uint256) public sponsoredStake;
 
     mapping(bytes32 => IOrchestratorV3.RiskIntentData) internal intents;
     bytes32[] internal intentHashes;
 
-    constructor(RiskInvariantEscrow _escrow, address _stakeOwner) {
+    constructor(RiskInvariantEscrow _escrow, address _stakeOwner, address _delegatedTaker) {
         escrow = _escrow;
         stakeOwner = _stakeOwner;
+        delegatedTaker = _delegatedTaker;
     }
 
     function setManager(RiskManager _manager) external {
@@ -96,8 +97,11 @@ contract RiskManagerInvariantHandler is Test {
 
     function create(uint96 rawAmount, bool chargebackable, bool deferred) external {
         uint256 amount = bound(uint256(rawAmount), 1, 10_000e6);
-        bytes32 intentHash = keccak256(abi.encode(++nonce, amount, chargebackable, deferred));
-        address intentOwner = deferred ? address(this) : stakeOwner;
+        uint256 intentNonce = ++nonce;
+        bytes32 intentHash = keccak256(abi.encode(intentNonce, amount, chargebackable, deferred));
+        address intentOwner = deferred
+            ? address(this)
+            : (intentNonce % 2 == 0 ? stakeOwner : delegatedTaker);
         intents[intentHash] = IOrchestratorV3.RiskIntentData({
             owner: intentOwner,
             to: intentOwner,
@@ -116,7 +120,7 @@ contract RiskManagerInvariantHandler is Test {
         }
     }
 
-    function extend(uint256 rawIndex, uint32 rawAdditionalTime, bool sponsor) external {
+    function extend(uint256 rawIndex, uint32 rawAdditionalTime, bool ownerCalls) external {
         if (intentHashes.length == 0) return;
         bytes32 intentHash = intentHashes[rawIndex % intentHashes.length];
         IRiskManager.RiskPosition memory beforeExtension = manager.getRiskPosition(intentHash);
@@ -132,16 +136,12 @@ contract RiskManagerInvariantHandler is Test {
         if (remainingTime == 0) return;
         uint64 additionalTime = uint64(bound(uint256(rawAdditionalTime), 1, remainingTime));
 
-        if (sponsor) {
-            try manager.stakeAndExtendIntent(intentHash, additionalTime) {
-                IRiskManager.RiskPosition memory afterExtension = manager.getRiskPosition(intentHash);
-                sponsoredStake[afterExtension.taker] +=
-                    afterExtension.extensionReservation - beforeExtension.extensionReservation;
-            } catch { }
-        } else {
-            vm.prank(beforeExtension.taker);
-            try manager.extendIntent(intentHash, additionalTime) { } catch { }
+        address extensionStakeOwner = beforeExtension.extensionStakeOwner;
+        if (extensionStakeOwner == address(0)) {
+            extensionStakeOwner = manager.stakeVault().stakeOwnerOf(beforeExtension.taker);
         }
+        vm.prank(ownerCalls ? extensionStakeOwner : beforeExtension.taker);
+        try manager.extendIntent(intentHash, additionalTime) { } catch { }
     }
 
     function cancel(uint256 rawIndex, uint32 rawElapsed) external {
@@ -252,6 +252,7 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
     bytes32 internal constant ZELLE = keccak256("zelle");
 
     address internal stakeOwner = makeAddr("stakeOwner");
+    address internal delegatedTaker = makeAddr("delegatedTaker");
     address internal lp = makeAddr("lp");
 
     USDCMock internal token;
@@ -263,7 +264,7 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
         vm.warp(1_000_000);
         token = new USDCMock(2_000_000e6, "USD Coin", "USDC");
         RiskInvariantEscrow escrow = new RiskInvariantEscrow(lp, token);
-        handler = new RiskManagerInvariantHandler(escrow, stakeOwner);
+        handler = new RiskManagerInvariantHandler(escrow, stakeOwner, delegatedTaker);
         AttestationVerifierMock verifier = new AttestationVerifierMock();
         NullifierRegistry legacyRegistry = new NullifierRegistry();
         NullifierRegistryV2 nullifierRegistry = new NullifierRegistryV2(legacyRegistry);
@@ -307,6 +308,7 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
         vm.startPrank(stakeOwner);
         token.approve(address(vault), type(uint256).max);
         vault.depositStake(1_000_000e6);
+        vault.setTakerAuthorization(delegatedTaker, true);
         vm.stopPrank();
         deal(address(token), address(handler), 100_000_000e6);
 
@@ -384,7 +386,9 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
             if (position.status == IRiskManager.PositionStatus.PENDING) {
                 assertEq(extensionReservation.amount, position.extensionReservation);
                 assertEq(extensionReservation.active, position.extensionReservation != 0);
-                if (extensionReservation.active) assertEq(extensionReservation.staker, position.taker);
+                if (extensionReservation.active) {
+                    assertEq(extensionReservation.staker, position.extensionStakeOwner);
+                }
                 assertEq(position.extensionPenalty, 0);
             } else {
                 assertEq(position.extensionReservation, 0);
@@ -436,8 +440,10 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
         uint256 handlerSlashes;
         for (uint256 index = 0; index < handler.hashCount(); index++) {
             IRiskManager.RiskPosition memory position = manager.getRiskPosition(handler.hashAt(index));
-            if (position.taker == stakeOwner) stakeOwnerSlashes += position.extensionPenalty;
-            else if (position.taker == address(handler)) handlerSlashes += position.extensionPenalty;
+            if (position.extensionStakeOwner == stakeOwner) stakeOwnerSlashes += position.extensionPenalty;
+            else if (position.extensionStakeOwner == address(handler)) {
+                handlerSlashes += position.extensionPenalty;
+            }
             if (position.stakeOwner == stakeOwner) stakeOwnerSlashes += position.slashedAmount;
             else if (position.stakeOwner == address(handler)) handlerSlashes += position.slashedAmount;
         }
@@ -453,14 +459,10 @@ contract RiskManagerInvariantTest is StdInvariant, Test {
             }
         }
 
-        assertEq(
-            vault.stakeBalance(stakeOwner),
-            1_000_000e6 + handler.sponsoredStake(stakeOwner) - stakeOwnerSlashes
-        );
+        assertEq(vault.stakeBalance(stakeOwner), 1_000_000e6 - stakeOwnerSlashes);
         assertEq(
             vault.stakeBalance(address(handler)),
-            handler.sponsoredStake(address(handler)) + handlerDeferredDeposits
-                - handlerSlashes - vestedDeferredFees
+            handlerDeferredDeposits - handlerSlashes - vestedDeferredFees
         );
     }
 

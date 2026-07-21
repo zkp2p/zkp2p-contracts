@@ -219,31 +219,62 @@ contract RiskManagerTest is Test {
         assertEq(vault.claimableCompensation(maker), 200_000);
     }
 
-    function test_SponsorSuppliesNewStakeWithoutUsingTakerFreeStake() public {
-        bytes32 intentHash = keccak256("sponsored-extension");
+    function test_DelegatedOwnerFundsExtensionWithoutGivingTakerWithdrawalRights() public {
+        vault.setTakerState(taker, beneficiary, 1e6, 1e6, false);
+        bytes32 intentHash = keccak256("delegated-extension");
         _create(intentHash, 100e6, ZELLE);
-        uint256 freeStakeBefore = vault.freeStake(taker);
-        uint256 stakeBefore = vault.stakeBalance(taker);
+        uint256 takerStakeBefore = vault.stakeBalance(taker);
 
-        token.transfer(beneficiary, 1e6);
-        vm.startPrank(beneficiary);
-        token.approve(address(vault), type(uint256).max);
-        manager.stakeAndExtendIntent(intentHash, 2 hours);
-        vm.stopPrank();
+        vm.prank(beneficiary);
+        manager.extendIntent(intentHash, 2 hours);
 
         uint256 extensionCost = 200_000;
-        (, uint256 reservation,) = vault.reservations(manager.extensionReservationId(intentHash));
+        (address reservationOwner, uint256 reservation,) =
+            vault.reservations(manager.extensionReservationId(intentHash));
         assertEq(reservation, extensionCost);
-        assertEq(vault.stakeBalance(taker), stakeBefore + extensionCost);
-        assertEq(vault.freeStake(taker), freeStakeBefore);
+        assertEq(reservationOwner, beneficiary);
+        assertEq(manager.getRiskPosition(intentHash).extensionStakeOwner, beneficiary);
+        assertEq(vault.stakeBalance(beneficiary), 1e6);
+        assertEq(vault.freeStake(beneficiary), 800_000);
+        assertEq(vault.stakeBalance(taker), takerStakeBefore);
 
         vm.warp(manager.getRiskPosition(intentHash).baseIntentExpiry + 1 hours);
         orchestrator.cancelPosition(manager, intentHash);
 
         assertEq(manager.getRiskPosition(intentHash).extensionPenalty, 100_000);
-        assertEq(vault.stakeBalance(taker), stakeBefore + 100_000);
-        assertEq(vault.freeStake(taker), freeStakeBefore + 100_000);
+        assertEq(vault.stakeBalance(beneficiary), 900_000);
+        assertEq(vault.freeStake(beneficiary), 900_000);
+        assertEq(vault.stakeBalance(taker), takerStakeBefore);
         assertEq(vault.claimableCompensation(maker), 100_000);
+    }
+
+    function test_RevocationBlocksTakerTopUpButNotSnapshottedOwner() public {
+        vault.setTakerState(taker, beneficiary, 1e6, 1e6, false);
+        bytes32 intentHash = keccak256("revoked-extension");
+        _create(intentHash, 100e6, ZELLE);
+
+        vm.prank(taker);
+        manager.extendIntent(intentHash, 1 hours);
+        vault.setTakerState(taker, taker, 10_000e6, 10_000e6, false);
+
+        vm.prank(taker);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IRiskManager.UnauthorizedStakeExtension.selector,
+                taker,
+                taker,
+                beneficiary
+            )
+        );
+        manager.extendIntent(intentHash, 1 hours);
+
+        vm.prank(beneficiary);
+        manager.extendIntent(intentHash, 1 hours);
+        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        assertEq(position.extensionStakeOwner, beneficiary);
+        assertEq(position.totalExtensionTime, 2 hours);
+        assertEq(position.extensionReservation, 200_000);
+        assertEq(vault.reservedStake(beneficiary), 200_000);
     }
 
     function test_CancellationReleasesDeferredAuthorization() public {

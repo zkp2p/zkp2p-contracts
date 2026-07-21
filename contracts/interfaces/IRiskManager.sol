@@ -105,7 +105,9 @@ interface IRiskManager is IIntentRiskHook {
         bool isManualRelease;
         /// @notice Original locked amount on which maximum pending liabilities were calculated.
         uint256 intentAmount;
-        /// @notice Taker-owned stake currently reserved to fund purchased extension time.
+        /// @notice Economic owner whose delegated stake funds purchased extension time.
+        address extensionStakeOwner;
+        /// @notice Delegated-owner stake currently reserved to fund purchased extension time.
         uint256 extensionReservation;
         /// @notice Exact extension charge paid to the LP at terminal resolution.
         uint256 extensionPenalty;
@@ -178,18 +180,19 @@ interface IRiskManager is IIntentRiskHook {
     );
     event IntentExtended(
         bytes32 indexed intentHash,
-        address indexed funder,
         address indexed taker,
+        address indexed extensionStakeOwner,
+        address caller,
         uint64 additionalTime,
         uint64 newExpiryTime,
         uint256 additionalReservation,
-        uint256 totalReservation,
-        bool usedExistingStake
+        uint256 totalReservation
     );
     event IntentExtensionCharged(
         bytes32 indexed intentHash,
-        address indexed taker,
+        address indexed extensionStakeOwner,
         address indexed lp,
+        address taker,
         uint64 terminalAt,
         uint64 chargeableTime,
         uint256 penalty,
@@ -261,7 +264,7 @@ interface IRiskManager is IIntentRiskHook {
     error PositionNotSettled(bytes32 intentHash, PositionStatus status);
     error PositionModeMismatch(bytes32 intentHash, RiskMode mode);
     error IntentStateMismatch(bytes32 intentHash);
-    error UnauthorizedStakeExtension(address caller, address taker);
+    error UnauthorizedStakeExtension(address caller, address taker, address extensionStakeOwner);
     error IntentAlreadyExpired(bytes32 intentHash, uint64 expiryTime, uint64 currentTime);
     error ExtensionTimeOverflow(uint256 extensionTime);
     error ExtensionExceedsIntentLifetime(uint64 newExpiry, uint64 maximumExpiry);
@@ -304,10 +307,11 @@ interface IRiskManager is IIntentRiskHook {
     function releaseMaturedPositions(bytes32[] calldata _intentHashes) external;
     /** @notice Authenticates chargeback evidence and compensates the LP for the full covered amount. */
     function submitChargeback(ChargebackAttestation calldata _attestation) external;
-    /** @notice Uses the taker's existing free stake to purchase more time for a pending intent. */
+    /**
+     * @notice Uses delegated stake to purchase more time for a pending intent.
+     * @dev Callable by the taker or the exact stake owner snapshotted by the first extension.
+     */
     function extendIntent(bytes32 _intentHash, uint64 _additionalTime) external;
-    /** @notice Atomically supplies new taker-owned stake and purchases more time; callable by any sponsor. */
-    function stakeAndExtendIntent(bytes32 _intentHash, uint64 _additionalTime) external;
 
     /* ============ View and Math Functions ============ */
 

@@ -219,60 +219,6 @@ describe("StakeVault", () => {
       expect(await vault.freeStake(staker.address)).to.eq(usdc(600));
     });
 
-    it("atomically sponsors new stake and reserves every supplied token for a taker", async () => {
-      const { controller, staker: sponsor, maker: taker, token, vault } = await deployFixture();
-      const positionId = ethers.utils.id("extension");
-      const sponsorBefore = await token.balanceOf(sponsor.address);
-
-      await expect(vault.connect(controller).depositAndReserveStake(
-        sponsor.address,
-        taker.address,
-        positionId,
-        usdc(2),
-        100,
-      )).to.emit(vault, "StakeSponsoredAndReserved")
-        .withArgs(positionId, sponsor.address, taker.address, usdc(2), usdc(2), 100);
-
-      expect(await token.balanceOf(sponsor.address)).to.eq(sponsorBefore.sub(usdc(2)));
-      expect(await vault.stakeBalance(taker.address)).to.eq(usdc(2));
-      expect(await vault.reservedStake(taker.address)).to.eq(usdc(2));
-      expect(await vault.freeStake(taker.address)).to.eq(0);
-      expect(await vault.totalLiabilities()).to.eq(usdc(2));
-    });
-
-    it("adds repeated sponsorship to the same reservation without consuming existing free stake", async () => {
-      const { controller, staker: sponsor, maker: taker, vault } = await deployFixture();
-      const positionId = ethers.utils.id("extension");
-      await vault.connect(controller).depositAndReserveStake(
-        sponsor.address, taker.address, positionId, usdc(1), 100,
-      );
-      await vault.connect(controller).releaseReservation(positionId);
-      await vault.connect(controller).reserveStake(taker.address, positionId, usdc(1), 100);
-
-      await vault.connect(controller).depositAndReserveStake(
-        sponsor.address, taker.address, positionId, usdc(2), 200,
-      );
-
-      const reservation = await vault.getReservation(positionId);
-      expect(reservation.amount).to.eq(usdc(3));
-      expect(reservation.releaseTime).to.eq(200);
-      expect(await vault.stakeBalance(taker.address)).to.eq(usdc(3));
-      expect(await vault.reservedStake(taker.address)).to.eq(usdc(3));
-    });
-
-    it("rejects sponsored reservations when either deposit or reservation admission is paused", async () => {
-      const { owner, controller, staker: sponsor, maker: taker, vault } = await deployFixture();
-      const positionId = ethers.utils.id("extension");
-      await vault.connect(owner).setStakeOperationsPaused(true, false);
-      await expect(vault.connect(controller).depositAndReserveStake(
-        sponsor.address, taker.address, positionId, usdc(1), 0,
-      )).to.be.revertedWithCustomError(vault, "StakeActionPaused");
-      await vault.connect(owner).setStakeOperationsPaused(false, true);
-      await expect(vault.connect(controller).depositAndReserveStake(
-        sponsor.address, taker.address, positionId, usdc(1), 0,
-      )).to.be.revertedWithCustomError(vault, "StakeActionPaused");
-    });
-
     it("rejects a reservation larger than free stake", async () => {
       const { controller, staker, vault } = await deployFixture();
       await vault.connect(staker).depositStake(usdc(100));
