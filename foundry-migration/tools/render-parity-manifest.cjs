@@ -68,6 +68,8 @@ const riskManagerSettlementRoutingFile = "test-foundry/deterministic/staking/Ris
 const orchestratorV3SettlementSafetyFile = "test-foundry/deterministic/staking/OrchestratorV3SettlementSafetyParity.t.sol";
 const orchestratorV3ControlRecoveryFile = "test-foundry/deterministic/staking/OrchestratorV3ControlRecoveryParity.t.sol";
 const legacySystemDeploymentFile = "test-foundry/deterministic/deployment/LegacySystemDeploymentParity.t.sol";
+const unifiedVerifierDeploymentFile = "test-foundry/deterministic/deployment/UnifiedVerifierDeploymentParity.t.sol";
+const legacyPaymentMethodDeploymentFile = "test-foundry/deterministic/deployment/LegacyPaymentMethodDeploymentParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -1650,6 +1652,68 @@ function legacySystemDeploymentDestination(test) {
     return `${legacySystemDeploymentFile}:LegacySystemDeploymentParityTest::${legacySystemDeploymentDestinations[sourceIndex]}`;
 }
 
+const legacyVerifierDeploymentMappings = new Map([
+    ["test/deploy/01_unifiedVerifier.spec.ts", [unifiedVerifierDeploymentFile, "UnifiedVerifierDeploymentParityTest", [
+        "test_SimpleAttestationVerifierDeploymentSetsOwner",
+        "test_UnifiedPaymentVerifierDeploymentSetsOwner",
+        "test_UnifiedPaymentVerifierDeploymentSetsNullifierRegistry",
+        "test_UnifiedPaymentVerifierDeploymentSetsAttestationVerifier",
+        "test_RetiredVerifierLegacyNullifierPermissionIsRevoked",
+    ]]],
+    ["test/deploy/02_venmoPaymentMethod.spec.ts", [legacyPaymentMethodDeploymentFile, "LegacyPaymentMethodDeploymentParityTest", [
+        "test_VenmoRegistryContainsPaymentMethod", "test_VenmoRegistryStoresCurrencies", "test_VenmoUnifiedVerifierContainsPaymentMethod",
+    ]]],
+    ["test/deploy/03_revolutPaymentMethod.spec.ts", [legacyPaymentMethodDeploymentFile, "LegacyPaymentMethodDeploymentParityTest", [
+        "test_RevolutRegistryContainsPaymentMethod", "test_RevolutRegistryStoresCurrencies", "test_RevolutUnifiedVerifierContainsPaymentMethod",
+    ]]],
+    ["test/deploy/04_cashappPaymentMethod.spec.ts", [legacyPaymentMethodDeploymentFile, "LegacyPaymentMethodDeploymentParityTest", [
+        "test_CashAppRegistryContainsPaymentMethod", "test_CashAppRegistryStoresCurrencies", "test_CashAppUnifiedVerifierContainsPaymentMethod",
+    ]]],
+    ["test/deploy/05_wisePaymentMethod.spec.ts", [legacyPaymentMethodDeploymentFile, "LegacyPaymentMethodDeploymentParityTest", [
+        "test_WiseRegistryContainsPaymentMethod", "test_WiseRegistryStoresCurrencies", "test_WiseUnifiedVerifierContainsPaymentMethod",
+    ]]],
+    ["test/deploy/06_mercadopagoPaymentMethod.spec.ts", [legacyPaymentMethodDeploymentFile, "LegacyPaymentMethodDeploymentParityTest", [
+        "test_MercadoPagoRegistryContainsPaymentMethod", "test_MercadoPagoRegistryStoresCurrencies", "test_MercadoPagoUnifiedVerifierContainsPaymentMethod",
+    ]]],
+    ["test/deploy/07_zellePaymentMethods.spec.ts", [legacyPaymentMethodDeploymentFile, "LegacyPaymentMethodDeploymentParityTest", [
+        "test_ZelleUsesGenericPaymentMethodHash", "test_ZelleRegistryStoresGenericMethodAndCurrencies", "test_ZelleUnifiedVerifierContainsGenericMethod",
+    ]]],
+    ["test/deploy/08_paypalPaymentMethod.spec.ts", [legacyPaymentMethodDeploymentFile, "LegacyPaymentMethodDeploymentParityTest", [
+        "test_PayPalRegistryContainsPaymentMethod", "test_PayPalRegistryStoresCurrencies", "test_PayPalRegistrySupportsSevenCurrencies", "test_PayPalUnifiedVerifierContainsPaymentMethod",
+    ]]],
+    ["test/deploy/09_monzoPaymentMethod.spec.ts", [legacyPaymentMethodDeploymentFile, "LegacyPaymentMethodDeploymentParityTest", [
+        "test_MonzoRegistryContainsPaymentMethod", "test_MonzoRegistryStoresCurrencies", "test_MonzoRegistrySupportsOnlyGbp", "test_MonzoUnifiedVerifierContainsPaymentMethod",
+    ]]],
+    ["test/deploy/10_n26PaymentMethod.spec.ts", [legacyPaymentMethodDeploymentFile, "LegacyPaymentMethodDeploymentParityTest", [
+        "test_N26RegistryRemovesPaymentMethod", "test_N26RegistryRemovesCurrencies", "test_N26UnifiedVerifierRemovesPaymentMethod",
+    ]]],
+    ["test/deploy/11_alipayPaymentMethod.spec.ts", [legacyPaymentMethodDeploymentFile, "LegacyPaymentMethodDeploymentParityTest", [
+        "test_AlipayRegistryContainsPaymentMethod", "test_AlipayRegistryStoresCurrencies", "test_AlipayRegistrySupportsOnlyCny", "test_AlipayUnifiedVerifierContainsPaymentMethod",
+    ]]],
+    ["test/deploy/12_chimePaymentMethod.spec.ts", [legacyPaymentMethodDeploymentFile, "LegacyPaymentMethodDeploymentParityTest", [
+        "test_ChimeRegistryContainsPaymentMethod", "test_ChimeRegistryStoresCurrencies", "test_ChimeRegistrySupportsOnlyUsd", "test_ChimeUnifiedVerifierContainsPaymentMethod",
+    ]]],
+    ["test/deploy/13_luxonPaymentMethod.spec.ts", [legacyPaymentMethodDeploymentFile, "LegacyPaymentMethodDeploymentParityTest", [
+        "test_LuxonRegistryRemovesPaymentMethod", "test_LuxonRegistryRemovesCurrencies", "test_LuxonUnifiedVerifierRemovesPaymentMethod",
+    ]]],
+]);
+for (const [sourceFile, [, , destinations]] of legacyVerifierDeploymentMappings) {
+    const sourceCount = inventory.tests.filter((test) => test.sourceFile === sourceFile).length;
+    if (sourceCount !== destinations.length) {
+        throw new Error(`${sourceFile} mapping count mismatch: ${sourceCount} source / ${destinations.length} translated destinations`);
+    }
+}
+
+function legacyVerifierDeploymentDestination(test) {
+    const mapping = legacyVerifierDeploymentMappings.get(test.sourceFile);
+    if (!mapping) return "";
+    const [file, contractName, destinations] = mapping;
+    const sourceTests = inventory.tests.filter((sourceTest) => sourceTest.sourceFile === test.sourceFile);
+    const sourceIndex = sourceTests.findIndex((sourceTest) => sourceTest.id === test.id);
+    if (sourceIndex < 0) return "";
+    return `${file}:${contractName}::${destinations[sourceIndex]}`;
+}
+
 function orchestratorV2LegacyDestination(test) {
     if (test.sourceFile !== "test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts") return "";
     const scenario = test.scenario;
@@ -1719,7 +1783,7 @@ const header = [
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || escrowLegacyDestination(test) || orchestratorLegacyDestination(test) || stakeVaultDestination(test) || riskManagerDestination(test) || riskManagerCoverageDestination(test) || legacySystemDeploymentDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || escrowLegacyDestination(test) || orchestratorLegacyDestination(test) || stakeVaultDestination(test) || riskManagerDestination(test) || riskManagerCoverageDestination(test) || legacySystemDeploymentDestination(test) || legacyVerifierDeploymentDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -1755,6 +1819,9 @@ const rows = inventory.tests.map((test) => {
     }
     if (test.sourceFile === legacySystemDeploymentSource && !foundryDestination) {
         throw new Error(`Unmapped legacy deployment behavior: ${test.id} ${test.scenario}`);
+    }
+    if (legacyVerifierDeploymentMappings.has(test.sourceFile) && !foundryDestination) {
+        throw new Error(`Unmapped verifier deployment behavior: ${test.id} ${test.scenario}`);
     }
     if (test.sourceFile === "test/escrowV2/escrowV2.pythOracle.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped EscrowV2 Pyth behavior: ${test.id} ${test.scenario}`);
@@ -1819,6 +1886,7 @@ const rows = inventory.tests.map((test) => {
     if ([riskManagerHarnessGovernanceFile, riskManagerHarnessAdmissionFile, riskManagerHarnessSettlementFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete RiskManager hard-cut branch parity: 18 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 18/18";
     if ([riskManagerIntegrationConfigFile, riskManagerAdmissionFile, riskManagerExtensionLifecycleFile, riskManagerExtensionBoundaryFile, riskManagerSettlementFile, riskManagerChargebackFile, riskManagerDeferredCustodyFile, riskManagerSettlementRoutingFile, orchestratorV3SettlementSafetyFile, orchestratorV3ControlRecoveryFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete RiskManager real-system parity: 70 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 70/70";
     if (foundryDestination.startsWith(legacySystemDeploymentFile)) evidence = "Legacy system deployment parity: 21 passed individually and together, 0 failed, 0 skipped; same-commit localhost Hardhat source 21/21";
+    if ([unifiedVerifierDeploymentFile, legacyPaymentMethodDeploymentFile].some((file) => foundryDestination.startsWith(file))) evidence = "Legacy verifier and payment-method deployment parity: 45 source rows mapped; 46 Foundry tests passed individually and together, including the formerly commented orchestrator-registry assertion; same-commit localhost Hardhat sources 45/45";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
