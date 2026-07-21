@@ -49,6 +49,8 @@ const orchestratorLegacyManualReleaseFile = "test-foundry/deterministic/orchestr
 const orchestratorLegacyPruneFile = "test-foundry/deterministic/orchestrator/OrchestratorPruneParity.t.sol";
 const orchestratorLegacyGovernanceFile = "test-foundry/deterministic/orchestrator/OrchestratorGovernanceParity.t.sol";
 const orchestratorLegacyViewsFile = "test-foundry/deterministic/orchestrator/OrchestratorViewsParity.t.sol";
+const stakeVaultDepositDelegationFile = "test-foundry/deterministic/staking/StakeVaultDepositDelegationParity.t.sol";
+const stakeVaultReservationFile = "test-foundry/deterministic/staking/StakeVaultReservationParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -1357,6 +1359,58 @@ function orchestratorLegacyDestination(test) {
     return `${file}:${contractName}::${testName}`;
 }
 
+const stakeVaultSource = "test/staking/stakeVault.spec.ts";
+const stakeVaultSourceTests = inventory.tests.filter((test) => test.sourceFile === stakeVaultSource);
+const stakeVaultDestinations = [
+    ...[
+        "test_DepositStakeRecordsStakeAndEmitsResultingBalance",
+        "test_DepositStakeRejectsZeroValue",
+        "test_DepositStakeRejectsWhileDepositsPaused",
+        "test_DepositStakeForPreservesStakeOwnership",
+        "test_DelegationRejectsReplacementByAnotherStakeOwner",
+        "test_StakeOwnerCanRevokeTaker",
+        "test_TakerClearsStakeOwnerAndDisablesReassignment",
+        "test_DelegationRejectsForcedReassignmentAfterClear",
+        "test_TakerCanReenableStakeDelegation",
+        "test_TakerCanDisableDelegationBeforeAssignment",
+        "test_TakerCanPreapproveExactStakeOwner",
+        "test_AllowedStakeOwnerAtomicallyReplacesSquatter",
+        "test_DelegatedTakerHasNoStakeWithdrawalRights",
+        "test_BatchAuthorizationUpdatesEveryTakerAtomically",
+        "test_InvalidBatchAuthorizationRollsBackEveryTaker",
+    ].map((testName) => [stakeVaultDepositDelegationFile, "StakeVaultDepositDelegationParityTest", testName]),
+    ...[
+        "test_ReserveStakeReservesFreeStakeForUniqueIntent",
+        "test_ReserveStakeRejectsAmountAboveFreeStake",
+        "test_ReserveStakeRejectsReusedActiveIntent",
+        "test_UpdateReservationReducesAfterPartialFulfillment",
+        "test_IncreaseReservationUsesAdmissionGatedPath",
+        "test_IncreaseReservationZeroRefreshesReleaseTimeOnly",
+        "test_IncreaseReservationRejectsMissingAndInsufficientStake",
+        "test_IncreaseReservationRejectsPauseAndExit",
+        "test_ZeroIncreaseReservationStillRejectsPauseAndExit",
+        "test_ReleaseReservationClearsCancelledIntentReservation",
+        "test_ReservationMutationRejectsNonController",
+        "test_SlashReservationRetainsRemainderAndCreditsMaker",
+        "test_SlashReservationRejectsAboveActiveReservation",
+        "test_MakerWithdrawsCreditedCompensation",
+        "test_CompensationAggregatesAcrossIntentClaims",
+    ].map((testName) => [stakeVaultReservationFile, "StakeVaultReservationParityTest", testName]),
+];
+if (stakeVaultSourceTests.length !== 56 || stakeVaultDestinations.length !== 30) {
+    throw new Error(
+        `StakeVault mapping count mismatch: ${stakeVaultSourceTests.length} source / ${stakeVaultDestinations.length} translated destinations`
+    );
+}
+
+function stakeVaultDestination(test) {
+    if (test.sourceFile !== stakeVaultSource) return "";
+    const sourceIndex = stakeVaultSourceTests.findIndex((sourceTest) => sourceTest.id === test.id);
+    if (sourceIndex < 0 || sourceIndex >= stakeVaultDestinations.length) return "";
+    const [file, contractName, testName] = stakeVaultDestinations[sourceIndex];
+    return `${file}:${contractName}::${testName}`;
+}
+
 function orchestratorV2LegacyDestination(test) {
     if (test.sourceFile !== "test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts") return "";
     const scenario = test.scenario;
@@ -1426,7 +1480,7 @@ const header = [
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || escrowLegacyDestination(test) || orchestratorLegacyDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || escrowLegacyDestination(test) || orchestratorLegacyDestination(test) || stakeVaultDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -1513,6 +1567,7 @@ const rows = inventory.tests.map((test) => {
     if ([escrowV2BranchAuthorizationFile, escrowV2BranchValidationFile, escrowV2BranchGovernanceLifecycleFile, escrowV2BranchStatePauseFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 branch parity: 108 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 108/108";
     if ([escrowCreateDepositFile, escrowFundingFile, escrowWithdrawFile, escrowRateRangeFile, escrowPaymentMethodFile, escrowCurrencyFile, escrowDelegateFile, escrowAcceptingRetainFile, escrowPruningFile, escrowLockFundsFile, escrowUnlockFundsFile, escrowUnlockTransferFile, escrowIntentExpiryFile, escrowGovernanceFile, escrowExpiredIntentsViewFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete legacy Escrow parity: 276 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 275 passed plus 1 baseline-pending case resolved in Foundry";
     if ([orchestratorLegacySignalFile, orchestratorLegacyCancelFile, orchestratorLegacyFulfillCoreFile, orchestratorLegacyFulfillAccountingFile, orchestratorLegacyFulfillHookFile, orchestratorLegacyFulfillPartialReentryFile, orchestratorLegacyManualReleaseFile, orchestratorLegacyPruneFile, orchestratorLegacyGovernanceFile, orchestratorLegacyViewsFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete legacy Orchestrator parity: 141 passed individually and together, 0 failed, 0 skipped; all 4 baseline-pending cases resolved in Foundry";
+    if ([stakeVaultDepositDelegationFile, stakeVaultReservationFile].some((file) => foundryDestination.startsWith(file))) evidence = "StakeVault deposit/delegation/reservation/slashing slice: 30 passed individually and together, 0 failed, 0 skipped; full same-commit Hardhat source 56/56";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
