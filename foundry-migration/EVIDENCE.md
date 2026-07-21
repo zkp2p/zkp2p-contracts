@@ -110,6 +110,12 @@ Machine-readable evidence is committed in [hardhat-coverage-summary.json](./base
 
 The machine-auditable [migration manifest](./hardhat-to-foundry-manifest.csv) contains all 1,514 runtime-expanded named behaviors with unique stable hash IDs, source file, suite path, scenario, expected-behavior category, inherited hook/helper dependencies, one-to-one translation shape, and baseline status. The underlying [Hardhat inventory](./baseline/hardhat-inventory.json) preserves suites, hooks, imports, named local callables, source hashes, group totals, and the five pending cases. Runtime enumeration expands parameterized test construction rather than relying on a text-only `it()` search. No row is verified until its Foundry destination passes alone and in the complete repeated suite.
 
+| Re-derived domain | Hardhat rows mapped | Foundry tests | Isolation evidence | Status |
+| --- | ---: | ---: | --- | --- |
+| Seven registries | 120 | 50 across 7 contracts | Every test passed individually; complete file 50/50, 0 skipped; warm real 0.22s | Independently verified; shadow/full-repeat gates pending |
+
+Current deterministic mapping: 120 / 1,514 rows (7.93%); 1,394 remain. Registry consolidations combine assertions from the same Hardhat setup/action only where the manifest gives every source behavior an exact Foundry function destination. This slice covers ownership, exact revert reasons/custom errors, all emitted events, array/set mutation, independent payment-method state, legacy-nullifier precedence, bidirectional binding, and replay prevention.
+
 ## Fuzz and invariant catalog
 
 Pending deterministic parity completion. Foundry-native tests cannot receive parity credit.
