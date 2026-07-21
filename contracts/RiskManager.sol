@@ -533,15 +533,13 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         position.status = PositionStatus.RELEASED;
         position.reservedAmount = 0;
 
-        address releasedStakeOwner = position.stakeOwner;
         if (position.mode == RiskMode.STAKE_BACKED && releasedCoverage != 0) {
             stakeVault.releaseReservation(_intentHash);
         } else if (position.mode == RiskMode.DEFERRED_PAYOUT && releasedCoverage != 0) {
-            releasedStakeOwner = position.taker;
             stakeVault.releaseDeferredStake(_intentHash);
         }
 
-        emit RiskPositionReleased(_intentHash, releasedStakeOwner, position.mode, releasedCoverage);
+        emit RiskPositionReleased(_intentHash, position.stakeOwner, position.mode, releasedCoverage);
     }
 
     /**
@@ -588,8 +586,6 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             position.mode,
             position.grossReleasedAmount,
             compensatedAmount,
-            position.slashedAmount,
-            position.reservedAmount,
             details.disputeId
         );
     }

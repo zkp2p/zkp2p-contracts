@@ -590,6 +590,24 @@ describe("StakeVault", () => {
   });
 
   describe("deferred stake", () => {
+    it("names terminal event amounts by their accounting outcome", async () => {
+      const { vault } = await deployFixture();
+      expect(vault.interface.getEvent("DeferredStakeSlashed").inputs.map((input: any) => input.name)).to.deep.eq([
+        "intentHash",
+        "staker",
+        "maker",
+        "slashedGrossAmount",
+        "cancelledFeeAmount",
+      ]);
+      expect(vault.interface.getEvent("DeferredStakeReleased").inputs.map((input: any) => input.name)).to.deep.eq([
+        "intentHash",
+        "staker",
+        "releasedGrossAmount",
+        "vestedFeeAmount",
+        "netStakeReleased",
+      ]);
+    });
+
     it("converts the full gross settlement into fully reserved taker stake", async () => {
       const { controller, staker, maker: protocol, recipient: referrer, token, vault } = await deployFixture();
       const intentHash = ethers.utils.id("deferred");

@@ -122,14 +122,14 @@ interface IStakeVault {
         bytes32 indexed intentHash,
         address indexed staker,
         address indexed maker,
-        uint256 grossAmount,
-        uint256 feeAmount
+        uint256 slashedGrossAmount,
+        uint256 cancelledFeeAmount
     );
     event DeferredStakeReleased(
         bytes32 indexed intentHash,
         address indexed staker,
-        uint256 grossAmount,
-        uint256 feeAmount,
+        uint256 releasedGrossAmount,
+        uint256 vestedFeeAmount,
         uint256 netStakeReleased
     );
     event DeferredFeeVested(

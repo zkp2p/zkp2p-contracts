@@ -238,8 +238,6 @@ interface IRiskManager is IIntentRiskHook {
         RiskMode mode,
         uint256 grossReleasedAmount,
         uint256 compensatedAmount,
-        uint256 totalCompensated,
-        uint256 remainingCoverage,
         bytes32 disputeId
     );
     event AttestationVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);

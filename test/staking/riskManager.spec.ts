@@ -751,7 +751,8 @@ describe("RiskManager and OrchestratorV3", () => {
       await vault.connect(taker).depositStake(usdc(500));
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(500), PAYPAL);
       await fulfillIntent(orchestrator, intentHash, usdc(500));
-      const claim = await chargebackAttestation(manager, intentHash, usdc(500));
+      const disputeId = ethers.utils.id("chargeback-event-semantics");
+      const claim = await chargebackAttestation(manager, intentHash, usdc(500), disputeId);
       const { chainId } = await ethers.provider.getNetwork();
       expect(await manager.hashChargebackAttestation(claim)).to.eq(ethers.utils._TypedDataEncoder.hash(
         { name: "ZKP2P RiskManager", version: "1", chainId, verifyingContract: manager.address },
@@ -761,7 +762,15 @@ describe("RiskManager and OrchestratorV3", () => {
         ] },
         { intentHash: claim.intentHash, dataHash: claim.dataHash },
       ));
-      await manager.submitChargeback(claim);
+      await expect(manager.submitChargeback(claim)).to.emit(manager, "ChargebackSettled").withArgs(
+        intentHash,
+        taker.address,
+        maker.address,
+        2,
+        usdc(500),
+        usdc(500),
+        disputeId,
+      );
       expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(500));
       expect((await manager.getRiskPosition(intentHash)).status).to.eq(5);
     });
@@ -816,7 +825,12 @@ describe("RiskManager and OrchestratorV3", () => {
       await fulfillIntent(orchestrator, intentHash, usdc(500));
       const deadline = (await manager.getRiskPosition(intentHash)).coverageDeadline.toNumber();
       await time.increaseTo(deadline);
-      await manager.releaseMaturedPosition(intentHash);
+      await expect(manager.releaseMaturedPosition(intentHash)).to.emit(manager, "RiskPositionReleased").withArgs(
+        intentHash,
+        taker.address,
+        2,
+        usdc(500),
+      );
       expect(await vault.reservedStake(taker.address)).to.eq(0);
       expect((await manager.getRiskPosition(intentHash)).status).to.eq(4);
     });
