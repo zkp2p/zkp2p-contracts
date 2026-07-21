@@ -281,4 +281,35 @@ contract EscrowV2BranchStatePauseParityTest is EscrowV2LegacyFixture {
         vm.prank(depositor);
         escrow.removeFunds(0, 10e6);
     }
+
+    function test_WithdrawDepositRejectsWhenReentrancyGuardIsEntered() public {
+        vm.store(address(escrow), bytes32(uint256(1)), bytes32(uint256(2)));
+        vm.expectRevert("ReentrancyGuard: reentrant call");
+        vm.prank(depositor);
+        escrow.withdrawDeposit(0);
+    }
+
+    function test_PruneExpiredIntentsRejectsWhenReentrancyGuardIsEntered() public {
+        vm.store(address(escrow), bytes32(uint256(1)), bytes32(uint256(2)));
+        vm.expectRevert("ReentrancyGuard: reentrant call");
+        escrow.pruneExpiredIntents(0);
+    }
+
+    function test_LockFundsRejectsWhenReentrancyGuardIsEntered() public {
+        vm.store(address(escrow), bytes32(uint256(1)), bytes32(uint256(2)));
+        vm.expectRevert("ReentrancyGuard: reentrant call");
+        escrow.lockFunds(0, keccak256("guarded-lock"), 1e6);
+    }
+
+    function test_UnlockFundsRejectsWhenReentrancyGuardIsEntered() public {
+        vm.store(address(escrow), bytes32(uint256(1)), bytes32(uint256(2)));
+        vm.expectRevert("ReentrancyGuard: reentrant call");
+        escrow.unlockFunds(0, keccak256("guarded-unlock"));
+    }
+
+    function test_UnlockAndTransferRejectsWhenReentrancyGuardIsEntered() public {
+        vm.store(address(escrow), bytes32(uint256(1)), bytes32(uint256(2)));
+        vm.expectRevert("ReentrancyGuard: reentrant call");
+        escrow.unlockAndTransferFunds(0, keccak256("guarded-transfer"), 1e6, other);
+    }
 }
