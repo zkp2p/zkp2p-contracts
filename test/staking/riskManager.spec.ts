@@ -734,9 +734,11 @@ describe("RiskManager and OrchestratorV3", () => {
 
     it("removes the gift-style sponsorship entrypoints from the hard-cut ABI", async () => {
       const { vault, manager } = await loadFixture(deployFixture);
-      expect(manager.interface.functions["stakeAndExtendIntent(bytes32,uint64)"]).to.eq(undefined);
+      const managerFunctions = manager.interface.functions as Record<string, unknown>;
+      const vaultFunctions = vault.interface.functions as Record<string, unknown>;
+      expect(managerFunctions["stakeAndExtendIntent(bytes32,uint64)"]).to.eq(undefined);
       expect(
-        vault.interface.functions["depositAndReserveStake(address,address,bytes32,uint256,uint64)"],
+        vaultFunctions["depositAndReserveStake(address,address,bytes32,uint256,uint64)"],
       ).to.eq(undefined);
     });
 
