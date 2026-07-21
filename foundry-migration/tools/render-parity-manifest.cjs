@@ -15,6 +15,7 @@ const preIntentHookFile = "test-foundry/deterministic/orchestrator/PreIntentHook
 const whitelistPreIntentHookFile = "test-foundry/deterministic/hooks/WhitelistPreIntentHookParity.t.sol";
 const acrossBridgeHookFile = "test-foundry/deterministic/hooks/AcrossBridgeHookParity.t.sol";
 const rateManagerV1File = "test-foundry/deterministic/rateManager/RateManagerV1Parity.t.sol";
+const escrowV2DelegationFile = "test-foundry/deterministic/escrow/EscrowV2DelegationParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
 const protocolViewerFile = "test-foundry/deterministic/periphery/ProtocolViewerParity.t.sol";
 const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifierParity.t.sol";
@@ -535,13 +536,41 @@ function rateManagerV1Destination(test) {
     return "";
 }
 
+function escrowV2DelegationDestination(test) {
+    if (test.sourceFile !== "test/escrowV2/escrowV2.delegation.spec.ts") return "";
+    const scenario = test.scenario;
+    const target = (testName) => `${escrowV2DelegationFile}:EscrowV2DelegationParityTest::${testName}`;
+    if (scenario.includes("sets delegated manager")) return target("test_SetRateManagerStoresConfigAndEmits");
+    if (scenario.includes("calls onDepositOptIn")) return target("test_SetRateManagerCallsOptInCallback");
+    if (scenario.includes("manager already set")) return target("test_SetRateManagerRejectsExistingManager");
+    if (scenario.includes("#setRateManager") && scenario.includes("caller is delegate")) return target("test_SetRateManagerRejectsDelegate");
+    if (scenario.includes("manager rejects opt-in")) return target("test_SetRateManagerPropagatesOptInRejectionAtomically");
+    if (scenario.includes("malicious manager attempts reentrancy")) return target("test_SetRateManagerWritesStateBeforeReentrantOptIn");
+    if (scenario.includes("clears delegated manager")) return target("test_ClearRateManagerDeletesConfigAndEmitsPriorValues");
+    if (scenario.includes("#clearRateManager") && scenario.includes("caller is not depositor")) return target("test_ClearRateManagerRejectsNonDepositor");
+    if (scenario.includes("native rate when deposit is not delegated")) return target("test_EffectiveRateUsesNativeRateWithoutDelegation");
+    if (scenario.includes("passes through to delegated manager")) return target("test_EffectiveRateUsesDelegatedRate");
+    if (scenario.includes("native rate after clear")) return target("test_EffectiveRateReturnsNativeRateAfterClear");
+    if (scenario.includes("manager reverts")) return target("test_EffectiveRateFallsBackToFloorWhenManagerReverts");
+    if (scenario.includes("manager rate is below floor")) return target("test_EffectiveRateUsesFloorWhenManagerBelowFloor");
+    if (scenario.includes("escrow floor is 0")) return target("test_EffectiveRateIsZeroWhenCurrencyDeactivated");
+    if (scenario.includes("manager returns 0")) return target("test_EffectiveRateIsZeroWhenManagerDisablesPair");
+    if (scenario.includes("oracle configured but stale")) return target("test_EffectiveRateIsZeroWhenConfiguredOracleIsStale");
+    if (scenario.includes("max(managerRate")) return target("test_EffectiveRateReturnsMaximumOfManagerAndFloor");
+    if (scenario.includes("manager rate equals floor")) return target("test_EffectiveRateReturnsFloorWhenManagerEqualsFloor");
+    if (scenario.includes("zero fee when not delegated")) return target("test_ManagerFeeIsZeroWithoutDelegation");
+    if (scenario.includes("returns delegated manager fee")) return target("test_ManagerFeeUsesDelegatedManager");
+    if (scenario.includes("zero fee when delegated manager reverts")) return target("test_ManagerFeeIsZeroWhenManagerReverts");
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || orchestratorV2Destination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || orchestratorV2Destination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -593,6 +622,9 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/rateManager/rateManagerV1.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped RateManagerV1 behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/escrowV2/escrowV2.delegation.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped EscrowV2 delegation behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
     let evidence = "";
     if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
@@ -604,6 +636,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(whitelistPreIntentHookFile)) evidence = "WhitelistPreIntentHookParity.t.sol: 29 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(acrossBridgeHookFile)) evidence = "AcrossBridgeHookParity.t.sol: 56 passed individually and together across legacy and V2, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(rateManagerV1File)) evidence = "RateManagerV1Parity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(escrowV2DelegationFile)) evidence = "EscrowV2DelegationParity.t.sol: 21 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(attestationFile)) evidence = "AttestationVerifierParity.t.sol: 24 passed, 0 failed, 0 skipped";
