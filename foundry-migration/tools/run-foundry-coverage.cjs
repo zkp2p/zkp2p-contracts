@@ -14,6 +14,12 @@ const baselinePath = path.join(
 const exceptionsPath = path.join(repositoryRoot, "foundry-migration/coverage-exceptions.json");
 const mergeOnly = process.argv.includes("--merge-only");
 const resume = process.argv.includes("--resume");
+const coverageSeed = "0x0000000000000000000000000000000000000000000000000000000000000001";
+const excludedProductionDirectories = new Set([
+    "contracts/external",
+    "contracts/interfaces",
+    "contracts/mocks",
+]);
 
 const legacyOrchestratorTests = [
     "OrchestratorCancelParity.t.sol",
@@ -77,6 +83,8 @@ function runCoverage(run) {
     const logPath = path.join(shardDirectory, `${run.name}.log`);
     const args = [
         "coverage",
+        "--fuzz-seed",
+        coverageSeed,
         "--report",
         "lcov",
         "--report",
@@ -102,8 +110,14 @@ function runCoverage(run) {
     const output = `${result.stdout || ""}${result.stderr || ""}`;
     fs.writeFileSync(logPath, output);
     if (result.error || result.status !== 0) {
-        process.stderr.write(output);
-        fail(`coverage shard ${run.name} failed after ${elapsedSeconds.toFixed(2)}s`);
+        const diagnosticLimit = 64 * 1024;
+        const diagnostic = output.length > diagnosticLimit
+            ? `... coverage output truncated to final ${diagnosticLimit} bytes ...\n${output.slice(-diagnosticLimit)}`
+            : output;
+        process.stderr.write(diagnostic);
+        fail(
+            `coverage shard ${run.name} failed after ${elapsedSeconds.toFixed(2)}s (status=${result.status}, signal=${result.signal || "none"}, error=${result.error?.message || "none"})`
+        );
     }
     console.log(`coverage: ${run.name} passed in ${elapsedSeconds.toFixed(2)}s`);
     return { name: run.name, elapsedSeconds };
@@ -113,6 +127,23 @@ function normalizeSource(source) {
     const normalized = source.replaceAll("\\", "/");
     const root = repositoryRoot.replaceAll("\\", "/");
     return normalized.startsWith(`${root}/`) ? normalized.slice(root.length + 1) : normalized;
+}
+
+function discoverProductionFiles() {
+    const productionFiles = [];
+    function walk(directory) {
+        for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+            const absolutePath = path.join(directory, entry.name);
+            const source = normalizeSource(absolutePath);
+            if (entry.isDirectory()) {
+                if (!excludedProductionDirectories.has(source)) walk(absolutePath);
+            } else if (entry.isFile() && entry.name.endsWith(".sol")) {
+                productionFiles.push(source);
+            }
+        }
+    }
+    walk(path.join(repositoryRoot, "contracts"));
+    return productionFiles.sort();
 }
 
 function parseLcov(contents) {
@@ -305,7 +336,7 @@ function checkCoverage(summary, baseline, exceptions) {
 
 function mergeAndCheck(runTimings) {
     const baseline = JSON.parse(fs.readFileSync(baselinePath, "utf8"));
-    const productionFiles = baseline.files.map((entry) => entry.file).sort();
+    const productionFiles = discoverProductionFiles();
     const lcovPaths = coverageRuns.map((run) => path.join(shardDirectory, `${run.name}.lcov`));
     const logPaths = coverageRuns.map((run) => path.join(shardDirectory, `${run.name}.log`));
     for (const file of [...lcovPaths, ...logPaths]) {
@@ -313,9 +344,13 @@ function mergeAndCheck(runTimings) {
     }
 
     const baseRecords = parseLcov(fs.readFileSync(lcovPaths[0], "utf8"));
-    const actualProduction = [...baseRecords.keys()].filter((file) => productionFiles.includes(file)).sort();
+    const productionFileSet = new Set(productionFiles);
+    const actualProduction = [...baseRecords.keys()].filter((file) => productionFileSet.has(file)).sort();
     if (JSON.stringify(actualProduction) !== JSON.stringify(productionFiles)) {
-        fail("full Foundry coverage denominator does not match the authoritative 35-file production set");
+        const missing = productionFiles.filter((file) => !baseRecords.has(file));
+        fail(
+            `full Foundry coverage denominator does not match the current production source set; missing records: ${missing.join(", ") || "none"}`
+        );
     }
     const shardRecords = lcovPaths.slice(1).map((file) => parseLcov(fs.readFileSync(file, "utf8")));
     mergeLcov(baseRecords, shardRecords, productionFiles);
@@ -346,6 +381,7 @@ function mergeAndCheck(runTimings) {
     const summary = {
         schemaVersion: 1,
         source: "Foundry coverage: full minimal-IR execution plus exact-source standard-IR source-map shards",
+        coverageSeed,
         productionFileCount: productionFiles.length,
         overall,
         files,

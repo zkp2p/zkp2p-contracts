@@ -128,6 +128,23 @@ contract StakeVaultStatefulInvariantTest is StdInvariant, Test {
         assertGt(handler.unauthorizedAttempts(), 0);
         assertEq(handler.unauthorizedSuccesses(), 0);
     }
+
+    function test_HandlerFailsClosedOnUnexpectedProductionRevert() public {
+        bytes memory unexpectedRevert = abi.encodeWithSelector(StakeVault.StakeActionPaused.selector);
+        vm.mockCallRevert(address(vault), abi.encodeWithSelector(vault.depositStake.selector), unexpectedRevert);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(StakeVaultHandler.UnexpectedRevert.selector, uint256(0), unexpectedRevert)
+        );
+        handler.deposit(0, 1e6);
+    }
+
+    function test_HandlerFailsClosedOnUnexpectedProductionSuccess() public {
+        vm.mockCall(address(vault), abi.encodeWithSelector(vault.releaseReservation.selector), bytes(""));
+
+        vm.expectRevert(abi.encodeWithSelector(StakeVaultHandler.UnexpectedSuccess.selector, uint256(4)));
+        handler.release(0);
+    }
 }
 
 contract NullifierStatefulInvariantTest is StdInvariant, Test {

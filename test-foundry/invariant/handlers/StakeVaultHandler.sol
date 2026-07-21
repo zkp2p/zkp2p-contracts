@@ -8,10 +8,13 @@ import {IStakeVault} from "contracts/interfaces/IStakeVault.sol";
 
 /// @dev Stateful driver with a shadow accounting model. Expected reverts are caught so fail_on_revert can stay true.
 contract StakeVaultHandler is Test {
+    error UnexpectedSuccess(uint256 action);
+    error UnexpectedRevert(uint256 action, bytes revertData);
+
     uint256 public constant ACTOR_COUNT = 3;
     uint256 public constant MAKER_COUNT = 2;
     uint256 public constant SLOT_COUNT = 12;
-    uint256 public constant ACTION_COUNT = 11;
+    uint256 public constant ACTION_COUNT = 12;
     uint256 internal constant MAX_ACTION_AMOUNT = 1_000e6;
 
     StakeVault public immutable vault;
@@ -75,9 +78,25 @@ contract StakeVaultHandler is Test {
         return positionAt(seed % SLOT_COUNT);
     }
 
-    function _call(address caller, bytes memory data) internal returns (bool success) {
+    function _call(address caller, bytes memory data, uint256 action, bytes4 expectedRevert)
+        internal
+        returns (bool success)
+    {
         if (caller != address(this)) vm.prank(caller);
-        (success,) = address(vault).call(data);
+        bytes memory revertData;
+        (success, revertData) = address(vault).call(data);
+        if (success && expectedRevert != bytes4(0)) revert UnexpectedSuccess(action);
+        if (!success && (expectedRevert == bytes4(0) || _selector(revertData) != expectedRevert)) {
+            revert UnexpectedRevert(action, revertData);
+        }
+        _record(action, success);
+    }
+
+    function _selector(bytes memory revertData) internal pure returns (bytes4 selector) {
+        if (revertData.length < 4) return bytes4(0);
+        assembly {
+            selector := mload(add(revertData, 0x20))
+        }
     }
 
     function _record(uint256 action, bool success) internal {
@@ -93,8 +112,8 @@ contract StakeVaultHandler is Test {
         uint256 amount =
             available == 0 ? 1 : bound(rawAmount, 1, available > MAX_ACTION_AMOUNT ? MAX_ACTION_AMOUNT : available);
         uint256 beforeStake = vault.stakeBalance(actor);
-        bool success = _call(actor, abi.encodeCall(vault.depositStake, (amount)));
-        _record(0, success);
+        bytes4 expectedRevert = available == 0 ? bytes4(keccak256("Error(string)")) : bytes4(0);
+        bool success = _call(actor, abi.encodeCall(vault.depositStake, (amount)), 0, expectedRevert);
         if (success) {
             uint256 delta = vault.stakeBalance(actor) - beforeStake;
             ghostStake[actor] += delta;
@@ -108,8 +127,14 @@ contract StakeVaultHandler is Test {
         uint256 free = vault.freeStake(actor);
         uint256 amount = free == 0 ? 1 : bound(rawAmount, 1, free > MAX_ACTION_AMOUNT ? MAX_ACTION_AMOUNT : free);
         uint64 releaseTime = uint64(block.timestamp) + uint64(bound(uint256(rawDuration), 1, 30 days));
-        bool success = _call(address(this), abi.encodeCall(vault.reserveStake, (actor, position, amount, releaseTime)));
-        _record(1, success);
+        IStakeVault.Reservation memory existingReservation = vault.getReservation(position);
+        bytes4 expectedRevert;
+        if (vault.isExiting(actor)) expectedRevert = StakeVault.AlreadyExiting.selector;
+        else if (existingReservation.active) expectedRevert = StakeVault.ReservationAlreadyExists.selector;
+        else if (free == 0) expectedRevert = StakeVault.InsufficientFreeStake.selector;
+        bool success = _call(
+            address(this), abi.encodeCall(vault.reserveStake, (actor, position, amount, releaseTime)), 1, expectedRevert
+        );
         if (success) ghostReserved[actor] += amount;
     }
 
@@ -119,8 +144,12 @@ contract StakeVaultHandler is Test {
         uint256 free = beforeReservation.active ? vault.freeStake(beforeReservation.staker) : 0;
         uint256 amount = free == 0 ? 0 : bound(rawAmount, 0, free > MAX_ACTION_AMOUNT ? MAX_ACTION_AMOUNT : free);
         uint64 releaseTime = uint64(block.timestamp) + uint64(bound(uint256(rawDuration), 1, 30 days));
-        bool success = _call(address(this), abi.encodeCall(vault.increaseReservation, (position, amount, releaseTime)));
-        _record(2, success);
+        bytes4 expectedRevert;
+        if (!beforeReservation.active) expectedRevert = StakeVault.ReservationNotFound.selector;
+        else if (vault.isExiting(beforeReservation.staker)) expectedRevert = StakeVault.AlreadyExiting.selector;
+        bool success = _call(
+            address(this), abi.encodeCall(vault.increaseReservation, (position, amount, releaseTime)), 2, expectedRevert
+        );
         if (success) ghostReserved[beforeReservation.staker] += amount;
     }
 
@@ -129,13 +158,18 @@ contract StakeVaultHandler is Test {
         IStakeVault.Reservation memory beforeReservation = vault.getReservation(position);
         uint256 capacity;
         if (beforeReservation.active) {
-            capacity = vault.stakeBalance(beforeReservation.staker)
+            capacity = vault.eligibleStake(beforeReservation.staker)
                 - (vault.reservedStake(beforeReservation.staker) - beforeReservation.amount);
         }
         uint256 newAmount = capacity == 0 ? 1 : bound(rawAmount, 1, capacity);
         uint64 releaseTime = uint64(block.timestamp) + uint64(bound(uint256(rawDuration), 1, 30 days));
-        bool success = _call(address(this), abi.encodeCall(vault.updateReservation, (position, newAmount, releaseTime)));
-        _record(3, success);
+        bytes4 expectedRevert = beforeReservation.active ? bytes4(0) : StakeVault.ReservationNotFound.selector;
+        bool success = _call(
+            address(this),
+            abi.encodeCall(vault.updateReservation, (position, newAmount, releaseTime)),
+            3,
+            expectedRevert
+        );
         if (success) {
             if (newAmount >= beforeReservation.amount) {
                 ghostReserved[beforeReservation.staker] += newAmount - beforeReservation.amount;
@@ -148,8 +182,8 @@ contract StakeVaultHandler is Test {
     function release(uint256 slotSeed) external {
         bytes32 position = _position(slotSeed);
         IStakeVault.Reservation memory beforeReservation = vault.getReservation(position);
-        bool success = _call(address(this), abi.encodeCall(vault.releaseReservation, (position)));
-        _record(4, success);
+        bytes4 expectedRevert = beforeReservation.active ? bytes4(0) : StakeVault.ReservationNotFound.selector;
+        bool success = _call(address(this), abi.encodeCall(vault.releaseReservation, (position)), 4, expectedRevert);
         if (success) ghostReserved[beforeReservation.staker] -= beforeReservation.amount;
     }
 
@@ -158,8 +192,9 @@ contract StakeVaultHandler is Test {
         address maker = _maker(makerSeed);
         IStakeVault.Reservation memory beforeReservation = vault.getReservation(position);
         uint256 amount = beforeReservation.active ? bound(rawAmount, 1, beforeReservation.amount) : 1;
-        bool success = _call(address(this), abi.encodeCall(vault.slashReservation, (position, maker, amount)));
-        _record(5, success);
+        bytes4 expectedRevert = beforeReservation.active ? bytes4(0) : StakeVault.ReservationNotFound.selector;
+        bool success =
+            _call(address(this), abi.encodeCall(vault.slashReservation, (position, maker, amount)), 5, expectedRevert);
         if (success) {
             ghostStake[beforeReservation.staker] -= amount;
             ghostReserved[beforeReservation.staker] -= amount;
@@ -170,8 +205,8 @@ contract StakeVaultHandler is Test {
     function claimCompensation(uint256 makerSeed) external {
         address maker = _maker(makerSeed);
         uint256 amount = vault.claimableCompensation(maker);
-        bool success = _call(maker, abi.encodeCall(vault.withdrawCompensation, (maker)));
-        _record(6, success);
+        bytes4 expectedRevert = amount == 0 ? StakeVault.ZeroAmount.selector : bytes4(0);
+        bool success = _call(maker, abi.encodeCall(vault.withdrawCompensation, (maker)), 6, expectedRevert);
         if (success) {
             ghostCompensation[maker] -= amount;
             ghostTokensOut += amount;
@@ -182,18 +217,28 @@ contract StakeVaultHandler is Test {
         address actor = _actor(actorSeed);
         uint256 free = vault.freeStake(actor);
         uint256 amount = free == 0 ? 1 : bound(rawAmount, 1, free);
-        bool success = _call(actor, abi.encodeCall(vault.requestStakeWithdrawal, (amount)));
-        _record(7, success);
+        IStakeVault.StakeWithdrawalRequest memory existingRequest = vault.getStakeWithdrawalRequest(actor);
+        bytes4 expectedRevert;
+        if (vault.isExiting(actor)) expectedRevert = StakeVault.AlreadyExiting.selector;
+        else if (existingRequest.amount != 0) expectedRevert = StakeVault.StakeWithdrawalAlreadyRequested.selector;
+        else if (free == 0) expectedRevert = StakeVault.InsufficientFreeStake.selector;
+        _call(actor, abi.encodeCall(vault.requestStakeWithdrawal, (amount)), 7, expectedRevert);
     }
 
     function settlePartialWithdrawal(uint256 actorSeed, bool cancel) external {
         address actor = _actor(actorSeed);
         uint256 beforeStake = vault.stakeBalance(actor);
+        IStakeVault.StakeWithdrawalRequest memory withdrawalRequest = vault.getStakeWithdrawalRequest(actor);
         bytes memory data = cancel
             ? abi.encodeCall(vault.cancelStakeWithdrawal, ())
             : abi.encodeCall(vault.withdrawRequestedStake, (actor));
-        bool success = _call(actor, data);
-        _record(8, success);
+        bytes4 expectedRevert;
+        if (withdrawalRequest.amount == 0) {
+            expectedRevert = StakeVault.StakeWithdrawalNotFound.selector;
+        } else if (!cancel && block.timestamp < withdrawalRequest.availableAt) {
+            expectedRevert = StakeVault.StakeWithdrawalNotReady.selector;
+        }
+        bool success = _call(actor, data, 8, expectedRevert);
         if (success && !cancel) {
             uint256 withdrawn = beforeStake - vault.stakeBalance(actor);
             ghostStake[actor] -= withdrawn;
@@ -205,12 +250,25 @@ contract StakeVaultHandler is Test {
         address actor = _actor(actorSeed);
         bool exiting = vault.isExiting(actor);
         uint256 beforeStake = vault.stakeBalance(actor);
+        IStakeVault.ExitRequest memory exitRequest = vault.getExitRequest(actor);
+        IStakeVault.StakeWithdrawalRequest memory withdrawalRequest = vault.getStakeWithdrawalRequest(actor);
         bytes memory data;
         if (!exiting) data = abi.encodeCall(vault.requestExit, ());
         else if (settle) data = abi.encodeCall(vault.withdrawStake, (actor));
         else data = abi.encodeCall(vault.cancelExit, ());
-        bool success = _call(actor, data);
-        _record(9, success);
+        bytes4 expectedRevert;
+        if (!exiting && beforeStake == 0) {
+            expectedRevert = StakeVault.ZeroAmount.selector;
+        } else if (!exiting && withdrawalRequest.amount != 0) {
+            expectedRevert = StakeVault.PendingStakeWithdrawal.selector;
+        } else if (exiting && settle && block.timestamp < exitRequest.availableAt) {
+            expectedRevert = StakeVault.ExitNotReady.selector;
+        } else if (exiting && settle && vault.reservedStake(actor) != 0) {
+            expectedRevert = StakeVault.ActiveReservations.selector;
+        } else if (exiting && settle && beforeStake == 0) {
+            expectedRevert = StakeVault.ZeroAmount.selector;
+        }
+        bool success = _call(actor, data, 9, expectedRevert);
         if (success && exiting && settle) {
             uint256 withdrawn = beforeStake - vault.stakeBalance(actor);
             ghostStake[actor] -= withdrawn;
@@ -230,11 +288,10 @@ contract StakeVaultHandler is Test {
             attacker,
             abi.encodeCall(
                 vault.reserveStake, (_actor(attackerSeed), _position(slotSeed), 1, uint64(block.timestamp + 1))
-            )
+            ),
+            11,
+            StakeVault.UnauthorizedController.selector
         );
         if (success) ++unauthorizedSuccesses;
-        ++totalCalls;
-        if (success) ++successfulCalls;
-        else ++rejectedCalls;
     }
 }

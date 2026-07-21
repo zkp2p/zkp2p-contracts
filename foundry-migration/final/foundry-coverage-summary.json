@@ -3,7 +3,7 @@
   "baseCommit": "845f8a077404a3c000e723265288f83be65194c7",
   "productionFileCount": 35,
   "testResult": {
-    "passing": 1457,
+    "passing": 1459,
     "skipped": 0,
     "failing": 0
   },
@@ -13,6 +13,7 @@
     "invariantRuns": 128,
     "invariantDepth": 64,
     "failOnRevert": true,
+    "coverageSeed": "0x0000000000000000000000000000000000000000000000000000000000000001",
     "command": "corepack yarn coverage",
     "generatedPerFileArtifacts": [
       "coverage/foundry-coverage-summary.json",
@@ -28,14 +29,14 @@
   },
   "final": {
     "lines": { "covered": 2772, "total": 2789, "pct": 99.39 },
-    "statements": { "covered": 3076, "total": 3112, "pct": 98.84 },
-    "branches": { "covered": 733, "total": 770, "pct": 95.19 },
+    "statements": { "covered": 3075, "total": 3112, "pct": 98.81 },
+    "branches": { "covered": 732, "total": 770, "pct": 95.06 },
     "functions": { "covered": 438, "total": 439, "pct": 99.77 }
   },
   "timingSeconds": {
-    "completeMinimalIr": 270.29,
-    "accurateMappingShards": 11.66,
-    "totalShardSum": 281.95
+    "completeMinimalIr": 265.37,
+    "accurateMappingShards": 12.36,
+    "totalShardSum": 277.74
   },
   "productionDiffFromBase": []
 }

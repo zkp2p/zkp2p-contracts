@@ -44,10 +44,10 @@ corepack yarn coverage
 
 Solidity 0.8.18 cannot compile several stack-heavy production contracts after ordinary coverage disables optimizer/IR. The coverage tool therefore:
 
-1. executes the complete suite once with Foundry's supported `--ir-minimum` fallback;
+1. executes the complete suite once with Foundry's supported `--ir-minimum` fallback and a fixed coverage seed;
 2. runs exact-source standard-compiler shards for contracts whose source maps are more accurate without IR;
 3. merges hit maxima only onto the original minimal-IR anchors;
-4. verifies that the denominator remains the authoritative 35 production files;
+4. derives the current production source set independently and requires an LCOV record for every file;
 5. enforces strict improvement over the committed Hardhat line/branch baseline and no aggregate statement/function regression; and
 6. rejects every per-file regression unless `foundry-migration/coverage-exceptions.json` contains a current, metric-specific technical explanation.
 
