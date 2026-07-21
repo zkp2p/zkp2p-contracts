@@ -57,7 +57,7 @@ The v2 system is built around four layers:
 2. Intent coordination and settlement.
    `OrchestratorV2` validates whether a taker can lock liquidity, snapshots fee terms and min intent size, verifies payments through the registry-selected verifier, and releases funds.
 3. Verification and registries.
-   `UnifiedPaymentVerifier` validates EIP-712 attestations and nullifies payments. Active registries define which escrows, orchestrators, hooks, and payment methods are valid. `RelayerRegistry` remains only for the deployed legacy V1 stack.
+   `UnifiedPaymentVerifier` validates EIP-712 attestations and nullifies payments. Active registries define which escrows, orchestrators, hooks, and payment methods are valid. `RelayerRegistry` backs the deployed legacy V1 stack and the deployed prod `OrchestratorV2`; the active `OrchestratorV3` has no relayer dependency.
 4. Read models and periphery.
    `ProtocolViewerV2`, oracle adapters, bridge hooks, and pre-intent hooks provide the ergonomic layer used by frontends, routing systems, and privileged operators.
 
@@ -266,7 +266,7 @@ The v2 stack reuses and extends the existing registry model:
 - `OrchestratorRegistry`: whitelists both v1 and v2 orchestrators for escrow/verifier authorization
 - `PaymentVerifierRegistry`: maps payment method hash to verifier and supported currencies
 - `PostIntentHookRegistry`: whitelists post-intent hooks
-- `RelayerRegistry`: retained only for deployed legacy V1 orchestrators
+- `RelayerRegistry`: backs deployed legacy V1 orchestrators and the deployed prod `OrchestratorV2`; not used by the active `OrchestratorV3`
 - `NullifierRegistry`: stores consumed payment nullifiers
 
 ## Core Lifecycle
