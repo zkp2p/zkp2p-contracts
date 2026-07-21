@@ -26,6 +26,7 @@ const escrowV2BranchGovernanceLifecycleFile = "test-foundry/deterministic/escrow
 const escrowV2BranchStatePauseFile = "test-foundry/deterministic/escrow/EscrowV2BranchStatePauseParity.t.sol";
 const escrowCreateDepositFile = "test-foundry/deterministic/escrow/EscrowCreateDepositParity.t.sol";
 const escrowFundingFile = "test-foundry/deterministic/escrow/EscrowFundingParity.t.sol";
+const escrowWithdrawFile = "test-foundry/deterministic/escrow/EscrowWithdrawParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -890,8 +891,38 @@ const escrowLegacyDestinations = [
         "test_RemoveFundsRejectsZeroAmount",
         "test_RemoveFundsRejectsWhilePaused",
     ].map((testName) => [escrowFundingFile, "EscrowFundingParityTest", testName]),
+    ...[
+        "test_WithdrawDepositTransfersAllAvailableFunds",
+        "test_WithdrawDepositDeletesDeposit",
+        "test_WithdrawDepositRemovesAccountDepositId",
+        "test_WithdrawDepositDeletesPaymentMethodData",
+        "test_WithdrawDepositClearsPaymentMethodActive",
+        "test_WithdrawDepositClearsPaymentMethodListed",
+        "test_WithdrawDepositDeletesPaymentMethodArray",
+        "test_WithdrawDepositDeletesCurrencyArray",
+        "test_WithdrawDepositDeletesCurrencyMinimumRate",
+        "test_WithdrawDepositClearsCurrencyListed",
+        "test_WithdrawDepositEmitsWithdrawal",
+        "test_WithdrawDepositClearsAcceptingState",
+        "test_WithdrawDepositEmitsDepositClosed",
+        "test_WithdrawDepositWithOutstandingIntentTransfersOnlyAvailableFunds",
+        "test_WithdrawDepositWithOutstandingIntentZerosRemainingOnly",
+        "test_WithdrawDepositWithOutstandingIntentDisablesDeposit",
+        "test_WithdrawDepositWithOutstandingIntentEmitsAvailableWithdrawal",
+        "test_WithdrawDepositWithOutstandingIntentClearsAcceptingState",
+        "test_WithdrawDepositWithExpiredIntentTransfersReclaimedAndAvailableFunds",
+        "test_WithdrawDepositWithExpiredIntentDeletesDeposit",
+        "test_WithdrawDepositWithExpiredIntentDeletesIntent",
+        "test_WithdrawDepositWithExpiredIntentEmitsFullWithdrawal",
+        "test_WithdrawDepositWithExpiredIntentClearsAcceptingState",
+        "test_WithdrawDepositWithExpiredIntentEmitsDepositClosed",
+        "test_WithdrawDepositRejectsNonDepositor",
+        "test_WithdrawDepositRejectsDelegate",
+        "test_WithdrawDepositRejectsMissingDepositWithUnauthorizedError",
+        "test_WithdrawDepositSucceedsWhilePaused",
+    ].map((testName) => [escrowWithdrawFile, "EscrowWithdrawParityTest", testName]),
 ];
-if (escrowLegacySourceTests.length !== 276 || escrowLegacyDestinations.length !== 54) {
+if (escrowLegacySourceTests.length !== 276 || escrowLegacyDestinations.length !== 82) {
     throw new Error(
         `Escrow legacy mapping count mismatch: ${escrowLegacySourceTests.length} source / ${escrowLegacyDestinations.length} translated destinations`
     );
@@ -1056,7 +1087,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(escrowV2OracleConfigFile)) evidence = "EscrowV2OracleRateConfigParity.t.sol: 29 passed individually and together, 0 failed, 0 skipped";
     if ([escrowV2LegacyManagementFile, escrowV2LegacyLifecycleFile, escrowV2LegacyConfigurationFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 management + lifecycle + configuration parity: 70 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 70/70";
     if ([escrowV2BranchAuthorizationFile, escrowV2BranchValidationFile, escrowV2BranchGovernanceLifecycleFile, escrowV2BranchStatePauseFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 branch parity: 108 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 108/108";
-    if ([escrowCreateDepositFile, escrowFundingFile].some((file) => foundryDestination.startsWith(file))) evidence = "Escrow constructor/create/add/remove parity slice: 54 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat suites: 54/54";
+    if ([escrowCreateDepositFile, escrowFundingFile, escrowWithdrawFile].some((file) => foundryDestination.startsWith(file))) evidence = "Escrow constructor/create/add/remove/withdraw parity slice: 82 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat suites: 82/82";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
