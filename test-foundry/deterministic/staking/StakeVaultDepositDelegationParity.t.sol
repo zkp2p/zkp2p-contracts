@@ -3,12 +3,24 @@ pragma solidity ^0.8.18;
 
 import {StakeVaultLegacyFixture} from "../helpers/StakeVaultLegacyFixture.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract StakeVaultDepositDelegationParityTest is StakeVaultLegacyFixture {
     event StakeDeposited(address indexed staker, uint256 amount, uint256 newStakeBalance);
     event TakerAuthorizationUpdated(address indexed stakeOwner, address indexed taker, bool authorized);
     event StakeDelegationEnabledUpdated(address indexed taker, bool enabled);
     event AllowedStakeOwnerUpdated(address indexed taker, address indexed allowedStakeOwner);
+
+    function test_ConstructorRejectsZeroDependenciesAndUnsafeControllerDelay() public {
+        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        new StakeVault(address(0), token, controller, EXIT_DELAY, DAY);
+
+        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        new StakeVault(address(this), IERC20(address(0)), controller, EXIT_DELAY, DAY);
+
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.InvalidControllerChangeDelay.selector, DAY - 1));
+        new StakeVault(address(this), token, controller, EXIT_DELAY, DAY - 1);
+    }
 
     function test_DepositStakeRecordsStakeAndEmitsResultingBalance() public {
         vm.expectEmit(true, false, false, true, address(vault));
@@ -59,6 +71,37 @@ contract StakeVaultDepositDelegationParityTest is StakeVaultLegacyFixture {
         assertEq(vault.stakeOwnerOf(maker), maker);
     }
 
+    function test_DelegationRejectsEmptyBatchAndMissingRevocation() public {
+        vm.expectRevert(StakeVault.EmptyBatch.selector);
+        vault.setTakerAuthorizations(new address[](0), true);
+
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.TakerAuthorizationNotFound.selector, maker, staker));
+        vm.prank(staker);
+        vault.setTakerAuthorization(maker, false);
+    }
+
+    function test_DelegationRejectsInvalidTakersAndIdempotentlyKeepsOwner() public {
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.InvalidTaker.selector, address(0)));
+        vm.prank(staker);
+        vault.setTakerAuthorization(address(0), true);
+
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.InvalidTaker.selector, staker));
+        vm.prank(staker);
+        vault.setTakerAuthorization(staker, true);
+
+        vm.prank(staker);
+        vault.setTakerAuthorization(maker, true);
+        vm.prank(staker);
+        vault.setTakerAuthorization(maker, true);
+        assertEq(vault.stakeOwnerOf(maker), staker);
+    }
+
+    function test_ClearStakeOwnerRejectsWithoutDelegation() public {
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.NoDelegatedStakeOwner.selector, maker));
+        vm.prank(maker);
+        vault.clearStakeOwner();
+    }
+
     function test_TakerClearsStakeOwnerAndDisablesReassignment() public {
         vm.prank(staker);
         vault.setTakerAuthorization(maker, true);
@@ -96,6 +139,16 @@ contract StakeVaultDepositDelegationParityTest is StakeVaultLegacyFixture {
         assertEq(vault.stakeOwnerOf(maker), nextController);
     }
 
+    function test_ReenablingDelegationClearsAnExactAllowedOwner() public {
+        vm.prank(maker);
+        vault.setAllowedStakeOwner(staker);
+        assertEq(vault.allowedStakeOwner(maker), staker);
+
+        vm.prank(maker);
+        vault.setStakeDelegationEnabled(true);
+        assertEq(vault.allowedStakeOwner(maker), address(0));
+    }
+
     function test_TakerCanDisableDelegationBeforeAssignment() public {
         vm.prank(maker);
         vault.setStakeDelegationEnabled(false);
@@ -115,6 +168,16 @@ contract StakeVaultDepositDelegationParityTest is StakeVaultLegacyFixture {
         vm.prank(staker);
         vault.depositStakeFor(maker, 100e6);
         assertEq(vault.stakeOwnerOf(maker), staker);
+    }
+
+    function test_AllowedStakeOwnerRejectsZeroAndSelf() public {
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.InvalidTaker.selector, address(0)));
+        vm.prank(maker);
+        vault.setAllowedStakeOwner(address(0));
+
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.InvalidTaker.selector, maker));
+        vm.prank(maker);
+        vault.setAllowedStakeOwner(maker);
     }
 
     function test_AllowedStakeOwnerAtomicallyReplacesSquatter() public {

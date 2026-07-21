@@ -10,9 +10,6 @@ solc_version = '0.8.18'
 via_ir = true
 ffi = true
 
-[profile.fork]
-evm_version = 'cancun'
-
 # Remappings for cleaner imports
 remappings = [
     '@openzeppelin/=node_modules/@openzeppelin/',

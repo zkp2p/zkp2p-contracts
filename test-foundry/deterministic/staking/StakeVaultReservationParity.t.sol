@@ -48,6 +48,16 @@ contract StakeVaultReservationParityTest is StakeVaultLegacyFixture {
         _reserve(keccak256("intent"), 101e6, 0);
     }
 
+    function test_ReserveStakeRejectsZeroStakerAndAmount() public {
+        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vm.prank(controller);
+        vault.reserveStake(address(0), keccak256("zero-staker"), 1e6, 0);
+
+        vm.expectRevert(StakeVault.ZeroAmount.selector);
+        vm.prank(controller);
+        vault.reserveStake(staker, keccak256("zero-amount"), 0, 0);
+    }
+
     function test_ReserveStakeRejectsReusedActiveIntent() public {
         bytes32 intentHash = keccak256("intent");
         _deposit(100e6);
@@ -65,6 +75,15 @@ contract StakeVaultReservationParityTest is StakeVaultLegacyFixture {
         vm.prank(controller);
         vault.updateReservation(intentHash, 200e6, 200);
         assertEq(vault.freeStake(staker), 800e6);
+    }
+
+    function test_UpdateReservationRejectsZeroAmount() public {
+        bytes32 intentHash = keccak256("zero-update");
+        _deposit(10e6);
+        _reserve(intentHash, 5e6, 0);
+        vm.expectRevert(StakeVault.ZeroAmount.selector);
+        vm.prank(controller);
+        vault.updateReservation(intentHash, 0, 0);
     }
 
     function test_IncreaseReservationUsesAdmissionGatedPath() public {
@@ -175,6 +194,30 @@ contract StakeVaultReservationParityTest is StakeVaultLegacyFixture {
         vm.expectRevert(abi.encodeWithSelector(StakeVault.InvalidReservationAmount.selector, 51e6, 50e6));
         vm.prank(controller);
         vault.slashReservation(intentHash, maker, 51e6);
+    }
+
+    function test_SlashReservationRejectsZeroMakerAndAmount() public {
+        bytes32 intentHash = keccak256("invalid-slash-inputs");
+        _deposit(10e6);
+        _reserve(intentHash, 5e6, 0);
+
+        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vm.prank(controller);
+        vault.slashReservation(intentHash, address(0), 1e6);
+
+        vm.expectRevert(StakeVault.ZeroAmount.selector);
+        vm.prank(controller);
+        vault.slashReservation(intentHash, maker, 0);
+    }
+
+    function test_CompensationWithdrawalRejectsZeroRecipientAndEmptyClaim() public {
+        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vm.prank(maker);
+        vault.withdrawCompensation(address(0));
+
+        vm.expectRevert(StakeVault.ZeroAmount.selector);
+        vm.prank(maker);
+        vault.withdrawCompensation(recipient);
     }
 
     function test_MakerWithdrawsCreditedCompensation() public {

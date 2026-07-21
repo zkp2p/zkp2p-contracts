@@ -182,4 +182,41 @@ contract RiskManagerHarnessSettlementParityTest is RiskManagerHarnessFixture {
         vm.expectRevert(IRiskManager.EmptyBatch.selector);
         manager.releaseMaturedPositions(new bytes32[](0));
     }
+
+    function test_MaturityAndChargebackRejectMissingPositions() public {
+        bytes32 missingIntent = keccak256("missing-terminal-position");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IRiskManager.PositionNotSettled.selector, missingIntent, IRiskManager.PositionStatus.NONE
+            )
+        );
+        manager.releaseMaturedPosition(missingIntent);
+
+        IRiskManager.ChargebackAttestation memory attestation = IRiskManager.ChargebackAttestation({
+            intentHash: missingIntent, dataHash: bytes32(0), signatures: new bytes[](0), data: "", metadata: ""
+        });
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IRiskManager.PositionNotSettled.selector, missingIntent, IRiskManager.PositionStatus.NONE
+            )
+        );
+        manager.submitChargeback(attestation);
+    }
+
+    function test_MaturityBatchProcessesMultipleSettledPositions() public {
+        bytes32 firstIntent = keccak256("maturity-batch-first");
+        bytes32 secondIntent = keccak256("maturity-batch-second");
+        _createPosition(firstIntent);
+        _createPosition(secondIntent);
+        orchestrator.settlePosition(manager, _defaultContext(firstIntent));
+        orchestrator.settlePosition(manager, _defaultContext(secondIntent));
+        vm.warp(manager.getRiskPosition(firstIntent).coverageDeadline);
+
+        bytes32[] memory intents = new bytes32[](2);
+        intents[0] = firstIntent;
+        intents[1] = secondIntent;
+        manager.releaseMaturedPositions(intents);
+        assertEq(uint256(manager.getRiskPosition(firstIntent).status), uint256(IRiskManager.PositionStatus.RELEASED));
+        assertEq(uint256(manager.getRiskPosition(secondIntent).status), uint256(IRiskManager.PositionStatus.RELEASED));
+    }
 }

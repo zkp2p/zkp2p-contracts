@@ -6,6 +6,16 @@ import {StakeVault} from "contracts/StakeVault.sol";
 import {IStakeVault} from "contracts/interfaces/IStakeVault.sol";
 
 contract StakeVaultExitParityTest is StakeVaultLegacyFixture {
+    function test_PartialWithdrawalRejectsZeroAmountAndRecipient() public {
+        vm.expectRevert(StakeVault.ZeroAmount.selector);
+        vm.prank(staker);
+        vault.requestStakeWithdrawal(0);
+
+        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vm.prank(staker);
+        vault.withdrawRequestedStake(address(0));
+    }
+
     event StakeWithdrawalRequested(address indexed stakeOwner, uint256 amount, uint64 requestedAt, uint64 availableAt);
     event StakeWithdrawalCancelled(address indexed stakeOwner, uint256 amount);
     event StakeWithdrawn(address indexed staker, address indexed recipient, uint256 amount);
@@ -108,6 +118,23 @@ contract StakeVaultExitParityTest is StakeVaultLegacyFixture {
         vm.prank(staker);
         vault.requestExit();
         assertTrue(vault.isExiting(staker));
+        IStakeVault.ExitRequest memory request = vault.getExitRequest(staker);
+        assertTrue(request.exiting);
+        assertEq(request.availableAt - request.requestedAt, EXIT_DELAY);
+
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.AlreadyExiting.selector, staker));
+        vm.prank(staker);
+        vault.requestExit();
+    }
+
+    function test_ExitActionsRejectMissingExitAndZeroRecipient() public {
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.NotExiting.selector, staker));
+        vm.prank(staker);
+        vault.cancelExit();
+
+        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vm.prank(staker);
+        vault.withdrawStake(address(0));
     }
 
     function test_FullExitBlocksNewReservations() public {

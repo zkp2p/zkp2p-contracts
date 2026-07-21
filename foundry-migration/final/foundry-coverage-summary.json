@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "845f8a077404a3c000e723265288f83be65194c7",
+  "productionFileCount": 35,
+  "testResult": {
+    "passing": 1457,
+    "skipped": 0,
+    "failing": 0
+  },
+  "configuration": {
+    "foundry": "1.7.1",
+    "fuzzRuns": 512,
+    "invariantRuns": 128,
+    "invariantDepth": 64,
+    "failOnRevert": true,
+    "command": "corepack yarn coverage",
+    "generatedPerFileArtifacts": [
+      "coverage/foundry-coverage-summary.json",
+      "coverage/foundry-coverage-by-file.csv",
+      "coverage/lcov.info"
+    ]
+  },
+  "baseline": {
+    "lines": { "covered": 2327, "total": 2379, "pct": 97.81 },
+    "statements": { "covered": 1751, "total": 1775, "pct": 98.65 },
+    "branches": { "covered": 1600, "total": 1770, "pct": 90.40 },
+    "functions": { "covered": 440, "total": 446, "pct": 98.65 }
+  },
+  "final": {
+    "lines": { "covered": 2772, "total": 2789, "pct": 99.39 },
+    "statements": { "covered": 3076, "total": 3112, "pct": 98.84 },
+    "branches": { "covered": 733, "total": 770, "pct": 95.19 },
+    "functions": { "covered": 438, "total": 439, "pct": 99.77 }
+  },
+  "timingSeconds": {
+    "completeMinimalIr": 270.29,
+    "accurateMappingShards": 11.66,
+    "totalShardSum": 281.95
+  },
+  "productionDiffFromBase": []
+}

@@ -184,6 +184,17 @@ contract UnifiedPaymentVerifierV3ParityTest is Test {
     ) internal view returns (bytes memory) {
         bytes memory data = abi.encode(payment, snapshot);
         bytes32 dataHash = correctDataHash ? keccak256(data) : keccak256("tampered-hash");
+        return _encodeProof(target, attestedIntentHash, releaseAmount, dataHash, data, signerKey);
+    }
+
+    function _encodeProof(
+        UnifiedPaymentVerifierV3 target,
+        bytes32 attestedIntentHash,
+        uint256 releaseAmount,
+        bytes32 dataHash,
+        bytes memory data,
+        uint256 signerKey
+    ) internal view returns (bytes memory) {
         bytes32 typeHash = keccak256("PaymentAttestation(bytes32 intentHash,uint256 releaseAmount,bytes32 dataHash)");
         bytes32 structHash = keccak256(abi.encode(typeHash, attestedIntentHash, releaseAmount, dataHash));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", target.DOMAIN_SEPARATOR(), structHash));

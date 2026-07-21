@@ -81,12 +81,58 @@ contract RiskManagerHarnessAdmissionParityTest is RiskManagerHarnessFixture {
         orchestrator.createPosition(manager, intentHash);
     }
 
+    function test_RiskManagerAdmissionRejectsDisabledPlatform() public {
+        IRiskManager.PlatformRiskConfig memory disabledConfig = _nonChargebackConfig();
+        disabledConfig.enabled = false;
+        manager.setPlatformRiskConfig(ZELLE, disabledConfig);
+        bytes32 intentHash = keccak256("disabled-platform");
+        _setRiskIntent(intentHash, 100e6, ZELLE, uint64(block.timestamp), taker, beneficiary);
+        vm.expectRevert(abi.encodeWithSelector(IRiskManager.PlatformDisabled.selector, ZELLE));
+        orchestrator.createPosition(manager, intentHash);
+    }
+
+    function test_RiskManagerExtensionRejectsMissingOrTerminalPositionAndZeroTime() public {
+        bytes32 missingIntent = keccak256("missing-extension-position");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IRiskManager.PositionNotPending.selector, missingIntent, IRiskManager.PositionStatus.NONE
+            )
+        );
+        vm.prank(taker);
+        manager.extendIntent(missingIntent, HOUR);
+
+        bytes32 pendingIntent = keccak256("zero-extension-time");
+        _createPosition(pendingIntent);
+        vm.expectRevert(IRiskManager.ZeroAmount.selector);
+        vm.prank(taker);
+        manager.extendIntent(pendingIntent, 0);
+    }
+
+    function test_RiskManagerTakerStateReflectsDelegatedPortfolio() public view {
+        (address stakeOwner, uint256 totalStake, uint256 reserved, uint256 free, bool exiting) =
+            manager.getTakerState(taker);
+        assertEq(stakeOwner, taker);
+        assertEq(totalStake, 100_000e6);
+        assertEq(reserved, 0);
+        assertEq(free, 100_000e6);
+        assertFalse(exiting);
+    }
+
     function test_RiskManagerExtensionRejectsEscrowTimestampMismatch() public {
         bytes32 intentHash = keccak256("mutated-escrow-timestamp");
         uint64 createdAt = uint64(block.timestamp);
         _setRiskIntent(intentHash, 100e6, ZELLE, createdAt, taker, beneficiary);
         orchestrator.createPosition(manager, intentHash);
         escrow.setIntentState(intentHash, createdAt + 1, createdAt + PERIOD);
+        vm.expectRevert(abi.encodeWithSelector(IRiskManager.IntentStateMismatch.selector, intentHash));
+        vm.prank(taker);
+        manager.extendIntent(intentHash, HOUR);
+    }
+
+    function test_RiskManagerExtensionRejectsOrchestratorOwnerDrift() public {
+        bytes32 intentHash = keccak256("mutated-orchestrator-owner");
+        _createPosition(intentHash);
+        _setRiskIntent(intentHash, 100e6, PAYPAL, uint64(block.timestamp), other, beneficiary);
         vm.expectRevert(abi.encodeWithSelector(IRiskManager.IntentStateMismatch.selector, intentHash));
         vm.prank(taker);
         manager.extendIntent(intentHash, HOUR);

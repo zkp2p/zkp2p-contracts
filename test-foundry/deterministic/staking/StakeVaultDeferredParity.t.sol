@@ -116,6 +116,62 @@ contract StakeVaultDeferredParityTest is StakeVaultLegacyFixture {
         vault.recordDeferredStake(intentHash, staker, 1e6, 0, new IIntentRiskHook.FeeAllocation[](0));
     }
 
+    function test_DeferredFundingRejectsZeroOwnerAndGrossAmount() public {
+        bytes32 intentHash = keccak256("invalid-deferred-funding-inputs");
+        _authorize(intentHash, 0);
+
+        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vm.prank(controller);
+        vault.recordDeferredStake(intentHash, address(0), 1e6, 0, new IIntentRiskHook.FeeAllocation[](0));
+
+        vm.expectRevert(StakeVault.ZeroAmount.selector);
+        vm.prank(controller);
+        vault.recordDeferredStake(intentHash, staker, 0, 0, new IIntentRiskHook.FeeAllocation[](0));
+    }
+
+    function test_DeferredFundingRejectsDuplicateAndWrongOwner() public {
+        bytes32 fundedIntent = keccak256("duplicate-deferred-funding");
+        _authorize(fundedIntent, 0);
+        _fund(fundedIntent, 100e6, 0, new IIntentRiskHook.FeeAllocation[](0));
+        token.transfer(address(vault), 100e6);
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.DeferredStakeAlreadyFunded.selector, fundedIntent, 100e6));
+        vm.prank(controller);
+        vault.recordDeferredStake(fundedIntent, staker, 100e6, 0, new IIntentRiskHook.FeeAllocation[](0));
+
+        bytes32 wrongOwnerIntent = keccak256("wrong-deferred-owner");
+        _authorize(wrongOwnerIntent, 0);
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.DeferredStakeOwnerMismatch.selector, staker, maker));
+        vm.prank(controller);
+        vault.recordDeferredStake(wrongOwnerIntent, maker, 1e6, 0, new IIntentRiskHook.FeeAllocation[](0));
+    }
+
+    function test_DeferredFundingRejectsExistingReservation() public {
+        bytes32 intentHash = keccak256("deferred-reservation-conflict");
+        _deposit(10e6);
+        _authorize(intentHash, 0);
+        _reserve(intentHash, 1e6, 0);
+        token.transfer(address(vault), 1e6);
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.ReservationAlreadyExists.selector, intentHash));
+        vm.prank(controller);
+        vault.recordDeferredStake(intentHash, staker, 1e6, 0, new IIntentRiskHook.FeeAllocation[](0));
+    }
+
+    function test_DeferredFundingRejectsInvalidFeePlan() public {
+        bytes32 zeroRecipientIntent = keccak256("zero-deferred-fee-recipient");
+        _authorize(zeroRecipientIntent, 0);
+        IIntentRiskHook.FeeAllocation[] memory zeroRecipient = _fees(address(0), 1e6, maker, 0);
+        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vm.prank(controller);
+        vault.recordDeferredStake(zeroRecipientIntent, staker, 2e6, 0, zeroRecipient);
+
+        bytes32 excessiveFeeIntent = keccak256("excessive-deferred-fee");
+        _authorize(excessiveFeeIntent, 0);
+        IIntentRiskHook.FeeAllocation[] memory excessiveFee = _fees(maker, 2e6, recipient, 0);
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.InvalidDeferredFeeTotal.selector, 2e6, 2e6));
+        vm.prank(controller);
+        vault.recordDeferredStake(excessiveFeeIntent, staker, 2e6, 0, excessiveFee);
+    }
+
     function test_DeferredMaturityVestsFeesAndLeavesReusableNetStake() public {
         bytes32 intentHash = keccak256("deferred");
         uint64 releaseTime = uint64(block.timestamp + DAY);
@@ -141,6 +197,33 @@ contract StakeVaultDeferredParityTest is StakeVaultLegacyFixture {
         assertEq(token.balanceOf(maker), 2e6);
         assertEq(token.balanceOf(recipient), 1e6);
         assertEq(vault.totalLiabilities(), 97e6);
+    }
+
+    function test_FeeOwnerCanWithdrawClaimToChosenRecipient() public {
+        bytes32 intentHash = keccak256("owner-fee-withdrawal");
+        _authorize(intentHash, uint64(block.timestamp));
+        _fund(intentHash, 100e6, uint64(block.timestamp), _fees(maker, 2e6, recipient, 1e6));
+        vm.prank(controller);
+        vault.releaseDeferredStake(intentHash);
+
+        uint256 balanceBefore = token.balanceOf(recipient);
+        vm.prank(maker);
+        vault.withdrawFeeClaim(recipient);
+        assertEq(token.balanceOf(recipient), balanceBefore + 2e6);
+        assertEq(vault.claimableFees(maker), 0);
+    }
+
+    function test_FeeClaimsRejectZeroAddressesAndEmptyBalance() public {
+        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vault.withdrawFeeClaimFor(address(0));
+
+        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vm.prank(maker);
+        vault.withdrawFeeClaim(address(0));
+
+        vm.expectRevert(StakeVault.ZeroAmount.selector);
+        vm.prank(maker);
+        vault.withdrawFeeClaim(recipient);
     }
 
     function test_DeferredFeesAggregateDuplicateRecipients() public {
@@ -206,6 +289,18 @@ contract StakeVaultDeferredParityTest is StakeVaultLegacyFixture {
         vault.authorizeDeferredStake(keccak256("deferred"), staker, 0);
     }
 
+    function test_DeferredAuthorizationRejectsZeroStakerAndDuplicate() public {
+        bytes32 intentHash = keccak256("invalid-deferred-authorization");
+        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vm.prank(controller);
+        vault.authorizeDeferredStake(intentHash, address(0), 0);
+
+        _authorize(intentHash, 0);
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.DeferredStakeAlreadyExists.selector, intentHash));
+        vm.prank(controller);
+        vault.authorizeDeferredStake(intentHash, staker, 0);
+    }
+
     function test_DeferredAuthorizationRejectsExitingStaker() public {
         _deposit(1e6);
         vm.prank(staker);
@@ -213,6 +308,49 @@ contract StakeVaultDeferredParityTest is StakeVaultLegacyFixture {
         vm.expectRevert(abi.encodeWithSelector(StakeVault.AlreadyExiting.selector, staker));
         vm.prank(controller);
         vault.authorizeDeferredStake(keccak256("deferred"), staker, 0);
+    }
+
+    function test_DeferredAuthorizationCanBeReleasedBeforeFunding() public {
+        bytes32 intentHash = keccak256("released-authorization");
+        _authorize(intentHash, uint64(block.timestamp + DAY));
+        vm.prank(controller);
+        vault.releaseDeferredStakeAuthorization(intentHash);
+        assertEq(vault.getDeferredStake(intentHash).staker, address(0));
+    }
+
+    function test_DeferredAuthorizationReleaseRejectsMissingFundedAndWrongController() public {
+        bytes32 missingIntent = keccak256("missing-authorization");
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.DeferredStakeNotFound.selector, missingIntent));
+        vm.prank(controller);
+        vault.releaseDeferredStakeAuthorization(missingIntent);
+
+        bytes32 fundedIntent = keccak256("funded-authorization");
+        _authorize(fundedIntent, uint64(block.timestamp + DAY));
+        _fund(fundedIntent, 100e6, uint64(block.timestamp + DAY), new IIntentRiskHook.FeeAllocation[](0));
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.DeferredStakeAlreadyFunded.selector, fundedIntent, 100e6));
+        vm.prank(controller);
+        vault.releaseDeferredStakeAuthorization(fundedIntent);
+
+        bytes32 wrongControllerIntent = keccak256("wrong-controller-authorization");
+        _authorize(wrongControllerIntent, uint64(block.timestamp + DAY));
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.UnauthorizedPositionController.selector, maker, controller));
+        vm.prank(maker);
+        vault.releaseDeferredStakeAuthorization(wrongControllerIntent);
+    }
+
+    function test_DeferredTerminalCallsRejectMissingPositionsAndZeroMaker() public {
+        bytes32 intentHash = keccak256("missing-deferred-terminal");
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.DeferredStakeNotFound.selector, intentHash));
+        vm.prank(controller);
+        vault.releaseDeferredStake(intentHash);
+
+        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vm.prank(controller);
+        vault.slashDeferredStake(intentHash, address(0));
+
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.DeferredStakeNotFound.selector, intentHash));
+        vm.prank(controller);
+        vault.slashDeferredStake(intentHash, maker);
     }
 
     function test_PreAuthorizedDeferredStakeFundsWhileReservationsPaused() public {

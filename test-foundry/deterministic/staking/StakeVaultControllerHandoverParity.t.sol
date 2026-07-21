@@ -27,6 +27,27 @@ contract StakeVaultControllerHandoverParityTest is StakeVaultLegacyFixture {
         assertEq(vault.controller(), nextController);
     }
 
+    function test_ControllerInitializationAndProposalRejectInvalidState() public {
+        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vault.initializeController(address(0));
+
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.ControllerAlreadyInitialized.selector, controller));
+        vault.initializeController(nextController);
+
+        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vault.proposeController(address(0));
+    }
+
+    function test_ControllerAcceptanceRejectsMissingAndWrongProposer() public {
+        vm.expectRevert(StakeVault.NoPendingController.selector);
+        vault.acceptController();
+
+        vault.proposeController(nextController);
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.UnauthorizedController.selector, maker));
+        vm.prank(maker);
+        vault.acceptController();
+    }
+
     function test_PreviousControllerSettlesOnlySnapshottedReservations() public {
         bytes32 oldIntent = keccak256("old-intent");
         bytes32 newIntent = keccak256("new-intent");
