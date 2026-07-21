@@ -175,10 +175,7 @@ abstract contract EscrowLegacyFixture is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    function _signalIntent(uint256 depositId, uint256 amount, uint256 conversionRate)
-        internal
-        returns (bytes32 intentHash)
-    {
+    function _signalIntentCall(uint256 depositId, uint256 amount, uint256 conversionRate) internal {
         uint256 expiration = block.timestamp + 1 days;
         bytes memory gatingSignature =
             _gatingSignature(depositId, amount, onRamper, VENMO, USD, conversionRate, expiration);
@@ -200,6 +197,13 @@ abstract contract EscrowLegacyFixture is Test {
                 data: ""
             })
         );
+    }
+
+    function _signalIntent(uint256 depositId, uint256 amount, uint256 conversionRate)
+        internal
+        returns (bytes32 intentHash)
+    {
+        _signalIntentCall(depositId, amount, conversionRate);
         bytes32[] memory accountIntents = orchestrator.getAccountIntents(onRamper);
         intentHash = accountIntents[accountIntents.length - 1];
     }
