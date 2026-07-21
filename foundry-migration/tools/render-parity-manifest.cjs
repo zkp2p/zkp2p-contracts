@@ -20,6 +20,10 @@ const escrowV2OracleConfigFile = "test-foundry/deterministic/escrow/EscrowV2Orac
 const escrowV2LegacyManagementFile = "test-foundry/deterministic/escrow/EscrowV2ManagementParity.t.sol";
 const escrowV2LegacyLifecycleFile = "test-foundry/deterministic/escrow/EscrowV2LifecycleParity.t.sol";
 const escrowV2LegacyConfigurationFile = "test-foundry/deterministic/escrow/EscrowV2ConfigurationParity.t.sol";
+const escrowV2BranchAuthorizationFile = "test-foundry/deterministic/escrow/EscrowV2BranchAuthorizationParity.t.sol";
+const escrowV2BranchValidationFile = "test-foundry/deterministic/escrow/EscrowV2BranchValidationParity.t.sol";
+const escrowV2BranchGovernanceLifecycleFile = "test-foundry/deterministic/escrow/EscrowV2BranchGovernanceLifecycleParity.t.sol";
+const escrowV2BranchStatePauseFile = "test-foundry/deterministic/escrow/EscrowV2BranchStatePauseParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -689,6 +693,140 @@ function escrowV2LegacyDestination(test) {
     return `${escrowV2LegacyConfigurationFile}:EscrowV2ConfigurationParityTest::${testName}`;
 }
 
+const escrowV2BranchSource = "test/escrowV2/escrowV2.branchCoverage.spec.ts";
+const escrowV2BranchSourceTests = inventory.tests.filter((test) => test.sourceFile === escrowV2BranchSource);
+const escrowV2BranchDestinations = [
+    ...[
+        "test_CreateDepositRejectsZeroIntentMinimum",
+        "test_CreateDepositRejectsSelfDelegation",
+        "test_DepositToRejectsZeroOwner",
+        "test_DepositToRejectsOwnerAsDelegate",
+        "test_WithdrawDepositRejectsNonDepositor",
+        "test_WithdrawDepositWithoutExpiredIntentsSkipsOrchestratorPrune",
+        "test_RemoveDelegateRejectsNonDepositor",
+        "test_PruneExpiredIntentsWithoutExpiredEntriesSkipsOrchestrator",
+        "test_UnlockFundsRejectsDirectNonOrchestratorCaller",
+        "test_UnlockAndTransferRejectsDirectNonOrchestratorCaller",
+        "test_SetOracleRateConfigBatchRejectsUnauthorizedCaller",
+        "test_UpdateCurrencyConfigBatchRejectsUnauthorizedCaller",
+        "test_RemoveOracleRateConfigRejectsUnauthorizedCaller",
+        "test_SetIntentRangeRejectsUnauthorizedCaller",
+        "test_AddPaymentMethodsRejectsUnauthorizedCaller",
+        "test_SetPaymentMethodActiveRejectsUnauthorizedCaller",
+        "test_AddCurrenciesRejectsUnauthorizedCaller",
+        "test_DeactivateCurrencyRejectsUnauthorizedCaller",
+        "test_DeactivateCurrenciesBatchRejectsUnauthorizedCaller",
+        "test_SetAcceptingIntentsRejectsUnauthorizedCaller",
+        "test_SetRetainOnEmptyRejectsUnauthorizedCaller",
+    ].map((testName) => [escrowV2BranchAuthorizationFile, "EscrowV2BranchAuthorizationParityTest", testName]),
+    ...[
+        "test_AddPaymentMethodsRejectsZeroMethod",
+        "test_AddPaymentMethodsRejectsEmptyPayeeDetails",
+        "test_AddPaymentMethodsRejectsExistingMethod",
+        "test_AddPaymentMethodsRejectsMethodDataLengthMismatch",
+        "test_AddPaymentMethodsRejectsCurrencyArrayLengthMismatch",
+        "test_SetOracleRateConfigRejectsEoaAdapter",
+        "test_SetOracleRateConfigAcceptsSpreadAboveTenThousand",
+        "test_SetOracleRateConfigRejectsNegativeTenThousandSpread",
+        "test_SetOracleRateConfigRejectsZeroMaxStaleness",
+        "test_SetOracleRateConfigRejectsZeroAdapter",
+        "test_RemoveOracleRateConfigRejectsUnsupportedCurrency",
+        "test_DeactivateCurrencyRejectsInactivePaymentMethod",
+        "test_DeactivateCurrencyRejectsUnlistedCurrency",
+        "test_DeactivateCurrencyWithoutOracleEmitsOnlyFloorUpdate",
+        "test_DeactivateCurrencyWithoutOracleDoesNotEmitRemoval",
+        "test_AddCurrenciesRejectsInactivePaymentMethod",
+        "test_SetPaymentMethodActiveRejectsUnlistedMethod",
+        "test_SetRateManagerRejectsMissingDeposit",
+        "test_SetRateManagerRejectsZeroAddress",
+        "test_SetRateManagerRejectsEoa",
+        "test_SetRateManagerRejectsZeroManagerId",
+        "test_SetRateManagerPropagatesMissingManagerError",
+        "test_ClearRateManagerRejectsMissingDeposit",
+        "test_ClearRateManagerRejectsUnsetManager",
+        "test_SetDelegateRejectsZeroAddress",
+        "test_SetDelegateRejectsDepositorSelfDelegation",
+    ].map((testName) => [escrowV2BranchValidationFile, "EscrowV2BranchValidationParityTest", testName]),
+    ...[
+        "test_SetOrchestratorRegistryRejectsZeroAddress",
+        "test_SetOrchestratorRegistryRejectsNonOwner",
+        "test_SetPaymentVerifierRegistryRejectsZeroAddress",
+        "test_SetPaymentVerifierRegistryRejectsNonOwner",
+        "test_SetDustRecipientRejectsZeroAddress",
+        "test_SetDustRecipientRejectsNonOwner",
+        "test_SetDustThresholdRejectsValueAboveMaximum",
+        "test_SetDustThresholdRejectsNonOwner",
+        "test_SetMaxIntentsRejectsZero",
+        "test_SetMaxIntentsRejectsNonOwner",
+        "test_SetIntentExpirationPeriodRejectsZero",
+        "test_SetIntentExpirationPeriodRejectsNonOwner",
+        "test_PauseEscrowRejectsNonOwner",
+        "test_UnpauseEscrowRejectsNonOwner",
+        "test_LockFundsRejectsMissingDeposit",
+        "test_LockFundsRejectsDepositNotAcceptingIntents",
+        "test_LockFundsRejectsAmountBelowRange",
+        "test_LockFundsRejectsAmountAboveRange",
+        "test_UnlockFundsRejectsMissingDeposit",
+        "test_UnlockFundsRejectsMissingIntent",
+        "test_UnlockAndTransferRejectsMissingDeposit",
+        "test_UnlockAndTransferRejectsMissingIntent",
+        "test_UnlockAndTransferRejectsZeroTransferAmount",
+        "test_UnlockAndTransferRejectsAmountAboveLockedAmount",
+        "test_ExtendIntentExpiryRejectsMissingDeposit",
+        "test_ExtendIntentExpiryRejectsMissingIntent",
+        "test_ExtendIntentExpiryRejectsNonGuardian",
+        "test_ExtendIntentExpiryRejectsZeroAdditionalTime",
+    ].map((testName) => [escrowV2BranchGovernanceLifecycleFile, "EscrowV2BranchGovernanceLifecycleParityTest", testName]),
+    ...[
+        "test_ZeroOracleMarketRateHaltsRate",
+        "test_ZeroOracleUpdatedAtHaltsRate",
+        "test_RetainOnEmptyPreservesDepositAfterFullSettlement",
+        "test_ZeroRemainingClosesDepositWithoutDustEvent",
+        "test_SetAcceptingIntentsRejectsAlreadyTrue",
+        "test_SetAcceptingIntentsRejectsAlreadyFalse",
+        "test_SetRetainOnEmptyRejectsAlreadyFalse",
+        "test_SetRetainOnEmptyRejectsAlreadyTrue",
+        "test_RemoveFundsRejectsZeroAmount",
+        "test_CreateDepositRejectsWhilePaused",
+        "test_DepositToRejectsWhilePaused",
+        "test_AddFundsRejectsWhilePaused",
+        "test_RemoveFundsRejectsWhilePaused",
+        "test_SetCurrencyMinRateRejectsUnauthorizedCallerWithDelegateConfigured",
+        "test_SetCurrencyMinRateRejectsUnauthorizedCallerWithNoDelegate",
+        "test_SetCurrencyMinRateRejectsWhilePaused",
+        "test_SetOracleRateConfigRejectsWhilePaused",
+        "test_AddPaymentMethodsRejectsWhilePaused",
+        "test_AddCurrenciesRejectsWhilePaused",
+        "test_SetPaymentMethodActiveRejectsWhilePaused",
+        "test_SetAcceptingIntentsRejectsWhilePaused",
+        "test_SetRetainOnEmptyRejectsWhilePaused",
+        "test_SetIntentRangeRejectsWhilePaused",
+        "test_SetDelegateRejectsWhilePaused",
+        "test_RemoveDelegateRejectsWhilePaused",
+        "test_RemoveOracleRateConfigRejectsWhilePaused",
+        "test_DeactivateCurrencyRejectsWhilePaused",
+        "test_SetRateManagerRejectsWhilePaused",
+        "test_ClearRateManagerRejectsWhilePaused",
+        "test_SetOracleRateConfigBatchRejectsWhilePaused",
+        "test_UpdateCurrencyConfigBatchRejectsWhilePaused",
+        "test_DeactivateCurrenciesBatchRejectsWhilePaused",
+        "test_RemoveFundsRejectsWhenReentrancyGuardIsEntered",
+    ].map((testName) => [escrowV2BranchStatePauseFile, "EscrowV2BranchStatePauseParityTest", testName]),
+];
+if (escrowV2BranchSourceTests.length !== 108 || escrowV2BranchDestinations.length !== 108) {
+    throw new Error(
+        `EscrowV2 branch mapping count mismatch: ${escrowV2BranchSourceTests.length} source / ${escrowV2BranchDestinations.length} destinations`
+    );
+}
+
+function escrowV2BranchDestination(test) {
+    if (test.sourceFile !== escrowV2BranchSource) return "";
+    const sourceIndex = escrowV2BranchSourceTests.findIndex((sourceTest) => sourceTest.id === test.id);
+    if (sourceIndex < 0) return "";
+    const [file, contractName, testName] = escrowV2BranchDestinations[sourceIndex];
+    return `${file}:${contractName}::${testName}`;
+}
+
 function orchestratorV2LegacyDestination(test) {
     if (test.sourceFile !== "test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts") return "";
     const scenario = test.scenario;
@@ -758,7 +896,7 @@ const header = [
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -819,6 +957,9 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/escrowV2/escrowV2.legacyCoverage.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped EscrowV2 legacy behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === escrowV2BranchSource && !foundryDestination) {
+        throw new Error(`Unmapped EscrowV2 branch behavior: ${test.id} ${test.scenario}`);
+    }
     if (test.sourceFile === "test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped OrchestratorV2 legacy behavior: ${test.id} ${test.scenario}`);
     }
@@ -836,6 +977,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(escrowV2DelegationFile)) evidence = "EscrowV2DelegationParity.t.sol: 21 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(escrowV2OracleConfigFile)) evidence = "EscrowV2OracleRateConfigParity.t.sol: 29 passed individually and together, 0 failed, 0 skipped";
     if ([escrowV2LegacyManagementFile, escrowV2LegacyLifecycleFile, escrowV2LegacyConfigurationFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 management + lifecycle + configuration parity: 70 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 70/70";
+    if ([escrowV2BranchAuthorizationFile, escrowV2BranchValidationFile, escrowV2BranchGovernanceLifecycleFile, escrowV2BranchStatePauseFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 branch parity: 108 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 108/108";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
@@ -854,7 +996,12 @@ const rows = inventory.tests.map((test) => {
         test.expectedBehavior,
         test.fixtureDependencies,
         foundryDestination,
-        foundryDestination ? (test.sourceFile.includes("nullifierRegistryV2") ? "one-to-one" : "consolidated-with-explicit-destination") : "one-to-one",
+        foundryDestination
+            ? (["test/escrowV2/escrowV2.legacyCoverage.spec.ts", escrowV2BranchSource].includes(test.sourceFile)
+                || test.sourceFile.includes("nullifierRegistryV2")
+                ? "one-to-one"
+                : "consolidated-with-explicit-destination")
+            : "one-to-one",
         foundryDestination ? "verified-independent-file" : (test.pending ? "pending-resolution" : "pending-translation"),
         foundryDestination ? evidence : (test.pending ? "baseline-pending" : "baseline-passed"),
     ];
