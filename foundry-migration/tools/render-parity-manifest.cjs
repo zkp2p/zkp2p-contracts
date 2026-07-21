@@ -11,6 +11,7 @@ const escrowV2PythFile = "test-foundry/deterministic/escrow/EscrowV2PythOraclePa
 const escrowV2CurrencyRateFile = "test-foundry/deterministic/escrow/EscrowV2CurrencyRateParity.t.sol";
 const oracleFile = "test-foundry/deterministic/oracles/OracleAdapterParity.t.sol";
 const orchestratorV2File = "test-foundry/deterministic/orchestrator/OrchestratorV2RateManagerParity.t.sol";
+const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
 const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifierParity.t.sol";
 const thresholdFile = "test-foundry/deterministic/libs/ThresholdSignatureParity.t.sol";
 const baseUnifiedFile = "test-foundry/deterministic/verifiers/BaseUnifiedVerifierParity.t.sol";
@@ -322,13 +323,32 @@ function escrowV2CurrencyRateDestination(test) {
     return "";
 }
 
+function protocolViewerV2Destination(test) {
+    if (test.sourceFile !== "test/periphery/protocolViewerV2.spec.ts") return "";
+    const scenario = test.scenario;
+    const target = (testName) => `${protocolViewerV2File}:ProtocolViewerV2ParityTest::${testName}`;
+    if (scenario.includes("returns deposit data for a provided")) return target("test_GetDepositReturnsCompleteDepositPaymentMethodAndCurrencyData");
+    if (scenario.includes("returns native min rate")) return target("test_GetDepositReturnsNativeRateWithoutManager");
+    if (scenario.includes("returns delegated rate")) return target("test_GetDepositReturnsDelegatedManagerRate");
+    if (scenario.includes("falls back to native rate")) return target("test_GetDepositFallsBackToNativeRateWhenManagerReverts");
+    if (scenario.includes("rate manager returns zero")) return target("test_GetDepositReturnsZeroWhenManagerDisablesPair");
+    if (scenario.includes("#getDeposit reverts when escrow")) return target("test_GetDepositRejectsZeroEscrow");
+    if (scenario.includes("returns all requested deposits")) return target("test_GetDepositFromIdsReturnsEveryRequestedDeposit");
+    if (scenario.includes("zero even with empty deposit ids")) return target("test_GetDepositFromIdsRejectsZeroEscrowEvenWhenIdsEmpty");
+    if (scenario.includes("returns a single intent")) return target("test_GetIntentReturnsIntentAndDepositResolvedFromIntentEscrow");
+    if (scenario.includes("returns all intents for an account")) return target("test_GetAccountIntentsReturnsAllAccountIntents");
+    if (scenario.includes("returns intents for a provided list")) return target("test_GetIntentsReturnsViewsForProvidedHashesInOrder");
+    if (scenario.includes("orchestrator address is zero")) return target("test_GetIntentRejectsZeroOrchestrator");
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || orchestratorV2Destination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || orchestratorV2Destination(test) || protocolViewerV2Destination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -362,6 +382,9 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/escrowV2/escrowV2.getDepositCurrencyMinRate.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped EscrowV2 currency-rate behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/periphery/protocolViewerV2.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped ProtocolViewerV2 behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
     let evidence = "";
     if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
@@ -369,6 +392,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(escrowV2CurrencyRateFile)) evidence = "EscrowV2CurrencyRateParity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(oracleFile)) evidence = "OracleAdapterParity.t.sol: 25 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(orchestratorV2File)) evidence = "OrchestratorV2RateManagerParity.t.sol: 4 passed individually and together, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(attestationFile)) evidence = "AttestationVerifierParity.t.sol: 24 passed, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(thresholdFile)) evidence = "ThresholdSignatureParity.t.sol: 16 passed, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(baseUnifiedFile)) evidence = "BaseUnifiedVerifierParity.t.sol: 8 passed, 0 failed, 0 skipped";
