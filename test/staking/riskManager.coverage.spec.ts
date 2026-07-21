@@ -343,15 +343,21 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       expect(await f.token.allowance(f.orchestrator.address, f.manager.address)).to.eq(0);
     });
 
-    it("rejects deferred admission when payout recipient differs from the taker", async () => {
+    it("snapshots the payout recipient as deferred stake owner", async () => {
       const f = await loadFixture(deployFixture);
       await f.manager.setPlatformRiskConfig(PAYPAL, chargebackConfig(true));
       await f.vault.setTakerState(f.taker.address, f.taker.address, usdc(1), usdc(1), false);
       const intentHash = ethers.utils.id("deferred-third-party-recipient");
       await setRiskIntent(f, intentHash, { recipient: f.other.address });
 
-      await expect(f.orchestrator.createPosition(f.manager.address, intentHash))
-        .to.be.revertedWithCustomError(f.manager, "DeferredStakeRecipientMismatch");
+      await f.orchestrator.createPosition(f.manager.address, intentHash);
+
+      const position = await f.manager.getRiskPosition(intentHash);
+      const deferredStake = await f.vault.deferredStakes(intentHash);
+      expect(position.taker).to.eq(f.taker.address);
+      expect(position.stakeOwner).to.eq(f.other.address);
+      expect(position.payoutRecipient).to.eq(f.other.address);
+      expect(deferredStake.staker).to.eq(f.other.address);
     });
 
     it("releases non-chargebackable reservations and rejects repeated settlement", async () => {

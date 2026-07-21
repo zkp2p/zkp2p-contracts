@@ -9,7 +9,7 @@ Hard-cut contract specification. The active ABI uses `IntentExtensionConfig`; de
 Stake now funds two independent liabilities:
 
 1. A taker can purchase additional intent time after the Escrow's initial free expiry. The maximum charge for the purchased time is reserved when the intent is extended, and the elapsed charge is paid to the LP whether the intent is fulfilled or cancelled.
-2. A chargebackable payment reserves coverage after settlement. Coverage comes from existing membership stake or from gross deferred settlement proceeds converted into taker-owned stake.
+2. A chargebackable payment reserves coverage after settlement. Coverage comes from existing membership stake or from gross deferred settlement proceeds converted into payout-recipient-owned stake.
 
 Admission reserves only chargeback coverage. Merely signaling an intent does not reserve a pending-intent penalty. The Escrow's initial expiration period is the free interval; an intent must explicitly purchase any additional time before its current expiry.
 
@@ -185,7 +185,7 @@ Current policy requires `r = 10_000`, so coverage equals the gross Escrow releas
 - StakeVault credits `R` to the taker and reserves the full amount through the chargeback window.
 - The fee slice `F` remains contingent; no taker or fee recipient can withdraw it while coverage is live.
 
-On a valid chargeback, the complete gross reservation compensates the LP and all contingent fees are cancelled. On clean maturity, `F` becomes pull-based fee claims and `E` becomes free reusable taker stake.
+On a valid chargeback, the complete gross reservation compensates the LP and all contingent fees are cancelled. On clean maturity, `F` becomes pull-based fee claims and `E` becomes free reusable payout-recipient stake.
 
 Deferred payment therefore becomes stake at settlement. It is not a separate balance class: gross proceeds increase `stakeBalance`, remain fully reserved during the risk window, and leave net proceeds as ordinary reusable stake after clean maturity.
 
@@ -250,7 +250,7 @@ Indexers must use the emitted extension reservation identifier and must not comb
 8. Terminal extension charge never exceeds the purchased-time reservation; all excess is released.
 9. A chargeback reservation and extension reservation can coexist without either operation mutating the other.
 10. Third-party extension sponsorship increases taker stake and reserved stake by exactly the token amount received.
-11. Deferred settlement increases taker stake and chargeback reservation by exactly the gross release.
+11. Deferred settlement increases payout-recipient stake and chargeback reservation by exactly the gross release.
 12. Every slash decreases stake and reserved stake by the same amount and increases LP compensation by that amount.
 13. Clean deferred maturity leaves `net free stake + claimable fees == gross release`.
 14. Across every lifecycle transition, `token balance in StakeVault == total liabilities`.

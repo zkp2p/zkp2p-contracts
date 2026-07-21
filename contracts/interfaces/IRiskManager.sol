@@ -71,7 +71,7 @@ interface IRiskManager is IIntentRiskHook {
     struct RiskPosition {
         /// @notice Intent owner whose action created the position.
         address taker;
-        /// @notice Portfolio owner whose shared stake backs chargeback coverage.
+        /// @notice Economic owner whose existing or newly deferred stake backs chargeback coverage.
         address stakeOwner;
         /// @notice Escrow depositor compensated by extension charges and valid chargebacks.
         address lp;
@@ -115,7 +115,7 @@ interface IRiskManager is IIntentRiskHook {
         uint256 reservedAmount;
         /// @notice Exact gross amount released from Escrow before protocol, referral, and manager fees.
         uint256 grossReleasedAmount;
-        /// @notice Exact post-fee amount reserved for the taker after the hook sees the gross settlement plan.
+        /// @notice Exact post-fee amount reserved for the payout recipient after deferred settlement.
         uint256 executableAmount;
         /// @notice Cumulative compensation already charged against this position.
         uint256 slashedAmount;
@@ -268,7 +268,7 @@ interface IRiskManager is IIntentRiskHook {
     error CancellationNotRecorded(bytes32 intentHash);
     error IntentTokenMismatch(address expectedToken, address actualToken);
     error InvalidSettlementAmounts(uint256 grossAmount, uint256 executableAmount);
-    error DeferredStakeRecipientMismatch(address taker, address recipient);
+    error DeferredStakeRecipientMismatch(address expectedStakeOwner, address recipient);
     error DeferredStakeTransferMismatch(uint256 expectedAmount, uint256 actualAmount);
     error InvalidFeeAllocationCount(uint256 count, uint256 maximum);
     error InvalidFeeAllocations(uint256 expectedAmount, uint256 actualAmount);

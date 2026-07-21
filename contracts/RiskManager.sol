@@ -42,7 +42,7 @@ import { IStakeVault } from "./interfaces/IStakeVault.sol";
  *      - Non-chargebackable settlement releases the full pending reservation immediately.
  *      - Stake-backed settlement resizes coverage to the gross Escrow release and consumes no payout funds.
  *      - Deferred settlement pulls the complete gross release directly into StakeVault and converts it
- *        into taker-owned stake that remains fully reserved through the chargeback window.
+ *        into payout-recipient-owned stake that remains fully reserved through the chargeback window.
  *      - Deferred fees remain contingent inside that reservation. Clean maturity vests fee claims and
  *        releases the net amount as reusable stake; chargeback cancels the fee plan and compensates gross.
  *
@@ -227,10 +227,8 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
                 config.chargeback.chargebackable
                     && config.chargeback.deferredPayoutEnabled
             ) {
-                if (intent.to != intent.owner) {
-                    revert DeferredStakeRecipientMismatch(intent.owner, intent.to);
-                }
                 mode = RiskMode.DEFERRED_PAYOUT;
+                stakeOwner = intent.to;
             } else {
                 revert InsufficientCollateral(stakeOwner, available, chargebackReserve);
             }
@@ -263,7 +261,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             stakeVault.reserveStake(stakeOwner, _intentHash, initialReservation, 0);
         }
         if (mode == RiskMode.DEFERRED_PAYOUT) {
-            stakeVault.authorizeDeferredStake(_intentHash, intent.owner, 0);
+            stakeVault.authorizeDeferredStake(_intentHash, stakeOwner, 0);
         }
 
         _emitRiskPositionCreated(_intentHash, position, chargebackReserve);
@@ -305,7 +303,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
      * @inheritdoc IIntentRiskHook
      * @dev This callback runs before distribution. Stake-backed settlement consumes zero tokens.
      *      Deferred settlement pulls gross funds and preserves the independently rounded fee plan
-     *      inside fully reserved taker stake until chargeback or clean maturity.
+     *      inside fully reserved payout-recipient stake until chargeback or clean maturity.
      */
     function settleIntent(
         RiskSettlementContext calldata _context
@@ -581,7 +579,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
         emit ChargebackSettled(
             _attestation.intentHash,
-            position.mode == RiskMode.DEFERRED_PAYOUT ? position.taker : position.stakeOwner,
+            position.stakeOwner,
             position.lp,
             position.mode,
             position.grossReleasedAmount,
@@ -816,7 +814,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     /**
      * @dev Transitions a pending position at settlement after charging elapsed purchased time.
      *      Stake-backed coverage is resized against the gross release and consumes no funds. Deferred
-     *      settlement transfers gross into fully reserved taker stake and keeps fee claims contingent.
+     *      settlement transfers gross into fully reserved payout-recipient stake and keeps fee claims contingent.
      */
     function _settlePosition(
         bytes32 _intentHash,
@@ -878,8 +876,8 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         } else if (position.mode == RiskMode.DEFERRED_PAYOUT) {
             // Admission already enforces this before fiat payment; retain the settlement check as
             // defense-in-depth against corrupted or non-canonical orchestrator state.
-            if (position.payoutRecipient != position.taker) {
-                revert DeferredStakeRecipientMismatch(position.taker, position.payoutRecipient);
+            if (position.payoutRecipient != position.stakeOwner) {
+                revert DeferredStakeRecipientMismatch(position.stakeOwner, position.payoutRecipient);
             }
             chargebackCoverage = _calculateChargebackReserve(
                 _grossAmount,
@@ -905,14 +903,14 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
             uint256 deferredFeeAmount = _grossAmount - _executableAmount;
             stakeVault.recordDeferredStake(
                 _intentHash,
-                position.taker,
+                position.stakeOwner,
                 _grossAmount,
                 coverageDeadline,
                 _feeAllocations
             );
             emit DeferredSettlementFunded(
                 _intentHash,
-                position.taker,
+                position.stakeOwner,
                 _grossAmount,
                 _executableAmount,
                 deferredFeeAmount,

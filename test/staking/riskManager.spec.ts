@@ -880,10 +880,10 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await token.allowance(orchestrator.address, manager.address)).to.eq(0);
     });
 
-    it("rejects a deferred third-party payout at admission before fiat payment", async () => {
-      const { taker, recipient, escrow, orchestrator, manager } = await loadFixture(deployFixture);
+    it("credits relayed deferred settlement to the payout recipient", async () => {
+      const { taker, recipient, escrow, orchestrator, vault, manager } = await loadFixture(deployFixture);
       await enableDeferred(manager);
-      await expect(signalIntent(
+      const intentHash = await signalIntent(
         orchestrator,
         escrow,
         taker,
@@ -891,7 +891,19 @@ describe("RiskManager and OrchestratorV3", () => {
         PAYPAL,
         ZERO,
         recipient.address,
-      )).to.be.revertedWithCustomError(orchestrator, "RiskHookAdmissionFailed");
+      );
+
+      const admittedPosition = await manager.getRiskPosition(intentHash);
+      expect(admittedPosition.taker).to.eq(taker.address);
+      expect(admittedPosition.stakeOwner).to.eq(recipient.address);
+      expect(admittedPosition.payoutRecipient).to.eq(recipient.address);
+      expect((await vault.getDeferredStake(intentHash)).staker).to.eq(recipient.address);
+
+      await fulfillIntent(orchestrator, intentHash, usdc(100));
+
+      expect(await vault.stakeBalance(taker.address)).to.eq(0);
+      expect(await vault.stakeBalance(recipient.address)).to.eq(usdc(100));
+      expect(await vault.reservedStake(recipient.address)).to.eq(usdc(100));
     });
 
     it("defers gross custody and the exact protocol, referral, and manager fee plan", async () => {
