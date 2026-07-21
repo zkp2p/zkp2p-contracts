@@ -1,7 +1,9 @@
 import "module-alias/register";
 
 import { expect } from "chai";
+import { existsSync, readFileSync } from "fs";
 import { deployments, ethers } from "hardhat";
+import { resolve } from "path";
 
 import {
   riskSettlementPlatformPolicyForNetwork,
@@ -72,6 +74,14 @@ describe("Risk-manager-owned settlement deployment", () => {
     const functions = manager.interface.functions as Record<string, unknown>;
     expect(functions["deferredPayoutHook()"]).to.eq(undefined);
     expect(functions["setDeferredPayoutHook(address)"]).to.eq(undefined);
+  });
+
+  it("excludes the retired deferred hook from active source and type exports", () => {
+    expect(existsSync(resolve(__dirname, "../../contracts/hooks/DeferredPayoutHook.sol"))).to.eq(false);
+    expect(existsSync(resolve(__dirname, "../../contracts/interfaces/IDeferredPayoutHook.sol"))).to.eq(false);
+    expect(readFileSync(resolve(__dirname, "../../utils/contracts.ts"), "utf8")).not.to.include(
+      "DeferredPayoutHook",
+    );
   });
 
   it("wires the fresh canonical vault and immutable manager dependencies", async () => {
