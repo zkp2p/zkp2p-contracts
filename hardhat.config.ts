@@ -1,13 +1,9 @@
 import * as dotenv from 'dotenv';
 
 import '@typechain/hardhat'
-import 'solidity-coverage'
 import '@nomiclabs/hardhat-ethers'
 import 'hardhat-deploy';
 import '@nomicfoundation/hardhat-verify';
-import '@nomicfoundation/hardhat-chai-matchers'
-import 'hardhat-gas-reporter';
-import '@nomicfoundation/hardhat-foundry';
 
 import { HardhatUserConfig } from "hardhat/config";
 
@@ -100,17 +96,11 @@ const config: HardhatUserConfig = {
     outDir: "typechain",
     target: "ethers-v5",
   },
-  gasReporter: {
-    enabled: false,
-    reportPureAndViewMethods: true,
-    showMethodSig: true,
-  },
   etherscan: {
     apiKey: process.env.ETHERSCAN_KEY || "",
   },
   paths: {
     sources: "./contracts",
-    tests: "./test",
     cache: "./cache",
     artifacts: "./artifacts",
   },

@@ -18,9 +18,11 @@ const scenario = process.argv[2];
 let passed = false;
 
 if (scenario === "retired") {
+  const legacyTypeExport = path.join(root, "utils/contracts.ts");
   passed = !fs.existsSync(path.join(root, "contracts/hooks/DeferredPayoutHook.sol"))
     && !fs.existsSync(path.join(root, "contracts/interfaces/IDeferredPayoutHook.sol"))
-    && !fs.readFileSync(path.join(root, "utils/contracts.ts"), "utf8").includes("DeferredPayoutHook");
+    && (!fs.existsSync(legacyTypeExport)
+      || !fs.readFileSync(legacyTypeExport, "utf8").includes("DeferredPayoutHook"));
 } else if (scenario === "policy") {
   let policyError = "";
   let witnessError = "";

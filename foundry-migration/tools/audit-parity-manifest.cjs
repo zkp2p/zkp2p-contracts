@@ -95,12 +95,19 @@ for (let index = 0; index < inventory.tests.length; ++index) {
     destinations.set(row.foundry_destination, mappedRows);
 }
 
+let sourceHashesVerified = 0;
+let sourceFilesRemoved = 0;
 for (const file of inventory.files) {
     const sourcePath = path.join(repositoryRoot, file.file);
-    if (!fs.existsSync(sourcePath)) fail(`Inventoried Hardhat source is missing: ${file.file}`);
+    if (!fs.existsSync(sourcePath)) {
+        ++sourceFilesRemoved;
+        continue;
+    }
     const actualHash = sha256(sourcePath);
     if (actualHash !== file.sha256) fail(`Hardhat source changed after inventory: ${file.file}`);
+    ++sourceHashesVerified;
 }
+if (sourceHashesVerified && sourceFilesRemoved) fail("Hardhat source removal is incomplete");
 
 const forgeList = JSON.parse(execFileSync("forge", ["test", "--list", "--json"], {
     cwd: repositoryRoot,
@@ -133,7 +140,8 @@ for (const rows of consolidatedDestinations) {
 }
 const summary = {
     sourceFiles: inventory.files.length,
-    sourceHashesVerified: inventory.files.length,
+    sourceHashesVerified,
+    sourceFilesRemoved,
     inventoryRows: inventory.tests.length,
     manifestRows: manifest.length,
     mappedRows: [...destinations.values()].reduce((total, rows) => total + rows.length, 0),

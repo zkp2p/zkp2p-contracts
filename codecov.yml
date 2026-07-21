@@ -20,5 +20,5 @@ flag_management:
   default_rules:
     carryforward: false
   individual_flags:
-    - name: hardhat
+    - name: foundry
       carryforward: false
