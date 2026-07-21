@@ -10,6 +10,7 @@ const registryFile = "test-foundry/deterministic/registries/RegistryParity.t.sol
 const oracleFile = "test-foundry/deterministic/oracles/OracleAdapterParity.t.sol";
 const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifierParity.t.sol";
 const thresholdFile = "test-foundry/deterministic/libs/ThresholdSignatureParity.t.sol";
+const baseUnifiedFile = "test-foundry/deterministic/verifiers/BaseUnifiedVerifierParity.t.sol";
 
 function csv(value) {
     const stringValue = String(value ?? "");
@@ -212,13 +213,28 @@ function thresholdDestination(test) {
     return "";
 }
 
+function baseUnifiedDestination(test) {
+    if (test.sourceFile !== "test/unifiedVerifier/baseUnifiedPaymentVerifier.spec.ts") return "";
+    const scenario = test.scenario;
+    const target = (testName) => `${baseUnifiedFile}:BaseUnifiedVerifierParityTest::${testName}`;
+    if (scenario.includes("#constructor")) return target("test_ConstructorSetsRegistriesAttestationVerifierAndOwner");
+    if (scenario.includes("#setAttestationVerifier") && !scenario.includes("should revert")) return target("test_SetAttestationVerifierUpdatesStateAndEmits");
+    if (scenario.includes("#setAttestationVerifier")) return target("test_SetAttestationVerifierRejectsZeroSameAndNonOwner");
+    if (scenario.includes("#addPaymentMethod") && !scenario.includes("should revert")) return target("test_AddPaymentMethodUpdatesArrayMappingAndEmits");
+    if (scenario.includes("#addPaymentMethod")) return target("test_AddPaymentMethodRejectsDuplicateAndNonOwner");
+    if (scenario.includes("#removePaymentMethod") && !scenario.includes("should revert")) return target("test_RemovePaymentMethodUpdatesArrayMappingAndEmits");
+    if (scenario.includes("#removePaymentMethod")) return target("test_RemovePaymentMethodRejectsMissingAndNonOwner");
+    if (scenario.includes("view functions")) return target("test_ViewFunctionsReturnAllConfiguredMethodsAndMembership");
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || attestationDestination(test) || thresholdDestination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -231,12 +247,16 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/libs/thresholdSigVerifierUtils.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped threshold-signature behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/unifiedVerifier/baseUnifiedPaymentVerifier.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped base unified verifier behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
     let evidence = "";
     if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(oracleFile)) evidence = "OracleAdapterParity.t.sol: 25 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(attestationFile)) evidence = "AttestationVerifierParity.t.sol: 24 passed, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(thresholdFile)) evidence = "ThresholdSignatureParity.t.sol: 16 passed, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(baseUnifiedFile)) evidence = "BaseUnifiedVerifierParity.t.sol: 8 passed, 0 failed, 0 skipped";
     return [
         test.id,
         test.sourceFile,

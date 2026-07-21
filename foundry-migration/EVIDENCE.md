@@ -116,8 +116,9 @@ The machine-auditable [migration manifest](./hardhat-to-foundry-manifest.csv) co
 | Chainlink and Pyth oracle adapters | 27 | 25 across 2 contracts | Every test passed individually; complete file 25/25, 0 skipped; warm real 0.22s | Independently verified; shadow/full-repeat gates pending |
 | Simple and multi attestation verifiers | 37 | 24 across 2 contracts | Every test passed individually; complete file 24/24, 0 skipped; cumulative deterministic suite 99/99, warm real 0.22s | Independently verified; shadow/full-repeat gates pending |
 | Threshold signature library | 22 | 16 | Every test passed individually; complete file 16/16, 0 skipped; cumulative deterministic suite 115/115, warm real 0.21s | Independently verified; shadow/full-repeat gates pending |
+| Base unified verifier configuration | 19 | 8 | Every test passed individually; complete file 8/8, 0 skipped; cumulative deterministic suite 123/123, warm real 0.29s | Independently verified; shadow/full-repeat gates pending |
 
-Current deterministic mapping: 206 / 1,514 rows (13.61%); 1,308 remain. Consolidations combine assertions from the same Hardhat setup/action only where the manifest gives every source behavior an exact Foundry function destination. Completed slices cover ownership, exact errors, registry/nullifier state, oracle responses, witness governance, threshold validation, signature ordering, unique-signer enforcement, mixed/invalid/malformed signatures, duplicate witness entries, ten-witness thresholds, and early threshold success.
+Current deterministic mapping: 225 / 1,514 rows (14.86%); 1,289 remain. Consolidations combine assertions from the same Hardhat setup/action only where the manifest gives every source behavior an exact Foundry function destination. Completed slices additionally cover immutable verifier registries, attestation-verifier rotation, payment-method membership/enumeration, and exact owner/error/event behavior for the base unified verifier.
 
 ## Fuzz and invariant catalog
 
