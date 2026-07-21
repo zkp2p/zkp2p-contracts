@@ -24,6 +24,8 @@ const escrowV2BranchAuthorizationFile = "test-foundry/deterministic/escrow/Escro
 const escrowV2BranchValidationFile = "test-foundry/deterministic/escrow/EscrowV2BranchValidationParity.t.sol";
 const escrowV2BranchGovernanceLifecycleFile = "test-foundry/deterministic/escrow/EscrowV2BranchGovernanceLifecycleParity.t.sol";
 const escrowV2BranchStatePauseFile = "test-foundry/deterministic/escrow/EscrowV2BranchStatePauseParity.t.sol";
+const escrowCreateDepositFile = "test-foundry/deterministic/escrow/EscrowCreateDepositParity.t.sol";
+const escrowFundingFile = "test-foundry/deterministic/escrow/EscrowFundingParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -827,6 +829,82 @@ function escrowV2BranchDestination(test) {
     return `${file}:${contractName}::${testName}`;
 }
 
+const escrowLegacySource = "test/escrow/escrow.spec.ts";
+const escrowLegacySourceTests = inventory.tests.filter((test) => test.sourceFile === escrowLegacySource);
+const escrowLegacyDestinations = [
+    ...[
+        "test_ConstructorSetsEveryStateVariable",
+        "test_CreateDepositTransfersTokensIntoEscrow",
+        "test_CreateDepositPopulatesCompleteDepositView",
+        "test_CreateDepositAddsIdToAccountDeposits",
+        "test_CreateDepositIncrementsCounter",
+        "test_CreateDepositStoresPaymentMethodData",
+        "test_CreateDepositMarksPaymentMethodActive",
+        "test_CreateDepositMarksPaymentMethodListed",
+        "test_CreateDepositStoresRetainOnEmpty",
+        "test_CreateDepositStoresEveryCurrencyMinimumRate",
+        "test_CreateDepositMarksCurrencyListed",
+        "test_CreateDepositEmitsDepositReceived",
+        "test_CreateDepositEmitsPaymentMethodAdded",
+        "test_CreateDepositEmitsEveryCurrencyAddedInOrder",
+        "test_CreateDepositStoresAllMultiplePaymentMethodMappings",
+        "test_CreateDepositActivatesAllMultiplePaymentMethods",
+        "test_CreateDepositRejectsZeroIntentMinimum",
+        "test_CreateDepositRejectsMinimumAboveMaximum",
+        "test_CreateDepositRejectsAmountBelowMinimum",
+        "test_CreateDepositRejectsPaymentMethodDataLengthMismatch",
+        "test_CreateDepositRejectsCurrencyArrayLengthMismatch",
+        "test_CreateDepositRejectsUnsupportedCurrency",
+        "test_CreateDepositRejectsZeroConversionRate",
+        "test_CreateDepositRejectsZeroPaymentMethod",
+        "test_CreateDepositRejectsUnwhitelistedPaymentMethod",
+        "test_CreateDepositRejectsEmptyPayeeDetails",
+        "test_CreateDepositRejectsDuplicatePaymentMethods",
+        "test_CreateDepositRejectsDuplicateCurrencies",
+        "test_CreateDepositRejectsWhilePaused",
+    ].map((testName) => [escrowCreateDepositFile, "EscrowCreateDepositParityTest", testName]),
+    ...[
+        "test_AddFundsTransfersTokensIntoEscrow",
+        "test_AddFundsUpdatesRemainingDepositAmount",
+        "test_AddFundsEmitsFunderAndAmount",
+        "test_AddFundsSucceedsWithoutReenablingDisabledDeposit",
+        "test_AddFundsAllowsThirdPartyFunder",
+        "test_AddFundsRejectsMissingDeposit",
+        "test_AddFundsRejectsZeroAmount",
+        "test_AddFundsRejectsWhilePaused",
+        "test_RemoveFundsTransfersTokensToDepositor",
+        "test_RemoveFundsUpdatesRemainingDepositAmount",
+        "test_RemoveFundsEmitsWithdrawal",
+        "test_RemoveFundsPreservesAcceptingStateAboveMinimum",
+        "test_RemoveFundsSucceedsWhileDepositIsDisabled",
+        "test_RemoveFundsBelowMinimumAutomaticallyDisablesDeposit",
+        "test_RemoveFundsBelowMinimumEmitsAcceptingStateUpdate",
+        "test_RemoveFundsBelowMinimumEmitsWithdrawal",
+        "test_RemoveAllFundsDoesNotCloseDeposit",
+        "test_RemoveFundsPrunesExpiredIntentAndReclaimsLiquidity",
+        "test_RemoveFundsAfterExpiredIntentEmitsWithdrawal",
+        "test_RemoveFundsAfterExpiredIntentRemainsAccepting",
+        "test_RemoveFundsRejectsAmountAboveAvailableLiquidity",
+        "test_RemoveFundsRejectsNonDepositor",
+        "test_RemoveFundsRejectsMissingDepositWithUnauthorizedError",
+        "test_RemoveFundsRejectsZeroAmount",
+        "test_RemoveFundsRejectsWhilePaused",
+    ].map((testName) => [escrowFundingFile, "EscrowFundingParityTest", testName]),
+];
+if (escrowLegacySourceTests.length !== 276 || escrowLegacyDestinations.length !== 54) {
+    throw new Error(
+        `Escrow legacy mapping count mismatch: ${escrowLegacySourceTests.length} source / ${escrowLegacyDestinations.length} translated destinations`
+    );
+}
+
+function escrowLegacyDestination(test) {
+    if (test.sourceFile !== escrowLegacySource) return "";
+    const sourceIndex = escrowLegacySourceTests.findIndex((sourceTest) => sourceTest.id === test.id);
+    if (sourceIndex < 0 || sourceIndex >= escrowLegacyDestinations.length) return "";
+    const [file, contractName, testName] = escrowLegacyDestinations[sourceIndex];
+    return `${file}:${contractName}::${testName}`;
+}
+
 function orchestratorV2LegacyDestination(test) {
     if (test.sourceFile !== "test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts") return "";
     const scenario = test.scenario;
@@ -896,7 +974,7 @@ const header = [
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || escrowLegacyDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -978,6 +1056,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(escrowV2OracleConfigFile)) evidence = "EscrowV2OracleRateConfigParity.t.sol: 29 passed individually and together, 0 failed, 0 skipped";
     if ([escrowV2LegacyManagementFile, escrowV2LegacyLifecycleFile, escrowV2LegacyConfigurationFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 management + lifecycle + configuration parity: 70 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 70/70";
     if ([escrowV2BranchAuthorizationFile, escrowV2BranchValidationFile, escrowV2BranchGovernanceLifecycleFile, escrowV2BranchStatePauseFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 branch parity: 108 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 108/108";
+    if ([escrowCreateDepositFile, escrowFundingFile].some((file) => foundryDestination.startsWith(file))) evidence = "Escrow constructor/create/add/remove parity slice: 54 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat suites: 54/54";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
@@ -997,7 +1076,7 @@ const rows = inventory.tests.map((test) => {
         test.fixtureDependencies,
         foundryDestination,
         foundryDestination
-            ? (["test/escrowV2/escrowV2.legacyCoverage.spec.ts", escrowV2BranchSource].includes(test.sourceFile)
+            ? (["test/escrowV2/escrowV2.legacyCoverage.spec.ts", escrowV2BranchSource, escrowLegacySource].includes(test.sourceFile)
                 || test.sourceFile.includes("nullifierRegistryV2")
                 ? "one-to-one"
                 : "consolidated-with-explicit-destination")
