@@ -45,11 +45,13 @@ corepack yarn coverage
 Solidity 0.8.18 cannot compile several stack-heavy production contracts after ordinary coverage disables optimizer/IR. The coverage tool therefore:
 
 1. executes the complete suite once with Foundry's supported `--ir-minimum` fallback and a fixed coverage seed;
-2. runs exact-source standard-compiler shards for contracts whose source maps are more accurate without IR;
-3. merges hit maxima only onto the original minimal-IR anchors;
-4. derives the current production source set independently and requires an LCOV record for every file;
-5. enforces strict improvement over the committed Hardhat line/branch baseline and no aggregate statement/function regression; and
-6. rejects every per-file regression unless `foundry-migration/coverage-exceptions.json` contains a current, metric-specific technical explanation.
+2. reconstructs the 1,512 behaviors that actually executed in the starting Hardhat run from the immutable inventory/manifest and runs their exact Foundry destinations in two selector partitions;
+3. compares that starting-behavior bridge with the complete suite on identical minimal-IR line, statement, branch, and function denominators, requiring strict line/branch improvement and no aggregate or per-file regression;
+4. runs exact-source standard-compiler shards for contracts whose source maps are more accurate without IR;
+5. merges hit maxima only onto the original minimal-IR anchors and independently requires an LCOV record for every current production file; and
+6. rejects stale or unexplained instrumentation gaps recorded in `foundry-migration/coverage-exceptions.json`.
+
+The historical Hardhat and final Foundry percentages remain useful absolute evidence, but they are not compared directly: Istanbul and Foundry model Solidity branches differently. The enforced improvement uses one Foundry compiler/anchor denominator on both sides. The bridge deliberately includes selector-collision additions, making its baseline conservative.
 
 Generated artifacts are:
 
@@ -58,7 +60,7 @@ Generated artifacts are:
 - `coverage/foundry-coverage-by-file.csv` — review-friendly per-file table
 - `coverage/shards/*.log` — full compiler/test diagnostics
 
-CI uploads only `coverage/lcov.info` under the `foundry` flag using Codecov OIDC. Upload errors fail the job. `codecov.yml` requires 99.39% project coverage and 100% patch coverage.
+CI uploads only `coverage/lcov.info` under the `foundry` flag using Codecov OIDC. Upload errors fail the job. `codecov.yml` requires 99.42% project coverage and 100% patch coverage.
 
 ## Adding tests
 
@@ -80,4 +82,4 @@ There are no fork-dependent tests. Chain-dependent behavior was replaced with de
 
 ## Expected local runtimes
 
-On the recorded Apple M5 Max / Foundry v1.7.1 baseline host, deterministic tests take about 0.8s warm, the complete suite takes about 5.7s warm, and coverage takes about 4.7 minutes. A genuinely clean production-like via-IR compile is expensive (about 15.3 minutes for 241 files); subsequent runs use Foundry's content-addressed cache. CI restores this cache opportunistically but never relies on it for correctness. See `foundry-migration/EVIDENCE.md` for distributions, cold comparisons, and GitHub Actions timing.
+On the recorded Apple M5 Max / Foundry v1.7.1 baseline host, deterministic tests take about 0.8s warm and the complete suite takes about 5.6s warm. Coverage takes about 14 minutes because it runs the complete IR suite, two same-denominator bridge partitions, and 16 mapping shards; see `foundry-migration/EVIDENCE.md` for the component timings. A genuinely clean production-like via-IR compile is expensive (about 15.3 minutes for 242 files); subsequent runs use Foundry's content-addressed cache. CI restores this cache opportunistically but never relies on it for correctness.

@@ -4,7 +4,7 @@ coverage:
   status:
     project:
       default:
-        target: 99.39%
+        target: 99.42%
         threshold: 0%
         flags:
           - foundry

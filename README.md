@@ -525,7 +525,7 @@ See [TESTING.md](./TESTING.md) for suite design, seed reproduction, coverage mec
 
 ### Coverage
 
-- `corepack yarn coverage`: run the complete suite, build accurate Foundry LCOV, and enforce the Hardhat baseline gates
+- `corepack yarn coverage`: run the complete suite, build accurate Foundry LCOV, and enforce the same-denominator starting-behavior gates
 - `corepack yarn coverage:merge`: rebuild the merged report from previously generated shards after diagnosing a coverage run
 
 Coverage is intentionally heavy and runs on every push and pull request. The output is `coverage/lcov.info`; CI uploads it to the `foundry` Codecov flag through OIDC and fails visibly on upload errors.
