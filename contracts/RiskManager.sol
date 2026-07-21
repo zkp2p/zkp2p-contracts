@@ -422,21 +422,21 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         uint256 additionalReservation = newReservation - position.extensionReservation;
         bytes32 reservationId = _extensionReservationId(_intentHash);
 
-        if (additionalReservation != 0) {
-            if (position.extensionReservation == 0) {
-                stakeVault.reserveStake(
-                    _extensionStakeOwner,
-                    reservationId,
-                    additionalReservation,
-                    newExpiry
-                );
-            } else {
-                stakeVault.increaseReservation(
-                    reservationId,
-                    additionalReservation,
-                    newExpiry
-                );
-            }
+        if (position.extensionReservation == 0) {
+            stakeVault.reserveStake(
+                _extensionStakeOwner,
+                reservationId,
+                additionalReservation,
+                newExpiry
+            );
+        } else {
+            // Refresh the release time and admission gates even when cumulative rounding means
+            // this particular extension adds no new reserved stake.
+            stakeVault.increaseReservation(
+                reservationId,
+                additionalReservation,
+                newExpiry
+            );
         }
 
         escrow.extendIntentExpiry(intent.depositId, _intentHash, _additionalTime);

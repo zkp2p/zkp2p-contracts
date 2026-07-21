@@ -730,6 +730,39 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(position.extensionReservation).to.eq(1);
       expect(position.extensionStakeOwner).to.eq(stakeOwner.address);
       expect(await vault.reservedStake(stakeOwner.address)).to.eq(1);
+      const escrowIntent = await escrow.getDepositIntent(0, intentHash);
+      const reservation = await vault.getReservation(await manager.extensionReservationId(intentHash));
+      expect(reservation.releaseTime).to.eq(escrowIntent.expiryTime);
+    });
+
+    it("enforces reservation pause and exit gates on zero-increment extension steps", async () => {
+      const paused = await loadFixture(deployFixture);
+      await paused.vault.connect(paused.taker).depositStake(10);
+      const pausedIntent = await signalIntent(
+        paused.orchestrator,
+        paused.escrow,
+        paused.taker,
+        usdc(1),
+        ZELLE,
+      );
+      await paused.manager.connect(paused.taker).extendIntent(pausedIntent, 1);
+      await paused.vault.setStakeOperationsPaused(false, true);
+      await expect(paused.manager.connect(paused.taker).extendIntent(pausedIntent, 1))
+        .to.be.revertedWithCustomError(paused.vault, "StakeActionPaused");
+
+      const exiting = await loadFixture(deployFixture);
+      await exiting.vault.connect(exiting.taker).depositStake(10);
+      const exitingIntent = await signalIntent(
+        exiting.orchestrator,
+        exiting.escrow,
+        exiting.taker,
+        usdc(1),
+        ZELLE,
+      );
+      await exiting.manager.connect(exiting.taker).extendIntent(exitingIntent, 1);
+      await exiting.vault.connect(exiting.taker).requestExit();
+      await expect(exiting.manager.connect(exiting.taker).extendIntent(exitingIntent, 1))
+        .to.be.revertedWithCustomError(exiting.vault, "AlreadyExiting");
     });
 
     it("removes the gift-style sponsorship entrypoints from the hard-cut ABI", async () => {

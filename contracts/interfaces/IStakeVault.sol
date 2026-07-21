@@ -166,6 +166,10 @@ interface IStakeVault {
     /* ============ Controller Functions ============ */
 
     function reserveStake(address _staker, bytes32 _intentHash, uint256 _amount, uint64 _releaseTime) external;
+    /**
+     * @notice Adds stake to, or refreshes the release time of, an active admission reservation.
+     * @dev `_amount` may be zero so cumulative-rounding steps still enforce admission gates.
+     */
     function increaseReservation(bytes32 _positionId, uint256 _amount, uint64 _releaseTime) external;
     function updateReservation(bytes32 _intentHash, uint256 _newAmount, uint64 _releaseTime) external;
     function releaseReservation(bytes32 _intentHash) external;

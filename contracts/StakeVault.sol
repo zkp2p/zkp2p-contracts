@@ -431,9 +431,10 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Adds free stake to an active reservation while enforcing admission pause and exit gates.
+     * @notice Adds free stake to, or refreshes the release time of, an active reservation.
      * @dev Settlement uses `updateReservation`, which intentionally remains available during a pause.
-     *      New paid extension exposure must use this function instead.
+     *      New paid extension exposure and zero-increment expiry refreshes must use this function
+     *      so admission pause, exit, and controller gates remain authoritative.
      */
     function increaseReservation(
         bytes32 _positionId,
@@ -441,7 +442,6 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         uint64 _releaseTime
     ) external override onlyController {
         if (reservationsPaused) revert StakeActionPaused();
-        if (_amount == 0) revert ZeroAmount();
 
         Reservation storage reservation = reservations[_positionId];
         if (!reservation.active) revert ReservationNotFound(_positionId);

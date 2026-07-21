@@ -266,6 +266,23 @@ describe("StakeVault", () => {
       expect(await vault.freeStake(staker.address)).to.eq(usdc(7));
     });
 
+    it("refreshes an active reservation release time without changing stake accounting", async () => {
+      const { controller, staker, vault } = await deployFixture();
+      const positionId = ethers.utils.id("extension-zero-increment-refresh");
+      await vault.connect(staker).depositStake(usdc(10));
+      await vault.connect(controller).reserveStake(staker.address, positionId, usdc(1), 100);
+
+      await expect(vault.connect(controller).increaseReservation(positionId, 0, 200))
+        .to.emit(vault, "StakeReservationUpdated")
+        .withArgs(positionId, staker.address, usdc(1), usdc(1), usdc(1), 200);
+
+      const reservation = await vault.getReservation(positionId);
+      expect(reservation.amount).to.eq(usdc(1));
+      expect(reservation.releaseTime).to.eq(200);
+      expect(await vault.reservedStake(staker.address)).to.eq(usdc(1));
+      expect(await vault.freeStake(staker.address)).to.eq(usdc(9));
+    });
+
     it("rejects invalid reservation increases", async () => {
       const { controller, staker, vault } = await deployFixture();
       const positionId = ethers.utils.id("invalid-extension-top-up");
@@ -291,6 +308,22 @@ describe("StakeVault", () => {
       await vault.connect(owner).setStakeOperationsPaused(false, false);
       await vault.connect(staker).requestExit();
       await expect(vault.connect(controller).increaseReservation(positionId, usdc(1), 200))
+        .to.be.revertedWithCustomError(vault, "AlreadyExiting");
+    });
+
+    it("enforces pause and exit gates on zero-increment reservation refreshes", async () => {
+      const { owner, controller, staker, vault } = await deployFixture();
+      const positionId = ethers.utils.id("extension-zero-increment-gates");
+      await vault.connect(staker).depositStake(usdc(10));
+      await vault.connect(controller).reserveStake(staker.address, positionId, usdc(1), 100);
+      await vault.connect(owner).setStakeOperationsPaused(false, true);
+
+      await expect(vault.connect(controller).increaseReservation(positionId, 0, 200))
+        .to.be.revertedWithCustomError(vault, "StakeActionPaused");
+
+      await vault.connect(owner).setStakeOperationsPaused(false, false);
+      await vault.connect(staker).requestExit();
+      await expect(vault.connect(controller).increaseReservation(positionId, 0, 200))
         .to.be.revertedWithCustomError(vault, "AlreadyExiting");
     });
 
