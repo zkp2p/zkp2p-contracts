@@ -22,9 +22,14 @@
       "reason": "The minimal-IR fallback required for this stack-heavy contract loses five branch anchors even though the corresponding deterministic success and revert scenarios execute. The compiler emits explicit anchor warnings; production code is intentionally unchanged."
     },
     {
-      "file": "contracts/OrchestratorV2.sol",
-      "metric": "functions",
-      "reason": "Minimal-IR cannot anchor the executed internal _afterIntentSignaled function and reports 30/31 despite its call paths being covered by deterministic lifecycle tests. Standard coverage fails stack-too-deep before tests run."
+      "file": "contracts/OrchestratorV3.sol",
+      "metric": "lines",
+      "reason": "After upstream f6fd7aa expanded standalone V3, Solidity 0.8.18 minimal-IR leaves only the pause/unpause wrapper lines unanchored even though exact V3 governance tests execute both and all 35 functions plus all 39 branches are covered. Standard coverage cannot compile FeeSettlementLib because of stack-too-deep, so production is not refactored solely for instrumentation."
+    },
+    {
+      "file": "contracts/OrchestratorV3.sol",
+      "metric": "statements",
+      "reason": "The only two uncovered minimal-IR statement anchors are the executed pause/unpause wrappers. Exact V3 owner/non-owner governance tests pass, function and branch coverage are 100%, and standard coverage fails stack-too-deep in FeeSettlementLib before tests can run."
     },
     {
       "file": "contracts/RateManagerV1.sol",

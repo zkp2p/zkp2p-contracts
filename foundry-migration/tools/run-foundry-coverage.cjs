@@ -170,7 +170,37 @@ function parseLcov(contents) {
         for (const match of block.matchAll(/^FNDA:(\d+),(.+)$/gm)) {
             functions.set(match[2], Number(match[1]));
         }
-        records.set(source, { source, lines, branches, functions, functionDefinitions });
+        const existing = records.get(source);
+        if (!existing) {
+            records.set(source, { source, lines, branches, functions, functionDefinitions });
+            continue;
+        }
+
+        // Forge can emit more than one LCOV record for the same production source when
+        // it is compiled into independently linked test topologies. LCOV defines those
+        // records cumulatively; retaining only the last record can turn executed lines
+        // into false misses. Merge duplicate records by anchor and retain the maximum
+        // hit count observed in any linked topology.
+        for (const [line, entry] of lines) {
+            const prior = existing.lines.get(line);
+            if (!prior || entry.hits > prior.hits) existing.lines.set(line, entry);
+        }
+        for (const [branch, hits] of branches) {
+            existing.branches.set(branch, Math.max(existing.branches.get(branch) || 0, hits));
+        }
+        for (const [name, hits] of functions) {
+            existing.functions.set(name, Math.max(existing.functions.get(name) || 0, hits));
+        }
+        const knownDefinitions = new Set(
+            existing.functionDefinitions.map((definition) => `${definition.line}:${definition.name}`)
+        );
+        for (const definition of functionDefinitions) {
+            const key = `${definition.line}:${definition.name}`;
+            if (!knownDefinitions.has(key)) {
+                existing.functionDefinitions.push(definition);
+                knownDefinitions.add(key);
+            }
+        }
     }
     return records;
 }
