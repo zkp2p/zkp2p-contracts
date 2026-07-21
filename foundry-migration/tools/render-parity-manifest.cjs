@@ -61,6 +61,8 @@ const riskManagerIntegrationConfigFile = "test-foundry/deterministic/staking/Ris
 const riskManagerAdmissionFile = "test-foundry/deterministic/staking/RiskManagerAdmissionParity.t.sol";
 const riskManagerExtensionLifecycleFile = "test-foundry/deterministic/staking/RiskManagerExtensionLifecycleParity.t.sol";
 const riskManagerExtensionBoundaryFile = "test-foundry/deterministic/staking/RiskManagerExtensionBoundaryParity.t.sol";
+const riskManagerSettlementFile = "test-foundry/deterministic/staking/RiskManagerSettlementParity.t.sol";
+const riskManagerChargebackFile = "test-foundry/deterministic/staking/RiskManagerChargebackParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -1544,8 +1546,22 @@ const riskManagerDestinations = [
         "test_HardCutRemovesGiftStyleSponsorshipSelectors",
         "test_FailedTerminalCallbackRecordsOriginalCancellationTime",
     ].map((testName) => [riskManagerExtensionBoundaryFile, "RiskManagerExtensionBoundaryParityTest", testName]),
+    ...[
+        "test_NonChargebackableIntentSettlesWithoutAdmissionReservation",
+        "test_SettlementResizesCoverageToExactGrossRelease",
+        "test_ManualReleaseUsesStakeBackedSettlementAccounting",
+        "test_ManualReleaseChargesElapsedExtensionPenalty",
+    ].map((testName) => [riskManagerSettlementFile, "RiskManagerSettlementParityTest", testName]),
+    ...[
+        "test_ChargebackAuthenticatesTypedDataAndCompensatesExactGrossRelease",
+        "test_ChargebackRejectsReusedDisputeEvidenceAcrossPositions",
+        "test_ManualReleaseAcceptsWitnessBoundChargebackWithoutPaymentNullifier",
+        "test_ProofFulfillmentRejectsUnboundAndMismatchedPaymentIdentifiers",
+        "test_MaturityReleasesRemainingCoverage",
+        "test_ChargebackRejectsCompensationAtExactCoverageDeadline",
+    ].map((testName) => [riskManagerChargebackFile, "RiskManagerChargebackParityTest", testName]),
 ];
-if (riskManagerSourceTests.length !== 70 || riskManagerDestinations.length !== 38) {
+if (riskManagerSourceTests.length !== 70 || riskManagerDestinations.length !== 48) {
     throw new Error(
         `RiskManager integration mapping count mismatch: ${riskManagerSourceTests.length} source / ${riskManagerDestinations.length} translated destinations`
     );
@@ -1723,7 +1739,7 @@ const rows = inventory.tests.map((test) => {
     if ([orchestratorLegacySignalFile, orchestratorLegacyCancelFile, orchestratorLegacyFulfillCoreFile, orchestratorLegacyFulfillAccountingFile, orchestratorLegacyFulfillHookFile, orchestratorLegacyFulfillPartialReentryFile, orchestratorLegacyManualReleaseFile, orchestratorLegacyPruneFile, orchestratorLegacyGovernanceFile, orchestratorLegacyViewsFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete legacy Orchestrator parity: 141 passed individually and together, 0 failed, 0 skipped; all 4 baseline-pending cases resolved in Foundry";
     if ([stakeVaultDepositDelegationFile, stakeVaultReservationFile, stakeVaultExitFile, stakeVaultDeferredFile, stakeVaultControllerHandoverFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete StakeVault parity: 56 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 56/56";
     if ([riskManagerHarnessGovernanceFile, riskManagerHarnessAdmissionFile, riskManagerHarnessSettlementFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete RiskManager hard-cut branch parity: 18 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 18/18";
-    if ([riskManagerIntegrationConfigFile, riskManagerAdmissionFile, riskManagerExtensionLifecycleFile, riskManagerExtensionBoundaryFile].some((file) => foundryDestination.startsWith(file))) evidence = "RiskManager real-system configuration/admission/extension parity: 38 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat groups 38/38";
+    if ([riskManagerIntegrationConfigFile, riskManagerAdmissionFile, riskManagerExtensionLifecycleFile, riskManagerExtensionBoundaryFile, riskManagerSettlementFile, riskManagerChargebackFile].some((file) => foundryDestination.startsWith(file))) evidence = "RiskManager real-system configuration/admission/extension/chargeback parity: 48 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat groups 48/48";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
