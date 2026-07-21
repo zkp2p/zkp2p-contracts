@@ -288,6 +288,8 @@ function orchestratorV2Destination(test) {
     const scenario = test.scenario;
     const target = (testName) => `${orchestratorV2File}:OrchestratorV2RateManagerParityTest::${testName}`;
     if (scenario.includes("uses EscrowV2 delegated effective rate")) return target("test_SignalUsesDelegatedRateAndSnapshotsManagerFee");
+    if (scenario.includes("allows an ordinary account")) return target("test_OrdinaryAccountCanKeepMultipleConcurrentIntents");
+    if (scenario.includes("does not expose retired relayer")) return target("test_RetiredRelayerAndGlobalMultipleIntentSelectorsAreAbsent");
     if (scenario.includes("conversion rate is below delegated")) return target("test_SignalRejectsConversionRateBelowDelegatedRate");
     if (scenario.includes("delegated manager fee exceeds")) return target("test_SignalRejectsDelegatedManagerFeeAboveMaximum");
     if (scenario.includes("deducts manager fee")) return target("test_FulfillDeductsManagerFeeAndTransfersNetAmount");
@@ -451,7 +453,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(escrowV2PythFile)) evidence = "EscrowV2PythOracleParity.t.sol: 5 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(escrowV2CurrencyRateFile)) evidence = "EscrowV2CurrencyRateParity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(oracleFile)) evidence = "OracleAdapterParity.t.sol: 25 passed individually and together, 0 failed, 0 skipped";
-    if (foundryDestination.startsWith(orchestratorV2File)) evidence = "OrchestratorV2RateManagerParity.t.sol: 4 passed individually and together, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(orchestratorV2File)) evidence = "OrchestratorV2RateManagerParity.t.sol: 6 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(preIntentHookFile)) evidence = "PreIntentHookParity.t.sol: 23 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";

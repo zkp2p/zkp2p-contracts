@@ -3,6 +3,7 @@
 process.env.TS_NODE_TRANSPILE_ONLY = "1";
 
 const crypto = require("node:crypto");
+const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const Mocha = require("mocha");
@@ -104,6 +105,10 @@ function expectedBehavior(title) {
 }
 
 async function main() {
+    const sourceCommit = execFileSync("git", ["rev-parse", "origin/main"], {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+    }).trim();
     const files = walk(testRoot).filter((file) => file.endsWith(".spec.ts")).sort();
     const staticByFile = new Map(files.map((file) => [relative(file), staticInventory(file)]));
     const mocha = new Mocha({ timeout: 1, dryRun: true });
@@ -184,7 +189,7 @@ async function main() {
 
     const inventory = {
         schemaVersion: 1,
-        sourceCommit: "659fb603907339e920af07a1355c6473ddcdb223",
+        sourceCommit,
         totals: {
             files: fileInventory.length,
             suites: suites.length,

@@ -11,7 +11,6 @@ import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
-import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {SimpleAttestationVerifier} from "contracts/unifiedVerifier/SimpleAttestationVerifier.sol";
 import {UnifiedPaymentVerifier} from "contracts/unifiedVerifier/UnifiedPaymentVerifier.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
@@ -58,7 +57,6 @@ contract UnifiedPaymentVerifierV2CompatibilityParityTest is Test {
         EscrowRegistry escrowRegistry = new EscrowRegistry();
         OrchestratorRegistry orchestratorRegistry = new OrchestratorRegistry();
         PaymentVerifierRegistry paymentVerifierRegistry = new PaymentVerifierRegistry();
-        RelayerRegistry relayerRegistry = new RelayerRegistry();
         nullifierRegistry = new NullifierRegistry();
 
         escrow = new EscrowV2(
@@ -72,13 +70,7 @@ contract UnifiedPaymentVerifierV2CompatibilityParityTest is Test {
             1 hours
         );
         orchestrator = new OrchestratorV2(
-            address(this),
-            block.chainid,
-            address(escrowRegistry),
-            address(paymentVerifierRegistry),
-            address(relayerRegistry),
-            0,
-            address(this)
+            address(this), block.chainid, address(escrowRegistry), address(paymentVerifierRegistry), 0, address(this)
         );
         SimpleAttestationVerifier attestationVerifier = new SimpleAttestationVerifier(witness);
         verifier = new UnifiedPaymentVerifier(orchestratorRegistry, nullifierRegistry, attestationVerifier);

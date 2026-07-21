@@ -15,7 +15,6 @@ import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
-import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
@@ -60,7 +59,6 @@ contract PreIntentHookParityTest is Test {
 
         EscrowRegistry escrowRegistry = new EscrowRegistry();
         PaymentVerifierRegistry paymentVerifierRegistry = new PaymentVerifierRegistry();
-        RelayerRegistry relayerRegistry = new RelayerRegistry();
         orchestratorRegistry = new OrchestratorRegistry();
         PaymentVerifierMock verifier = new PaymentVerifierMock();
         bytes32[] memory currencies = new bytes32[](1);
@@ -79,13 +77,7 @@ contract PreIntentHookParityTest is Test {
         );
         escrowRegistry.addEscrow(address(escrow));
         orchestrator = new OrchestratorV2(
-            address(this),
-            CHAIN_ID,
-            address(escrowRegistry),
-            address(paymentVerifierRegistry),
-            address(relayerRegistry),
-            0,
-            address(this)
+            address(this), CHAIN_ID, address(escrowRegistry), address(paymentVerifierRegistry), 0, address(this)
         );
         orchestratorRegistry.addOrchestrator(address(orchestrator));
         verifier.setVerificationContext(address(orchestrator), address(escrow));

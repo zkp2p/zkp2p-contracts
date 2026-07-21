@@ -12,7 +12,6 @@ import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
-import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
@@ -49,7 +48,6 @@ contract OrchestratorV2RateManagerParityTest is Test {
         token.transfer(depositor, 100_000e6);
 
         PaymentVerifierRegistry paymentVerifierRegistry = new PaymentVerifierRegistry();
-        RelayerRegistry relayerRegistry = new RelayerRegistry();
         EscrowRegistry escrowRegistry = new EscrowRegistry();
         OrchestratorRegistry orchestratorRegistry = new OrchestratorRegistry();
         verifier = new PaymentVerifierMock();
@@ -69,13 +67,7 @@ contract OrchestratorV2RateManagerParityTest is Test {
             1 hours
         );
         orchestrator = new OrchestratorV2(
-            address(this),
-            1,
-            address(escrowRegistry),
-            address(paymentVerifierRegistry),
-            address(relayerRegistry),
-            0,
-            address(this)
+            address(this), 1, address(escrowRegistry), address(paymentVerifierRegistry), 0, address(this)
         );
         escrowRegistry.addEscrow(address(escrow));
         orchestratorRegistry.addOrchestrator(address(orchestrator));
@@ -164,6 +156,30 @@ contract OrchestratorV2RateManagerParityTest is Test {
         emit IntentManagerFeeSnapshotted(expectedIntentHash, managerFeeRecipient, MANAGER_FEE);
         bytes32 actualIntentHash = _signal(MANAGER_RATE);
         assertEq(actualIntentHash, expectedIntentHash);
+    }
+
+    function test_OrdinaryAccountCanKeepMultipleConcurrentIntents() public {
+        bytes32 firstIntentHash = _signal(MANAGER_RATE);
+        bytes32 secondIntentHash = _signal(MANAGER_RATE);
+        bytes32[] memory accountIntents = orchestrator.getAccountIntents(taker);
+        assertEq(accountIntents.length, 2);
+        assertEq(accountIntents[0], firstIntentHash);
+        assertEq(accountIntents[1], secondIntentHash);
+        assertNotEq(firstIntentHash, secondIntentHash);
+    }
+
+    function test_RetiredRelayerAndGlobalMultipleIntentSelectorsAreAbsent() public {
+        (bool relayerGetterSuccess,) = address(orchestrator).staticcall(abi.encodeWithSignature("relayerRegistry()"));
+        (bool multipleGetterSuccess,) =
+            address(orchestrator).staticcall(abi.encodeWithSignature("allowMultipleIntents()"));
+        (bool relayerSetterSuccess,) =
+            address(orchestrator).call(abi.encodeWithSignature("setRelayerRegistry(address)", address(this)));
+        (bool multipleSetterSuccess,) =
+            address(orchestrator).call(abi.encodeWithSignature("setAllowMultipleIntents(bool)", true));
+        assertFalse(relayerGetterSuccess);
+        assertFalse(multipleGetterSuccess);
+        assertFalse(relayerSetterSuccess);
+        assertFalse(multipleSetterSuccess);
     }
 
     function test_SignalRejectsConversionRateBelowDelegatedRate() public {

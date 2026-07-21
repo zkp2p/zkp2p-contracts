@@ -13,7 +13,6 @@ import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
-import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
@@ -41,7 +40,6 @@ contract ProtocolViewerV2ParityTest is Test {
         token.transfer(depositor, 100_000e6);
 
         PaymentVerifierRegistry paymentVerifierRegistry = new PaymentVerifierRegistry();
-        RelayerRegistry relayerRegistry = new RelayerRegistry();
         EscrowRegistry escrowRegistry = new EscrowRegistry();
         OrchestratorRegistry orchestratorRegistry = new OrchestratorRegistry();
         PaymentVerifierMock verifier = new PaymentVerifierMock();
@@ -60,13 +58,7 @@ contract ProtocolViewerV2ParityTest is Test {
             1 days
         );
         orchestrator = new OrchestratorV2(
-            address(this),
-            1,
-            address(escrowRegistry),
-            address(paymentVerifierRegistry),
-            address(relayerRegistry),
-            0,
-            address(this)
+            address(this), 1, address(escrowRegistry), address(paymentVerifierRegistry), 0, address(this)
         );
         escrowRegistry.addEscrow(address(escrow));
         orchestratorRegistry.addOrchestrator(address(orchestrator));
@@ -142,7 +134,6 @@ contract ProtocolViewerV2ParityTest is Test {
     }
 
     function _signalTwoIntents() internal returns (bytes32 firstHash, bytes32 secondHash) {
-        orchestrator.setAllowMultipleIntents(true);
         firstHash = _signal(50e6);
         secondHash = _signal(30e6);
     }
