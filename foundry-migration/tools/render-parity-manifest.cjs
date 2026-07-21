@@ -27,6 +27,9 @@ const escrowV2BranchStatePauseFile = "test-foundry/deterministic/escrow/EscrowV2
 const escrowCreateDepositFile = "test-foundry/deterministic/escrow/EscrowCreateDepositParity.t.sol";
 const escrowFundingFile = "test-foundry/deterministic/escrow/EscrowFundingParity.t.sol";
 const escrowWithdrawFile = "test-foundry/deterministic/escrow/EscrowWithdrawParity.t.sol";
+const escrowRateRangeFile = "test-foundry/deterministic/escrow/EscrowRateRangeParity.t.sol";
+const escrowPaymentMethodFile = "test-foundry/deterministic/escrow/EscrowPaymentMethodParity.t.sol";
+const escrowCurrencyFile = "test-foundry/deterministic/escrow/EscrowCurrencyParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -921,8 +924,77 @@ const escrowLegacyDestinations = [
         "test_WithdrawDepositRejectsMissingDepositWithUnauthorizedError",
         "test_WithdrawDepositSucceedsWhilePaused",
     ].map((testName) => [escrowWithdrawFile, "EscrowWithdrawParityTest", testName]),
+    ...[
+        "test_SetCurrencyMinRateUpdatesRate",
+        "test_SetCurrencyMinRateEmitsUpdate",
+        "test_SetCurrencyMinRateAllowsDelegate",
+        "test_SetCurrencyMinRateRejectsUnauthorizedCaller",
+        "test_SetCurrencyMinRateRejectsMissingDepositWithUnauthorizedError",
+        "test_SetCurrencyMinRateRejectsUnsupportedCurrency",
+        "test_SetCurrencyMinRateRejectsZeroRate",
+        "test_SetCurrencyMinRateRejectsWhilePaused",
+        "test_SetIntentRangeUpdatesBothBounds",
+        "test_SetIntentRangeEmitsUpdate",
+        "test_SetIntentRangeAllowsIncreasingMinimum",
+        "test_SetIntentRangeDisablesDepositWhenLiquidityBelowNewMinimum",
+        "test_SetIntentRangeEmitsDisabledStateWhenLiquidityBelowNewMinimum",
+        "test_SetIntentRangeDoesNotReenableAfterMinimumDecreases",
+        "test_SetIntentRangeAllowsDelegate",
+        "test_SetIntentRangeRejectsUnauthorizedCaller",
+        "test_SetIntentRangeRejectsMissingDepositWithUnauthorizedError",
+        "test_SetIntentRangeRejectsZeroMinimum",
+        "test_SetIntentRangeRejectsMinimumAboveMaximum",
+        "test_SetIntentRangeRejectsWhilePaused",
+    ].map((testName) => [escrowRateRangeFile, "EscrowRateRangeParityTest", testName]),
+    ...[
+        "test_AddPaymentMethodStoresMethodAndVerificationData",
+        "test_AddPaymentMethodMarksMethodActive",
+        "test_AddPaymentMethodMarksMethodListed",
+        "test_AddPaymentMethodStoresAllCurrenciesAndRates",
+        "test_AddPaymentMethodEmitsMethodAndEveryCurrencyEvent",
+        "test_AddPaymentMethodAllowsDelegate",
+        "test_AddPaymentMethodRejectsUnauthorizedCaller",
+        "test_AddPaymentMethodRejectsMissingDepositWithUnauthorizedError",
+        "test_AddPaymentMethodRejectsUnwhitelistedMethod",
+        "test_AddPaymentMethodRejectsWhilePaused",
+        "test_AddPaymentMethodRejectsAlreadyListedMethod",
+        "test_SetPaymentMethodInactiveKeepsMethodListed",
+        "test_SetPaymentMethodInactivePreservesVerificationData",
+        "test_SetPaymentMethodInactiveUpdatesActiveMapping",
+        "test_SetPaymentMethodInactivePreservesCurrenciesRatesAndData",
+        "test_SetPaymentMethodInactiveEmitsUpdate",
+        "test_SetPaymentMethodInactiveRejectsAlreadyInactive",
+        "test_SetPaymentMethodActiveReactivatesInactiveMethod",
+        "test_SetPaymentMethodActiveEmitsReactivation",
+        "test_SetPaymentMethodActiveAllowsDelegate",
+        "test_SetPaymentMethodActiveRejectsUnauthorizedCaller",
+        "test_SetPaymentMethodActiveRejectsMissingDepositWithUnauthorizedError",
+        "test_SetPaymentMethodActiveRejectsUnlistedMethod",
+        "test_SetPaymentMethodActiveRejectsAlreadyInactive",
+        "test_SetPaymentMethodActiveRejectsWhilePaused",
+    ].map((testName) => [escrowPaymentMethodFile, "EscrowPaymentMethodParityTest", testName]),
+    ...[
+        "test_AddCurrencyStoresCurrencyAndRate",
+        "test_AddCurrencyEmitsAddedEvent",
+        "test_AddCurrencyAllowsDelegate",
+        "test_AddCurrencyRejectsUnauthorizedCaller",
+        "test_AddCurrencyRejectsMissingDepositWithUnauthorizedError",
+        "test_AddCurrencyRejectsInactiveOrMissingPaymentMethod",
+        "test_AddCurrencyRejectsUnsupportedCurrency",
+        "test_AddCurrencyRejectsZeroConversionRate",
+        "test_AddCurrencyRejectsExistingCurrency",
+        "test_AddCurrencyRejectsWhilePaused",
+        "test_DeactivateCurrencyKeepsCurrencyListedAndZerosRate",
+        "test_DeactivateCurrencyEmitsZeroRateUpdate",
+        "test_DeactivateCurrencyAllowsDelegate",
+        "test_DeactivateCurrencyRejectsUnauthorizedCaller",
+        "test_DeactivateCurrencyRejectsMissingDepositWithUnauthorizedError",
+        "test_DeactivateCurrencyRejectsInactiveOrMissingPaymentMethod",
+        "test_DeactivateCurrencyRejectsMissingCurrency",
+        "test_DeactivateCurrencyRejectsWhilePaused",
+    ].map((testName) => [escrowCurrencyFile, "EscrowCurrencyParityTest", testName]),
 ];
-if (escrowLegacySourceTests.length !== 276 || escrowLegacyDestinations.length !== 82) {
+if (escrowLegacySourceTests.length !== 276 || escrowLegacyDestinations.length !== 145) {
     throw new Error(
         `Escrow legacy mapping count mismatch: ${escrowLegacySourceTests.length} source / ${escrowLegacyDestinations.length} translated destinations`
     );
@@ -1087,7 +1159,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(escrowV2OracleConfigFile)) evidence = "EscrowV2OracleRateConfigParity.t.sol: 29 passed individually and together, 0 failed, 0 skipped";
     if ([escrowV2LegacyManagementFile, escrowV2LegacyLifecycleFile, escrowV2LegacyConfigurationFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 management + lifecycle + configuration parity: 70 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 70/70";
     if ([escrowV2BranchAuthorizationFile, escrowV2BranchValidationFile, escrowV2BranchGovernanceLifecycleFile, escrowV2BranchStatePauseFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 branch parity: 108 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 108/108";
-    if ([escrowCreateDepositFile, escrowFundingFile, escrowWithdrawFile].some((file) => foundryDestination.startsWith(file))) evidence = "Escrow constructor/create/add/remove/withdraw parity slice: 82 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat suites: 82/82";
+    if ([escrowCreateDepositFile, escrowFundingFile, escrowWithdrawFile, escrowRateRangeFile, escrowPaymentMethodFile, escrowCurrencyFile].some((file) => foundryDestination.startsWith(file))) evidence = "Escrow constructor/create/funding/withdraw/configuration parity slice: 145 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat suites: 145/145";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
