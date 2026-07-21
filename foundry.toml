@@ -8,9 +8,7 @@ optimizer = true
 optimizer_runs = 800
 solc_version = '0.8.18'
 via_ir = true
-
-[profile.fork]
-evm_version = 'cancun'
+ffi = true
 
 # Remappings for cleaner imports
 remappings = [
@@ -21,10 +19,11 @@ remappings = [
 
 # Fuzzing configuration
 [fuzz]
-runs = 256
+runs = 512
 max_test_rejects = 65536
 
 [invariant]
-runs = 256
-depth = 15
-fail_on_revert = false
+runs = 128
+depth = 64
+fail_on_revert = true
+show_metrics = true

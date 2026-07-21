@@ -456,20 +456,8 @@ deploy/
   19_redeploy_escrowv2_orchestratorv2_staging.ts
   deploy_summary.ts
 
-test/
-  deploy/
-  escrow/
-  escrowV2/
-  hooks/
-  libs/
-  orchestrator/
-  orchestratorV2/
-  periphery/
-  rateManager/
-  registries/
-  unifiedVerifier/
-
 test-foundry/
+  deterministic/
   fuzz/
   invariant/
 ```
@@ -478,15 +466,15 @@ test-foundry/
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20.20.2 (the version pinned in CI)
 - Yarn 4
-- Foundry for Solidity-native tests
+- Foundry v1.7.1
 - a `.env` copied from `.env.default`
 
 ### Initial Setup
 
 ```bash
-yarn
+corepack yarn install --immutable
 cp .env.default .env
 ```
 
@@ -521,28 +509,26 @@ For wallet-based local testing, import Hardhat account `#0` into your wallet.
 
 - `yarn compile`: compile Solidity contracts
 - `yarn build`: clean, compile, generate typechain bindings, and transpile TypeScript
-- `yarn clean`: remove Hardhat, coverage, and generated build artifacts
+- `yarn clean`: remove compiler, coverage, and generated build artifacts
 - `yarn typechain`: generate TypeChain bindings
 - `yarn transpile`: run `tsc`
 
 ### Test Commands
 
-- `foundry-main` migration rule: new contract tests should be written in Foundry under `test-foundry/`; existing Hardhat suites under `test/` are being preserved only until their parity ports are verified
-- `yarn test`: run the main Hardhat suite across libs, hooks, periphery, unified verifier, registries, escrow, escrowV2, orchestrator, orchestratorV2, and rate manager
-- `yarn test:fast`: run the same Hardhat suite without recompiling
-- `yarn test:deploy`: run deployment-script tests
-- `yarn test:forge`: run Foundry tests
-- `yarn test:forge:fuzz`: run Foundry fuzz contracts
-- `yarn test:forge:invariant`: run Foundry invariant contracts
-- `yarn test:forge:fork`: run the fork profile tests
-- `yarn test:all`: run Hardhat plus Foundry
+- `corepack yarn test`: run the complete always-on Foundry suite
+- `corepack yarn test:deterministic`: run deterministic parity, integration, and deployment tests
+- `corepack yarn test:fuzz`: run the real-contract property suite at 512 cases per property
+- `corepack yarn test:invariant`: run handler-driven invariants at 128 runs × 64 calls
+- `forge test --match-path '<path>' --match-test '<name>'`: isolate a file or named test
+
+See [TESTING.md](./TESTING.md) for suite design, seed reproduction, coverage mechanics, and contribution rules.
 
 ### Coverage
 
-- `yarn coverage`
-- `yarn test:forge:coverage`
+- `corepack yarn coverage`: run the complete suite, build accurate Foundry LCOV, and enforce the same-denominator starting-behavior gates
+- `corepack yarn coverage:merge`: rebuild the merged report from previously generated shards after diagnosing a coverage run
 
-Coverage is intentionally heavy in this repo. On `foundry-main`, it should not sit on the every-push critical path; use focused unit/integration suites for normal iteration and run coverage in the slower dedicated lane.
+Coverage is intentionally heavy and runs on every push and pull request. The output is `coverage/lcov.info`; CI uploads it to the `foundry` Codecov flag through OIDC and fails visibly on upload errors.
 
 ### Packaging Commands
 
@@ -660,37 +646,13 @@ Payment-method specific provider configuration lives under `deployments/verifier
 
 ## Testing Strategy
 
-The repo uses both Hardhat tests and Foundry tests today, but `foundry-main` is the active migration branch toward a Foundry-only end state.
+Foundry is the sole contract test system. The suite is separated by assurance type:
 
-### Hardhat Test Areas
+- `test-foundry/deterministic/`: behavior parity, integration, deployment topology, events, reverts, state, balances, and authorization boundaries
+- `test-foundry/fuzz/`: bounded real-contract properties that add input breadth beyond deterministic cases
+- `test-foundry/invariant/`: multi-actor handlers, ghost accounting, lifecycle conservation, and nullifier uniqueness
 
-- `test/escrowV2/`: v2 deposit lifecycle, delegated rates, oracle rates, Pyth rates, and legacy/branch coverage
-- `test/orchestratorV2/`: v2 signaling, fulfillment, fee behavior, and cleanup logic
-- `test/hooks/`: whitelist, signature-gating, and Across hook behavior
-- `test/rateManager/`: delegated pricing and oracle adapters
-- `test/periphery/`: `ProtocolViewerV2` and related read-model behavior
-- `test/deploy/`: deployment scripts for the unified verifier, v2 system, v2 periphery, payment-method configuration, and Pyth deployment
-- `test/unifiedVerifier/`: attestation validation and nullifier logic
-- `test/registries/`: whitelist and registry integrity
-
-### Foundry
-
-Foundry suites live in `test-foundry/` and are intended for:
-
-- deterministic replacements for the current Hardhat suites as parity ports land
-- fuzzing
-- invariants
-- fork-based testing where needed
-
-### Recommended Verification Loop During Development
-
-For work on `foundry-main`:
-
-1. `yarn compile`
-2. add or update the relevant Foundry suite under `test-foundry/`
-3. run the focused Foundry suite for the touched area
-4. run the corresponding legacy Hardhat suite only when checking parity during migration
-5. avoid coverage unless explicitly needed
+The default `corepack yarn test` command runs every layer with the centrally configured run counts. CI has no event gates, reduced fuzz counts, live forks, pending cases, or ignored test failures. For ordinary development, run the affected file first and the complete command before pushing; run coverage whenever production or test behavior changes.
 
 ## Networks and Deployment Artifacts
 

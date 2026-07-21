@@ -4,8 +4,16 @@ coverage:
   status:
     project:
       default:
-        target: 99%
+        target: 99.42%
         threshold: 0%
+        flags:
+          - foundry
+    patch:
+      default:
+        target: 100%
+        threshold: 0%
+        flags:
+          - foundry
 ignore:
   - contracts/mocks/**
   - contracts/**/mocks/**
@@ -20,5 +28,5 @@ flag_management:
   default_rules:
     carryforward: false
   individual_flags:
-    - name: hardhat
+    - name: foundry
       carryforward: false

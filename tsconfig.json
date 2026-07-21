@@ -20,7 +20,6 @@
   },
   "include": [
     "index.ts",
-    "./test/**/*.ts",
     "./scripts/**/*.ts",
     "./utils/**/*.ts",
     "./typechain/**/*.ts"

@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 2,
+  "baseCommit": "f6fd7aa4b475ea0045cddabe245c26584b960000",
+  "productionFileCount": 35,
+  "testResult": {
+    "passing": 1528,
+    "skipped": 0,
+    "failing": 0,
+    "deterministic": 1504,
+    "fuzzProperties": 14,
+    "invariants": 6,
+    "handlerReachabilityAndClassification": 4
+  },
+  "configuration": {
+    "foundry": "1.7.1",
+    "fuzzRuns": 512,
+    "invariantRuns": 128,
+    "invariantDepth": 64,
+    "failOnRevert": true,
+    "coverageSeed": "0x0000000000000000000000000000000000000000000000000000000000000001",
+    "command": "corepack yarn coverage",
+    "generatedPerFileArtifacts": [
+      "coverage/foundry-coverage-summary.json",
+      "coverage/foundry-coverage-by-file.csv",
+      "coverage/lcov.info"
+    ]
+  },
+  "historicalHardhatBaseline": {
+    "role": "absolute historical evidence only; Istanbul and Foundry percentages are not directly compared",
+    "lines": { "covered": 2327, "total": 2379, "pct": 97.81 },
+    "statements": { "covered": 1751, "total": 1775, "pct": 98.65 },
+    "branches": { "covered": 1600, "total": 1770, "pct": 90.4 },
+    "functions": { "covered": 440, "total": 446, "pct": 98.65 }
+  },
+  "sameDenominatorBridge": {
+    "role": "acceptance baseline reconstructed from the 1512 behaviors executable in the starting Hardhat run and measured with the same Foundry minimal-IR anchors as the complete suite",
+    "manifestRows": 1517,
+    "startingExecutableRows": 1512,
+    "startingPendingRowsExcluded": 5,
+    "exactParityDestinations": 1383,
+    "conservativeCollisionAdditions": 6,
+    "selectedTests": 1389,
+    "mainSelectorTests": 1314,
+    "collisionSelectorTests": 75,
+    "selectorPreflightMissing": 0,
+    "selectorPreflightUnexpected": 0,
+    "lines": { "covered": 2714, "total": 2947, "pct": 92.09 },
+    "statements": { "covered": 2965, "total": 3307, "pct": 89.66 },
+    "branches": { "covered": 455, "total": 801, "pct": 56.8 },
+    "functions": { "covered": 430, "total": 458, "pct": 93.89 }
+  },
+  "completeFullIr": {
+    "lines": { "covered": 2910, "total": 2947, "pct": 98.74 },
+    "statements": { "covered": 3251, "total": 3307, "pct": 98.31 },
+    "branches": { "covered": 588, "total": 801, "pct": 73.41 },
+    "functions": { "covered": 458, "total": 458, "pct": 100 }
+  },
+  "finalMappedFoundry": {
+    "lines": { "covered": 2930, "total": 2947, "pct": 99.42 },
+    "statements": { "covered": 3269, "total": 3307, "pct": 98.85 },
+    "branches": { "covered": 764, "total": 801, "pct": 95.38 },
+    "functions": { "covered": 458, "total": 458, "pct": 100 }
+  },
+  "coverageGates": {
+    "strictOverallLineImprovement": true,
+    "strictOverallBranchImprovement": true,
+    "overallStatementNonRegression": true,
+    "overallFunctionNonRegression": true,
+    "allPerProductionFileMetricsNonRegressing": true,
+    "currentProductionDenominatorComplete": true,
+    "changedProductionCoveragePct": 100
+  },
+  "timingSeconds": {
+    "completeMinimalIr": 281.99,
+    "accurateMappingShards": 12.34,
+    "parityBridgeMain": 272.23,
+    "parityBridgeCollisions": 273.13,
+    "totalShardSum": 839.69,
+    "cleanEquivalentWallClock": 840.82,
+    "note": "clean equivalent replaces the 282.69-second contaminated selector shard in the 851.28-second uninterrupted diagnostic run with the corrected 272.23-second shard"
+  },
+  "productionDiffFromBase": []
+}
