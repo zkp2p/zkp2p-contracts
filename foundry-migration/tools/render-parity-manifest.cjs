@@ -54,6 +54,9 @@ const stakeVaultReservationFile = "test-foundry/deterministic/staking/StakeVault
 const stakeVaultExitFile = "test-foundry/deterministic/staking/StakeVaultExitParity.t.sol";
 const stakeVaultDeferredFile = "test-foundry/deterministic/staking/StakeVaultDeferredParity.t.sol";
 const stakeVaultControllerHandoverFile = "test-foundry/deterministic/staking/StakeVaultControllerHandoverParity.t.sol";
+const riskManagerHarnessGovernanceFile = "test-foundry/deterministic/staking/RiskManagerHarnessGovernanceParity.t.sol";
+const riskManagerHarnessAdmissionFile = "test-foundry/deterministic/staking/RiskManagerHarnessAdmissionParity.t.sol";
+const riskManagerHarnessSettlementFile = "test-foundry/deterministic/staking/RiskManagerHarnessSettlementParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -1446,6 +1449,48 @@ function stakeVaultDestination(test) {
     return `${file}:${contractName}::${testName}`;
 }
 
+const riskManagerCoverageSource = "test/staking/riskManager.coverage.spec.ts";
+const riskManagerCoverageSourceTests = inventory.tests.filter((test) => test.sourceFile === riskManagerCoverageSource);
+const riskManagerCoverageDestinations = [
+    ...[
+        "test_RiskManagerConstructorRejectsZeroAndEoaDependencies",
+        "test_RiskManagerGovernanceUpdatesVerifierPauseAndVaultController",
+        "test_RiskManagerGovernanceRejectsNonOwnerAndInvalidVerifier",
+        "test_RiskManagerConfigAcceptsDeferredAndRejectsInvalidCombinations",
+        "test_RiskManagerFormulaBranchesRoundUpAndHandleZero",
+    ].map((testName) => [riskManagerHarnessGovernanceFile, "RiskManagerHarnessGovernanceParityTest", testName]),
+    ...[
+        "test_RiskManagerLifecycleRejectsDirectPausedAndMissingIntentCalls",
+        "test_RiskManagerCreatesUnbondedStakeBackedAndDeferredModes",
+        "test_RiskManagerAdmissionRejectsDuplicateTokenMismatchInsufficientAndExiting",
+        "test_RiskManagerAdmissionRequiresManagerAsIntentGuardian",
+        "test_RiskManagerExtensionRejectsEscrowTimestampMismatch",
+        "test_RiskManagerReconcilesCancellationAtOriginalTimestamp",
+    ].map((testName) => [riskManagerHarnessAdmissionFile, "RiskManagerHarnessAdmissionParityTest", testName]),
+    ...[
+        "test_RiskSettlementRejectsDirectAndInvalidContexts",
+        "test_StakeBackedSettlementUsesGrossCoverageAndConsumesNoFunds",
+        "test_DeferredSettlementPullsGrossAndAccountsFees",
+        "test_DeferredAdmissionSnapshotsPayoutRecipientAsStakeOwner",
+        "test_DeferredAdmissionRejectsExitingPayoutRecipient",
+        "test_UnbondedSettlementReleasesPositionAndRejectsRepeat",
+        "test_StakeCoverageMaturesAtHalfOpenDeadlineAndEmptyBatchRejects",
+    ].map((testName) => [riskManagerHarnessSettlementFile, "RiskManagerHarnessSettlementParityTest", testName]),
+];
+if (riskManagerCoverageSourceTests.length !== 18 || riskManagerCoverageDestinations.length !== 18) {
+    throw new Error(
+        `RiskManager coverage mapping count mismatch: ${riskManagerCoverageSourceTests.length} source / ${riskManagerCoverageDestinations.length} translated destinations`
+    );
+}
+
+function riskManagerCoverageDestination(test) {
+    if (test.sourceFile !== riskManagerCoverageSource) return "";
+    const sourceIndex = riskManagerCoverageSourceTests.findIndex((sourceTest) => sourceTest.id === test.id);
+    if (sourceIndex < 0) return "";
+    const [file, contractName, testName] = riskManagerCoverageDestinations[sourceIndex];
+    return `${file}:${contractName}::${testName}`;
+}
+
 function orchestratorV2LegacyDestination(test) {
     if (test.sourceFile !== "test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts") return "";
     const scenario = test.scenario;
@@ -1515,7 +1560,7 @@ const header = [
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || escrowLegacyDestination(test) || orchestratorLegacyDestination(test) || stakeVaultDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || escrowLegacyDestination(test) || orchestratorLegacyDestination(test) || stakeVaultDestination(test) || riskManagerCoverageDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -1545,6 +1590,9 @@ const rows = inventory.tests.map((test) => {
     }
     if (test.sourceFile === stakeVaultSource && !foundryDestination) {
         throw new Error(`Unmapped StakeVault behavior: ${test.id} ${test.scenario}`);
+    }
+    if (test.sourceFile === riskManagerCoverageSource && !foundryDestination) {
+        throw new Error(`Unmapped RiskManager coverage behavior: ${test.id} ${test.scenario}`);
     }
     if (test.sourceFile === "test/escrowV2/escrowV2.pythOracle.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped EscrowV2 Pyth behavior: ${test.id} ${test.scenario}`);
@@ -1606,6 +1654,7 @@ const rows = inventory.tests.map((test) => {
     if ([escrowCreateDepositFile, escrowFundingFile, escrowWithdrawFile, escrowRateRangeFile, escrowPaymentMethodFile, escrowCurrencyFile, escrowDelegateFile, escrowAcceptingRetainFile, escrowPruningFile, escrowLockFundsFile, escrowUnlockFundsFile, escrowUnlockTransferFile, escrowIntentExpiryFile, escrowGovernanceFile, escrowExpiredIntentsViewFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete legacy Escrow parity: 276 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 275 passed plus 1 baseline-pending case resolved in Foundry";
     if ([orchestratorLegacySignalFile, orchestratorLegacyCancelFile, orchestratorLegacyFulfillCoreFile, orchestratorLegacyFulfillAccountingFile, orchestratorLegacyFulfillHookFile, orchestratorLegacyFulfillPartialReentryFile, orchestratorLegacyManualReleaseFile, orchestratorLegacyPruneFile, orchestratorLegacyGovernanceFile, orchestratorLegacyViewsFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete legacy Orchestrator parity: 141 passed individually and together, 0 failed, 0 skipped; all 4 baseline-pending cases resolved in Foundry";
     if ([stakeVaultDepositDelegationFile, stakeVaultReservationFile, stakeVaultExitFile, stakeVaultDeferredFile, stakeVaultControllerHandoverFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete StakeVault parity: 56 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 56/56";
+    if ([riskManagerHarnessGovernanceFile, riskManagerHarnessAdmissionFile, riskManagerHarnessSettlementFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete RiskManager hard-cut branch parity: 18 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 18/18";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
