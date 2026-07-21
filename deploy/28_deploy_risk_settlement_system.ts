@@ -98,7 +98,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const legacyNullifierRegistryAddress = getDeployedContractAddress(network, "NullifierRegistry");
   const escrowRegistryAddress = getDeployedContractAddress(network, "EscrowRegistry");
   const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
-  const relayerRegistryAddress = getDeployedContractAddress(network, "RelayerRegistry");
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
   const escrowV2Address = getDeployedContractAddress(network, "EscrowV2");
   const paymentAttestationVerifierAddress = getDeployedContractAddress(network, "MultiAttestationVerifier");
@@ -205,7 +204,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       chainId,
       escrowRegistryAddress,
       paymentVerifierRegistryAddress,
-      relayerRegistryAddress,
       ORCHESTRATOR_V2_PROTOCOL_FEE[network],
       ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT[network] || deployer,
       RISK_CALLBACK_GAS_LIMIT,
@@ -260,11 +258,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     await waitForDeploymentDelay(hre);
   } else if (currentController.toLowerCase() !== riskManager.address.toLowerCase()) {
     throw new Error(`StakeVault controller mismatch: expected ${riskManager.address}, found ${currentController}`);
-  }
-
-  if (!(await orchestratorV3Contract.allowMultipleIntents())) {
-    await (await orchestratorV3Contract.setAllowMultipleIntents(true)).wait();
-    await waitForDeploymentDelay(hre);
   }
 
   if (!(await escrowV2Contract.intentExpirationPeriod()).eq(ONE_HOUR_IN_SECONDS)) {

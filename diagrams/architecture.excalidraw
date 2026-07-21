@@ -199,8 +199,8 @@
     },
     {
       "type": "text", "id": "orch_box_text", "x": 40, "y": 315, "width": 230, "height": 80,
-      "text": "OrchestratorV2\n\nSignal, Cancel, Fulfill\nFees, Hooks, Relayers",
-      "originalText": "OrchestratorV2\n\nSignal, Cancel, Fulfill\nFees, Hooks, Relayers",
+      "text": "OrchestratorV2\n\nSignal, Cancel, Fulfill\nFees, Hooks, Admission",
+      "originalText": "OrchestratorV2\n\nSignal, Cancel, Fulfill\nFees, Hooks, Admission",
       "fontSize": 14, "fontFamily": 3, "textAlign": "center", "verticalAlign": "middle",
       "strokeColor": "#ffffff", "backgroundColor": "transparent",
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
@@ -527,7 +527,7 @@
     },
     {
       "type": "text", "id": "reg_relayer_text", "x": 845, "y": 580, "width": 120, "height": 25,
-      "text": "RelayerRegistry", "originalText": "RelayerRegistry",
+      "text": "RelayerRegistry (V1)", "originalText": "RelayerRegistry (V1)",
       "fontSize": 11, "fontFamily": 3, "textAlign": "center", "verticalAlign": "middle",
       "strokeColor": "#1e3a5f", "backgroundColor": "transparent",
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,

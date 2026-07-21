@@ -137,10 +137,13 @@ describe("Risk-manager-owned settlement deployment", () => {
     }
   });
 
-  it("registers the new orchestrator and preserves the configured lifecycle controls", async () => {
+  it("registers the new orchestrator with risk-managed concurrency admission", async () => {
     const { orchestrator, orchestratorRegistry } = await contracts();
     expect(await orchestratorRegistry.isOrchestrator(orchestrator.address)).to.eq(true);
-    expect(await orchestrator.allowMultipleIntents()).to.eq(true);
+    expect(orchestrator.interface.functions).not.to.have.property("relayerRegistry()");
+    expect(orchestrator.interface.functions).not.to.have.property("setRelayerRegistry(address)");
+    expect(orchestrator.interface.functions).not.to.have.property("allowMultipleIntents()");
+    expect(orchestrator.interface.functions).not.to.have.property("setAllowMultipleIntents(bool)");
     expect(await orchestrator.riskCallbackGasLimit()).to.eq(RISK_CALLBACK_GAS_LIMIT);
   });
 

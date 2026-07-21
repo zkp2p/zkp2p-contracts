@@ -2,10 +2,11 @@
 
 [![Coverage](https://codecov.io/gh/zkp2p/zkp2p-contracts/branch/main/graph/badge.svg?precision=2)](https://codecov.io/gh/zkp2p/zkp2p-contracts)
 
-Smart contracts for the ZKP2P fiat on/off-ramp, with the current repository centered on the v2 system:
+Smart contracts for the ZKP2P fiat on/off-ramp, with the current repository centered on the v2 system.
+The pristine deployed pre-cut `OrchestratorV2` source is archived outside the compilation tree.
 
 - `EscrowV2`: maker liquidity, per-deposit payment configuration, oracle-backed pricing, delegated rate managers.
-- `OrchestratorV2`: intent lifecycle, fee handling, pre-intent hooks, whitelist hooks, post-intent execution.
+- `OrchestratorV2`: intent lifecycle, fee handling, pre-intent hooks, whitelist hooks, post-intent execution, and unrestricted account-level concurrency.
 - `UnifiedPaymentVerifierV2`: shared attestation-based verifier registered across supported payment methods.
 - `ProtocolViewerV2`: batched read model for deposits, intents, supported payment methods, and effective rates.
 
@@ -56,7 +57,7 @@ The v2 system is built around four layers:
 2. Intent coordination and settlement.
    `OrchestratorV2` validates whether a taker can lock liquidity, snapshots fee terms and min intent size, verifies payments through the registry-selected verifier, and releases funds.
 3. Verification and registries.
-   `UnifiedPaymentVerifier` validates EIP-712 attestations and nullifies payments. Shared registries define which escrows, orchestrators, relayers, hooks, and payment methods are valid.
+   `UnifiedPaymentVerifier` validates EIP-712 attestations and nullifies payments. Active registries define which escrows, orchestrators, hooks, and payment methods are valid. `RelayerRegistry` remains only for the deployed legacy V1 stack.
 4. Read models and periphery.
    `ProtocolViewerV2`, oracle adapters, bridge hooks, and pre-intent hooks provide the ergonomic layer used by frontends, routing systems, and privileged operators.
 
@@ -135,7 +136,7 @@ Key v2 behavior:
 - Supports a generic pre-intent hook and a dedicated whitelist hook per deposit.
 - Supports optional post-intent hooks through `IPostIntentHookV2`.
 - Distributes protocol fees, manager fees, and multiple referral fees.
-- Supports relayer-authorized flows through `RelayerRegistry`.
+- Allows every account to hold multiple concurrent intents; V3 admission is governed only by the selected risk hook.
 
 Recent addition:
 
@@ -265,7 +266,7 @@ The v2 stack reuses and extends the existing registry model:
 - `OrchestratorRegistry`: whitelists both v1 and v2 orchestrators for escrow/verifier authorization
 - `PaymentVerifierRegistry`: maps payment method hash to verifier and supported currencies
 - `PostIntentHookRegistry`: whitelists post-intent hooks
-- `RelayerRegistry`: whitelists relayers
+- `RelayerRegistry`: retained only for deployed legacy V1 orchestrators
 - `NullifierRegistry`: stores consumed payment nullifiers
 
 ## Core Lifecycle
@@ -438,6 +439,9 @@ contracts/
   oracles/
   registries/
   unifiedVerifier/
+
+archive/
+  orchestrator-v2-pre-relayer-cut/  # pristine deployed legacy V2 source, excluded from compilation
 
 deploy/
   00_deploy_system.ts

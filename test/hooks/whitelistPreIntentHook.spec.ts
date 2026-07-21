@@ -15,7 +15,6 @@ import {
   OrchestratorV2,
   OrchestratorRegistry,
   PaymentVerifierRegistry,
-  RelayerRegistry,
   EscrowRegistry,
   USDCMock,
   PaymentVerifierMock,
@@ -41,7 +40,6 @@ describe("WhitelistPreIntentHook", () => {
   let orchestrator: OrchestratorV2;
   let orchestratorRegistry: OrchestratorRegistry;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
-  let relayerRegistry: RelayerRegistry;
   let escrowRegistry: EscrowRegistry;
   let verifier: PaymentVerifierMock;
   let whitelistHook: WhitelistPreIntentHook;
@@ -64,7 +62,6 @@ describe("WhitelistPreIntentHook", () => {
 
     escrowRegistry = await deployer.deployEscrowRegistry();
     paymentVerifierRegistry = await deployer.deployPaymentVerifierRegistry();
-    relayerRegistry = await deployer.deployRelayerRegistry();
     orchestratorRegistry = await deployer.deployOrchestratorRegistry();
 
     escrow = await deployer.deployEscrowV2(
@@ -84,7 +81,6 @@ describe("WhitelistPreIntentHook", () => {
       chainId,
       escrowRegistry.address,
       paymentVerifierRegistry.address,
-      relayerRegistry.address,
       ZERO,
       feeRecipient.address
     );

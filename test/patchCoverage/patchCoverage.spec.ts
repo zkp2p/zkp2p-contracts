@@ -123,7 +123,6 @@ describe("Patch Coverage", () => {
       ONE,
       escrowRegistry.address,
       paymentVerifierRegistry.address,
-      relayerRegistry.address,
       ZERO,
       protocolFeeRecipient.address
     );

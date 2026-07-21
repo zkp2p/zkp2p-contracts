@@ -13,7 +13,6 @@ import {
   OrchestratorRegistry,
   OrchestratorV2,
   PaymentVerifierRegistry,
-  RelayerRegistry,
   SimpleAttestationVerifier,
   UnifiedPaymentVerifier,
   USDCMock,
@@ -38,7 +37,6 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
   let escrowRegistry: EscrowRegistry;
   let orchestratorRegistry: OrchestratorRegistry;
   let paymentVerifierRegistry: PaymentVerifierRegistry;
-  let relayerRegistry: RelayerRegistry;
   let nullifierRegistry: NullifierRegistry;
   let escrow: EscrowV2;
   let orchestrator: OrchestratorV2;
@@ -61,7 +59,6 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
     escrowRegistry = await deployer.deployEscrowRegistry();
     orchestratorRegistry = await deployer.deployOrchestratorRegistry();
     paymentVerifierRegistry = await deployer.deployPaymentVerifierRegistry();
-    relayerRegistry = await deployer.deployRelayerRegistry();
     nullifierRegistry = await deployer.deployNullifierRegistry();
 
     chainId = (await ethers.provider.getNetwork()).chainId;
@@ -82,7 +79,6 @@ describe("UnifiedPaymentVerifierV2 Compatibility", () => {
       BigNumber.from(chainId),
       escrowRegistry.address,
       paymentVerifierRegistry.address,
-      relayerRegistry.address,
       ZERO,
       owner.address,
     );
