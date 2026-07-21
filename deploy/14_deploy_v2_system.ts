@@ -34,7 +34,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const orchestratorV1Address = getDeployedContractAddress(network, "Orchestrator");
   const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
   const escrowRegistryAddress = getDeployedContractAddress(network, "EscrowRegistry");
-  const relayerRegistryAddress = getDeployedContractAddress(network, "RelayerRegistry");
   const nullifierRegistryAddress = getDeployedContractAddress(network, "NullifierRegistry");
   const simpleAttestationVerifierAddress = getDeployedContractAddress(network, "SimpleAttestationVerifier");
 
@@ -73,7 +72,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       chainId,
       escrowRegistryAddress,
       paymentVerifierRegistryAddress,
-      relayerRegistryAddress,
       ORCHESTRATOR_V2_PROTOCOL_FEE[network],
       ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT[network] != ""
         ? ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT[network]
