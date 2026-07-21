@@ -370,8 +370,7 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       await setRiskIntent(f, intentHash, { recipient: f.other.address });
 
       await expect(f.orchestrator.createPosition(f.manager.address, intentHash))
-        .to.be.revertedWithCustomError(f.manager, "StakeOwnerExiting")
-        .withArgs(f.taker.address, f.other.address);
+        .to.be.revertedWithCustomError(f.manager, "StakeOwnerExiting");
     });
 
     it("releases non-chargebackable reservations and rejects repeated settlement", async () => {

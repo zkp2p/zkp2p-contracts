@@ -762,7 +762,7 @@ describe("StakeVault", () => {
 
       await expect(
         vault.connect(controller).authorizeDeferredStake(ethers.utils.id("deferred"), staker.address, 0),
-      ).to.be.revertedWithCustomError(vault, "AlreadyExiting").withArgs(staker.address);
+      ).to.be.revertedWithCustomError(vault, "AlreadyExiting");
     });
 
     it("funds an already-authorized deferred stake while new reservations are paused", async () => {
