@@ -700,6 +700,32 @@ describe("StakeVault", () => {
       expect(await vault.totalLiabilities()).to.eq(usdc(100));
     });
 
+    it("drops zero-rounded fee allocations before storage and vesting", async () => {
+      const { controller, staker, maker: zeroRecipient, recipient: paidRecipient, token, vault } =
+        await deployFixture();
+      const intentHash = ethers.utils.id("zero-rounded-deferred-fee");
+      const releaseTime = (await time.latest()) + DAY;
+      await vault.connect(controller).authorizeDeferredStake(intentHash, staker.address, releaseTime);
+      await token.transfer(vault.address, usdc(100));
+      await vault.connect(controller).recordDeferredStake(intentHash, staker.address, usdc(100), releaseTime, [
+        { feeType: 0, recipient: zeroRecipient.address, amount: 0 },
+        { feeType: 1, recipient: paidRecipient.address, amount: usdc(1) },
+      ]);
+
+      const storedAllocations = await vault.getDeferredFeeAllocations(intentHash);
+      expect(storedAllocations.length).to.eq(1);
+      expect(storedAllocations[0].recipient).to.eq(paidRecipient.address);
+      expect((await vault.getDeferredStake(intentHash)).feeAmount).to.eq(usdc(1));
+
+      await time.increaseTo(releaseTime);
+      const receipt = await (await vault.connect(controller).releaseDeferredStake(intentHash)).wait();
+      const vestedEvents = receipt.events?.filter((event: any) => event.event === "DeferredFeeVested") ?? [];
+      expect(vestedEvents.length).to.eq(1);
+      expect(vestedEvents[0].args?.recipient).to.eq(paidRecipient.address);
+      expect(vestedEvents[0].args?.amount).to.eq(usdc(1));
+      expect(await vault.claimableFees(zeroRecipient.address)).to.eq(0);
+    });
+
     it("slashes the full gross stake to the maker and cancels every contingent fee", async () => {
       const { controller, staker, maker, recipient: feeRecipient, token, vault } = await deployFixture();
       const intentHash = ethers.utils.id("deferred");

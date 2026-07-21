@@ -711,6 +711,7 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         for (uint256 allocationIndex = 0; allocationIndex < _feeAllocations.length; allocationIndex++) {
             IIntentRiskHook.FeeAllocation calldata allocation = _feeAllocations[allocationIndex];
             if (allocation.recipient == address(0)) revert ZeroAddress();
+            if (allocation.amount == 0) continue;
             feeAmount += allocation.amount;
         }
         if (feeAmount >= _grossAmount) revert InvalidDeferredFeeTotal(_grossAmount, feeAmount);
@@ -725,7 +726,9 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
         deferredStake.releaseTime = _releaseTime;
         deferredStake.funded = true;
         for (uint256 allocationIndex = 0; allocationIndex < _feeAllocations.length; allocationIndex++) {
-            deferredFeeAllocations[_intentHash].push(_feeAllocations[allocationIndex]);
+            if (_feeAllocations[allocationIndex].amount != 0) {
+                deferredFeeAllocations[_intentHash].push(_feeAllocations[allocationIndex]);
+            }
         }
 
         reservations[_intentHash] = Reservation({
