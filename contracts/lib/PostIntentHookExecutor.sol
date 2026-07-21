@@ -5,7 +5,7 @@ pragma solidity ^0.8.18;
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
+import { IOrchestratorV3 } from "../interfaces/IOrchestratorV3.sol";
 import { IPostIntentHookV2 } from "../interfaces/IPostIntentHookV2.sol";
 
 /**
@@ -22,7 +22,7 @@ library PostIntentHookExecutor {
     function transferOrExecute(
         IERC20 _token,
         bytes32 _intentHash,
-        IOrchestratorV2.Intent memory _intent,
+        IOrchestratorV3.Intent memory _intent,
         uint256 _netAmount,
         bytes memory _postIntentHookData
     ) public returns (address fundsTransferredTo) {

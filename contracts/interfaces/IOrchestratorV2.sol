@@ -90,7 +90,10 @@ interface IOrchestratorV2 {
     event DepositPreIntentHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
     event DepositWhitelistHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
 
+    event AllowMultipleIntentsUpdated(bool allowMultiple);
+
     event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);
+    event RelayerRegistryUpdated(address indexed relayerRegistry);
     event EscrowRegistryUpdated(address indexed escrowRegistry);
 
     event ProtocolFeeUpdated(uint256 protocolFee);
@@ -126,6 +129,7 @@ interface IOrchestratorV2 {
     error RateBelowMinimum(uint256 rate, uint256 minRate);
 
     // Validation errors
+    error AccountHasActiveIntent(address account, bytes32 existingIntent);
     error InvalidPostIntentHook(address hook);
     error InvalidPreIntentHook(address hook);
     error InvalidSignature();
