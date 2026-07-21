@@ -6,7 +6,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
-import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
+import { IOrchestratorV3 } from "../interfaces/IOrchestratorV3.sol";
 import { IReferralFee } from "../interfaces/IReferralFee.sol";
 import { PostIntentHookExecutor } from "./PostIntentHookExecutor.sol";
 import { RiskSettlementExecutor } from "./RiskSettlementExecutor.sol";
@@ -39,7 +39,7 @@ library FeeSettlementLib {
         IERC20 _token,
         IIntentRiskHook _riskHook,
         bytes32 _intentHash,
-        IOrchestratorV2.Intent memory _intent,
+        IOrchestratorV3.Intent memory _intent,
         uint256 _releaseAmount,
         bytes memory _postIntentHookData,
         FeeConfig memory _feeConfig,
@@ -86,7 +86,7 @@ library FeeSettlementLib {
     }
 
     function _calculateFeeAllocations(
-        IOrchestratorV2.Intent memory _intent,
+        IOrchestratorV3.Intent memory _intent,
         uint256 _releaseAmount,
         FeeConfig memory _feeConfig
     ) internal pure returns (IIntentRiskHook.FeeAllocation[] memory allocations, uint256 totalFees) {
