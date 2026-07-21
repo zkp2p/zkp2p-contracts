@@ -167,6 +167,7 @@ interface IOrchestratorV3 {
     error InvalidPostIntentHook(address hook);
     error InvalidPreIntentHook(address hook);
     error InvalidSignature();
+    error GatingSignatureAlreadyUsed(bytes32 digest);
     error SignatureExpired(uint256 expiration, uint256 currentTime);
 
     // Verification errors

@@ -73,6 +73,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     mapping(address => mapping(uint256 => IIntentRiskHook)) internal depositRiskHooks;
     mapping(bytes32 => IIntentRiskHook) internal intentRiskHooks;
     mapping(bytes32 => IntentCancellation) internal failedIntentCancellations;
+    mapping(bytes32 => bool) public usedGatingSignatureDigests;
 
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
@@ -633,7 +634,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     /**
      * @notice Validates an intent before it is signaled.
      */
-    function _validateSignalIntent(SignalIntentParams calldata _intent) internal view {
+    function _validateSignalIntent(SignalIntentParams calldata _intent) internal {
         if (_intent.to == address(0)) revert ZeroAddress();
 
         ReferralFeeLib.validateReferralFees(_intent.referralFees);
@@ -671,9 +672,15 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
                 revert SignatureExpired(_intent.signatureExpiration, block.timestamp);
             }
 
-            if (!_isValidIntentGatingSignature(_intent, intentGatingService, msg.sender)) {
+            bytes32 verifierPayload = _getIntentGatingSignatureDigest(_intent, msg.sender);
+            if (!_isValidIntentGatingSignature(_intent, intentGatingService, verifierPayload)) {
                 revert InvalidSignature();
             }
+
+            if (usedGatingSignatureDigests[verifierPayload]) {
+                revert GatingSignatureAlreadyUsed(verifierPayload);
+            }
+            usedGatingSignatureDigests[verifierPayload] = true;
         }
     }
 
@@ -801,11 +808,22 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     function _isValidIntentGatingSignature(
         SignalIntentParams calldata _intent,
         address _intentGatingService,
-        address _caller
+        bytes32 _verifierPayload
     )
         internal
         view
         returns(bool)
+    {
+        return _intentGatingService.isValidSignatureNow(_verifierPayload, _intent.gatingServiceSignature);
+    }
+
+    function _getIntentGatingSignatureDigest(
+        SignalIntentParams calldata _intent,
+        address _caller
+    )
+        internal
+        view
+        returns(bytes32)
     {
         bytes memory message = abi.encodePacked(
             address(this),
@@ -818,11 +836,12 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
             _intent.fiatCurrency,
             _intent.conversionRate,
             ReferralFeeLib.hashReferralFees(_intent.referralFees),
+            address(_intent.postIntentHook),
+            keccak256(_intent.data),
             _intent.signatureExpiration,
             chainId
         );
 
-        bytes32 verifierPayload = keccak256(message).toEthSignedMessageHash();
-        return _intentGatingService.isValidSignatureNow(verifierPayload, _intent.gatingServiceSignature);
+        return keccak256(message).toEthSignedMessageHash();
     }
 }
