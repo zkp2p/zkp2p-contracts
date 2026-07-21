@@ -25,8 +25,11 @@ contract V2PaymentMethodDeploymentParityTest is Test {
     bytes32 internal constant MONZO = keccak256("monzo");
     bytes32 internal constant ALIPAY = keccak256("alipay");
     bytes32 internal constant CHIME = keccak256("chime");
+    bytes32 internal constant N26 = keccak256("n26");
+    bytes32 internal constant LUXON = keccak256("luxon");
     PaymentVerifierRegistry internal registry;
     UnifiedPaymentVerifier internal v2Verifier;
+    UnifiedPaymentVerifier internal legacyVerifier;
     UnifiedPaymentVerifierV3 internal activeVerifier;
     mapping(bytes32 => bytes32[]) internal expectedCurrencies;
 
@@ -38,6 +41,11 @@ contract V2PaymentMethodDeploymentParityTest is Test {
         AttestationVerifierMock attestationVerifier = new AttestationVerifierMock();
         registry = new PaymentVerifierRegistry();
         v2Verifier = new UnifiedPaymentVerifier(
+            IOrchestratorRegistry(address(orchestratorRegistry)),
+            INullifierRegistry(address(legacyNullifierRegistry)),
+            IAttestationVerifier(address(attestationVerifier))
+        );
+        legacyVerifier = new UnifiedPaymentVerifier(
             IOrchestratorRegistry(address(orchestratorRegistry)),
             INullifierRegistry(address(legacyNullifierRegistry)),
             IAttestationVerifier(address(attestationVerifier))
@@ -57,6 +65,8 @@ contract V2PaymentMethodDeploymentParityTest is Test {
         _register(MONZO, _singleCurrency("GBP"));
         _register(ALIPAY, _singleCurrency("CNY"));
         _register(CHIME, _singleCurrency("USD"));
+        _registerAndRemove(N26, _singleCurrency("EUR"));
+        _registerAndRemove(LUXON, _paypalCurrencies());
     }
 
     function _register(bytes32 method, bytes32[] memory currencies) internal {
@@ -65,6 +75,15 @@ contract V2PaymentMethodDeploymentParityTest is Test {
         for (uint256 index; index < currencies.length; index++) {
             expectedCurrencies[method].push(currencies[index]);
         }
+    }
+
+    function _registerAndRemove(bytes32 method, bytes32[] memory currencies) internal {
+        registry.addPaymentMethod(method, address(activeVerifier), currencies);
+        legacyVerifier.addPaymentMethod(method);
+        v2Verifier.addPaymentMethod(method);
+        registry.removePaymentMethod(method);
+        legacyVerifier.removePaymentMethod(method);
+        v2Verifier.removePaymentMethod(method);
     }
 
     function _singleCurrency(string memory currency) internal pure returns (bytes32[] memory currencies) {
@@ -319,5 +338,30 @@ contract V2PaymentMethodDeploymentParityTest is Test {
     function test_ChimeIsRegisteredInV2UnifiedVerifier() public view {
         assertTrue(_contains(v2Verifier.getPaymentMethods(), CHIME));
     }
-}
 
+    function test_GenericZelleUsesCanonicalKeccakHash() public pure {
+        assertEq(ZELLE, 0xf752c7d19698ecb0bb8988abf9b9a53a4c3657f3bc8850a6fb59fdf3e3ce8cd3);
+    }
+
+    function test_GenericZelleRegistryRoutesActiveV3WithUsd() public view {
+        assertTrue(registry.isPaymentMethod(ZELLE));
+        assertEq(registry.getVerifier(ZELLE), address(activeVerifier));
+        assertEq(registry.getCurrencies(ZELLE), _singleCurrency("USD"));
+    }
+
+    function test_GenericZelleRemainsInUnifiedPaymentVerifierV2() public view {
+        assertTrue(_contains(v2Verifier.getPaymentMethods(), ZELLE));
+    }
+
+    function test_N26IsRemovedFromEveryPaymentMethodSurface() public view {
+        assertFalse(registry.isPaymentMethod(N26));
+        assertFalse(_contains(legacyVerifier.getPaymentMethods(), N26));
+        assertFalse(_contains(v2Verifier.getPaymentMethods(), N26));
+    }
+
+    function test_LuxonIsRemovedFromEveryPaymentMethodSurface() public view {
+        assertFalse(registry.isPaymentMethod(LUXON));
+        assertFalse(_contains(legacyVerifier.getPaymentMethods(), LUXON));
+        assertFalse(_contains(v2Verifier.getPaymentMethods(), LUXON));
+    }
+}

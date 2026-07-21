@@ -1771,6 +1771,13 @@ function v2CoreDeploymentDestination(test) {
 }
 
 const peripheryDeploymentMappings = new Map([
+    ["test/deploy/25_genericZellePaymentMethod.spec.ts", [v2PaymentMethodDeploymentFile, "V2PaymentMethodDeploymentParityTest", [
+        "test_GenericZelleUsesCanonicalKeccakHash",
+        "test_GenericZelleRegistryRoutesActiveV3WithUsd",
+        "test_GenericZelleRemainsInUnifiedPaymentVerifierV2",
+        "test_N26IsRemovedFromEveryPaymentMethodSurface",
+        "test_LuxonIsRemovedFromEveryPaymentMethodSurface",
+    ]]],
     ["test/deploy/16_v2PaymentMethods.spec.ts", [v2PaymentMethodDeploymentFile, "V2PaymentMethodDeploymentParityTest", [
         "test_VenmoIsRegisteredInPaymentVerifierRegistry",
         "test_VenmoPointsToActiveV3Verifier",
@@ -2032,7 +2039,7 @@ const rows = inventory.tests.map((test) => {
     if ([unifiedVerifierDeploymentFile, legacyPaymentMethodDeploymentFile].some((file) => foundryDestination.startsWith(file))) evidence = "Legacy verifier and payment-method deployment parity: 45 source rows mapped; 46 Foundry tests passed individually and together, including the formerly commented orchestrator-registry assertion; same-commit localhost Hardhat sources 45/45";
     if ([acrossBridgeHookDeploymentFile, v2SystemDeploymentFile].some((file) => foundryDestination.startsWith(file))) evidence = "Across and V2 core deployment parity: 26 passed individually and together, 0 failed, 0 skipped; same-commit localhost Hardhat sources 26/26";
     if ([v2PeripheryDeploymentFile, pythOracleDeploymentFile, multiAttestationVerifierDeploymentFile, safeBatchCollectorDeploymentFile].some((file) => foundryDestination.startsWith(file))) evidence = "V2 periphery, Pyth, multi-witness, and real SafeBatchCollector parity: 24 passed independently, 0 failed, 0 skipped; same-commit localhost Hardhat sources 24/24";
-    if (foundryDestination.startsWith(v2PaymentMethodDeploymentFile)) evidence = "V2 payment-method cutover parity: 40 passed independently and together, 0 failed, 0 skipped; registry routes every method to the active V3 verifier while the retired V2 verifier retains configured method membership";
+    if (foundryDestination.startsWith(v2PaymentMethodDeploymentFile)) evidence = "V2 payment-method and generic-Zelle cutover parity: 45 passed together, 0 failed, 0 skipped; registry routes every active method to V3, V2 retains configured membership, and removed N26/Luxon methods are absent from every surface";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
