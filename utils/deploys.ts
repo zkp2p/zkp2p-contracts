@@ -1,4 +1,4 @@
-import { BigNumber, Signer, ethers } from "ethers";
+import { BigNumber, BigNumberish, Signer, ethers } from "ethers";
 
 import { Address } from "@utils/types";
 
@@ -11,6 +11,7 @@ import {
   ProtocolViewer,
   Orchestrator,
   OrchestratorV2,
+  OrchestratorV3,
   RateManagerV1,
   OrchestratorRegistry,
   PaymentVerifierMock,
@@ -74,6 +75,10 @@ import { EscrowV2__factory } from "../typechain/factories/contracts/EscrowV2__fa
 import { ProtocolViewer__factory } from "../typechain/factories/contracts/index";
 import { Orchestrator__factory } from "../typechain/factories/contracts/index";
 import { OrchestratorV2__factory } from "../typechain/factories/contracts/OrchestratorV2__factory";
+import { OrchestratorV3__factory } from "../typechain/factories/contracts/OrchestratorV3__factory";
+import { BoundedCall__factory } from "../typechain/factories/contracts/lib/BoundedCall__factory";
+import { FeeSettlementLib__factory } from "../typechain/factories/contracts/lib/FeeSettlementLib__factory";
+import { RiskSettlementExecutor__factory } from "../typechain/factories/contracts/lib/RiskSettlementExecutor__factory";
 import { RateManagerV1__factory } from "../typechain/factories/contracts/RateManagerV1__factory";
 import { UnifiedPaymentVerifier__factory } from "../typechain/factories/contracts/unifiedVerifier";
 import { SimpleAttestationVerifier__factory } from "../typechain/factories/contracts/unifiedVerifier";
@@ -188,6 +193,52 @@ export default class DeployHelper {
       relayerRegistry,
       protocolFee,
       protocolFeeRecipient
+    );
+  }
+
+  public async deployOrchestratorV3(
+    owner: Address,
+    chainId: BigNumber,
+    escrowRegistry: Address,
+    paymentVerifierRegistry: Address,
+    protocolFee: BigNumber,
+    protocolFeeRecipient: Address,
+    riskCallbackGasLimit: BigNumberish = 2_000_000
+  ): Promise<OrchestratorV3> {
+    const boundedCall = await new BoundedCall__factory(this._deployerSigner).deploy();
+    // PostIntentHookExecutor has an empty ABI (no events/errors; public library fns are not ABI entries),
+    // so typechain emits no factory for it — deploy from the hardhat artifact instead.
+    const postIntentHookExecutorArtifact = require("../artifacts/contracts/lib/PostIntentHookExecutor.sol/PostIntentHookExecutor.json");
+    const postIntentHookExecutor = await new ethers.ContractFactory(
+      postIntentHookExecutorArtifact.abi,
+      postIntentHookExecutorArtifact.bytecode,
+      this._deployerSigner
+    ).deploy();
+    const riskSettlementExecutor = await new RiskSettlementExecutor__factory(
+      { "contracts/lib/BoundedCall.sol:BoundedCall": boundedCall.address },
+      this._deployerSigner
+    ).deploy();
+    const feeSettlementLib = await new FeeSettlementLib__factory(
+      {
+        "contracts/lib/PostIntentHookExecutor.sol:PostIntentHookExecutor": postIntentHookExecutor.address,
+        "contracts/lib/RiskSettlementExecutor.sol:RiskSettlementExecutor": riskSettlementExecutor.address,
+      },
+      this._deployerSigner
+    ).deploy();
+    return await new OrchestratorV3__factory(
+      {
+        "contracts/lib/BoundedCall.sol:BoundedCall": boundedCall.address,
+        "contracts/lib/FeeSettlementLib.sol:FeeSettlementLib": feeSettlementLib.address,
+      },
+      this._deployerSigner
+    ).deploy(
+      owner,
+      chainId.toString(),
+      escrowRegistry,
+      paymentVerifierRegistry,
+      protocolFee,
+      protocolFeeRecipient,
+      riskCallbackGasLimit
     );
   }
 
