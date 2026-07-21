@@ -114,8 +114,9 @@ The machine-auditable [migration manifest](./hardhat-to-foundry-manifest.csv) co
 | --- | ---: | ---: | --- | --- |
 | Seven registries | 120 | 50 across 7 contracts | Every test passed individually; complete file 50/50, 0 skipped; warm real 0.22s | Independently verified; shadow/full-repeat gates pending |
 | Chainlink and Pyth oracle adapters | 27 | 25 across 2 contracts | Every test passed individually; complete file 25/25, 0 skipped; warm real 0.22s | Independently verified; shadow/full-repeat gates pending |
+| Simple and multi attestation verifiers | 37 | 24 across 2 contracts | Every test passed individually; complete file 24/24, 0 skipped; cumulative deterministic suite 99/99, warm real 0.22s | Independently verified; shadow/full-repeat gates pending |
 
-Current deterministic mapping: 147 / 1,514 rows (9.71%); 1,367 remain. Consolidations combine assertions from the same Hardhat setup/action only where the manifest gives every source behavior an exact Foundry function destination. Completed slices cover ownership, exact revert reasons/custom errors, all registry events, array/set mutation, independent payment-method state, legacy-nullifier precedence, bidirectional binding/replay prevention, packed oracle configuration, direct/inverted rounded rates, exponent/decimal bounds, and every invalid oracle response path.
+Current deterministic mapping: 184 / 1,514 rows (12.15%); 1,330 remain. Consolidations combine assertions from the same Hardhat setup/action only where the manifest gives every source behavior an exact Foundry function destination. Completed slices cover ownership, exact revert reasons/custom errors, registry state/events, nullifier replay prevention, oracle normalization/invalid responses, witness governance, single/multi-signature thresholds, unique-signer enforcement, malformed signatures, and complete witness-set views.
 
 ## Fuzz and invariant catalog
 

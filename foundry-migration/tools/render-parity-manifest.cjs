@@ -8,6 +8,7 @@ const inventory = require(path.join(repositoryRoot, "foundry-migration/baseline/
 const outputPath = path.join(repositoryRoot, "foundry-migration/hardhat-to-foundry-manifest.csv");
 const registryFile = "test-foundry/deterministic/registries/RegistryParity.t.sol";
 const oracleFile = "test-foundry/deterministic/oracles/OracleAdapterParity.t.sol";
+const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifierParity.t.sol";
 
 function csv(value) {
     const stringValue = String(value ?? "");
@@ -150,21 +151,63 @@ function oracleDestination(test) {
     return "";
 }
 
+function attestationDestination(test) {
+    const scenario = test.scenario;
+    const target = (contractName, testName) => `${attestationFile}:${contractName}::${testName}`;
+    if (test.sourceFile === "test/unifiedVerifier/simpleAttestationVerifier.spec.ts") {
+        const contractName = "SimpleAttestationVerifierParityTest";
+        if (scenario.includes("#constructor") && scenario.includes("correct initial state")) return target(contractName, "test_ConstructorSetsWitnessOwnerAndThreshold");
+        if (scenario.includes("#constructor") && scenario.includes("zero witness")) return target(contractName, "test_ConstructorAllowsZeroWitness");
+        if (scenario.includes("#setWitness") && (scenario.includes("should update witness") || scenario.includes("should emit"))) return target(contractName, "test_SetWitnessUpdatesStateAndEmits");
+        if (scenario.includes("#setWitness")) return target(contractName, "test_SetWitnessRejectsZeroAndNonOwner");
+        if (scenario.includes("valid signature and attestor")) return target(contractName, "test_VerifyReturnsTrueForWitnessSignature");
+        if (scenario.includes("signed by non-witness")) return target(contractName, "test_VerifyRejectsNonWitnessSignature");
+        if (scenario.includes("wrong message")) return target(contractName, "test_VerifyRejectsWitnessSignatureForWrongDigest");
+        if (scenario.includes("malformed") || scenario.includes("empty bytes")) return target(contractName, "test_VerifyRejectsMalformedAndEmptySignature");
+        if (scenario.includes("no signatures")) return target(contractName, "test_VerifyRejectsMissingSignaturesBeforeWitnessMatching");
+        if (scenario.includes("multiple signatures")) return target(contractName, "test_VerifyAcceptsFirstValidSignatureAmongAdditionalSignatures");
+    }
+    if (test.sourceFile === "test/unifiedVerifier/MultiAttestationVerifier.spec.ts") {
+        const contractName = "MultiAttestationVerifierParityTest";
+        if (scenario.includes("one witness and threshold 1")) return target(contractName, "test_VerifySingleWitnessThresholdOne");
+        if (scenario.includes("two witnesses and threshold 1") && (scenario.includes("witness A signs") || scenario.includes("witness B signs"))) return target(contractName, "test_VerifyEitherAuthorizedWitnessAtThresholdOne");
+        if (scenario.includes("non-witness signs")) return target(contractName, "test_VerifyRejectsNonWitnessAtThresholdOne");
+        if (scenario.includes("same witness signature is passed twice")) return target(contractName, "test_VerifyDuplicateSignerCountsOnceButMeetsThresholdOne");
+        if (scenario.includes("witness A and witness B")) return target(contractName, "test_VerifyTwoDistinctWitnessesMeetThresholdTwo");
+        if (scenario.includes("same witness signs twice") || scenario.includes("replayed three times")) return target(contractName, "test_VerifyDuplicateSignerDoesNotMeetThresholdTwoOrThree");
+        if (scenario.includes("#constructor")) return target(contractName, "test_ConstructorRejectsZeroDuplicateAndInvalidThresholds");
+        if (scenario.includes("#addWitness") && scenario.includes("emit WitnessAdded")) return target(contractName, "test_AddWitnessUpdatesSetCountAndEmits");
+        if (scenario.includes("#addWitness")) return target(contractName, "test_AddWitnessRejectsNonOwnerZeroAndExistingWitness");
+        if (scenario.includes("#removeWitness") && scenario.includes("emit WitnessRemoved")) return target(contractName, "test_RemoveWitnessUpdatesSetCountAndEmits");
+        if (scenario.includes("#removeWitness")) return target(contractName, "test_RemoveWitnessRejectsBelowThresholdAndMissingWitness");
+        if (scenario.includes("#setRequiredSignatures") && scenario.includes("emit RequiredSignaturesUpdated")) return target(contractName, "test_SetRequiredSignaturesUpdatesThresholdAndEmits");
+        if (scenario.includes("#setRequiredSignatures")) return target(contractName, "test_SetRequiredSignaturesRejectsZeroAndAboveWitnessCount");
+        if (scenario.includes("view helpers")) return target(contractName, "test_ViewHelpersTrackCurrentWitnessMembership");
+    }
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || attestationDestination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
     if (["test/rateManager/chainlinkOracleAdapter.spec.ts", "test/rateManager/pythOracleAdapter.spec.ts"].includes(test.sourceFile) && !foundryDestination) {
         throw new Error(`Unmapped oracle behavior: ${test.id} ${test.scenario}`);
     }
+    if (["test/unifiedVerifier/simpleAttestationVerifier.spec.ts", "test/unifiedVerifier/MultiAttestationVerifier.spec.ts"].includes(test.sourceFile) && !foundryDestination) {
+        throw new Error(`Unmapped attestation behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
-    const isRegistry = foundryDestination.startsWith(registryFile);
+    let evidence = "";
+    if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(oracleFile)) evidence = "OracleAdapterParity.t.sol: 25 passed individually and together, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(attestationFile)) evidence = "AttestationVerifierParity.t.sol: 24 passed, 0 failed, 0 skipped";
     return [
         test.id,
         test.sourceFile,
@@ -176,7 +219,7 @@ const rows = inventory.tests.map((test) => {
         foundryDestination,
         foundryDestination ? (test.sourceFile.includes("nullifierRegistryV2") ? "one-to-one" : "consolidated-with-explicit-destination") : "one-to-one",
         foundryDestination ? "verified-independent-file" : (test.pending ? "pending-resolution" : "pending-translation"),
-        foundryDestination ? (isRegistry ? "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped" : "OracleAdapterParity.t.sol: 25 passed, 0 failed, 0 skipped") : (test.pending ? "baseline-pending" : "baseline-passed"),
+        foundryDestination ? evidence : (test.pending ? "baseline-pending" : "baseline-passed"),
     ];
 });
 
