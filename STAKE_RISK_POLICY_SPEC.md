@@ -182,8 +182,8 @@ Current policy requires `r = 10_000`, so coverage equals the gross Escrow releas
 - Admission authorizes future deferred stake but reserves no nonexistent proceeds.
 - Settlement first charges the taker's extension reservation.
 - RiskManager then pulls the complete gross release directly from Orchestrator into StakeVault.
-- StakeVault credits `R` to the taker and reserves the full amount through the chargeback window.
-- The fee slice `F` remains contingent; no taker or fee recipient can withdraw it while coverage is live.
+- StakeVault credits `R` to the payout recipient and reserves the full amount through the chargeback window.
+- The fee slice `F` remains contingent; neither the payout recipient nor any fee recipient can withdraw it while coverage is live.
 
 On a valid chargeback, the complete gross reservation compensates the LP and all contingent fees are cancelled. On clean maturity, `F` becomes pull-based fee claims and `E` becomes free reusable payout-recipient stake.
 

@@ -1060,7 +1060,7 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await vault.freeStake(taker.address)).to.eq(0);
     });
 
-    it("releases matured deferred custody as reusable taker stake", async () => {
+    it("releases matured deferred custody as reusable payout-recipient stake", async () => {
       const { taker, escrow, orchestrator, token, vault, manager } = await loadFixture(deployFixture);
       await enableDeferred(manager);
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(100), PAYPAL);

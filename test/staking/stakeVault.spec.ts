@@ -608,7 +608,7 @@ describe("StakeVault", () => {
       ]);
     });
 
-    it("converts the full gross settlement into fully reserved taker stake", async () => {
+    it("converts the full gross settlement into fully reserved payout-recipient stake", async () => {
       const { controller, staker, maker: protocol, recipient: referrer, token, vault } = await deployFixture();
       const intentHash = ethers.utils.id("deferred");
       const releaseTime = (await time.latest()) + DAY;
