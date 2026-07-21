@@ -24,6 +24,7 @@ interface IOrchestratorV3 is IOrchestratorV2 {
 
     struct IntentCancellation {
         uint64 cancelledAt;
+        IIntentRiskHook riskHook;
     }
 
     /* ============ Events ============ */
@@ -47,6 +48,7 @@ interface IOrchestratorV3 is IOrchestratorV2 {
     );
     event RiskCallbackGasLimitUpdated(uint256 gasLimit);
     event IntentCancellationRecorded(bytes32 indexed intentHash, uint64 cancelledAt);
+    event IntentCancellationReconciled(bytes32 indexed intentHash, address indexed riskHook);
 
     /* ============ Errors ============ */
 
@@ -57,11 +59,15 @@ interface IOrchestratorV3 is IOrchestratorV2 {
     error RiskHookSettlementBalanceIncreased(bytes32 intentHash, uint256 beforeBalance, uint256 afterBalance);
     error InvalidRiskHookSettlementConsumption(bytes32 intentHash, uint256 consumed, uint256 grossAmount);
     error RiskCallbackGasLimitTooLow(uint256 gasLimit, uint256 minimum);
+    error IntentCancellationNotRecorded(bytes32 intentHash);
+    error UnauthorizedCancellationAcknowledger(address caller, address riskHook);
 
     /* ============ External Functions ============ */
 
     function setDepositRiskHook(address _escrow, uint256 _depositId, IIntentRiskHook _hook) external;
     function setRiskCallbackGasLimit(uint256 _gasLimit) external;
+    /** @notice Clears durable recovery data after the failed risk hook completes reconciliation. */
+    function acknowledgeIntentCancellation(bytes32 _intentHash) external;
 
     /* ============ View Functions ============ */
 

@@ -171,6 +171,21 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
         return failedIntentCancellations[_intentHash].cancelledAt;
     }
 
+    /**
+     * @inheritdoc IOrchestratorV3
+     * @dev Only the exact snapshotted hook whose callback failed may clear its recovery record.
+     */
+    function acknowledgeIntentCancellation(bytes32 _intentHash) external override {
+        IntentCancellation memory cancellation = failedIntentCancellations[_intentHash];
+        if (cancellation.cancelledAt == 0) revert IntentCancellationNotRecorded(_intentHash);
+        if (msg.sender != address(cancellation.riskHook)) {
+            revert UnauthorizedCancellationAcknowledger(msg.sender, address(cancellation.riskHook));
+        }
+
+        delete failedIntentCancellations[_intentHash];
+        emit IntentCancellationReconciled(_intentHash, msg.sender);
+    }
+
     /* ============ Internal Lifecycle Extensions ============ */
 
     /**
@@ -215,7 +230,10 @@ contract OrchestratorV3 is OrchestratorV2, IOrchestratorV3 {
             MAX_RISK_CALLBACK_RETURN_DATA
         );
         if (!callbackSucceeded) {
-            failedIntentCancellations[_intentHash] = IntentCancellation({ cancelledAt: cancelledAt });
+            failedIntentCancellations[_intentHash] = IntentCancellation({
+                cancelledAt: cancelledAt,
+                riskHook: riskHook
+            });
             emit IntentCancellationRecorded(_intentHash, cancelledAt);
         }
     }

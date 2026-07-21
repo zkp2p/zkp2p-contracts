@@ -498,6 +498,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         uint64 cancelledAt = orchestrator.getIntentCancellation(_intentHash);
         if (cancelledAt == 0) revert CancellationNotRecorded(_intentHash);
         _cancelPosition(_intentHash, cancelledAt);
+        orchestrator.acknowledgeIntentCancellation(_intentHash);
     }
 
     /* ============ Chargebacks and Maturity ============ */

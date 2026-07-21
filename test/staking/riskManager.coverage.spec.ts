@@ -272,6 +272,7 @@ describe("RiskManager -- hard-cut branch coverage", () => {
       await f.orchestrator.setIntentCancellation(intentHash, cancelledAt);
       await f.manager.reconcileCancellation(intentHash);
       expect((await f.manager.getRiskPosition(intentHash)).cancelledAt).to.eq(cancelledAt);
+      expect(await f.orchestrator.getIntentCancellation(intentHash)).to.eq(0);
       await expect(f.manager.reconcileCancellations([])).to.be.revertedWithCustomError(f.manager, "EmptyBatch");
       await expect(f.manager.reconcileCancellation(ethers.utils.id("unknown")))
         .to.be.revertedWithCustomError(f.manager, "CancellationNotRecorded");

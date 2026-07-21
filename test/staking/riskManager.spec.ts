@@ -1268,6 +1268,27 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await orchestrator.getIntentCancellation(intentHash)).to.not.eq(0);
       expect((await orchestrator.getIntent(intentHash)).owner).to.eq(ZERO);
     });
+
+    it("lets only the failed risk hook clear reconciled cancellation data", async () => {
+      const { maker, taker, other, escrow, orchestrator } = await loadFixture(deployFixture);
+      const hook = await (await ethers.getContractFactory("IntentRiskHookMock")).deploy();
+      await orchestrator.connect(maker).setDepositRiskHook(escrow.address, 0, hook.address);
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(20), ZELLE);
+      await hook.setRevertOnCallback(true);
+      await orchestrator.connect(taker).cancelIntent(intentHash);
+      expect(await orchestrator.getIntentCancellation(intentHash)).to.not.eq(0);
+
+      await expect(orchestrator.connect(other).acknowledgeIntentCancellation(intentHash))
+        .to.be.revertedWithCustomError(orchestrator, "UnauthorizedCancellationAcknowledger")
+        .withArgs(other.address, hook.address);
+      await expect(hook.acknowledgeIntentCancellation(orchestrator.address, intentHash))
+        .to.emit(orchestrator, "IntentCancellationReconciled")
+        .withArgs(intentHash, hook.address);
+      expect(await orchestrator.getIntentCancellation(intentHash)).to.eq(0);
+      await expect(hook.acknowledgeIntentCancellation(orchestrator.address, intentHash))
+        .to.be.revertedWithCustomError(orchestrator, "IntentCancellationNotRecorded")
+        .withArgs(intentHash);
+    });
   });
 
   describe("OrchestratorV3 control and recovery surface", () => {

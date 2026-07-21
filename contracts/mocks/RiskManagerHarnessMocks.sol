@@ -118,6 +118,10 @@ contract RiskManagerOrchestratorHarness {
         return cancellationTimes[_intentHash];
     }
 
+    function acknowledgeIntentCancellation(bytes32 _intentHash) external {
+        delete cancellationTimes[_intentHash];
+    }
+
     function createPosition(IIntentRiskHook _hook, bytes32 _intentHash) external {
         _hook.onIntentCreated(_intentHash);
     }
