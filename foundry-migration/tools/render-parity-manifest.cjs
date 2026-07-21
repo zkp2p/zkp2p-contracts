@@ -51,6 +51,9 @@ const orchestratorLegacyGovernanceFile = "test-foundry/deterministic/orchestrato
 const orchestratorLegacyViewsFile = "test-foundry/deterministic/orchestrator/OrchestratorViewsParity.t.sol";
 const stakeVaultDepositDelegationFile = "test-foundry/deterministic/staking/StakeVaultDepositDelegationParity.t.sol";
 const stakeVaultReservationFile = "test-foundry/deterministic/staking/StakeVaultReservationParity.t.sol";
+const stakeVaultExitFile = "test-foundry/deterministic/staking/StakeVaultExitParity.t.sol";
+const stakeVaultDeferredFile = "test-foundry/deterministic/staking/StakeVaultDeferredParity.t.sol";
+const stakeVaultControllerHandoverFile = "test-foundry/deterministic/staking/StakeVaultControllerHandoverParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -1396,8 +1399,40 @@ const stakeVaultDestinations = [
         "test_MakerWithdrawsCreditedCompensation",
         "test_CompensationAggregatesAcrossIntentClaims",
     ].map((testName) => [stakeVaultReservationFile, "StakeVaultReservationParityTest", testName]),
+    ...[
+        "test_PartialWithdrawalImmediatelyReducesEligibleAndFreeStake",
+        "test_PartialWithdrawalRejectsAmountAboveFreeStake",
+        "test_PartialWithdrawalRejectsExecutionBeforeDelay",
+        "test_PartialWithdrawalExecutesWhileReservationRemains",
+        "test_CancelPartialWithdrawalRestoresEligibility",
+        "test_FullExitRejectsPendingPartialWithdrawal",
+        "test_PartialWithdrawalRejectsPendingFullExit",
+        "test_SlashPreservesPendingPartialWithdrawal",
+        "test_RequestExitMarksStakerExitingImmediately",
+        "test_FullExitBlocksNewReservations",
+        "test_FullExitRequiresDelayAndResolvedReservations",
+        "test_MatureFullExitWithdrawsEntireRemainingBalance",
+        "test_CancelExitPreservesStakeBalance",
+    ].map((testName) => [stakeVaultExitFile, "StakeVaultExitParityTest", testName]),
+    ...[
+        "test_DeferredTerminalEventsNameAmountsByAccountingOutcome",
+        "test_DeferredFundingConvertsGrossToFullyReservedRecipientStake",
+        "test_DeferredFundingRejectsMissingBackingTokens",
+        "test_DeferredMaturityVestsFeesAndLeavesReusableNetStake",
+        "test_DeferredFeesAggregateDuplicateRecipients",
+        "test_DeferredFundingDropsZeroRoundedFeeAllocations",
+        "test_DeferredSlashCreditsGrossAndCancelsContingentFees",
+        "test_DeferredAuthorizationRejectsReservationsPause",
+        "test_DeferredAuthorizationRejectsExitingStaker",
+        "test_PreAuthorizedDeferredStakeFundsWhileReservationsPaused",
+    ].map((testName) => [stakeVaultDeferredFile, "StakeVaultDeferredParityTest", testName]),
+    ...[
+        "test_ControllerHandoverRequiresDelayedTwoStepAcceptance",
+        "test_PreviousControllerSettlesOnlySnapshottedReservations",
+        "test_PreviousControllerFundsSnapshottedDeferredAuthorization",
+    ].map((testName) => [stakeVaultControllerHandoverFile, "StakeVaultControllerHandoverParityTest", testName]),
 ];
-if (stakeVaultSourceTests.length !== 56 || stakeVaultDestinations.length !== 30) {
+if (stakeVaultSourceTests.length !== 56 || stakeVaultDestinations.length !== 56) {
     throw new Error(
         `StakeVault mapping count mismatch: ${stakeVaultSourceTests.length} source / ${stakeVaultDestinations.length} translated destinations`
     );
@@ -1508,6 +1543,9 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/orchestratorV2/orchestratorV2.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped orchestrator V2 behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === stakeVaultSource && !foundryDestination) {
+        throw new Error(`Unmapped StakeVault behavior: ${test.id} ${test.scenario}`);
+    }
     if (test.sourceFile === "test/escrowV2/escrowV2.pythOracle.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped EscrowV2 Pyth behavior: ${test.id} ${test.scenario}`);
     }
@@ -1567,7 +1605,7 @@ const rows = inventory.tests.map((test) => {
     if ([escrowV2BranchAuthorizationFile, escrowV2BranchValidationFile, escrowV2BranchGovernanceLifecycleFile, escrowV2BranchStatePauseFile].some((file) => foundryDestination.startsWith(file))) evidence = "EscrowV2 branch parity: 108 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 108/108";
     if ([escrowCreateDepositFile, escrowFundingFile, escrowWithdrawFile, escrowRateRangeFile, escrowPaymentMethodFile, escrowCurrencyFile, escrowDelegateFile, escrowAcceptingRetainFile, escrowPruningFile, escrowLockFundsFile, escrowUnlockFundsFile, escrowUnlockTransferFile, escrowIntentExpiryFile, escrowGovernanceFile, escrowExpiredIntentsViewFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete legacy Escrow parity: 276 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source: 275 passed plus 1 baseline-pending case resolved in Foundry";
     if ([orchestratorLegacySignalFile, orchestratorLegacyCancelFile, orchestratorLegacyFulfillCoreFile, orchestratorLegacyFulfillAccountingFile, orchestratorLegacyFulfillHookFile, orchestratorLegacyFulfillPartialReentryFile, orchestratorLegacyManualReleaseFile, orchestratorLegacyPruneFile, orchestratorLegacyGovernanceFile, orchestratorLegacyViewsFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete legacy Orchestrator parity: 141 passed individually and together, 0 failed, 0 skipped; all 4 baseline-pending cases resolved in Foundry";
-    if ([stakeVaultDepositDelegationFile, stakeVaultReservationFile].some((file) => foundryDestination.startsWith(file))) evidence = "StakeVault deposit/delegation/reservation/slashing slice: 30 passed individually and together, 0 failed, 0 skipped; full same-commit Hardhat source 56/56";
+    if ([stakeVaultDepositDelegationFile, stakeVaultReservationFile, stakeVaultExitFile, stakeVaultDeferredFile, stakeVaultControllerHandoverFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete StakeVault parity: 56 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 56/56";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
