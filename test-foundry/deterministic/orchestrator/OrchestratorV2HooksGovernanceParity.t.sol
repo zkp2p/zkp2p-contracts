@@ -3,6 +3,7 @@ pragma solidity ^0.8.18;
 
 import {OrchestratorV2LegacyFixture} from "../helpers/OrchestratorV2LegacyFixture.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
+import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {ReentrantHookSetterMock} from "contracts/mocks/ReentrantHookSetterMock.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
@@ -17,6 +18,8 @@ contract OrchestratorV2HooksGovernanceParityTest is OrchestratorV2LegacyFixture 
         address indexed escrow, uint256 indexed depositId, address indexed hook, address setter
     );
     event EscrowRegistryUpdated(address indexed registry);
+    event RelayerRegistryUpdated(address indexed registry);
+    event AllowMultipleIntentsUpdated(bool allowMultiple);
     event ProtocolFeeUpdated(uint256 fee);
     event ProtocolFeeRecipientUpdated(address indexed recipient);
     event IntentReferralFeeDistributed(bytes32 indexed intentHash, address indexed recipient, uint256 amount);
@@ -106,8 +109,9 @@ contract OrchestratorV2HooksGovernanceParityTest is OrchestratorV2LegacyFixture 
         );
     }
 
-    function test_GovernanceUpdatesRegistriesFeesAndPauseState() public {
+    function test_GovernanceUpdatesRegistriesFeesAndPauseState() public virtual {
         EscrowRegistry newRegistry = new EscrowRegistry();
+        RelayerRegistry newRelayerRegistry = new RelayerRegistry();
         vm.expectEmit(true, false, false, true, address(orchestrator));
         emit EscrowRegistryUpdated(address(newRegistry));
         orchestrator.setEscrowRegistry(address(newRegistry));
@@ -117,22 +121,32 @@ contract OrchestratorV2HooksGovernanceParityTest is OrchestratorV2LegacyFixture 
         vm.expectEmit(true, false, false, true, address(orchestrator));
         emit ProtocolFeeRecipientUpdated(other);
         orchestrator.setProtocolFeeRecipient(other);
+        vm.expectEmit(false, false, false, true, address(orchestrator));
+        emit AllowMultipleIntentsUpdated(false);
+        orchestrator.setAllowMultipleIntents(false);
+        vm.expectEmit(true, false, false, true, address(orchestrator));
+        emit RelayerRegistryUpdated(address(newRelayerRegistry));
+        orchestrator.setRelayerRegistry(address(newRelayerRegistry));
+        assertEq(address(orchestrator.relayerRegistry()), address(newRelayerRegistry));
+        assertFalse(orchestrator.allowMultipleIntents());
         orchestrator.pauseOrchestrator();
         assertTrue(orchestrator.paused());
         orchestrator.unpauseOrchestrator();
         assertFalse(orchestrator.paused());
     }
 
-    function test_GovernanceRejectsInvalidSetterValues() public {
+    function test_GovernanceRejectsInvalidSetterValues() public virtual {
         vm.expectRevert(IOrchestratorV2.ZeroAddress.selector);
         orchestrator.setEscrowRegistry(address(0));
         vm.expectRevert(abi.encodeWithSelector(IOrchestratorV2.FeeExceedsMaximum.selector, 6e16, 5e16));
         orchestrator.setProtocolFee(6e16);
         vm.expectRevert(IOrchestratorV2.ZeroAddress.selector);
         orchestrator.setProtocolFeeRecipient(address(0));
+        vm.expectRevert(IOrchestratorV2.ZeroAddress.selector);
+        orchestrator.setRelayerRegistry(address(0));
     }
 
-    function test_GovernanceRejectsEveryNonOwnerCall() public {
+    function test_GovernanceRejectsEveryNonOwnerCall() public virtual {
         vm.startPrank(other);
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
         orchestrator.pauseOrchestrator();
@@ -144,6 +158,10 @@ contract OrchestratorV2HooksGovernanceParityTest is OrchestratorV2LegacyFixture 
         orchestrator.setProtocolFee(1e16);
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
         orchestrator.setProtocolFeeRecipient(other);
+        vm.expectRevert(bytes("Ownable: caller is not the owner"));
+        orchestrator.setAllowMultipleIntents(false);
+        vm.expectRevert(bytes("Ownable: caller is not the owner"));
+        orchestrator.setRelayerRegistry(address(relayerRegistry));
         vm.stopPrank();
     }
 
@@ -155,13 +173,11 @@ contract OrchestratorV2HooksGovernanceParityTest is OrchestratorV2LegacyFixture 
         assertEq(orchestrator.getIntentMinAtSignal(intentHash), 10e6);
     }
 
-    function test_AccountCanCreateMultipleActiveIntents() public {
+    function test_AccountWithActiveIntentRevertsWhenMultipleIntentsDisabled() public virtual {
+        orchestrator.setAllowMultipleIntents(false);
         bytes32 first = _signalDefault();
-        bytes32 second = _signalDefault();
-        bytes32[] memory accountIntents = orchestrator.getAccountIntents(taker);
-        assertEq(accountIntents.length, 2);
-        assertEq(accountIntents[0], first);
-        assertEq(accountIntents[1], second);
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV2.AccountHasActiveIntent.selector, taker, first));
+        _signalCall(taker, _defaultParams());
     }
 
     function test_SignalRejectsUnwhitelistedEscrow() public {

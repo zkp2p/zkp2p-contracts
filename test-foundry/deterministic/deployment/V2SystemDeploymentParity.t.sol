@@ -10,6 +10,7 @@ import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
+import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {IAttestationVerifier} from "contracts/interfaces/IAttestationVerifier.sol";
 import {INullifierRegistry} from "contracts/interfaces/INullifierRegistry.sol";
 import {IOrchestratorRegistry} from "contracts/interfaces/IOrchestratorRegistry.sol";
@@ -24,6 +25,7 @@ contract V2SystemDeploymentParityTest is Test {
     EscrowRegistry internal escrowRegistry;
     PaymentVerifierRegistry internal paymentVerifierRegistry;
     OrchestratorRegistry internal orchestratorRegistry;
+    RelayerRegistry internal relayerRegistry;
     NullifierRegistry internal nullifierRegistry;
     EscrowV2 internal escrow;
     OrchestratorV2 internal orchestrator;
@@ -34,6 +36,7 @@ contract V2SystemDeploymentParityTest is Test {
         escrowRegistry = new EscrowRegistry();
         paymentVerifierRegistry = new PaymentVerifierRegistry();
         orchestratorRegistry = new OrchestratorRegistry();
+        relayerRegistry = new RelayerRegistry();
         nullifierRegistry = new NullifierRegistry();
         AttestationVerifierMock attestationVerifier = new AttestationVerifierMock();
         escrow = new EscrowV2(
@@ -51,6 +54,7 @@ contract V2SystemDeploymentParityTest is Test {
             block.chainid,
             address(escrowRegistry),
             address(paymentVerifierRegistry),
+            address(relayerRegistry),
             PROTOCOL_FEE,
             address(this)
         );
@@ -130,17 +134,8 @@ contract V2SystemDeploymentParityTest is Test {
         assertEq(address(orchestrator.paymentVerifierRegistry()), address(paymentVerifierRegistry));
     }
 
-    function test_OrchestratorV2DeploymentOmitsRetiredRelayerAndGlobalIntentControls() public view {
-        (bool relayerGetter,) = address(orchestrator).staticcall(abi.encodeWithSignature("relayerRegistry()"));
-        (bool relayerSetter,) =
-            address(orchestrator).staticcall(abi.encodeWithSignature("setRelayerRegistry(address)", address(this)));
-        (bool multipleGetter,) = address(orchestrator).staticcall(abi.encodeWithSignature("allowMultipleIntents()"));
-        (bool multipleSetter,) =
-            address(orchestrator).staticcall(abi.encodeWithSignature("setAllowMultipleIntents(bool)", true));
-        assertFalse(relayerGetter);
-        assertFalse(relayerSetter);
-        assertFalse(multipleGetter);
-        assertFalse(multipleSetter);
+    function test_OrchestratorV2DeploymentWiresRelayerRegistry() public view {
+        assertEq(address(orchestrator.relayerRegistry()), address(relayerRegistry));
     }
 
     function test_OrchestratorV2DeploymentSetsProtocolFee() public view {

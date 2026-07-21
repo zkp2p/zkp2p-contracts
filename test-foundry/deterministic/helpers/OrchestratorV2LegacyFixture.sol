@@ -6,6 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {EscrowV2} from "contracts/EscrowV2.sol";
 import {OrchestratorV2} from "contracts/OrchestratorV2.sol";
+import {OrchestratorV3} from "contracts/OrchestratorV3.sol";
 import {OrchestratorMock} from "contracts/mocks/OrchestratorMock.sol";
 import {PartialPullPostIntentHookV2Mock} from "contracts/mocks/PartialPullPostIntentHookV2Mock.sol";
 import {PaymentVerifierMock} from "contracts/mocks/PaymentVerifierMock.sol";
@@ -19,6 +20,7 @@ import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
+import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
@@ -48,6 +50,7 @@ abstract contract OrchestratorV2LegacyFixture is Test {
     EscrowRegistry internal escrowRegistry;
     OrchestratorRegistry internal orchestratorRegistry;
     PaymentVerifierRegistry internal paymentVerifierRegistry;
+    RelayerRegistry internal relayerRegistry;
     PaymentVerifierMock internal verifier;
     PreIntentHookMock internal preIntentHook;
     PreIntentHookMock internal whitelistHook;
@@ -74,6 +77,7 @@ abstract contract OrchestratorV2LegacyFixture is Test {
         paymentVerifierRegistry = new PaymentVerifierRegistry();
         escrowRegistry = new EscrowRegistry();
         orchestratorRegistry = new OrchestratorRegistry();
+        relayerRegistry = new RelayerRegistry();
         verifier = new PaymentVerifierMock();
         preIntentHook = new PreIntentHookMock();
         whitelistHook = new PreIntentHookMock();
@@ -92,8 +96,15 @@ abstract contract OrchestratorV2LegacyFixture is Test {
             1 hours
         );
         orchestrator = new OrchestratorV2(
-            address(this), CHAIN_ID, address(escrowRegistry), address(paymentVerifierRegistry), 0, protocolFeeRecipient
+            address(this),
+            CHAIN_ID,
+            address(escrowRegistry),
+            address(paymentVerifierRegistry),
+            address(relayerRegistry),
+            0,
+            protocolFeeRecipient
         );
+        orchestrator.setAllowMultipleIntents(true);
         postIntentHook = new PostIntentHookV2Mock(address(token), address(orchestrator));
         partialPostIntentHook = new PartialPullPostIntentHookV2Mock(address(token), address(orchestrator));
         pushPostIntentHook = new PushPostIntentHookV2Mock(address(token), address(orchestrator));
@@ -146,6 +157,31 @@ abstract contract OrchestratorV2LegacyFixture is Test {
 
     function _emptyReferralFees() internal pure returns (IReferralFee.ReferralFee[] memory) {
         return new IReferralFee.ReferralFee[](0);
+    }
+
+    function _replaceOrchestratorWithStandaloneV3() internal {
+        orchestrator = OrchestratorV2(
+            address(
+                new OrchestratorV3(
+                    address(this),
+                    CHAIN_ID,
+                    address(escrowRegistry),
+                    address(paymentVerifierRegistry),
+                    0,
+                    protocolFeeRecipient,
+                    2_000_000
+                )
+            )
+        );
+        postIntentHook = new PostIntentHookV2Mock(address(token), address(orchestrator));
+        partialPostIntentHook = new PartialPullPostIntentHookV2Mock(address(token), address(orchestrator));
+        pushPostIntentHook = new PushPostIntentHookV2Mock(address(token), address(orchestrator));
+        reentrantPostIntentHook = new ReentrantPostIntentHookV2(address(token), address(orchestrator));
+        reentrantSignalCaller = new ReentrantSignalIntentCallerV2Mock(address(orchestrator));
+        reentrantPreIntentHook = new ReentrantPreIntentHookMock(address(reentrantSignalCaller));
+        token.transfer(address(pushPostIntentHook), 10e6);
+        orchestratorRegistry.addOrchestrator(address(orchestrator));
+        verifier.setVerificationContext(address(orchestrator), address(escrow));
     }
 
     function _twoReferralFees() internal view returns (IReferralFee.ReferralFee[] memory fees) {

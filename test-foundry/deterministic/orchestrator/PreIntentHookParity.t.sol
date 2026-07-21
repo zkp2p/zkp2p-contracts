@@ -15,6 +15,7 @@ import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
+import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
@@ -77,8 +78,15 @@ contract PreIntentHookParityTest is Test {
         );
         escrowRegistry.addEscrow(address(escrow));
         orchestrator = new OrchestratorV2(
-            address(this), CHAIN_ID, address(escrowRegistry), address(paymentVerifierRegistry), 0, address(this)
+            address(this),
+            CHAIN_ID,
+            address(escrowRegistry),
+            address(paymentVerifierRegistry),
+            address(new RelayerRegistry()),
+            0,
+            address(this)
         );
+        orchestrator.setAllowMultipleIntents(true);
         orchestratorRegistry.addOrchestrator(address(orchestrator));
         verifier.setVerificationContext(address(orchestrator), address(escrow));
         hookMock = new PreIntentHookMock();
@@ -259,6 +267,7 @@ contract PreIntentHookParityTest is Test {
     }
 
     function test_ReentrantHookCannotCreateSecondIntent() public {
+        orchestrator.setAllowMultipleIntents(false);
         _setHook(depositor, address(escrow), 0, reentrantHook);
         IOrchestratorV2.SignalIntentParams memory params =
             _signalParams(address(reentrantCaller), abi.encode(uint256(42)), abi.encode(uint256(7)));

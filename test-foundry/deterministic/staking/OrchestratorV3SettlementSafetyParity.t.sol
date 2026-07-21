@@ -6,7 +6,6 @@ import {IntentRiskHookMock} from "contracts/mocks/IntentRiskHookMock.sol";
 import {NullifyingPaymentVerifierMock} from "contracts/mocks/NullifyingPaymentVerifierMock.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IIntentRiskHook} from "contracts/interfaces/IIntentRiskHook.sol";
-import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 
@@ -101,7 +100,7 @@ contract OrchestratorV3SettlementSafetyParityTest is RiskManagerBoundaryFixture 
         IntentRiskHookMock hook = new IntentRiskHookMock();
         _selectRiskHook(IIntentRiskHook(address(hook)));
         vm.etch(address(hook), "");
-        IOrchestratorV2.SignalIntentParams memory params = _signalParams(taker, 20e6, ZELLE);
+        IOrchestratorV3.SignalIntentParams memory params = _signalParams(taker, 20e6, ZELLE);
         vm.expectPartialRevert(IOrchestratorV3.RiskHookAdmissionFailed.selector);
         vm.prank(taker);
         orchestrator.signalIntent(params);

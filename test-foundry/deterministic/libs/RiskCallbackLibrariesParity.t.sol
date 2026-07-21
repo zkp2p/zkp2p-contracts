@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 import {Test} from "forge-std/Test.sol";
 
 import {IIntentRiskHook} from "contracts/interfaces/IIntentRiskHook.sol";
-import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
+import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 import {BoundedCall} from "contracts/lib/BoundedCall.sol";
@@ -129,7 +129,7 @@ contract RiskCallbackLibrariesParityTest is Test {
 
     function test_PostIntentExecutorTransfersDirectlyAndThroughExactPullHook() public {
         address recipient = makeAddr("post-hook-recipient");
-        IOrchestratorV2.Intent memory intent = _intent(recipient, IPostIntentHookV2(address(0)));
+        IOrchestratorV3.Intent memory intent = _intent(recipient, IPostIntentHookV2(address(0)));
         assertEq(PostIntentHookExecutor.transferOrExecute(token, INTENT_HASH, intent, 10e6, ""), recipient);
         assertEq(token.balanceOf(recipient), 10e6);
 
@@ -147,7 +147,7 @@ contract RiskCallbackLibrariesParityTest is Test {
     }
 
     function test_PostIntentExecutorRejectsPartialPullAndBalanceIncrease() public {
-        IOrchestratorV2.Intent memory intent = _intent(RECIPIENT, postIntentHook);
+        IOrchestratorV3.Intent memory intent = _intent(RECIPIENT, postIntentHook);
         postIntentHook.configure(1, 0);
         vm.expectRevert(bytes("PostIntentHook: must pull exact netAmount"));
         PostIntentHookExecutor.transferOrExecute(token, INTENT_HASH, intent, 10e6, "");
@@ -173,9 +173,9 @@ contract RiskCallbackLibrariesParityTest is Test {
     function _intent(address recipient, IPostIntentHookV2 intentHook)
         internal
         view
-        returns (IOrchestratorV2.Intent memory)
+        returns (IOrchestratorV3.Intent memory)
     {
-        return IOrchestratorV2.Intent({
+        return IOrchestratorV3.Intent({
             owner: address(this),
             to: recipient,
             escrow: address(0xCAFE),

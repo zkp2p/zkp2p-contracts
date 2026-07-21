@@ -13,6 +13,7 @@ import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
+import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
@@ -58,8 +59,15 @@ contract ProtocolViewerV2ParityTest is Test {
             1 days
         );
         orchestrator = new OrchestratorV2(
-            address(this), 1, address(escrowRegistry), address(paymentVerifierRegistry), 0, address(this)
+            address(this),
+            1,
+            address(escrowRegistry),
+            address(paymentVerifierRegistry),
+            address(new RelayerRegistry()),
+            0,
+            address(this)
         );
+        orchestrator.setAllowMultipleIntents(true);
         escrowRegistry.addEscrow(address(escrow));
         orchestratorRegistry.addOrchestrator(address(orchestrator));
         verifier.setVerificationContext(address(orchestrator), address(escrow));

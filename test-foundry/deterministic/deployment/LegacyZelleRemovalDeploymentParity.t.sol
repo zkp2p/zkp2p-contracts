@@ -12,6 +12,7 @@ import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
+import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {SimpleAttestationVerifier} from "contracts/unifiedVerifier/SimpleAttestationVerifier.sol";
 import {UnifiedPaymentVerifier} from "contracts/unifiedVerifier/UnifiedPaymentVerifier.sol";
 import {UnifiedPaymentVerifierV3} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol";
@@ -66,8 +67,15 @@ contract LegacyZelleRemovalDeploymentParityTest is Test {
             1 hours
         );
         orchestrator = new OrchestratorV2(
-            address(this), block.chainid, address(escrowRegistry), address(registry), 0, address(this)
+            address(this),
+            block.chainid,
+            address(escrowRegistry),
+            address(registry),
+            address(new RelayerRegistry()),
+            0,
+            address(this)
         );
+        orchestrator.setAllowMultipleIntents(true);
         legacyVerifier = new UnifiedPaymentVerifier(
             IOrchestratorRegistry(address(orchestratorRegistry)),
             INullifierRegistry(address(legacyNullifier)),

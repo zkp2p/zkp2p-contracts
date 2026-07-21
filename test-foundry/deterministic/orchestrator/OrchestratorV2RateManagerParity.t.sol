@@ -12,6 +12,7 @@ import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
+import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
@@ -37,19 +38,23 @@ contract OrchestratorV2RateManagerParityTest is Test {
     USDCMock internal token;
     EscrowV2 internal escrow;
     OrchestratorV2 internal orchestrator;
+    RelayerRegistry internal relayerRegistry;
+    PaymentVerifierRegistry internal paymentVerifierRegistry;
+    EscrowRegistry internal escrowRegistry;
+    OrchestratorRegistry internal orchestratorRegistry;
     PaymentVerifierMock internal verifier;
     RateManagerMock internal rateManager;
 
-    function setUp() public {
+    function setUp() public virtual {
         depositor = makeAddr("depositor");
         taker = makeAddr("taker");
         managerFeeRecipient = makeAddr("managerFeeRecipient");
         token = new USDCMock(1_000_000_000e6, "USDC", "USDC");
         token.transfer(depositor, 100_000e6);
 
-        PaymentVerifierRegistry paymentVerifierRegistry = new PaymentVerifierRegistry();
-        EscrowRegistry escrowRegistry = new EscrowRegistry();
-        OrchestratorRegistry orchestratorRegistry = new OrchestratorRegistry();
+        paymentVerifierRegistry = new PaymentVerifierRegistry();
+        escrowRegistry = new EscrowRegistry();
+        orchestratorRegistry = new OrchestratorRegistry();
         verifier = new PaymentVerifierMock();
         rateManager = new RateManagerMock();
 
@@ -66,9 +71,17 @@ contract OrchestratorV2RateManagerParityTest is Test {
             20,
             1 hours
         );
+        relayerRegistry = new RelayerRegistry();
         orchestrator = new OrchestratorV2(
-            address(this), 1, address(escrowRegistry), address(paymentVerifierRegistry), 0, address(this)
+            address(this),
+            1,
+            address(escrowRegistry),
+            address(paymentVerifierRegistry),
+            address(relayerRegistry),
+            0,
+            address(this)
         );
+        orchestrator.setAllowMultipleIntents(true);
         escrowRegistry.addEscrow(address(escrow));
         orchestratorRegistry.addOrchestrator(address(orchestrator));
         verifier.setVerificationContext(address(orchestrator), address(escrow));
@@ -158,7 +171,7 @@ contract OrchestratorV2RateManagerParityTest is Test {
         assertEq(actualIntentHash, expectedIntentHash);
     }
 
-    function test_OrdinaryAccountCanKeepMultipleConcurrentIntents() public {
+    function test_GovernanceCanAllowOrdinaryAccountMultipleConcurrentIntents() public virtual {
         bytes32 firstIntentHash = _signal(MANAGER_RATE);
         bytes32 secondIntentHash = _signal(MANAGER_RATE);
         bytes32[] memory accountIntents = orchestrator.getAccountIntents(taker);
@@ -168,18 +181,20 @@ contract OrchestratorV2RateManagerParityTest is Test {
         assertNotEq(firstIntentHash, secondIntentHash);
     }
 
-    function test_RetiredRelayerAndGlobalMultipleIntentSelectorsAreAbsent() public {
-        (bool relayerGetterSuccess,) = address(orchestrator).staticcall(abi.encodeWithSignature("relayerRegistry()"));
-        (bool multipleGetterSuccess,) =
-            address(orchestrator).staticcall(abi.encodeWithSignature("allowMultipleIntents()"));
-        (bool relayerSetterSuccess,) =
-            address(orchestrator).call(abi.encodeWithSignature("setRelayerRegistry(address)", address(this)));
-        (bool multipleSetterSuccess,) =
-            address(orchestrator).call(abi.encodeWithSignature("setAllowMultipleIntents(bool)", true));
-        assertFalse(relayerGetterSuccess);
-        assertFalse(multipleGetterSuccess);
-        assertFalse(relayerSetterSuccess);
-        assertFalse(multipleSetterSuccess);
+    function test_OrdinaryAccountWithActiveIntentRevertsWhenMultipleDisabled() public virtual {
+        orchestrator.setAllowMultipleIntents(false);
+        bytes32 existingIntent = _signal(MANAGER_RATE);
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV2.AccountHasActiveIntent.selector, taker, existingIntent));
+        _signalCall(MANAGER_RATE);
+    }
+
+    function test_WhitelistedRelayerCanKeepMultipleIntentsWhenGlobalMultipleDisabled() public virtual {
+        orchestrator.setAllowMultipleIntents(false);
+        relayerRegistry.addRelayer(taker);
+        bytes32 firstIntentHash = _signal(MANAGER_RATE);
+        bytes32 secondIntentHash = _signal(MANAGER_RATE);
+        assertNotEq(firstIntentHash, secondIntentHash);
+        assertEq(orchestrator.getAccountIntents(taker).length, 2);
     }
 
     function test_SignalRejectsConversionRateBelowDelegatedRate() public {

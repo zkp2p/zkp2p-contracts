@@ -18,7 +18,6 @@ import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IIntentRiskHook} from "contracts/interfaces/IIntentRiskHook.sol";
-import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
@@ -192,9 +191,9 @@ abstract contract RiskManagerIntegrationFixture is Test {
     function _signalParams(address payoutRecipient, uint256 amount, bytes32 paymentMethod)
         internal
         view
-        returns (IOrchestratorV2.SignalIntentParams memory)
+        returns (IOrchestratorV3.SignalIntentParams memory)
     {
-        return IOrchestratorV2.SignalIntentParams({
+        return IOrchestratorV3.SignalIntentParams({
             escrow: address(escrow),
             depositId: 0,
             amount: amount,
@@ -237,7 +236,7 @@ abstract contract RiskManagerIntegrationFixture is Test {
 
     function _fulfill(bytes32 intentHash, uint256 releaseAmount) internal {
         orchestrator.fulfillIntent(
-            IOrchestratorV2.FulfillIntentParams({
+            IOrchestratorV3.FulfillIntentParams({
                 paymentProof: _paymentProof(intentHash, releaseAmount),
                 intentHash: intentHash,
                 verificationData: "",

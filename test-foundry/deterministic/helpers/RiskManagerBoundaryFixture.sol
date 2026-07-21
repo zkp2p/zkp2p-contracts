@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 import {RiskManagerIntegrationFixture} from "./RiskManagerIntegrationFixture.sol";
 import {RateManagerMock} from "contracts/mocks/RateManagerMock.sol";
 import {IIntentRiskHook} from "contracts/interfaces/IIntentRiskHook.sol";
-import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
+import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 import {IRiskManager} from "contracts/interfaces/IRiskManager.sol";
@@ -40,7 +40,7 @@ abstract contract RiskManagerBoundaryFixture is RiskManagerIntegrationFixture {
         IPostIntentHookV2 hook,
         bytes memory data
     ) internal returns (bytes32 intentHash) {
-        IOrchestratorV2.SignalIntentParams memory params = _signalParams(payoutRecipient, amount, paymentMethod);
+        IOrchestratorV3.SignalIntentParams memory params = _signalParams(payoutRecipient, amount, paymentMethod);
         params.referralFees = referralFees;
         params.postIntentHook = hook;
         params.data = data;
