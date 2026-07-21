@@ -76,6 +76,7 @@ const v2PeripheryDeploymentFile = "test-foundry/deterministic/deployment/V2Perip
 const pythOracleDeploymentFile = "test-foundry/deterministic/deployment/PythOracleDeploymentParity.t.sol";
 const multiAttestationVerifierDeploymentFile = "test-foundry/deterministic/deployment/MultiAttestationVerifierDeploymentParity.t.sol";
 const safeBatchCollectorDeploymentFile = "test-foundry/deterministic/deployment/SafeBatchCollectorParity.t.sol";
+const v2PaymentMethodDeploymentFile = "test-foundry/deterministic/deployment/V2PaymentMethodDeploymentParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -1770,6 +1771,48 @@ function v2CoreDeploymentDestination(test) {
 }
 
 const peripheryDeploymentMappings = new Map([
+    ["test/deploy/16_v2PaymentMethods.spec.ts", [v2PaymentMethodDeploymentFile, "V2PaymentMethodDeploymentParityTest", [
+        "test_VenmoIsRegisteredInPaymentVerifierRegistry",
+        "test_VenmoPointsToActiveV3Verifier",
+        "test_VenmoHasCorrectCurrencies",
+        "test_VenmoIsRegisteredInV2UnifiedVerifier",
+        "test_RevolutIsRegisteredInPaymentVerifierRegistry",
+        "test_RevolutPointsToActiveV3Verifier",
+        "test_RevolutHasCorrectCurrencies",
+        "test_RevolutIsRegisteredInV2UnifiedVerifier",
+        "test_CashAppIsRegisteredInPaymentVerifierRegistry",
+        "test_CashAppPointsToActiveV3Verifier",
+        "test_CashAppHasCorrectCurrencies",
+        "test_CashAppIsRegisteredInV2UnifiedVerifier",
+        "test_WiseIsRegisteredInPaymentVerifierRegistry",
+        "test_WisePointsToActiveV3Verifier",
+        "test_WiseHasCorrectCurrencies",
+        "test_WiseIsRegisteredInV2UnifiedVerifier",
+        "test_MercadoPagoIsRegisteredInPaymentVerifierRegistry",
+        "test_MercadoPagoPointsToActiveV3Verifier",
+        "test_MercadoPagoHasCorrectCurrencies",
+        "test_MercadoPagoIsRegisteredInV2UnifiedVerifier",
+        "test_ZelleIsRegisteredInPaymentVerifierRegistry",
+        "test_ZellePointsToActiveV3Verifier",
+        "test_ZelleHasCorrectCurrencies",
+        "test_ZelleIsRegisteredInV2UnifiedVerifier",
+        "test_PayPalIsRegisteredInPaymentVerifierRegistry",
+        "test_PayPalPointsToActiveV3Verifier",
+        "test_PayPalHasCorrectCurrencies",
+        "test_PayPalIsRegisteredInV2UnifiedVerifier",
+        "test_MonzoIsRegisteredInPaymentVerifierRegistry",
+        "test_MonzoPointsToActiveV3Verifier",
+        "test_MonzoHasCorrectCurrencies",
+        "test_MonzoIsRegisteredInV2UnifiedVerifier",
+        "test_AlipayIsRegisteredInPaymentVerifierRegistry",
+        "test_AlipayPointsToActiveV3Verifier",
+        "test_AlipayHasCorrectCurrencies",
+        "test_AlipayIsRegisteredInV2UnifiedVerifier",
+        "test_ChimeIsRegisteredInPaymentVerifierRegistry",
+        "test_ChimePointsToActiveV3Verifier",
+        "test_ChimeHasCorrectCurrencies",
+        "test_ChimeIsRegisteredInV2UnifiedVerifier",
+    ]]],
     ["test/deploy/15_v2Periphery.spec.ts", [v2PeripheryDeploymentFile, "V2PeripheryDeploymentParityTest", [
         "test_WhitelistPreIntentHookWiresOrchestratorRegistry", "test_SignatureGatingPreIntentHookWiresOrchestratorRegistry",
         "test_SignatureGatingPreIntentHookSetsChainId", "test_AcrossBridgeHookV2WiresOrchestratorRegistry",
@@ -1989,6 +2032,7 @@ const rows = inventory.tests.map((test) => {
     if ([unifiedVerifierDeploymentFile, legacyPaymentMethodDeploymentFile].some((file) => foundryDestination.startsWith(file))) evidence = "Legacy verifier and payment-method deployment parity: 45 source rows mapped; 46 Foundry tests passed individually and together, including the formerly commented orchestrator-registry assertion; same-commit localhost Hardhat sources 45/45";
     if ([acrossBridgeHookDeploymentFile, v2SystemDeploymentFile].some((file) => foundryDestination.startsWith(file))) evidence = "Across and V2 core deployment parity: 26 passed individually and together, 0 failed, 0 skipped; same-commit localhost Hardhat sources 26/26";
     if ([v2PeripheryDeploymentFile, pythOracleDeploymentFile, multiAttestationVerifierDeploymentFile, safeBatchCollectorDeploymentFile].some((file) => foundryDestination.startsWith(file))) evidence = "V2 periphery, Pyth, multi-witness, and real SafeBatchCollector parity: 24 passed independently, 0 failed, 0 skipped; same-commit localhost Hardhat sources 24/24";
+    if (foundryDestination.startsWith(v2PaymentMethodDeploymentFile)) evidence = "V2 payment-method cutover parity: 40 passed independently and together, 0 failed, 0 skipped; registry routes every method to the active V3 verifier while the retired V2 verifier retains configured method membership";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
