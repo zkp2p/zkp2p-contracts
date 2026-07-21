@@ -11,6 +11,7 @@ const escrowV2PythFile = "test-foundry/deterministic/escrow/EscrowV2PythOraclePa
 const escrowV2CurrencyRateFile = "test-foundry/deterministic/escrow/EscrowV2CurrencyRateParity.t.sol";
 const oracleFile = "test-foundry/deterministic/oracles/OracleAdapterParity.t.sol";
 const orchestratorV2File = "test-foundry/deterministic/orchestrator/OrchestratorV2RateManagerParity.t.sol";
+const preIntentHookFile = "test-foundry/deterministic/orchestrator/PreIntentHookParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
 const protocolViewerFile = "test-foundry/deterministic/periphery/ProtocolViewerParity.t.sol";
 const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifierParity.t.sol";
@@ -365,13 +366,43 @@ function protocolViewerDestination(test) {
     return "";
 }
 
+function preIntentHookDestination(test) {
+    if (test.sourceFile !== "test/orchestrator/preIntentHook.spec.ts") return "";
+    const scenario = test.scenario;
+    const target = (testName) => `${preIntentHookFile}:PreIntentHookParityTest::${testName}`;
+    if (scenario.includes("allows depositor to set a pre-intent")) return target("test_DepositorCanSetPreIntentHookAndEmits");
+    if (scenario.includes("allows delegate to set a pre-intent")) return target("test_DelegateCanSetPreIntentHookAndEmits");
+    if (scenario.includes("reverts for unauthorized caller")) return target("test_UnauthorizedCallerCannotSetPreIntentHook");
+    if (scenario.includes("removes a pre-intent hook")) return target("test_ZeroHookRemovesPreIntentHookAndEmits");
+    if (scenario.includes("hook is an EOA")) return target("test_EoaCannotBeConfiguredAsPreIntentHook");
+    if (scenario.includes("deposit does not exist")) return target("test_MissingDepositCannotConfigurePreIntentHook");
+    if (scenario.includes("#setDepositPreIntentHook when escrow is zero")) return target("test_ZeroEscrowCannotConfigurePreIntentHook");
+    if (scenario.includes("passes preIntentHookData")) return target("test_SignalPassesEphemeralHookDataWithoutPersistingIt");
+    if (scenario.includes("reverts when pre-intent hook rejects")) return target("test_SignalRevertsAtomicallyWhenPreIntentHookRejects");
+    if (scenario.includes("works normally when no pre-intent")) return target("test_SignalWorksWithoutConfiguredPreIntentHook");
+    if (scenario.includes("skips hook execution")) return target("test_SignalSkipsRemovedPreIntentHook");
+    if (scenario.includes("prevents hook-driven reentrant")) return target("test_ReentrantHookCannotCreateSecondIntent");
+    if (scenario.includes("SignatureGatingPreIntentHook #constructor")) return target("test_SignatureHookConstructorRejectsZeroRegistry");
+    if (scenario.includes("allows depositor to set signer")) return target("test_DepositorCanSetDepositSignerAndEmits");
+    if (scenario.includes("allows delegate to set signer")) return target("test_DelegateCanSetDepositSignerAndEmits");
+    if (scenario.includes("#setDepositSigner when called by unauthorized")) return target("test_UnauthorizedCallerCannotSetDepositSigner");
+    if (scenario.includes("#setDepositSigner when escrow is zero")) return target("test_ZeroEscrowCannotSetDepositSigner");
+    if (scenario.includes("accepts valid signature data")) return target("test_SignatureHookAcceptsValidSignature");
+    if (scenario.includes("when signature is invalid")) return target("test_SignatureHookRejectsInvalidSigner");
+    if (scenario.includes("when called directly")) return target("test_SignatureHookRejectsDirectCaller");
+    if (scenario.includes("when signer is not set")) return target("test_SignatureHookRejectsDepositWithoutSigner");
+    if (scenario.includes("caller differs from signed taker")) return target("test_SignatureHookBindsActualCallerAsTaker");
+    if (scenario.includes("when signature is expired")) return target("test_SignatureHookRejectsExpiredSignature");
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || orchestratorV2Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || orchestratorV2Destination(test) || preIntentHookDestination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -411,6 +442,9 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/periphery/protocolViewer.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped ProtocolViewer behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/orchestrator/preIntentHook.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped pre-intent hook behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
     let evidence = "";
     if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
@@ -418,6 +452,7 @@ const rows = inventory.tests.map((test) => {
     if (foundryDestination.startsWith(escrowV2CurrencyRateFile)) evidence = "EscrowV2CurrencyRateParity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(oracleFile)) evidence = "OracleAdapterParity.t.sol: 25 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(orchestratorV2File)) evidence = "OrchestratorV2RateManagerParity.t.sol: 4 passed individually and together, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(preIntentHookFile)) evidence = "PreIntentHookParity.t.sol: 23 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(attestationFile)) evidence = "AttestationVerifierParity.t.sol: 24 passed, 0 failed, 0 skipped";
