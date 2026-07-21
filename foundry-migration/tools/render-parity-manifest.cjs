@@ -70,6 +70,8 @@ const orchestratorV3ControlRecoveryFile = "test-foundry/deterministic/staking/Or
 const legacySystemDeploymentFile = "test-foundry/deterministic/deployment/LegacySystemDeploymentParity.t.sol";
 const unifiedVerifierDeploymentFile = "test-foundry/deterministic/deployment/UnifiedVerifierDeploymentParity.t.sol";
 const legacyPaymentMethodDeploymentFile = "test-foundry/deterministic/deployment/LegacyPaymentMethodDeploymentParity.t.sol";
+const acrossBridgeHookDeploymentFile = "test-foundry/deterministic/deployment/AcrossBridgeHookDeploymentParity.t.sol";
+const v2SystemDeploymentFile = "test-foundry/deterministic/deployment/V2SystemDeploymentParity.t.sol";
 const orchestratorV2LifecycleFile = "test-foundry/deterministic/orchestrator/OrchestratorV2LifecycleParity.t.sol";
 const orchestratorV2HooksFile = "test-foundry/deterministic/orchestrator/OrchestratorV2HooksGovernanceParity.t.sol";
 const protocolViewerV2File = "test-foundry/deterministic/periphery/ProtocolViewerV2Parity.t.sol";
@@ -1714,6 +1716,55 @@ function legacyVerifierDeploymentDestination(test) {
     return `${file}:${contractName}::${destinations[sourceIndex]}`;
 }
 
+const v2CoreDeploymentMappings = new Map([
+    ["test/deploy/10_acrossBridgeHook.spec.ts", [acrossBridgeHookDeploymentFile, "AcrossBridgeHookDeploymentParityTest", [
+        "test_AcrossBridgeHookDeploymentSetsConstructorParameters",
+        "test_AcrossBridgeHookDeploymentSetsOwner",
+        "test_AcrossBridgeHookDeploymentWhitelistsHook",
+    ]]],
+    ["test/deploy/14_v2System.spec.ts", [v2SystemDeploymentFile, "V2SystemDeploymentParityTest", [
+        "test_OrchestratorRegistryDeploymentSetsOwner",
+        "test_OrchestratorRegistryRegistersV1",
+        "test_OrchestratorRegistryRegistersV2",
+        "test_EscrowV2DeploymentSetsOwner",
+        "test_EscrowV2DeploymentSetsChainId",
+        "test_EscrowV2DeploymentWiresOrchestratorRegistry",
+        "test_EscrowV2DeploymentWiresPaymentVerifierRegistry",
+        "test_EscrowV2DeploymentSetsDustRecipient",
+        "test_EscrowV2DeploymentSetsDustThreshold",
+        "test_EscrowV2DeploymentSetsMaximumIntents",
+        "test_EscrowV2DeploymentSetsIntentExpiration",
+        "test_EscrowV2DeploymentWhitelistsEscrow",
+        "test_OrchestratorV2DeploymentSetsOwner",
+        "test_OrchestratorV2DeploymentSetsChainId",
+        "test_OrchestratorV2DeploymentWiresEscrowRegistry",
+        "test_OrchestratorV2DeploymentWiresPaymentVerifierRegistry",
+        "test_OrchestratorV2DeploymentOmitsRetiredRelayerAndGlobalIntentControls",
+        "test_OrchestratorV2DeploymentSetsProtocolFee",
+        "test_OrchestratorV2DeploymentSetsProtocolFeeRecipient",
+        "test_UnifiedPaymentVerifierV2DeploymentSetsOwner",
+        "test_UnifiedPaymentVerifierV2DeploymentWiresOrchestratorRegistry",
+        "test_UnifiedPaymentVerifierV2DeploymentWiresNullifierRegistry",
+        "test_RetiredV2VerifierLegacyNullifierPermissionIsRevoked",
+    ]]],
+]);
+for (const [sourceFile, [, , destinations]] of v2CoreDeploymentMappings) {
+    const sourceCount = inventory.tests.filter((test) => test.sourceFile === sourceFile).length;
+    if (sourceCount !== destinations.length) {
+        throw new Error(`${sourceFile} mapping count mismatch: ${sourceCount} source / ${destinations.length} translated destinations`);
+    }
+}
+
+function v2CoreDeploymentDestination(test) {
+    const mapping = v2CoreDeploymentMappings.get(test.sourceFile);
+    if (!mapping) return "";
+    const [file, contractName, destinations] = mapping;
+    const sourceTests = inventory.tests.filter((sourceTest) => sourceTest.sourceFile === test.sourceFile);
+    const sourceIndex = sourceTests.findIndex((sourceTest) => sourceTest.id === test.id);
+    if (sourceIndex < 0) return "";
+    return `${file}:${contractName}::${destinations[sourceIndex]}`;
+}
+
 function orchestratorV2LegacyDestination(test) {
     if (test.sourceFile !== "test/orchestratorV2/orchestratorV2.legacyCoverage.spec.ts") return "";
     const scenario = test.scenario;
@@ -1783,7 +1834,7 @@ const header = [
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || escrowLegacyDestination(test) || orchestratorLegacyDestination(test) || stakeVaultDestination(test) || riskManagerDestination(test) || riskManagerCoverageDestination(test) || legacySystemDeploymentDestination(test) || legacyVerifierDeploymentDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || escrowLegacyDestination(test) || orchestratorLegacyDestination(test) || stakeVaultDestination(test) || riskManagerDestination(test) || riskManagerCoverageDestination(test) || legacySystemDeploymentDestination(test) || legacyVerifierDeploymentDestination(test) || v2CoreDeploymentDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -1822,6 +1873,9 @@ const rows = inventory.tests.map((test) => {
     }
     if (legacyVerifierDeploymentMappings.has(test.sourceFile) && !foundryDestination) {
         throw new Error(`Unmapped verifier deployment behavior: ${test.id} ${test.scenario}`);
+    }
+    if (v2CoreDeploymentMappings.has(test.sourceFile) && !foundryDestination) {
+        throw new Error(`Unmapped V2 core deployment behavior: ${test.id} ${test.scenario}`);
     }
     if (test.sourceFile === "test/escrowV2/escrowV2.pythOracle.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped EscrowV2 Pyth behavior: ${test.id} ${test.scenario}`);
@@ -1887,6 +1941,7 @@ const rows = inventory.tests.map((test) => {
     if ([riskManagerIntegrationConfigFile, riskManagerAdmissionFile, riskManagerExtensionLifecycleFile, riskManagerExtensionBoundaryFile, riskManagerSettlementFile, riskManagerChargebackFile, riskManagerDeferredCustodyFile, riskManagerSettlementRoutingFile, orchestratorV3SettlementSafetyFile, orchestratorV3ControlRecoveryFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete RiskManager real-system parity: 70 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 70/70";
     if (foundryDestination.startsWith(legacySystemDeploymentFile)) evidence = "Legacy system deployment parity: 21 passed individually and together, 0 failed, 0 skipped; same-commit localhost Hardhat source 21/21";
     if ([unifiedVerifierDeploymentFile, legacyPaymentMethodDeploymentFile].some((file) => foundryDestination.startsWith(file))) evidence = "Legacy verifier and payment-method deployment parity: 45 source rows mapped; 46 Foundry tests passed individually and together, including the formerly commented orchestrator-registry assertion; same-commit localhost Hardhat sources 45/45";
+    if ([acrossBridgeHookDeploymentFile, v2SystemDeploymentFile].some((file) => foundryDestination.startsWith(file))) evidence = "Across and V2 core deployment parity: 26 passed individually and together, 0 failed, 0 skipped; same-commit localhost Hardhat sources 26/26";
     if (foundryDestination.startsWith(orchestratorV2LifecycleFile) || foundryDestination.startsWith(orchestratorV2HooksFile)) evidence = "OrchestratorV2LifecycleParity.t.sol + OrchestratorV2HooksGovernanceParity.t.sol: 55 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerV2File)) evidence = "ProtocolViewerV2Parity.t.sol: 12 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(protocolViewerFile)) evidence = "ProtocolViewerParity.t.sol: 15 passed individually and together, 0 failed, 0 skipped";
