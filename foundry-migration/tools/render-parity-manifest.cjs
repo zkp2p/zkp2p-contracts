@@ -8,6 +8,7 @@ const inventory = require(path.join(repositoryRoot, "foundry-migration/baseline/
 const outputPath = path.join(repositoryRoot, "foundry-migration/hardhat-to-foundry-manifest.csv");
 const registryFile = "test-foundry/deterministic/registries/RegistryParity.t.sol";
 const oracleFile = "test-foundry/deterministic/oracles/OracleAdapterParity.t.sol";
+const orchestratorV2File = "test-foundry/deterministic/orchestrator/OrchestratorV2RateManagerParity.t.sol";
 const attestationFile = "test-foundry/deterministic/verifiers/AttestationVerifierParity.t.sol";
 const thresholdFile = "test-foundry/deterministic/libs/ThresholdSignatureParity.t.sol";
 const baseUnifiedFile = "test-foundry/deterministic/verifiers/BaseUnifiedVerifierParity.t.sol";
@@ -277,13 +278,24 @@ function unifiedV2CompatibilityDestination(test) {
     return `${unifiedV2CompatibilityFile}:UnifiedPaymentVerifierV2CompatibilityParityTest::test_FulfillsV2IntentWithUnifiedVerifierAndTransfersExactTokens`;
 }
 
+function orchestratorV2Destination(test) {
+    if (test.sourceFile !== "test/orchestratorV2/orchestratorV2.spec.ts") return "";
+    const scenario = test.scenario;
+    const target = (testName) => `${orchestratorV2File}:OrchestratorV2RateManagerParityTest::${testName}`;
+    if (scenario.includes("uses EscrowV2 delegated effective rate")) return target("test_SignalUsesDelegatedRateAndSnapshotsManagerFee");
+    if (scenario.includes("conversion rate is below delegated")) return target("test_SignalRejectsConversionRateBelowDelegatedRate");
+    if (scenario.includes("delegated manager fee exceeds")) return target("test_SignalRejectsDelegatedManagerFeeAboveMaximum");
+    if (scenario.includes("deducts manager fee")) return target("test_FulfillDeductsManagerFeeAndTransfersNetAmount");
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || orchestratorV2Destination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -308,10 +320,14 @@ const rows = inventory.tests.map((test) => {
     if (test.sourceFile === "test/unifiedVerifier/unifiedPaymentVerifierV2.spec.ts" && !foundryDestination) {
         throw new Error(`Unmapped unified verifier V2 compatibility behavior: ${test.id} ${test.scenario}`);
     }
+    if (test.sourceFile === "test/orchestratorV2/orchestratorV2.spec.ts" && !foundryDestination) {
+        throw new Error(`Unmapped orchestrator V2 behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
     let evidence = "";
     if (foundryDestination.startsWith(registryFile)) evidence = "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(oracleFile)) evidence = "OracleAdapterParity.t.sol: 25 passed individually and together, 0 failed, 0 skipped";
+    if (foundryDestination.startsWith(orchestratorV2File)) evidence = "OrchestratorV2RateManagerParity.t.sol: 4 passed individually and together, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(attestationFile)) evidence = "AttestationVerifierParity.t.sol: 24 passed, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(thresholdFile)) evidence = "ThresholdSignatureParity.t.sol: 16 passed, 0 failed, 0 skipped";
     if (foundryDestination.startsWith(baseUnifiedFile)) evidence = "BaseUnifiedVerifierParity.t.sol: 8 passed, 0 failed, 0 skipped";
