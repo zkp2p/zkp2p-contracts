@@ -97,10 +97,11 @@ interface IOrchestratorV3 {
         bool isManualRelease
     );
 
-    event IntentReferralFeeDistributed(
+    event IntentFeeDistributed(
         bytes32 indexed intentHash,
-        address indexed feeRecipient,
-        uint256 feeAmount
+        IIntentRiskHook.FeeType feeType,
+        address indexed recipient,
+        uint256 amount
     );
     event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
     event DepositPreIntentHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);

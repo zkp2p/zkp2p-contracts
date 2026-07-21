@@ -22,8 +22,9 @@ library FeeSettlementLib {
     uint256 internal constant PRECISE_UNIT = 1e18;
     uint256 internal constant MAX_RISK_CALLBACK_RETURN_DATA = 2_048;
 
-    event IntentReferralFeeDistributed(
+    event IntentFeeDistributed(
         bytes32 indexed intentHash,
+        IIntentRiskHook.FeeType feeType,
         address indexed recipient,
         uint256 amount
     );
@@ -139,9 +140,12 @@ library FeeSettlementLib {
         for (uint256 allocationIndex = 0; allocationIndex < _allocations.length; allocationIndex++) {
             IIntentRiskHook.FeeAllocation memory allocation = _allocations[allocationIndex];
             _token.safeTransfer(allocation.recipient, allocation.amount);
-            if (allocation.feeType == IIntentRiskHook.FeeType.REFERRAL) {
-                emit IntentReferralFeeDistributed(_intentHash, allocation.recipient, allocation.amount);
-            }
+            emit IntentFeeDistributed(
+                _intentHash,
+                allocation.feeType,
+                allocation.recipient,
+                allocation.amount
+            );
         }
     }
 }
