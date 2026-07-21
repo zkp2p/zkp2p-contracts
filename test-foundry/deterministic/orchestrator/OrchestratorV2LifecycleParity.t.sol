@@ -115,6 +115,14 @@ contract OrchestratorV2LifecycleParityTest is OrchestratorV2LegacyFixture {
         _fulfill(intentHash, 5e6, CONVERSION_RATE);
     }
 
+    function test_FulfillWithZeroProtocolFeeTransfersEntireRelease() public {
+        bytes32 intentHash = _signalDefault();
+        uint256 beforeBalance = token.balanceOf(taker);
+        _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
+        assertEq(token.balanceOf(taker) - beforeBalance, INTENT_AMOUNT);
+        assertEq(token.balanceOf(protocolFeeRecipient), 0);
+    }
+
     function test_FulfillRejectsMissingIntent() public {
         bytes32 missing = bytes32("missing");
         vm.expectRevert(abi.encodeWithSelector(IOrchestratorV2.IntentNotFound.selector, missing));

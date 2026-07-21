@@ -36,6 +36,13 @@ contract OrchestratorV2HooksGovernanceParityTest is OrchestratorV2LegacyFixture 
         orchestrator.setDepositWhitelistHook(address(escrow), depositId, whitelistHook);
     }
 
+    function test_SetDepositWhitelistHookRejectsWhenReentrancyGuardIsEntered() public {
+        vm.store(address(orchestrator), bytes32(uint256(1)), bytes32(uint256(2)));
+        vm.expectRevert("ReentrancyGuard: reentrant call");
+        vm.prank(depositor);
+        orchestrator.setDepositWhitelistHook(address(escrow), depositId, whitelistHook);
+    }
+
     function test_HookSetterRejectsUnauthorizedCaller() public {
         vm.expectRevert(
             abi.encodeWithSelector(IOrchestratorV2.UnauthorizedCallerOrDelegate.selector, other, depositor, delegate)
@@ -163,6 +170,12 @@ contract OrchestratorV2HooksGovernanceParityTest is OrchestratorV2LegacyFixture 
         _signalCall(taker, _defaultParams());
     }
 
+    function test_SignalAcceptsUnlistedEscrowWhenRegistryAcceptsAll() public {
+        escrowRegistry.removeEscrow(address(escrow));
+        escrowRegistry.setAcceptAllEscrows(true);
+        assertNotEq(_signal(taker, _defaultParams()), bytes32(0));
+    }
+
     function test_SignalRejectsWhilePaused() public {
         orchestrator.pauseOrchestrator();
         vm.expectRevert(bytes("Pausable: paused"));
@@ -197,6 +210,14 @@ contract OrchestratorV2HooksGovernanceParityTest is OrchestratorV2LegacyFixture 
         IOrchestratorV2.SignalIntentParams memory params = _defaultParams();
         params.referralFees = new IReferralFee.ReferralFee[](1);
         params.referralFees[0] = IReferralFee.ReferralFee({recipient: address(0), fee: 1e15});
+        vm.expectRevert(IReferralFee.InvalidReferralFeeConfiguration.selector);
+        _signalCall(taker, params);
+    }
+
+    function test_SignalRejectsReferralRecipientWithZeroFee() public {
+        IOrchestratorV2.SignalIntentParams memory params = _defaultParams();
+        params.referralFees = new IReferralFee.ReferralFee[](1);
+        params.referralFees[0] = IReferralFee.ReferralFee({recipient: referrer, fee: 0});
         vm.expectRevert(IReferralFee.InvalidReferralFeeConfiguration.selector);
         _signalCall(taker, params);
     }

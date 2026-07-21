@@ -108,6 +108,18 @@ contract EscrowV2LifecycleParityTest is EscrowV2LegacyFixture {
         assertEq(escrow.getDepositIntentHashes(0).length, 3);
     }
 
+    function test_LockFundsReclaimsExpiredIntentAtMaximumIntentCount() public {
+        escrow.setMaxIntentsPerDeposit(1);
+        bytes32 expired = _lock(address(orchestratorMock), 20e6);
+        vm.warp(block.timestamp + 3601);
+        bytes32 replacement = keccak256("max-count-replacement");
+        orchestratorMock.lockFunds(0, replacement, 20e6);
+        bytes32[] memory pruned = orchestratorMock.getLastPrunedIntents();
+        assertEq(pruned.length, 1);
+        assertEq(pruned[0], expired);
+        assertEq(escrow.getDepositIntentHashes(0).length, 1);
+    }
+
     function test_LockFundsRejectsNonOrchestrator() public {
         bytes32 intentHash = keccak256("unauthorized-intent");
         vm.expectRevert(

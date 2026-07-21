@@ -1620,6 +1620,55 @@ function riskManagerDestination(test) {
     return `${file}:${contractName}::${testName}`;
 }
 
+const patchCoverageSource = "test/patchCoverage/patchCoverage.spec.ts";
+const patchCoverageSourceTests = inventory.tests.filter((test) => test.sourceFile === patchCoverageSource);
+const patchCoverageDestinations = [
+    [orchestratorV2HooksFile, "OrchestratorV2HooksGovernanceParityTest", "test_SignalAcceptsUnlistedEscrowWhenRegistryAcceptsAll"],
+    [escrowV2LegacyManagementFile, "EscrowV2ManagementParityTest", "test_CreateDepositStoresZeroDelegate"],
+    [escrowV2LegacyConfigurationFile, "EscrowV2ConfigurationParityTest", "test_InvalidOracleQuoteHaltsRateAtZero"],
+    [escrowV2LegacyConfigurationFile, "EscrowV2ConfigurationParityTest", "test_FutureOracleTimestampHaltsRateAtZero"],
+    [escrowV2OracleConfigFile, "EscrowV2OracleRateConfigParityTest", "test_RevertingOracleAdapterHaltsRateAtZero"],
+    [escrowV2DelegationFile, "EscrowV2DelegationParityTest", "test_EffectiveRateUsesDelegatedRate"],
+    [escrowV2LegacyManagementFile, "EscrowV2ManagementParityTest", "test_WithdrawDepositRetainOnEmptyKeepsDepositOpen"],
+    [escrowV2LegacyLifecycleFile, "EscrowV2LifecycleParityTest", "test_LockFundsReclaimsExpiredIntentAtMaximumIntentCount"],
+    [rateManagerV1File, "RateManagerV1ParityTest", "test_CreateAllowsZeroFeeWithZeroRecipient"],
+    [rateManagerV1File, "RateManagerV1ParityTest", "test_SetFeeAllowsZeroWhenRecipientIsZero"],
+    [rateManagerV1File, "RateManagerV1ParityTest", "test_SetConfigAllowsZeroRecipientWhenFeeIsZero"],
+    [rateManagerV1File, "RateManagerV1ParityTest", "test_GetRateReturnsStoredManagerRate"],
+    [rateManagerV1File, "RateManagerV1ParityTest", "test_GetRateReturnsZeroForUnsetPair"],
+    [orchestratorV2LifecycleFile, "OrchestratorV2LifecycleParityTest", "test_FulfillWithZeroProtocolFeeTransfersEntireRelease"],
+    [escrowV2LegacyManagementFile, "EscrowV2ManagementParityTest", "test_DisablingAcceptingIntentsBypassesMinimumLiquidityCheck"],
+    [escrowV2LegacyLifecycleFile, "EscrowV2LifecycleParityTest", "test_PruneExpiredIntentsSkipsClearedOrchestrator"],
+    [escrowV2LegacyManagementFile, "EscrowV2ManagementParityTest", "test_WithdrawDepositWithOutstandingIntentKeepsDepositOpen"],
+    [escrowV2LegacyManagementFile, "EscrowV2ManagementParityTest", "test_RemoveFundsUpdatesLiquidityAndEmits"],
+    [rateManagerV1File, "RateManagerV1ParityTest", "test_ConstructorRejectsZeroEscrowRegistry"],
+    [escrowV2BranchValidationFile, "EscrowV2BranchValidationParityTest", "test_SetRateManagerPropagatesMissingManagerError"],
+    [escrowV2BranchStatePauseFile, "EscrowV2BranchStatePauseParityTest", "test_WithdrawDepositRejectsWhenReentrancyGuardIsEntered"],
+    [escrowV2BranchStatePauseFile, "EscrowV2BranchStatePauseParityTest", "test_PruneExpiredIntentsRejectsWhenReentrancyGuardIsEntered"],
+    [escrowV2BranchStatePauseFile, "EscrowV2BranchStatePauseParityTest", "test_LockFundsRejectsWhenReentrancyGuardIsEntered"],
+    [escrowV2BranchStatePauseFile, "EscrowV2BranchStatePauseParityTest", "test_UnlockFundsRejectsWhenReentrancyGuardIsEntered"],
+    [escrowV2BranchStatePauseFile, "EscrowV2BranchStatePauseParityTest", "test_UnlockAndTransferRejectsWhenReentrancyGuardIsEntered"],
+    [orchestratorV2HooksFile, "OrchestratorV2HooksGovernanceParityTest", "test_SetDepositWhitelistHookRejectsWhenReentrancyGuardIsEntered"],
+    [escrowFundingFile, "EscrowFundingParityTest", "test_RemoveFundsRejectsWhenReentrancyGuardIsEntered"],
+    [escrowFundingFile, "EscrowFundingParityTest", "test_WithdrawDepositRejectsWhenReentrancyGuardIsEntered"],
+    [escrowFundingFile, "EscrowFundingParityTest", "test_PruneExpiredIntentsRejectsWhenReentrancyGuardIsEntered"],
+    [escrowFundingFile, "EscrowFundingParityTest", "test_UnlockFundsRejectsWhenReentrancyGuardIsEntered"],
+    [escrowFundingFile, "EscrowFundingParityTest", "test_UnlockAndTransferRejectsWhenReentrancyGuardIsEntered"],
+    [orchestratorLegacyManualReleaseFile, "OrchestratorManualReleaseParityTest", "test_ManualReleaseRejectsWhenReentrancyGuardIsEntered"],
+    [orchestratorV2HooksFile, "OrchestratorV2HooksGovernanceParityTest", "test_SignalRejectsReferralRecipientWithZeroFee"],
+];
+if (patchCoverageSourceTests.length !== 33 || patchCoverageDestinations.length !== 33) {
+    throw new Error(`Patch coverage mapping count mismatch: ${patchCoverageSourceTests.length} source / ${patchCoverageDestinations.length} translated destinations`);
+}
+
+function patchCoverageDestination(test) {
+    if (test.sourceFile !== patchCoverageSource) return "";
+    const sourceIndex = patchCoverageSourceTests.findIndex((sourceTest) => sourceTest.id === test.id);
+    if (sourceIndex < 0) return "";
+    const [file, contractName, testName] = patchCoverageDestinations[sourceIndex];
+    return `${file}:${contractName}::${testName}`;
+}
+
 const legacySystemDeploymentSource = "test/deploy/00_system.spec.ts";
 const legacySystemDeploymentSourceTests = inventory.tests.filter(
     (test) => test.sourceFile === legacySystemDeploymentSource
@@ -1942,7 +1991,7 @@ const header = [
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || escrowLegacyDestination(test) || orchestratorLegacyDestination(test) || stakeVaultDestination(test) || riskManagerDestination(test) || riskManagerCoverageDestination(test) || legacySystemDeploymentDestination(test) || legacyVerifierDeploymentDestination(test) || v2CoreDeploymentDestination(test) || peripheryDeploymentDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test) || escrowV2PythDestination(test) || escrowV2CurrencyRateDestination(test) || escrowV2DelegationDestination(test) || escrowV2OracleConfigDestination(test) || escrowV2LegacyDestination(test) || escrowV2BranchDestination(test) || escrowLegacyDestination(test) || orchestratorLegacyDestination(test) || stakeVaultDestination(test) || riskManagerDestination(test) || riskManagerCoverageDestination(test) || patchCoverageDestination(test) || legacySystemDeploymentDestination(test) || legacyVerifierDeploymentDestination(test) || v2CoreDeploymentDestination(test) || peripheryDeploymentDestination(test) || orchestratorV2Destination(test) || orchestratorV2LegacyDestination(test) || preIntentHookDestination(test) || whitelistPreIntentHookDestination(test) || acrossBridgeHookDestination(test) || rateManagerV1Destination(test) || protocolViewerV2Destination(test) || protocolViewerDestination(test) || attestationDestination(test) || thresholdDestination(test) || baseUnifiedDestination(test) || unifiedDestination(test) || unifiedV2CompatibilityDestination(test) || unifiedV3Destination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
@@ -1975,6 +2024,9 @@ const rows = inventory.tests.map((test) => {
     }
     if (test.sourceFile === riskManagerCoverageSource && !foundryDestination) {
         throw new Error(`Unmapped RiskManager coverage behavior: ${test.id} ${test.scenario}`);
+    }
+    if (test.sourceFile === patchCoverageSource && !foundryDestination) {
+        throw new Error(`Unmapped patch-coverage behavior: ${test.id} ${test.scenario}`);
     }
     if (test.sourceFile === legacySystemDeploymentSource && !foundryDestination) {
         throw new Error(`Unmapped legacy deployment behavior: ${test.id} ${test.scenario}`);
@@ -2049,6 +2101,7 @@ const rows = inventory.tests.map((test) => {
     if ([orchestratorLegacySignalFile, orchestratorLegacyCancelFile, orchestratorLegacyFulfillCoreFile, orchestratorLegacyFulfillAccountingFile, orchestratorLegacyFulfillHookFile, orchestratorLegacyFulfillPartialReentryFile, orchestratorLegacyManualReleaseFile, orchestratorLegacyPruneFile, orchestratorLegacyGovernanceFile, orchestratorLegacyViewsFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete legacy Orchestrator parity: 141 passed individually and together, 0 failed, 0 skipped; all 4 baseline-pending cases resolved in Foundry";
     if ([stakeVaultDepositDelegationFile, stakeVaultReservationFile, stakeVaultExitFile, stakeVaultDeferredFile, stakeVaultControllerHandoverFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete StakeVault parity: 56 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 56/56";
     if ([riskManagerHarnessGovernanceFile, riskManagerHarnessAdmissionFile, riskManagerHarnessSettlementFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete RiskManager hard-cut branch parity: 18 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 18/18";
+    if (test.sourceFile === patchCoverageSource) evidence = "Patch-coverage behavior parity: 33/33 mechanically mapped to exact named deterministic tests; targeted branch tests passed independently and together, with no coverage-only calls";
     if ([riskManagerIntegrationConfigFile, riskManagerAdmissionFile, riskManagerExtensionLifecycleFile, riskManagerExtensionBoundaryFile, riskManagerSettlementFile, riskManagerChargebackFile, riskManagerDeferredCustodyFile, riskManagerSettlementRoutingFile, orchestratorV3SettlementSafetyFile, orchestratorV3ControlRecoveryFile].some((file) => foundryDestination.startsWith(file))) evidence = "Complete RiskManager real-system parity: 70 passed individually and together, 0 failed, 0 skipped; same-commit Hardhat source 70/70";
     if (foundryDestination.startsWith(legacySystemDeploymentFile)) evidence = "Legacy system deployment parity: 21 passed individually and together, 0 failed, 0 skipped; same-commit localhost Hardhat source 21/21";
     if ([unifiedVerifierDeploymentFile, legacyPaymentMethodDeploymentFile].some((file) => foundryDestination.startsWith(file))) evidence = "Legacy verifier and payment-method deployment parity: 45 source rows mapped; 46 Foundry tests passed individually and together, including the formerly commented orchestrator-registry assertion; same-commit localhost Hardhat sources 45/45";

@@ -219,6 +219,13 @@ contract RateManagerV1ParityTest is Test {
         _createManager(manager, address(0), MAX_FEE, INITIAL_FEE, 0, "RM", "ipfs://rm");
     }
 
+    function test_CreateAllowsZeroFeeWithZeroRecipient() public {
+        bytes32 id = _createManager(manager, address(0), MAX_FEE, 0, 0, "ZeroFee", "ipfs://zero");
+        RateManagerV1.RateManagerConfig memory config = rateManager.getRateManager(id);
+        assertEq(config.fee, 0);
+        assertEq(config.feeRecipient, address(0));
+    }
+
     function test_CreateRejectsFeeAboveManagerMaximum() public {
         vm.expectRevert(abi.encodeWithSelector(RateManagerV1.FeeExceedsMaximum.selector, 2e16, 1e16));
         _createManager(manager, feeRecipient, 1e16, 2e16, 0, "RM", "ipfs://rm");
@@ -280,6 +287,19 @@ contract RateManagerV1ParityTest is Test {
         _setConfig(manager, rateManagerId, manager, address(0), "RM");
         vm.expectRevert(RateManagerV1.ZeroAddress.selector);
         _setFee(manager, rateManagerId, 2e16);
+    }
+
+    function test_SetFeeAllowsZeroWhenRecipientIsZero() public {
+        _setFee(manager, rateManagerId, 0);
+        _setConfig(manager, rateManagerId, manager, address(0), "RM");
+        vm.expectEmit(true, false, false, true, address(rateManager));
+        emit RateManagerFeeUpdated(rateManagerId, 0);
+        _setFee(manager, rateManagerId, 0);
+    }
+
+    function test_ConstructorRejectsZeroEscrowRegistry() public {
+        vm.expectRevert(RateManagerV1.ZeroAddress.selector);
+        new RateManagerV1(address(0));
     }
 
     function test_SetConfigUpdatesMutableFieldsAndEmits() public {

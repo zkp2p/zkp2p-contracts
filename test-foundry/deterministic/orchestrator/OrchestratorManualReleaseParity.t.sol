@@ -52,6 +52,13 @@ contract OrchestratorManualReleaseParityTest is OrchestratorLegacyFixture {
         orchestrator.releaseFundsToPayer(intentHash);
     }
 
+    function test_ManualReleaseRejectsWhenReentrancyGuardIsEntered() public {
+        vm.store(address(orchestrator), bytes32(uint256(1)), bytes32(uint256(2)));
+        vm.expectRevert("ReentrancyGuard: reentrant call");
+        vm.prank(offRamper);
+        orchestrator.releaseFundsToPayer(keccak256("legacy-guarded-release"));
+    }
+
     function _replaceIntent(address referrer, uint256 referrerFee, IPostIntentHook hook, bytes memory data)
         internal
         returns (bytes32)

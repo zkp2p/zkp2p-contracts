@@ -59,6 +59,13 @@ contract EscrowV2ManagementParityTest is EscrowV2LegacyFixture {
         assertEq(escrow.getDepositCurrencyMinRate(1, VENMO, USD), 0);
     }
 
+    function test_CreateDepositStoresZeroDelegate() public {
+        IEscrowV2.CreateDepositParams memory params =
+            _createParams(50e6, IEscrowV2.Range({min: 10e6, max: 50e6}), 1e18, address(0), address(0));
+        _createAsDepositor(params);
+        assertEq(escrow.getDeposit(1).delegate, address(0));
+    }
+
     function test_DepositToPullsFromCallerButAssignsSpecifiedOwner() public {
         IEscrowV2.CreateDepositParams memory params =
             _createParams(30e6, IEscrowV2.Range({min: 10e6, max: 100e6}), 1e18, delegate, intentGuardian);
@@ -173,6 +180,34 @@ contract EscrowV2ManagementParityTest is EscrowV2LegacyFixture {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length > 0) assertNotEq(logs[i].topics[0], topic);
         }
+    }
+
+    function test_WithdrawDepositRetainOnEmptyKeepsDepositOpen() public {
+        IEscrowV2.CreateDepositParams memory params =
+            _createParams(20e6, IEscrowV2.Range({min: 10e6, max: 200e6}), 1e18, address(0), address(0));
+        params.retainOnEmpty = true;
+        _createAsDepositor(params);
+        vm.prank(depositor);
+        escrow.withdrawDeposit(1);
+        assertEq(escrow.getDeposit(1).depositor, depositor);
+        assertEq(escrow.getDeposit(1).remainingDeposits, 0);
+    }
+
+    function test_WithdrawDepositWithOutstandingIntentKeepsDepositOpen() public {
+        _lock(address(orchestratorMock), 50e6);
+        vm.prank(depositor);
+        escrow.withdrawDeposit(0);
+        IEscrowV2.Deposit memory deposit = escrow.getDeposit(0);
+        assertEq(deposit.depositor, depositor);
+        assertEq(deposit.outstandingIntentAmount, 50e6);
+    }
+
+    function test_DisablingAcceptingIntentsBypassesMinimumLiquidityCheck() public {
+        vm.startPrank(depositor);
+        escrow.removeFunds(0, 495e6);
+        escrow.setAcceptingIntents(0, false);
+        vm.stopPrank();
+        assertFalse(escrow.getDeposit(0).acceptingIntents);
     }
 
     function test_SetDelegateUpdatesStateAndEmits() public {

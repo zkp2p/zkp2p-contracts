@@ -195,4 +195,41 @@ contract EscrowFundingParityTest is EscrowLegacyFixture {
         vm.expectRevert("Pausable: paused");
         _remove(offRamper, 30e6);
     }
+
+    function test_RemoveFundsRejectsWhenReentrancyGuardIsEntered() public {
+        _enterReentrancyGuard();
+        vm.expectRevert("ReentrancyGuard: reentrant call");
+        vm.prank(offRamper);
+        escrow.removeFunds(0, 1e6);
+    }
+
+    function test_WithdrawDepositRejectsWhenReentrancyGuardIsEntered() public {
+        _enterReentrancyGuard();
+        vm.expectRevert("ReentrancyGuard: reentrant call");
+        vm.prank(offRamper);
+        escrow.withdrawDeposit(0);
+    }
+
+    function test_PruneExpiredIntentsRejectsWhenReentrancyGuardIsEntered() public {
+        _enterReentrancyGuard();
+        vm.expectRevert("ReentrancyGuard: reentrant call");
+        vm.prank(onRamperOtherAddress);
+        escrow.pruneExpiredIntents(0);
+    }
+
+    function test_UnlockFundsRejectsWhenReentrancyGuardIsEntered() public {
+        _enterReentrancyGuard();
+        vm.expectRevert("ReentrancyGuard: reentrant call");
+        orchestratorMock.unlockFunds(0, keccak256("legacy-guarded-unlock"));
+    }
+
+    function test_UnlockAndTransferRejectsWhenReentrancyGuardIsEntered() public {
+        _enterReentrancyGuard();
+        vm.expectRevert("ReentrancyGuard: reentrant call");
+        orchestratorMock.unlockAndTransferFunds(0, keccak256("legacy-guarded-transfer"), 1e6, onRamper);
+    }
+
+    function _enterReentrancyGuard() internal {
+        vm.store(address(escrow), bytes32(uint256(1)), bytes32(uint256(2)));
+    }
 }
