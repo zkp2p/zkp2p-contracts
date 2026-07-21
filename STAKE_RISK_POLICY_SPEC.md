@@ -8,7 +8,7 @@ Hard-cut contract specification. The active ABI uses `IntentExtensionConfig`; de
 
 Stake now funds two independent liabilities:
 
-1. A taker can purchase additional intent time after the Escrow's initial free expiry. The maximum charge for the purchased time is reserved when the intent is extended, and the elapsed charge is paid to the LP whether the intent is fulfilled or cancelled.
+1. A taker or its delegated stake owner can purchase additional intent time after the Escrow's initial free expiry. The maximum charge is reserved from the economic owner's stake, and the elapsed charge is paid to the LP whether the intent is fulfilled or cancelled.
 2. A chargebackable payment reserves coverage after settlement. Coverage comes from existing membership stake or from gross deferred settlement proceeds converted into payout-recipient-owned stake.
 
 Admission reserves only chargeback coverage. Merely signaling an intent does not reserve a pending-intent penalty. The Escrow's initial expiration period is the free interval; an intent must explicitly purchase any additional time before its current expiry.
@@ -21,6 +21,7 @@ The two liabilities use different StakeVault reservation identifiers and are nev
 - Orchestrator snapshots the selected risk hook when the intent is admitted.
 - RiskManager is the only contract allowed to extend the Escrow intent expiry.
 - StakeVault is the only token custody and accounting boundary. RiskManager never retains tokens.
+- Extension stake remains owned and withdrawable only by the stake owner; delegation gives the taker reservation authority, not custody rights.
 - Ordinary post-intent hooks remain selected by the onramper and are independent of the risk policy.
 - Curator and onramper clients must accept only known RiskManager addresses before paying fiat.
 
@@ -102,7 +103,7 @@ Pextension = ceil(
 )
 ```
 
-`Pextension` is slashed to LP compensation. Every unused unit of the extension reservation is immediately released as reusable taker stake.
+`Pextension` is slashed to LP compensation. Every unused unit of the extension reservation is immediately released as reusable stake of the snapshotted extension stake owner.
 
 Consequences:
 
@@ -115,28 +116,19 @@ Consequences:
 
 ### `extendIntent(intentHash, additionalTime)`
 
-- Callable only by the intent taker.
-- Uses the taker's existing free membership stake.
+- Callable by the intent taker or the exact delegated stake owner selected for the extension.
+- On the first extension, resolves `StakeVault.stakeOwnerOf(taker)` and snapshots that address as `extensionStakeOwner` for the intent's complete extension lifecycle.
+- Uses the snapshotted owner's existing free membership stake. Funding and authorization happen beforehand through `depositStake`, `depositStakeFor`, or `setTakerAuthorization`; no tokens move during `extendIntent`.
 - Creates or increases the isolated extension reservation.
 - Calls Escrow as the intent guardian only after the reservation succeeds.
-
-### `stakeAndExtendIntent(intentHash, additionalTime)`
-
-- Callable by the taker or any sponsor.
-- Pulls exactly the incremental reservation amount directly from the caller into StakeVault.
-- Credits the deposited amount to the intent taker's `stakeBalance` and reserves it atomically.
-- Never consumes pre-existing taker stake on behalf of a third party.
-- Any amount not charged at terminal resolution remains reusable stake owned by the taker; sponsorship is a stake contribution, not a refundable loan.
-
-Both calls:
-
 - require a pending, unexpired intent;
-- fail closed while StakeVault reservations are paused or the taker's direct stake is exiting;
-- require stake deposits to be unpaused when `stakeAndExtendIntent` supplies new collateral;
+- fail closed while StakeVault reservations are paused or the extension stake owner is exiting;
 - validate that Escrow's current expiry equals `Tbase + Tpurchased`;
 - reject zero added time and any extension that would move final expiry beyond five days from the original intent timestamp;
 - cannot revive an already-expired intent;
 - update RiskManager state only if the StakeVault reservation and Escrow guardian call both succeed.
+
+Delegation changes cannot move an active reservation between economic owners. If the stake owner revokes the taker after the first extension, the taker cannot add exposure, but the snapshotted owner can still add time from its own stake. Terminal penalties and unused releases always settle against that original owner.
 
 ## Isolated Reservations
 
@@ -173,7 +165,7 @@ Current policy requires `r = 10_000`, so coverage equals the gross Escrow releas
 ### Stake-backed mode
 
 - Admission reserves `ceil(A * r / 10_000)` from the delegated stake owner.
-- Settlement first charges the taker's extension reservation.
+- Settlement first charges the independent extension stake owner's reservation.
 - The independent chargeback reservation is then resized to `Qchargeback`.
 - No settlement tokens are consumed by RiskManager.
 
@@ -229,11 +221,10 @@ Partial token consumption, token mismatch, amount mismatch, callback failure, or
 The hard-cut ABI:
 
 - uses `IntentExtensionConfig` in `PlatformRiskConfig`;
-- snapshots `intentAmount`, `baseIntentExpiry`, and `extensionPenaltyBpsPerHour`;
-- tracks `totalExtensionTime`, `extensionReservation`, and terminal `extensionPenalty`;
-- exposes `extendIntent`, `stakeAndExtendIntent`, extension cost/penalty math, and `extensionReservationId`;
+- snapshots `intentAmount`, `baseIntentExpiry`, and `extensionPenaltyBpsPerHour` at admission;
+- snapshots `extensionStakeOwner` on the first extension and tracks `totalExtensionTime`, `extensionReservation`, and terminal `extensionPenalty`;
+- exposes `extendIntent`, extension cost/penalty math, and `extensionReservationId`;
 - emits `IntentExtended` for each purchase and `IntentExtensionCharged` at every extended intent's terminal outcome;
-- emits `StakeSponsoredAndReserved` when new stake funds an extension;
 - keeps extension events separate from chargeback and deferred-settlement events.
 
 Indexers must use the emitted extension reservation identifier and must not combine extension collateral with `reservedAmount`, which remains chargeback coverage.
@@ -244,16 +235,17 @@ Indexers must use the emitted extension reservation identifier and must not comb
 2. Every extension cost is calculated from the full `intentAmount`.
 3. Admission reserves chargeback coverage only; `extensionReservation == 0` initially.
 4. The active extension reservation equals the position's `extensionReservation` and is keyed by the domain-separated identifier.
-5. The extension reservation staker is the intent taker, independent of delegated chargeback stake ownership.
+5. The extension reservation staker is the `extensionStakeOwner` snapshotted from current delegation on the first extension.
 6. Cumulative extension reservation is monotonic and uses one upward rounding over cumulative purchased time.
 7. Terminal extension charge is identical for cancellation, proof fulfillment, and manual release at the same timestamp.
 8. Terminal extension charge never exceeds the purchased-time reservation; all excess is released.
 9. A chargeback reservation and extension reservation can coexist without either operation mutating the other.
-10. Third-party extension sponsorship increases taker stake and reserved stake by exactly the token amount received.
-11. Deferred settlement increases payout-recipient stake and chargeback reservation by exactly the gross release.
-12. Every slash decreases stake and reserved stake by the same amount and increases LP compensation by that amount.
-13. Clean deferred maturity leaves `net free stake + claimable fees == gross release`.
-14. Across every lifecycle transition, `token balance in StakeVault == total liabilities`.
+10. Delegated extension authority never changes stake ownership or grants the taker withdrawal rights.
+11. Revocation blocks new taker-authorized exposure but does not strand or reassign the existing owner's reservation.
+12. Deferred settlement increases payout-recipient stake and chargeback reservation by exactly the gross release.
+13. Every slash decreases stake and reserved stake by the same amount and increases LP compensation by that amount.
+14. Clean deferred maturity leaves `net free stake + claimable fees == gross release`.
+15. Across every lifecycle transition, `token balance in StakeVault == total liabilities`.
 
 ## Illustrative Policy
 
@@ -282,7 +274,7 @@ The same table applies whether the terminal action is fulfillment or cancellatio
 2. Set the Escrow initial expiration period to the intended free interval (one hour for the initial rollout).
 3. Configure `IntentExtensionConfig` and chargeback policy per payment method.
 4. Publish the hard-cut ABI and risk math.
-5. Migrate the indexer to extension snapshots, reservations, charges, and sponsorship events.
+5. Migrate the indexer to extension-owner snapshots, delegated reservations, and terminal charges.
 6. Update curator and quote clients to recognize only approved risk hooks and the new extension fields.
 
 `EscrowV2.setIntentExpirationPeriod` is a global Escrow setting, not a per-deposit or

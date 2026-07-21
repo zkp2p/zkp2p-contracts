@@ -24,7 +24,8 @@ import { IStakeVault } from "./interfaces/IStakeVault.sol";
  *
  * @dev ECONOMIC MODEL
  *      Admission reserves chargeback coverage only. The Escrow's original expiry is the free period.
- *      Additional time is purchased by reserving taker-owned stake under an isolated reservation:
+ *      Additional time is purchased by reserving stake owned by the taker or its delegated stake owner
+ *      under an isolated reservation:
  *
  *        extensionReserve = ceil(A * s * purchasedTime / (10_000 * 1 hour))
  *        extensionCharge = ceil(A * s * elapsedPurchasedTime / (10_000 * 1 hour))
@@ -32,12 +33,12 @@ import { IStakeVault } from "./interfaces/IStakeVault.sol";
  *      where A is the full locked intent amount and s is the extension slope. Pricing the complete
  *      LP liquidity lock prevents free or dust-priced extensions. The same elapsed-time charge applies
  *      on fulfillment, manual release, cancellation, or expiry; unused reserved stake becomes free
- *      taker stake.
+ *      stake of the snapshotted extension owner.
  *
  * @dev LIFECYCLE
  *      - Initial Escrow time requires no pending-intent bond.
  *      - Only purchased time after the original expiry reserves extension stake.
- *      - Third parties may sponsor only by supplying new stake credited to the taker.
+ *      - A taker or its delegated stake owner may purchase time from the owner's reusable stake.
  *      - Every terminal path charges the same elapsed purchased time and releases every unused unit.
  *      - Non-chargebackable settlement releases the full pending reservation immediately.
  *      - Stake-backed settlement resizes coverage to the gross Escrow release and consumes no payout funds.
@@ -349,41 +350,37 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
     /**
      * @inheritdoc IRiskManager
-     * @dev Only the intent taker can allocate already-deposited taker stake. This prevents an arbitrary
-     *      caller from locking someone else's reusable stake while keeping the common one-transaction
-     *      extension path available after the taker has deposited once.
+     * @dev The first extension snapshots the taker's current delegated stake owner. Later delegation
+     *      changes cannot move the active reservation to a different economic owner. The taker may add
+     *      exposure only while that delegation remains current; the snapshotted owner may always add
+     *      exposure from its own stake.
      */
     function extendIntent(bytes32 _intentHash, uint64 _additionalTime) external override nonReentrant {
         RiskPosition storage position = riskPositions[_intentHash];
         if (position.status != PositionStatus.PENDING) {
             revert PositionNotPending(_intentHash, position.status);
         }
-        if (msg.sender != position.taker) {
-            revert UnauthorizedStakeExtension(msg.sender, position.taker);
-        }
-        _extendIntent(_intentHash, _additionalTime, msg.sender, true);
-    }
+        address extensionStakeOwner = position.extensionStakeOwner;
+        address currentStakeOwner = stakeVault.stakeOwnerOf(position.taker);
+        if (extensionStakeOwner == address(0)) extensionStakeOwner = currentStakeOwner;
 
-    /**
-     * @inheritdoc IRiskManager
-     * @dev The sponsor approves StakeVault, not RiskManager. Every token added to the extension
-     *      reservation is new stake credited to the taker, so a sponsor can never consume the taker's
-     *      pre-existing free stake. Unused collateral remains reusable taker stake at resolution.
-     */
-    function stakeAndExtendIntent(bytes32 _intentHash, uint64 _additionalTime) external override nonReentrant {
-        RiskPosition storage position = riskPositions[_intentHash];
-        if (position.status != PositionStatus.PENDING) {
-            revert PositionNotPending(_intentHash, position.status);
+        bool callerIsTaker = msg.sender == position.taker;
+        bool callerIsStakeOwner = msg.sender == extensionStakeOwner;
+        if (
+            (!callerIsTaker && !callerIsStakeOwner)
+                || (callerIsTaker && !callerIsStakeOwner && currentStakeOwner != extensionStakeOwner)
+        ) {
+            revert UnauthorizedStakeExtension(msg.sender, position.taker, extensionStakeOwner);
         }
-        _extendIntent(_intentHash, _additionalTime, msg.sender, false);
+        _extendIntent(_intentHash, _additionalTime, msg.sender, extensionStakeOwner);
     }
 
     /** @dev Purchases time, atomically reserves its maximum charge, then invokes the canonical guardian action. */
     function _extendIntent(
         bytes32 _intentHash,
         uint64 _additionalTime,
-        address _funder,
-        bool _useExistingStake
+        address _caller,
+        address _extensionStakeOwner
     ) internal {
         if (_additionalTime == 0) revert ZeroAmount();
 
@@ -425,28 +422,17 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
         uint256 additionalReservation = newReservation - position.extensionReservation;
         bytes32 reservationId = _extensionReservationId(_intentHash);
 
-        if (_useExistingStake) {
-            if (additionalReservation != 0) {
-                if (position.extensionReservation == 0) {
-                    stakeVault.reserveStake(
-                        position.taker,
-                        reservationId,
-                        additionalReservation,
-                        newExpiry
-                    );
-                } else {
-                    stakeVault.increaseReservation(
-                        reservationId,
-                        additionalReservation,
-                        newExpiry
-                    );
-                }
-            }
+        if (position.extensionReservation == 0) {
+            stakeVault.reserveStake(
+                _extensionStakeOwner,
+                reservationId,
+                additionalReservation,
+                newExpiry
+            );
         } else {
-            if (additionalReservation == 0) revert ZeroAmount();
-            stakeVault.depositAndReserveStake(
-                _funder,
-                position.taker,
+            // Refresh the release time and admission gates even when cumulative rounding means
+            // this particular extension adds no new reserved stake.
+            stakeVault.increaseReservation(
                 reservationId,
                 additionalReservation,
                 newExpiry
@@ -455,17 +441,20 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
         escrow.extendIntentExpiry(intent.depositId, _intentHash, _additionalTime);
 
+        if (position.extensionStakeOwner == address(0)) {
+            position.extensionStakeOwner = _extensionStakeOwner;
+        }
         position.totalExtensionTime = uint64(newTotalExtensionTime);
         position.extensionReservation = newReservation;
         emit IntentExtended(
             _intentHash,
-            _funder,
             position.taker,
+            _extensionStakeOwner,
+            _caller,
             _additionalTime,
             newExpiry,
             additionalReservation,
-            newReservation,
-            _useExistingStake
+            newReservation
         );
     }
 
@@ -773,7 +762,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     /**
      * @dev Charges identical elapsed extension time on every terminal path and frees unused collateral.
      *      The reservation is isolated from chargeback stake so delegated portfolio accounting cannot
-     *      be resized or slashed by extension sponsorship.
+     *      be resized or slashed by extension purchases.
      */
     function _chargeIntentExtension(
         bytes32 _intentHash,
@@ -803,8 +792,9 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
 
         emit IntentExtensionCharged(
             _intentHash,
-            position.taker,
+            position.extensionStakeOwner,
             position.lp,
+            position.taker,
             _terminalAt,
             chargeableTime,
             penalty,

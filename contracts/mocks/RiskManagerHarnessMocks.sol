@@ -275,22 +275,6 @@ contract RiskManagerVaultHarness {
         reservations[_intentHash] = Reservation(_staker, _amount, _releaseTime);
     }
 
-    function depositAndReserveStake(
-        address _funder,
-        address _staker,
-        bytes32 _positionId,
-        uint256 _amount,
-        uint64 _releaseTime
-    ) external {
-        stakeToken.transferFrom(_funder, address(this), _amount);
-        stakeBalance[_staker] += _amount;
-        reservedStake[_staker] += _amount;
-        Reservation storage reservation = reservations[_positionId];
-        reservation.staker = _staker;
-        reservation.amount += _amount;
-        reservation.releaseTime = _releaseTime;
-    }
-
     function increaseReservation(bytes32 _positionId, uint256 _amount, uint64 _releaseTime) external {
         Reservation storage reservation = reservations[_positionId];
         require(!isExiting[reservation.staker], "staker exiting");

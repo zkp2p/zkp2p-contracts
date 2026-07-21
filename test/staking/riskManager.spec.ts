@@ -545,39 +545,69 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(1));
     });
 
-    it("lets anyone sponsor only with newly supplied taker-owned stake", async () => {
-      const { taker, secondTaker: sponsor, escrow, orchestrator, token, vault, manager } =
+    it("lets the delegated stake owner extend without transferring ownership to the taker", async () => {
+      const { owner: stakeOwner, maker, taker, escrow, orchestrator, token, vault, manager } =
         await loadFixture(deployFixture);
-      await vault.connect(taker).depositStake(usdc(5));
+      await token.connect(stakeOwner).approve(vault.address, ethers.constants.MaxUint256);
+      await vault.connect(stakeOwner).depositStakeFor(taker.address, usdc(10));
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), ZELLE);
-      const sponsorBefore = await token.balanceOf(sponsor.address);
+      const baseExpiry = (await manager.getRiskPosition(intentHash)).baseIntentExpiry.toNumber();
 
-      await expect(manager.connect(sponsor).stakeAndExtendIntent(intentHash, 2 * HOUR))
-        .to.emit(vault, "StakeSponsoredAndReserved");
-      expect(await token.balanceOf(sponsor.address)).to.eq(sponsorBefore.sub(usdc(2)));
-      expect(await vault.stakeBalance(taker.address)).to.eq(usdc(7));
-      expect(await vault.freeStake(taker.address)).to.eq(usdc(5));
+      await expect(manager.connect(stakeOwner).extendIntent(intentHash, 2 * HOUR))
+        .to.emit(manager, "IntentExtended")
+        .withArgs(
+          intentHash,
+          taker.address,
+          stakeOwner.address,
+          stakeOwner.address,
+          2 * HOUR,
+          baseExpiry + 2 * HOUR,
+          usdc(2),
+          usdc(2),
+        );
+      const position = await manager.getRiskPosition(intentHash);
+      expect(position.extensionStakeOwner).to.eq(stakeOwner.address);
+      expect((await vault.getReservation(await manager.extensionReservationId(intentHash))).staker)
+        .to.eq(stakeOwner.address);
+      expect(await vault.stakeBalance(stakeOwner.address)).to.eq(usdc(10));
+      expect(await vault.freeStake(stakeOwner.address)).to.eq(usdc(8));
+      expect(await vault.stakeBalance(taker.address)).to.eq(0);
 
-      await orchestrator.connect(taker).cancelIntent(intentHash);
-      expect(await vault.stakeBalance(taker.address)).to.eq(usdc(7));
-      expect(await vault.freeStake(taker.address)).to.eq(usdc(7));
+      await time.setNextBlockTimestamp(baseExpiry + HOUR);
+      await expect(orchestrator.connect(taker).cancelIntent(intentHash))
+        .to.emit(manager, "IntentExtensionCharged")
+        .withArgs(
+          intentHash,
+          stakeOwner.address,
+          maker.address,
+          taker.address,
+          baseExpiry + HOUR,
+          HOUR,
+          usdc(1),
+          usdc(1),
+        );
+      expect(await vault.stakeBalance(stakeOwner.address)).to.eq(usdc(9));
+      expect(await vault.freeStake(stakeOwner.address)).to.eq(usdc(9));
+      expect(await vault.stakeBalance(taker.address)).to.eq(0);
+      expect(await vault.claimableCompensation(maker.address)).to.eq(usdc(1));
     });
 
-    it("atomically rolls back sponsorship when the sponsor has not approved StakeVault", async () => {
-      const { taker, secondTaker: sponsor, escrow, orchestrator, token, vault, manager } =
+    it("resolves a delegated stake owner added after intent admission", async () => {
+      const { owner: stakeOwner, taker, escrow, orchestrator, token, vault, manager } =
         await loadFixture(deployFixture);
-      await token.connect(sponsor).approve(vault.address, 0);
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), ZELLE);
-      const expiryBefore = (await escrow.getDepositIntent(0, intentHash)).expiryTime;
+      expect((await manager.getRiskPosition(intentHash)).stakeOwner).to.eq(taker.address);
 
-      await expect(manager.connect(sponsor).stakeAndExtendIntent(intentHash, 2 * HOUR)).to.be.reverted;
+      await token.connect(stakeOwner).approve(vault.address, ethers.constants.MaxUint256);
+      await vault.connect(stakeOwner).depositStakeFor(taker.address, usdc(10));
+      await manager.connect(stakeOwner).extendIntent(intentHash, 2 * HOUR);
 
       const position = await manager.getRiskPosition(intentHash);
-      expect(position.totalExtensionTime).to.eq(0);
-      expect(position.extensionReservation).to.eq(0);
-      expect((await escrow.getDepositIntent(0, intentHash)).expiryTime).to.eq(expiryBefore);
+      expect(position.extensionStakeOwner).to.eq(stakeOwner.address);
+      expect(position.totalExtensionTime).to.eq(2 * HOUR);
+      expect(position.extensionReservation).to.eq(usdc(2));
       expect(await vault.stakeBalance(taker.address)).to.eq(0);
-      expect(await vault.reservedStake(taker.address)).to.eq(0);
+      expect(await vault.reservedStake(stakeOwner.address)).to.eq(usdc(2));
     });
 
     it("does not let a third party lock the taker's existing stake", async () => {
@@ -587,6 +617,26 @@ describe("RiskManager and OrchestratorV3", () => {
       await expect(manager.connect(secondTaker).extendIntent(intentHash, HOUR))
         .to.be.revertedWithCustomError(manager, "UnauthorizedStakeExtension");
       expect(await vault.reservedStake(taker.address)).to.eq(0);
+    });
+
+    it("blocks taker top-ups after revocation while preserving the original owner's control", async () => {
+      const { owner: stakeOwner, taker, escrow, orchestrator, token, vault, manager } =
+        await loadFixture(deployFixture);
+      await token.connect(stakeOwner).approve(vault.address, ethers.constants.MaxUint256);
+      await vault.connect(stakeOwner).depositStakeFor(taker.address, usdc(10));
+      const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), ZELLE);
+      await manager.connect(taker).extendIntent(intentHash, HOUR);
+
+      await vault.connect(stakeOwner).setTakerAuthorization(taker.address, false);
+      await expect(manager.connect(taker).extendIntent(intentHash, HOUR))
+        .to.be.revertedWithCustomError(manager, "UnauthorizedStakeExtension");
+
+      await manager.connect(stakeOwner).extendIntent(intentHash, HOUR);
+      const position = await manager.getRiskPosition(intentHash);
+      expect(position.extensionStakeOwner).to.eq(stakeOwner.address);
+      expect(position.totalExtensionTime).to.eq(2 * HOUR);
+      expect(position.extensionReservation).to.eq(usdc(2));
+      expect(await vault.reservedStake(stakeOwner.address)).to.eq(usdc(2));
     });
 
     it("cannot revive an already expired intent", async () => {
@@ -627,16 +677,17 @@ describe("RiskManager and OrchestratorV3", () => {
         .to.be.revertedWithCustomError(vault, "StakeActionPaused");
     });
 
-    it("blocks first-time existing-stake and sponsored extensions while reservations are paused", async () => {
-      const { taker, secondTaker: sponsor, escrow, orchestrator, vault, manager } =
+    it("blocks first-time taker and delegated-owner extensions while reservations are paused", async () => {
+      const { owner: stakeOwner, taker, escrow, orchestrator, token, vault, manager } =
         await loadFixture(deployFixture);
-      await vault.connect(taker).depositStake(usdc(10));
+      await token.connect(stakeOwner).approve(vault.address, ethers.constants.MaxUint256);
+      await vault.connect(stakeOwner).depositStakeFor(taker.address, usdc(10));
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1_000), ZELLE);
       await vault.setStakeOperationsPaused(false, true);
 
       await expect(manager.connect(taker).extendIntent(intentHash, HOUR))
         .to.be.revertedWithCustomError(vault, "StakeActionPaused");
-      await expect(manager.connect(sponsor).stakeAndExtendIntent(intentHash, HOUR))
+      await expect(manager.connect(stakeOwner).extendIntent(intentHash, HOUR))
         .to.be.revertedWithCustomError(vault, "StakeActionPaused");
       expect((await manager.getRiskPosition(intentHash)).totalExtensionTime).to.eq(0);
     });
@@ -664,18 +715,64 @@ describe("RiskManager and OrchestratorV3", () => {
       expect(await vault.reservedStake(taker.address)).to.eq(1);
     });
 
-    it("rejects sponsored top-ups that add no reservation after cumulative rounding", async () => {
-      const { taker, secondTaker: sponsor, escrow, orchestrator, token, vault, manager } =
+    it("lets the delegated owner extend through a zero-increment cumulative rounding step", async () => {
+      const { owner: stakeOwner, taker, escrow, orchestrator, token, vault, manager } =
         await loadFixture(deployFixture);
-      await vault.connect(taker).depositStake(10);
+      await token.connect(stakeOwner).approve(vault.address, ethers.constants.MaxUint256);
+      await vault.connect(stakeOwner).depositStakeFor(taker.address, 10);
       const intentHash = await signalIntent(orchestrator, escrow, taker, usdc(1), ZELLE);
       await manager.connect(taker).extendIntent(intentHash, 1);
-      const sponsorBalance = await token.balanceOf(sponsor.address);
 
-      await expect(manager.connect(sponsor).stakeAndExtendIntent(intentHash, 1))
-        .to.be.revertedWithCustomError(manager, "ZeroAmount");
-      expect(await token.balanceOf(sponsor.address)).to.eq(sponsorBalance);
-      expect((await manager.getRiskPosition(intentHash)).totalExtensionTime).to.eq(1);
+      await expect(manager.connect(stakeOwner).extendIntent(intentHash, 1))
+        .to.emit(manager, "IntentExtended");
+      const position = await manager.getRiskPosition(intentHash);
+      expect(position.totalExtensionTime).to.eq(2);
+      expect(position.extensionReservation).to.eq(1);
+      expect(position.extensionStakeOwner).to.eq(stakeOwner.address);
+      expect(await vault.reservedStake(stakeOwner.address)).to.eq(1);
+      const escrowIntent = await escrow.getDepositIntent(0, intentHash);
+      const reservation = await vault.getReservation(await manager.extensionReservationId(intentHash));
+      expect(reservation.releaseTime).to.eq(escrowIntent.expiryTime);
+    });
+
+    it("enforces reservation pause and exit gates on zero-increment extension steps", async () => {
+      const paused = await loadFixture(deployFixture);
+      await paused.vault.connect(paused.taker).depositStake(10);
+      const pausedIntent = await signalIntent(
+        paused.orchestrator,
+        paused.escrow,
+        paused.taker,
+        usdc(1),
+        ZELLE,
+      );
+      await paused.manager.connect(paused.taker).extendIntent(pausedIntent, 1);
+      await paused.vault.setStakeOperationsPaused(false, true);
+      await expect(paused.manager.connect(paused.taker).extendIntent(pausedIntent, 1))
+        .to.be.revertedWithCustomError(paused.vault, "StakeActionPaused");
+
+      const exiting = await loadFixture(deployFixture);
+      await exiting.vault.connect(exiting.taker).depositStake(10);
+      const exitingIntent = await signalIntent(
+        exiting.orchestrator,
+        exiting.escrow,
+        exiting.taker,
+        usdc(1),
+        ZELLE,
+      );
+      await exiting.manager.connect(exiting.taker).extendIntent(exitingIntent, 1);
+      await exiting.vault.connect(exiting.taker).requestExit();
+      await expect(exiting.manager.connect(exiting.taker).extendIntent(exitingIntent, 1))
+        .to.be.revertedWithCustomError(exiting.vault, "AlreadyExiting");
+    });
+
+    it("removes the gift-style sponsorship entrypoints from the hard-cut ABI", async () => {
+      const { vault, manager } = await loadFixture(deployFixture);
+      const managerFunctions = manager.interface.functions as Record<string, unknown>;
+      const vaultFunctions = vault.interface.functions as Record<string, unknown>;
+      expect(managerFunctions["stakeAndExtendIntent(bytes32,uint64)"]).to.eq(undefined);
+      expect(
+        vaultFunctions["depositAndReserveStake(address,address,bytes32,uint256,uint64)"],
+      ).to.eq(undefined);
     });
 
     it("records the original cancellation time when a terminal callback fails", async () => {
