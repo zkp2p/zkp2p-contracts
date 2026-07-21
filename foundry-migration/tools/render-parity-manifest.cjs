@@ -7,6 +7,7 @@ const repositoryRoot = path.resolve(__dirname, "../..");
 const inventory = require(path.join(repositoryRoot, "foundry-migration/baseline/hardhat-inventory.json"));
 const outputPath = path.join(repositoryRoot, "foundry-migration/hardhat-to-foundry-manifest.csv");
 const registryFile = "test-foundry/deterministic/registries/RegistryParity.t.sol";
+const oracleFile = "test-foundry/deterministic/oracles/OracleAdapterParity.t.sol";
 
 function csv(value) {
     const stringValue = String(value ?? "");
@@ -113,17 +114,57 @@ function registryDestination(test) {
     return "";
 }
 
+function oracleDestination(test) {
+    const scenario = test.scenario;
+    const chainlink = "ChainlinkOracleAdapterParityTest";
+    const pyth = "PythOracleAdapterParityTest";
+    const oracle = (contractName, testName) => `${oracleFile}:${contractName}::${testName}`;
+    if (test.sourceFile === "test/rateManager/chainlinkOracleAdapter.spec.ts") {
+        if (scenario.includes("returns packed normalized config") && !scenario.includes("feed is zero")) return oracle(chainlink, "test_ValidateConfigPacksFeedDecimalsAndInvertFlag");
+        if (scenario.includes("feed is zero returns packed")) return oracle(chainlink, "test_ValidateConfigAllowsZeroFeedAsConstantRate");
+        if (scenario.includes("feed decimals > 18")) return oracle(chainlink, "test_ValidateConfigRejectsDecimalsAboveEighteen");
+        if (scenario.includes("returns inverted rate")) return oracle(chainlink, "test_GetRateReturnsRoundedUpInvertedRateAndTimestamp");
+        if (scenario.includes("invert is false")) return oracle(chainlink, "test_GetRateReturnsDirectRateScaledToPreciseUnits");
+        if (scenario.includes("feed is zero returns constant")) return oracle(chainlink, "test_GetRateReturnsOneForConstantZeroFeed");
+        if (scenario.includes("feedDecimals > 18")) return oracle(chainlink, "test_GetRateDefensivelyRejectsNormalizedDecimalsAboveEighteen");
+        if (scenario.includes("answer <= 0")) return oracle(chainlink, "test_GetRateRejectsZeroAndNegativeAnswers");
+        if (scenario.includes("updatedAt is 0")) return oracle(chainlink, "test_GetRateRejectsZeroUpdatedAt");
+        if (scenario.includes("answeredInRound")) return oracle(chainlink, "test_GetRateRejectsStaleAnsweredRound");
+        if (scenario.includes("config length is invalid")) return oracle(chainlink, "test_GetRateRejectsInvalidConfigLength");
+    }
+    if (test.sourceFile === "test/rateManager/pythOracleAdapter.spec.ts") {
+        if (scenario.includes("packed 34-byte")) return oracle(pyth, "test_ValidateConfigPacksFeedAbsExponentAndFalseInvert");
+        if (scenario.includes("invert=true")) return oracle(pyth, "test_ValidateConfigPacksTrueInvertFlag");
+        if (scenario.includes("absExpo for expo=-8")) return oracle(pyth, "test_ValidateConfigUsesAbsoluteExponent");
+        if (scenario.includes("feedId is bytes32(0)") || scenario.includes("feed doesn't exist")) return oracle(pyth, "test_ValidateConfigRejectsZeroOrUnknownFeed");
+        if (scenario.includes("exponent > 0") || scenario.includes("exponent < -18")) return oracle(pyth, "test_ValidateConfigRejectsPositiveOrTooNegativeExponent");
+        if (scenario.includes("returns direct rate")) return oracle(pyth, "test_GetRateReturnsDirectRateAndPublishTime");
+        if (scenario.includes("invert is true")) return oracle(pyth, "test_GetRateReturnsRoundedUpInvertedRate");
+        if (scenario.includes("with expo=-8")) return oracle(pyth, "test_GetRateScalesEightDecimalExponent");
+        if (scenario.includes("with expo=-18")) return oracle(pyth, "test_GetRateScalesEighteenDecimalExponent");
+        if (scenario.includes("price <= 0") || scenario.includes("price is negative")) return oracle(pyth, "test_GetRateRejectsZeroAndNegativePrices");
+        if (scenario.includes("publishTime is 0")) return oracle(pyth, "test_GetRateRejectsZeroPublishTime");
+        if (scenario.includes("Pyth reverts")) return oracle(pyth, "test_GetRateReturnsInvalidWhenPythReverts");
+        if (scenario.includes("config length is invalid")) return oracle(pyth, "test_GetRateRejectsInvalidConfigLength");
+    }
+    return "";
+}
+
 const header = [
     "id", "source_file", "suite_path", "hardhat_test", "scenario", "expected_behavior",
     "fixture_dependencies", "foundry_destination", "translation_shape", "status", "evidence",
 ];
 let verified = 0;
 const rows = inventory.tests.map((test) => {
-    const foundryDestination = registryDestination(test);
+    const foundryDestination = registryDestination(test) || oracleDestination(test);
     if (test.sourceFile.startsWith("test/registries/") && !foundryDestination) {
         throw new Error(`Unmapped registry behavior: ${test.id} ${test.scenario}`);
     }
+    if (["test/rateManager/chainlinkOracleAdapter.spec.ts", "test/rateManager/pythOracleAdapter.spec.ts"].includes(test.sourceFile) && !foundryDestination) {
+        throw new Error(`Unmapped oracle behavior: ${test.id} ${test.scenario}`);
+    }
     if (foundryDestination) verified += 1;
+    const isRegistry = foundryDestination.startsWith(registryFile);
     return [
         test.id,
         test.sourceFile,
@@ -135,7 +176,7 @@ const rows = inventory.tests.map((test) => {
         foundryDestination,
         foundryDestination ? (test.sourceFile.includes("nullifierRegistryV2") ? "one-to-one" : "consolidated-with-explicit-destination") : "one-to-one",
         foundryDestination ? "verified-independent-file" : (test.pending ? "pending-resolution" : "pending-translation"),
-        foundryDestination ? "RegistryParity.t.sol: 50 passed, 0 failed, 0 skipped" : (test.pending ? "baseline-pending" : "baseline-passed"),
+        foundryDestination ? (isRegistry ? "RegistryParity.t.sol: 50 passed individually and together, 0 failed, 0 skipped" : "OracleAdapterParity.t.sol: 25 passed, 0 failed, 0 skipped") : (test.pending ? "baseline-pending" : "baseline-passed"),
     ];
 });
 
