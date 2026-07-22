@@ -233,11 +233,11 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         address temporaryController = makeAddr("temporaryController");
 
         vault.proposeController(temporaryController);
-        vm.warp(block.timestamp + vault.controllerChangeDelay());
+        uint64 cancelledAt = uint64(block.timestamp + vault.controllerChangeDelay());
+        vm.warp(cancelledAt);
         vm.prank(temporaryController);
         vault.acceptController();
 
-        uint64 cancelledAt = uint64(block.timestamp);
         vm.prank(taker);
         orchestrator.cancelIntent(intentHash);
 
@@ -246,7 +246,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         assertEq(vault.lockedStake(safe), INTENT_AMOUNT);
 
         vault.proposeController(address(manager));
-        vm.warp(block.timestamp + vault.controllerChangeDelay());
+        vm.warp(uint256(cancelledAt) + vault.controllerChangeDelay());
         manager.acceptVaultController();
         manager.reconcileCancellation(intentHash);
 
