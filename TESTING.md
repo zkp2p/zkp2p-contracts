@@ -17,7 +17,7 @@ Focused layers are available for iteration:
 corepack yarn test:deterministic
 corepack yarn test:fuzz
 corepack yarn test:invariant
-forge test --match-path 'test-foundry/deterministic/escrow/EscrowCreateDepositParity.t.sol'
+forge test --match-path 'test-foundry/deterministic/escrow/EscrowCreateDeposit.t.sol'
 forge test --match-test test_CreateDepositStoresEveryField
 ```
 

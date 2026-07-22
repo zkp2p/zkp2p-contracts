@@ -24,16 +24,16 @@ const excludedProductionDirectories = new Set([
 ]);
 
 const legacyOrchestratorTests = [
-    "OrchestratorCancelParity.t.sol",
-    "OrchestratorFulfillAccountingParity.t.sol",
-    "OrchestratorFulfillCoreParity.t.sol",
-    "OrchestratorFulfillHookParity.t.sol",
-    "OrchestratorFulfillPartialReentryParity.t.sol",
-    "OrchestratorGovernanceParity.t.sol",
-    "OrchestratorManualReleaseParity.t.sol",
-    "OrchestratorPruneParity.t.sol",
-    "OrchestratorSignalParity.t.sol",
-    "OrchestratorViewsParity.t.sol",
+    "OrchestratorCancel.t.sol",
+    "OrchestratorFulfillAccounting.t.sol",
+    "OrchestratorFulfillCore.t.sol",
+    "OrchestratorFulfillHook.t.sol",
+    "OrchestratorFulfillPartialReentry.t.sol",
+    "OrchestratorGovernance.t.sol",
+    "OrchestratorManualRelease.t.sol",
+    "OrchestratorPrune.t.sol",
+    "OrchestratorSignal.t.sol",
+    "OrchestratorViews.t.sol",
 ].map((file) => `test-foundry/deterministic/orchestrator/${file}`);
 
 const coverageRuns = [
@@ -65,7 +65,7 @@ const coverageRuns = [
     {
         name: "protocol-viewer",
         source: "contracts/ProtocolViewer.sol",
-        test: "test-foundry/deterministic/periphery/ProtocolViewerParity.t.sol",
+        test: "test-foundry/deterministic/periphery/ProtocolViewer.t.sol",
     },
     {
         name: "risk-libraries",

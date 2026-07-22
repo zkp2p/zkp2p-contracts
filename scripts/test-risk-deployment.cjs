@@ -31,7 +31,7 @@ if (scenario === "retired") {
   passed = policyError === "No governance-ratified risk-settlement platform policy for network: base"
     && witnessError === "No governance-ratified chargeback witness policy for network: base_staging";
 } else {
-  throw new Error(`Unknown risk deployment parity scenario: ${scenario}`);
+  throw new Error(`Unknown risk deployment test scenario: ${scenario}`);
 }
 
 process.stdout.write(passed ? "0x01" : "0x00");

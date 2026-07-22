@@ -16,7 +16,7 @@ const {
 } = require("../deploy/27_remove_legacy_zelle_payment_methods.ts");
 const { safeBatchCollector } = require("../deployments/safeBatchCollector.ts");
 
-if (process.argv[2] !== "safe") throw new Error("Unknown Zelle removal parity scenario: " + process.argv[2]);
+if (process.argv[2] !== "safe") throw new Error("Unknown Zelle removal test scenario: " + process.argv[2]);
 
 const safeOwner = "0x9999999999999999999999999999999999999999";
 const registryAddress = "0x1111111111111111111111111111111111111111";

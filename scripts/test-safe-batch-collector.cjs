@@ -19,7 +19,7 @@ if (scenario === "duplicate") {
   collector.add(firstTarget, "0xbbbb");
   collector.add(secondTarget, "0xaaaa");
 } else {
-  throw new Error(`Unknown SafeBatchCollector parity scenario: ${scenario}`);
+  throw new Error(`Unknown SafeBatchCollector test scenario: ${scenario}`);
 }
 
 process.stdout.write(`0x${collector.count().toString(16).padStart(2, "0")}`);
