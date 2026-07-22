@@ -10,7 +10,7 @@ import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
 import { INullifierRegistryV2 } from "../interfaces/INullifierRegistryV2.sol";
 import { IOrchestratorV3 } from "../interfaces/IOrchestratorV3.sol";
 import { IRiskManager } from "../interfaces/IRiskManager.sol";
-import { IStakeVault } from "../interfaces/IStakeVault.sol";
+import { ILegacyStakeVault } from "../interfaces/ILegacyStakeVault.sol";
 import { RiskManager } from "../RiskManager.sol";
 import { NullifierRegistryV2 } from "../registries/NullifierRegistryV2.sol";
 import { INullifierRegistry } from "../interfaces/INullifierRegistry.sol";
@@ -25,7 +25,7 @@ contract RiskManagerStateHarness is RiskManager {
     constructor(
         address _owner,
         IOrchestratorV3 _orchestrator,
-        IStakeVault _stakeVault,
+        ILegacyStakeVault _stakeVault,
         IAttestationVerifier _attestationVerifier,
         INullifierRegistryV2 _nullifierRegistry
     ) RiskManager(_owner, _orchestrator, _stakeVault, _attestationVerifier, _nullifierRegistry) { }

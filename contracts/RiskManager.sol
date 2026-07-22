@@ -15,7 +15,7 @@ import { IIntentRiskHook } from "./interfaces/IIntentRiskHook.sol";
 import { INullifierRegistryV2 } from "./interfaces/INullifierRegistryV2.sol";
 import { IOrchestratorV3 } from "./interfaces/IOrchestratorV3.sol";
 import { IRiskManager } from "./interfaces/IRiskManager.sol";
-import { IStakeVault } from "./interfaces/IStakeVault.sol";
+import { ILegacyStakeVault } from "./interfaces/ILegacyStakeVault.sol";
 
 /**
  * @title RiskManager
@@ -106,7 +106,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     IOrchestratorV3 public immutable override orchestrator;
 
     /// @notice Custody and portfolio-accounting boundary for stake and deferred proceeds.
-    IStakeVault public immutable override stakeVault;
+    ILegacyStakeVault public immutable override stakeVault;
 
     /// @notice Canonical source binding each post-cutover payment nullifier to its fulfilled intent.
     INullifierRegistryV2 public immutable override nullifierRegistry;
@@ -152,7 +152,7 @@ contract RiskManager is IRiskManager, Ownable, ReentrancyGuard, EIP712 {
     constructor(
         address _owner,
         IOrchestratorV3 _orchestrator,
-        IStakeVault _stakeVault,
+        ILegacyStakeVault _stakeVault,
         IAttestationVerifier _attestationVerifier,
         INullifierRegistryV2 _nullifierRegistry
     ) Ownable() EIP712("ZKP2P RiskManager", "1") {

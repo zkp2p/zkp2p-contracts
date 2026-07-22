@@ -5,7 +5,7 @@ pragma solidity ^0.8.18;
 import { IIntentRiskHook } from "./IIntentRiskHook.sol";
 import { INullifierRegistryV2 } from "./INullifierRegistryV2.sol";
 import { IOrchestratorV3 } from "./IOrchestratorV3.sol";
-import { IStakeVault } from "./IStakeVault.sol";
+import { ILegacyStakeVault } from "./ILegacyStakeVault.sol";
 
 /**
  * @title IRiskManager
@@ -347,7 +347,7 @@ interface IRiskManager is IIntentRiskHook {
     /** @notice Returns the immutable canonical lifecycle source authorized to call position callbacks. */
     function orchestrator() external view returns (IOrchestratorV3);
     /** @notice Returns the immutable policy-agnostic custody and reservation vault. */
-    function stakeVault() external view returns (IStakeVault);
+    function stakeVault() external view returns (ILegacyStakeVault);
     /** @notice Returns the immutable registry that binds verified payment nullifiers to intents. */
     function nullifierRegistry() external view returns (INullifierRegistryV2);
 }
