@@ -86,6 +86,37 @@ contract StakeVaultReservationParityTest is StakeVaultLegacyFixture {
         vault.updateReservation(intentHash, 0, 0);
     }
 
+    function test_UpdateReservationRejectsIncreaseDespiteAmpleFreeStake() public {
+        bytes32 intentHash = keccak256("decrease-only");
+        _deposit(1_000e6);
+        _reserve(intentHash, 100e6, 100);
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.InvalidReservationAmount.selector, 200e6, 100e6));
+        vm.prank(controller);
+        vault.updateReservation(intentHash, 200e6, 200);
+    }
+
+    function test_UpdateReservationEqualAmountRefreshesMaturity() public {
+        bytes32 intentHash = keccak256("equal-refresh");
+        _deposit(100e6);
+        _reserve(intentHash, 50e6, 100);
+        vm.expectEmit(true, true, false, true, address(vault));
+        emit StakeReservationUpdated(intentHash, staker, 50e6, 50e6, 50e6, 200);
+        vm.prank(controller);
+        vault.updateReservation(intentHash, 50e6, 200);
+        assertEq(_reservation(intentHash).releaseTime, 200);
+    }
+
+    function test_UpdateReservationCanDecreaseWhileReservationsPaused() public {
+        bytes32 intentHash = keccak256("paused-decrease");
+        _deposit(100e6);
+        _reserve(intentHash, 50e6, 100);
+        vault.setStakeOperationsPaused(false, true);
+        vm.prank(controller);
+        vault.updateReservation(intentHash, 20e6, 200);
+        assertEq(_reservation(intentHash).amount, 20e6);
+        assertEq(vault.freeStake(staker), 80e6);
+    }
+
     function test_IncreaseReservationUsesAdmissionGatedPath() public {
         bytes32 positionId = keccak256("extension-top-up");
         _deposit(10e6);

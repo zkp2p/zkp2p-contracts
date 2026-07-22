@@ -131,6 +131,18 @@ interface IStakeVault {
         uint256 amount,
         uint256 newClaimableBalance
     );
+    event DeferredFeeContingent(
+        bytes32 indexed intentHash,
+        address indexed recipient,
+        IIntentRiskHook.FeeType indexed feeType,
+        uint256 amount
+    );
+    event DeferredFeeCancelled(
+        bytes32 indexed intentHash,
+        address indexed recipient,
+        IIntentRiskHook.FeeType indexed feeType,
+        uint256 amount
+    );
     event FeeClaimWithdrawn(
         address indexed beneficiary,
         address indexed recipient,
@@ -171,6 +183,10 @@ interface IStakeVault {
      * @dev `_amount` may be zero so cumulative-rounding steps still enforce admission gates.
      */
     function increaseReservation(bytes32 _positionId, uint256 _amount, uint64 _releaseTime) external;
+    /**
+     * @notice Decreases a reservation amount and updates its maturity after settlement accounting.
+     * @dev Increases must use `increaseReservation` so its admission gates apply.
+     */
     function updateReservation(bytes32 _intentHash, uint256 _newAmount, uint64 _releaseTime) external;
     function releaseReservation(bytes32 _intentHash) external;
     function slashReservation(bytes32 _intentHash, address _maker, uint256 _amount) external;

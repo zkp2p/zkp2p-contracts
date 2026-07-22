@@ -73,6 +73,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     mapping(address => mapping(uint256 => IIntentRiskHook)) internal depositRiskHooks;
     mapping(bytes32 => IIntentRiskHook) internal intentRiskHooks;
     mapping(bytes32 => IntentCancellation) internal failedIntentCancellations;
+    mapping(bytes32 => bool) public usedGatingSignatureDigests;
 
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
@@ -272,7 +273,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
 
     /**
      * @notice Sets or removes the risk hook used by future intents for one deposit.
-     * @dev Existing intents keep their snapshotted hook.
+     * @dev Callable only by the deposit's depositor. Existing intents keep their snapshotted hook.
      *
      * @param _escrow       Escrow address.
      * @param _depositId    Deposit id.
@@ -291,11 +292,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         }
 
         IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
-        bool isDepositorOrDelegate = msg.sender == deposit.depositor
-            || (deposit.delegate != address(0) && msg.sender == deposit.delegate);
-        if (!isDepositorOrDelegate) {
-            revert UnauthorizedCallerOrDelegate(msg.sender, deposit.depositor, deposit.delegate);
-        }
+        if (msg.sender != deposit.depositor) revert UnauthorizedCaller(msg.sender, deposit.depositor);
 
         depositRiskHooks[_escrow][_depositId] = _hook;
         emit DepositRiskHookSet(_escrow, _depositId, hookAddress, msg.sender);
@@ -362,8 +359,8 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     /**
      * @notice Allows depositor to release funds to the payer in case of a failed fulfill intent or because of some other arrangement
      * between the two parties. Upon submission we check to make sure the msg.sender is the depositor, the intent is removed, and
-     * escrow state is updated. Manual release routes through the shared post-funds risk-settlement gate before the deposit token
-     * is transferred to the payer.
+     * escrow state is updated. Manual release routes through the shared post-funds risk-settlement gate, then executes the
+     * configured post-intent hook or transfers the deposit token directly to the payer when no hook is configured.
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
      */
@@ -633,7 +630,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     /**
      * @notice Validates an intent before it is signaled.
      */
-    function _validateSignalIntent(SignalIntentParams calldata _intent) internal view {
+    function _validateSignalIntent(SignalIntentParams calldata _intent) internal {
         if (_intent.to == address(0)) revert ZeroAddress();
 
         ReferralFeeLib.validateReferralFees(_intent.referralFees);
@@ -671,9 +668,15 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
                 revert SignatureExpired(_intent.signatureExpiration, block.timestamp);
             }
 
-            if (!_isValidIntentGatingSignature(_intent, intentGatingService, msg.sender)) {
+            bytes32 verifierPayload = _getIntentGatingSignatureDigest(_intent, msg.sender);
+            if (!_isValidIntentGatingSignature(_intent, intentGatingService, verifierPayload)) {
                 revert InvalidSignature();
             }
+
+            if (usedGatingSignatureDigests[verifierPayload]) {
+                revert GatingSignatureAlreadyUsed(verifierPayload);
+            }
+            usedGatingSignatureDigests[verifierPayload] = true;
         }
     }
 
@@ -765,7 +768,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         bool _isManualRelease
     ) internal {
         IIntentRiskHook riskHook = intentRiskHooks[_intentHash];
-        (address fundsTransferredTo, uint256 netAmount) = FeeSettlementLib.executeSettlement(
+        (address fundsTransferredTo, uint256 reportedAmount) = FeeSettlementLib.executeSettlement(
             _token,
             riskHook,
             _intentHash,
@@ -783,7 +786,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         );
         delete intentRiskHooks[_intentHash];
 
-        emit IntentFulfilled(_intentHash, fundsTransferredTo, netAmount, _isManualRelease);
+        emit IntentFulfilled(_intentHash, fundsTransferredTo, reportedAmount, _isManualRelease);
     }
 
     function _setRiskCallbackGasLimit(uint256 _gasLimit) internal {
@@ -801,11 +804,22 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     function _isValidIntentGatingSignature(
         SignalIntentParams calldata _intent,
         address _intentGatingService,
-        address _caller
+        bytes32 _verifierPayload
     )
         internal
         view
         returns(bool)
+    {
+        return _intentGatingService.isValidSignatureNow(_verifierPayload, _intent.gatingServiceSignature);
+    }
+
+    function _getIntentGatingSignatureDigest(
+        SignalIntentParams calldata _intent,
+        address _caller
+    )
+        internal
+        view
+        returns(bytes32)
     {
         bytes memory message = abi.encodePacked(
             address(this),
@@ -818,11 +832,12 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
             _intent.fiatCurrency,
             _intent.conversionRate,
             ReferralFeeLib.hashReferralFees(_intent.referralFees),
+            address(_intent.postIntentHook),
+            keccak256(_intent.data),
             _intent.signatureExpiration,
             chainId
         );
 
-        bytes32 verifierPayload = keccak256(message).toEthSignedMessageHash();
-        return _intentGatingService.isValidSignatureNow(verifierPayload, _intent.gatingServiceSignature);
+        return keccak256(message).toEthSignedMessageHash();
     }
 }

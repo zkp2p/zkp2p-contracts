@@ -97,10 +97,11 @@ interface IOrchestratorV3 {
         bool isManualRelease
     );
 
-    event IntentReferralFeeDistributed(
+    event IntentFeeDistributed(
         bytes32 indexed intentHash,
-        address indexed feeRecipient,
-        uint256 feeAmount
+        IIntentRiskHook.FeeType feeType,
+        address indexed recipient,
+        uint256 amount
     );
     event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
     event DepositPreIntentHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
@@ -166,6 +167,7 @@ interface IOrchestratorV3 {
     error InvalidPostIntentHook(address hook);
     error InvalidPreIntentHook(address hook);
     error InvalidSignature();
+    error GatingSignatureAlreadyUsed(bytes32 digest);
     error SignatureExpired(uint256 expiration, uint256 currentTime);
 
     // Verification errors
@@ -198,6 +200,7 @@ interface IOrchestratorV3 {
 
     function fulfillIntent(FulfillIntentParams calldata params) external;
 
+    /** @notice Manually releases an intent through risk settlement and its configured post-intent hook, if any. */
     function releaseFundsToPayer(bytes32 intentHash) external;
 
     /** @notice Clears durable recovery data after the failed risk hook completes reconciliation. */

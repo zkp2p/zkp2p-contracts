@@ -22,8 +22,9 @@ library FeeSettlementLib {
     uint256 internal constant PRECISE_UNIT = 1e18;
     uint256 internal constant MAX_RISK_CALLBACK_RETURN_DATA = 2_048;
 
-    event IntentReferralFeeDistributed(
+    event IntentFeeDistributed(
         bytes32 indexed intentHash,
+        IIntentRiskHook.FeeType feeType,
         address indexed recipient,
         uint256 amount
     );
@@ -35,6 +36,11 @@ library FeeSettlementLib {
         uint256 managerFee;
     }
 
+    /**
+     * @notice Executes risk settlement or distributes the fee plan and remaining funds.
+     * @return fundsTransferredTo Recipient of the settlement funds.
+     * @return reportedAmount Net amount for ordinary distribution, or gross amount when the risk hook consumes funds.
+     */
     function executeSettlement(
         IERC20 _token,
         IIntentRiskHook _riskHook,
@@ -45,12 +51,12 @@ library FeeSettlementLib {
         FeeConfig memory _feeConfig,
         bool _isManualRelease,
         uint256 _riskCallbackGasLimit
-    ) public returns (address fundsTransferredTo, uint256 netAmount) {
+    ) public returns (address fundsTransferredTo, uint256 reportedAmount) {
         (
             IIntentRiskHook.FeeAllocation[] memory feeAllocations,
             uint256 totalFees
         ) = _calculateFeeAllocations(_intent, _releaseAmount, _feeConfig);
-        netAmount = _releaseAmount - totalFees;
+        uint256 netAmount = _releaseAmount - totalFees;
 
         bool fundsConsumed = RiskSettlementExecutor.execute(
             _riskHook,
@@ -68,14 +74,9 @@ library FeeSettlementLib {
             MAX_RISK_CALLBACK_RETURN_DATA
         );
 
-        if (fundsConsumed) return (address(_riskHook), netAmount);
+        if (fundsConsumed) return (address(_riskHook), _releaseAmount);
 
         _transferFeeAllocations(_token, _intentHash, feeAllocations);
-        if (_isManualRelease) {
-            PostIntentHookExecutor.transferTo(_token, _intent.to, netAmount);
-            return (_intent.to, netAmount);
-        }
-
         fundsTransferredTo = PostIntentHookExecutor.transferOrExecute(
             _token,
             _intentHash,
@@ -83,6 +84,7 @@ library FeeSettlementLib {
             netAmount,
             _postIntentHookData
         );
+        return (fundsTransferredTo, netAmount);
     }
 
     function _calculateFeeAllocations(
@@ -139,9 +141,12 @@ library FeeSettlementLib {
         for (uint256 allocationIndex = 0; allocationIndex < _allocations.length; allocationIndex++) {
             IIntentRiskHook.FeeAllocation memory allocation = _allocations[allocationIndex];
             _token.safeTransfer(allocation.recipient, allocation.amount);
-            if (allocation.feeType == IIntentRiskHook.FeeType.REFERRAL) {
-                emit IntentReferralFeeDistributed(_intentHash, allocation.recipient, allocation.amount);
-            }
+            emit IntentFeeDistributed(
+                _intentHash,
+                allocation.feeType,
+                allocation.recipient,
+                allocation.amount
+            );
         }
     }
 }

@@ -15,6 +15,7 @@ contract PostIntentHookV2Mock is IPostIntentHookV2 {
 
     IERC20 public immutable usdc;
     address public immutable orchestrator;
+    bytes public lastPostIntentHookData;
 
     /* ============ Constructor ============ */
 
@@ -29,8 +30,10 @@ contract PostIntentHookV2Mock is IPostIntentHookV2 {
      */
     function execute(
         HookExecutionContext calldata _ctx,
-        bytes calldata /*_fulfillHookData*/
+        bytes calldata _postIntentHookData
     ) external override {
+        lastPostIntentHookData = _postIntentHookData;
+
         // Decode target address from intent data
         address targetAddress = abi.decode(_ctx.intent.signalHookData, (address));
 

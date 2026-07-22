@@ -5,9 +5,18 @@ import {RiskManagerBoundaryFixture} from "../helpers/RiskManagerBoundaryFixture.
 import {PostIntentHookV2Mock} from "contracts/mocks/PostIntentHookV2Mock.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 import {IRiskManager} from "contracts/interfaces/IRiskManager.sol";
+import {IIntentRiskHook} from "contracts/interfaces/IIntentRiskHook.sol";
 
 contract RiskManagerSettlementRoutingParityTest is RiskManagerBoundaryFixture {
-    event IntentReferralFeeDistributed(bytes32 indexed intentHash, address indexed recipient, uint256 feeAmount);
+    event IntentFulfilled(
+        bytes32 indexed intentHash, address indexed fundsTransferredTo, uint256 amount, bool manual
+    );
+    event IntentFeeDistributed(
+        bytes32 indexed intentHash,
+        IIntentRiskHook.FeeType feeType,
+        address indexed recipient,
+        uint256 amount
+    );
 
     function test_ManualReleaseUsesDeferredCustodyAndSkipsOrdinaryPostHook() public {
         _enableDeferred();
@@ -22,6 +31,8 @@ contract RiskManagerSettlementRoutingParityTest is RiskManagerBoundaryFixture {
             abi.encode(recipient)
         );
         uint256 recipientBefore = token.balanceOf(recipient);
+        vm.expectEmit(true, true, false, true, address(orchestrator));
+        emit IntentFulfilled(intentHash, address(manager), 100e6, true);
         vm.prank(maker);
         orchestrator.releaseFundsToPayer(intentHash);
         assertEq(vault.getDeferredStake(intentHash).grossAmount, 100e6);
@@ -69,7 +80,13 @@ contract RiskManagerSettlementRoutingParityTest is RiskManagerBoundaryFixture {
         uint256 managerBefore = token.balanceOf(recipient);
         uint256 takerBefore = token.balanceOf(taker);
         vm.expectEmit(true, true, false, true, address(orchestrator));
-        emit IntentReferralFeeDistributed(intentHash, other, 0.2e6);
+        emit IntentFeeDistributed(intentHash, IIntentRiskHook.FeeType.PROTOCOL, address(this), 0.2e6);
+        vm.expectEmit(true, true, false, true, address(orchestrator));
+        emit IntentFeeDistributed(intentHash, IIntentRiskHook.FeeType.REFERRAL, other, 0.2e6);
+        vm.expectEmit(true, true, false, true, address(orchestrator));
+        emit IntentFeeDistributed(intentHash, IIntentRiskHook.FeeType.MANAGER, recipient, 0.2e6);
+        vm.expectEmit(true, true, false, true, address(orchestrator));
+        emit IntentFulfilled(intentHash, taker, 19.4e6, false);
         _fulfill(intentHash, 20e6);
         assertEq(token.balanceOf(address(this)), protocolBefore + 0.2e6);
         assertEq(token.balanceOf(other), referrerBefore + 0.2e6);

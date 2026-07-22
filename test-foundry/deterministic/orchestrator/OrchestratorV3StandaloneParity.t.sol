@@ -4,6 +4,7 @@ pragma solidity ^0.8.18;
 import {OrchestratorV2} from "contracts/OrchestratorV2.sol";
 import {OrchestratorV3} from "contracts/OrchestratorV3.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
+import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 
 import {OrchestratorV2LifecycleParityTest} from "./OrchestratorV2LifecycleParity.t.sol";
@@ -18,9 +19,17 @@ contract OrchestratorV3LifecycleParityTest is OrchestratorV2LifecycleParityTest 
 }
 
 contract OrchestratorV3HooksGovernanceParityTest is OrchestratorV2HooksGovernanceParityTest {
+    event IntentFulfilled(
+        bytes32 indexed intentHash, address indexed fundsTransferredTo, uint256 amount, bool manual
+    );
+
     function setUp() public override {
         super.setUp();
         _replaceOrchestratorWithStandaloneV3();
+    }
+
+    function _usesStandaloneV3Format() internal pure override returns (bool) {
+        return true;
     }
 
     function test_GovernanceUpdatesRegistriesFeesAndPauseState() public override {
@@ -71,6 +80,69 @@ contract OrchestratorV3HooksGovernanceParityTest is OrchestratorV2HooksGovernanc
         assertEq(accountIntents.length, 2);
         assertEq(accountIntents[0], first);
         assertEq(accountIntents[1], second);
+    }
+
+    function test_GatingRejectsReusedSignature() public {
+        uint256 gatedDepositId = _newGatedDeposit();
+        IOrchestratorV2.SignalIntentParams memory params =
+            _gatedParams(gatedDepositId, gatingServiceKey, taker, block.timestamp + 1 days);
+        _signal(taker, params);
+        vm.expectPartialRevert(IOrchestratorV3.GatingSignatureAlreadyUsed.selector);
+        _signalCall(taker, params);
+    }
+
+    function test_GatingAcceptsFreshSignatureWithDifferentExpiration() public {
+        uint256 gatedDepositId = _newGatedDeposit();
+        IOrchestratorV2.SignalIntentParams memory first =
+            _gatedParams(gatedDepositId, gatingServiceKey, taker, block.timestamp + 1 days);
+        _signal(taker, first);
+        IOrchestratorV2.SignalIntentParams memory second =
+            _gatedParams(gatedDepositId, gatingServiceKey, taker, block.timestamp + 2 days);
+        assertNotEq(_signal(taker, second), bytes32(0));
+    }
+
+    function test_GatingRejectsUnsignedPostIntentHook() public {
+        uint256 gatedDepositId = _newGatedDeposit();
+        uint256 expiration = block.timestamp + 1 days;
+        IOrchestratorV2.SignalIntentParams memory params =
+            _gatedParams(gatedDepositId, gatingServiceKey, taker, expiration);
+        params.postIntentHook = postIntentHook;
+        vm.expectRevert(IOrchestratorV3.InvalidSignature.selector);
+        _signalCall(taker, params);
+    }
+
+    function test_GatingRejectsUnsignedData() public {
+        uint256 gatedDepositId = _newGatedDeposit();
+        uint256 expiration = block.timestamp + 1 days;
+        IOrchestratorV2.SignalIntentParams memory params =
+            _gatedParams(gatedDepositId, gatingServiceKey, taker, expiration);
+        params.data = "different data";
+        vm.expectRevert(IOrchestratorV3.InvalidSignature.selector);
+        _signalCall(taker, params);
+    }
+
+    function test_ManualReleaseRoutesNetThroughConfiguredPostIntentHook() public {
+        orchestrator.setProtocolFee(1e16);
+        IOrchestratorV2.SignalIntentParams memory params = _defaultParams();
+        params.postIntentHook = postIntentHook;
+        params.data = abi.encode(other);
+        bytes32 intentHash = _signal(taker, params);
+        uint256 recipientBefore = token.balanceOf(other);
+        vm.expectEmit(true, true, false, true, address(orchestrator));
+        emit IntentFulfilled(intentHash, address(postIntentHook), 49.5e6, true);
+        vm.prank(depositor);
+        orchestrator.releaseFundsToPayer(intentHash);
+        assertEq(token.balanceOf(other) - recipientBefore, 49.5e6);
+    }
+
+    function test_ManualReleaseWithoutPostIntentHookTransfersDirectlyToIntentRecipient() public {
+        bytes32 intentHash = _signalDefault();
+        uint256 recipientBefore = token.balanceOf(taker);
+        vm.expectEmit(true, true, false, true, address(orchestrator));
+        emit IntentFulfilled(intentHash, taker, INTENT_AMOUNT, true);
+        vm.prank(depositor);
+        orchestrator.releaseFundsToPayer(intentHash);
+        assertEq(token.balanceOf(taker) - recipientBefore, INTENT_AMOUNT);
     }
 }
 
