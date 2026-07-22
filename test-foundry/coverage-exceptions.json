@@ -44,7 +44,7 @@
     {
       "file": "contracts/RiskManager.sol",
       "metric": "statements",
-      "reason": "Standard coverage cannot compile the stack-heavy RiskManager contract. Minimal-IR covers 407 of 432 statements, 96.66% of lines, 71.74% of branches, and every function without a production-only instrumentation refactor."
+      "reason": "Standard coverage cannot compile the stack-heavy RiskManager contract. Minimal-IR covers 417 of 421 statements, 99.08% of lines, 91.36% of branches, and every function; the remaining mode guards require invalid enum storage values that Solidity rejects before their explicit defensive fallbacks execute."
     },
     {
       "file": "contracts/lib/ThresholdSigVerifierUtils.sol",

@@ -228,6 +228,34 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         assertEq(vault.lockedStake(safe), 0);
     }
 
+    function test_RiskHookGovernanceAndViewsExposeConfiguredSnapshots() public {
+        IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
+        assertEq(address(riskOrchestrator.getDepositRiskHook(address(escrow), riskDepositId)), address(manager));
+
+        bytes32 intentHash = _signalRiskIntent(taker, taker);
+        assertEq(address(riskOrchestrator.getIntentRiskHook(intentHash)), address(manager));
+
+        riskOrchestrator.setRiskCallbackGasLimit(1_000_000);
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.RiskCallbackGasLimitTooLow.selector, 749_999, 750_000));
+        riskOrchestrator.setRiskCallbackGasLimit(749_999);
+
+        vm.expectRevert(IOrchestratorV3.ZeroAddress.selector);
+        riskOrchestrator.setDepositRiskHook(address(0), riskDepositId, manager);
+
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.InvalidRiskHook.selector, other));
+        riskOrchestrator.setDepositRiskHook(address(escrow), riskDepositId, IIntentRiskHook(other));
+
+        vm.prank(other);
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.UnauthorizedCaller.selector, other, depositor));
+        riskOrchestrator.setDepositRiskHook(address(escrow), riskDepositId, manager);
+
+        bytes32 missingCancellation = keccak256("missing-cancellation");
+        vm.expectRevert(
+            abi.encodeWithSelector(IOrchestratorV3.IntentCancellationNotRecorded.selector, missingCancellation)
+        );
+        riskOrchestrator.acknowledgeIntentCancellation(missingCancellation);
+    }
+
     function test_RealFailedCancellationCanReconcileAfterControllerRecovery() public {
         bytes32 intentHash = _signalRiskIntent(taker, taker);
         address temporaryController = makeAddr("temporaryController");
@@ -244,6 +272,14 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         assertEq(uint256(manager.getRiskPosition(intentHash).status), uint256(IRiskManager.PositionStatus.PENDING));
         assertEq(IOrchestratorV3(address(orchestrator)).getIntentCancellation(intentHash), cancelledAt);
         assertEq(vault.lockedStake(safe), INTENT_AMOUNT);
+
+        vm.prank(other);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IOrchestratorV3.UnauthorizedCancellationAcknowledger.selector, other, address(manager)
+            )
+        );
+        IOrchestratorV3(address(orchestrator)).acknowledgeIntentCancellation(intentHash);
 
         vault.proposeController(address(manager));
         vm.warp(uint256(cancelledAt) + vault.controllerChangeDelay());

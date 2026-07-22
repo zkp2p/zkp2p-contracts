@@ -19,10 +19,44 @@ import {IReferralFee} from "../../../contracts/interfaces/IReferralFee.sol";
 import {IRiskManager} from "../../../contracts/interfaces/IRiskManager.sol";
 
 contract RiskTokenMock is ERC20 {
+    bool internal transferFeeEnabled;
+
     constructor() ERC20("Risk Token", "RISK") {}
 
     function mint(address _account, uint256 _amount) external {
         _mint(_account, _amount);
+    }
+
+    function setTransferFeeEnabled(bool _enabled) external {
+        transferFeeEnabled = _enabled;
+    }
+
+    function _transfer(address _from, address _to, uint256 _amount) internal override {
+        if (!transferFeeEnabled || _amount == 0) {
+            super._transfer(_from, _to, _amount);
+            return;
+        }
+
+        super._transfer(_from, _to, _amount - 1);
+        _burn(_from, 1);
+    }
+}
+
+contract RiskManagerHarness is RiskManager {
+    constructor(
+        address _owner,
+        IOrchestratorV3 _orchestrator,
+        StakeVault _stakeVault,
+        IAttestationVerifier _attestationVerifier,
+        INullifierRegistryV2 _nullifierRegistry
+    ) RiskManager(_owner, _orchestrator, _stakeVault, _attestationVerifier, _nullifierRegistry) {}
+
+    function setPositionStakeOwner(bytes32 _intentHash, address _stakeOwner) external {
+        riskPositions[_intentHash].stakeOwner = _stakeOwner;
+    }
+
+    function setPositionCoverageAmount(bytes32 _intentHash, uint256 _coverageAmount) external {
+        riskPositions[_intentHash].coverageAmount = _coverageAmount;
     }
 }
 
@@ -73,6 +107,10 @@ contract RiskEscrowMock {
 
     function setIntentExpirationPeriod(uint256 _period) external {
         intentExpirationPeriod = _period;
+    }
+
+    function setIntentExpiry(bytes32 _intentHash, uint256 _expiryTime) external {
+        intents[_intentHash].expiryTime = _expiryTime;
     }
 
     function setGuardian(address _guardian) external {
@@ -194,7 +232,7 @@ abstract contract RiskManagerFixture is Test {
     RiskTokenMock internal token;
     RiskTokenMock internal otherToken;
     StakeVault internal vault;
-    RiskManager internal manager;
+    RiskManagerHarness internal manager;
     RiskOrchestratorMock internal orchestrator;
     RiskEscrowMock internal escrow;
     RiskAttestationVerifierMock internal verifier;
@@ -210,7 +248,7 @@ abstract contract RiskManagerFixture is Test {
         verifier = new RiskAttestationVerifierMock();
         nullifierRegistry = new RiskNullifierRegistryMock();
         vault = new StakeVault(owner, token, address(0), 1 days);
-        manager = new RiskManager(
+        manager = new RiskManagerHarness(
             owner,
             IOrchestratorV3(address(orchestrator)),
             vault,
