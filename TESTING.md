@@ -82,3 +82,9 @@ There are no fork-dependent tests. Chain-dependent behavior was replaced with de
 ## Expected local runtimes
 
 On the recorded Apple M5 Max / Foundry v1.7.1 host, deterministic tests take about 0.8s warm and the complete suite takes about 5.6s warm. Deterministic coverage takes about 5 minutes locally: roughly 288 seconds for the complete minimal-IR pass and about 12 seconds for all exact-source mapping shards. PR #197 measured the equivalent deterministic coverage producer at 8m46s on a fresh GitHub-hosted runner. Subsequent normal test runs use Foundry's content-addressed cache, while correctness never depends on cache state.
+
+## CI cache behavior
+
+The complete-suite job caches `out/` and `cache_forge/`. Its exact key includes the pinned Foundry version, `foundry.toml`, production Solidity, Foundry tests, and Forge Standard Library sources. A documentation-only change therefore restores the exact cache produced by `main`; changing any Solidity test or compiler input intentionally creates a new key and may require a cold compile once.
+
+Pull-request caches are scoped to the pull request. After a large source-path change lands, allow the resulting push-to-`main` workflow to finish so it can publish the new cache for later branches. Coverage still compiles with its dedicated instrumentation settings and is measured separately from the incremental complete-suite cache.
