@@ -44,18 +44,15 @@ corepack yarn coverage
 
 Solidity 0.8.18 cannot compile several stack-heavy production contracts after ordinary coverage disables optimizer/IR. The coverage tool therefore:
 
-1. executes every deterministic unit, integration, deployment, and Hardhat-parity test once with Foundry's supported `--ir-minimum` fallback and a fixed coverage seed;
-2. reconstructs the 1,512 behaviors that actually executed in the starting Hardhat run from the immutable inventory/manifest and runs their exact Foundry destinations in two selector partitions;
-3. compares that starting-behavior bridge with the complete deterministic suite on identical minimal-IR line, statement, branch, and function denominators, requiring strict line/branch improvement and no aggregate or per-file regression;
-4. runs exact-source standard-compiler shards for contracts whose source maps are more accurate without IR;
-5. merges hit maxima only onto the original minimal-IR anchors and independently requires an LCOV record for every current production file; and
-6. rejects stale or unexplained instrumentation gaps recorded in `foundry-migration/coverage-exceptions.json`.
+1. executes every deterministic unit, integration, deployment, and regression test once with Foundry's supported `--ir-minimum` fallback and a fixed coverage seed;
+2. runs small exact-source standard-compiler shards for contracts whose source maps are more accurate without IR;
+3. merges hit maxima only onto the original minimal-IR anchors and independently requires an LCOV record for every current production file;
+4. enforces the permanent Foundry baseline floors: 99.42% lines, 98.70% statements, 94.74% branches, and 100% functions; and
+5. rejects stale or unexplained instrumentation gaps recorded in `test-foundry/coverage-exceptions.json`.
 
 Fuzz and invariant tests remain mandatory in the separate complete-suite CI job, but are deliberately excluded from coverage. Coverage measures stable deterministic behavior rather than giving randomized exploration credit toward the project threshold.
 
-In CI, the deterministic pass and the two expensive parity-bridge passes run on three parallel runners. Each producer uploads its LCOV, log, timing, and independently derived selector evidence. A final job requires both parity producers to agree byte-for-byte on the selected live tests before merging artifacts, enforcing the same-denominator gates, and uploading to Codecov. Local `corepack yarn coverage` keeps the same work sequential for a one-command clean-checkout workflow.
-
-The historical Hardhat and final Foundry percentages remain useful absolute evidence, but they are not compared directly: Istanbul and Foundry model Solidity branches differently. The enforced improvement uses one Foundry compiler/anchor denominator on both sides. The bridge deliberately includes selector-collision additions, making its baseline conservative.
+CI runs this deterministic coverage workflow once and uploads its LCOV to Codecov.
 
 Generated artifacts are:
 
@@ -64,15 +61,13 @@ Generated artifacts are:
 - `coverage/foundry-coverage-by-file.csv` — review-friendly per-file table
 - `coverage/shards/*.log` — full compiler/test diagnostics
 
-CI uploads only `coverage/lcov.info` under the `foundry` flag using Codecov OIDC. Upload errors fail the job. `codecov.yml` requires 99.42% project coverage and 100% patch coverage.
+CI uploads only `coverage/lcov.info` under the `foundry` flag using Codecov OIDC. Upload errors fail the job. The local runner enforces all four Foundry baseline metrics; `codecov.yml` independently requires 99.42% project line coverage and 100% patch coverage.
 
 ## Adding tests
 
 ### Deterministic behavior
 
 Place the test in the matching domain under `test-foundry/deterministic/`. Use explicit actor addresses, assert exact custom-error arguments and events where meaningful, and verify the complete state/balance postcondition. Deployment changes require a deterministic topology or deployment-helper test. Every test must pass alone and in the complete suite.
-
-The historical one-to-one Hardhat migration is preserved in `foundry-migration/hardhat-to-foundry-manifest.csv`. If changing a migrated behavior, keep its named destination stable or update the manifest and parity audit with an explicit rationale.
 
 ### Fuzz properties
 
@@ -86,4 +81,4 @@ There are no fork-dependent tests. Chain-dependent behavior was replaced with de
 
 ## Expected local runtimes
 
-On the recorded Apple M5 Max / Foundry v1.7.1 host, deterministic tests take about 0.8s warm and the complete suite takes about 5.6s warm. On the latest `main`, a locally clean coverage run took 31m06s end to end: about 16m24s to compile and enumerate the live deterministic tests, then 14m42s across the instrumented passes. Those instrumented passes were balanced—288.42s deterministic, 290.37s parity-main, and 291.21s parity-collisions—while all 16 mapping shards together took about 12 seconds. CI parallelizes the three expensive passes; mapping shards remain attached to the deterministic producer because distributing roughly 1.5% of the instrumented work would add more artifact/setup overhead than useful speedup. Subsequent normal test runs use Foundry's content-addressed cache, while correctness never depends on cache state.
+On the recorded Apple M5 Max / Foundry v1.7.1 host, deterministic tests take about 0.8s warm and the complete suite takes about 5.6s warm. Deterministic coverage takes about 5 minutes locally: roughly 288 seconds for the complete minimal-IR pass and about 12 seconds for all exact-source mapping shards. PR #197 measured the equivalent deterministic coverage producer at 8m46s on a fresh GitHub-hosted runner. Subsequent normal test runs use Foundry's content-addressed cache, while correctness never depends on cache state.

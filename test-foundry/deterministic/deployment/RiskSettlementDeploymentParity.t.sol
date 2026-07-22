@@ -252,11 +252,10 @@ contract RiskSettlementDeploymentParityTest is Test {
     function _sourceCheck(string memory scenario) internal returns (uint8) {
         string[] memory command = new string[](3);
         command[0] = "node";
-        command[1] = "foundry-migration/tools/run-risk-deployment-parity.cjs";
+        command[1] = "scripts/test-risk-deployment.cjs";
         command[2] = scenario;
         bytes memory result = vm.ffi(command);
         assertEq(result.length, 1);
         return uint8(result[0]);
     }
 }
-

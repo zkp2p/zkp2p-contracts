@@ -11,9 +11,9 @@ const path = require("node:path");
 const {
   riskSettlementPlatformPolicyForNetwork,
   riskWitnessConfigForNetwork,
-} = require("../../deploy/28_deploy_risk_settlement_system.ts");
+} = require("../deploy/28_deploy_risk_settlement_system.ts");
 
-const root = path.resolve(__dirname, "../..");
+const root = path.resolve(__dirname, "..");
 const scenario = process.argv[2];
 let passed = false;
 

@@ -339,7 +339,7 @@ contract LegacyZelleRemovalDeploymentParityTest is Test {
     function _ffiCheck(string memory scenario) internal returns (uint8) {
         string[] memory command = new string[](3);
         command[0] = "node";
-        command[1] = "foundry-migration/tools/run-zelle-removal-parity.cjs";
+        command[1] = "scripts/test-zelle-removal.cjs";
         command[2] = scenario;
         bytes memory result = vm.ffi(command);
         assertEq(result.length, 1);

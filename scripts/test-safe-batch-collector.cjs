@@ -2,7 +2,7 @@
 
 require("ts-node/register/transpile-only");
 
-const { SafeBatchCollector } = require("../../deployments/safeBatchCollector.ts");
+const { SafeBatchCollector } = require("../deployments/safeBatchCollector.ts");
 
 const scenario = process.argv[2];
 const collector = new SafeBatchCollector();

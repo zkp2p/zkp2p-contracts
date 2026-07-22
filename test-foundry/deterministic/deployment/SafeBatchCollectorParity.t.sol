@@ -15,7 +15,7 @@ contract SafeBatchCollectorParityTest is Test {
     function _runScenario(string memory scenario) internal returns (uint8) {
         string[] memory command = new string[](3);
         command[0] = "node";
-        command[1] = "foundry-migration/tools/run-safe-batch-parity.cjs";
+        command[1] = "scripts/test-safe-batch-collector.cjs";
         command[2] = scenario;
         bytes memory result = vm.ffi(command);
         assertEq(result.length, 1, "unexpected SafeBatchCollector runner output");

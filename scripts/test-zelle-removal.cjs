@@ -13,8 +13,8 @@ const {
   GENERIC_ZELLE_PAYMENT_METHOD_HASH,
   LEGACY_ZELLE_PAYMENT_METHODS,
   removeLegacyZelleVerifierRegistrations,
-} = require("../../deploy/27_remove_legacy_zelle_payment_methods.ts");
-const { safeBatchCollector } = require("../../deployments/safeBatchCollector.ts");
+} = require("../deploy/27_remove_legacy_zelle_payment_methods.ts");
+const { safeBatchCollector } = require("../deployments/safeBatchCollector.ts");
 
 if (process.argv[2] !== "safe") throw new Error("Unknown Zelle removal parity scenario: " + process.argv[2]);
 
