@@ -432,9 +432,10 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
 
     /**
      * @notice Adds free stake to, or refreshes the release time of, an active reservation.
-     * @dev Settlement uses `updateReservation`, which intentionally remains available during a pause.
-     *      New paid extension exposure and zero-increment expiry refreshes must use this function
-     *      so admission pause, exit, and controller gates remain authoritative.
+     * @dev Settlement may only decrease or refresh reservations through `updateReservation`, which
+     *      intentionally remains available during a pause. New paid extension exposure and
+     *      zero-increment expiry refreshes must use this function so admission pause, exit, and
+     *      controller gates remain authoritative.
      */
     function increaseReservation(
         bytes32 _positionId,
@@ -470,7 +471,9 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Replaces a reservation amount and maturity after exact release accounting is known.
+     * @notice Decreases a reservation amount and updates its maturity after settlement accounting.
+     * @dev Settlement resizing remains available during a pause. Increases must use
+     *      `increaseReservation` so its admission pause, exit, and current-controller gates apply.
      */
     function updateReservation(
         bytes32 _intentHash,
@@ -484,11 +487,9 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
 
         uint256 previousAmount = reservation.amount;
         if (_newAmount > previousAmount) {
-            uint256 increase = _newAmount - previousAmount;
-            uint256 available = freeStake(reservation.staker);
-            if (increase > available) revert InsufficientFreeStake(reservation.staker, available, increase);
-            reservedStake[reservation.staker] += increase;
-        } else if (_newAmount < previousAmount) {
+            revert InvalidReservationAmount(_newAmount, previousAmount);
+        }
+        if (_newAmount < previousAmount) {
             reservedStake[reservation.staker] -= previousAmount - _newAmount;
         }
 
