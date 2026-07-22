@@ -768,7 +768,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         bool _isManualRelease
     ) internal {
         IIntentRiskHook riskHook = intentRiskHooks[_intentHash];
-        (address fundsTransferredTo, uint256 netAmount) = FeeSettlementLib.executeSettlement(
+        (address fundsTransferredTo, uint256 reportedAmount) = FeeSettlementLib.executeSettlement(
             _token,
             riskHook,
             _intentHash,
@@ -786,7 +786,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         );
         delete intentRiskHooks[_intentHash];
 
-        emit IntentFulfilled(_intentHash, fundsTransferredTo, netAmount, _isManualRelease);
+        emit IntentFulfilled(_intentHash, fundsTransferredTo, reportedAmount, _isManualRelease);
     }
 
     function _setRiskCallbackGasLimit(uint256 _gasLimit) internal {

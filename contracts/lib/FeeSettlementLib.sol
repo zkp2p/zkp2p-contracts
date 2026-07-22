@@ -36,6 +36,11 @@ library FeeSettlementLib {
         uint256 managerFee;
     }
 
+    /**
+     * @notice Executes risk settlement or distributes the fee plan and remaining funds.
+     * @return fundsTransferredTo Recipient of the settlement funds.
+     * @return reportedAmount Net amount for ordinary distribution, or gross amount when the risk hook consumes funds.
+     */
     function executeSettlement(
         IERC20 _token,
         IIntentRiskHook _riskHook,
@@ -46,12 +51,12 @@ library FeeSettlementLib {
         FeeConfig memory _feeConfig,
         bool _isManualRelease,
         uint256 _riskCallbackGasLimit
-    ) public returns (address fundsTransferredTo, uint256 netAmount) {
+    ) public returns (address fundsTransferredTo, uint256 reportedAmount) {
         (
             IIntentRiskHook.FeeAllocation[] memory feeAllocations,
             uint256 totalFees
         ) = _calculateFeeAllocations(_intent, _releaseAmount, _feeConfig);
-        netAmount = _releaseAmount - totalFees;
+        uint256 netAmount = _releaseAmount - totalFees;
 
         bool fundsConsumed = RiskSettlementExecutor.execute(
             _riskHook,
@@ -69,7 +74,7 @@ library FeeSettlementLib {
             MAX_RISK_CALLBACK_RETURN_DATA
         );
 
-        if (fundsConsumed) return (address(_riskHook), netAmount);
+        if (fundsConsumed) return (address(_riskHook), _releaseAmount);
 
         _transferFeeAllocations(_token, _intentHash, feeAllocations);
         fundsTransferredTo = PostIntentHookExecutor.transferOrExecute(
@@ -79,6 +84,7 @@ library FeeSettlementLib {
             netAmount,
             _postIntentHookData
         );
+        return (fundsTransferredTo, netAmount);
     }
 
     function _calculateFeeAllocations(
