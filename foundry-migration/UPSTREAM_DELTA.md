@@ -105,3 +105,5 @@ The 61 upstream V3 rows execute alongside five V3-only assertions that receive n
 - rejection of a nonzero referral recipient paired with a zero fee.
 
 The V3 fixture deploys the real standalone `OrchestratorV3`, recreates its registry/verifier topology, and reuses only ABI-compatible test setup and assertions that are independently executed against the new address. No V2 contract instance supplies V3 parity credit.
+
+After this 67-row reconciliation and isolated 66/66 V3 execution gate, the two upstream Hardhat source files are deleted with the rest of the obsolete Hardhat contract-test surface. This document retains their behavior names and exact Foundry destinations as the durable source oracle.
