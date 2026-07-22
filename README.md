@@ -516,7 +516,7 @@ For wallet-based local testing, import Hardhat account `#0` into your wallet.
 ### Test Commands
 
 - `corepack yarn test`: run the complete always-on Foundry suite
-- `corepack yarn test:deterministic`: run deterministic parity, integration, and deployment tests
+- `corepack yarn test:deterministic`: run deterministic unit, integration, and deployment tests
 - `corepack yarn test:fuzz`: run the real-contract property suite at 512 cases per property
 - `corepack yarn test:invariant`: run handler-driven invariants at 128 runs × 64 calls
 - `forge test --match-path '<path>' --match-test '<name>'`: isolate a file or named test
@@ -525,10 +525,9 @@ See [TESTING.md](./TESTING.md) for suite design, seed reproduction, coverage mec
 
 ### Coverage
 
-- `corepack yarn coverage`: run the complete suite, build accurate Foundry LCOV, and enforce the same-denominator starting-behavior gates
-- `corepack yarn coverage:merge`: rebuild the merged report from previously generated shards after diagnosing a coverage run
+- `corepack yarn coverage`: run deterministic coverage once, build accurate Foundry LCOV, and enforce the permanent Foundry baseline floors
 
-Coverage is intentionally heavy and runs on every push and pull request. The output is `coverage/lcov.info`; CI uploads it to the `foundry` Codecov flag through OIDC and fails visibly on upload errors.
+Coverage runs on every pull request and every push to `main`. Fuzz and invariant tests remain outside coverage but always run in the complete-suite job. The output is `coverage/lcov.info`; CI uploads it to the `foundry` Codecov flag through OIDC and fails visibly on upload errors.
 
 ### Packaging Commands
 
@@ -648,7 +647,7 @@ Payment-method specific provider configuration lives under `deployments/verifier
 
 Foundry is the sole contract test system. The suite is separated by assurance type:
 
-- `test-foundry/deterministic/`: behavior parity, integration, deployment topology, events, reverts, state, balances, and authorization boundaries
+- `test-foundry/deterministic/`: unit behavior, integration, deployment topology, events, reverts, state, balances, and authorization boundaries
 - `test-foundry/fuzz/`: bounded real-contract properties that add input breadth beyond deterministic cases
 - `test-foundry/invariant/`: multi-actor handlers, ghost accounting, lifecycle conservation, and nullifier uniqueness
 

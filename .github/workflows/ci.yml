@@ -2,6 +2,8 @@ name: Foundry CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -123,7 +125,7 @@ jobs:
           corepack yarn install --immutable
       - name: Prepare local environment
         run: cp .env.default .env
-      - name: Run complete Foundry coverage and enforce same-denominator gates
+      - name: Run deterministic Foundry coverage and enforce baseline floors
         run: corepack yarn coverage
       - name: Upload Foundry LCOV to Codecov with OIDC
         uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac
