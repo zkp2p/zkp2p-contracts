@@ -19,42 +19,140 @@ import {IStakeVault} from "./interfaces/IStakeVault.sol";
 
 /**
  * @title RiskManager
- * @notice Applies intent-extension and chargeback policy to the generic StakeVault ledger.
- * @dev StakeVault owns custody and accounting only. This contract exclusively decides why stake is locked,
- *      when a lock resolves, and which beneficiaries receive claims.
+ * @notice Applies intent-extension and chargeback policy to the generic StakeVault custody and accounting ledger.
+ *
+ * @dev ECONOMIC MODEL
+ *      The Escrow's original intent period is free. A taker or its selected stake owner can purchase additional
+ *      time by locking the maximum extension charge under a lock separate from chargeback coverage:
+ *
+ *        extensionLock = ceil(intentAmount * slope * purchasedTime / (10_000 * 1 hour))
+ *        extensionFee  = ceil(intentAmount * slope * elapsedPurchasedTime / (10_000 * 1 hour))
+ *
+ *      The extension fee is paid to the LP when the intent reaches any terminal path. Any purchased time that was
+ *      not used is unlocked back into the extension stake owner's free stake.
+ *
+ *      A chargebackable intent is admitted in one of two modes. STAKE_BACKED locks the full intent amount from the
+ *      taker's selected stake owner. DEFERRED_PAYOUT admits the intent without an initial chargeback lock, then moves
+ *      the full gross settlement into StakeVault as payout-recipient-owned stake. Both modes hold the full gross
+ *      settlement amount until the snapshotted risk window ends or a valid chargeback awards it to the LP.
+ *
+ * @dev LIFECYCLE
+ *      - Admission validates canonical intent and Escrow state, then snapshots all mutable risk-policy inputs.
+ *      - Pending chargeback and extension locks use `NEVER_MATURES`; only this controller resolves pending exposure.
+ *      - Settlement resolves the extension lock before creating or retiming post-settlement chargeback coverage.
+ *      - Clean maturity unlocks stake-backed coverage. For deferred coverage, exact fee claims are created and the
+ *        executable remainder becomes free stake owned by the payout recipient.
+ *      - A valid chargeback resolves the complete coverage lock into one immediately claimable LP allocation and
+ *        discards any contingent deferred-fee plan.
+ *
+ * @dev SECURITY INVARIANTS AND RATIONALE
+ *      1. StakeVault owns custody and generic accounting only. This contract exclusively decides why stake is locked,
+ *         when a lock resolves, and which beneficiaries receive claims.
+ *      2. Mutable platform and Escrow policy is snapshotted at admission; later governance changes cannot rewrite an
+ *         existing position's liabilities.
+ *      3. All takers selecting one stake owner share that owner's `freeStake`. Locks compose additively, so delegation
+ *         cannot replace the stake owner's funds or prevent either party from adding independent stake.
+ *      4. Extension and chargeback exposure use distinct lock identifiers. Resolving one cannot resize, mature, or
+ *         distribute the other.
+ *      5. Token-bearing settlement is fail-closed. Cancellation may fail open in OrchestratorV3 for liquidity liveness;
+ *         reconciliation uses the durable original cancellation timestamp so delay cannot increase extension fees.
+ *      6. Chargeback compensation is full-only: coverage must equal the gross Escrow release in both backed modes.
+ *      7. This contract never retains tokens. Deferred proceeds move directly from OrchestratorV3 to StakeVault, the
+ *         sole custody boundary, and balance-delta validation rejects fee-on-transfer shortfalls.
+ *      8. Escrow intent amounts and StakeVault liabilities use the same immutable token so raw accounting units match.
+ *      9. Proof-based chargebacks must bind the supplied payment ID to the exact intent in both registry directions.
+ *         Manual releases instead rely on an EIP-712 witness signature binding evidence to the exact intent, while
+ *         every payment-method-scoped dispute identifier remains single-use.
  */
 contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
     using SafeERC20 for IERC20;
 
+    /* ============ Constants ============ */
+
+    /// @notice Basis-point denominator used by extension pricing.
     uint256 public constant BPS_DENOMINATOR = 10_000;
+
+    /// @notice Seconds per hour used to convert the configured hourly extension slope.
     uint256 public constant SECONDS_PER_HOUR = 1 hours;
+
+    /// @notice Combined denominator for the time-linear extension formula.
     uint256 public constant EXTENSION_DENOMINATOR = BPS_DENOMINATOR * SECONDS_PER_HOUR;
+
+    /// @notice Maximum time from original intent creation through final extended expiry.
     uint64 public constant MAX_TOTAL_INTENT_LIFETIME = 5 days;
+
+    /// @notice Operational ceiling that keeps settlement deadlines safely representable as `uint64`.
     uint64 public constant MAX_RISK_WINDOW = 365 days;
+
+    /// @notice Maturity used for pending exposure that only a RiskManager terminal transition may resolve.
     uint64 public constant NEVER_MATURES = type(uint64).max;
+
+    /// @notice Protocol fee, up to ten referral fees, and one manager fee.
     uint256 public constant MAX_FEE_ALLOCATIONS = 12;
 
+    /// @notice EIP-712 type hash; chain and manager binding are supplied by the domain separator.
     bytes32 public constant CHARGEBACK_ATTESTATION_TYPEHASH =
         keccak256("ChargebackAttestation(bytes32 intentHash,bytes32 dataHash)");
+
+    /// @notice Namespace separating extension lock IDs from intent-hash chargeback lock IDs.
     bytes32 public constant EXTENSION_LOCK_NAMESPACE = keccak256("ZKP2P_INTENT_EXTENSION");
 
+    /* ============ Immutable Dependencies ============ */
+
+    /// @notice Canonical source of intent admission, settlement, and failed-cancellation timestamps.
     IOrchestratorV3 public immutable override orchestrator;
+
+    /// @notice Policy-agnostic custody, delegation, lock, and claim ledger.
     IStakeVault public immutable override stakeVault;
+
+    /// @notice Canonical source binding each verified payment nullifier to its fulfilled intent.
     INullifierRegistryV2 public immutable override nullifierRegistry;
 
+    /* ============ Mutable Governance State ============ */
+
+    /// @notice Verifier responsible for authenticating typed chargeback attestations.
+    /// @dev Deployments should use witness credentials independent from payment-attestation credentials.
     IAttestationVerifier public override attestationVerifier;
+
+    /// @notice Emergency switch for new admissions and extensions; terminal accounting remains available.
     bool public override riskTakingPaused;
 
+    /* ============ Position State ============ */
+
+    /// @dev Mutable policy for future positions only. Every admitted position snapshots its applicable values.
     mapping(bytes32 => PlatformRiskConfig) internal platformRiskConfigs;
+
+    /// @dev Complete per-intent policy snapshot and lifecycle accounting.
     mapping(bytes32 => RiskPosition) internal riskPositions;
+
+    /// @dev Contingent fee allocations retained only while a deferred-payout lock can still be charged back.
     mapping(bytes32 => FeeAllocation[]) internal deferredFeeAllocations;
+
+    /// @notice Global replay protection for payment-method-scoped dispute identifiers.
     mapping(bytes32 => bool) public override usedChargebackNullifiers;
 
+    /* ============ Modifiers ============ */
+
+    /**
+     * @dev Restricts canonical intent lifecycle callbacks to the immutable orchestrator.
+     */
     modifier onlyOrchestrator() {
         if (msg.sender != address(orchestrator)) revert UnauthorizedOrchestrator(msg.sender);
         _;
     }
 
+    /* ============ Constructor ============ */
+
+    /**
+     * @notice Creates a replaceable policy controller for one immutable orchestrator and StakeVault.
+     * @dev Every dependency must be a deployed contract. Ownership is transferred directly to `_owner`; future
+     *      ownership changes use Ownable2Step. The vault separately enforces its delayed controller handover.
+     * @param _owner Governance owner allowed to configure future risk policy.
+     * @param _orchestrator Canonical intent lifecycle source.
+     * @param _stakeVault Policy-agnostic custody and accounting ledger controlled by this contract after handover.
+     * @param _attestationVerifier Initial chargeback evidence verifier.
+     * @param _nullifierRegistry Canonical registry binding verified payments to fulfilled intents.
+     */
     constructor(
         address _owner,
         IOrchestratorV3 _orchestrator,
@@ -78,8 +176,20 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         _transferOwnership(_owner);
     }
 
+    /* ============ Orchestrator Lifecycle ============ */
+
     /**
-     * @inheritdoc IIntentRiskHook
+     * @notice Validates and records a newly created intent, reserving full chargeback coverage when required.
+     * @dev ORCHESTRATOR ONLY. Admission is fail-closed and blocked while risk taking is paused. The function:
+     *      1. Reads canonical intent and deposit state and verifies this contract is the deposit's intent guardian.
+     *      2. Snapshots payment-method policy, original expiry, parties, amount, and the current delegated stake owner.
+     *      3. Selects UNBONDED, STAKE_BACKED, or DEFERRED_PAYOUT mode from policy and available free stake.
+     *      4. For STAKE_BACKED mode, creates an intent-hash lock for the full intent amount with no autonomous maturity.
+     *
+     *      Deferred mode records the payout recipient as stake owner and defers funding until settlement. It rejects
+     *      post-intent hooks because deferred settlement consumes the full gross release instead of executing the
+     *      orchestrator's ordinary payout path.
+     * @param _intentHash Identifier of the intent readable from the calling orchestrator.
      */
     function onIntentCreated(bytes32 _intentHash) external override onlyOrchestrator nonReentrant {
         if (riskTakingPaused) revert RiskTakingPaused();
@@ -158,14 +268,28 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
     }
 
     /**
-     * @inheritdoc IIntentRiskHook
+     * @notice Resolves risk accounting for an intent cancelled or expired by the orchestrator.
+     * @dev ORCHESTRATOR ONLY. Charges elapsed purchased extension time, unlocks any pending stake-backed coverage,
+     *      and transitions the position from PENDING to CANCELLED. The callback timestamp is captured once and used
+     *      for extension pricing. If this callback fails open in OrchestratorV3, anyone may later execute the same
+     *      transition through `reconcileCancellation` using the orchestrator's persisted cancellation timestamp.
+     * @param _intentHash Identifier of the intent being cancelled.
      */
     function onIntentCancelled(bytes32 _intentHash) external override onlyOrchestrator nonReentrant {
         _cancelPosition(_intentHash, _currentTimestamp());
     }
 
     /**
-     * @inheritdoc IIntentRiskHook
+     * @notice Atomically resolves extension and chargeback policy before settlement funds are distributed.
+     * @dev ORCHESTRATOR ONLY. The supplied token, recipient, gross amount, executable amount, and fee allocations must
+     *      exactly describe the canonical settlement. Extension exposure is resolved first on every settlement path.
+     *
+     *      UNBONDED positions become RELEASED and consume no tokens. STAKE_BACKED positions resize their existing
+     *      intent lock to the gross released amount and give it the chargeback deadline. DEFERRED_PAYOUT positions
+     *      transfer the full gross amount directly from the orchestrator into StakeVault, create an equally sized lock,
+     *      and retain the exact fee plan for clean maturity. Thus the hook consumes either zero tokens or exactly the
+     *      gross settlement amount, matching OrchestratorV3's settlement invariant.
+     * @param _context Token, parties, amounts, fee plan, intent hash, and manual-release flag for this settlement.
      */
     function settleIntent(RiskSettlementContext calldata _context) external override onlyOrchestrator nonReentrant {
         RiskPosition storage position = riskPositions[_context.intentHash];
@@ -222,8 +346,20 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         );
     }
 
+    /* ============ Intent Extensions ============ */
+
     /**
-     * @inheritdoc IRiskManager
+     * @notice Purchases additional lifetime for a pending intent by locking the maximum resulting extension fee.
+     * @dev Callable by the taker or the stake owner snapshotted by the first extension. On the first extension, the
+     *      taker's current selected stake owner is captured and cannot change for this intent. The taker may fund later
+     *      extensions only while that delegation remains current; the captured stake owner may always add exposure from
+     *      its own stake. The extension lock is distinct from the intent-hash chargeback lock and never self-matures.
+     *
+     *      Cost is recalculated over total purchased time and only the incremental difference is locked. The Escrow
+     *      expiry extension and local accounting update are atomic, and the final expiry cannot exceed five days from
+     *      original intent creation.
+     * @param _intentHash Identifier of the pending intent to extend.
+     * @param _additionalTime Number of seconds to add to the current Escrow expiry.
      */
     function extendIntent(bytes32 _intentHash, uint64 _additionalTime) external override nonReentrant {
         if (riskTakingPaused) revert RiskTakingPaused();
@@ -298,15 +434,24 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         );
     }
 
+    /* ============ Permissionless Lifecycle Recovery ============ */
+
     /**
-     * @inheritdoc IRiskManager
+     * @notice Completes risk accounting for one cancellation whose original callback failed open.
+     * @dev ANYONE. Reads the durable cancellation timestamp from OrchestratorV3, applies the same cancellation transition
+     *      that the original callback would have applied, then acknowledges the recovery record. Extension fees are
+     *      calculated at the original liquidity-unlock time rather than the later reconciliation time.
+     * @param _intentHash Identifier of the cancelled intent to reconcile.
      */
     function reconcileCancellation(bytes32 _intentHash) external override nonReentrant {
         _reconcileCancellation(_intentHash);
     }
 
     /**
-     * @inheritdoc IRiskManager
+     * @notice Completes risk accounting for a non-empty batch of failed-open cancellation callbacks.
+     * @dev ANYONE. Reverts atomically if any supplied intent has no recorded cancellation or cannot be reconciled.
+     *      Duplicate hashes therefore also revert after the first occurrence consumes its recovery record.
+     * @param _intentHashes Identifiers of cancelled intents to reconcile in order.
      */
     function reconcileCancellations(bytes32[] calldata _intentHashes) external override nonReentrant {
         if (_intentHashes.length == 0) revert EmptyBatch();
@@ -316,14 +461,20 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
     }
 
     /**
-     * @inheritdoc IRiskManager
+     * @notice Releases one settled chargeback position after its risk window has matured cleanly.
+     * @dev ANYONE. STAKE_BACKED coverage becomes free stake. DEFERRED_PAYOUT coverage is resolved into the stored fee
+     *      claims, while the executable remainder becomes free stake of the payout recipient. The position transitions
+     *      from SETTLED to RELEASED before the external vault call.
+     * @param _intentHash Identifier of the matured settled position.
      */
     function releaseMaturedPosition(bytes32 _intentHash) external override nonReentrant {
         _releaseMaturedPosition(_intentHash);
     }
 
     /**
-     * @inheritdoc IRiskManager
+     * @notice Releases a non-empty batch of settled positions whose chargeback windows have matured cleanly.
+     * @dev ANYONE. Reverts atomically if any supplied position is not settled or has not reached its coverage deadline.
+     * @param _intentHashes Identifiers of matured positions to release in order.
      */
     function releaseMaturedPositions(bytes32[] calldata _intentHashes) external override nonReentrant {
         if (_intentHashes.length == 0) revert EmptyBatch();
@@ -332,8 +483,19 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         }
     }
 
+    /* ============ Chargebacks ============ */
+
     /**
-     * @inheritdoc IRiskManager
+     * @notice Resolves a fully covered settled position into an immediately claimable LP chargeback award.
+     * @dev ANYONE may relay evidence before the half-open coverage window ends. The signed EIP-712 attestation must bind
+     *      to its exact data payload and payment method. Non-manual settlements additionally require the original payment
+     *      ID to map to this intent in both directions through the nullifier registry. The payment-method-scoped dispute
+     *      ID is consumed globally before the vault interaction.
+     *
+     *      Chargebacks are deliberately all-or-nothing: the position's coverage must equal its gross release. Resolving
+     *      the lock creates one claim for that complete amount in favor of the LP. Any deferred fee plan is discarded,
+     *      because no settlement fee vests when gross proceeds compensate the LP.
+     * @param _attestation Intent-bound chargeback evidence, payload hash, witness signatures, and encoded details.
      */
     function submitChargeback(ChargebackAttestation calldata _attestation) external override nonReentrant {
         RiskPosition storage position = riskPositions[_attestation.intentHash];
@@ -374,8 +536,15 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         );
     }
 
+    /* ============ Governance ============ */
+
     /**
-     * @inheritdoc IRiskManager
+     * @notice GOVERNANCE ONLY: Sets risk policy used by future intents for one payment method.
+     * @dev Existing positions are unaffected because all liability inputs are snapshotted at admission. Enabling
+     *      chargebacks requires a non-zero bounded risk window. Deferred payout cannot be enabled without chargebacks.
+     *      The maximum extension slope is bounded so buying the maximum lifetime cannot cost more than the intent amount.
+     * @param _paymentMethod Payment-method key whose future policy is being configured.
+     * @param _config Enabled state, chargeback settings, and hourly extension slope to validate and store.
      */
     function setPlatformRiskConfig(bytes32 _paymentMethod, PlatformRiskConfig calldata _config)
         external
@@ -395,7 +564,10 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
     }
 
     /**
-     * @inheritdoc IRiskManager
+     * @notice GOVERNANCE ONLY: Replaces the verifier used for future chargeback submissions.
+     * @dev The new address must contain deployed code. Updating the verifier affects unresolved settled positions because
+     *      attestations are verified at submission time rather than against a per-position verifier snapshot.
+     * @param _verifier New chargeback attestation verifier contract.
      */
     function setAttestationVerifier(address _verifier) external override onlyOwner {
         if (_verifier == address(0) || _verifier.code.length == 0) revert ZeroAddress();
@@ -405,7 +577,10 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
     }
 
     /**
-     * @inheritdoc IRiskManager
+     * @notice GOVERNANCE ONLY: Pauses or resumes new risk admissions and intent extensions.
+     * @dev Pausing does not block cancellations, settlement, maturity release, reconciliation, or chargebacks, ensuring
+     *      existing liabilities can still reach a terminal state.
+     * @param _paused True to stop new risk taking; false to resume it.
      */
     function setRiskTakingPaused(bool _paused) external override onlyOwner {
         riskTakingPaused = _paused;
@@ -413,39 +588,61 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
     }
 
     /**
-     * @inheritdoc IRiskManager
+     * @notice GOVERNANCE ONLY: Accepts this RiskManager as StakeVault controller after the vault's handover delay.
+     * @dev The StakeVault independently verifies that this contract is the matured pending controller. Once accepted,
+     *      this RiskManager can create, resize, unlock, fund, and resolve locks according to the policies above.
      */
     function acceptVaultController() external override onlyOwner {
         stakeVault.acceptController();
     }
 
+    /**
+     * @notice Ownership renunciation is disabled so governed safety controls cannot be made permanently unreachable.
+     * @dev Always reverts for the owner; non-owners revert through the inherited ownership check first.
+     */
     function renounceOwnership() public view override onlyOwner {
         revert OwnershipRenunciationDisabled();
     }
 
+    /* ============ Views ============ */
+
     /**
-     * @inheritdoc IRiskManager
+     * @notice Returns the mutable policy that will apply to future intents for a payment method.
+     * @param _paymentMethod Payment-method key to query.
+     * @return config Current platform risk configuration.
      */
     function getPlatformRiskConfig(bytes32 _paymentMethod) external view override returns (PlatformRiskConfig memory) {
         return platformRiskConfigs[_paymentMethod];
     }
 
     /**
-     * @inheritdoc IRiskManager
+     * @notice Returns the immutable policy snapshot and current lifecycle accounting for an intent.
+     * @param _intentHash Intent identifier to query.
+     * @return position Stored risk position, or the zero-valued position if it was never admitted.
      */
     function getRiskPosition(bytes32 _intentHash) external view override returns (RiskPosition memory) {
         return riskPositions[_intentHash];
     }
 
     /**
-     * @inheritdoc IRiskManager
+     * @notice Returns contingent fee allocations retained for a deferred-payout position.
+     * @dev Allocations exist only between deferred settlement and either clean maturity or chargeback resolution.
+     * @param _intentHash Deferred-payout intent identifier to query.
+     * @return allocations Exact fee claims that will vest on clean maturity.
      */
     function getDeferredFeeAllocations(bytes32 _intentHash) external view override returns (FeeAllocation[] memory) {
         return deferredFeeAllocations[_intentHash];
     }
 
     /**
-     * @inheritdoc IRiskManager
+     * @notice Returns the selected stake owner and its portfolio-wide StakeVault balances for a taker.
+     * @dev Locked and free values are shared across every taker and position using the selected stake owner; they are not
+     *      taker-specific exposure figures.
+     * @param _taker Taker whose currently selected stake owner should be resolved.
+     * @return stakeOwner Current selected stake owner, falling back to the taker itself when no delegation is selected.
+     * @return totalStake Stake owner's total principal balance, excluding beneficiary claim balances.
+     * @return locked Stake owner's principal currently committed across all locks.
+     * @return free Stake owner's immediately withdrawable or lockable principal.
      */
     function getTakerState(address _taker)
         external
@@ -459,8 +656,16 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         free = stakeVault.freeStake(stakeOwner);
     }
 
+    /* ============ Public Formula Helpers ============ */
+
     /**
-     * @inheritdoc IRiskManager
+     * @notice Calculates the maximum stake lock required to purchase a total amount of extension time.
+     * @dev Implements `ceil(intentAmount * slope * extensionTime / (10_000 * 1 hour))` with full-precision
+     *      multiplication and upward rounding. Returns zero if any multiplicative input is zero.
+     * @param _intentAmount Full amount of liquidity locked by the intent.
+     * @param _extensionTime Total number of extension seconds being purchased.
+     * @param _extensionPenaltyBpsPerHour Hourly extension slope in basis points.
+     * @return Maximum extension fee to lock for the supplied total purchased time.
      */
     function calculateIntentExtensionCost(
         uint256 _intentAmount,
@@ -471,7 +676,16 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
     }
 
     /**
-     * @inheritdoc IRiskManager
+     * @notice Calculates the extension fee owed when an intent reaches a terminal state.
+     * @dev Only time elapsed after the original expiry is chargeable, capped by total time actually purchased. The fee
+     *      uses the same upward-rounded pricing formula as the extension lock, so it can never exceed that lock.
+     * @param _intentAmount Full amount of liquidity locked by the intent.
+     * @param _baseIntentExpiry Original expiry before any purchased extensions.
+     * @param _terminalAt Timestamp at which the intent settled, cancelled, or expired.
+     * @param _totalExtensionTime Total number of extension seconds purchased.
+     * @param _extensionPenaltyBpsPerHour Hourly extension slope in basis points.
+     * @return penalty Amount awarded to the LP from the extension lock.
+     * @return chargeableTime Elapsed purchased seconds included in the fee.
      */
     function calculateIntentExtensionPenalty(
         uint256 _intentAmount,
@@ -486,14 +700,21 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
     }
 
     /**
-     * @inheritdoc IRiskManager
+     * @notice Derives the StakeVault lock ID used for an intent's extension exposure.
+     * @dev Namespacing prevents collision with the raw intent hash used for chargeback coverage.
+     * @param _intentHash Intent identifier to namespace.
+     * @return Collision-resistant extension lock identifier.
      */
     function extensionLockId(bytes32 _intentHash) external pure override returns (bytes32) {
         return _extensionLockId(_intentHash);
     }
 
     /**
-     * @inheritdoc IRiskManager
+     * @notice Returns the complete EIP-712 digest that chargeback witnesses must sign.
+     * @dev The struct commits to the intent hash and payload hash. The EIP-712 domain additionally binds the signature to
+     *      this RiskManager, its configured name and version, and the current chain.
+     * @param _attestation Attestation whose intent and data hash should be signed.
+     * @return Typed-data digest consumed by the configured attestation verifier.
      */
     function hashChargebackAttestation(ChargebackAttestation calldata _attestation)
         external
@@ -504,6 +725,15 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         return _hashTypedDataV4(_hashChargebackAttestation(_attestation));
     }
 
+    /* ============ Internal Lifecycle Accounting ============ */
+
+    /**
+     * @dev Applies the common cancellation transition using a trustworthy liquidity-unlock timestamp. Extension
+     *      exposure is resolved first, then pending chargeback coverage is unlocked and the position becomes CANCELLED.
+     *      Any vault failure reverts the complete transition.
+     * @param _intentHash Identifier of the pending position being cancelled.
+     * @param _cancelledAt Original timestamp at which the orchestrator released intent liquidity.
+     */
     function _cancelPosition(bytes32 _intentHash, uint64 _cancelledAt) internal {
         RiskPosition storage position = riskPositions[_intentHash];
         if (position.status != PositionStatus.PENDING) revert PositionNotPending(_intentHash, position.status);
@@ -522,6 +752,16 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         );
     }
 
+    /**
+     * @dev Charges identical elapsed extension time on every terminal path and frees all unused extension collateral.
+     *      `resolveLock` turns the charged portion into an immediately claimable LP allocation and returns the remainder
+     *      to the extension stake owner's free stake. The isolated extension lock cannot mutate chargeback coverage.
+     * @param _intentHash Intent whose extension lock is being resolved.
+     * @param _position Stored position containing the snapshotted extension terms and current lock amount.
+     * @param _terminalAt Timestamp at which the intent reached its terminal path.
+     * @return penalty Amount converted into an LP claim.
+     * @return releasedAmount Amount returned to the extension stake owner's free stake.
+     */
     function _resolveExtension(bytes32 _intentHash, RiskPosition storage _position, uint64 _terminalAt)
         internal
         returns (uint256 penalty, uint256 releasedAmount)
@@ -554,6 +794,11 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         );
     }
 
+    /**
+     * @dev Replays a failed-open cancellation using OrchestratorV3's persisted original timestamp, then acknowledges the
+     *      recovery record only after all RiskManager and StakeVault accounting succeeds.
+     * @param _intentHash Identifier of the cancelled intent being reconciled.
+     */
     function _reconcileCancellation(bytes32 _intentHash) internal {
         uint64 cancelledAt = orchestrator.getIntentCancellation(_intentHash);
         if (cancelledAt == 0) revert CancellationNotRecorded(_intentHash);
@@ -561,6 +806,12 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         orchestrator.acknowledgeIntentCancellation(_intentHash);
     }
 
+    /**
+     * @dev Applies clean maturity after the half-open chargeback window has ended. Stake-backed locks are simply
+     *      unlocked. Deferred locks resolve into their contingent fee claims, leaving unallocated principal as free
+     *      payout-recipient stake. State is updated before the vault interaction and the transaction remains atomic.
+     * @param _intentHash Identifier of the settled position being released.
+     */
     function _releaseMaturedPosition(bytes32 _intentHash) internal {
         RiskPosition storage position = riskPositions[_intentHash];
         if (position.status != PositionStatus.SETTLED) revert PositionNotSettled(_intentHash, position.status);
@@ -587,6 +838,14 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         emit RiskPositionReleased(_intentHash, position.stakeOwner, position.mode, releasedCoverage);
     }
 
+    /**
+     * @dev Converts a deferred settlement's complete gross release into payout-recipient-owned locked stake. Tokens move
+     *      directly from the orchestrator to StakeVault; an exact balance-delta check rejects transfer-tax or otherwise
+     *      non-conforming tokens. Non-zero fee allocations are stored as contingent claims until maturity.
+     * @param _context Canonical settlement amounts, token, recipient, fee plan, and intent identifier.
+     * @param _position Deferred position being funded; its stake owner must equal the settlement recipient.
+     * @param _coverageDeadline Timestamp at which clean maturity becomes permissionlessly releasable.
+     */
     function _fundDeferredLock(
         RiskSettlementContext calldata _context,
         RiskPosition storage _position,
@@ -623,6 +882,12 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         );
     }
 
+    /**
+     * @dev Converts stored deferred fee allocations into StakeVault claims. The returned claims intentionally cover only
+     *      fees; `resolveLock` returns every unallocated unit to the payout recipient's free stake.
+     * @param _intentHash Deferred-payout intent whose fee plan should be materialized.
+     * @return claims Immediately claimable fee allocations for clean maturity.
+     */
     function _deferredClaims(bytes32 _intentHash) internal view returns (IStakeVault.Claim[] memory claims) {
         FeeAllocation[] storage allocations = deferredFeeAllocations[_intentHash];
         claims = new IStakeVault.Claim[](allocations.length);
@@ -632,6 +897,14 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         }
     }
 
+    /* ============ Internal Validation ============ */
+
+    /**
+     * @dev Binds settlement to the vault token, snapshotted payout recipient, admitted intent amount, and an exact fee
+     *      plan. The fee sum must equal `grossAmount - executableAmount`, and every allocation needs a non-zero recipient.
+     * @param _context Settlement data supplied by the canonical orchestrator.
+     * @param _position Pending position against which settlement is validated.
+     */
     function _validateSettlementContext(RiskSettlementContext calldata _context, RiskPosition storage _position)
         internal
         view
@@ -659,6 +932,13 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         if (allocatedFees != expectedFees) revert InvalidFeeAllocations(expectedFees, allocatedFees);
     }
 
+    /**
+     * @dev Enforces internally consistent future policy and bounds every derived timestamp and extension amount.
+     *      Chargebackable platforms need a non-zero risk window of at most one year; non-chargebackable platforms cannot
+     *      enable deferred payout or retain a risk window. Maximum-lifetime extension cost cannot exceed intent principal.
+     * @param _paymentMethod Non-zero platform key associated with the configuration.
+     * @param _config Proposed platform configuration.
+     */
     function _validatePlatformConfig(bytes32 _paymentMethod, PlatformRiskConfig calldata _config) internal pure {
         if (_paymentMethod == bytes32(0)) revert InvalidPlatformConfig(_paymentMethod);
 
@@ -676,6 +956,10 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         }
     }
 
+    /**
+     * @dev Binds every risk amount to StakeVault's immutable accounting token before admission.
+     * @param _intentToken Token configured on the intent's Escrow deposit.
+     */
     function _validateIntentToken(IERC20 _intentToken) internal view {
         address expectedToken = address(stakeVault.stakeToken());
         if (address(_intentToken) != expectedToken) {
@@ -683,6 +967,16 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         }
     }
 
+    /**
+     * @dev Binds encoded dispute details to settlement state and the half-open coverage window. Proof-based fulfillment
+     *      additionally requires the canonical payment-nullifier binding in both directions. Manual releases have no
+     *      payment-verifier call, so their dedicated witnesses are the binding authority: the EIP-712 signature commits
+     *      to the exact intent and data hash while the derived dispute nullifier remains globally single-use.
+     * @param _attestation Intent-bound evidence and encoded chargeback details.
+     * @param _position Settled position whose snapshotted terms constrain the evidence.
+     * @return details Decoded chargeback details used by subsequent settlement and event emission.
+     * @return nullifier Payment-method-scoped dispute identifier consumed on successful settlement.
+     */
     function _validateAttestation(ChargebackAttestation calldata _attestation, RiskPosition storage _position)
         internal
         view
@@ -714,6 +1008,15 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         if (usedChargebackNullifiers[nullifier]) revert ChargebackEvidenceUsed(nullifier);
     }
 
+    /* ============ Internal Formula Helpers ============ */
+
+    /**
+     * @dev Implements `ceil(A * slope * time / (10_000 * 1 hour))` without intermediate multiplication overflow.
+     * @param _intentAmount Full amount of liquidity locked by the intent.
+     * @param _extensionTime Number of purchased extension seconds being priced.
+     * @param _extensionPenaltyBpsPerHour Hourly extension slope in basis points.
+     * @return Upward-rounded extension cost.
+     */
     function _calculateIntentExtensionCost(
         uint256 _intentAmount,
         uint64 _extensionTime,
@@ -726,6 +1029,16 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         return Math.mulDiv(_intentAmount, rateNumerator, EXTENSION_DENOMINATOR, Math.Rounding.Up);
     }
 
+    /**
+     * @dev Charges only elapsed time after the original expiry, capped by time actually purchased.
+     * @param _intentAmount Full amount of liquidity locked by the intent.
+     * @param _baseIntentExpiry Original expiry before purchased extensions.
+     * @param _terminalAt Timestamp of the terminal lifecycle transition.
+     * @param _totalExtensionTime Total number of purchased extension seconds.
+     * @param _extensionPenaltyBpsPerHour Hourly extension slope in basis points.
+     * @return penalty Upward-rounded amount owed to the LP.
+     * @return chargeableTime Purchased extension seconds that had elapsed at the terminal timestamp.
+     */
     function _calculateIntentExtensionPenalty(
         uint256 _intentAmount,
         uint64 _baseIntentExpiry,
@@ -741,23 +1054,48 @@ contract RiskManager is IRiskManager, Ownable2Step, ReentrancyGuard, EIP712 {
         penalty = _calculateIntentExtensionCost(_intentAmount, chargeableTime, _extensionPenaltyBpsPerHour);
     }
 
+    /**
+     * @dev Derives a collision-resistant StakeVault key independent from the raw intent-hash chargeback key.
+     * @param _intentHash Intent identifier to namespace.
+     * @return Extension lock identifier.
+     */
     function _extensionLockId(bytes32 _intentHash) internal pure returns (bytes32) {
         return keccak256(abi.encode(EXTENSION_LOCK_NAMESPACE, _intentHash));
     }
 
+    /**
+     * @dev Produces the EIP-712 struct hash; `_hashTypedDataV4` adds domain and chain binding separately.
+     * @param _attestation Attestation whose intent and data hash should be committed.
+     * @return EIP-712 struct hash for the chargeback attestation.
+     */
     function _hashChargebackAttestation(ChargebackAttestation calldata _attestation) internal pure returns (bytes32) {
         return keccak256(abi.encode(CHARGEBACK_ATTESTATION_TYPEHASH, _attestation.intentHash, _attestation.dataHash));
     }
 
+    /**
+     * @dev Returns the current block timestamp after checked narrowing to the storage timestamp width.
+     * @return Current EVM timestamp represented as `uint64`.
+     */
     function _currentTimestamp() internal view returns (uint64) {
         return _toTimestamp(block.timestamp);
     }
 
+    /**
+     * @dev Narrows an absolute timestamp after rejecting values that cannot be represented in position or lock storage.
+     * @param _timestamp Timestamp to narrow.
+     * @return Safely narrowed timestamp.
+     */
     function _toTimestamp(uint256 _timestamp) internal pure returns (uint64) {
         if (_timestamp > type(uint64).max) revert TimestampOverflow(_timestamp);
         return uint64(_timestamp);
     }
 
+    /**
+     * @dev Returns the smaller of two unsigned integers.
+     * @param _left First value.
+     * @param _right Second value.
+     * @return Minimum value.
+     */
     function _min(uint256 _left, uint256 _right) internal pure returns (uint256) {
         return _left < _right ? _left : _right;
     }
