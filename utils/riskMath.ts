@@ -2,16 +2,7 @@
 
 export type IntegerLike = bigint | number | string | { toString(): string };
 
-export interface IntentExtensionTerms {
-  extensionPenaltyBpsPerHour: IntegerLike;
-}
-
-export interface RiskCapacity {
-  /** null means chargeback coverage is disabled and admission is unbounded by stake. */
-  chargebackCapacity: bigint | null;
-  /** Admission capacity equals chargeback capacity; extensions are funded only when purchased. */
-  totalTakingCapacity: bigint | null;
-}
+export type RiskMode = "UNBONDED" | "STAKE_BACKED" | "DEFERRED_PAYOUT";
 
 export interface IntentExtensionPenalty {
   penalty: bigint;
@@ -74,30 +65,29 @@ export function calculateIntentExtensionPenalty(
   };
 }
 
-/** ceil(A * r / 10_000); returns zero when chargeback coverage is disabled. */
-export function calculateChargebackReserve(amount: IntegerLike, reserveBps: IntegerLike): bigint {
-  const intentAmount = integer(amount, "amount");
-  const reserveRatio = integer(reserveBps, "reserveBps");
-  if (reserveRatio > RISK_BPS_DENOMINATOR) throw new RangeError("reserveBps cannot exceed 10,000");
-  return ceilDiv(intentAmount * reserveRatio, RISK_BPS_DENOMINATOR);
+/** Full-gross coverage required at admission; zero when chargebacks are disabled. */
+export function calculateRequiredCoverage(
+  amount: IntegerLike,
+  chargebackable: boolean,
+): bigint {
+  return chargebackable ? integer(amount, "amount") : 0n;
 }
 
-/** Admission reserves chargeback coverage only; extension collateral is added when time is purchased. */
-export function calculateRequiredReservation(amount: IntegerLike, reserveBps: IntegerLike): bigint {
-  return calculateChargebackReserve(amount, reserveBps);
+/** Maximum chargebackable intent amount that can use existing stake. */
+export function calculateStakeBackedCapacity(freeStake: IntegerLike): bigint {
+  return integer(freeStake, "freeStake");
 }
 
-/** Inverts the exact rounded admission reserve. A null capacity is unbounded. */
-export function calculateTakingCapacity(
+/** Exact admission mode selected by RiskManager's full-gross policy. */
+export function selectRiskMode(
+  amount: IntegerLike,
   freeStake: IntegerLike,
-  reserveBps: IntegerLike,
-): RiskCapacity {
-  const available = integer(freeStake, "freeStake");
-  const reserveRatio = integer(reserveBps, "reserveBps");
-  if (reserveRatio > RISK_BPS_DENOMINATOR) throw new RangeError("reserveBps cannot exceed 10,000");
-
-  const chargebackCapacity = reserveRatio === 0n
-    ? null
-    : (available * RISK_BPS_DENOMINATOR) / reserveRatio;
-  return { chargebackCapacity, totalTakingCapacity: chargebackCapacity };
+  chargebackable: boolean,
+  deferredPayoutEnabled: boolean,
+): RiskMode {
+  const required = calculateRequiredCoverage(amount, chargebackable);
+  if (!chargebackable) return "UNBONDED";
+  if (integer(freeStake, "freeStake") >= required) return "STAKE_BACKED";
+  if (deferredPayoutEnabled) return "DEFERRED_PAYOUT";
+  throw new RangeError("insufficient collateral and deferred payout is disabled");
 }

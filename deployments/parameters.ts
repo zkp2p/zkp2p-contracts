@@ -148,7 +148,6 @@ export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
   "base_staging": "",
 };
 
-export const STAKE_VAULT_BASE_EXIT_DELAY = ONE_DAY_IN_SECONDS.mul(30);
 export const STAKE_VAULT_CONTROLLER_CHANGE_DELAY = ONE_DAY_IN_SECONDS.mul(2);
 export const RISK_CALLBACK_GAS_LIMIT = 2_000_000;
 
@@ -160,24 +159,18 @@ const INITIAL_STAKE_RISK_PLATFORM_POLICY = {
     chargeback: {
       chargebackable: true,
       deferredPayoutEnabled: true,
-      reserveBps: 10_000,
       riskWindow: ONE_DAY_IN_SECONDS.mul(30),
     },
-    intentExtension: {
-      extensionPenaltyBpsPerHour: 10,
-    },
+    extensionPenaltyBpsPerHour: 10,
   },
   nonChargebackable: {
     enabled: true,
     chargeback: {
       chargebackable: false,
       deferredPayoutEnabled: false,
-      reserveBps: 0,
       riskWindow: 0,
     },
-    intentExtension: {
-      extensionPenaltyBpsPerHour: 10,
-    },
+    extensionPenaltyBpsPerHour: 10,
   },
 };
 

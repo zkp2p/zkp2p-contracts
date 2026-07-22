@@ -175,6 +175,7 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
 
         stakeBalance[_stakeOwner] += _amount;
         totalStaked += _amount;
+        emit LockFunded(_lockId, _stakeOwner, _amount, stakeBalance[_stakeOwner]);
         _storeLock(_stakeOwner, _lockId, _amount, _maturesAt);
     }
 

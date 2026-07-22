@@ -28,6 +28,7 @@ interface IStakeVault {
     event StakeLocked(
         bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint64 maturesAt, uint256 totalLockedStake
     );
+    event LockFunded(bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
     event StakeLockIncreased(
         bytes32 indexed lockId,
         address indexed stakeOwner,

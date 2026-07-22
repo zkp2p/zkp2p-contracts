@@ -43,6 +43,8 @@ contract ReentrantToken is ERC20 {
 }
 
 contract StakeVaultTest is Test {
+    event LockFunded(bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
+
     uint64 internal constant CONTROLLER_DELAY = 1 days;
     uint64 internal constant NEVER_MATURES = type(uint64).max;
 
@@ -513,6 +515,8 @@ contract StakeVaultTest is Test {
         vault.fundLock(taker, lockId, 100e6, maturesAt);
 
         token.transfer(address(vault), 120e6);
+        vm.expectEmit(true, true, false, true, address(vault));
+        emit LockFunded(lockId, taker, 100e6, 100e6);
         vm.prank(controller);
         vault.fundLock(taker, lockId, 100e6, maturesAt);
 
