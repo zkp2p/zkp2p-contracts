@@ -21,7 +21,11 @@ const exceptionsPath = path.join(repositoryRoot, "foundry-migration/coverage-exc
 const parityBridgeName = "parity-bridge-ir";
 const mergeOnly = process.argv.includes("--merge-only");
 const resume = process.argv.includes("--resume");
+const groupArgumentIndex = process.argv.indexOf("--group");
+const runGroup = groupArgumentIndex === -1 ? null : process.argv[groupArgumentIndex + 1];
+const validRunGroups = new Set(["deterministic", "parity-main", "parity-collisions"]);
 const coverageSeed = "0x0000000000000000000000000000000000000000000000000000000000000001";
+const deterministicTestRoot = "test-foundry/deterministic";
 const excludedProductionDirectories = new Set([
     "contracts/external",
     "contracts/interfaces",
@@ -42,7 +46,11 @@ const legacyOrchestratorTests = [
 ].map((file) => `test-foundry/deterministic/orchestrator/${file}`);
 
 const coverageRuns = [
-    { name: "full-ir", irMinimum: true },
+    {
+        name: "full-ir",
+        irMinimum: true,
+        test: deterministicTestRoot,
+    },
     {
         name: "registries",
         source: "contracts/registries",
@@ -84,6 +92,12 @@ function fail(message) {
     console.error(message);
     process.exit(1);
 }
+
+if (groupArgumentIndex !== -1 && !validRunGroups.has(runGroup)) {
+    fail(`--group must be one of: ${[...validRunGroups].join(", ")}`);
+}
+if (mergeOnly && runGroup) fail("--merge-only and --group cannot be combined");
+if (resume && runGroup) fail("--resume is supported only by the sequential local workflow");
 
 function parseCsv(input) {
     const rows = [];
@@ -132,6 +146,7 @@ function parseCsv(input) {
 function listLiveFoundryTests(filterArgs = []) {
     const result = spawnSync("forge", ["test", ...filterArgs, "--list", "--json"], {
         cwd: repositoryRoot,
+        env: { ...process.env, FOUNDRY_TEST: deterministicTestRoot },
         encoding: "utf8",
         maxBuffer: 64 * 1024 * 1024,
     });
@@ -312,6 +327,56 @@ function runCoverage(run) {
     }
     console.log(`coverage: ${run.name} passed in ${elapsedSeconds.toFixed(2)}s`);
     return { name: run.name, elapsedSeconds };
+}
+
+function writeJson(file, value) {
+    fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function persistGroupResult(group, runTimings, parityEvidence) {
+    fs.mkdirSync(coverageDirectory, { recursive: true });
+    writeJson(path.join(coverageDirectory, `run-timings-${group}.json`), runTimings);
+    if (parityEvidence) {
+        writeJson(
+            path.join(coverageDirectory, `parity-evidence-${group}.json`),
+            parityEvidence
+        );
+    }
+}
+
+function loadPersistedRunTimings() {
+    const sequentialPath = path.join(coverageDirectory, "run-timings-sequential.json");
+    if (fs.existsSync(sequentialPath)) return JSON.parse(fs.readFileSync(sequentialPath, "utf8"));
+
+    const paths = [...validRunGroups].map((group) =>
+        path.join(coverageDirectory, `run-timings-${group}.json`)
+    );
+    for (const file of paths) {
+        if (!fs.existsSync(file)) fail(`missing coverage timing input ${path.relative(repositoryRoot, file)}`);
+    }
+    return paths.flatMap((file) => JSON.parse(fs.readFileSync(file, "utf8")));
+}
+
+function loadPersistedParityEvidence() {
+    const sequentialPath = path.join(coverageDirectory, "parity-evidence-sequential.json");
+    if (fs.existsSync(sequentialPath)) {
+        return JSON.parse(fs.readFileSync(sequentialPath, "utf8"));
+    }
+
+    const mainPath = path.join(coverageDirectory, "parity-evidence-parity-main.json");
+    const collisionPath = path.join(
+        coverageDirectory,
+        "parity-evidence-parity-collisions.json"
+    );
+    for (const file of [mainPath, collisionPath]) {
+        if (!fs.existsSync(file)) fail(`missing parity evidence ${path.relative(repositoryRoot, file)}`);
+    }
+    const main = JSON.parse(fs.readFileSync(mainPath, "utf8"));
+    const collisions = JSON.parse(fs.readFileSync(collisionPath, "utf8"));
+    if (JSON.stringify(main) !== JSON.stringify(collisions)) {
+        fail("parallel parity producers disagreed on the live test selection");
+    }
+    return main;
 }
 
 function normalizeSource(source) {
@@ -630,8 +695,13 @@ function mergeAndCheck(runTimings, parityEvidence) {
     const parityMetrics = coverageMetrics(parityRecords, parityStatements, productionFiles);
     const summary = {
         schemaVersion: 2,
-        source: "Foundry coverage: starting executable Hardhat behaviors re-instrumented through mapped Foundry destinations and compared with the complete suite using an identical minimal-IR denominator; final LCOV then receives exact-source mapping shards",
+        source: "Foundry coverage: starting executable Hardhat behaviors re-instrumented through mapped Foundry destinations and compared with the complete deterministic suite using an identical minimal-IR denominator; final LCOV then receives exact-source mapping shards",
         coverageSeed,
+        coverageSelection: {
+            included: "all deterministic unit, integration, deployment, and Hardhat-parity tests",
+            excluded: "Foundry-native fuzz and invariant tests; these remain mandatory in the separate complete-suite CI job",
+            testRoot: deterministicTestRoot,
+        },
         productionFileCount: productionFiles.length,
         historicalHardhatBaseline: {
             role: "historical absolute evidence only; strict improvement is enforced by the same-denominator starting-behavior bridge below",
@@ -698,33 +768,64 @@ function mergeAndCheck(runTimings, parityEvidence) {
     );
     checkCoverage(summary, exceptions);
     console.log(
-        `coverage passed on identical minimal-IR denominators: starting behaviors -> complete suite lines ${parityMetrics.overall.lines.pct}% -> ${completeFullIr.overall.lines.pct}%, statements ${parityMetrics.overall.statements.pct}% -> ${completeFullIr.overall.statements.pct}%, branches ${parityMetrics.overall.branches.pct}% -> ${completeFullIr.overall.branches.pct}%, functions ${parityMetrics.overall.functions.pct}% -> ${completeFullIr.overall.functions.pct}%; final mapped LCOV lines ${overall.lines.pct}%, branches ${overall.branches.pct}%`
+        `coverage passed on identical minimal-IR denominators: starting behaviors -> complete deterministic suite lines ${parityMetrics.overall.lines.pct}% -> ${completeFullIr.overall.lines.pct}%, statements ${parityMetrics.overall.statements.pct}% -> ${completeFullIr.overall.statements.pct}%, branches ${parityMetrics.overall.branches.pct}% -> ${completeFullIr.overall.branches.pct}%, functions ${parityMetrics.overall.functions.pct}% -> ${completeFullIr.overall.functions.pct}%; final mapped LCOV lines ${overall.lines.pct}%, branches ${overall.branches.pct}%`
     );
 }
 
 fs.mkdirSync(coverageDirectory, { recursive: true });
-const parityEvidence = loadParityDestinations();
-console.log(
-    `coverage bridge: ${parityEvidence.startingExecutableRows} starting executable behaviors -> ${parityEvidence.exactParityDestinations.length} exact destinations + ${parityEvidence.conservativeAdditions.length} conservative collision-recovery additions = ${parityEvidence.destinations.length} selected tests`
-);
-const parityRuns = [
-    {
-        name: `${parityBridgeName}-main`,
-        irMinimum: true,
-        noMatchTest: exactTestNamePattern(parityEvidence.additiveTestNames),
-    },
-    {
-        name: `${parityBridgeName}-collisions`,
-        irMinimum: true,
-        matchContract: `^(${parityEvidence.collisionContracts.join("|")})$`,
-        matchTest: exactTestNamePattern(parityEvidence.collisionNames),
-    },
-];
-let runTimings = [];
-if (!mergeOnly) {
+if (mergeOnly) {
+    if (!fs.existsSync(shardDirectory)) {
+        fail("coverage/shards does not exist; run coverage producers first");
+    }
+    mergeAndCheck(loadPersistedRunTimings(), loadPersistedParityEvidence());
+} else if (runGroup === "deterministic") {
+    fs.mkdirSync(shardDirectory, { recursive: true });
+    const runTimings = coverageRuns.map(runCoverage);
+    persistGroupResult(runGroup, runTimings);
+} else if (runGroup === "parity-main" || runGroup === "parity-collisions") {
+    fs.mkdirSync(shardDirectory, { recursive: true });
+    const parityEvidence = loadParityDestinations();
+    console.log(
+        `coverage bridge: ${parityEvidence.startingExecutableRows} starting executable behaviors -> ${parityEvidence.exactParityDestinations.length} exact destinations + ${parityEvidence.conservativeAdditions.length} conservative collision-recovery additions = ${parityEvidence.destinations.length} selected tests`
+    );
+    const run = runGroup === "parity-main"
+        ? {
+            name: `${parityBridgeName}-main`,
+            irMinimum: true,
+            test: deterministicTestRoot,
+            noMatchTest: exactTestNamePattern(parityEvidence.additiveTestNames),
+        }
+        : {
+            name: `${parityBridgeName}-collisions`,
+            irMinimum: true,
+            test: deterministicTestRoot,
+            matchContract: `^(${parityEvidence.collisionContracts.join("|")})$`,
+            matchTest: exactTestNamePattern(parityEvidence.collisionNames),
+        };
+    persistGroupResult(runGroup, [runCoverage(run)], parityEvidence);
+} else {
+    const parityEvidence = loadParityDestinations();
+    console.log(
+        `coverage bridge: ${parityEvidence.startingExecutableRows} starting executable behaviors -> ${parityEvidence.exactParityDestinations.length} exact destinations + ${parityEvidence.conservativeAdditions.length} conservative collision-recovery additions = ${parityEvidence.destinations.length} selected tests`
+    );
+    const parityRuns = [
+        {
+            name: `${parityBridgeName}-main`,
+            irMinimum: true,
+            test: deterministicTestRoot,
+            noMatchTest: exactTestNamePattern(parityEvidence.additiveTestNames),
+        },
+        {
+            name: `${parityBridgeName}-collisions`,
+            irMinimum: true,
+            test: deterministicTestRoot,
+            matchContract: `^(${parityEvidence.collisionContracts.join("|")})$`,
+            matchTest: exactTestNamePattern(parityEvidence.collisionNames),
+        },
+    ];
     if (!resume) fs.rmSync(shardDirectory, { recursive: true, force: true });
     fs.mkdirSync(shardDirectory, { recursive: true });
-    runTimings = coverageRuns.map((run) => {
+    const runTimings = [...coverageRuns, ...parityRuns].map((run) => {
         const reportPath = path.join(shardDirectory, `${run.name}.lcov`);
         const logPath = path.join(shardDirectory, `${run.name}.log`);
         if (resume && fs.existsSync(reportPath) && fs.existsSync(logPath)) {
@@ -733,17 +834,6 @@ if (!mergeOnly) {
         }
         return runCoverage(run);
     });
-    for (const run of parityRuns) {
-        const parityReportPath = path.join(shardDirectory, `${run.name}.lcov`);
-        const parityLogPath = path.join(shardDirectory, `${run.name}.log`);
-        if (resume && fs.existsSync(parityReportPath) && fs.existsSync(parityLogPath)) {
-            console.log(`coverage: ${run.name} already passed`);
-            runTimings.push({ name: run.name, elapsedSeconds: null, resumed: true });
-        } else {
-            runTimings.push(runCoverage(run));
-        }
-    }
-} else if (!fs.existsSync(shardDirectory)) {
-    fail("coverage/shards does not exist; run without --merge-only first");
+    persistGroupResult("sequential", runTimings, parityEvidence);
+    mergeAndCheck(runTimings, parityEvidence);
 }
-mergeAndCheck(runTimings, parityEvidence);

@@ -44,12 +44,16 @@ corepack yarn coverage
 
 Solidity 0.8.18 cannot compile several stack-heavy production contracts after ordinary coverage disables optimizer/IR. The coverage tool therefore:
 
-1. executes the complete suite once with Foundry's supported `--ir-minimum` fallback and a fixed coverage seed;
+1. executes every deterministic unit, integration, deployment, and Hardhat-parity test once with Foundry's supported `--ir-minimum` fallback and a fixed coverage seed;
 2. reconstructs the 1,512 behaviors that actually executed in the starting Hardhat run from the immutable inventory/manifest and runs their exact Foundry destinations in two selector partitions;
-3. compares that starting-behavior bridge with the complete suite on identical minimal-IR line, statement, branch, and function denominators, requiring strict line/branch improvement and no aggregate or per-file regression;
+3. compares that starting-behavior bridge with the complete deterministic suite on identical minimal-IR line, statement, branch, and function denominators, requiring strict line/branch improvement and no aggregate or per-file regression;
 4. runs exact-source standard-compiler shards for contracts whose source maps are more accurate without IR;
 5. merges hit maxima only onto the original minimal-IR anchors and independently requires an LCOV record for every current production file; and
 6. rejects stale or unexplained instrumentation gaps recorded in `foundry-migration/coverage-exceptions.json`.
+
+Fuzz and invariant tests remain mandatory in the separate complete-suite CI job, but are deliberately excluded from coverage. Coverage measures stable deterministic behavior rather than giving randomized exploration credit toward the project threshold.
+
+In CI, the deterministic pass and the two expensive parity-bridge passes run on three parallel runners. Each producer uploads its LCOV, log, timing, and independently derived selector evidence. A final job requires both parity producers to agree byte-for-byte on the selected live tests before merging artifacts, enforcing the same-denominator gates, and uploading to Codecov. Local `corepack yarn coverage` keeps the same work sequential for a one-command clean-checkout workflow.
 
 The historical Hardhat and final Foundry percentages remain useful absolute evidence, but they are not compared directly: Istanbul and Foundry model Solidity branches differently. The enforced improvement uses one Foundry compiler/anchor denominator on both sides. The bridge deliberately includes selector-collision additions, making its baseline conservative.
 
@@ -78,8 +82,8 @@ Place additive real-contract properties under `test-foundry/fuzz/`. Document the
 
 Place handlers under `test-foundry/invariant/handlers/` and invariant contracts under `test-foundry/invariant/`. Target selectors deliberately, use multiple realistic actors, maintain sufficient ghost state, and assert both a protocol property and handler reachability. Expected reverting actions belong inside the handler; an uncaught revert must fail the run.
 
-There are no fork-dependent tests. Chain-dependent behavior was replaced with deterministic fixtures so every required suite runs on every push and pull request without an RPC secret or mutable live-head state.
+There are no fork-dependent tests. Chain-dependent behavior was replaced with deterministic fixtures so every required suite runs on pushes to `main` and on every pull request without an RPC secret or mutable live-head state.
 
 ## Expected local runtimes
 
-On the recorded Apple M5 Max / Foundry v1.7.1 baseline host, deterministic tests take about 0.8s warm and the complete suite takes about 5.6s warm. Coverage takes about 14 minutes because it runs the complete IR suite, two same-denominator bridge partitions, and 16 mapping shards; see `foundry-migration/EVIDENCE.md` for the component timings. A genuinely clean production-like via-IR compile is expensive (about 15.3 minutes for 242 files); subsequent runs use Foundry's content-addressed cache. CI restores this cache opportunistically but never relies on it for correctness.
+On the recorded Apple M5 Max / Foundry v1.7.1 host, deterministic tests take about 0.8s warm and the complete suite takes about 5.6s warm. On the latest `main`, a locally clean coverage run took 31m06s end to end: about 16m24s to compile and enumerate the live deterministic tests, then 14m42s across the instrumented passes. Those instrumented passes were balanced—288.42s deterministic, 290.37s parity-main, and 291.21s parity-collisions—while all 16 mapping shards together took about 12 seconds. CI parallelizes the three expensive passes; mapping shards remain attached to the deterministic producer because distributing roughly 1.5% of the instrumented work would add more artifact/setup overhead than useful speedup. Subsequent normal test runs use Foundry's content-addressed cache, while correctness never depends on cache state.

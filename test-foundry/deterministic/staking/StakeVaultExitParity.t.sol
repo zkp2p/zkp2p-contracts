@@ -31,6 +31,15 @@ contract StakeVaultExitParityTest is StakeVaultLegacyFixture {
         assertEq(vault.freeStake(staker), 600e6);
     }
 
+    function test_PartialWithdrawalRejectsSecondPendingRequest() public {
+        _deposit(100e6);
+        vm.startPrank(staker);
+        vault.requestStakeWithdrawal(40e6);
+        vm.expectRevert(abi.encodeWithSelector(StakeVault.StakeWithdrawalAlreadyRequested.selector, staker, 40e6));
+        vault.requestStakeWithdrawal(1e6);
+        vm.stopPrank();
+    }
+
     function test_PartialWithdrawalRejectsAmountAboveFreeStake() public {
         _deposit(1_000e6);
         _reserve(keccak256("intent"), 700e6, 0);
@@ -153,6 +162,18 @@ contract StakeVaultExitParityTest is StakeVaultLegacyFixture {
         vault.requestExit();
         vm.warp(block.timestamp + EXIT_DELAY);
         vm.expectRevert(abi.encodeWithSelector(StakeVault.ActiveReservations.selector, staker, 20e6));
+        vm.prank(staker);
+        vault.withdrawStake(recipient);
+    }
+
+    function test_FullExitRejectsWithdrawalBeforeDelay() public {
+        _deposit(100e6);
+        vm.prank(staker);
+        vault.requestExit();
+        IStakeVault.ExitRequest memory request = vault.getExitRequest(staker);
+        vm.expectRevert(
+            abi.encodeWithSelector(StakeVault.ExitNotReady.selector, request.availableAt, uint64(block.timestamp))
+        );
         vm.prank(staker);
         vault.withdrawStake(recipient);
     }
