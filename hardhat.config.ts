@@ -58,7 +58,7 @@ const config: HardhatUserConfig = {
       allowBlocksWithSameTimestamp: true,
     },
     base_staging: {
-      url: "https://developer-access-mainnet.base.org",
+      url: "https://base-mainnet.g.alchemy.com/v2/" + process.env.ALCHEMY_API_KEY,
       // @ts-ignore
       accounts: [
         `0x${process.env.BASE_DEPLOY_PRIVATE_KEY}`,

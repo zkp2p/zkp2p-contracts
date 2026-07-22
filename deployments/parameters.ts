@@ -79,11 +79,16 @@ export const MULTI_WITNESS_THRESHOLD: Record<string, number> = {
 // Hardhat account #1 so deployment tests can enforce disjoint witness sets. Live values must be
 // governance-ratified before DEPLOY_RISK_SETTLEMENT_SYSTEM is enabled for that network.
 export const RISK_WITNESS_ADDRESSES: Record<string, string[]> = {
+  base_staging: [
+    "0x66649F896521b0fb487fE2077b4FBDA283d7f19a", // current AWS Nitro TEE signer
+    "0x4ab950AE1e3326578Bf7e643a2031E858aBa2927", // current Railway staging signer (SIGNER_MODE=local)
+  ],
   localhost: ["0x70997970C51812dc3A010C7d01b50e0d17dc79C8"],
   hardhat: ["0x70997970C51812dc3A010C7d01b50e0d17dc79C8"],
 };
 
 export const RISK_WITNESS_THRESHOLD: Record<string, number> = {
+  base_staging: 1,
   localhost: 1,
   hardhat: 1,
 };
