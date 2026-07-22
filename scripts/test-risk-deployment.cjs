@@ -27,9 +27,14 @@ if (scenario === "retired") {
   let policyError = "";
   let witnessError = "";
   try { riskSettlementPlatformPolicyForNetwork("base"); } catch (error) { policyError = error.message; }
-  try { riskWitnessConfigForNetwork("base_staging"); } catch (error) { witnessError = error.message; }
+  try { riskWitnessConfigForNetwork("base"); } catch (error) { witnessError = error.message; }
+  const stagingWitnessConfig = riskWitnessConfigForNetwork("base_staging");
   passed = policyError === "No governance-ratified risk-settlement platform policy for network: base"
-    && witnessError === "No governance-ratified chargeback witness policy for network: base_staging";
+    && witnessError === "No governance-ratified chargeback witness policy for network: base"
+    && stagingWitnessConfig.witnesses.length === 2
+    && stagingWitnessConfig.witnesses[0] === "0x66649F896521b0fb487fE2077b4FBDA283d7f19a"
+    && stagingWitnessConfig.witnesses[1] === "0x4ab950AE1e3326578Bf7e643a2031E858aBa2927"
+    && stagingWitnessConfig.threshold === 1;
 } else {
   throw new Error(`Unknown risk deployment test scenario: ${scenario}`);
 }
