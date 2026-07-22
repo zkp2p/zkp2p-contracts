@@ -38,6 +38,25 @@ contract StakeVaultDeferredParityTest is StakeVaultLegacyFixture {
         uint256 vestedFeeAmount,
         uint256 netStakeReleased
     );
+    event DeferredFeeVested(
+        bytes32 indexed intentHash,
+        address indexed recipient,
+        IIntentRiskHook.FeeType indexed feeType,
+        uint256 amount,
+        uint256 newClaimableBalance
+    );
+    event DeferredFeeContingent(
+        bytes32 indexed intentHash,
+        address indexed recipient,
+        IIntentRiskHook.FeeType indexed feeType,
+        uint256 amount
+    );
+    event DeferredFeeCancelled(
+        bytes32 indexed intentHash,
+        address indexed recipient,
+        IIntentRiskHook.FeeType indexed feeType,
+        uint256 amount
+    );
 
     function _fees(address protocol, uint256 protocolAmount, address referrer, uint256 referrerAmount)
         internal
@@ -244,12 +263,19 @@ contract StakeVaultDeferredParityTest is StakeVaultLegacyFixture {
         bytes32 intentHash = keccak256("zero-rounded-deferred-fee");
         uint64 releaseTime = uint64(block.timestamp + DAY);
         _authorize(intentHash, releaseTime);
-        _fund(intentHash, 100e6, releaseTime, _fees(maker, 0, recipient, 1e6));
+        IIntentRiskHook.FeeAllocation[] memory fees = _fees(maker, 0, recipient, 1e6);
+        token.transfer(address(vault), 100e6);
+        vm.expectEmit(true, true, true, true, address(vault));
+        emit DeferredFeeContingent(intentHash, recipient, IIntentRiskHook.FeeType.REFERRAL, 1e6);
+        vm.prank(controller);
+        vault.recordDeferredStake(intentHash, staker, 100e6, releaseTime, fees);
         IIntentRiskHook.FeeAllocation[] memory stored = vault.getDeferredFeeAllocations(intentHash);
         assertEq(stored.length, 1);
         assertEq(stored[0].recipient, recipient);
         assertEq(vault.getDeferredStake(intentHash).feeAmount, 1e6);
         vm.warp(releaseTime);
+        vm.expectEmit(true, true, true, true, address(vault));
+        emit DeferredFeeVested(intentHash, recipient, IIntentRiskHook.FeeType.REFERRAL, 1e6, 1e6);
         vm.recordLogs();
         vm.prank(controller);
         vault.releaseDeferredStake(intentHash);
@@ -271,6 +297,8 @@ contract StakeVaultDeferredParityTest is StakeVaultLegacyFixture {
         bytes32 intentHash = keccak256("deferred");
         _authorize(intentHash, 0);
         _fund(intentHash, 100e6, 0, _fees(recipient, 2e6, maker, 0));
+        vm.expectEmit(true, true, true, true, address(vault));
+        emit DeferredFeeCancelled(intentHash, recipient, IIntentRiskHook.FeeType.PROTOCOL, 2e6);
         vm.prank(controller);
         vault.slashDeferredStake(intentHash, maker);
         assertEq(vault.getDeferredStake(intentHash).grossAmount, 0);

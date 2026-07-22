@@ -274,25 +274,51 @@ abstract contract OrchestratorV2LegacyFixture is Test {
         IOrchestratorV2.SignalIntentParams memory params,
         uint256 expiration
     ) internal view returns (bytes memory) {
-        bytes32 messageHash = keccak256(
-            abi.encodePacked(
-                address(orchestrator),
-                params.escrow,
-                params.depositId,
-                params.amount,
-                signedCaller,
-                params.to,
-                params.paymentMethod,
-                params.fiatCurrency,
-                params.conversionRate,
-                _referralHash(params.referralFees),
-                expiration,
-                CHAIN_ID
-            )
-        );
+        bytes32 messageHash;
+        if (_usesStandaloneV3Format()) {
+            messageHash = keccak256(
+                abi.encodePacked(
+                    address(orchestrator),
+                    params.escrow,
+                    params.depositId,
+                    params.amount,
+                    signedCaller,
+                    params.to,
+                    params.paymentMethod,
+                    params.fiatCurrency,
+                    params.conversionRate,
+                    _referralHash(params.referralFees),
+                    address(params.postIntentHook),
+                    keccak256(params.data),
+                    expiration,
+                    CHAIN_ID
+                )
+            );
+        } else {
+            messageHash = keccak256(
+                abi.encodePacked(
+                    address(orchestrator),
+                    params.escrow,
+                    params.depositId,
+                    params.amount,
+                    signedCaller,
+                    params.to,
+                    params.paymentMethod,
+                    params.fiatCurrency,
+                    params.conversionRate,
+                    _referralHash(params.referralFees),
+                    expiration,
+                    CHAIN_ID
+                )
+            );
+        }
         bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
         return abi.encodePacked(r, s, v);
+    }
+
+    function _usesStandaloneV3Format() internal pure virtual returns (bool) {
+        return false;
     }
 
     function _gatedParams(uint256 gatedDepositId, uint256 signerKey, address signedCaller, uint256 expiration)

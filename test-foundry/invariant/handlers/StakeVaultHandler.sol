@@ -156,12 +156,7 @@ contract StakeVaultHandler is Test {
     function update(uint256 slotSeed, uint256 rawAmount, uint64 rawDuration) external {
         bytes32 position = _position(slotSeed);
         IStakeVault.Reservation memory beforeReservation = vault.getReservation(position);
-        uint256 capacity;
-        if (beforeReservation.active) {
-            capacity = vault.eligibleStake(beforeReservation.staker)
-                - (vault.reservedStake(beforeReservation.staker) - beforeReservation.amount);
-        }
-        uint256 newAmount = capacity == 0 ? 1 : bound(rawAmount, 1, capacity);
+        uint256 newAmount = beforeReservation.active ? bound(rawAmount, 1, beforeReservation.amount) : 1;
         uint64 releaseTime = uint64(block.timestamp) + uint64(bound(uint256(rawDuration), 1, 30 days));
         bytes4 expectedRevert = beforeReservation.active ? bytes4(0) : StakeVault.ReservationNotFound.selector;
         bool success = _call(
@@ -171,11 +166,7 @@ contract StakeVaultHandler is Test {
             expectedRevert
         );
         if (success) {
-            if (newAmount >= beforeReservation.amount) {
-                ghostReserved[beforeReservation.staker] += newAmount - beforeReservation.amount;
-            } else {
-                ghostReserved[beforeReservation.staker] -= beforeReservation.amount - newAmount;
-            }
+            ghostReserved[beforeReservation.staker] -= beforeReservation.amount - newAmount;
         }
     }
 

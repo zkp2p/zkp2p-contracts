@@ -142,7 +142,8 @@ contract RiskCallbackLibrariesParityTest is Test {
         assertEq(token.balanceOf(address(postIntentHook)), 10e6);
         assertEq(token.allowance(address(this), address(postIntentHook)), 0);
 
-        PostIntentHookExecutor.transferTo(token, recipient, 1e6);
+        intent.postIntentHook = IPostIntentHookV2(address(0));
+        assertEq(PostIntentHookExecutor.transferOrExecute(token, INTENT_HASH, intent, 1e6, ""), recipient);
         assertEq(token.balanceOf(recipient), 11e6);
     }
 

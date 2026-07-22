@@ -14,6 +14,22 @@ import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 contract OrchestratorV3ControlRecoveryParityTest is RiskManagerBoundaryFixture {
     event RiskCallbackGasLimitUpdated(uint256 gasLimit);
 
+    function test_DepositorCanSetAndClearRiskHookButRegisteredDelegateCannot() public {
+        assertEq(escrow.getDeposit(0).delegate, makerDelegate);
+        IntentRiskHookMock hook = new IntentRiskHookMock();
+        vm.prank(maker);
+        orchestrator.setDepositRiskHook(address(escrow), 0, IIntentRiskHook(address(hook)));
+        assertEq(address(orchestrator.getDepositRiskHook(address(escrow), 0)), address(hook));
+
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.UnauthorizedCaller.selector, makerDelegate, maker));
+        vm.prank(makerDelegate);
+        orchestrator.setDepositRiskHook(address(escrow), 0, IIntentRiskHook(address(0)));
+
+        vm.prank(maker);
+        orchestrator.setDepositRiskHook(address(escrow), 0, IIntentRiskHook(address(0)));
+        assertEq(address(orchestrator.getDepositRiskHook(address(escrow), 0)), address(0));
+    }
+
     function test_OrchestratorV3ExposesHookSnapshotsAndGuardedGovernance() public {
         assertEq(address(orchestrator.getDepositRiskHook(address(escrow), 0)), address(manager));
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
@@ -25,7 +41,7 @@ contract OrchestratorV3ControlRecoveryParityTest is RiskManagerBoundaryFixture {
         emit RiskCallbackGasLimitUpdated(1_000_000);
         orchestrator.setRiskCallbackGasLimit(1_000_000);
 
-        vm.expectPartialRevert(IOrchestratorV2.UnauthorizedCallerOrDelegate.selector);
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.UnauthorizedCaller.selector, other, maker));
         vm.prank(other);
         orchestrator.setDepositRiskHook(address(escrow), 0, IIntentRiskHook(address(0)));
         vm.expectRevert(IOrchestratorV2.ZeroAddress.selector);
