@@ -35,7 +35,7 @@ import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils
 
 // Import stable source ABIs for the hard-cut risk-settlement boundary and exact bigint math helpers
 import { IIntentRiskHook, OrchestratorV3, RiskManager } from "@zkp2p/contracts-v2/abis/contracts"
-import { calculateRequiredReservation } from "@zkp2p/contracts-v2/utils/riskMath"
+import { calculateRequiredCoverage, selectRiskMode } from "@zkp2p/contracts-v2/utils/riskMath"
 
 // Example: Create contract instance with ethers
 import { ethers } from 'ethers';

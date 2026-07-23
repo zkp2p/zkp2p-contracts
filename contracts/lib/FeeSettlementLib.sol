@@ -13,15 +13,26 @@ import { RiskSettlementExecutor } from "./RiskSettlementExecutor.sol";
 
 /**
  * @title FeeSettlementLib
- * @notice Builds and executes the exact fee plan used by OrchestratorV3 settlement.
- * @dev Public library functions keep fee-plan machinery out of the size-constrained orchestrator runtime.
+ * @notice Builds and executes the exact fee and net-payout plan used by OrchestratorV3 settlement.
+ * @dev Settlement follows one of two mutually exclusive paths:
+ *      1. A configured risk hook consumes the complete gross release under a temporary allowance. No fee or net-payout
+ *         transfer is then executed by the orchestrator; the hook owns the complete downstream accounting decision.
+ *      2. The risk hook consumes nothing, each fee line is transferred directly, and the executable remainder is sent
+ *         either to the intent recipient or through its snapshotted post-intent hook.
+ *
+ *      Protocol, referral, and manager fees are calculated independently from the gross release and rounded down before
+ *      being summed. Public library functions keep this machinery out of the size-constrained orchestrator runtime.
  */
 library FeeSettlementLib {
     using SafeERC20 for IERC20;
 
+    /// @dev Denominator for protocol, referral, and manager fee rates expressed in 1e18 precise units.
     uint256 internal constant PRECISE_UNIT = 1e18;
+
+    /// @dev Maximum callback return or revert data copied by the risk settlement boundary.
     uint256 internal constant MAX_RISK_CALLBACK_RETURN_DATA = 2_048;
 
+    /// @notice Emitted for every fee line paid directly by the ordinary settlement path.
     event IntentFeeDistributed(
         bytes32 indexed intentHash,
         IIntentRiskHook.FeeType feeType,
@@ -29,6 +40,10 @@ library FeeSettlementLib {
         uint256 amount
     );
 
+    /**
+     * @dev Protocol and per-intent manager fee terms supplied by OrchestratorV3. Fee values are rates in 1e18 precise
+     *      units; recipients and rates are both required for the corresponding fee line to be included.
+     */
     struct FeeConfig {
         address protocolFeeRecipient;
         uint256 protocolFee;
@@ -37,9 +52,22 @@ library FeeSettlementLib {
     }
 
     /**
-     * @notice Executes risk settlement or distributes the fee plan and remaining funds.
-     * @return fundsTransferredTo Recipient of the settlement funds.
-     * @return reportedAmount Net amount for ordinary distribution, or gross amount when the risk hook consumes funds.
+     * @notice Gives the risk hook first refusal over gross funds, then executes ordinary fees and payout if unconsumed.
+     * @dev Builds the exact fee plan and executable amount before invoking the risk hook. The hook may consume either zero
+     *      or exactly the gross release; `RiskSettlementExecutor` rejects every other balance delta. Full consumption
+     *      returns immediately without paying fees or invoking a post-intent hook. Zero consumption distributes every fee
+     *      line and routes the executable remainder through `PostIntentHookExecutor`.
+     * @param _token Settlement token currently held by OrchestratorV3.
+     * @param _riskHook Snapshotted risk hook, or zero to use ordinary settlement directly.
+     * @param _intentHash Identifier included in callbacks and settlement events.
+     * @param _intent Snapshotted intent containing recipient, referral fees, and optional post-intent hook.
+     * @param _releaseAmount Gross amount released from Escrow for this settlement.
+     * @param _postIntentHookData Fulfillment-time data forwarded only when the ordinary path invokes a post-intent hook.
+     * @param _feeConfig Current protocol terms and snapshotted per-intent manager terms.
+     * @param _isManualRelease Whether settlement was initiated through depositor manual release.
+     * @param _riskCallbackGasLimit Maximum gas forwarded to the risk settlement callback.
+     * @return fundsTransferredTo Address reported as handling the settled amount: risk hook, direct recipient, or post hook.
+     * @return reportedAmount Gross amount when the risk hook consumes funds; otherwise the executable amount.
      */
     function executeSettlement(
         IERC20 _token,
@@ -87,6 +115,16 @@ library FeeSettlementLib {
         return (fundsTransferredTo, netAmount);
     }
 
+    /**
+     * @dev Builds ordered protocol, referral, and manager fee lines from one gross release. Each line is independently
+     *      rounded down before being added to `totalFees`. Protocol is first when configured, referrals retain their
+     *      snapshotted array order, and manager is last when configured.
+     * @param _intent Intent containing the validated and snapshotted referral fee terms.
+     * @param _releaseAmount Gross settlement amount used as the basis for every fee.
+     * @param _feeConfig Protocol and manager fee recipients and rates.
+     * @return allocations Ordered exact fee-payment plan supplied to risk policy or ordinary distribution.
+     * @return totalFees Sum of every independently rounded fee amount.
+     */
     function _calculateFeeAllocations(
         IOrchestratorV3.Intent memory _intent,
         uint256 _releaseAmount,
@@ -133,6 +171,13 @@ library FeeSettlementLib {
         }
     }
 
+    /**
+     * @dev Transfers every fee line directly from OrchestratorV3 and emits one event per line. Zero-value lines remain in
+     *      the plan and emit an event because independently rounded non-zero fee rates may produce a zero token amount.
+     * @param _token Settlement token held by OrchestratorV3.
+     * @param _intentHash Intent identifier included in each distribution event.
+     * @param _allocations Ordered exact fee-payment plan to execute.
+     */
     function _transferFeeAllocations(
         IERC20 _token,
         bytes32 _intentHash,

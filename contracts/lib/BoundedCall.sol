@@ -6,11 +6,14 @@ import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
 
 /**
  * @title BoundedCall
- * @notice Performs gas-limited calls while bounding copied return data.
- * @dev This follows the excessively-safe-call pattern: the callee cannot force the caller to
- *      copy unbounded return data and exhaust gas during memory expansion.
+ * @notice Executes gas-limited risk-hook callbacks while bounding copied return and revert data.
+ * @dev This follows the excessively-safe-call pattern: the callee cannot force the caller to copy unbounded return data
+ *      and exhaust gas during memory expansion. Admission and settlement are fail-closed and bubble bounded revert data
+ *      through typed errors. Cancellation is fail-open for intent-liquidity liveness and emits bounded failure evidence
+ *      so the orchestrator can persist a reconciliation record.
  */
 library BoundedCall {
+    /// @notice Emitted when a fail-open risk cancellation callback does not complete successfully.
     event RiskHookCallbackFailed(
         bytes32 indexed intentHash,
         address indexed riskHook,
@@ -23,7 +26,13 @@ library BoundedCall {
     error InsufficientGasForRiskCallback(uint256 availableGas, uint256 requiredGas);
 
     /**
-     * @notice Executes a fail-closed risk admission callback.
+     * @notice Executes a fail-closed risk admission callback with fixed gas and bounded revert data.
+     * @dev A zero hook is an intentional no-op. A non-zero hook must contain deployed code and successfully execute
+     *      `onIntentCreated`; otherwise the complete outer intent admission reverts with `RiskHookAdmissionFailed`.
+     * @param _riskHook Snapshotted hook selected by the deposit, or zero when no risk policy applies.
+     * @param _intentHash Newly created intent identifier readable from the calling orchestrator.
+     * @param _gasLimit Exact gas allowance supplied to the callback call.
+     * @param _maxReturnDataSize Maximum revert-data bytes copied from the hook.
      */
     function executeRiskAdmission(
         IIntentRiskHook _riskHook,
@@ -47,6 +56,12 @@ library BoundedCall {
 
     /**
      * @notice Executes a fail-closed settlement callback with bounded return data.
+     * @dev The caller must already validate that `_riskHook` is non-zero deployed code. Any callback failure reverts the
+     *      outer settlement with the intent-bound `RiskHookSettlementFailed` error and bounded revert data.
+     * @param _riskHook Snapshotted non-zero risk hook receiving settlement context.
+     * @param _context Exact gross amount, executable amount, fee plan, token, recipient, and settlement type.
+     * @param _gasLimit Exact gas allowance supplied to the callback call.
+     * @param _maxReturnDataSize Maximum revert-data bytes copied from the hook.
      */
     function executeRiskSettlement(
         IIntentRiskHook _riskHook,
@@ -66,7 +81,15 @@ library BoundedCall {
     }
 
     /**
-     * @notice Executes the fail-open cancellation callback.
+     * @notice Executes a fail-open cancellation callback without allowing hook failure to trap intent liquidity.
+     * @dev A zero hook succeeds without a call. A non-contract hook or reverted callback emits `RiskHookCallbackFailed`
+     *      and returns false so OrchestratorV3 can store durable recovery state. Before calling, the function verifies
+     *      EIP-150 permits the complete configured gas allowance to be forwarded; insufficient outer gas reverts rather
+     *      than being misclassified as a hook failure.
+     * @param _riskHook Snapshotted hook selected when the intent was created, or zero when none applied.
+     * @param _intentHash Cancelled intent identifier included in the callback and any failure event.
+     * @param _gasLimit Exact gas allowance supplied to the callback call.
+     * @param _maxReturnDataSize Maximum revert-data bytes copied from the hook.
      * @return success Whether the callback completed successfully.
      */
     function executeRiskCancellation(
@@ -115,6 +138,8 @@ library BoundedCall {
 
     /**
      * @notice Calls a target with a fixed gas allowance and copies at most `_maxReturnDataSize` bytes.
+     * @dev The helper does not validate target code or interpret returned bytes; callers own those policy decisions.
+     *      Return data is allocated manually and rounded to the next 32-byte memory boundary.
      * @param _target Address receiving the call.
      * @param _gasLimit Maximum gas forwarded to the target.
      * @param _maxReturnDataSize Maximum number of return-data bytes copied into memory.

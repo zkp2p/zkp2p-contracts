@@ -373,6 +373,11 @@ contract UnifiedPaymentVerifierV3Test is Test {
     }
 
     function test_ConstructorAndPaymentMethodGovernanceEnforceAllBoundaries() public {
+        bytes32[] memory paymentMethods = verifier.getPaymentMethods();
+        assertEq(paymentMethods.length, 2);
+        assertEq(paymentMethods[0], METHOD);
+        assertEq(paymentMethods[1], OTHER_METHOD);
+
         vm.expectRevert(bytes("UPV: Invalid orchestrator registry"));
         new UnifiedPaymentVerifierV3(OrchestratorRegistry(address(0)), nullifierRegistry, attestationVerifier);
         vm.expectRevert(bytes("UPV: Invalid orchestrator registry"));

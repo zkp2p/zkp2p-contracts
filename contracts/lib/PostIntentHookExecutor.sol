@@ -11,13 +11,25 @@ import { IPostIntentHookV2 } from "../interfaces/IPostIntentHookV2.sol";
 /**
  * @title PostIntentHookExecutor
  * @notice Transfers settled funds directly or executes a V2 post-intent hook with an exact allowance.
+ * @dev This executor runs only after the risk hook declines gross-fund consumption and fees have been distributed.
+ *      Without a hook, it transfers the executable amount directly to the snapshotted intent recipient. With a hook, it
+ *      grants a temporary exact allowance and requires the orchestrator's token balance to decrease by precisely that
+ *      amount during execution. The complete settlement reverts on hook failure or any other balance delta.
  */
 library PostIntentHookExecutor {
     using SafeERC20 for IERC20;
 
     /**
      * @notice Transfers `_netAmount` to the recipient or requires the configured hook to consume it exactly.
-     * @return fundsTransferredTo Recipient of the direct transfer or the hook that consumed the funds.
+     * @dev The hook receives immutable signal-time intent context plus fulfillment-time execution data. Its allowance is
+     *      reset before being granted and cleared after exact-consumption validation. A revert at any stage atomically
+     *      unwinds the allowance and all earlier settlement transfers.
+     * @param _token Settlement token held by OrchestratorV3.
+     * @param _intentHash Identifier supplied to the post-intent hook execution context.
+     * @param _intent Snapshotted intent containing recipient, hook address, and signal-time context.
+     * @param _netAmount Executable amount remaining after all ordinary settlement fees.
+     * @param _postIntentHookData Fulfillment-time opaque data forwarded to the hook.
+     * @return fundsTransferredTo Direct recipient when no hook is set, otherwise the hook that consumed the funds.
      */
     function transferOrExecute(
         IERC20 _token,

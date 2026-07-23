@@ -8,7 +8,14 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
 import { BoundedCall } from "./BoundedCall.sol";
 
-/** @notice Exact temporary-allowance and balance-delta boundary for post-funds risk settlement. */
+/**
+ * @title RiskSettlementExecutor
+ * @notice Enforces the temporary-allowance and exact balance-delta boundary for post-Escrow risk settlement.
+ * @dev A risk hook receives an allowance for the gross release only during its fail-closed callback. After the callback,
+ *      the allowance is removed and OrchestratorV3's token balance must have decreased by either zero or exactly the gross
+ *      amount. Zero selects ordinary fee and recipient distribution; full consumption delegates all downstream accounting
+ *      to the risk hook. Partial consumption and balance increases always revert the complete settlement.
+ */
 library RiskSettlementExecutor {
     using SafeERC20 for IERC20;
 
@@ -26,7 +33,19 @@ library RiskSettlementExecutor {
     error RiskHookSettlementBalanceIncreased(bytes32 intentHash, uint256 beforeBalance, uint256 afterBalance);
     error InvalidRiskHookSettlementConsumption(bytes32 intentHash, uint256 consumed, uint256 grossAmount);
 
-    /** @return fundsConsumed Whether the hook consumed the exact gross amount before distribution. */
+    /**
+     * @notice Gives a validated risk hook temporary access to gross funds and classifies its exact balance consumption.
+     * @dev A zero hook is treated as zero consumption without granting an allowance. A non-zero hook must contain deployed
+     *      code. Its existing allowance is cleared, the gross allowance is granted, and `BoundedCall` executes settlement
+     *      fail-closed. The allowance is cleared again before balance-delta validation. Any revert unwinds every allowance
+     *      and accounting change atomically.
+     * @param _riskHook Snapshotted risk hook, or zero to select ordinary settlement.
+     * @param _token Settlement token held by OrchestratorV3.
+     * @param _context Exact intent, token, recipient, gross amount, executable amount, fee plan, and release type.
+     * @param _gasLimit Exact gas allowance forwarded to the risk callback.
+     * @param _maxReturnDataSize Maximum return or revert data copied from the risk callback.
+     * @return fundsConsumed Whether the hook consumed the exact gross amount before ordinary distribution.
+     */
     function execute(
         IIntentRiskHook _riskHook,
         IERC20 _token,

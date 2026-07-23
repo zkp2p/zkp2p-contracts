@@ -2,100 +2,122 @@
 
 pragma solidity ^0.8.18;
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-import { IIntentRiskHook } from "./interfaces/IIntentRiskHook.sol";
-import { IStakeVault } from "./interfaces/IStakeVault.sol";
+import {IStakeVault} from "./interfaces/IStakeVault.sol";
 
 /**
  * @title StakeVault
- * @notice Stable, policy-agnostic USDC accounting for taker stake, reservations, and deferred fee claims.
- * @dev The controller decides why funds are reserved or slashed. The vault only enforces accounting,
- *      exit, maturity, and solvency rules. User and maker withdrawals remain available while stake
- *      admission is paused.
+ * @notice Policy-agnostic custody, delegation, lock, and immediately claimable token accounting.
+ *
+ * @dev ACCOUNTING MODEL
+ *      Stake principal belongs to a `stakeOwner` and is split into locked and free amounts:
+ *
+ *        freeStake(owner) = stakeBalance(owner) - lockedStake(owner)
+ *        totalAccounted() = totalStaked + totalClaimable
+ *
+ *      Creating, increasing, resizing, or unlocking a lock only moves principal between locked and free accounting.
+ *      Resolving a lock may move some principal from `totalStaked` into beneficiary `claimable` balances; every
+ *      unallocated unit becomes free stake of the original owner. Claims are immediately withdrawable and are never
+ *      stake. `fundLock` is the sole path that adopts tokens already transferred into the vault as new locked stake.
+ *
+ * @dev DELEGATION MODEL
+ *      A stake owner may authorize any number of takers, and each taker explicitly selects at most one authorized owner.
+ *      Authorizations are additive: one owner's authorization never overwrites another's, and a taker can always fall
+ *      back to its own stake. Delegation never transfers ownership, custody rights, or withdrawal rights. Revocation
+ *      clears an active selection for future policy reads but cannot alter locks already created for that owner.
+ *
+ * @dev LOCK AND CONTROLLER MODEL
+ *      The vault deliberately knows nothing about intents, fees, chargebacks, or lock purpose. Lock IDs and beneficiary
+ *      allocations are opaque controller inputs. A lock maturity prevents further increase or resize once reached, but
+ *      does not automatically resolve the lock; the controller remains responsible for choosing whether and how every
+ *      lock is unlocked or converted into claims. `NEVER_MATURES` represents exposure requiring an explicit controller
+ *      transition on all paths.
+ *
+ *      Controller replacement is delayed, but accepted authority is global: the new controller immediately gains the
+ *      same power over existing and future locks. The owner can cancel a pending handover during the delay and cannot
+ *      renounce ownership, preserving a governance recovery path.
+ *
+ * @dev SECURITY INVARIANTS AND RATIONALE
+ *      1. Only free stake may be withdrawn or newly locked. Existing locks remain fully backed in aggregate accounting.
+ *      2. Lock IDs are globally unique while active, preventing one owner's lock from colliding with another's.
+ *      3. Only the controller can create, resize, unlock, fund, or resolve locks. The controller must enforce all policy,
+ *         including whether a named stake owner authorized the economic action; the vault enforces accounting only.
+ *      4. Resolution conserves liabilities: claim allocations cannot exceed the lock, and unclaimed remainder stays with
+ *         the stake owner rather than being transferred to the controller.
+ *      5. Deposits require an exact token balance delta. Funded locks can adopt only balance already held above existing
+ *         liabilities, while the controller remains responsible for transfer-specific delta checks. The controller never
+ *         takes custody.
+ *      6. User withdrawals and claims apply accounting effects before token interactions and are reentrancy guarded.
+ *      7. Initializing an omitted controller is allowed only before any stake or claim liabilities exist. Later controller
+ *         replacements always use the configured handover delay.
  */
-contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
+contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     /* ============ Constants ============ */
 
+    /// @notice Minimum governance delay allowed for controller replacement.
     uint64 public constant MIN_CONTROLLER_CHANGE_DELAY = 1 days;
 
-    /* ============ State Variables ============ */
+    /// @notice Sentinel maturity for locks that must never become mature through passage of practical time.
+    uint64 public constant NEVER_MATURES = type(uint64).max;
 
+    /* ============ Immutable Configuration ============ */
+
+    /// @notice Token held and accounted by the vault.
     IERC20 public immutable override stakeToken;
-    uint64 public immutable baseExitDelay;
-    uint64 public immutable controllerChangeDelay;
 
+    /// @notice Delay between controller proposal and acceptance eligibility.
+    uint64 public immutable override controllerChangeDelay;
+
+    /* ============ Controller State ============ */
+
+    /// @notice Address with authority over every active and future lock.
     address public override controller;
-    address public pendingController;
-    uint64 public pendingControllerValidAt;
 
-    bool public depositsPaused;
-    bool public reservationsPaused;
+    /// @notice Proposed replacement controller, or zero when no handover is pending.
+    address public override pendingController;
 
+    /// @notice Earliest timestamp at which the pending controller may accept authority.
+    uint64 public override pendingControllerValidAt;
+
+    /* ============ Stake and Claim State ============ */
+
+    /// @notice Total principal owned by each stake owner, including both free and locked stake.
     mapping(address => uint256) public override stakeBalance;
-    mapping(address => uint256) public override reservedStake;
-    mapping(address => address) internal delegatedStakeOwners;
-    mapping(address => bool) internal stakeDelegationDisabled;
-    mapping(address => address) internal allowedStakeOwners;
-    mapping(address => ExitRequest) internal exitRequests;
-    mapping(address => StakeWithdrawalRequest) internal stakeWithdrawalRequests;
-    mapping(bytes32 => Reservation) internal reservations;
-    mapping(bytes32 => DeferredStake) internal deferredStakes;
-    mapping(bytes32 => IIntentRiskHook.FeeAllocation[]) internal deferredFeeAllocations;
-    mapping(address => uint256) public override claimableCompensation;
-    mapping(address => uint256) public override claimableFees;
 
-    uint256 public totalStaked;
-    uint256 public override totalDeferredFees;
-    uint256 public totalClaimableCompensation;
-    uint256 public override totalClaimableFees;
+    /// @notice Principal committed across all active locks for each stake owner.
+    mapping(address => uint256) public override lockedStake;
 
-    /* ============ Errors ============ */
+    /// @notice Immediately withdrawable, non-stake token balance credited to each beneficiary.
+    mapping(address => uint256) public override claimable;
 
-    error ZeroAddress();
-    error ZeroAmount();
-    error EmptyBatch();
-    error InvalidTaker(address taker);
-    error TakerAlreadyAuthorized(address taker, address stakeOwner);
-    error TakerAuthorizationNotFound(address taker, address stakeOwner);
-    error NoDelegatedStakeOwner(address taker);
-    error StakeDelegationDisabled(address taker);
-    error StakeOwnerNotAllowed(address taker, address stakeOwner, address allowedStakeOwner);
-    error UnauthorizedController(address caller);
-    error UnauthorizedPositionController(address caller, address expectedController);
-    error StakeActionPaused();
-    error AlreadyExiting(address staker);
-    error NotExiting(address staker);
-    error ExitNotReady(uint64 availableAt, uint64 currentTime);
-    error StakeWithdrawalAlreadyRequested(address stakeOwner, uint256 amount);
-    error StakeWithdrawalNotFound(address stakeOwner);
-    error StakeWithdrawalNotReady(uint64 availableAt, uint64 currentTime);
-    error PendingStakeWithdrawal(address stakeOwner, uint256 amount);
-    error ActiveReservations(address staker, uint256 reservedAmount);
-    error InsufficientFreeStake(address staker, uint256 available, uint256 required);
-    error ReservationAlreadyExists(bytes32 intentHash);
-    error ReservationNotFound(bytes32 intentHash);
-    error InvalidReservationAmount(uint256 amount, uint256 reservedAmount);
-    error DeferredStakeAlreadyExists(bytes32 intentHash);
-    error DeferredStakeNotFound(bytes32 intentHash);
-    error DeferredStakeAlreadyFunded(bytes32 intentHash, uint256 amount);
-    error DeferredStakeOwnerMismatch(address expected, address actual);
-    error DeferredStakeNotMature(uint64 releaseTime, uint64 currentTime);
-    error InvalidDeferredFeeTotal(uint256 grossAmount, uint256 feeAmount);
-    error InsufficientUnaccountedTokens(uint256 available, uint256 required);
-    error UnexpectedTokenAmount(uint256 expected, uint256 received);
-    error InvalidControllerChangeDelay(uint64 delay);
-    error ControllerAlreadyInitialized(address controller);
-    error ControllerProposalNotReady(uint64 validAt, uint64 currentTime);
-    error NoPendingController();
+    /// @notice Active lock accounting keyed by controller-defined globally unique identifiers.
+    mapping(bytes32 => StakeLock) public override locks;
+
+    /* ============ Delegation State ============ */
+
+    /// @notice Whether a stake owner permits a taker to select its stake for future controller policy reads.
+    mapping(address => mapping(address => bool)) public override authorizedTakers;
+
+    /// @notice Stake owner explicitly selected by each taker, subject to live authorization.
+    mapping(address => address) public override selectedStakeOwner;
+
+    /// @notice Aggregate stake principal liability across all owners.
+    uint256 public override totalStaked;
+
+    /// @notice Aggregate immediately withdrawable claim liability across all beneficiaries.
+    uint256 public override totalClaimable;
 
     /* ============ Modifiers ============ */
 
+    /**
+     * @dev Restricts lock and claim-allocation transitions to the current global controller.
+     */
     modifier onlyController() {
         if (msg.sender != controller) revert UnauthorizedController(msg.sender);
         _;
@@ -104,881 +126,507 @@ contract StakeVault is IStakeVault, Ownable, ReentrancyGuard {
     /* ============ Constructor ============ */
 
     /**
-     * @notice Creates a vault with an initial controller and delayed controller handover.
-     * @param _owner Governance owner.
-     * @param _stakeToken USDC-compatible token held by the vault.
-     * @param _controller Initial risk-policy controller.
-     * @param _baseExitDelay Minimum delay after a full-exit request.
-     * @param _controllerChangeDelay Delay before a proposed controller may accept control.
+     * @notice Creates a token vault with an optional initial controller and delayed controller replacement.
+     * @dev `_controller` may be zero to break circular deployment dependencies; it can then be initialized exactly once
+     *      before any liabilities exist. The owner and token must be non-zero, and the handover delay must be at least
+     *      one day. Future ownership transfers use Ownable2Step.
+     * @param _owner Governance owner responsible for controller selection and recovery.
+     * @param _stakeToken Token held and accounted by the vault.
+     * @param _controller Initial global lock-policy controller, or zero for later liability-free initialization.
+     * @param _controllerChangeDelay Delay required before a proposed replacement controller may accept authority.
      */
-    constructor(
-        address _owner,
-        IERC20 _stakeToken,
-        address _controller,
-        uint64 _baseExitDelay,
-        uint64 _controllerChangeDelay
-    ) Ownable() {
-        if (_owner == address(0) || address(_stakeToken) == address(0)) {
-            revert ZeroAddress();
-        }
+    constructor(address _owner, IERC20 _stakeToken, address _controller, uint64 _controllerChangeDelay) {
+        if (_owner == address(0) || address(_stakeToken) == address(0)) revert ZeroAddress();
         if (_controllerChangeDelay < MIN_CONTROLLER_CHANGE_DELAY) {
             revert InvalidControllerChangeDelay(_controllerChangeDelay);
         }
 
         stakeToken = _stakeToken;
         controller = _controller;
-        baseExitDelay = _baseExitDelay;
         controllerChangeDelay = _controllerChangeDelay;
-
-        transferOwnership(_owner);
+        _transferOwnership(_owner);
     }
 
-    /* ============ User Functions ============ */
+    /* ============ User Stake and Claim Accounting ============ */
 
     /**
-     * @notice Deposits membership stake for the caller.
-     * @param _amount Amount of stake token to deposit.
+     * @notice Deposits stake-token principal owned exclusively by the caller.
+     * @dev Pulls exactly `_amount` from the caller and verifies the vault's balance increased by that amount before
+     *      crediting stake. Fee-on-transfer and rebasing behavior that changes the observed delta is rejected. Deposited
+     *      principal begins as free stake and does not affect delegation selections or authorizations.
+     * @param _amount Amount of stake token to transfer into and credit within the vault.
      */
     function depositStake(uint256 _amount) external override nonReentrant {
-        _depositStake(msg.sender, _amount);
-    }
-
-    /**
-     * @notice Deposits stake owned by the caller and authorizes a taker to use it.
-     * @dev The caller remains the stake owner and retains all withdrawal rights.
-     * @param _taker Address that may use the caller's stake for future intents.
-     * @param _amount Amount of stake token to deposit.
-     */
-    function depositStakeFor(address _taker, uint256 _amount) external override nonReentrant {
-        _setTakerAuthorization(msg.sender, _taker, true);
-        _depositStake(msg.sender, _amount);
-    }
-
-    /**
-     * @notice Authorizes or revokes a taker's use of the caller's stake for future intents.
-     * @dev Existing risk positions retain the stake owner snapshotted at admission.
-     * @param _taker Address whose authorization is being updated.
-     * @param _authorized True to authorize the taker, false to revoke it.
-     */
-    function setTakerAuthorization(address _taker, bool _authorized) external override {
-        _setTakerAuthorization(msg.sender, _taker, _authorized);
-    }
-
-    /**
-     * @notice Authorizes or revokes multiple takers for the caller's stake.
-     * @param _takers Addresses whose authorizations are being updated.
-     * @param _authorized True to authorize every taker, false to revoke them.
-     */
-    function setTakerAuthorizations(address[] calldata _takers, bool _authorized) external override {
-        if (_takers.length == 0) revert EmptyBatch();
-
-        for (uint256 takerIndex = 0; takerIndex < _takers.length; takerIndex++) {
-            _setTakerAuthorization(msg.sender, _takers[takerIndex], _authorized);
-        }
-    }
-
-    /**
-     * @notice Clears the caller's delegated stake owner for future intents.
-     * @dev Existing risk positions remain backed by their snapshotted stake owner. New delegations
-     *      stay disabled until the caller explicitly re-enables them, preventing forced reassignment.
-     */
-    function clearStakeOwner() external override {
-        address stakeOwner = delegatedStakeOwners[msg.sender];
-        if (stakeOwner == address(0)) revert NoDelegatedStakeOwner(msg.sender);
-
-        delete delegatedStakeOwners[msg.sender];
-        stakeDelegationDisabled[msg.sender] = true;
-        delete allowedStakeOwners[msg.sender];
-        emit TakerAuthorizationUpdated(stakeOwner, msg.sender, false);
-        emit StakeDelegationEnabledUpdated(msg.sender, false);
-        emit AllowedStakeOwnerUpdated(msg.sender, address(0));
-    }
-
-    /**
-     * @notice Enables or disables third-party stake delegation for the caller's future intents.
-     * @dev Delegation is enabled by default so a Safe may authorize its relayer in one transaction.
-     *      Disabling delegation does not alter an existing assignment; use clearStakeOwner for that.
-     * @param _enabled True to accept future assignments, false to reject them.
-     */
-    function setStakeDelegationEnabled(bool _enabled) external override {
-        stakeDelegationDisabled[msg.sender] = !_enabled;
-        if (_enabled && allowedStakeOwners[msg.sender] != address(0)) {
-            delete allowedStakeOwners[msg.sender];
-            emit AllowedStakeOwnerUpdated(msg.sender, address(0));
-        }
-        emit StakeDelegationEnabledUpdated(msg.sender, _enabled);
-    }
-
-    /**
-     * @notice Restricts the caller's future stake assignment to one exact stake owner.
-     * @dev This atomically removes a different current assignment, so a taker can recover from
-     *      squatting without briefly reopening delegation to every address.
-     * @param _stakeOwner Only address allowed to authorize stake for the caller.
-     */
-    function setAllowedStakeOwner(address _stakeOwner) external override {
-        if (_stakeOwner == address(0) || _stakeOwner == msg.sender) revert InvalidTaker(_stakeOwner);
-
-        address currentStakeOwner = delegatedStakeOwners[msg.sender];
-        if (currentStakeOwner != address(0) && currentStakeOwner != _stakeOwner) {
-            delete delegatedStakeOwners[msg.sender];
-            emit TakerAuthorizationUpdated(currentStakeOwner, msg.sender, false);
-        }
-
-        allowedStakeOwners[msg.sender] = _stakeOwner;
-        stakeDelegationDisabled[msg.sender] = false;
-        emit AllowedStakeOwnerUpdated(msg.sender, _stakeOwner);
-        emit StakeDelegationEnabledUpdated(msg.sender, true);
-    }
-
-    /**
-     * @notice Requests a delayed withdrawal of currently unreserved stake.
-     * @dev The requested amount immediately stops contributing to reservation eligibility and free stake.
-     * @param _amount Amount of stake token to withdraw after the delay.
-     */
-    function requestStakeWithdrawal(uint256 _amount) external override {
-        if (_amount == 0) revert ZeroAmount();
-        if (exitRequests[msg.sender].exiting) revert AlreadyExiting(msg.sender);
-
-        StakeWithdrawalRequest memory existingRequest = stakeWithdrawalRequests[msg.sender];
-        if (existingRequest.amount != 0) {
-            revert StakeWithdrawalAlreadyRequested(msg.sender, existingRequest.amount);
-        }
-
-        uint256 available = freeStake(msg.sender);
-        if (_amount > available) revert InsufficientFreeStake(msg.sender, available, _amount);
-
-        uint64 requestedAt = uint64(block.timestamp);
-        uint64 availableAt = requestedAt + baseExitDelay;
-        stakeWithdrawalRequests[msg.sender] = StakeWithdrawalRequest({
-            amount: _amount,
-            requestedAt: requestedAt,
-            availableAt: availableAt
-        });
-
-        emit StakeWithdrawalRequested(msg.sender, _amount, requestedAt, availableAt);
-    }
-
-    /**
-     * @notice Cancels the caller's pending partial stake withdrawal.
-     */
-    function cancelStakeWithdrawal() external override {
-        StakeWithdrawalRequest memory withdrawalRequest = stakeWithdrawalRequests[msg.sender];
-        if (withdrawalRequest.amount == 0) revert StakeWithdrawalNotFound(msg.sender);
-
-        delete stakeWithdrawalRequests[msg.sender];
-        emit StakeWithdrawalCancelled(msg.sender, withdrawalRequest.amount);
-    }
-
-    /**
-     * @notice Withdraws the caller's requested stake after the delay.
-     * @param _recipient Address receiving the stake token.
-     */
-    function withdrawRequestedStake(address _recipient) external override nonReentrant {
-        if (_recipient == address(0)) revert ZeroAddress();
-
-        StakeWithdrawalRequest memory withdrawalRequest = stakeWithdrawalRequests[msg.sender];
-        if (withdrawalRequest.amount == 0) revert StakeWithdrawalNotFound(msg.sender);
-        if (block.timestamp < withdrawalRequest.availableAt) {
-            revert StakeWithdrawalNotReady(withdrawalRequest.availableAt, uint64(block.timestamp));
-        }
-
-        delete stakeWithdrawalRequests[msg.sender];
-        stakeBalance[msg.sender] -= withdrawalRequest.amount;
-        totalStaked -= withdrawalRequest.amount;
-
-        stakeToken.safeTransfer(_recipient, withdrawalRequest.amount);
-        emit StakeWithdrawn(msg.sender, _recipient, withdrawalRequest.amount);
-    }
-
-    function _depositStake(address _stakeOwner, uint256 _amount) internal {
-        if (depositsPaused) revert StakeActionPaused();
         if (_amount == 0) revert ZeroAmount();
 
         uint256 balanceBefore = stakeToken.balanceOf(address(this));
         stakeToken.safeTransferFrom(msg.sender, address(this), _amount);
-        uint256 received = stakeToken.balanceOf(address(this)) - balanceBefore;
-        if (received != _amount) revert UnexpectedTokenAmount(_amount, received);
+        uint256 balanceAfter = stakeToken.balanceOf(address(this));
+        uint256 received = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
+        if (received != _amount) revert InvalidReceivedAmount(_amount, received);
+
+        stakeBalance[msg.sender] += _amount;
+        totalStaked += _amount;
+        emit StakeDeposited(msg.sender, _amount, stakeBalance[msg.sender]);
+    }
+
+    /**
+     * @notice Withdraws caller-owned free stake directly to the caller.
+     * @dev Reverts unless the complete amount is free; active locks are never implicitly matured, resolved, or resized.
+     *      Accounting is reduced before the token transfer and the function is reentrancy guarded.
+     * @param _amount Amount of free stake principal to withdraw.
+     */
+    function withdrawStake(uint256 _amount) external override nonReentrant {
+        if (_amount == 0) revert ZeroAmount();
+        uint256 available = freeStake(msg.sender);
+        if (available < _amount) revert InsufficientFreeStake(msg.sender, available, _amount);
+
+        stakeBalance[msg.sender] -= _amount;
+        totalStaked -= _amount;
+        emit StakeWithdrawn(msg.sender, _amount, stakeBalance[msg.sender]);
+        stakeToken.safeTransfer(msg.sender, _amount);
+    }
+
+    /**
+     * @notice Withdraws the caller's complete immediately claimable balance.
+     * @dev Claims are separate from stake principal and cannot be delegated or used for locks. The claim balance and
+     *      aggregate claim liability are cleared before the token transfer. Partial claim withdrawal is intentionally
+     *      unsupported, keeping claim settlement to one state transition per beneficiary withdrawal.
+     */
+    function claim() external override nonReentrant {
+        uint256 amount = claimable[msg.sender];
+        if (amount == 0) revert ZeroAmount();
+
+        claimable[msg.sender] = 0;
+        totalClaimable -= amount;
+        emit ClaimWithdrawn(msg.sender, amount);
+        stakeToken.safeTransfer(msg.sender, amount);
+    }
+
+    /* ============ Delegation ============ */
+
+    /**
+     * @notice Authorizes or revokes a taker's ability to select the caller's stake for future policy reads.
+     * @dev The caller remains the stake owner and retains all deposit and withdrawal rights. Revoking the authorization
+     *      automatically clears the taker's selection if it currently points to the caller. Existing locks remain owned
+     *      by and charged against the original stake owner. Self-authorization is unnecessary because every taker falls
+     *      back to its own stake when it has no valid selection.
+     * @param _taker Taker whose authorization is being changed.
+     * @param _authorized True to authorize selection of the caller's stake; false to revoke it.
+     */
+    function setTakerAuthorization(address _taker, bool _authorized) external override {
+        if (_taker == address(0) || _taker == msg.sender) revert InvalidTaker(_taker);
+
+        authorizedTakers[msg.sender][_taker] = _authorized;
+        emit TakerAuthorizationUpdated(msg.sender, _taker, _authorized);
+
+        if (!_authorized && selectedStakeOwner[_taker] == msg.sender) {
+            delete selectedStakeOwner[_taker];
+            emit StakeOwnerSelected(_taker, msg.sender, address(0));
+        }
+    }
+
+    /**
+     * @notice Selects an authorizing third-party stake owner for the caller's future policy reads.
+     * @dev Selection does not lock or transfer funds and overwrites only the caller's previous selection. The named owner
+     *      must currently authorize the caller. Selecting oneself or zero is unsupported; use `clearStakeOwner` to return
+     *      to the implicit self-staking fallback.
+     * @param _stakeOwner Authorized third party whose stake the caller wants future policy to resolve.
+     */
+    function selectStakeOwner(address _stakeOwner) external override {
+        if (_stakeOwner == address(0) || _stakeOwner == msg.sender) revert ZeroAddress();
+        if (!authorizedTakers[_stakeOwner][msg.sender]) {
+            revert UnauthorizedStakeOwner(msg.sender, _stakeOwner);
+        }
+
+        address previousStakeOwner = selectedStakeOwner[msg.sender];
+        selectedStakeOwner[msg.sender] = _stakeOwner;
+        emit StakeOwnerSelected(msg.sender, previousStakeOwner, _stakeOwner);
+    }
+
+    /**
+     * @notice Clears the caller's selected third-party stake owner and restores the self-staking fallback.
+     * @dev Does not change any owner's authorization mapping and cannot alter existing locks. Emits an event even when no
+     *      selection was active, allowing indexers to treat the call as an explicit preference reset.
+     */
+    function clearStakeOwner() external override {
+        address previousStakeOwner = selectedStakeOwner[msg.sender];
+        delete selectedStakeOwner[msg.sender];
+        emit StakeOwnerSelected(msg.sender, previousStakeOwner, address(0));
+    }
+
+    /* ============ Controller Lock Accounting ============ */
+
+    /**
+     * @notice CONTROLLER ONLY: Creates a new lock backed by an owner's existing free stake.
+     * @dev The lock ID must be non-zero and globally unused, the owner and amount must be non-zero, and maturity must be
+     *      strictly in the future. This function does not consult delegation state; authorization and lock purpose are
+     *      controller policy. Principal remains in `stakeBalance` while `lockedStake` increases by the lock amount.
+     * @param _stakeOwner Owner whose free stake backs the new lock.
+     * @param _lockId Controller-defined globally unique identifier for the active lock.
+     * @param _amount Amount of existing free stake to commit.
+     * @param _maturesAt Timestamp after which this lock can no longer be increased or resized.
+     */
+    function lockStake(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt)
+        external
+        override
+        onlyController
+    {
+        _validateNewLock(_stakeOwner, _lockId, _amount, _maturesAt);
+        _requireFreeStake(_stakeOwner, _amount);
+        _storeLock(_stakeOwner, _lockId, _amount, _maturesAt);
+    }
+
+    /**
+     * @notice CONTROLLER ONLY: Adopts unaccounted vault tokens as new stake and immediately locks them.
+     * @dev Intended for atomic flows that transfer tokens directly to StakeVault before calling this function. The vault
+     *      must hold at least `_amount` above existing stake and claim liabilities. Funding increases the named owner's
+     *      stake balance and aggregate stake, then commits the complete amount under a validated new lock. Any excess
+     *      unaccounted tokens remain available for a later funding operation.
+     * @param _stakeOwner Owner credited with the newly accounted stake.
+     * @param _lockId Controller-defined globally unique identifier for the active lock.
+     * @param _amount Amount of unaccounted token balance to adopt and lock.
+     * @param _maturesAt Timestamp after which this lock can no longer be increased or resized.
+     */
+    function fundLock(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt)
+        external
+        override
+        onlyController
+    {
+        _validateNewLock(_stakeOwner, _lockId, _amount, _maturesAt);
+        uint256 available = unaccountedBalance();
+        if (available < _amount) revert InsufficientUnaccountedTokens(available, _amount);
 
         stakeBalance[_stakeOwner] += _amount;
         totalStaked += _amount;
-
-        emit StakeDeposited(_stakeOwner, _amount, stakeBalance[_stakeOwner]);
+        emit LockFunded(_lockId, _stakeOwner, _amount, stakeBalance[_stakeOwner]);
+        _storeLock(_stakeOwner, _lockId, _amount, _maturesAt);
     }
 
     /**
-     * @notice Requests a full exit and immediately blocks new reservations for the caller.
+     * @notice CONTROLLER ONLY: Adds owner free stake to an active lock without changing its maturity.
+     * @dev The lock must exist and remain strictly before maturity. Only the incremental amount is checked against the
+     *      owner's current free stake; principal and aggregate stake liabilities are unchanged.
+     * @param _lockId Identifier of the active lock to increase.
+     * @param _additionalAmount Non-zero amount of owner free stake to add.
      */
-    function requestExit() external override {
-        if (stakeBalance[msg.sender] == 0) revert ZeroAmount();
-        if (exitRequests[msg.sender].exiting) revert AlreadyExiting(msg.sender);
-        uint256 pendingWithdrawal = stakeWithdrawalRequests[msg.sender].amount;
-        if (pendingWithdrawal != 0) revert PendingStakeWithdrawal(msg.sender, pendingWithdrawal);
+    function increaseLock(bytes32 _lockId, uint256 _additionalAmount) external override onlyController {
+        if (_additionalAmount == 0) revert ZeroAmount();
+        StakeLock storage stakeLock = locks[_lockId];
+        if (stakeLock.stakeOwner == address(0)) revert LockNotFound(_lockId);
 
-        uint64 requestedAt = uint64(block.timestamp);
-        uint64 availableAt = requestedAt + baseExitDelay;
-        exitRequests[msg.sender] = ExitRequest({ exiting: true, requestedAt: requestedAt, availableAt: availableAt });
-
-        emit ExitRequested(msg.sender, requestedAt, availableAt);
-    }
-
-    /**
-     * @notice Cancels an outstanding exit request and restores admission eligibility.
-     */
-    function cancelExit() external override {
-        if (!exitRequests[msg.sender].exiting) revert NotExiting(msg.sender);
-
-        delete exitRequests[msg.sender];
-        emit ExitCancelled(msg.sender);
-    }
-
-    /**
-     * @notice Withdraws the caller's entire remaining stake after the exit delay and all reservations settle.
-     * @param _recipient Address receiving the stake token.
-     */
-    function withdrawStake(address _recipient) external override nonReentrant {
-        if (_recipient == address(0)) revert ZeroAddress();
-
-        ExitRequest memory exitRequest = exitRequests[msg.sender];
-        if (!exitRequest.exiting) revert NotExiting(msg.sender);
-        if (block.timestamp < exitRequest.availableAt) {
-            revert ExitNotReady(exitRequest.availableAt, uint64(block.timestamp));
+        uint64 currentTime = _currentTimestamp();
+        if (currentTime >= stakeLock.maturesAt) {
+            revert LockAlreadyMatured(_lockId, stakeLock.maturesAt, currentTime);
         }
 
-        uint256 activeReservedStake = reservedStake[msg.sender];
-        if (activeReservedStake != 0) revert ActiveReservations(msg.sender, activeReservedStake);
+        address stakeOwner = stakeLock.stakeOwner;
+        _requireFreeStake(stakeOwner, _additionalAmount);
+        uint256 previousAmount = stakeLock.amount;
+        stakeLock.amount = previousAmount + _additionalAmount;
+        lockedStake[stakeOwner] += _additionalAmount;
 
-        uint256 amount = stakeBalance[msg.sender];
-        if (amount == 0) revert ZeroAmount();
-
-        delete exitRequests[msg.sender];
-        delete stakeBalance[msg.sender];
-        totalStaked -= amount;
-
-        stakeToken.safeTransfer(_recipient, amount);
-        emit StakeWithdrawn(msg.sender, _recipient, amount);
+        emit StakeLockIncreased(_lockId, stakeOwner, previousAmount, stakeLock.amount, lockedStake[stakeOwner]);
     }
 
     /**
-     * @notice Withdraws all maker compensation credited to the caller.
-     * @param _recipient Address receiving the stake token.
+     * @notice CONTROLLER ONLY: Decreases an active lock and replaces its maturity.
+     * @dev The existing lock must not already be mature, the new maturity must be strictly in the future, and the new
+     *      non-zero amount cannot exceed the current amount. A same-amount call may retime the lock; increases must use
+     *      `increaseLock`. Any removed amount immediately becomes free stake of the original owner.
+     * @param _lockId Identifier of the active lock to resize.
+     * @param _newAmount New non-zero locked amount, less than or equal to the current amount.
+     * @param _newMaturesAt Replacement maturity timestamp.
      */
-    function withdrawCompensation(address _recipient) external override nonReentrant {
-        if (_recipient == address(0)) revert ZeroAddress();
-
-        uint256 amount = claimableCompensation[msg.sender];
-        if (amount == 0) revert ZeroAmount();
-
-        delete claimableCompensation[msg.sender];
-        totalClaimableCompensation -= amount;
-
-        stakeToken.safeTransfer(_recipient, amount);
-        emit CompensationWithdrawn(msg.sender, _recipient, amount);
-    }
-
-    /** @notice Withdraws every matured deferred fee claim owned by the caller. */
-    function withdrawFeeClaim(address _recipient) external override nonReentrant {
-        _withdrawFeeClaim(msg.sender, _recipient);
-    }
-
-    /** @notice Permissionlessly transfers a beneficiary's matured fee claims to that beneficiary. */
-    function withdrawFeeClaimFor(address _beneficiary) external override nonReentrant {
-        _withdrawFeeClaim(_beneficiary, _beneficiary);
-    }
-
-    function _withdrawFeeClaim(address _beneficiary, address _recipient) internal {
-        if (_beneficiary == address(0) || _recipient == address(0)) revert ZeroAddress();
-
-        uint256 amount = claimableFees[_beneficiary];
-        if (amount == 0) revert ZeroAmount();
-
-        delete claimableFees[_beneficiary];
-        totalClaimableFees -= amount;
-        stakeToken.safeTransfer(_recipient, amount);
-
-        emit FeeClaimWithdrawn(_beneficiary, _recipient, amount);
-    }
-
-    /* ============ Controller Functions ============ */
-
-    /**
-     * @notice Reserves free membership stake for one risk position.
-     */
-    function reserveStake(
-        address _staker,
-        bytes32 _intentHash,
-        uint256 _amount,
-        uint64 _releaseTime
-    ) external override onlyController {
-        if (reservationsPaused) revert StakeActionPaused();
-        if (_staker == address(0)) revert ZeroAddress();
-        if (_amount == 0) revert ZeroAmount();
-        if (exitRequests[_staker].exiting) revert AlreadyExiting(_staker);
-        if (reservations[_intentHash].active) revert ReservationAlreadyExists(_intentHash);
-
-        uint256 available = freeStake(_staker);
-        if (_amount > available) revert InsufficientFreeStake(_staker, available, _amount);
-
-        reservations[_intentHash] = Reservation({
-            staker: _staker,
-            controller: msg.sender,
-            amount: _amount,
-            releaseTime: _releaseTime,
-            active: true
-        });
-        reservedStake[_staker] += _amount;
-
-        emit StakeReserved(_intentHash, _staker, msg.sender, _amount, reservedStake[_staker], _releaseTime);
-    }
-
-    /**
-     * @notice Adds free stake to, or refreshes the release time of, an active reservation.
-     * @dev Settlement may only decrease or refresh reservations through `updateReservation`, which
-     *      intentionally remains available during a pause. New paid extension exposure and
-     *      zero-increment expiry refreshes must use this function so admission pause, exit, and
-     *      controller gates remain authoritative.
-     */
-    function increaseReservation(
-        bytes32 _positionId,
-        uint256 _amount,
-        uint64 _releaseTime
-    ) external override onlyController {
-        if (reservationsPaused) revert StakeActionPaused();
-
-        Reservation storage reservation = reservations[_positionId];
-        if (!reservation.active) revert ReservationNotFound(_positionId);
-        _requirePositionController(reservation.controller);
-        if (exitRequests[reservation.staker].exiting) revert AlreadyExiting(reservation.staker);
-
-        uint256 available = freeStake(reservation.staker);
-        if (_amount > available) {
-            revert InsufficientFreeStake(reservation.staker, available, _amount);
-        }
-
-        uint256 previousAmount = reservation.amount;
-        uint256 newAmount = previousAmount + _amount;
-        reservation.amount = newAmount;
-        reservation.releaseTime = _releaseTime;
-        reservedStake[reservation.staker] += _amount;
-
-        emit StakeReservationUpdated(
-            _positionId,
-            reservation.staker,
-            previousAmount,
-            newAmount,
-            reservedStake[reservation.staker],
-            _releaseTime
-        );
-    }
-
-    /**
-     * @notice Decreases a reservation amount and updates its maturity after settlement accounting.
-     * @dev Settlement resizing remains available during a pause. Increases must use
-     *      `increaseReservation` so its admission pause, exit, and current-controller gates apply.
-     */
-    function updateReservation(
-        bytes32 _intentHash,
-        uint256 _newAmount,
-        uint64 _releaseTime
-    ) external override {
-        Reservation storage reservation = reservations[_intentHash];
-        if (!reservation.active) revert ReservationNotFound(_intentHash);
-        _requirePositionController(reservation.controller);
+    function resizeLock(bytes32 _lockId, uint256 _newAmount, uint64 _newMaturesAt) external override onlyController {
         if (_newAmount == 0) revert ZeroAmount();
+        StakeLock storage stakeLock = locks[_lockId];
+        if (stakeLock.stakeOwner == address(0)) revert LockNotFound(_lockId);
 
-        uint256 previousAmount = reservation.amount;
-        if (_newAmount > previousAmount) {
-            revert InvalidReservationAmount(_newAmount, previousAmount);
+        uint64 currentTime = _currentTimestamp();
+        if (currentTime >= stakeLock.maturesAt) {
+            revert LockAlreadyMatured(_lockId, stakeLock.maturesAt, currentTime);
         }
-        if (_newAmount < previousAmount) {
-            reservedStake[reservation.staker] -= previousAmount - _newAmount;
-        }
+        _validateMaturity(_newMaturesAt, currentTime);
 
-        reservation.amount = _newAmount;
-        reservation.releaseTime = _releaseTime;
+        uint256 previousAmount = stakeLock.amount;
+        if (_newAmount > previousAmount) revert InvalidLockAmount(_newAmount, previousAmount);
 
-        emit StakeReservationUpdated(
-            _intentHash,
-            reservation.staker,
-            previousAmount,
-            _newAmount,
-            reservedStake[reservation.staker],
-            _releaseTime
+        address stakeOwner = stakeLock.stakeOwner;
+        uint64 previousMaturity = stakeLock.maturesAt;
+        lockedStake[stakeOwner] -= previousAmount - _newAmount;
+        stakeLock.amount = _newAmount;
+        stakeLock.maturesAt = _newMaturesAt;
+
+        emit StakeLockResized(
+            _lockId, stakeOwner, previousAmount, _newAmount, previousMaturity, _newMaturesAt, lockedStake[stakeOwner]
         );
     }
 
     /**
-     * @notice Releases an active reservation without slashing stake.
+     * @notice CONTROLLER ONLY: Deletes an active lock and returns its complete amount to owner free stake.
+     * @dev Unlocking is permitted before or after maturity because business policy belongs to the controller. No stake or
+     *      aggregate liability changes; only the lock record and owner's locked subtotal are reduced.
+     * @param _lockId Identifier of the active lock to delete.
      */
-    function releaseReservation(bytes32 _intentHash) external override {
-        Reservation memory reservation = reservations[_intentHash];
-        if (!reservation.active) revert ReservationNotFound(_intentHash);
-        _requirePositionController(reservation.controller);
-
-        delete reservations[_intentHash];
-        reservedStake[reservation.staker] -= reservation.amount;
-
-        emit StakeReservationReleased(
-            _intentHash,
-            reservation.staker,
-            reservation.amount,
-            reservedStake[reservation.staker]
-        );
+    function unlockStake(bytes32 _lockId) external override onlyController {
+        StakeLock memory stakeLock = _removeLock(_lockId);
+        emit StakeUnlocked(_lockId, stakeLock.stakeOwner, stakeLock.amount, lockedStake[stakeLock.stakeOwner]);
     }
 
     /**
-     * @notice Slashes part of a reservation, retains remaining coverage, and credits maker compensation.
+     * @notice CONTROLLER ONLY: Deletes an active lock and converts selected principal into beneficiary claims.
+     * @dev Resolution is permitted before or after maturity. Every allocation requires a non-zero beneficiary and amount,
+     *      and their sum cannot exceed the lock. Allocated principal moves atomically from the owner's stake liability to
+     *      immediately withdrawable claim liabilities; duplicate beneficiaries accumulate. The unallocated remainder
+     *      becomes owner free stake. An empty claim array is equivalent in accounting effect to an unlock.
+     * @param _lockId Identifier of the active lock to resolve.
+     * @param _claims Beneficiary allocations to create from the locked principal.
      */
-    function slashReservation(
-        bytes32 _intentHash,
-        address _maker,
-        uint256 _amount
-    ) external override {
-        if (_maker == address(0)) revert ZeroAddress();
-        if (_amount == 0) revert ZeroAmount();
+    function resolveLock(bytes32 _lockId, Claim[] calldata _claims) external override onlyController {
+        StakeLock memory stakeLock = locks[_lockId];
+        if (stakeLock.stakeOwner == address(0)) revert LockNotFound(_lockId);
 
-        Reservation storage reservation = reservations[_intentHash];
-        if (!reservation.active) revert ReservationNotFound(_intentHash);
-        _requirePositionController(reservation.controller);
-        if (_amount > reservation.amount) revert InvalidReservationAmount(_amount, reservation.amount);
-
-        address staker = reservation.staker;
-        uint256 remainingReservation = reservation.amount - _amount;
-        if (remainingReservation == 0) {
-            delete reservations[_intentHash];
-        } else {
-            reservation.amount = remainingReservation;
+        uint256 claimsAmount;
+        for (uint256 claimIndex = 0; claimIndex < _claims.length; claimIndex++) {
+            Claim calldata claimAllocation = _claims[claimIndex];
+            if (claimAllocation.beneficiary == address(0) || claimAllocation.amount == 0) {
+                revert InvalidClaim(claimAllocation.beneficiary, claimAllocation.amount);
+            }
+            claimsAmount += claimAllocation.amount;
         }
+        if (claimsAmount > stakeLock.amount) revert ClaimsExceedLock(stakeLock.amount, claimsAmount);
 
-        reservedStake[staker] -= _amount;
-        stakeBalance[staker] -= _amount;
-        totalStaked -= _amount;
+        _removeLock(_lockId);
+        if (claimsAmount != 0) {
+            stakeBalance[stakeLock.stakeOwner] -= claimsAmount;
+            totalStaked -= claimsAmount;
+            totalClaimable += claimsAmount;
 
-        _creditCompensation(_intentHash, _maker, _amount);
-
-        emit StakeSlashed(
-            _intentHash,
-            staker,
-            _maker,
-            _amount,
-            stakeBalance[staker],
-            remainingReservation
-        );
-    }
-
-    /**
-     * @notice Snapshots the current controller for a deferred position before any proceeds exist.
-     * @dev Admission is blocked while reservations are paused. Later terminal accounting remains
-     *      available to the snapshotted controller even after a pause or controller handover.
-     */
-    function authorizeDeferredStake(
-        bytes32 _intentHash,
-        address _staker,
-        uint64 _releaseTime
-    ) external override onlyController {
-        if (reservationsPaused) revert StakeActionPaused();
-        if (_staker == address(0)) revert ZeroAddress();
-        if (exitRequests[_staker].exiting) revert AlreadyExiting(_staker);
-        if (deferredStakes[_intentHash].staker != address(0)) revert DeferredStakeAlreadyExists(_intentHash);
-
-        deferredStakes[_intentHash] = DeferredStake({
-            staker: _staker,
-            controller: msg.sender,
-            grossAmount: 0,
-            feeAmount: 0,
-            releaseTime: _releaseTime,
-            funded: false
-        });
-
-        emit DeferredStakeAuthorized(_intentHash, _staker, msg.sender, _releaseTime);
-    }
-
-    /**
-     * @notice Removes an unfunded deferred-position authorization after cancellation.
-     */
-    function releaseDeferredStakeAuthorization(bytes32 _intentHash) external override {
-        DeferredStake memory deferredStake = deferredStakes[_intentHash];
-        if (deferredStake.staker == address(0)) revert DeferredStakeNotFound(_intentHash);
-        _requirePositionController(deferredStake.controller);
-        if (deferredStake.funded) revert DeferredStakeAlreadyFunded(_intentHash, deferredStake.grossAmount);
-
-        delete deferredStakes[_intentHash];
-        emit DeferredStakeAuthorizationReleased(_intentHash, deferredStake.staker, deferredStake.controller);
-    }
-
-    /**
-     * @notice Converts a gross deferred settlement already transferred into the vault into fully reserved stake.
-     * @dev The gross amount is immediately part of `stakeBalance`, while the full amount remains reserved until
-     *      chargeback or maturity. Fee allocations vest only at clean maturity; before then the maker can receive
-     *      the full gross amount through a slash.
-     */
-    function recordDeferredStake(
-        bytes32 _intentHash,
-        address _staker,
-        uint256 _grossAmount,
-        uint64 _releaseTime,
-        IIntentRiskHook.FeeAllocation[] calldata _feeAllocations
-    ) external override {
-        if (_staker == address(0)) revert ZeroAddress();
-        if (_grossAmount == 0) revert ZeroAmount();
-
-        DeferredStake storage deferredStake = deferredStakes[_intentHash];
-        if (deferredStake.staker == address(0)) revert DeferredStakeNotFound(_intentHash);
-        _requirePositionController(deferredStake.controller);
-        if (deferredStake.funded) revert DeferredStakeAlreadyFunded(_intentHash, deferredStake.grossAmount);
-        if (_staker != deferredStake.staker) {
-            revert DeferredStakeOwnerMismatch(deferredStake.staker, _staker);
-        }
-        if (reservations[_intentHash].active) revert ReservationAlreadyExists(_intentHash);
-
-        uint256 feeAmount;
-        for (uint256 allocationIndex = 0; allocationIndex < _feeAllocations.length; allocationIndex++) {
-            IIntentRiskHook.FeeAllocation calldata allocation = _feeAllocations[allocationIndex];
-            if (allocation.recipient == address(0)) revert ZeroAddress();
-            if (allocation.amount == 0) continue;
-            feeAmount += allocation.amount;
-        }
-        if (feeAmount >= _grossAmount) revert InvalidDeferredFeeTotal(_grossAmount, feeAmount);
-
-        uint256 accountedBefore = totalLiabilities();
-        uint256 vaultBalance = stakeToken.balanceOf(address(this));
-        uint256 unaccounted = vaultBalance > accountedBefore ? vaultBalance - accountedBefore : 0;
-        if (_grossAmount > unaccounted) revert InsufficientUnaccountedTokens(unaccounted, _grossAmount);
-
-        deferredStake.grossAmount = _grossAmount;
-        deferredStake.feeAmount = feeAmount;
-        deferredStake.releaseTime = _releaseTime;
-        deferredStake.funded = true;
-        for (uint256 allocationIndex = 0; allocationIndex < _feeAllocations.length; allocationIndex++) {
-            if (_feeAllocations[allocationIndex].amount != 0) {
-                deferredFeeAllocations[_intentHash].push(_feeAllocations[allocationIndex]);
-                emit DeferredFeeContingent(
-                    _intentHash,
-                    _feeAllocations[allocationIndex].recipient,
-                    _feeAllocations[allocationIndex].feeType,
-                    _feeAllocations[allocationIndex].amount
+            for (uint256 claimIndex = 0; claimIndex < _claims.length; claimIndex++) {
+                Claim calldata claimAllocation = _claims[claimIndex];
+                claimable[claimAllocation.beneficiary] += claimAllocation.amount;
+                emit ClaimCreated(
+                    _lockId, claimAllocation.beneficiary, claimAllocation.amount, claimable[claimAllocation.beneficiary]
                 );
             }
         }
 
-        reservations[_intentHash] = Reservation({
-            staker: _staker,
-            controller: deferredStake.controller,
-            amount: _grossAmount,
-            releaseTime: _releaseTime,
-            active: true
-        });
-        stakeBalance[_staker] += _grossAmount;
-        reservedStake[_staker] += _grossAmount;
-        totalStaked += _grossAmount;
-        totalDeferredFees += feeAmount;
-
-        emit StakeReserved(
-            _intentHash,
-            _staker,
-            deferredStake.controller,
-            _grossAmount,
-            reservedStake[_staker],
-            _releaseTime
-        );
-        emit DeferredStakeFunded(
-            _intentHash,
-            _staker,
-            _grossAmount,
-            feeAmount,
-            _grossAmount - feeAmount,
-            _releaseTime
+        emit StakeLockResolved(
+            _lockId,
+            stakeLock.stakeOwner,
+            stakeLock.amount,
+            stakeLock.amount - claimsAmount,
+            claimsAmount,
+            lockedStake[stakeLock.stakeOwner]
         );
     }
 
-    /** @notice Vests deferred fee claims and releases the remaining net amount as reusable stake. */
-    function releaseDeferredStake(bytes32 _intentHash) external override {
-        DeferredStake memory deferredStake = deferredStakes[_intentHash];
-        if (deferredStake.staker == address(0) || !deferredStake.funded) {
-            revert DeferredStakeNotFound(_intentHash);
-        }
-        _requirePositionController(deferredStake.controller);
-        if (block.timestamp < deferredStake.releaseTime) {
-            revert DeferredStakeNotMature(deferredStake.releaseTime, uint64(block.timestamp));
-        }
-
-        Reservation memory reservation = reservations[_intentHash];
-        if (!reservation.active || reservation.amount != deferredStake.grossAmount) {
-            revert InvalidReservationAmount(reservation.amount, deferredStake.grossAmount);
-        }
-
-        delete reservations[_intentHash];
-        reservedStake[deferredStake.staker] -= deferredStake.grossAmount;
-        stakeBalance[deferredStake.staker] -= deferredStake.feeAmount;
-        totalStaked -= deferredStake.feeAmount;
-        totalDeferredFees -= deferredStake.feeAmount;
-
-        IIntentRiskHook.FeeAllocation[] storage allocations = deferredFeeAllocations[_intentHash];
-        for (uint256 allocationIndex = 0; allocationIndex < allocations.length; allocationIndex++) {
-            IIntentRiskHook.FeeAllocation storage allocation = allocations[allocationIndex];
-            claimableFees[allocation.recipient] += allocation.amount;
-            totalClaimableFees += allocation.amount;
-            emit DeferredFeeVested(
-                _intentHash,
-                allocation.recipient,
-                allocation.feeType,
-                allocation.amount,
-                claimableFees[allocation.recipient]
-            );
-        }
-
-        delete deferredFeeAllocations[_intentHash];
-        delete deferredStakes[_intentHash];
-
-        emit StakeReservationReleased(
-            _intentHash,
-            deferredStake.staker,
-            deferredStake.grossAmount,
-            reservedStake[deferredStake.staker]
-        );
-        emit DeferredStakeReleased(
-            _intentHash,
-            deferredStake.staker,
-            deferredStake.grossAmount,
-            deferredStake.feeAmount,
-            deferredStake.grossAmount - deferredStake.feeAmount
-        );
-    }
-
-    /** @notice Slashes the full gross deferred stake and cancels every contingent fee allocation. */
-    function slashDeferredStake(bytes32 _intentHash, address _maker) external override {
-        if (_maker == address(0)) revert ZeroAddress();
-
-        DeferredStake memory deferredStake = deferredStakes[_intentHash];
-        if (deferredStake.staker == address(0) || !deferredStake.funded) {
-            revert DeferredStakeNotFound(_intentHash);
-        }
-        _requirePositionController(deferredStake.controller);
-
-        Reservation memory reservation = reservations[_intentHash];
-        if (!reservation.active || reservation.amount != deferredStake.grossAmount) {
-            revert InvalidReservationAmount(reservation.amount, deferredStake.grossAmount);
-        }
-
-        delete reservations[_intentHash];
-        IIntentRiskHook.FeeAllocation[] storage allocations = deferredFeeAllocations[_intentHash];
-        for (uint256 allocationIndex = 0; allocationIndex < allocations.length; allocationIndex++) {
-            IIntentRiskHook.FeeAllocation storage allocation = allocations[allocationIndex];
-            emit DeferredFeeCancelled(
-                _intentHash,
-                allocation.recipient,
-                allocation.feeType,
-                allocation.amount
-            );
-        }
-        delete deferredFeeAllocations[_intentHash];
-        delete deferredStakes[_intentHash];
-        reservedStake[deferredStake.staker] -= deferredStake.grossAmount;
-        stakeBalance[deferredStake.staker] -= deferredStake.grossAmount;
-        totalStaked -= deferredStake.grossAmount;
-        totalDeferredFees -= deferredStake.feeAmount;
-        _creditCompensation(_intentHash, _maker, deferredStake.grossAmount);
-
-        emit StakeSlashed(
-            _intentHash,
-            deferredStake.staker,
-            _maker,
-            deferredStake.grossAmount,
-            stakeBalance[deferredStake.staker],
-            0
-        );
-        emit DeferredStakeSlashed(
-            _intentHash,
-            deferredStake.staker,
-            _maker,
-            deferredStake.grossAmount,
-            deferredStake.feeAmount
-        );
-    }
-
-    /* ============ Governance Functions ============ */
+    /* ============ Controller Governance ============ */
 
     /**
-     * @notice Initializes controller authority once after circular deployment dependencies are resolved.
-     * @dev This one-time path is available only when the constructor controller was address(0).
+     * @notice GOVERNANCE ONLY: Initializes controller authority when deployment intentionally omitted a controller.
+     * @dev This path is available only while `controller` is zero and both aggregate stake and claim liabilities are zero.
+     *      The liability check prevents governance from bypassing delayed handover after user funds are accounted. Once
+     *      initialized, every subsequent replacement must use proposal and delayed acceptance.
+     * @param _controller Non-zero initial controller address.
      */
     function initializeController(address _controller) external override onlyOwner {
         if (_controller == address(0)) revert ZeroAddress();
         if (controller != address(0)) revert ControllerAlreadyInitialized(controller);
-
+        if (totalStaked != 0 || totalClaimable != 0) {
+            revert ControllerInitializationWithLiabilities(totalStaked, totalClaimable);
+        }
         controller = _controller;
         emit ControllerInitialized(_controller);
     }
 
     /**
-     * @notice Proposes a delayed two-step controller handover.
+     * @notice Ownership renunciation is disabled so governance always retains a delayed controller recovery path.
+     * @dev Always reverts for the owner; non-owners revert through the inherited ownership check first.
+     */
+    function renounceOwnership() public view override onlyOwner {
+        revert OwnershipRenunciationDisabled();
+    }
+
+    /**
+     * @notice GOVERNANCE ONLY: Proposes a replacement global controller subject to the immutable handover delay.
+     * @dev A new proposal overwrites any existing proposal and restarts the full delay. The current controller remains
+     *      authoritative until the proposed controller accepts after `pendingControllerValidAt`.
+     * @param _controller Non-zero address proposed to receive global lock authority.
      */
     function proposeController(address _controller) external override onlyOwner {
         if (_controller == address(0)) revert ZeroAddress();
-
+        uint64 currentTime = _currentTimestamp();
+        uint64 validAt = currentTime + controllerChangeDelay;
         pendingController = _controller;
-        pendingControllerValidAt = uint64(block.timestamp) + controllerChangeDelay;
-
-        emit ControllerProposed(controller, _controller, pendingControllerValidAt);
+        pendingControllerValidAt = validAt;
+        emit ControllerProposed(controller, _controller, validAt);
     }
 
     /**
-     * @notice Accepts controller authority after the handover delay.
+     * @notice GOVERNANCE ONLY: Cancels the active controller replacement proposal.
+     * @dev Leaves the current controller unchanged and clears both pending-controller fields.
      */
-    function acceptController() external override {
-        if (pendingController == address(0)) revert NoPendingController();
-        if (msg.sender != pendingController) revert UnauthorizedController(msg.sender);
-        if (block.timestamp < pendingControllerValidAt) {
-            revert ControllerProposalNotReady(pendingControllerValidAt, uint64(block.timestamp));
-        }
-
-        address previousController = controller;
-        controller = pendingController;
+    function cancelControllerProposal() external override onlyOwner {
+        address proposedController = pendingController;
+        if (proposedController == address(0)) revert NoPendingController();
         delete pendingController;
         delete pendingControllerValidAt;
-
-        emit ControllerAccepted(previousController, controller);
+        emit ControllerProposalCancelled(proposedController);
     }
 
     /**
-     * @notice Pauses new deposits and/or new stake reservations without blocking withdrawals.
+     * @notice PENDING CONTROLLER ONLY: Accepts global lock authority after the handover delay.
+     * @dev The caller must equal the pending controller and the current timestamp must be at least the proposal's valid
+     *      timestamp. Acceptance immediately grants authority over all existing and future locks, then clears proposal
+     *      state. Governance cannot accept on the proposed controller's behalf.
      */
-    function setStakeOperationsPaused(bool _depositsPaused, bool _reservationsPaused) external override onlyOwner {
-        depositsPaused = _depositsPaused;
-        reservationsPaused = _reservationsPaused;
-        emit StakeOperationsPausedUpdated(_depositsPaused, _reservationsPaused);
+    function acceptController() external override {
+        address proposedController = pendingController;
+        if (proposedController == address(0)) revert NoPendingController();
+        if (msg.sender != proposedController) {
+            revert UnauthorizedPendingController(msg.sender, proposedController);
+        }
+
+        uint64 currentTime = _currentTimestamp();
+        uint64 validAt = pendingControllerValidAt;
+        if (currentTime < validAt) revert ControllerProposalNotReady(validAt, currentTime);
+
+        address previousController = controller;
+        controller = proposedController;
+        delete pendingController;
+        delete pendingControllerValidAt;
+        emit ControllerAccepted(previousController, proposedController);
     }
 
-    /* ============ View Functions ============ */
+    /* ============ Views ============ */
 
     /**
-     * @notice Returns stake eligible for new reservations after a pending withdrawal is excluded.
-     */
-    function eligibleStake(address _staker) public view override returns (uint256) {
-        return stakeBalance[_staker] - stakeWithdrawalRequests[_staker].amount;
-    }
-
-    /**
-     * @notice Returns eligible stake not currently committed to active reservations.
-     */
-    function freeStake(address _staker) public view override returns (uint256) {
-        return eligibleStake(_staker) - reservedStake[_staker];
-    }
-
-    /**
-     * @notice Returns the stake owner used for a taker's future intents.
-     * @dev Takers without a delegation use their own stake.
+     * @notice Resolves the stake owner used for a taker's future controller policy reads.
+     * @dev Returns the selected owner only while its authorization remains live; otherwise returns the taker itself.
+     *      Existing locks are independent of this live lookup and retain the owner stored in each lock.
+     * @param _taker Taker whose effective stake owner should be resolved.
+     * @return Effective stake owner for future policy decisions.
      */
     function stakeOwnerOf(address _taker) external view override returns (address) {
-        address delegatedStakeOwner = delegatedStakeOwners[_taker];
-        return delegatedStakeOwner == address(0) ? _taker : delegatedStakeOwner;
+        address selectedOwner = selectedStakeOwner[_taker];
+        if (selectedOwner != address(0) && authorizedTakers[selectedOwner][_taker]) return selectedOwner;
+        return _taker;
     }
 
     /**
-     * @notice Returns whether a taker accepts new third-party stake assignments.
+     * @notice Returns principal the owner may immediately withdraw or commit to another lock.
+     * @dev Derived from aggregate owner balances; lock creation and release maintain `lockedStake <= stakeBalance`.
+     * @param _stakeOwner Owner whose free principal should be calculated.
+     * @return Stake balance not committed to any active lock.
      */
-    function stakeDelegationEnabled(address _taker) external view override returns (bool) {
-        return !stakeDelegationDisabled[_taker];
+    function freeStake(address _stakeOwner) public view override returns (uint256) {
+        return stakeBalance[_stakeOwner] - lockedStake[_stakeOwner];
     }
 
     /**
-     * @notice Returns the only stake owner a taker currently accepts, or zero when assignments are open.
+     * @notice Returns whether an existing lock has reached or passed its recorded maturity.
+     * @dev Returns false for an unknown lock. Maturity does not automatically unlock or resolve principal; it only blocks
+     *      later increase and resize operations and can be used by controller policy to authorize a terminal transition.
+     * @param _lockId Identifier of the lock to inspect.
+     * @return True when the lock exists and its maturity is not later than the current block timestamp.
      */
-    function allowedStakeOwner(address _taker) external view override returns (address) {
-        return allowedStakeOwners[_taker];
+    function isLockMature(bytes32 _lockId) external view override returns (bool) {
+        StakeLock memory stakeLock = locks[_lockId];
+        return stakeLock.stakeOwner != address(0) && block.timestamp >= stakeLock.maturesAt;
     }
 
     /**
-     * @notice Returns whether a staker has requested full exit.
+     * @notice Returns aggregate token liabilities represented by stake principal and beneficiary claims.
+     * @return Sum of `totalStaked` and `totalClaimable`.
      */
-    function isExiting(address _staker) external view override returns (bool) {
-        return exitRequests[_staker].exiting;
+    function totalAccounted() public view override returns (uint256) {
+        return totalStaked + totalClaimable;
     }
 
     /**
-     * @notice Returns the full exit request for a staker.
+     * @notice Returns vault token balance available to be adopted through `fundLock`.
+     * @dev Direct transfers and settlement transfers are unaccounted until funded. The subtraction saturates at zero, so
+     *      an external token-balance deficit is not represented as a negative value and remains an insolvency condition.
+     * @return Token balance held above aggregate stake and claim liabilities.
      */
-    function getExitRequest(address _staker) external view override returns (ExitRequest memory) {
-        return exitRequests[_staker];
+    function unaccountedBalance() public view override returns (uint256) {
+        uint256 tokenBalance = stakeToken.balanceOf(address(this));
+        uint256 accounted = totalAccounted();
+        return tokenBalance > accounted ? tokenBalance - accounted : 0;
+    }
+
+    /* ============ Internal Lock Helpers ============ */
+
+    /**
+     * @dev Validates common creation requirements without changing accounting. A lock ID may be reused only after its
+     *      previous lock has been deleted by unlock or resolution.
+     * @param _stakeOwner Non-zero owner to record on the lock.
+     * @param _lockId Non-zero globally unused active lock identifier.
+     * @param _amount Non-zero amount to lock.
+     * @param _maturesAt Maturity timestamp required to be strictly in the future.
+     */
+    function _validateNewLock(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt) internal view {
+        if (_stakeOwner == address(0)) revert ZeroAddress();
+        if (_lockId == bytes32(0)) revert ZeroLockId();
+        if (_amount == 0) revert ZeroAmount();
+        if (locks[_lockId].stakeOwner != address(0)) revert LockAlreadyExists(_lockId);
+        _validateMaturity(_maturesAt, _currentTimestamp());
     }
 
     /**
-     * @notice Returns the pending partial withdrawal for a stake owner.
+     * @dev Enforces a strictly future maturity; equality is already mature and therefore invalid for a new lock state.
+     * @param _maturesAt Proposed lock maturity.
+     * @param _currentTime Current checked timestamp.
      */
-    function getStakeWithdrawalRequest(
-        address _staker
-    ) external view override returns (StakeWithdrawalRequest memory) {
-        return stakeWithdrawalRequests[_staker];
+    function _validateMaturity(uint64 _maturesAt, uint64 _currentTime) internal pure {
+        if (_maturesAt <= _currentTime) revert InvalidMaturity(_maturesAt, _currentTime);
     }
 
     /**
-     * @notice Returns one membership-stake reservation.
+     * @dev Verifies that an owner can commit the requested principal. The subsequent lock write performs the accounting
+     *      transition by increasing `lockedStake`; this helper itself is intentionally read-only.
+     * @param _stakeOwner Owner whose free stake backs the operation.
+     * @param _amount Amount of free stake required.
      */
-    function getReservation(bytes32 _intentHash) external view override returns (Reservation memory) {
-        return reservations[_intentHash];
-    }
-
-    /** @notice Returns one deferred-stake authorization or funded position. */
-    function getDeferredStake(bytes32 _intentHash) external view override returns (DeferredStake memory) {
-        return deferredStakes[_intentHash];
-    }
-
-    /** @notice Returns the exact fee plan that remains contingent until maturity. */
-    function getDeferredFeeAllocations(
-        bytes32 _intentHash
-    ) external view override returns (IIntentRiskHook.FeeAllocation[] memory) {
-        return deferredFeeAllocations[_intentHash];
+    function _requireFreeStake(address _stakeOwner, uint256 _amount) internal view {
+        uint256 available = freeStake(_stakeOwner);
+        if (available < _amount) revert InsufficientFreeStake(_stakeOwner, available, _amount);
     }
 
     /**
-     * @notice Returns all token-denominated vault liabilities.
+     * @dev Writes a previously validated new lock and increases the owner's aggregate locked principal.
+     * @param _stakeOwner Owner recorded on the lock.
+     * @param _lockId Globally unused active lock identifier.
+     * @param _amount Amount of owner principal being committed.
+     * @param _maturesAt Recorded maturity timestamp.
      */
-    function totalLiabilities() public view override returns (uint256) {
-        return totalStaked + totalClaimableCompensation + totalClaimableFees;
+    function _storeLock(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt) internal {
+        locks[_lockId] = StakeLock({stakeOwner: _stakeOwner, amount: _amount, maturesAt: _maturesAt});
+        lockedStake[_stakeOwner] += _amount;
+        emit StakeLocked(_lockId, _stakeOwner, _amount, _maturesAt, lockedStake[_stakeOwner]);
     }
 
-    /* ============ Internal Functions ============ */
-
-    function _creditCompensation(bytes32 _intentHash, address _maker, uint256 _amount) internal {
-        claimableCompensation[_maker] += _amount;
-        totalClaimableCompensation += _amount;
-
-        emit CompensationCredited(
-            _intentHash,
-            _maker,
-            _amount,
-            claimableCompensation[_maker]
-        );
+    /**
+     * @dev Loads and deletes one active lock, returning its complete principal to the owner's free subtotal. Callers may
+     *      subsequently move some of that principal into claims as part of the same transaction.
+     * @param _lockId Identifier of the active lock to remove.
+     * @return stakeLock Deleted lock snapshot used by the caller's terminal accounting.
+     */
+    function _removeLock(bytes32 _lockId) internal returns (StakeLock memory stakeLock) {
+        stakeLock = locks[_lockId];
+        if (stakeLock.stakeOwner == address(0)) revert LockNotFound(_lockId);
+        delete locks[_lockId];
+        lockedStake[stakeLock.stakeOwner] -= stakeLock.amount;
     }
 
-    function _setTakerAuthorization(address _stakeOwner, address _taker, bool _authorized) internal {
-        if (_taker == address(0) || _taker == _stakeOwner) revert InvalidTaker(_taker);
-
-        address currentStakeOwner = delegatedStakeOwners[_taker];
-        if (_authorized) {
-            if (currentStakeOwner == _stakeOwner) return;
-            if (stakeDelegationDisabled[_taker]) revert StakeDelegationDisabled(_taker);
-            address requiredStakeOwner = allowedStakeOwners[_taker];
-            if (requiredStakeOwner != address(0) && requiredStakeOwner != _stakeOwner) {
-                revert StakeOwnerNotAllowed(_taker, _stakeOwner, requiredStakeOwner);
-            }
-            if (currentStakeOwner != address(0) && currentStakeOwner != _stakeOwner) {
-                revert TakerAlreadyAuthorized(_taker, currentStakeOwner);
-            }
-
-            delegatedStakeOwners[_taker] = _stakeOwner;
-        } else {
-            if (currentStakeOwner != _stakeOwner) {
-                revert TakerAuthorizationNotFound(_taker, _stakeOwner);
-            }
-            delete delegatedStakeOwners[_taker];
-        }
-
-        emit TakerAuthorizationUpdated(_stakeOwner, _taker, _authorized);
-    }
-
-    function _requirePositionController(address _expectedController) internal view {
-        if (msg.sender != _expectedController) {
-            revert UnauthorizedPositionController(msg.sender, _expectedController);
-        }
+    /**
+     * @dev Returns the current block timestamp after checked narrowing to the lock timestamp width.
+     * @return Current EVM timestamp represented as `uint64`.
+     */
+    function _currentTimestamp() internal view returns (uint64) {
+        if (block.timestamp > type(uint64).max) revert TimestampOverflow(block.timestamp);
+        return uint64(block.timestamp);
     }
 }

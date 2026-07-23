@@ -1,290 +1,204 @@
-# Stake-Funded Intent Extensions and Chargeback Coverage
+# StakeVault and RiskManager Policy
 
 ## Status
 
-Hard-cut contract specification. The active ABI uses `IntentExtensionConfig`; deployment and downstream consumers must not retain compatibility fields or accounting from the removed pending-intent bond model.
+Hard-cut specification for the simplified stake ledger and its initial RiskManager. No predecessor RiskManager has been deployed, so this version has no legacy migration surface.
 
-## Summary
+## Contract boundaries
 
-Stake now funds two independent liabilities:
+`StakeVault` is the only token custody and accounting boundary. It knows nothing about intents, chargebacks, fees, or extension policy. It stores:
 
-1. A taker or its delegated stake owner can purchase additional intent time after the Escrow's initial free expiry. The maximum charge is reserved from the economic owner's stake, and the elapsed charge is paid to the LP whether the intent is fulfilled or cancelled.
-2. A chargebackable payment reserves coverage after settlement. Coverage comes from existing membership stake or from gross deferred settlement proceeds converted into payout-recipient-owned stake.
+- stake balances and per-owner locked totals;
+- one lock per `bytes32` identifier;
+- immediately withdrawable claims;
+- Safe-to-taker authorizations and each taker's selected Safe;
+- one global controller with a delayed handover.
 
-Admission reserves only chargeback coverage. Merely signaling an intent does not reserve a pending-intent penalty. The Escrow's initial expiration period is the free interval; an intent must explicitly purchase any additional time before its current expiry.
+`RiskManager` owns all business policy. It decides why stake is locked, when a lock resolves, and who receives claims. It never retains tokens.
 
-The two liabilities use different StakeVault reservation identifiers and are never netted against each other.
+`OrchestratorV3` snapshots the depositor-selected risk hook per intent. Admission and settlement are fail-closed. Cancellation is fail-open and records the original cancellation timestamp for later reconciliation.
 
-## Trust and Custody Boundaries
+## StakeVault ledger
 
-- The depositor selects `RiskManager` as both the intent risk hook and the Escrow `intentGuardian`.
-- Orchestrator snapshots the selected risk hook when the intent is admitted.
-- RiskManager is the only contract allowed to extend the Escrow intent expiry.
-- StakeVault is the only token custody and accounting boundary. RiskManager never retains tokens.
-- Extension stake remains owned and withdrawable only by the stake owner; delegation gives the taker reservation authority, not custody rights.
-- Ordinary post-intent hooks remain selected by the onramper and are independent of the risk policy.
-- Curator and onramper clients must accept only known RiskManager addresses before paying fiat.
+For every stake owner:
 
-RiskManager rejects admission unless the deposit's `intentGuardian` is the same RiskManager. This binds the quoted extension policy to the only contract able to change the on-chain expiry.
+```text
+freeStake = stakeBalance - lockedStake
+```
 
-## Terminology
+Global accounting must always satisfy:
 
-- `A`: complete intent amount.
-- `R`: gross amount actually released by Escrow at settlement.
-- `E`: executable settlement amount after protocol, referral, and manager fees.
-- `F`: independently rounded contingent fees, `R - E`.
-- `s`: extension charge in basis points per hour.
-- `Tbase`: original Escrow intent expiry snapshotted at admission.
-- `Tpurchased`: cumulative additional time purchased for the intent.
-- `Tterminal`: fulfillment, manual-release, or cancellation timestamp.
-- `r`: chargeback reserve ratio in basis points.
+```text
+stakeToken.balanceOf(StakeVault) >= totalStaked + totalClaimable
+```
 
-## Platform Configuration
+The implementation rejects fee-on-transfer deposits and deferred funding so accepted transfers preserve exact accounting.
+
+### User operations
+
+- `depositStake(amount)` credits the caller's stake.
+- `withdrawStake(amount)` withdraws only free stake.
+- `claim()` withdraws the caller's complete claimable balance.
+- `setTakerAuthorization(taker, authorized)` grants or revokes access to the caller's stake.
+- `selectStakeOwner(stakeOwner)` lets a taker explicitly select one authorizing Safe.
+- `clearStakeOwner()` restores the taker's own stake as the fallback.
+
+Authorization never transfers ownership or custody. Revocation clears an active selection, and later reauthorization does not restore it automatically.
+
+### Controller operations
+
+- `lockStake(owner, id, amount, maturity)` moves free stake into a new lock.
+- `fundLock(owner, id, amount, maturity)` accounts already-transferred, previously unaccounted tokens as a new locked stake balance.
+- `increaseLock(id, amount)` adds free stake to a non-matured lock.
+- `resizeLock(id, newAmount, newMaturity)` only reduces a non-matured lock and updates its maturity.
+- `unlockStake(id)` deletes a lock and makes its complete amount free immediately.
+- `resolveLock(id, claims)` deletes a lock, converts the specified portion into immediate claims, and leaves the remainder as free stake.
+
+Lock maturity is a policy timestamp, not an autonomous transition. Only the current controller can mutate or resolve locks.
+
+## Delegation and squatting resistance
+
+Each Safe may authorize any number of takers, and each taker selects at most one authorizing Safe:
+
+```text
+authorizedTakers[safe][taker] = true
+selectedStakeOwner[taker] = safe
+```
+
+`stakeOwnerOf(taker)` returns the selected Safe only while the authorization remains live; otherwise it returns the taker. An unrelated account authorizing a taker cannot select itself, replace another selection, block self-staking, or consume the legitimate Safe's stake. Takers can always deposit additional stake for themselves.
+
+## Platform configuration
 
 ```solidity
 struct ChargebackConfig {
     bool chargebackable;
     bool deferredPayoutEnabled;
-    uint16 reserveBps;
     uint64 riskWindow;
-}
-
-struct IntentExtensionConfig {
-    uint32 extensionPenaltyBpsPerHour;
 }
 
 struct PlatformRiskConfig {
     bool enabled;
     ChargebackConfig chargeback;
-    IntentExtensionConfig intentExtension;
+    uint32 extensionPenaltyBpsPerHour;
 }
 ```
 
-Configuration rules:
+Rules:
 
-- `chargeback.reserveBps` is between `0` and `10_000`.
-- A chargebackable method requires `reserveBps == 10_000` and a nonzero bounded risk window.
-- A non-chargebackable method requires `reserveBps == 0` and disables deferred payout.
-- Across the five-day total intent-lifetime ceiling, the configured slope cannot charge more than 100% of `A`.
-- An enabled platform requires a nonzero extension slope, preventing accidental free extensions.
+- a chargebackable method requires a nonzero `riskWindow` no greater than 365 days;
+- a non-chargebackable method must disable deferred payout and use a zero risk window;
+- a zero extension slope disables extensions;
+- the configured slope cannot charge more than 100% of an intent across the five-day maximum lifetime;
+- each position snapshots its risk window and extension slope at admission.
 
-Governance changes affect only future admissions. Each position snapshots its full intent amount, extension slope, chargeback ratio, and risk window.
+`riskTakingPaused` blocks new admissions and extensions. Cancellation, settlement, reconciliation, maturity release, and chargeback remain live.
 
-## Initial Expiry and Extension Curve
+## Admission modes
 
-At admission:
+Admission requires the configured payment method to be enabled, the Escrow token to equal the Vault token, and `deposit.intentGuardian == RiskManager`.
+
+For an intent amount `A`:
+
+- `UNBONDED`: chargebacks are disabled; no coverage lock is created.
+- `STAKE_BACKED`: the selected Safe or taker has at least `A` free stake; the raw intent hash locks the full `A` with `NEVER_MATURES`.
+- `DEFERRED_PAYOUT`: chargebacks are enabled, free stake is insufficient, and deferred payout is enabled; admission creates no Vault state. Settlement later funds a gross lock owned by the payout recipient.
+
+Deferred admission rejects any nonzero post-intent hook. A deferred settlement consumes the full gross amount, so allowing a hook would silently skip its payout behavior.
+
+## Intent extensions
+
+The original Escrow expiry is free:
 
 ```text
-Tbase = createdAt + Escrow.intentExpirationPeriod()
+baseExpiry = createdAt + Escrow.intentExpirationPeriod()
 ```
 
-No extension stake is reserved at admission.
-
-For cumulative purchased time `Tpurchased`, the required extension reservation is:
+For intent amount `A`, hourly slope `s`, and cumulative purchased time `T`:
 
 ```text
-Qextension = ceil(
-    A * s * Tpurchased
-    / (10_000 * 1 hour)
+extensionCost = ceil(A * s * T / (10_000 * 1 hour))
+```
+
+Extensions use a separate never-maturing lock:
+
+```text
+extensionLockId = keccak256(
+    abi.encode(keccak256("ZKP2P_INTENT_EXTENSION"), intentHash)
 )
 ```
 
-Each extension reserves only the increase from the previously required cumulative reservation. Computing from cumulative time avoids rounding drift across repeated small extensions.
+The first extension snapshots its stake owner. Later extensions only increase that lock by the difference between the old and new cumulative costs. Computing from cumulative time prevents rounding drift.
 
-At any terminal outcome:
+The taker may extend while its current selection still matches the snapshotted extension owner. The snapshotted owner may always add exposure from its own stake. Revocation prevents the taker from adding further sponsor exposure without preventing the sponsor from acting voluntarily.
 
-```text
-elapsedAfterBase = max(Tterminal - Tbase, 0)
-chargeableTime = min(elapsedAfterBase, Tpurchased)
-
-Pextension = ceil(
-    A * s * chargeableTime
-    / (10_000 * 1 hour)
-)
-```
-
-`Pextension` is slashed to LP compensation. Every unused unit of the extension reservation is immediately released as reusable stake of the snapshotted extension stake owner.
-
-Consequences:
-
-- Fulfillment and cancellation at the same timestamp produce the same extension charge.
-- A terminal outcome at or before `Tbase` charges zero even if time was purchased early.
-- A terminal outcome after the purchased interval cannot charge more than `Qextension`.
-- Reconciliation uses Orchestrator's durable original cancellation timestamp, not the later reconciliation timestamp.
-
-## Extension Calls
-
-### `extendIntent(intentHash, additionalTime)`
-
-- Callable by the intent taker or the exact delegated stake owner selected for the extension.
-- On the first extension, resolves `StakeVault.stakeOwnerOf(taker)` and snapshots that address as `extensionStakeOwner` for the intent's complete extension lifecycle.
-- Uses the snapshotted owner's existing free membership stake. Funding and authorization happen beforehand through `depositStake`, `depositStakeFor`, or `setTakerAuthorization`; no tokens move during `extendIntent`.
-- Creates or increases the isolated extension reservation.
-- Calls Escrow as the intent guardian only after the reservation succeeds.
-- require a pending, unexpired intent;
-- fail closed while StakeVault reservations are paused or the extension stake owner is exiting;
-- validate that Escrow's current expiry equals `Tbase + Tpurchased`;
-- reject zero added time and any extension that would move final expiry beyond five days from the original intent timestamp;
-- cannot revive an already-expired intent;
-- update RiskManager state only if the StakeVault reservation and Escrow guardian call both succeed.
-
-Delegation changes cannot move an active reservation between economic owners. If the stake owner revokes the taker after the first extension, the taker cannot add exposure, but the snapshotted owner can still add time from its own stake. Terminal penalties and unused releases always settle against that original owner.
-
-## Isolated Reservations
-
-Chargeback coverage uses the intent hash as its StakeVault position identifier. Extension collateral uses:
+At cancellation or settlement time `terminalAt`:
 
 ```text
-extensionReservationId = keccak256(
-    abi.encode(EXTENSION_RESERVATION_NAMESPACE, intentHash)
-)
+chargeableTime = min(max(terminalAt - baseExpiry, 0), totalPurchasedTime)
+penalty = ceil(A * s * chargeableTime / (10_000 * 1 hour))
 ```
 
-This domain separation is mandatory. A payment method may require both liabilities at once:
+The extension lock resolves into an immediate LP claim for `penalty`; the unused remainder becomes free stake. Failed-cancellation reconciliation uses Orchestrator's recorded cancellation timestamp.
 
-```text
-active reservation under intentHash
-    = chargeback coverage
+## Settlement
 
-active reservation under extensionReservationId(intentHash)
-    = maximum purchased-time charge
-```
+Orchestrator transfers the gross Escrow release `R` to itself, computes exact fee allocations, and invokes the snapshotted RiskManager before distributing funds.
 
-Charging or releasing one reservation cannot resize, release, or slash the other.
+### Unbonded
 
-## Chargeback Coverage
+- RiskManager records the position as released.
+- It consumes zero tokens.
+- Orchestrator pays fees and the net payout normally, including any post-intent hook.
 
-For chargebackable settlement:
+### Stake-backed
 
-```text
-Qchargeback = ceil(R * r / 10_000)
-```
+- RiskManager resolves the extension lock.
+- The raw intent lock is reduced from admitted amount `A` to gross release `R` and receives `coverageDeadline = settlementTime + riskWindow`.
+- It consumes zero tokens.
+- Orchestrator pays fees and the net payout normally, including any post-intent hook.
 
-Current policy requires `r = 10_000`, so coverage equals the gross Escrow release.
+### Deferred payout
 
-### Stake-backed mode
+- RiskManager resolves the extension lock.
+- It pulls exactly `R` from Orchestrator directly into StakeVault.
+- StakeVault funds one raw-intent lock of `R` owned by the payout recipient until the coverage deadline.
+- RiskManager stores the exact nonzero fee allocations.
+- Orchestrator observes exact-gross consumption and performs no immediate fee or payout transfers.
 
-- Admission reserves `ceil(A * r / 10_000)` from the delegated stake owner.
-- Settlement first charges the independent extension stake owner's reservation.
-- The independent chargeback reservation is then resized to `Qchargeback`.
-- No settlement tokens are consumed by RiskManager.
+Partial token consumption, token mismatch, recipient mismatch, invalid fee totals, callback failure, or transfer mismatch reverts the complete settlement.
 
-### Deferred-payout mode
+## Maturity and chargeback
 
-- Admission authorizes future deferred stake but reserves no nonexistent proceeds.
-- Settlement first charges the taker's extension reservation.
-- RiskManager then pulls the complete gross release directly from Orchestrator into StakeVault.
-- StakeVault credits `R` to the payout recipient and reserves the full amount through the chargeback window.
-- The fee slice `F` remains contingent; neither the payout recipient nor any fee recipient can withdraw it while coverage is live.
+Anyone may call `releaseMaturedPosition` at or after the half-open coverage deadline.
 
-On a valid chargeback, the complete gross reservation compensates the LP and all contingent fees are cancelled. On clean maturity, `F` becomes pull-based fee claims and `E` becomes free reusable payout-recipient stake.
+- Stake-backed maturity unlocks the sponsor's raw-intent lock.
+- Deferred maturity resolves the raw-intent lock into immediate fee claims; the net remains free stake of the payout recipient.
 
-Deferred payment therefore becomes stake at settlement. It is not a separate balance class: gross proceeds increase `stakeBalance`, remain fully reserved during the risk window, and leave net proceeds as ordinary reusable stake after clean maturity.
+A valid chargeback before the deadline resolves the complete gross coverage lock into one immediate LP claim. Deferred fee allocations are deleted, so no fee claim survives a chargeback.
 
-## Admission and Capacity
+Chargeback evidence is bound by:
 
-Admission computes chargeback capacity only:
+- the RiskManager EIP-712 domain;
+- `intentHash` and `dataHash`;
+- a payment-method-scoped dispute nullifier;
+- bidirectional payment-nullifier binding for proof-based fulfillment;
+- the attestation verifier. Manual release has no payment nullifier and relies on the attestation witness set.
 
-```text
-chargebackAdmissionReserve = ceil(A * r / 10_000)
-```
+## Controller handover
 
-- If it is zero, the position is `UNBONDED`.
-- If existing delegated stake covers it, the position is `STAKE_BACKED`.
-- If existing stake is insufficient and deferred payout is enabled, the position is `DEFERRED_PAYOUT`.
-- Otherwise admission fails.
+StakeVault has one global controller. Governance proposes a successor, waits the configured delay, and the successor accepts. Acceptance immediately transfers authority over every Vault lock.
 
-Extension capacity is not pre-reserved and does not constrain initial quote capacity. Additional time succeeds only when its caller can fund the incremental extension reservation.
+Because Orchestrator snapshots a RiskManager per active intent, governance must not hand over the Vault while that manager still has positions that may require Vault mutation. This initial release contains no predecessor/migration path because no previous RiskManager has been deployed. A future upgrade must either drain active positions before handover or ship an explicit adoption/read-through procedure in the successor.
 
-For non-chargebackable methods, RiskManager therefore places no stake-derived limit on the initial intent amount. Escrow deposit limits and off-chain admission policy continue to bound the quote. Any extension is priced on the complete amount of LP liquidity that remains locked.
+## Core invariants
 
-## Settlement Ordering
-
-For fulfillment and manual release:
-
-```text
-Escrow -> Orchestrator: R
-Orchestrator -> RiskManager.settleIntent(fee plan, R, E)
-RiskManager -> StakeVault: charge elapsed extension time, release unused extension reserve
-RiskManager -> StakeVault: establish chargeback coverage, or release/no-op if non-chargebackable
-```
-
-After the risk callback:
-
-- a zero-consumption stake-backed or unbonded callback lets Orchestrator execute fees and ordinary payout handling;
-- an exact-gross deferred callback skips immediate fees, post-intent-hook execution, and direct payout because the entire fee plan is contingent in StakeVault.
-
-Partial token consumption, token mismatch, amount mismatch, callback failure, or allowance mismatch reverts the complete settlement.
-
-## Position and Event Surface
-
-The hard-cut ABI:
-
-- uses `IntentExtensionConfig` in `PlatformRiskConfig`;
-- snapshots `intentAmount`, `baseIntentExpiry`, and `extensionPenaltyBpsPerHour` at admission;
-- snapshots `extensionStakeOwner` on the first extension and tracks `totalExtensionTime`, `extensionReservation`, and terminal `extensionPenalty`;
-- exposes `extendIntent`, extension cost/penalty math, and `extensionReservationId`;
-- emits `IntentExtended` for each purchase and `IntentExtensionCharged` at every extended intent's terminal outcome;
-- keeps extension events separate from chargeback and deferred-settlement events.
-
-Indexers must use the emitted extension reservation identifier and must not combine extension collateral with `reservedAmount`, which remains chargeback coverage.
-
-## Core Invariants
-
-1. Admission requires `deposit.intentGuardian == RiskManager`.
-2. Every extension cost is calculated from the full `intentAmount`.
-3. Admission reserves chargeback coverage only; `extensionReservation == 0` initially.
-4. The active extension reservation equals the position's `extensionReservation` and is keyed by the domain-separated identifier.
-5. The extension reservation staker is the `extensionStakeOwner` snapshotted from current delegation on the first extension.
-6. Cumulative extension reservation is monotonic and uses one upward rounding over cumulative purchased time.
-7. Terminal extension charge is identical for cancellation, proof fulfillment, and manual release at the same timestamp.
-8. Terminal extension charge never exceeds the purchased-time reservation; all excess is released.
-9. A chargeback reservation and extension reservation can coexist without either operation mutating the other.
-10. Delegated extension authority never changes stake ownership or grants the taker withdrawal rights.
-11. Revocation blocks new taker-authorized exposure but does not strand or reassign the existing owner's reservation.
-12. Deferred settlement increases payout-recipient stake and chargeback reservation by exactly the gross release.
-13. Every slash decreases stake and reserved stake by the same amount and increases LP compensation by that amount.
-14. Clean deferred maturity leaves `net free stake + claimable fees == gross release`.
-15. Across every lifecycle transition, `token balance in StakeVault == total liabilities`.
-
-## Illustrative Policy
-
-```text
-Escrow initial intent period:             1 hour
-intentExtension.extensionPenaltyBpsPerHour: 10
-maximum total intent lifetime:             5 days
-```
-
-For a 1,000 USDC intent:
-
-```text
-purchase 1 hour  => reserve 1.00 USDC
-purchase 3 hours => cumulative reserve 3.00 USDC
-
-terminal 30 minutes after initial expiry => charge 0.50 USDC, release 2.50 USDC
-terminal 2 hours after initial expiry     => charge 2.00 USDC, release 1.00 USDC
-terminal after all 3 purchased hours      => charge 3.00 USDC, release 0
-```
-
-The same table applies whether the terminal action is fulfillment or cancellation.
-
-## Rollout
-
-1. Deploy/configure RiskManager and set it as the deposit risk hook and intent guardian.
-2. Set the Escrow initial expiration period to the intended free interval (one hour for the initial rollout).
-3. Configure `IntentExtensionConfig` and chargeback policy per payment method.
-4. Publish the hard-cut ABI and risk math.
-5. Migrate the indexer to extension-owner snapshots, delegated reservations, and terminal charges.
-6. Update curator and quote clients to recognize only approved risk hooks and the new extension fields.
-
-`EscrowV2.setIntentExpirationPeriod` is a global Escrow setting, not a per-deposit or
-per-payment-method policy. Executing step 2 shortens the initial window for every existing
-deposit on that Escrow, including deposits that do not use RiskManager. The Safe batch must be
-coordinated with quote clients, curators, indexers, and operators before execution. Existing
-deposits must also be recreated if they need RiskManager as their immutable intent guardian.
-
-The deployment command must export the freshly deployed ABI bundle and regenerate the contracts
-package in the same successful pipeline. Consumers must not publish or ingest an older exported
-`RiskManager` ABI after deploy 28 has executed.
-
-Historical deployment artifacts remain immutable. Active contracts and downstream consumers do not expose legacy aliases or dual accounting.
+1. Vault token balance covers `totalStaked + totalClaimable`.
+2. For every owner, `lockedStake <= stakeBalance`.
+3. Every active RiskManager amount matches its corresponding Vault lock.
+4. Coverage and extension locks use different identifiers.
+5. Only the current Vault controller can mutate locks.
+6. Delegation cannot change stake ownership or be selected by the sponsor.
+7. Stake-backed and deferred coverage always equal the gross release.
+8. Extension penalty never exceeds the extension reservation.
+9. Chargeback and clean maturity cannot both resolve the same coverage lock.
+10. Pause never blocks a terminal path.
