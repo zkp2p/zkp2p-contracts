@@ -199,12 +199,8 @@ abstract contract IntentExtensionManager is IRiskManager {
         extensionStakeOwner = _position.extensionStakeOwner;
         if (extensionStakeOwner == address(0)) extensionStakeOwner = _currentStakeOwner;
 
-        bool callerIsTaker = msg.sender == _taker;
-        bool callerIsStakeOwner = msg.sender == extensionStakeOwner;
-        if (
-            (!callerIsTaker && !callerIsStakeOwner)
-                || (callerIsTaker && !callerIsStakeOwner && _currentStakeOwner != extensionStakeOwner)
-        ) {
+        if (msg.sender == extensionStakeOwner) return extensionStakeOwner;
+        if (msg.sender != _taker || _currentStakeOwner != extensionStakeOwner) {
             revert UnauthorizedStakeExtension(msg.sender, _taker, extensionStakeOwner);
         }
     }
@@ -400,7 +396,7 @@ abstract contract IntentExtensionManager is IRiskManager {
         }
 
         uint256 elapsedAfterBaseExpiry = uint256(_terminalAt - _baseIntentExpiry);
-        chargeableTime = uint64(_minimum(elapsedAfterBaseExpiry, _totalExtensionTime));
+        chargeableTime = uint64(Math.min(elapsedAfterBaseExpiry, _totalExtensionTime));
         penalty = _calculateIntentExtensionCost(_intentAmount, chargeableTime, _extensionPenaltyBpsPerHour);
     }
 
@@ -426,13 +422,6 @@ abstract contract IntentExtensionManager is IRiskManager {
     function _toExtensionTimestamp(uint256 _timestamp) internal pure returns (uint64) {
         if (_timestamp > type(uint64).max) revert TimestampOverflow(_timestamp);
         return uint64(_timestamp);
-    }
-
-    /**
-     * @dev Returns the smaller of two unsigned integers.
-     */
-    function _minimum(uint256 _left, uint256 _right) private pure returns (uint256) {
-        return _left < _right ? _left : _right;
     }
 
     /* ============ Coordinator Dependency Accessors ============ */

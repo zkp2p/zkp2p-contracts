@@ -39,7 +39,8 @@ import {IntentExtensionManager} from "./risk/IntentExtensionManager.sol";
 contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
 
-    /// @notice Maturity used by pending exposure that requires an explicit lifecycle transition.
+    /// @notice Compatibility getter for the sentinel maturity used by pending risk exposure.
+    /// @dev Each policy module owns its operational sentinel so its lock policy remains self-contained.
     uint64 public constant NEVER_MATURES = type(uint64).max;
 
     /* ============ Structs ============ */
@@ -91,8 +92,8 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
 
     /**
      * @notice Creates the single coordinator for one Orchestrator and StakeVault.
-     * @dev Non-zero dependencies are required, but deployment-supplied contracts are not redundantly checked for code.
-     *      The attestation verifier may be the same verifier used by the unified payment verifier.
+     * @dev Dependencies must be non-zero deployed contracts. The attestation verifier may be the same verifier used by
+     *      the unified payment verifier.
      * @param _owner Governance owner allowed to configure future risk policy.
      * @param _orchestratorContract Canonical intent lifecycle source.
      * @param _stakeVaultContract Shared custody and accounting ledger controlled by this contract after handover.
@@ -111,6 +112,12 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
                 || address(_stakeVaultContract) == address(0)
         ) {
             revert ZeroAddress();
+        }
+        if (address(_orchestratorContract).code.length == 0) {
+            revert InvalidContract(address(_orchestratorContract));
+        }
+        if (address(_stakeVaultContract).code.length == 0) {
+            revert InvalidContract(address(_stakeVaultContract));
         }
 
         orchestrator = _orchestratorContract;
@@ -332,7 +339,7 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
     /**
      * @notice GOVERNANCE ONLY: Replaces the verifier used for subsequent chargeback submissions.
      * @dev The verifier may be the same instance used for payment attestations. The update affects unresolved positions.
-     * @param _verifier New non-zero chargeback attestation verifier.
+     * @param _verifier New non-zero deployed chargeback attestation verifier.
      */
     function setAttestationVerifier(address _verifier) external override onlyOwner {
         address previousVerifier = _setChargebackAttestationVerifier(IAttestationVerifier(_verifier));
@@ -433,25 +440,30 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
      * @param _taker Taker whose live selected stake owner should be resolved.
      * @return stakeOwner Live selected stake owner.
      * @return totalStake Stake owner's total principal balance.
-     * @return locked Stake owner's principal committed across active locks.
-     * @return free Stake owner's immediately available principal.
+     * @return lockedStake Stake owner's principal committed across active locks.
+     * @return freeStake Stake owner's immediately available principal.
      */
     function getTakerState(address _taker)
         external
         view
         override
-        returns (address stakeOwner, uint256 totalStake, uint256 locked, uint256 free)
+        returns (address stakeOwner, uint256 totalStake, uint256 lockedStake, uint256 freeStake)
     {
         stakeOwner = stakeVault.stakeOwnerOf(_taker);
         totalStake = stakeVault.stakeBalance(stakeOwner);
-        locked = stakeVault.lockedStake(stakeOwner);
-        free = stakeVault.freeStake(stakeOwner);
+        lockedStake = stakeVault.lockedStake(stakeOwner);
+        freeStake = stakeVault.freeStake(stakeOwner);
     }
 
     /* ============ Public Helpers ============ */
 
     /**
      * @notice Calculates the cumulative lock required for purchased extension time.
+     * @dev Applies the same full-precision, upward-rounded formula used when increasing the extension lock.
+     * @param _intentAmount Full amount of liquidity locked by the intent.
+     * @param _extensionTime Total number of extension seconds being priced.
+     * @param _extensionPenaltyBpsPerHour Hourly extension slope in basis points.
+     * @return Cumulative extension lock amount.
      */
     function calculateIntentExtensionCost(
         uint256 _intentAmount,
@@ -463,6 +475,14 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
 
     /**
      * @notice Calculates the extension penalty owed at a terminal timestamp.
+     * @dev Charges only purchased time used after the original expiry, capped by the total purchased duration.
+     * @param _intentAmount Full amount of liquidity locked by the intent.
+     * @param _baseIntentExpiry Original expiry before paid extensions.
+     * @param _terminalAt Settlement or cancellation timestamp.
+     * @param _totalExtensionTime Total number of purchased extension seconds.
+     * @param _extensionPenaltyBpsPerHour Snapshotted hourly extension slope in basis points.
+     * @return penalty Amount owed to the depositor.
+     * @return chargeableTime Purchased extension seconds used by the terminal timestamp.
      */
     function calculateIntentExtensionPenalty(
         uint256 _intentAmount,
@@ -478,6 +498,9 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
 
     /**
      * @notice Derives the isolated StakeVault lock identifier for extension exposure.
+     * @dev Namespaces extension exposure away from the raw intent hash used for chargeback coverage.
+     * @param _intentHash Intent identifier to namespace.
+     * @return Namespaced extension lock identifier.
      */
     function extensionLockId(bytes32 _intentHash) external pure override returns (bytes32) {
         return _extensionLockId(_intentHash);
@@ -485,6 +508,9 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
 
     /**
      * @notice Returns the manager- and chain-bound digest signed for chargeback evidence.
+     * @dev Commits to the attestation's intent and payload hash under this manager's EIP-712 domain.
+     * @param _attestation Chargeback evidence whose typed-data digest should be derived.
+     * @return EIP-712 digest consumed by the configured attestation verifier.
      */
     function hashChargebackAttestation(ChargebackAttestation calldata _attestation)
         external

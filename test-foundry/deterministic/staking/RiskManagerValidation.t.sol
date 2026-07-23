@@ -12,11 +12,12 @@ import {IStakeVault} from "../../../contracts/interfaces/IStakeVault.sol";
 import {NullifierRegistry} from "../../../contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "../../../contracts/registries/NullifierRegistryV2.sol";
 import {OrchestratorRegistry} from "../../../contracts/registries/OrchestratorRegistry.sol";
+import {SimpleAttestationVerifier} from "../../../contracts/unifiedVerifier/SimpleAttestationVerifier.sol";
 import {UnifiedPaymentVerifierV3} from "../../../contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol";
 import {RiskAttestationVerifierMock, RiskManagerFixture} from "../helpers/RiskManagerFixture.sol";
 
 contract RiskManagerValidationTest is RiskManagerFixture {
-    function test_ConstructorRejectsZeroDependenciesWithoutCodeLengthChecks() public {
+    function test_ConstructorRejectsZeroAndNonContractDependencies() public {
         vm.expectRevert(IRiskManager.ZeroAddress.selector);
         new RiskManager(
             address(0),
@@ -54,34 +55,85 @@ contract RiskManagerValidationTest is RiskManagerFixture {
             owner, IOrchestratorV3(address(orchestrator)), vault, verifier, INullifierRegistryV2(address(0))
         );
 
-        address nonContractOrchestrator = makeAddr("nonContractOrchestrator");
-        address nonContractVault = makeAddr("nonContractVault");
-        address nonContractVerifier = makeAddr("nonContractVerifier");
-        address nonContractRegistry = makeAddr("nonContractRegistry");
-        RiskManager dependencyShapeAgnosticManager = new RiskManager(
-            owner,
-            IOrchestratorV3(nonContractOrchestrator),
-            IStakeVault(nonContractVault),
-            IAttestationVerifier(nonContractVerifier),
-            INullifierRegistryV2(nonContractRegistry)
+        address nonContract = makeAddr("nonContract");
+        vm.expectRevert(abi.encodeWithSelector(IRiskManager.InvalidContract.selector, nonContract));
+        new RiskManager(
+            owner, IOrchestratorV3(nonContract), vault, verifier, INullifierRegistryV2(address(nullifierRegistry))
         );
-        assertEq(address(dependencyShapeAgnosticManager.orchestrator()), nonContractOrchestrator);
-        assertEq(address(dependencyShapeAgnosticManager.stakeVault()), nonContractVault);
-        assertEq(address(dependencyShapeAgnosticManager.attestationVerifier()), nonContractVerifier);
-        assertEq(address(dependencyShapeAgnosticManager.nullifierRegistry()), nonContractRegistry);
+
+        vm.expectRevert(abi.encodeWithSelector(IRiskManager.InvalidContract.selector, nonContract));
+        new RiskManager(
+            owner,
+            IOrchestratorV3(address(orchestrator)),
+            IStakeVault(nonContract),
+            verifier,
+            INullifierRegistryV2(address(nullifierRegistry))
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(IRiskManager.InvalidContract.selector, nonContract));
+        new RiskManager(
+            owner,
+            IOrchestratorV3(address(orchestrator)),
+            vault,
+            IAttestationVerifier(nonContract),
+            INullifierRegistryV2(address(nullifierRegistry))
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(IRiskManager.InvalidContract.selector, nonContract));
+        new RiskManager(
+            owner, IOrchestratorV3(address(orchestrator)), vault, verifier, INullifierRegistryV2(nonContract)
+        );
     }
 
-    function test_RiskAndPaymentVerificationCanShareOneAttestationVerifier() public {
+    function test_RiskAndPaymentVerificationShareVerifierWithoutCrossDomainReplay() public {
+        uint256 witnessKey = 0xA11CE;
+        SimpleAttestationVerifier sharedVerifier = new SimpleAttestationVerifier(vm.addr(witnessKey));
         NullifierRegistry legacyNullifierRegistry = new NullifierRegistry();
         NullifierRegistryV2 sharedNullifierRegistry = new NullifierRegistryV2(legacyNullifierRegistry);
         OrchestratorRegistry sharedOrchestratorRegistry = new OrchestratorRegistry();
         UnifiedPaymentVerifierV3 paymentVerifier =
-            new UnifiedPaymentVerifierV3(sharedOrchestratorRegistry, sharedNullifierRegistry, verifier);
-        RiskManager sharedVerifierManager =
-            new RiskManager(owner, IOrchestratorV3(address(orchestrator)), vault, verifier, sharedNullifierRegistry);
+            new UnifiedPaymentVerifierV3(sharedOrchestratorRegistry, sharedNullifierRegistry, sharedVerifier);
 
-        assertEq(address(paymentVerifier.attestationVerifier()), address(verifier));
-        assertEq(address(sharedVerifierManager.attestationVerifier()), address(verifier));
+        vm.prank(owner);
+        manager.setAttestationVerifier(address(sharedVerifier));
+
+        assertEq(address(paymentVerifier.attestationVerifier()), address(sharedVerifier));
+        assertEq(address(manager.attestationVerifier()), address(sharedVerifier));
+
+        bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
+        orchestrator.settle(manager, _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, true));
+
+        IRiskManager.ChargebackDetails memory details = IRiskManager.ChargebackDetails({
+            paymentMethod: PAYMENT_METHOD,
+            originalPaymentId: keccak256("shared-payment"),
+            disputeId: keccak256("shared-dispute"),
+            paymentAmount: 1,
+            paymentCurrency: keccak256("USD")
+        });
+        bytes memory data = abi.encode(details);
+        IRiskManager.ChargebackAttestation memory attestation = IRiskManager.ChargebackAttestation({
+            intentHash: intentHash, dataHash: keccak256(data), signatures: new bytes[](1), data: data
+        });
+
+        bytes32 paymentTypeHash =
+            keccak256("PaymentAttestation(bytes32 intentHash,uint256 releaseAmount,bytes32 dataHash)");
+        bytes32 paymentStructHash =
+            keccak256(abi.encode(paymentTypeHash, intentHash, INTENT_AMOUNT, attestation.dataHash));
+        bytes32 paymentDigest =
+            keccak256(abi.encodePacked("\x19\x01", paymentVerifier.DOMAIN_SEPARATOR(), paymentStructHash));
+        attestation.signatures[0] = _signDigest(witnessKey, paymentDigest);
+
+        vm.expectRevert(bytes("ThresholdSigVerifierUtils: Not enough valid witness signatures"));
+        manager.submitChargeback(attestation);
+
+        bytes32 chargebackDigest = manager.hashChargebackAttestation(attestation);
+        attestation.signatures[0] = _signDigest(witnessKey, chargebackDigest);
+
+        vm.expectRevert(bytes("ThresholdSigVerifierUtils: Not enough valid witness signatures"));
+        sharedVerifier.verify(paymentDigest, attestation.signatures, data);
+
+        manager.submitChargeback(attestation);
+        assertEq(uint256(manager.getRiskPosition(intentHash).status), uint256(IRiskManager.PositionStatus.SLASHED));
     }
 
     function test_AdmissionRejectsDisabledAndMismatchedProtocolBoundaries() public {
@@ -238,8 +290,8 @@ contract RiskManagerValidationTest is RiskManagerFixture {
 
         address nonContractVerifier = makeAddr("nonContractVerifier");
         vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(IRiskManager.InvalidContract.selector, nonContractVerifier));
         manager.setAttestationVerifier(nonContractVerifier);
-        assertEq(address(manager.attestationVerifier()), nonContractVerifier);
 
         RiskAttestationVerifierMock replacement = new RiskAttestationVerifierMock();
         vm.prank(owner);
@@ -433,5 +485,10 @@ contract RiskManagerValidationTest is RiskManagerFixture {
         bytes32 unknownIntent = keccak256("unknown-cancellation-intent");
         vm.expectPartialRevert(IRiskManager.PositionNotPending.selector);
         orchestrator.cancel(manager, unknownIntent);
+    }
+
+    function _signDigest(uint256 _signerKey, bytes32 _digest) private pure returns (bytes memory signature) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(_signerKey, _digest);
+        signature = abi.encodePacked(r, s, v);
     }
 }

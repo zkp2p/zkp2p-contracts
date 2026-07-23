@@ -165,6 +165,7 @@ interface IRiskManager is IIntentRiskHook {
     event RiskTakingPausedUpdated(bool paused);
 
     error ZeroAddress();
+    error InvalidContract(address dependency);
     error ZeroAmount();
     error UnauthorizedOrchestrator(address caller);
     error RiskTakingPaused();

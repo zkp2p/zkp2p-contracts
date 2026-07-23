@@ -144,9 +144,9 @@ economic invariant depends on the check.
 
 ### RM-TRUST-006: Constructor dependencies
 
-Constructor validation should follow the repository's reference-contract style. It must reject
-dependencies whose zero value would make the contract unusable, but must not add redundant
-`code.length` checks for immutable dependencies supplied by deployment code.
+Deployment is responsible for supplying the intended owner, Orchestrator, and StakeVault; the
+coordinator constructor does not duplicate those deployment checks. The chargeback module may
+retain dependency validation for the attestation verifier and nullifier registry.
 
 ## Shared lifecycle
 
@@ -221,8 +221,10 @@ Pausing must not block:
 For every admitted intent, the extension module snapshots:
 
 - configured hourly extension slope;
-- original Escrow expiry;
-- creation timestamp and intent amount needed by the formula.
+- original Escrow expiry.
+
+The coordinator snapshots creation timestamp and intent amount in common position state and supplies
+them to the extension module when its formulas or live-intent checks need them.
 
 A zero extension slope disables extensions without affecting chargeback admission.
 
@@ -413,7 +415,8 @@ Existing positions retain snapshotted values across governance changes.
 
 ### RM-GOV-003: Verifier updates
 
-Governance may replace the chargeback attestation verifier with a non-zero verifier dependency.
+Governance may replace the chargeback attestation verifier with a non-zero deployed verifier
+dependency.
 The update applies to unresolved settled positions because verification occurs at submission time.
 
 ### RM-GOV-004: Vault controller handover

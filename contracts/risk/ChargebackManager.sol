@@ -57,7 +57,8 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
     /// @notice Operational ceiling that keeps settlement deadlines safely representable as `uint64`.
     uint64 public constant MAX_RISK_WINDOW = 365 days;
 
-    /// @notice Protocol fee, up to ten referral fees, and one manager fee.
+    /// @notice Compatibility getter for the canonical maximum of protocol, referral, and manager fee lines.
+    /// @dev Orchestrator validates and constructs the fee plan; this module does not enforce the count independently.
     uint256 public constant MAX_FEE_ALLOCATIONS = 12;
 
     /// @notice EIP-712 type hash; chain and manager binding are supplied by the domain separator.
@@ -107,9 +108,9 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
 
     /**
      * @notice Initializes chargeback evidence dependencies and the deployed manager's EIP-712 domain.
-     * @dev The dependencies are intentionally independent interfaces, not independent trust roots. A deployment may
-     *      supply the same attestation verifier used for payment attestations. The concrete coordinator owns governance
-     *      and supplies the shared StakeVault dependency separately.
+     * @dev Both dependencies must be non-zero deployed contracts. They are intentionally independent interfaces, not
+     *      independent trust roots: a deployment may supply the same attestation verifier used for payment attestations.
+     *      The concrete coordinator owns governance and supplies the shared StakeVault dependency separately.
      * @param _attestationVerifier Initial verifier for signed chargeback evidence.
      * @param _nullifierRegistry Registry binding verified payment nullifiers to fulfilled intents.
      */
@@ -118,6 +119,12 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
     {
         if (address(_attestationVerifier) == address(0) || address(_nullifierRegistry) == address(0)) {
             revert ZeroAddress();
+        }
+        if (address(_attestationVerifier).code.length == 0) {
+            revert InvalidContract(address(_attestationVerifier));
+        }
+        if (address(_nullifierRegistry).code.length == 0) {
+            revert InvalidContract(address(_nullifierRegistry));
         }
 
         attestationVerifier = _attestationVerifier;
@@ -325,8 +332,8 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
             revert PositionModeMismatch(_attestation.intentHash, mode);
         }
 
-        (ChargebackDetails memory details, bytes32 disputeNullifier) =
-            _validateChargebackAttestation(_attestation, _paymentMethod, position);
+        bytes32 disputeNullifier;
+        (disputeId, disputeNullifier) = _validateChargebackAttestation(_attestation, _paymentMethod, position);
         bytes32 digest = _chargebackAttestationDigest(_attestation);
         if (!attestationVerifier.verify(digest, _attestation.signatures, _attestation.data)) {
             revert AttestationVerificationFailed();
@@ -346,7 +353,6 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
         _stakeVault().resolveLock(_attestation.intentHash, claims);
 
         stakeOwner = position.stakeOwner;
-        disputeId = details.disputeId;
     }
 
     /* ============ Internal Governance ============ */
@@ -365,8 +371,8 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
 
     /**
      * @dev Replaces the verifier used for subsequent chargeback submissions, including already settled positions.
-     *      Governance may use the same verifier instance as the unified payment verifier. Only non-zero dependency
-     *      validation is required; the coordinator owns caller authorization and emits the compatibility event.
+     *      Governance may use the same verifier instance as the unified payment verifier. The dependency must be a
+     *      non-zero deployed contract; the coordinator owns caller authorization and emits the compatibility event.
      * @param _verifier New attestation verifier dependency.
      * @return previousVerifier Address replaced by this update.
      */
@@ -375,6 +381,7 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
         returns (address previousVerifier)
     {
         if (address(_verifier) == address(0)) revert ZeroAddress();
+        if (address(_verifier).code.length == 0) revert InvalidContract(address(_verifier));
         previousVerifier = address(attestationVerifier);
         attestationVerifier = _verifier;
     }
@@ -495,20 +502,22 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
      * @param _attestation Intent-bound signed evidence and encoded chargeback details.
      * @param _paymentMethod Payment method snapshotted by the coordinator.
      * @param _position Settled coverage state constraining timing and proof binding.
-     * @return details Decoded chargeback details.
+     * @return disputeId Signed dispute identifier included in the settlement event.
      * @return disputeNullifier Payment-method-scoped replay identifier.
      */
     function _validateChargebackAttestation(
         ChargebackAttestation calldata _attestation,
         bytes32 _paymentMethod,
         ChargebackPosition storage _position
-    ) private view returns (ChargebackDetails memory details, bytes32 disputeNullifier) {
-        if (keccak256(_attestation.data) != _attestation.dataHash) revert InvalidAttestation();
+    ) private view returns (bytes32 disputeId, bytes32 disputeNullifier) {
+        if (keccak256(_attestation.data) != _attestation.dataHash) {
+            revert InvalidAttestation();
+        }
         if (block.timestamp >= _position.coverageDeadline) {
             revert ChargebackWindowClosed(_position.coverageDeadline, _chargebackTimestamp());
         }
 
-        details = abi.decode(_attestation.data, (ChargebackDetails));
+        ChargebackDetails memory details = abi.decode(_attestation.data, (ChargebackDetails));
         if (details.paymentMethod != _paymentMethod) revert InvalidAttestation();
 
         if (!_position.isManualRelease) {
@@ -521,6 +530,7 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
             }
         }
 
+        disputeId = details.disputeId;
         disputeNullifier = keccak256(abi.encodePacked(details.paymentMethod, details.disputeId));
         if (usedChargebackNullifiers[disputeNullifier]) revert ChargebackEvidenceUsed(disputeNullifier);
     }
