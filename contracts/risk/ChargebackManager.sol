@@ -108,25 +108,16 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
 
     /**
      * @notice Initializes chargeback evidence dependencies and the deployed manager's EIP-712 domain.
-     * @dev Both dependencies must be non-zero deployed contracts. They are intentionally independent interfaces, not
-     *      independent trust roots: a deployment may supply the same attestation verifier used for payment attestations.
-     *      The concrete coordinator owns governance and supplies the shared StakeVault dependency separately.
+     * @dev Deployment is responsible for supplying the intended dependencies. They are intentionally independent
+     *      interfaces, not independent trust roots: a deployment may supply the same attestation verifier used for
+     *      payment attestations. The concrete coordinator owns governance and supplies the shared StakeVault dependency
+     *      separately.
      * @param _attestationVerifier Initial verifier for signed chargeback evidence.
      * @param _nullifierRegistry Registry binding verified payment nullifiers to fulfilled intents.
      */
     constructor(IAttestationVerifier _attestationVerifier, INullifierRegistryV2 _nullifierRegistry)
         EIP712("ZKP2P RiskManager", "1")
     {
-        if (address(_attestationVerifier) == address(0) || address(_nullifierRegistry) == address(0)) {
-            revert ZeroAddress();
-        }
-        if (address(_attestationVerifier).code.length == 0) {
-            revert InvalidContract(address(_attestationVerifier));
-        }
-        if (address(_nullifierRegistry).code.length == 0) {
-            revert InvalidContract(address(_nullifierRegistry));
-        }
-
         attestationVerifier = _attestationVerifier;
         nullifierRegistry = _nullifierRegistry;
     }

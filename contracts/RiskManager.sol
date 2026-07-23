@@ -92,8 +92,8 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
 
     /**
      * @notice Creates the single coordinator for one Orchestrator and StakeVault.
-     * @dev Dependencies must be non-zero deployed contracts. The attestation verifier may be the same verifier used by
-     *      the unified payment verifier.
+     * @dev Deployment is responsible for supplying the intended dependencies. The attestation verifier may be the same
+     *      verifier used by the unified payment verifier.
      * @param _owner Governance owner allowed to configure future risk policy.
      * @param _orchestratorContract Canonical intent lifecycle source.
      * @param _stakeVaultContract Shared custody and accounting ledger controlled by this contract after handover.
@@ -107,19 +107,6 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
         IAttestationVerifier _attestationVerifier,
         INullifierRegistryV2 _nullifierRegistry
     ) ChargebackManager(_attestationVerifier, _nullifierRegistry) {
-        if (
-            _owner == address(0) || address(_orchestratorContract) == address(0)
-                || address(_stakeVaultContract) == address(0)
-        ) {
-            revert ZeroAddress();
-        }
-        if (address(_orchestratorContract).code.length == 0) {
-            revert InvalidContract(address(_orchestratorContract));
-        }
-        if (address(_stakeVaultContract).code.length == 0) {
-            revert InvalidContract(address(_stakeVaultContract));
-        }
-
         orchestrator = _orchestratorContract;
         stakeVault = _stakeVaultContract;
         _transferOwnership(_owner);

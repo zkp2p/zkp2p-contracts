@@ -126,7 +126,7 @@ abstract contract IntentExtensionManager is IRiskManager {
      *
      *      The first purchase snapshots the taker's currently selected stake owner. The taker may purchase subsequent
      *      time only while that selection remains current; the snapshotted owner may always add exposure backed by its
-     *      own stake. Canonical Orchestrator and Escrow state is re-read because this path is user callable.
+     *      own stake. Live records are read only to locate the active extension target and reject expired intents.
      *
      *      Cumulative pricing locks only the incremental amount. The Vault update, Escrow expiry extension, and local
      *      accounting occur atomically, so a downstream failure rolls back the entire purchase.
@@ -154,8 +154,7 @@ abstract contract IntentExtensionManager is IRiskManager {
         address currentStakeOwner = vault.stakeOwnerOf(_taker);
         address extensionStakeOwner = _authorizeIntentExtension(position, _taker, currentStakeOwner);
 
-        (IEscrowV2 escrow, uint256 depositId, uint64 currentExpiry) =
-            _validateLiveIntent(_intentHash, _taker, _paymentMethod, _createdAt, _intentAmount, position);
+        (IEscrowV2 escrow, uint256 depositId, uint64 currentExpiry) = _getLiveExtensionTarget(_intentHash);
 
         (uint64 newTotalExtensionTime, uint64 newExpiry) =
             _calculateUpdatedExpiry(position, _additionalTime, currentExpiry, _createdAt);
@@ -206,42 +205,28 @@ abstract contract IntentExtensionManager is IRiskManager {
     }
 
     /**
-     * @dev Confirms that the publicly referenced intent is still the exact active Orchestrator and Escrow intent
-     *      admitted by the coordinator. The local purchased-time accumulator must equal the live Escrow expiry.
+     * @dev Locates the immutable Escrow route for an active Orchestrator intent and reads its live expiry. Immutable
+     *      intent fields are not revalidated. The Escrow existence check covers the short orphan window before
+     *      Orchestrator cleanup, while the expiry check prevents resurrection because Escrow permits extending an
+     *      expired intent that has not yet been pruned.
      */
-    function _validateLiveIntent(
-        bytes32 _intentHash,
-        address _taker,
-        bytes32 _paymentMethod,
-        uint64 _createdAt,
-        uint256 _intentAmount,
-        IntentExtensionPosition storage _position
-    ) private view returns (IEscrowV2 escrow, uint256 depositId, uint64 currentExpiry) {
+    function _getLiveExtensionTarget(bytes32 _intentHash)
+        private
+        view
+        returns (IEscrowV2 escrow, uint256 depositId, uint64 currentExpiry)
+    {
         IOrchestratorV3.RiskIntentData memory intent = _orchestrator().getRiskIntent(_intentHash);
-        if (
-            intent.owner != _taker || intent.paymentMethod != _paymentMethod || intent.createdAt != _createdAt
-                || intent.amount != _intentAmount || intent.escrow == address(0)
-        ) {
-            revert IntentStateMismatch(_intentHash);
-        }
+        if (intent.escrow == address(0)) revert IntentStateMismatch(_intentHash);
 
         escrow = IEscrowV2(intent.escrow);
         depositId = intent.depositId;
         IEscrowV2.Intent memory escrowIntent = escrow.getDepositIntent(depositId, _intentHash);
-        if (
-            escrowIntent.intentHash != _intentHash || escrowIntent.timestamp != _createdAt
-                || escrowIntent.amount != _intentAmount
-        ) {
-            revert IntentStateMismatch(_intentHash);
-        }
+        if (escrowIntent.intentHash != _intentHash) revert IntentStateMismatch(_intentHash);
 
         currentExpiry = _toExtensionTimestamp(escrowIntent.expiryTime);
         uint64 currentTime = _currentExtensionTimestamp();
         if (currentTime >= currentExpiry) {
             revert IntentAlreadyExpired(_intentHash, currentExpiry, currentTime);
-        }
-        if (currentExpiry != uint256(_position.baseIntentExpiry) + _position.totalExtensionTime) {
-            revert IntentStateMismatch(_intentHash);
         }
     }
 

@@ -2,13 +2,8 @@
 
 pragma solidity ^0.8.18;
 
-import {RiskManager} from "../../../contracts/RiskManager.sol";
-import {IAttestationVerifier} from "../../../contracts/interfaces/IAttestationVerifier.sol";
 import {IIntentRiskHook} from "../../../contracts/interfaces/IIntentRiskHook.sol";
-import {INullifierRegistryV2} from "../../../contracts/interfaces/INullifierRegistryV2.sol";
-import {IOrchestratorV3} from "../../../contracts/interfaces/IOrchestratorV3.sol";
 import {IRiskManager} from "../../../contracts/interfaces/IRiskManager.sol";
-import {IStakeVault} from "../../../contracts/interfaces/IStakeVault.sol";
 import {NullifierRegistry} from "../../../contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "../../../contracts/registries/NullifierRegistryV2.sol";
 import {OrchestratorRegistry} from "../../../contracts/registries/OrchestratorRegistry.sol";
@@ -17,74 +12,6 @@ import {UnifiedPaymentVerifierV3} from "../../../contracts/unifiedVerifier/Unifi
 import {RiskAttestationVerifierMock, RiskManagerFixture} from "../helpers/RiskManagerFixture.sol";
 
 contract RiskManagerValidationTest is RiskManagerFixture {
-    function test_ConstructorRejectsZeroAndNonContractDependencies() public {
-        vm.expectRevert(IRiskManager.ZeroAddress.selector);
-        new RiskManager(
-            address(0),
-            IOrchestratorV3(address(orchestrator)),
-            vault,
-            verifier,
-            INullifierRegistryV2(address(nullifierRegistry))
-        );
-
-        vm.expectRevert(IRiskManager.ZeroAddress.selector);
-        new RiskManager(
-            owner, IOrchestratorV3(address(0)), vault, verifier, INullifierRegistryV2(address(nullifierRegistry))
-        );
-
-        vm.expectRevert(IRiskManager.ZeroAddress.selector);
-        new RiskManager(
-            owner,
-            IOrchestratorV3(address(orchestrator)),
-            IStakeVault(address(0)),
-            verifier,
-            INullifierRegistryV2(address(nullifierRegistry))
-        );
-
-        vm.expectRevert(IRiskManager.ZeroAddress.selector);
-        new RiskManager(
-            owner,
-            IOrchestratorV3(address(orchestrator)),
-            vault,
-            IAttestationVerifier(address(0)),
-            INullifierRegistryV2(address(nullifierRegistry))
-        );
-
-        vm.expectRevert(IRiskManager.ZeroAddress.selector);
-        new RiskManager(
-            owner, IOrchestratorV3(address(orchestrator)), vault, verifier, INullifierRegistryV2(address(0))
-        );
-
-        address nonContract = makeAddr("nonContract");
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.InvalidContract.selector, nonContract));
-        new RiskManager(
-            owner, IOrchestratorV3(nonContract), vault, verifier, INullifierRegistryV2(address(nullifierRegistry))
-        );
-
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.InvalidContract.selector, nonContract));
-        new RiskManager(
-            owner,
-            IOrchestratorV3(address(orchestrator)),
-            IStakeVault(nonContract),
-            verifier,
-            INullifierRegistryV2(address(nullifierRegistry))
-        );
-
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.InvalidContract.selector, nonContract));
-        new RiskManager(
-            owner,
-            IOrchestratorV3(address(orchestrator)),
-            vault,
-            IAttestationVerifier(nonContract),
-            INullifierRegistryV2(address(nullifierRegistry))
-        );
-
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.InvalidContract.selector, nonContract));
-        new RiskManager(
-            owner, IOrchestratorV3(address(orchestrator)), vault, verifier, INullifierRegistryV2(nonContract)
-        );
-    }
-
     function test_RiskAndPaymentVerificationShareVerifierWithoutCrossDomainReplay() public {
         uint256 witnessKey = 0xA11CE;
         SimpleAttestationVerifier sharedVerifier = new SimpleAttestationVerifier(vm.addr(witnessKey));
@@ -181,7 +108,7 @@ contract RiskManagerValidationTest is RiskManagerFixture {
         orchestrator.admit(manager, intentHash);
     }
 
-    function test_ExtensionRejectsEveryStaleIntentShape() public {
+    function test_ExtensionRejectsInvalidPublicRequests() public {
         bytes32 zeroAmountIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
         vm.prank(taker);
         vm.expectRevert(IRiskManager.ZeroAmount.selector);
@@ -191,41 +118,12 @@ contract RiskManagerValidationTest is RiskManagerFixture {
         vm.expectPartialRevert(IRiskManager.PositionNotPending.selector);
         manager.extendIntent(unknownIntent, 1 hours);
 
-        bytes32 ownerMismatchIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        IRiskManager.RiskPosition memory ownerMismatchPosition = manager.getRiskPosition(ownerMismatchIntent);
-        orchestrator.setIntent(
-            ownerMismatchIntent,
-            makeAddr("replacementTaker"),
-            payoutRecipient,
-            address(escrow),
-            INTENT_AMOUNT,
-            PAYMENT_METHOD,
-            ownerMismatchPosition.createdAt
-        );
-        vm.prank(taker);
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.IntentStateMismatch.selector, ownerMismatchIntent));
-        manager.extendIntent(ownerMismatchIntent, 1 hours);
-
-        bytes32 timestampMismatchIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        IRiskManager.RiskPosition memory timestampMismatchPosition = manager.getRiskPosition(timestampMismatchIntent);
-        escrow.setIntent(timestampMismatchIntent, INTENT_AMOUNT, timestampMismatchPosition.createdAt + 1);
-        vm.prank(taker);
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.IntentStateMismatch.selector, timestampMismatchIntent));
-        manager.extendIntent(timestampMismatchIntent, 1 hours);
-
         bytes32 expiredIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
         IRiskManager.RiskPosition memory expiredPosition = manager.getRiskPosition(expiredIntent);
         vm.warp(expiredPosition.baseIntentExpiry);
         vm.prank(taker);
         vm.expectPartialRevert(IRiskManager.IntentAlreadyExpired.selector);
         manager.extendIntent(expiredIntent, 1 hours);
-
-        bytes32 expiryMismatchIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        IRiskManager.RiskPosition memory expiryMismatchPosition = manager.getRiskPosition(expiryMismatchIntent);
-        escrow.setIntentExpiry(expiryMismatchIntent, uint256(expiryMismatchPosition.baseIntentExpiry) + 1);
-        vm.prank(taker);
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.IntentStateMismatch.selector, expiryMismatchIntent));
-        manager.extendIntent(expiryMismatchIntent, 1 hours);
     }
 
     function test_BatchCancellationAndMaturityValidateAndProcessEveryPosition() public {
