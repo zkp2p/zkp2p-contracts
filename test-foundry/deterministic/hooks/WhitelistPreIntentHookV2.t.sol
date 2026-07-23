@@ -329,4 +329,263 @@ contract WhitelistPreIntentHookV2Test is Test {
         vm.prank(taker);
         hook.validateSignalIntent(context);
     }
+    /* ============ group attachment ============ */
+
+    function _newGroup(address groupOwner) internal returns (uint256 groupId) {
+        vm.prank(groupOwner);
+        groupId = groupRegistry.createGroup("g");
+    }
+
+    function _attach(address caller, uint256[] memory ids) internal {
+        vm.prank(caller);
+        hook.attachGroups(address(escrow), 0, ids);
+    }
+
+    function _detach(address caller, uint256[] memory ids) internal {
+        vm.prank(caller);
+        hook.detachGroups(address(escrow), 0, ids);
+    }
+
+    function test_DepositorAttachesGroupAndEmits() public {
+        uint256 groupId = _newGroup(depositor);
+        vm.expectEmit(true, true, true, true, address(hook));
+        emit GroupAttached(address(escrow), 0, groupId);
+        _attach(depositor, _groupIds(groupId));
+        assertTrue(hook.isGroupAttached(address(escrow), 0, groupId));
+        uint256[] memory attached = hook.getAttachedGroups(address(escrow), 0);
+        assertEq(attached.length, 1);
+        assertEq(attached[0], groupId);
+    }
+
+    function test_DelegateCanAttachGroups() public {
+        uint256 groupId = _newGroup(depositor);
+        _attach(delegate, _groupIds(groupId));
+        assertTrue(hook.isGroupAttached(address(escrow), 0, groupId));
+    }
+
+    function test_UnauthorizedCannotAttachGroups() public {
+        uint256 groupId = _newGroup(depositor);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                WhitelistPreIntentHookV2.UnauthorizedCallerOrDelegate.selector, unauthorized, depositor, delegate
+            )
+        );
+        _attach(unauthorized, _groupIds(groupId));
+    }
+
+    function test_AttachNonexistentGroupReverts() public {
+        vm.expectRevert(abi.encodeWithSelector(WhitelistPreIntentHookV2.GroupDoesNotExist.selector, 42));
+        _attach(depositor, _groupIds(42));
+    }
+
+    function test_AttachGroupZeroReverts() public {
+        vm.expectRevert(abi.encodeWithSelector(WhitelistPreIntentHookV2.GroupDoesNotExist.selector, 0));
+        _attach(depositor, _groupIds(0));
+    }
+
+    function test_AttachEmptyArrayReverts() public {
+        vm.expectRevert(WhitelistPreIntentHookV2.EmptyArray.selector);
+        _attach(depositor, new uint256[](0));
+    }
+
+    function test_NonexistentIdInBatchRevertsWholeAttach() public {
+        uint256 valid = _newGroup(depositor);
+        uint256[] memory mixed = new uint256[](2);
+        mixed[0] = valid;
+        mixed[1] = 999; // nonexistent
+        vm.expectRevert(abi.encodeWithSelector(WhitelistPreIntentHookV2.GroupDoesNotExist.selector, 999));
+        _attach(depositor, mixed);
+        assertFalse(hook.isGroupAttached(address(escrow), 0, valid)); // earlier element rolled back
+    }
+
+    function test_DetachEmptyArrayReverts() public {
+        vm.expectRevert(WhitelistPreIntentHookV2.EmptyArray.selector);
+        _detach(depositor, new uint256[](0));
+    }
+
+    function test_AttachAlreadyAttachedIsNoOpWithoutEvent() public {
+        uint256 groupId = _newGroup(depositor);
+        _attach(depositor, _groupIds(groupId));
+        vm.recordLogs();
+        _attach(depositor, _groupIds(groupId));
+        assertEq(vm.getRecordedLogs().length, 0);
+        assertEq(hook.getAttachedGroups(address(escrow), 0).length, 1);
+    }
+
+    function test_DetachAbsentGroupIsNoOpWithoutEvent() public {
+        vm.recordLogs();
+        _detach(depositor, _groupIds(7));
+        assertEq(vm.getRecordedLogs().length, 0);
+    }
+
+    function test_DetachGroupZeroIsNoOp() public {
+        vm.recordLogs();
+        _detach(depositor, _groupIds(0));
+        assertEq(vm.getRecordedLogs().length, 0);
+    }
+
+    function test_MaxGroupsCapEnforced() public {
+        uint256[] memory ids = new uint256[](11);
+        for (uint256 i = 0; i < 11; i++) {
+            ids[i] = _newGroup(depositor);
+        }
+        uint256[] memory firstTen = new uint256[](10);
+        for (uint256 i = 0; i < 10; i++) {
+            firstTen[i] = ids[i];
+        }
+        _attach(depositor, firstTen);
+        vm.expectRevert(abi.encodeWithSelector(WhitelistPreIntentHookV2.MaxGroupsExceeded.selector, 11, 10));
+        _attach(depositor, _groupIds(ids[10]));
+    }
+
+    function test_DetachSwapAndPopKeepsIndexIntegrity() public {
+        uint256 a = _newGroup(depositor);
+        uint256 b = _newGroup(depositor);
+        uint256 c = _newGroup(depositor);
+        uint256[] memory all = new uint256[](3);
+        all[0] = a; all[1] = b; all[2] = c;
+        _attach(depositor, all);
+
+        vm.expectEmit(true, true, true, true, address(hook));
+        emit GroupDetached(address(escrow), 0, a);
+        _detach(depositor, _groupIds(a));
+
+        uint256[] memory attached = hook.getAttachedGroups(address(escrow), 0);
+        assertEq(attached.length, 2);
+        assertEq(attached[0], c); // last element swapped into a's slot
+        assertEq(attached[1], b);
+        assertFalse(hook.isGroupAttached(address(escrow), 0, a));
+        assertTrue(hook.isGroupAttached(address(escrow), 0, b));
+        assertTrue(hook.isGroupAttached(address(escrow), 0, c));
+
+        // detach the (moved) last element too
+        _detach(depositor, _groupIds(b));
+        attached = hook.getAttachedGroups(address(escrow), 0);
+        assertEq(attached.length, 1);
+        assertEq(attached[0], c);
+    }
+
+    function test_DetachedGroupCanBeReattached() public {
+        uint256 groupId = _newGroup(depositor);
+        _attach(depositor, _groupIds(groupId));
+        _detach(depositor, _groupIds(groupId));
+        _attach(depositor, _groupIds(groupId));
+        assertTrue(hook.isGroupAttached(address(escrow), 0, groupId));
+    }
+
+    /* ============ validateSignalIntent — group path ============ */
+
+    function test_CuratedGroupMemberCanSignal() public {
+        uint256 groupId = _newGroup(depositor);
+        vm.prank(depositor);
+        groupRegistry.addMembers(groupId, _address(taker));
+        _attach(depositor, _groupIds(groupId));
+        _signalCall();
+        assertEq(orchestrator.getAccountIntents(taker).length, 1);
+    }
+
+    function test_ThirdPartyGroupMemberCanSignal() public {
+        address thirdParty = makeAddr("thirdParty");
+        uint256 groupId = _newGroup(thirdParty);
+        vm.prank(thirdParty);
+        groupRegistry.addMembers(groupId, _address(taker));
+        _attach(depositor, _groupIds(groupId));
+        _signalCall();
+        assertEq(orchestrator.getAccountIntents(taker).length, 1);
+    }
+
+    function test_ResolverGroupMemberCanSignal() public {
+        uint256 groupId = _newGroup(depositor);
+        vm.prank(depositor);
+        groupRegistry.setResolver(groupId, address(resolverMock));
+        resolverMock.setMemberOf(groupId, taker, true);
+        _attach(depositor, _groupIds(groupId));
+        _signalCall();
+        assertEq(orchestrator.getAccountIntents(taker).length, 1);
+    }
+
+    function test_NonMemberOfAttachedGroupsCannotSignal() public {
+        uint256 groupId = _newGroup(depositor);
+        _attach(depositor, _groupIds(groupId));
+        _expectNotWhitelistedRevert();
+        _signalCall();
+    }
+
+    function test_MatchInLastOfTenGroupsSignals() public {
+        uint256[] memory ids = new uint256[](10);
+        for (uint256 i = 0; i < 10; i++) {
+            ids[i] = _newGroup(depositor);
+        }
+        _attach(depositor, ids);
+        vm.prank(depositor);
+        groupRegistry.addMembers(ids[9], _address(taker));
+        _signalCall();
+        assertEq(orchestrator.getAccountIntents(taker).length, 1);
+    }
+
+    function test_MatchInMiddleOfTenGroupsSignals() public {
+        uint256[] memory ids = new uint256[](10);
+        for (uint256 i = 0; i < 10; i++) {
+            ids[i] = _newGroup(depositor);
+        }
+        _attach(depositor, ids);
+        vm.prank(depositor);
+        groupRegistry.addMembers(ids[5], _address(taker));
+        _signalCall();
+        assertEq(orchestrator.getAccountIntents(taker).length, 1);
+    }
+
+    function test_DirectMatchShortCircuitsWithoutRegistryCalls() public {
+        uint256 groupId = _newGroup(depositor);
+        _attach(depositor, _groupIds(groupId));
+        _add(depositor, _address(taker));
+        vm.expectCall(address(groupRegistry), abi.encodeCall(groupRegistry.isMember, (groupId, taker)), 0);
+        _signalCall();
+        assertEq(orchestrator.getAccountIntents(taker).length, 1);
+    }
+
+    function test_GroupMatchShortCircuitsLaterGroupResolvers() public {
+        uint256 first = _newGroup(depositor);
+        uint256 second = _newGroup(depositor);
+        vm.prank(depositor);
+        groupRegistry.addMembers(first, _address(taker));
+        vm.prank(depositor);
+        groupRegistry.setResolver(second, address(resolverMock));
+        uint256[] memory both = new uint256[](2);
+        both[0] = first; both[1] = second;
+        _attach(depositor, both);
+        // match in the first group must not query the second group at all
+        vm.expectCall(address(groupRegistry), abi.encodeCall(groupRegistry.isMember, (second, taker)), 0);
+        vm.expectCall(address(resolverMock), abi.encodeCall(resolverMock.isMember, (second, taker)), 0);
+        _signalCall();
+        assertEq(orchestrator.getAccountIntents(taker).length, 1);
+    }
+
+    function test_RevertingResolverInEarlierGroupDoesNotBlockLaterGroupMatch() public {
+        uint256 broken = _newGroup(depositor);
+        uint256 good = _newGroup(depositor);
+        vm.prank(depositor);
+        groupRegistry.setResolver(broken, address(resolverMock));
+        resolverMock.setMode(WhitelistResolverMock.Mode.Revert);
+        vm.prank(depositor);
+        groupRegistry.addMembers(good, _address(taker));
+        uint256[] memory both = new uint256[](2);
+        both[0] = broken; both[1] = good;
+        _attach(depositor, both);
+        _signalCall();
+        assertEq(orchestrator.getAccountIntents(taker).length, 1);
+    }
+
+    function test_IsAllowedTakerMatchesValidateSemantics() public {
+        uint256 groupId = _newGroup(depositor);
+        _attach(depositor, _groupIds(groupId));
+        assertFalse(hook.isAllowedTaker(address(escrow), 0, taker));
+        vm.prank(depositor);
+        groupRegistry.addMembers(groupId, _address(taker));
+        assertTrue(hook.isAllowedTaker(address(escrow), 0, taker));
+        _detach(depositor, _groupIds(groupId));
+        assertFalse(hook.isAllowedTaker(address(escrow), 0, taker));
+        _add(depositor, _address(taker));
+        assertTrue(hook.isAllowedTaker(address(escrow), 0, taker));
+    }
 }

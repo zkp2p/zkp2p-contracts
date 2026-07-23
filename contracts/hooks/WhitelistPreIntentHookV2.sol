@@ -127,6 +127,61 @@ contract WhitelistPreIntentHookV2 is IPreIntentHook {
         revert TakerNotWhitelisted(_ctx.taker, _ctx.escrow, _ctx.depositId);
     }
 
+    /**
+     * @notice Attaches groups to a deposit. Idempotent: already-attached ids are skipped
+     * (no event). Validates each group exists in the registry (input validation only — not a
+     * trust guarantee about the group's governance).
+     * @param _escrow      Escrow address.
+     * @param _depositId   Deposit id.
+     * @param _groupIds    Group ids to attach (max MAX_GROUPS_PER_DEPOSIT attached in total).
+     */
+    function attachGroups(address _escrow, uint256 _depositId, uint256[] calldata _groupIds) external {
+        if (_escrow == address(0)) revert ZeroAddress();
+        if (_groupIds.length == 0) revert EmptyArray();
+
+        _validateDepositorOrDelegate(_escrow, _depositId);
+
+        uint256[] storage attached = attachedGroups[_escrow][_depositId];
+        for (uint256 i = 0; i < _groupIds.length; i++) {
+            uint256 groupId = _groupIds[i];
+            if (!groupRegistry.groupExists(groupId)) revert GroupDoesNotExist(groupId);
+            if (attachedGroupIndexPlusOne[_escrow][_depositId][groupId] != 0) continue;
+            if (attached.length >= MAX_GROUPS_PER_DEPOSIT) {
+                revert MaxGroupsExceeded(attached.length + 1, MAX_GROUPS_PER_DEPOSIT);
+            }
+            attached.push(groupId);
+            attachedGroupIndexPlusOne[_escrow][_depositId][groupId] = attached.length;
+            emit GroupAttached(_escrow, _depositId, groupId);
+        }
+    }
+
+    /**
+     * @notice Detaches groups from a deposit. Idempotent: ids not currently attached are
+     * skipped (no event). Detachment does not invalidate already-signaled intents.
+     * @param _escrow      Escrow address.
+     * @param _depositId   Deposit id.
+     * @param _groupIds    Group ids to detach.
+     */
+    function detachGroups(address _escrow, uint256 _depositId, uint256[] calldata _groupIds) external {
+        if (_escrow == address(0)) revert ZeroAddress();
+        if (_groupIds.length == 0) revert EmptyArray();
+
+        _validateDepositorOrDelegate(_escrow, _depositId);
+
+        uint256[] storage attached = attachedGroups[_escrow][_depositId];
+        for (uint256 i = 0; i < _groupIds.length; i++) {
+            uint256 groupId = _groupIds[i];
+            uint256 indexPlusOne = attachedGroupIndexPlusOne[_escrow][_depositId][groupId];
+            if (indexPlusOne == 0) continue;
+
+            uint256 lastId = attached[attached.length - 1];
+            attached[indexPlusOne - 1] = lastId;
+            attachedGroupIndexPlusOne[_escrow][_depositId][lastId] = indexPlusOne;
+            attached.pop();
+            delete attachedGroupIndexPlusOne[_escrow][_depositId][groupId];
+            emit GroupDetached(_escrow, _depositId, groupId);
+        }
+    }
     /* ============ External View Functions ============ */
 
     /**
@@ -139,6 +194,41 @@ contract WhitelistPreIntentHookV2 is IPreIntentHook {
         return whitelist[_escrow][_depositId][_taker];
     }
 
+    /**
+     * @notice Returns all group ids attached to a deposit.
+     * @param _escrow      Escrow address.
+     * @param _depositId   Deposit id.
+     */
+    function getAttachedGroups(address _escrow, uint256 _depositId) external view returns (uint256[] memory) {
+        return attachedGroups[_escrow][_depositId];
+    }
+
+    /**
+     * @notice Returns whether a group is attached to a deposit.
+     * @param _escrow      Escrow address.
+     * @param _depositId   Deposit id.
+     * @param _groupId     Group id.
+     */
+    function isGroupAttached(address _escrow, uint256 _depositId, uint256 _groupId) external view returns (bool) {
+        return attachedGroupIndexPlusOne[_escrow][_depositId][_groupId] != 0;
+    }
+
+    /**
+     * @notice Full effective admission check — same semantics as validateSignalIntent without
+     * the orchestrator gate or revert.
+     * @param _escrow      Escrow address.
+     * @param _depositId   Deposit id.
+     * @param _taker       Taker address to check.
+     */
+    function isAllowedTaker(address _escrow, uint256 _depositId, address _taker) external view returns (bool) {
+        if (whitelist[_escrow][_depositId][_taker]) return true;
+
+        uint256[] storage groupIds = attachedGroups[_escrow][_depositId];
+        for (uint256 i = 0; i < groupIds.length; i++) {
+            if (groupRegistry.isMember(groupIds[i], _taker)) return true;
+        }
+        return false;
+    }
     /* ============ Internal Functions ============ */
 
     function _validateDepositorOrDelegate(address _escrow, uint256 _depositId) internal view {
