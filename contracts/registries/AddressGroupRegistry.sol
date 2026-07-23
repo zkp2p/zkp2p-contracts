@@ -218,11 +218,21 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
     }
 
     /**
-     * @dev Task 2 replaces this stub with the hardened staticcall. Curated-only until then.
+     * @dev Invokes the resolver with a fixed gas stipend and bounded returndata handling.
+     * Uses the 0x00-0x3f scratch space as the 32-byte output buffer; never copies
+     * attacker-controlled returndata sizes. Success requires the call to succeed, at least
+     * 32 bytes of returndata, and the first word to be exactly 1. Any failure (revert,
+     * out-of-gas, short or malformed return, no code at call time) evaluates to false.
      */
-    function _resolverSaysYes(address _resolver, uint256 _groupId, address _account) internal view returns (bool) {
-        _resolver; _groupId; _account;
-        return false;
+    function _resolverSaysYes(address _resolver, uint256 _groupId, address _account) internal view returns (bool result) {
+        bytes memory callData = abi.encodeWithSelector(IWhitelistResolver.isMember.selector, _groupId, _account);
+        uint256 gasLimit = _resolverGasLimit();
+        assembly ("memory-safe") {
+            let success := staticcall(gasLimit, _resolver, add(callData, 0x20), mload(callData), 0x00, 0x20)
+            if and(success, gt(returndatasize(), 0x1f)) {
+                result := eq(mload(0x00), 1)
+            }
+        }
     }
 
     /**
