@@ -51,20 +51,16 @@ contract RiskManagerHarness is RiskManager {
         INullifierRegistryV2 _nullifierRegistry
     ) RiskManager(_owner, _orchestrator, _stakeVault, _attestationVerifier, _nullifierRegistry) {}
 
-    function setPositionStakeOwner(bytes32 _intentHash, address _stakeOwner) external {
-        riskPositions[_intentHash].stakeOwner = _stakeOwner;
-    }
-
     function setPositionCoverageAmount(bytes32 _intentHash, uint256 _coverageAmount) external {
-        riskPositions[_intentHash].coverageAmount = _coverageAmount;
+        chargebackPositions[_intentHash].coverageAmount = _coverageAmount;
     }
 
     function setPositionTotalExtensionTime(bytes32 _intentHash, uint64 _totalExtensionTime) external {
-        riskPositions[_intentHash].totalExtensionTime = _totalExtensionTime;
+        intentExtensionPositions[_intentHash].totalExtensionTime = _totalExtensionTime;
     }
 
     function setPositionMode(bytes32 _intentHash, RiskMode _mode) external {
-        riskPositions[_intentHash].mode = _mode;
+        chargebackPositions[_intentHash].mode = _mode;
     }
 }
 
