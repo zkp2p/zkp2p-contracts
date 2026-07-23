@@ -252,6 +252,15 @@ contract WhitelistPreIntentHookV2Test is Test {
         vm.expectRevert(WhitelistPreIntentHookV2.ZeroAddress.selector);
         vm.prank(depositor);
         hook.addToWhitelist(address(0), 0, _address(taker));
+        vm.expectRevert(WhitelistPreIntentHookV2.ZeroAddress.selector);
+        vm.prank(depositor);
+        hook.removeFromWhitelist(address(0), 0, _address(taker));
+        vm.expectRevert(WhitelistPreIntentHookV2.ZeroAddress.selector);
+        vm.prank(depositor);
+        hook.attachGroups(address(0), 0, _groupIds(0));
+        vm.expectRevert(WhitelistPreIntentHookV2.ZeroAddress.selector);
+        vm.prank(depositor);
+        hook.detachGroups(address(0), 0, _groupIds(0));
     }
 
     function test_EmptyBatchReverts() public {

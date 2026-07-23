@@ -147,6 +147,12 @@ contract AddressGroupRegistryTest is Test {
         assertEq(pendingOwner, address(0));
     }
 
+    function test_CannotAcceptOwnershipOfNonexistentGroup() public {
+        uint256 groupId = 42;
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.GroupDoesNotExist.selector, groupId));
+        registry.acceptGroupOwnership(groupId);
+    }
+
     function test_NonPendingOwnerCannotAccept() public {
         uint256 groupId = _createGroup(alice);
         vm.prank(alice);
