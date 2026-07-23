@@ -21,6 +21,31 @@ interface IStakeVault {
         uint256 amount;
     }
 
+    error ZeroAddress();
+    error ZeroAmount();
+    error ZeroLockId();
+    error InvalidControllerChangeDelay(uint64 suppliedDelay);
+    error ControllerAlreadyInitialized(address controller);
+    error ControllerInitializationWithLiabilities(uint256 totalStaked, uint256 totalClaimable);
+    error UnauthorizedController(address caller);
+    error UnauthorizedPendingController(address caller, address pendingController);
+    error NoPendingController();
+    error ControllerProposalNotReady(uint64 validAt, uint64 currentTime);
+    error InvalidTaker(address taker);
+    error UnauthorizedStakeOwner(address taker, address stakeOwner);
+    error InvalidMaturity(uint64 maturity, uint64 currentTime);
+    error LockAlreadyExists(bytes32 lockId);
+    error LockNotFound(bytes32 lockId);
+    error LockAlreadyMatured(bytes32 lockId, uint64 maturesAt, uint64 currentTime);
+    error InvalidLockAmount(uint256 newAmount, uint256 currentAmount);
+    error InsufficientFreeStake(address stakeOwner, uint256 available, uint256 required);
+    error InsufficientUnaccountedTokens(uint256 available, uint256 required);
+    error InvalidReceivedAmount(uint256 expected, uint256 received);
+    error InvalidClaim(address beneficiary, uint256 amount);
+    error ClaimsExceedLock(uint256 lockAmount, uint256 claimsAmount);
+    error TimestampOverflow(uint256 timestamp);
+    error OwnershipRenunciationDisabled();
+
     event StakeDeposited(address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
     event StakeWithdrawn(address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);
     event TakerAuthorizationUpdated(address indexed stakeOwner, address indexed taker, bool authorized);

@@ -82,13 +82,13 @@ contract StakeVaultTest is Test {
     }
 
     function test_ConstructorRejectsInvalidConfiguration() public {
-        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vm.expectRevert(IStakeVault.ZeroAddress.selector);
         new StakeVault(address(0), token, controller, CONTROLLER_DELAY);
 
-        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vm.expectRevert(IStakeVault.ZeroAddress.selector);
         new StakeVault(address(this), IERC20(address(0)), controller, CONTROLLER_DELAY);
 
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.InvalidControllerChangeDelay.selector, CONTROLLER_DELAY - 1));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InvalidControllerChangeDelay.selector, CONTROLLER_DELAY - 1));
         new StakeVault(address(this), token, controller, CONTROLLER_DELAY - 1);
     }
 
@@ -98,7 +98,7 @@ contract StakeVaultTest is Test {
         uninitializedVault.initializeController(controller);
         assertEq(uninitializedVault.controller(), controller);
 
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.ControllerAlreadyInitialized.selector, controller));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.ControllerAlreadyInitialized.selector, controller));
         uninitializedVault.initializeController(nextController);
     }
 
@@ -109,7 +109,7 @@ contract StakeVaultTest is Test {
         vm.prank(safeA);
         uninitializedVault.depositStake(100e6);
 
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.ControllerInitializationWithLiabilities.selector, 100e6, 0));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.ControllerInitializationWithLiabilities.selector, 100e6, 0));
         uninitializedVault.initializeController(controller);
 
         vm.prank(safeA);
@@ -128,7 +128,7 @@ contract StakeVaultTest is Test {
         assertEq(vault.owner(), safeA);
         assertEq(vault.pendingOwner(), address(0));
 
-        vm.expectRevert(StakeVault.OwnershipRenunciationDisabled.selector);
+        vm.expectRevert(IStakeVault.OwnershipRenunciationDisabled.selector);
         vm.prank(safeA);
         vault.renounceOwnership();
     }
@@ -156,7 +156,7 @@ contract StakeVaultTest is Test {
         StakeVault feeVault = new StakeVault(address(this), feeToken, controller, CONTROLLER_DELAY);
         feeToken.approve(address(feeVault), type(uint256).max);
 
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.InvalidReceivedAmount.selector, 100e6, 99e6));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InvalidReceivedAmount.selector, 100e6, 99e6));
         feeVault.depositStake(100e6);
         assertEq(feeToken.balanceOf(address(feeVault)), 0);
     }
@@ -175,15 +175,15 @@ contract StakeVaultTest is Test {
     }
 
     function test_ZeroValueUserActionsRevert() public {
-        vm.expectRevert(StakeVault.ZeroAmount.selector);
+        vm.expectRevert(IStakeVault.ZeroAmount.selector);
         vm.prank(safeA);
         vault.depositStake(0);
 
-        vm.expectRevert(StakeVault.ZeroAmount.selector);
+        vm.expectRevert(IStakeVault.ZeroAmount.selector);
         vm.prank(safeA);
         vault.withdrawStake(0);
 
-        vm.expectRevert(StakeVault.ZeroAmount.selector);
+        vm.expectRevert(IStakeVault.ZeroAmount.selector);
         vm.prank(safeA);
         vault.claim();
     }
@@ -238,7 +238,7 @@ contract StakeVaultTest is Test {
     }
 
     function test_TakerCannotSelectUnauthorizedStakeOwner() public {
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.UnauthorizedStakeOwner.selector, taker, safeA));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.UnauthorizedStakeOwner.selector, taker, safeA));
         vm.prank(taker);
         vault.selectStakeOwner(safeA);
     }
@@ -271,7 +271,7 @@ contract StakeVaultTest is Test {
         assertEq(amount, 300e6);
         assertEq(maturesAt, NEVER_MATURES);
 
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.InsufficientFreeStake.selector, safeA, 200e6, 201e6));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InsufficientFreeStake.selector, safeA, 200e6, 201e6));
         vm.prank(controller);
         vault.lockStake(safeA, keccak256("second-lock"), 201e6, NEVER_MATURES);
     }
@@ -280,21 +280,21 @@ contract StakeVaultTest is Test {
         bytes32 lockId = keccak256("lock");
         _deposit(safeA, 100e6);
 
-        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vm.expectRevert(IStakeVault.ZeroAddress.selector);
         vm.prank(controller);
         vault.lockStake(address(0), lockId, 1, NEVER_MATURES);
 
-        vm.expectRevert(StakeVault.ZeroLockId.selector);
+        vm.expectRevert(IStakeVault.ZeroLockId.selector);
         vm.prank(controller);
         vault.lockStake(safeA, bytes32(0), 1, NEVER_MATURES);
 
-        vm.expectRevert(StakeVault.ZeroAmount.selector);
+        vm.expectRevert(IStakeVault.ZeroAmount.selector);
         vm.prank(controller);
         vault.lockStake(safeA, lockId, 0, NEVER_MATURES);
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                StakeVault.InvalidMaturity.selector, uint64(block.timestamp), uint64(block.timestamp)
+                IStakeVault.InvalidMaturity.selector, uint64(block.timestamp), uint64(block.timestamp)
             )
         );
         vm.prank(controller);
@@ -302,14 +302,14 @@ contract StakeVaultTest is Test {
 
         vm.prank(controller);
         vault.lockStake(safeA, lockId, 1, NEVER_MATURES);
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.LockAlreadyExists.selector, lockId));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.LockAlreadyExists.selector, lockId));
         vm.prank(controller);
         vault.lockStake(safeA, lockId, 1, NEVER_MATURES);
     }
 
     function test_OnlyControllerCanMutateLocks() public {
         _deposit(safeA, 100e6);
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.UnauthorizedController.selector, safeA));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.UnauthorizedController.selector, safeA));
         vm.prank(safeA);
         vault.lockStake(safeA, keccak256("unauthorized"), 1e6, NEVER_MATURES);
     }
@@ -317,20 +317,20 @@ contract StakeVaultTest is Test {
     function test_MissingLockRevertsEveryMutation() public {
         bytes32 missingLockId = keccak256("missing");
 
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.LockNotFound.selector, missingLockId));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.LockNotFound.selector, missingLockId));
         vm.prank(controller);
         vault.increaseLock(missingLockId, 1);
 
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.LockNotFound.selector, missingLockId));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.LockNotFound.selector, missingLockId));
         vm.prank(controller);
         vault.resizeLock(missingLockId, 1, NEVER_MATURES);
 
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.LockNotFound.selector, missingLockId));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.LockNotFound.selector, missingLockId));
         vm.prank(controller);
         vault.unlockStake(missingLockId);
 
         IStakeVault.Claim[] memory claims = new IStakeVault.Claim[](0);
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.LockNotFound.selector, missingLockId));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.LockNotFound.selector, missingLockId));
         vm.prank(controller);
         vault.resolveLock(missingLockId, claims);
     }
@@ -355,7 +355,7 @@ contract StakeVaultTest is Test {
         vm.warp(maturesAt);
 
         vm.expectRevert(
-            abi.encodeWithSelector(StakeVault.LockAlreadyMatured.selector, finiteLockId, maturesAt, maturesAt)
+            abi.encodeWithSelector(IStakeVault.LockAlreadyMatured.selector, finiteLockId, maturesAt, maturesAt)
         );
         vm.prank(controller);
         vault.increaseLock(finiteLockId, 1e6);
@@ -377,7 +377,7 @@ contract StakeVaultTest is Test {
         assertEq(vault.lockedStake(safeA), 250e6);
         assertEq(vault.freeStake(safeA), 250e6);
 
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.InvalidLockAmount.selector, 251e6, 250e6));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InvalidLockAmount.selector, 251e6, 250e6));
         vm.prank(controller);
         vault.resizeLock(lockId, 251e6, coverageDeadline);
     }
@@ -391,14 +391,14 @@ contract StakeVaultTest is Test {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                StakeVault.InvalidMaturity.selector, uint64(block.timestamp), uint64(block.timestamp)
+                IStakeVault.InvalidMaturity.selector, uint64(block.timestamp), uint64(block.timestamp)
             )
         );
         vm.prank(controller);
         vault.resizeLock(lockId, 50e6, uint64(block.timestamp));
 
         vm.warp(maturesAt);
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.LockAlreadyMatured.selector, lockId, maturesAt, maturesAt));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.LockAlreadyMatured.selector, lockId, maturesAt, maturesAt));
         vm.prank(controller);
         vault.resizeLock(lockId, 50e6, uint64(block.timestamp + 1 days));
     }
@@ -453,7 +453,7 @@ contract StakeVaultTest is Test {
         IStakeVault.Claim[] memory claims = new IStakeVault.Claim[](2);
         claims[0] = IStakeVault.Claim({beneficiary: lp, amount: 50e6});
         claims[1] = IStakeVault.Claim({beneficiary: feeRecipient, amount: 31e6});
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.ClaimsExceedLock.selector, 80e6, 81e6));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.ClaimsExceedLock.selector, 80e6, 81e6));
         vm.prank(controller);
         vault.resolveLock(lockId, claims);
 
@@ -471,12 +471,12 @@ contract StakeVaultTest is Test {
 
         IStakeVault.Claim[] memory claims = new IStakeVault.Claim[](1);
         claims[0] = IStakeVault.Claim({beneficiary: address(0), amount: 1});
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.InvalidClaim.selector, address(0), 1));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InvalidClaim.selector, address(0), 1));
         vm.prank(controller);
         vault.resolveLock(lockId, claims);
 
         claims[0] = IStakeVault.Claim({beneficiary: lp, amount: 0});
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.InvalidClaim.selector, lp, 0));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InvalidClaim.selector, lp, 0));
         vm.prank(controller);
         vault.resolveLock(lockId, claims);
 
@@ -510,7 +510,7 @@ contract StakeVaultTest is Test {
         bytes32 lockId = keccak256("funded-deferred");
         uint64 maturesAt = uint64(block.timestamp + 30 days);
 
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.InsufficientUnaccountedTokens.selector, 0, 100e6));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InsufficientUnaccountedTokens.selector, 0, 100e6));
         vm.prank(controller);
         vault.fundLock(taker, lockId, 100e6, maturesAt);
 
@@ -530,21 +530,21 @@ contract StakeVaultTest is Test {
         bytes32 lockId = keccak256("fund-validation");
         token.transfer(address(vault), 100e6);
 
-        vm.expectRevert(StakeVault.ZeroAddress.selector);
+        vm.expectRevert(IStakeVault.ZeroAddress.selector);
         vm.prank(controller);
         vault.fundLock(address(0), lockId, 1, NEVER_MATURES);
 
-        vm.expectRevert(StakeVault.ZeroLockId.selector);
+        vm.expectRevert(IStakeVault.ZeroLockId.selector);
         vm.prank(controller);
         vault.fundLock(taker, bytes32(0), 1, NEVER_MATURES);
 
-        vm.expectRevert(StakeVault.ZeroAmount.selector);
+        vm.expectRevert(IStakeVault.ZeroAmount.selector);
         vm.prank(controller);
         vault.fundLock(taker, lockId, 0, NEVER_MATURES);
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                StakeVault.InvalidMaturity.selector, uint64(block.timestamp), uint64(block.timestamp)
+                IStakeVault.InvalidMaturity.selector, uint64(block.timestamp), uint64(block.timestamp)
             )
         );
         vm.prank(controller);
@@ -552,7 +552,7 @@ contract StakeVaultTest is Test {
 
         vm.prank(controller);
         vault.fundLock(taker, lockId, 100e6, NEVER_MATURES);
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.LockAlreadyExists.selector, lockId));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.LockAlreadyExists.selector, lockId));
         vm.prank(controller);
         vault.fundLock(taker, lockId, 1, NEVER_MATURES);
     }
@@ -568,7 +568,7 @@ contract StakeVaultTest is Test {
         vm.warp(maturesAt);
         assertTrue(vault.isLockMature(lockId));
 
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.UnauthorizedController.selector, safeA));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.UnauthorizedController.selector, safeA));
         vm.prank(safeA);
         vault.unlockStake(lockId);
 
@@ -587,7 +587,7 @@ contract StakeVaultTest is Test {
         uint64 validAt = vault.pendingControllerValidAt();
 
         vm.expectRevert(
-            abi.encodeWithSelector(StakeVault.ControllerProposalNotReady.selector, validAt, uint64(block.timestamp))
+            abi.encodeWithSelector(IStakeVault.ControllerProposalNotReady.selector, validAt, uint64(block.timestamp))
         );
         vm.prank(nextController);
         vault.acceptController();
@@ -597,7 +597,7 @@ contract StakeVaultTest is Test {
         vault.acceptController();
         assertEq(vault.controller(), nextController);
 
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.UnauthorizedController.selector, controller));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.UnauthorizedController.selector, controller));
         vm.prank(controller);
         vault.unlockStake(lockId);
 
@@ -612,7 +612,7 @@ contract StakeVaultTest is Test {
 
         assertEq(vault.pendingController(), address(0));
         assertEq(vault.pendingControllerValidAt(), 0);
-        vm.expectRevert(StakeVault.NoPendingController.selector);
+        vm.expectRevert(IStakeVault.NoPendingController.selector);
         vm.prank(nextController);
         vault.acceptController();
     }
@@ -622,12 +622,12 @@ contract StakeVaultTest is Test {
         vm.prank(attacker);
         vault.proposeController(nextController);
 
-        vm.expectRevert(StakeVault.NoPendingController.selector);
+        vm.expectRevert(IStakeVault.NoPendingController.selector);
         vault.cancelControllerProposal();
 
         vault.proposeController(nextController);
         vm.expectRevert(
-            abi.encodeWithSelector(StakeVault.UnauthorizedPendingController.selector, attacker, nextController)
+            abi.encodeWithSelector(IStakeVault.UnauthorizedPendingController.selector, attacker, nextController)
         );
         vm.prank(attacker);
         vault.acceptController();
@@ -654,7 +654,7 @@ contract StakeVaultTest is Test {
         vm.prank(controller);
         vault.lockStake(safeA, keccak256("locked-withdrawal"), 80e6, NEVER_MATURES);
 
-        vm.expectRevert(abi.encodeWithSelector(StakeVault.InsufficientFreeStake.selector, safeA, 20e6, 21e6));
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InsufficientFreeStake.selector, safeA, 20e6, 21e6));
         vm.prank(safeA);
         vault.withdrawStake(21e6);
 

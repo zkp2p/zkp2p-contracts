@@ -192,11 +192,11 @@ contract StakeVaultFuzzTest is Test {
         vm.warp(maturesAt);
 
         assertTrue(vault.isLockMature(lockId));
-        vm.expectPartialRevert(StakeVault.LockAlreadyMatured.selector);
+        vm.expectPartialRevert(IStakeVault.LockAlreadyMatured.selector);
         vm.prank(controller);
         vault.increaseLock(lockId, 1);
 
-        vm.expectPartialRevert(StakeVault.LockAlreadyMatured.selector);
+        vm.expectPartialRevert(IStakeVault.LockAlreadyMatured.selector);
         vm.prank(controller);
         vault.resizeLock(lockId, amount, NEVER_MATURES);
 
