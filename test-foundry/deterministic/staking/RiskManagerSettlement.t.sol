@@ -7,28 +7,21 @@ import {IRiskManager} from "../../../contracts/interfaces/IRiskManager.sol";
 import {RiskManagerFixture} from "../helpers/RiskManagerFixture.sol";
 
 contract RiskManagerSettlementTest is RiskManagerFixture {
-    function test_AdmissionSnapshotsRiskWindowAndExtensionSlopeAcrossGovernanceChanges() public {
+    function test_AdmissionSnapshotsRiskWindowAcrossGovernanceChanges() public {
         bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        _setConfig(true, true, 7 days, 20);
+        _setConfig(true, true, 7 days);
 
-        vm.prank(taker);
-        manager.extendIntent(intentHash, 1 hours);
         IIntentRiskHook.RiskSettlementContext memory context =
             _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, true);
         orchestrator.settle(manager, context);
 
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
         assertEq(position.riskWindow, RISK_WINDOW);
-        assertEq(position.extensionPenaltyBpsPerHour, EXTENSION_SLOPE);
         assertEq(position.coverageDeadline, block.timestamp + RISK_WINDOW);
     }
 
-    function test_StakeBackedSettlementResolvesExtensionAndRetimesCoverageLock() public {
+    function test_StakeBackedSettlementRetimesTheCoverageLock() public {
         bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        IRiskManager.RiskPosition memory admitted = manager.getRiskPosition(intentHash);
-        vm.prank(taker);
-        manager.extendIntent(intentHash, 2 hours);
-        vm.warp(uint256(admitted.baseIntentExpiry) + 1 hours);
 
         uint256 grossAmount = 800e6;
         IIntentRiskHook.RiskSettlementContext memory context =
@@ -36,20 +29,16 @@ contract RiskManagerSettlementTest is RiskManagerFixture {
         uint256 orchestratorBalanceBefore = token.balanceOf(address(orchestrator));
         orchestrator.settle(manager, context);
 
-        uint256 expectedPenalty = manager.calculateIntentExtensionCost(INTENT_AMOUNT, 1 hours, EXTENSION_SLOPE);
         IRiskManager.RiskPosition memory settled = manager.getRiskPosition(intentHash);
         assertEq(uint256(settled.status), uint256(IRiskManager.PositionStatus.SETTLED));
         assertEq(settled.coverageAmount, grossAmount);
         assertEq(settled.coverageDeadline, uint64(block.timestamp + RISK_WINDOW));
-        assertEq(vault.claimable(lp), expectedPenalty);
         assertEq(token.balanceOf(address(orchestrator)), orchestratorBalanceBefore);
 
         (address coverageOwner, uint256 coverageAmount, uint64 maturesAt) = vault.locks(intentHash);
         assertEq(coverageOwner, safe);
         assertEq(coverageAmount, grossAmount);
         assertEq(maturesAt, settled.coverageDeadline);
-        (address extensionOwner,,) = vault.locks(manager.extensionLockId(intentHash));
-        assertEq(extensionOwner, address(0));
     }
 
     function test_StakeBackedMaturityFreesCoverageWithoutCreatingClaim() public {
@@ -75,7 +64,7 @@ contract RiskManagerSettlementTest is RiskManagerFixture {
     }
 
     function test_UnbondedSettlementConsumesNoTokensAndNeedsNoMaturityAction() public {
-        _setConfig(false, false, 0, EXTENSION_SLOPE);
+        _setConfig(false, false, 0);
         bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
         IIntentRiskHook.RiskSettlementContext memory context =
             _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, false);

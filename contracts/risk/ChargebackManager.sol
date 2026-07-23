@@ -569,7 +569,7 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
      * @dev Returns the current block timestamp after checked narrowing to the stored timestamp width.
      * @return Current EVM timestamp represented as `uint64`.
      */
-    function _chargebackTimestamp() private view returns (uint64) {
+    function _chargebackTimestamp() internal view returns (uint64) {
         if (block.timestamp > type(uint64).max) revert TimestampOverflow(block.timestamp);
         return uint64(block.timestamp);
     }

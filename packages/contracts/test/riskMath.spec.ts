@@ -1,6 +1,5 @@
 import {
   calculateIntentExtensionCost,
-  calculateIntentExtensionPenalty,
   calculateRequiredCoverage,
   calculateStakeBackedCapacity,
   selectRiskMode,
@@ -13,15 +12,6 @@ describe("risk math", () => {
     expect(calculateIntentExtensionCost(1_000_000_000n, 23n * HOUR, 10n)).toBe(23_000_000n);
     expect(calculateIntentExtensionCost(1n, 1n, 1n)).toBe(1n);
     expect(calculateIntentExtensionCost(1_000_000n, HOUR, 0n)).toBe(0n);
-  });
-
-  it("charges only elapsed purchased time after the original expiry", () => {
-    expect(calculateIntentExtensionPenalty(1_000_000_000n, 10_000n, 9_999n, 2n * HOUR, 10n))
-      .toEqual({ penalty: 0n, chargeableTime: 0n });
-    expect(calculateIntentExtensionPenalty(1_000_000_000n, 10_000n, 10_000n + HOUR, 2n * HOUR, 10n))
-      .toEqual({ penalty: 1_000_000n, chargeableTime: HOUR });
-    expect(calculateIntentExtensionPenalty(1_000_000_000n, 10_000n, 10_000n + 3n * HOUR, 2n * HOUR, 10n))
-      .toEqual({ penalty: 2_000_000n, chargeableTime: 2n * HOUR });
   });
 
   it("prices extensions on the full locked intent amount", () => {

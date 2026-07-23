@@ -60,25 +60,9 @@ contract RiskManagerInvariantHandler {
         orchestrator.setIntent(
             intentHash, address(this), payoutRecipient, address(escrow), amount, paymentMethod, createdAt
         );
-        escrow.setIntent(intentHash, amount, createdAt);
         try orchestrator.admit(manager, intentHash) {
             intentHashes.push(intentHash);
         } catch {}
-    }
-
-    function extend(uint256 _seed, uint32 _rawTime) external {
-        if (intentHashes.length == 0) return;
-        bytes32 intentHash = intentHashes[_seed % intentHashes.length];
-        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
-        if (position.status != IRiskManager.PositionStatus.PENDING) return;
-
-        (,, uint256 currentTimestamp, uint256 currentExpiry) = _escrowIntent(intentHash);
-        if (block.timestamp >= currentExpiry) return;
-        uint256 maximumExpiry = currentTimestamp + 5 days;
-        if (currentExpiry >= maximumExpiry) return;
-        uint64 maximumAdditional = uint64(_min(maximumExpiry - currentExpiry, 6 hours));
-        uint64 additionalTime = uint64(1 + uint256(_rawTime) % maximumAdditional);
-        try manager.extendIntent(intentHash, additionalTime) {} catch {}
     }
 
     function cancel(uint256 _seed) external {
@@ -151,30 +135,6 @@ contract RiskManagerInvariantHandler {
         return intentHashes[_index];
     }
 
-    function _escrowIntent(bytes32 _intentHash)
-        internal
-        view
-        returns (bytes32 intentHash, uint256 amount, uint256 timestamp, uint256 expiryTime)
-    {
-        (intentHash, amount, timestamp, expiryTime) = _decodeEscrowIntent(_intentHash);
-    }
-
-    function _decodeEscrowIntent(bytes32 _intentHash)
-        internal
-        view
-        returns (bytes32 intentHash, uint256 amount, uint256 timestamp, uint256 expiryTime)
-    {
-        bytes memory result;
-        bool success;
-        (success, result) =
-            address(escrow).staticcall(abi.encodeWithSignature("getDepositIntent(uint256,bytes32)", 1, _intentHash));
-        require(success, "escrow read");
-        return abi.decode(result, (bytes32, uint256, uint256, uint256));
-    }
-
-    function _min(uint256 _left, uint256 _right) internal pure returns (uint256) {
-        return _left < _right ? _left : _right;
-    }
 }
 
 contract RiskManagerInvariantTest is RiskManagerFixture {
@@ -206,7 +166,6 @@ contract RiskManagerInvariantTest is RiskManagerFixture {
             bytes32 intentHash = handler.intentHashAt(intentIndex);
             IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
             (address coverageOwner, uint256 coverageAmount, uint64 coverageMaturity) = vault.locks(intentHash);
-            (address extensionOwner, uint256 extensionAmount,) = vault.locks(manager.extensionLockId(intentHash));
 
             if (position.status == IRiskManager.PositionStatus.PENDING) {
                 if (position.mode == IRiskManager.RiskMode.STAKE_BACKED) {
@@ -217,23 +176,13 @@ contract RiskManagerInvariantTest is RiskManagerFixture {
                     assertEq(coverageOwner, address(0));
                     assertEq(position.coverageAmount, 0);
                 }
-                if (position.extensionAmount != 0) {
-                    assertEq(extensionOwner, position.extensionStakeOwner);
-                    assertEq(extensionAmount, position.extensionAmount);
-                } else {
-                    assertEq(extensionOwner, address(0));
-                }
             } else if (position.status == IRiskManager.PositionStatus.SETTLED) {
                 assertEq(coverageOwner, position.stakeOwner);
                 assertEq(coverageAmount, position.coverageAmount);
                 assertEq(coverageMaturity, position.coverageDeadline);
-                assertEq(extensionOwner, address(0));
-                assertEq(position.extensionAmount, 0);
             } else {
                 assertEq(coverageOwner, address(0));
-                assertEq(extensionOwner, address(0));
                 assertEq(position.coverageAmount, 0);
-                assertEq(position.extensionAmount, 0);
             }
         }
     }

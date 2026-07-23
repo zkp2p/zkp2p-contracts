@@ -4,6 +4,7 @@ pragma solidity ^0.8.18;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+import {IntentGuardian} from "../../../contracts/IntentGuardian.sol";
 import {RiskManager} from "../../../contracts/RiskManager.sol";
 import {StakeVault} from "../../../contracts/StakeVault.sol";
 import {IEscrowV2} from "../../../contracts/interfaces/IEscrowV2.sol";
@@ -20,7 +21,6 @@ import {OrchestratorV2LegacyFixture} from "../helpers/OrchestratorV2LegacyFixtur
 
 contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture {
     uint64 internal constant RISK_WINDOW = 30 days;
-    uint32 internal constant EXTENSION_SLOPE = 10;
     uint256 internal constant SAFE_STAKE = 500e6;
 
     address internal safe;
@@ -28,6 +28,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
 
     StakeVault internal vault;
     RiskManager internal manager;
+    IntentGuardian internal guardian;
     RiskAttestationVerifierMock internal attestationVerifier;
     RiskNullifierRegistryMock internal nullifierRegistry;
     uint256 internal riskDepositId;
@@ -48,6 +49,8 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
             attestationVerifier,
             INullifierRegistryV2(address(nullifierRegistry))
         );
+        guardian = new IntentGuardian(address(this), IEscrowV2(address(escrow)));
+        guardian.setExtensionFeeBpsPerHour(10);
         vault.initializeController(address(manager));
 
         manager.setPlatformRiskConfig(
@@ -56,14 +59,13 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
                 enabled: true,
                 chargeback: IRiskManager.ChargebackConfig({
                     chargebackable: true, deferredPayoutEnabled: true, riskWindow: RISK_WINDOW
-                }),
-                extensionPenaltyBpsPerHour: EXTENSION_SLOPE
+                })
             })
         );
         orchestrator.setProtocolFee(1e16);
 
         vm.startPrank(depositor);
-        riskDepositId = _createRiskDeposit(address(manager));
+        riskDepositId = _createRiskDeposit(address(guardian));
         IOrchestratorV3(address(orchestrator)).setDepositRiskHook(address(escrow), riskDepositId, manager);
         vm.stopPrank();
 
@@ -77,7 +79,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         vault.selectStakeOwner(safe);
     }
 
-    function test_RealSignalExtensionAndCancellationResolveBothLocks() public {
+    function test_RealPrepaidExtensionPaysImmediatelyAndIsNotRefundedOnCancellation() public {
         bytes32 intentHash = _signalRiskIntent(taker, taker);
         IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
 
@@ -85,16 +87,23 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         assertEq(position.coverageAmount, INTENT_AMOUNT);
         assertEq(vault.lockedStake(safe), INTENT_AMOUNT);
 
-        vm.prank(taker);
-        manager.extendIntent(intentHash, 2 hours);
-        bytes32 extensionId = manager.extensionLockId(intentHash);
-        (address extensionOwner, uint256 extensionAmount, uint64 extensionMaturity) = vault.locks(extensionId);
-        assertEq(extensionOwner, safe);
-        assertEq(extensionAmount, 100_000);
-        assertEq(extensionMaturity, type(uint64).max);
+        vm.expectRevert(abi.encodeWithSelector(IEscrowV2.AmountAboveMax.selector, 5 days, 5 days));
+        guardian.extendIntent(riskDepositId, intentHash, 5 days, type(uint256).max);
 
         IEscrowV2.Intent memory escrowIntent = escrow.getDepositIntent(riskDepositId, intentHash);
+        uint256 extensionCost = guardian.quoteExtensionCost(escrowIntent.amount, 2 hours);
+        token.transfer(taker, extensionCost);
+        uint256 takerBalanceBefore = token.balanceOf(taker);
+        uint256 depositorBalanceBefore = token.balanceOf(depositor);
+        vm.startPrank(taker);
+        token.approve(address(guardian), extensionCost);
+        guardian.extendIntent(riskDepositId, intentHash, 2 hours, extensionCost);
+        vm.stopPrank();
+
+        escrowIntent = escrow.getDepositIntent(riskDepositId, intentHash);
         assertEq(escrowIntent.expiryTime, escrowIntent.timestamp + 3 hours);
+        assertEq(token.balanceOf(taker), takerBalanceBefore - extensionCost);
+        assertEq(token.balanceOf(depositor), depositorBalanceBefore + extensionCost);
 
         vm.warp(block.timestamp + 2 hours);
         vm.prank(taker);
@@ -103,8 +112,10 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         position = manager.getRiskPosition(intentHash);
         assertEq(uint256(position.status), uint256(IRiskManager.PositionStatus.CANCELLED));
         assertEq(vault.lockedStake(safe), 0);
-        assertEq(vault.claimable(depositor), 50_000);
-        assertEq(vault.stakeBalance(safe), SAFE_STAKE - 50_000);
+        assertEq(vault.claimable(depositor), 0);
+        assertEq(vault.stakeBalance(safe), SAFE_STAKE);
+        assertEq(token.balanceOf(taker), takerBalanceBefore - extensionCost);
+        assertEq(token.balanceOf(depositor), depositorBalanceBefore + extensionCost);
         assertEq(escrow.getDepositIntent(riskDepositId, intentHash).intentHash, bytes32(0));
     }
 
@@ -272,10 +283,6 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         assertEq(uint256(manager.getRiskPosition(intentHash).status), uint256(IRiskManager.PositionStatus.PENDING));
         assertEq(IOrchestratorV3(address(orchestrator)).getIntentCancellation(intentHash), cancelledAt);
         assertEq(vault.lockedStake(safe), INTENT_AMOUNT);
-
-        vm.prank(taker);
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.IntentStateMismatch.selector, intentHash));
-        manager.extendIntent(intentHash, 1 hours);
 
         vm.prank(other);
         vm.expectRevert(

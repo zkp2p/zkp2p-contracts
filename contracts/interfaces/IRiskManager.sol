@@ -10,7 +10,7 @@ import {IStakeVault} from "./IStakeVault.sol";
 
 /**
  * @title IRiskManager
- * @notice Intent-extension and chargeback policy for the generic StakeVault ledger.
+ * @notice Chargeback policy for the generic StakeVault ledger.
  */
 interface IRiskManager is IIntentRiskHook {
     enum RiskMode {
@@ -38,7 +38,6 @@ interface IRiskManager is IIntentRiskHook {
     struct PlatformRiskConfig {
         bool enabled;
         ChargebackConfig chargeback;
-        uint32 extensionPenaltyBpsPerHour;
     }
 
     /**
@@ -48,21 +47,16 @@ interface IRiskManager is IIntentRiskHook {
     struct RiskPosition {
         address taker;
         address stakeOwner;
-        address extensionStakeOwner;
         address lp;
         address payoutRecipient;
         bytes32 paymentMethod;
         RiskMode mode;
         PositionStatus status;
         bool isManualRelease;
-        uint32 extensionPenaltyBpsPerHour;
         uint64 riskWindow;
         uint64 createdAt;
-        uint64 baseIntentExpiry;
-        uint64 totalExtensionTime;
         uint64 coverageDeadline;
         uint256 intentAmount;
-        uint256 extensionAmount;
         uint256 coverageAmount;
         uint256 grossReleasedAmount;
         uint256 executableAmount;
@@ -88,8 +82,7 @@ interface IRiskManager is IIntentRiskHook {
         bool enabled,
         bool chargebackable,
         bool deferredPayoutEnabled,
-        uint64 riskWindow,
-        uint32 extensionPenaltyBpsPerHour
+        uint64 riskWindow
     );
     event RiskPositionCreated(
         bytes32 indexed intentHash,
@@ -100,35 +93,13 @@ interface IRiskManager is IIntentRiskHook {
         RiskMode mode,
         uint256 intentAmount,
         uint256 coverageAmount,
-        uint64 baseIntentExpiry,
-        uint64 riskWindow,
-        uint32 extensionPenaltyBpsPerHour
-    );
-    event IntentExtended(
-        bytes32 indexed intentHash,
-        address indexed taker,
-        address indexed extensionStakeOwner,
-        address caller,
-        uint64 additionalTime,
-        uint64 newExpiry,
-        uint256 additionalAmount,
-        uint256 totalAmount
-    );
-    event IntentExtensionResolved(
-        bytes32 indexed intentHash,
-        address indexed extensionStakeOwner,
-        address indexed lp,
-        uint64 terminalAt,
-        uint64 chargeableTime,
-        uint256 penalty,
-        uint256 releasedAmount
+        uint64 riskWindow
     );
     event RiskPositionCancelled(
         bytes32 indexed intentHash,
         address indexed stakeOwner,
         address indexed lp,
         uint64 cancelledAt,
-        uint256 extensionPenalty,
         uint256 releasedCoverage
     );
     event RiskPositionSettled(
@@ -166,24 +137,15 @@ interface IRiskManager is IIntentRiskHook {
 
     error ZeroAddress();
     error InvalidContract(address dependency);
-    error ZeroAmount();
     error UnauthorizedOrchestrator(address caller);
     error RiskTakingPaused();
     error InvalidPlatformConfig(bytes32 paymentMethod);
     error PlatformDisabled(bytes32 paymentMethod);
-    error InvalidIntentGuardian(address expected, address actual);
-    error ExtensionPenaltyExceedsIntentAmount(bytes32 paymentMethod);
     error InsufficientCollateral(address stakeOwner, uint256 available, uint256 required);
     error PositionAlreadyExists(bytes32 intentHash);
     error PositionNotPending(bytes32 intentHash, PositionStatus status);
     error PositionNotSettled(bytes32 intentHash, PositionStatus status);
     error PositionModeMismatch(bytes32 intentHash, RiskMode mode);
-    error IntentStateMismatch(bytes32 intentHash);
-    error ExtensionsDisabled(bytes32 paymentMethod);
-    error UnauthorizedStakeExtension(address caller, address taker, address extensionStakeOwner);
-    error IntentAlreadyExpired(bytes32 intentHash, uint64 expiry, uint64 currentTime);
-    error ExtensionTimeOverflow(uint256 extensionTime);
-    error ExtensionExceedsIntentLifetime(uint64 newExpiry, uint64 maximumExpiry);
     error CancellationNotRecorded(bytes32 intentHash);
     error IntentTokenMismatch(address expectedToken, address actualToken);
     error DeferredStakeTransferMismatch(uint256 expectedAmount, uint256 actualAmount);
@@ -203,7 +165,6 @@ interface IRiskManager is IIntentRiskHook {
     function setRiskTakingPaused(bool _paused) external;
     function acceptVaultController() external;
 
-    function extendIntent(bytes32 _intentHash, uint64 _additionalTime) external;
     function reconcileCancellation(bytes32 _intentHash) external;
     function reconcileCancellations(bytes32[] calldata _intentHashes) external;
     function releaseMaturedPosition(bytes32 _intentHash) external;
@@ -217,19 +178,6 @@ interface IRiskManager is IIntentRiskHook {
         external
         view
         returns (address stakeOwner, uint256 totalStake, uint256 lockedStake, uint256 freeStake);
-    function calculateIntentExtensionCost(
-        uint256 _intentAmount,
-        uint64 _extensionTime,
-        uint32 _extensionPenaltyBpsPerHour
-    ) external pure returns (uint256);
-    function calculateIntentExtensionPenalty(
-        uint256 _intentAmount,
-        uint64 _baseIntentExpiry,
-        uint64 _terminalAt,
-        uint64 _totalExtensionTime,
-        uint32 _extensionPenaltyBpsPerHour
-    ) external pure returns (uint256 penalty, uint64 chargeableTime);
-    function extensionLockId(bytes32 _intentHash) external pure returns (bytes32);
     function hashChargebackAttestation(ChargebackAttestation calldata _attestation) external view returns (bytes32);
 
     function orchestrator() external view returns (IOrchestratorV3);

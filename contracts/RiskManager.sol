@@ -12,31 +12,28 @@ import {IOrchestratorV3} from "./interfaces/IOrchestratorV3.sol";
 import {IRiskManager} from "./interfaces/IRiskManager.sol";
 import {IStakeVault} from "./interfaces/IStakeVault.sol";
 import {ChargebackManager} from "./risk/ChargebackManager.sol";
-import {IntentExtensionManager} from "./risk/IntentExtensionManager.sol";
 
 /**
  * @title RiskManager
- * @notice Coordinates intent-extension and chargeback policy against a shared StakeVault.
+ * @notice Coordinates chargeback policy against a shared StakeVault.
  *
  * @dev ARCHITECTURE
  *      This is the only deployed risk-policy contract and the only StakeVault controller. Common intent identity and
- *      lifecycle state live here. `IntentExtensionManager` owns paid-extension policy and its namespaced Vault lock;
- *      `ChargebackManager` owns chargeback policy and the raw-intent coverage lock. Both modules expose only internal
- *      entrypoints, so Orchestrator integration remains one contract and every terminal transition stays atomic.
+ *      lifecycle state live here. `ChargebackManager` owns chargeback policy and the raw-intent coverage lock. The
+ *      module exposes only internal entrypoints, so Orchestrator integration remains one contract and every terminal
+ *      transition stays atomic.
  *
  * @dev TRUST MODEL
  *      Orchestrator callbacks are authenticated and their canonical intent or settlement values are not redundantly
- *      shape-validated. Admission still enforces policy, Vault-token, and guardian boundaries. Public extension,
- *      maturity, reconciliation, and evidence paths retain their authorization, lifecycle, timing, cryptographic,
- *      replay, and accounting checks.
+ *      shape-validated. Admission still enforces policy and Vault-token boundaries. Public maturity, reconciliation,
+ *      and evidence paths retain their authorization, lifecycle, timing, cryptographic, replay, and accounting checks.
  *
  * @dev LIFECYCLE
- *      Admission snapshots common facts and both modules' policies. Cancellation and settlement always resolve paid
- *      extension exposure before chargeback exposure. Unbonded settlement completes immediately; backed settlement
- *      retains full gross coverage until clean maturity or a valid chargeback. Failed-open cancellation callbacks can
- *      be reconciled permissionlessly using Orchestrator's durable original cancellation timestamp.
+ *      Admission snapshots common facts and chargeback policy. Unbonded settlement completes immediately; backed
+ *      settlement retains full gross coverage until clean maturity or a valid chargeback. Failed-open cancellation
+ *      callbacks can be reconciled permissionlessly using Orchestrator's durable original cancellation timestamp.
  */
-contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step, ReentrancyGuard {
+contract RiskManager is ChargebackManager, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
 
     /// @notice Compatibility getter for the sentinel maturity used by pending risk exposure.
@@ -46,8 +43,7 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
     /* ============ Structs ============ */
 
     /**
-     * @dev Facts shared by extension and chargeback policy. Module-specific configuration and accounting remain in
-     *      their respective base contracts and are composed only by `getRiskPosition`.
+     * @dev Common intent facts composed with chargeback accounting by `getRiskPosition`.
      */
     struct IntentPosition {
         address taker;
@@ -69,7 +65,7 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
 
     /* ============ Coordinator State ============ */
 
-    /// @notice Emergency switch for new admissions and extensions; terminal accounting remains available.
+    /// @notice Emergency switch for new admissions; terminal accounting remains available.
     bool public override riskTakingPaused;
 
     /// @dev Admission switch for future intents under each payment method.
@@ -115,10 +111,9 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
     /* ============ Orchestrator Lifecycle ============ */
 
     /**
-     * @notice Records a canonical newly created intent and initializes both risk policies.
+     * @notice Records a canonical newly created intent and initializes chargeback policy.
      * @dev ORCHESTRATOR ONLY. Admission is fail-closed and blocked while risk taking is paused. The payment method must
-     *      be enabled, the Escrow deposit must use the Vault token, and this contract must be its intent guardian.
-     *      Chargeback admission may reserve full coverage; extension admission only snapshots its pricing terms.
+     *      be enabled and the Escrow deposit must use the Vault token. Chargeback admission may reserve full coverage.
      * @param _intentHash Identifier of the intent readable from the calling Orchestrator.
      */
     function onIntentCreated(bytes32 _intentHash) external override onlyOrchestrator nonReentrant {
@@ -142,8 +137,6 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
         position.createdAt = intent.createdAt;
         position.intentAmount = intent.amount;
 
-        (uint64 baseIntentExpiry, uint32 extensionPenaltyBpsPerHour) =
-            _initializeIntentExtension(_intentHash, intent.paymentMethod, intent.createdAt, escrow);
         (RiskMode mode, address stakeOwner, uint256 coverageAmount, uint64 riskWindow) =
             _admitChargeback(_intentHash, intent.owner, intent.to, intent.paymentMethod, intent.amount);
 
@@ -156,24 +149,22 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
             mode,
             intent.amount,
             coverageAmount,
-            baseIntentExpiry,
-            riskWindow,
-            extensionPenaltyBpsPerHour
+            riskWindow
         );
     }
 
     /**
      * @notice Resolves risk accounting for an intent cancelled or expired by Orchestrator.
-     * @dev ORCHESTRATOR ONLY. Extension exposure resolves before pending chargeback coverage. A failed callback can be
-     *      replayed through `reconcileCancellation` using Orchestrator's stored original cancellation timestamp.
+     * @dev ORCHESTRATOR ONLY. A failed callback can be replayed through `reconcileCancellation` using Orchestrator's
+     *      stored original cancellation timestamp.
      * @param _intentHash Identifier of the intent being cancelled.
      */
     function onIntentCancelled(bytes32 _intentHash) external override onlyOrchestrator nonReentrant {
-        _cancelPosition(_intentHash, _currentExtensionTimestamp());
+        _cancelPosition(_intentHash, _chargebackTimestamp());
     }
 
     /**
-     * @notice Atomically resolves extension and chargeback policy before settlement distribution.
+     * @notice Atomically resolves chargeback policy before settlement distribution.
      * @dev ORCHESTRATOR ONLY. Canonical settlement context is trusted. The hook consumes no tokens for unbonded or
      *      stake-backed settlement and exactly `grossAmount` for deferred settlement.
      * @param _context Canonical settlement amounts, fee plan, intent identifier, and release type.
@@ -184,9 +175,6 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
             revert PositionNotPending(_context.intentHash, position.status);
         }
 
-        _resolveIntentExtension(
-            _context.intentHash, _currentExtensionTimestamp(), position.depositor, position.intentAmount
-        );
         (address stakeOwner, RiskMode mode, uint256 coverageAmount, uint64 coverageDeadline) =
             _settleChargeback(_context);
 
@@ -202,31 +190,6 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
             coverageAmount,
             coverageDeadline,
             _context.isManualRelease
-        );
-    }
-
-    /* ============ Intent Extensions ============ */
-
-    /**
-     * @notice Purchases additional lifetime for a pending intent using the extension stake owner's collateral.
-     * @dev The user-callable path revalidates canonical live intent state, authorization, expiry, and the five-day
-     *      lifetime bound inside `IntentExtensionManager`.
-     * @param _intentHash Identifier of the pending intent to extend.
-     * @param _additionalTime Number of seconds to add to the current Escrow expiry.
-     */
-    function extendIntent(bytes32 _intentHash, uint64 _additionalTime) external override nonReentrant {
-        if (riskTakingPaused) revert RiskTakingPaused();
-
-        IntentPosition storage position = intentPositions[_intentHash];
-        if (position.status != PositionStatus.PENDING) revert PositionNotPending(_intentHash, position.status);
-
-        _extendIntent(
-            _intentHash,
-            _additionalTime,
-            position.taker,
-            position.paymentMethod,
-            position.createdAt,
-            position.intentAmount
         );
     }
 
@@ -299,10 +262,9 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
 
     /**
      * @notice GOVERNANCE ONLY: Sets policy used by future intents for one payment method.
-     * @dev Existing positions retain their snapshots. Each module validates only relationships needed for safe,
-     *      reachable economic states.
+     * @dev Existing positions retain their snapshots.
      * @param _paymentMethod Payment-method key whose future policy is configured.
-     * @param _config Enabled state, chargeback policy, and hourly extension slope.
+     * @param _config Enabled state and chargeback policy.
      */
     function setPlatformRiskConfig(bytes32 _paymentMethod, PlatformRiskConfig calldata _config)
         external
@@ -311,15 +273,13 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
     {
         platformEnabled[_paymentMethod] = _config.enabled;
         _setChargebackConfig(_paymentMethod, _config.chargeback);
-        _setIntentExtensionConfig(_paymentMethod, _config.extensionPenaltyBpsPerHour);
 
         emit PlatformRiskConfigUpdated(
             _paymentMethod,
             _config.enabled,
             _config.chargeback.chargebackable,
             _config.chargeback.deferredPayoutEnabled,
-            _config.chargeback.riskWindow,
-            _config.extensionPenaltyBpsPerHour
+            _config.chargeback.riskWindow
         );
     }
 
@@ -334,7 +294,7 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
     }
 
     /**
-     * @notice GOVERNANCE ONLY: Pauses or resumes new admissions and extensions.
+     * @notice GOVERNANCE ONLY: Pauses or resumes new admissions.
      * @dev Existing positions can still cancel, settle, reconcile, mature, or process a chargeback while paused.
      * @param _paused True to stop new risk taking; false to resume it.
      */
@@ -365,43 +325,35 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
      * @return config Current aggregate platform risk configuration.
      */
     function getPlatformRiskConfig(bytes32 _paymentMethod) external view override returns (PlatformRiskConfig memory) {
-        IntentExtensionConfig memory extensionConfig = _getIntentExtensionConfig(_paymentMethod);
         return PlatformRiskConfig({
             enabled: platformEnabled[_paymentMethod],
-            chargeback: _getChargebackConfig(_paymentMethod),
-            extensionPenaltyBpsPerHour: extensionConfig.extensionPenaltyBpsPerHour
+            chargeback: _getChargebackConfig(_paymentMethod)
         });
     }
 
     /**
      * @notice Returns the aggregate policy snapshot and lifecycle accounting for one intent.
-     * @dev The tuple remains ABI-compatible while its fields are composed from common and module-owned storage.
+     * @dev Fields are composed from common and chargeback-module storage.
      * @param _intentHash Intent identifier to query.
      * @return position Aggregate risk position, or a zero-valued position before admission.
      */
     function getRiskPosition(bytes32 _intentHash) external view override returns (RiskPosition memory position) {
         IntentPosition storage common = intentPositions[_intentHash];
-        IntentExtensionPosition memory extension = _getIntentExtensionPosition(_intentHash);
         ChargebackPosition memory chargeback = _getChargebackPosition(_intentHash);
 
         position = RiskPosition({
             taker: common.taker,
             stakeOwner: chargeback.stakeOwner,
-            extensionStakeOwner: extension.extensionStakeOwner,
             lp: common.depositor,
             payoutRecipient: common.payoutRecipient,
             paymentMethod: common.paymentMethod,
             mode: chargeback.mode,
             status: common.status,
             isManualRelease: chargeback.isManualRelease,
-            extensionPenaltyBpsPerHour: extension.extensionPenaltyBpsPerHour,
             riskWindow: chargeback.riskWindow,
             createdAt: common.createdAt,
-            baseIntentExpiry: extension.baseIntentExpiry,
-            totalExtensionTime: extension.totalExtensionTime,
             coverageDeadline: chargeback.coverageDeadline,
             intentAmount: common.intentAmount,
-            extensionAmount: extension.extensionAmount,
             coverageAmount: chargeback.coverageAmount,
             grossReleasedAmount: chargeback.grossReleasedAmount,
             executableAmount: chargeback.executableAmount
@@ -445,55 +397,6 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
     /* ============ Public Helpers ============ */
 
     /**
-     * @notice Calculates the cumulative lock required for purchased extension time.
-     * @dev Applies the same full-precision, upward-rounded formula used when increasing the extension lock.
-     * @param _intentAmount Full amount of liquidity locked by the intent.
-     * @param _extensionTime Total number of extension seconds being priced.
-     * @param _extensionPenaltyBpsPerHour Hourly extension slope in basis points.
-     * @return Cumulative extension lock amount.
-     */
-    function calculateIntentExtensionCost(
-        uint256 _intentAmount,
-        uint64 _extensionTime,
-        uint32 _extensionPenaltyBpsPerHour
-    ) external pure override returns (uint256) {
-        return _calculateIntentExtensionCost(_intentAmount, _extensionTime, _extensionPenaltyBpsPerHour);
-    }
-
-    /**
-     * @notice Calculates the extension penalty owed at a terminal timestamp.
-     * @dev Charges only purchased time used after the original expiry, capped by the total purchased duration.
-     * @param _intentAmount Full amount of liquidity locked by the intent.
-     * @param _baseIntentExpiry Original expiry before paid extensions.
-     * @param _terminalAt Settlement or cancellation timestamp.
-     * @param _totalExtensionTime Total number of purchased extension seconds.
-     * @param _extensionPenaltyBpsPerHour Snapshotted hourly extension slope in basis points.
-     * @return penalty Amount owed to the depositor.
-     * @return chargeableTime Purchased extension seconds used by the terminal timestamp.
-     */
-    function calculateIntentExtensionPenalty(
-        uint256 _intentAmount,
-        uint64 _baseIntentExpiry,
-        uint64 _terminalAt,
-        uint64 _totalExtensionTime,
-        uint32 _extensionPenaltyBpsPerHour
-    ) external pure override returns (uint256 penalty, uint64 chargeableTime) {
-        return _calculateIntentExtensionPenalty(
-            _intentAmount, _baseIntentExpiry, _terminalAt, _totalExtensionTime, _extensionPenaltyBpsPerHour
-        );
-    }
-
-    /**
-     * @notice Derives the isolated StakeVault lock identifier for extension exposure.
-     * @dev Namespaces extension exposure away from the raw intent hash used for chargeback coverage.
-     * @param _intentHash Intent identifier to namespace.
-     * @return Namespaced extension lock identifier.
-     */
-    function extensionLockId(bytes32 _intentHash) external pure override returns (bytes32) {
-        return _extensionLockId(_intentHash);
-    }
-
-    /**
      * @notice Returns the manager- and chain-bound digest signed for chargeback evidence.
      * @dev Commits to the attestation's intent and payload hash under this manager's EIP-712 domain.
      * @param _attestation Chargeback evidence whose typed-data digest should be derived.
@@ -511,20 +414,16 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
     /* ============ Internal Lifecycle ============ */
 
     /**
-     * @dev Resolves extension exposure first, then pending chargeback exposure, and records cancellation.
+     * @dev Resolves pending chargeback exposure and records cancellation.
      */
     function _cancelPosition(bytes32 _intentHash, uint64 _cancelledAt) internal {
         IntentPosition storage position = intentPositions[_intentHash];
         if (position.status != PositionStatus.PENDING) revert PositionNotPending(_intentHash, position.status);
 
-        (uint256 extensionPenalty,) =
-            _resolveIntentExtension(_intentHash, _cancelledAt, position.depositor, position.intentAmount);
         (address stakeOwner,, uint256 releasedCoverage) = _cancelChargeback(_intentHash);
         position.status = PositionStatus.CANCELLED;
 
-        emit RiskPositionCancelled(
-            _intentHash, stakeOwner, position.depositor, _cancelledAt, extensionPenalty, releasedCoverage
-        );
+        emit RiskPositionCancelled(_intentHash, stakeOwner, position.depositor, _cancelledAt, releasedCoverage);
     }
 
     /**
@@ -557,19 +456,9 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
         if (address(_deposit.token) != expectedToken) {
             revert IntentTokenMismatch(expectedToken, address(_deposit.token));
         }
-        if (_deposit.intentGuardian != address(this)) {
-            revert InvalidIntentGuardian(address(this), _deposit.intentGuardian);
-        }
     }
 
     /* ============ Module Dependencies ============ */
-
-    /**
-     * @dev Supplies the canonical Orchestrator to the extension module.
-     */
-    function _orchestrator() internal view override returns (IOrchestratorV3) {
-        return orchestrator;
-    }
 
     /**
      * @dev Lazily reads the post-intent hook only when chargeback admission needs deferred payout.
@@ -579,9 +468,9 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
     }
 
     /**
-     * @dev Supplies the shared custody ledger to both stateful policy modules.
+     * @dev Supplies the shared custody ledger to the chargeback module.
      */
-    function _stakeVault() internal view override(IntentExtensionManager, ChargebackManager) returns (IStakeVault) {
+    function _stakeVault() internal view override returns (IStakeVault) {
         return stakeVault;
     }
 }

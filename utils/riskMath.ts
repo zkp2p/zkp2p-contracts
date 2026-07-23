@@ -1,13 +1,8 @@
-/** Exact client-side counterparts of RiskManager's integer formulas. */
+/** Exact client-side counterparts of IntentGuardian and RiskManager integer formulas. */
 
 export type IntegerLike = bigint | number | string | { toString(): string };
 
 export type RiskMode = "UNBONDED" | "STAKE_BACKED" | "DEFERRED_PAYOUT";
-
-export interface IntentExtensionPenalty {
-  penalty: bigint;
-  chargeableTime: bigint;
-}
 
 export const RISK_BPS_DENOMINATOR = 10_000n;
 export const RISK_SECONDS_PER_HOUR = 3_600n;
@@ -28,7 +23,7 @@ function ceilDiv(numerator: bigint, denominator: bigint): bigint {
   return ((numerator - 1n) / denominator) + 1n;
 }
 
-/** ceil(A * s * T / (10_000 * 1 hour)); returns zero when the curve is disabled. */
+/** Exact counterpart of IntentGuardian's ceil(A * s * T / (10_000 * 1 hour)) pricing formula. */
 export function calculateIntentExtensionCost(
   intentAmount: IntegerLike,
   extensionTime: IntegerLike,
@@ -38,31 +33,6 @@ export function calculateIntentExtensionCost(
   const duration = integer(extensionTime, "extensionTime");
   const slope = integer(extensionPenaltyBpsPerHour, "extensionPenaltyBpsPerHour");
   return ceilDiv(amount * slope * duration, RISK_EXTENSION_DENOMINATOR);
-}
-
-/** Charges elapsed post-expiry time, capped by the exact duration purchased. */
-export function calculateIntentExtensionPenalty(
-  intentAmount: IntegerLike,
-  baseIntentExpiry: IntegerLike,
-  terminalAt: IntegerLike,
-  totalExtensionTime: IntegerLike,
-  extensionPenaltyBpsPerHour: IntegerLike,
-): IntentExtensionPenalty {
-  const baseExpiry = integer(baseIntentExpiry, "baseIntentExpiry");
-  const terminal = integer(terminalAt, "terminalAt");
-  const purchasedTime = integer(totalExtensionTime, "totalExtensionTime");
-  if (terminal <= baseExpiry || purchasedTime === 0n) return { penalty: 0n, chargeableTime: 0n };
-
-  const elapsed = terminal - baseExpiry;
-  const chargeableTime = elapsed < purchasedTime ? elapsed : purchasedTime;
-  return {
-    penalty: calculateIntentExtensionCost(
-      intentAmount,
-      chargeableTime,
-      extensionPenaltyBpsPerHour,
-    ),
-    chargeableTime,
-  };
 }
 
 /** Full-gross coverage required at admission; zero when chargebacks are disabled. */

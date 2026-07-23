@@ -39,7 +39,6 @@ interface PlatformRiskConfig {
     deferredPayoutEnabled: boolean;
     riskWindow: ethers.BigNumberish;
   };
-  extensionPenaltyBpsPerHour: ethers.BigNumberish;
 }
 
 function platformRiskConfigMatches(
@@ -49,8 +48,7 @@ function platformRiskConfigMatches(
   return actual.enabled === expected.enabled
     && actual.chargeback.chargebackable === expected.chargeback.chargebackable
     && actual.chargeback.deferredPayoutEnabled === expected.chargeback.deferredPayoutEnabled
-    && ethers.BigNumber.from(actual.chargeback.riskWindow).eq(expected.chargeback.riskWindow)
-    && ethers.BigNumber.from(actual.extensionPenaltyBpsPerHour).eq(expected.extensionPenaltyBpsPerHour);
+    && ethers.BigNumber.from(actual.chargeback.riskWindow).eq(expected.chargeback.riskWindow);
 }
 
 function riskPlatformPolicyForNetwork(network: string): {

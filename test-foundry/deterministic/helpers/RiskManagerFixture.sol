@@ -55,10 +55,6 @@ contract RiskManagerHarness is RiskManager {
         chargebackPositions[_intentHash].coverageAmount = _coverageAmount;
     }
 
-    function setPositionTotalExtensionTime(bytes32 _intentHash, uint64 _totalExtensionTime) external {
-        intentExtensionPositions[_intentHash].totalExtensionTime = _totalExtensionTime;
-    }
-
     function setPositionMode(bytes32 _intentHash, RiskMode _mode) external {
         chargebackPositions[_intentHash].mode = _mode;
     }
@@ -89,36 +85,12 @@ contract RiskNullifierRegistryMock {
 }
 
 contract RiskEscrowMock {
-    uint256 public intentExpirationPeriod = 1 hours;
     IEscrowV2.Deposit internal deposit;
-    mapping(bytes32 => IEscrowV2.Intent) internal intents;
 
-    function configureDeposit(address _lp, IERC20 _token, address _guardian) external {
+    function configureDeposit(address _lp, IERC20 _token) external {
         deposit.depositor = _lp;
         deposit.token = _token;
-        deposit.intentGuardian = _guardian;
         deposit.acceptingIntents = true;
-    }
-
-    function setIntent(bytes32 _intentHash, uint256 _amount, uint64 _createdAt) external {
-        intents[_intentHash] = IEscrowV2.Intent({
-            intentHash: _intentHash,
-            amount: _amount,
-            timestamp: _createdAt,
-            expiryTime: uint256(_createdAt) + intentExpirationPeriod
-        });
-    }
-
-    function setIntentExpirationPeriod(uint256 _period) external {
-        intentExpirationPeriod = _period;
-    }
-
-    function setIntentExpiry(bytes32 _intentHash, uint256 _expiryTime) external {
-        intents[_intentHash].expiryTime = _expiryTime;
-    }
-
-    function setGuardian(address _guardian) external {
-        deposit.intentGuardian = _guardian;
     }
 
     function setToken(IERC20 _token) external {
@@ -129,17 +101,6 @@ contract RiskEscrowMock {
         return deposit;
     }
 
-    function getDepositIntent(uint256, bytes32 _intentHash) external view returns (IEscrowV2.Intent memory) {
-        return intents[_intentHash];
-    }
-
-    function extendIntentExpiry(uint256, bytes32 _intentHash, uint256 _additionalTime) external {
-        require(msg.sender == deposit.intentGuardian, "guardian");
-        IEscrowV2.Intent storage intent = intents[_intentHash];
-        require(intent.intentHash != bytes32(0), "intent");
-        require(intent.expiryTime + _additionalTime <= intent.timestamp + 5 days, "lifetime");
-        intent.expiryTime += _additionalTime;
-    }
 }
 
 contract RiskOrchestratorMock {
@@ -221,7 +182,6 @@ contract RiskOrchestratorMock {
 
 abstract contract RiskManagerFixture is Test {
     uint64 internal constant RISK_WINDOW = 30 days;
-    uint32 internal constant EXTENSION_SLOPE = 10;
     uint256 internal constant INTENT_AMOUNT = 1_000e6;
     bytes32 internal constant PAYMENT_METHOD = keccak256("payment-method");
 
@@ -262,8 +222,8 @@ abstract contract RiskManagerFixture is Test {
 
         vm.prank(owner);
         vault.initializeController(address(manager));
-        escrow.configureDeposit(lp, token, address(manager));
-        _setConfig(true, true, RISK_WINDOW, EXTENSION_SLOPE);
+        escrow.configureDeposit(lp, token);
+        _setConfig(true, true, RISK_WINDOW);
 
         token.mint(safe, 100_000e6);
         token.mint(taker, 100_000e6);
@@ -276,15 +236,12 @@ abstract contract RiskManagerFixture is Test {
         vault.selectStakeOwner(safe);
     }
 
-    function _setConfig(bool _chargebackable, bool _deferredPayoutEnabled, uint64 _riskWindow, uint32 _extensionSlope)
-        internal
-    {
+    function _setConfig(bool _chargebackable, bool _deferredPayoutEnabled, uint64 _riskWindow) internal {
         IRiskManager.PlatformRiskConfig memory config = IRiskManager.PlatformRiskConfig({
             enabled: true,
             chargeback: IRiskManager.ChargebackConfig({
                 chargebackable: _chargebackable, deferredPayoutEnabled: _deferredPayoutEnabled, riskWindow: _riskWindow
-            }),
-            extensionPenaltyBpsPerHour: _extensionSlope
+            })
         });
         vm.prank(owner);
         manager.setPlatformRiskConfig(PAYMENT_METHOD, config);
@@ -306,7 +263,6 @@ abstract contract RiskManagerFixture is Test {
         orchestrator.setIntent(
             intentHash, _intentTaker, _recipient, address(escrow), _amount, PAYMENT_METHOD, createdAt
         );
-        escrow.setIntent(intentHash, _amount, createdAt);
     }
 
     function _admit(address _intentTaker, address _recipient, uint256 _amount) internal returns (bytes32 intentHash) {

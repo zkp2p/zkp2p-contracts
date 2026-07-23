@@ -68,8 +68,7 @@ contract RiskManagerValidationTest is RiskManagerFixture {
             enabled: false,
             chargeback: IRiskManager.ChargebackConfig({
                 chargebackable: true, deferredPayoutEnabled: true, riskWindow: RISK_WINDOW
-            }),
-            extensionPenaltyBpsPerHour: EXTENSION_SLOPE
+            })
         });
         vm.prank(owner);
         manager.setPlatformRiskConfig(PAYMENT_METHOD, disabledConfig);
@@ -77,7 +76,7 @@ contract RiskManagerValidationTest is RiskManagerFixture {
         vm.expectRevert(abi.encodeWithSelector(IRiskManager.PlatformDisabled.selector, PAYMENT_METHOD));
         orchestrator.admit(manager, disabledIntent);
 
-        _setConfig(true, true, RISK_WINDOW, EXTENSION_SLOPE);
+        _setConfig(true, true, RISK_WINDOW);
         escrow.setToken(otherToken);
         (bytes32 wrongTokenIntent,) = _newIntent(taker, payoutRecipient, INTENT_AMOUNT);
         vm.expectRevert(
@@ -86,44 +85,9 @@ contract RiskManagerValidationTest is RiskManagerFixture {
         orchestrator.admit(manager, wrongTokenIntent);
 
         escrow.setToken(token);
-        address wrongGuardian = makeAddr("wrongGuardian");
-        escrow.setGuardian(wrongGuardian);
-        (bytes32 wrongGuardianIntent,) = _newIntent(taker, payoutRecipient, INTENT_AMOUNT);
-        vm.expectRevert(
-            abi.encodeWithSelector(IRiskManager.InvalidIntentGuardian.selector, address(manager), wrongGuardian)
-        );
-        orchestrator.admit(manager, wrongGuardianIntent);
-
-        escrow.setGuardian(address(manager));
         bytes32 duplicateIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
         vm.expectRevert(abi.encodeWithSelector(IRiskManager.PositionAlreadyExists.selector, duplicateIntent));
         orchestrator.admit(manager, duplicateIntent);
-    }
-
-    function test_AdmissionRejectsTimestampOverflow() public {
-        escrow.setIntentExpirationPeriod(type(uint64).max);
-        (bytes32 intentHash,) = _newIntent(taker, payoutRecipient, INTENT_AMOUNT);
-
-        vm.expectPartialRevert(IRiskManager.TimestampOverflow.selector);
-        orchestrator.admit(manager, intentHash);
-    }
-
-    function test_ExtensionRejectsInvalidPublicRequests() public {
-        bytes32 zeroAmountIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        vm.prank(taker);
-        vm.expectRevert(IRiskManager.ZeroAmount.selector);
-        manager.extendIntent(zeroAmountIntent, 0);
-
-        bytes32 unknownIntent = keccak256("unknown-extension-intent");
-        vm.expectPartialRevert(IRiskManager.PositionNotPending.selector);
-        manager.extendIntent(unknownIntent, 1 hours);
-
-        bytes32 expiredIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        IRiskManager.RiskPosition memory expiredPosition = manager.getRiskPosition(expiredIntent);
-        vm.warp(expiredPosition.baseIntentExpiry);
-        vm.prank(taker);
-        vm.expectPartialRevert(IRiskManager.IntentAlreadyExpired.selector);
-        manager.extendIntent(expiredIntent, 1 hours);
     }
 
     function test_BatchCancellationAndMaturityValidateAndProcessEveryPosition() public {
@@ -172,12 +136,6 @@ contract RiskManagerValidationTest is RiskManagerFixture {
         assertEq(locked, 0);
         assertEq(free, 50_000e6);
 
-        (uint256 penalty, uint64 chargeableTime) =
-            manager.calculateIntentExtensionPenalty(INTENT_AMOUNT, 100, 150, 40, EXTENSION_SLOPE);
-        assertEq(chargeableTime, 40);
-        assertEq(penalty, manager.calculateIntentExtensionCost(INTENT_AMOUNT, 40, EXTENSION_SLOPE));
-        assertEq(manager.calculateIntentExtensionCost(0, 1 hours, EXTENSION_SLOPE), 0);
-
         IRiskManager.ChargebackAttestation memory attestation =
             _chargebackAttestation(keccak256("hash-only"), keccak256("payment"), keccak256("dispute"));
         assertNotEq(manager.hashChargebackAttestation(attestation), bytes32(0));
@@ -220,7 +178,7 @@ contract RiskManagerValidationTest is RiskManagerFixture {
         vm.expectPartialRevert(IRiskManager.PositionNotPending.selector);
         orchestrator.settle(manager, _settlementContext(unknownIntent, INTENT_AMOUNT, 10e6, 5e6, false));
 
-        _setConfig(false, false, 0, EXTENSION_SLOPE);
+        _setConfig(false, false, 0);
         bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
         IIntentRiskHook.RiskSettlementContext memory context =
             _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, false);
