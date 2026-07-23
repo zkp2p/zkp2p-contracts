@@ -235,3 +235,94 @@ There is no repository lint or format script. `forge fmt --check` was also
 probed, but it reports extensive pre-existing differences across untouched
 production and test Solidity on the starting SHA, so it is not a usable
 project gate for this infrastructure-only change.
+
+## GitHub Actions retained-change benchmarks
+
+All four measurements ran sequentially at commit
+`feeec10e6a68c2a4c70dbb68e3553c67615dfec5`. Every run started from a fresh
+GitHub checkout, recompiled every deterministic coverage partition, reran all
+97 suites / 1,517 tests, regenerated the exact-source shards and final LCOV,
+passed the unchanged gates, and completed the Codecov OIDC upload.
+
+Coverage path is measured from the earliest coverage-shard job start through
+the final coverage/Codecov job completion. Workflow wall includes GitHub queue
+and scheduling time for every job.
+
+| State | Run | Slowest shard | Final gate + upload | Coverage path | Workflow wall |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Cold | [29987887024](https://github.com/zkp2p/zkp2p-contracts/actions/runs/29987887024) | 3m56s | 57s | 4m55s | 4m59s |
+| Warm 1 | [29988194985](https://github.com/zkp2p/zkp2p-contracts/actions/runs/29988194985) | 3m43s | 1m00s | 4m46s | 5m09s |
+| Warm 2 | [29988456522](https://github.com/zkp2p/zkp2p-contracts/actions/runs/29988456522) | 3m31s | 57s | 4m30s | 4m33s |
+| Warm 3 | [29988694047](https://github.com/zkp2p/zkp2p-contracts/actions/runs/29988694047) | 3m28s | 56s | 4m27s | 4m31s |
+| Warm median | — | 3m31s | 57s | 4m30s | 4m33s |
+
+The warm median coverage path is 244 seconds (47.5%) faster than the accepted
+8m34s warm coverage-job baseline and 60 seconds below the 5m30s target. The
+cold coverage path is 249 seconds (45.8%) faster than the accepted 9m04s cold
+baseline, so there is no cold regression.
+
+### Component timing
+
+Warm run 3's slowest coverage lane breaks down as follows. Forge's compilation,
+test execution, and report production times were read from the fresh uploaded
+debug logs and timing records.
+
+| Component | Time |
+| --- | ---: |
+| Shard checkout/tool/dependency/environment setup | 24s |
+| Minimal-IR compilation on slowest lane | 2m55s |
+| Deterministic EVM execution on slowest lane | 2.60s |
+| Debug + LCOV report production overhead on slowest lane | 3.76s |
+| Current-run artifact upload | 1s |
+| Final checkout/tool/dependency/environment setup | 22s |
+| Current-run artifact download | 1s |
+| Exact-source compilation, LCOV merge, reconstruction, and gating | 28s |
+| Codecov OIDC upload | 3s |
+| Complete coverage path | 4m27s |
+| Complete workflow wall | 4m31s |
+
+The four warm-run-3 lanes compiled for 2m34s to 2m55s, while actual
+deterministic EVM execution was 0.16s to 2.60s. Compilation remains the
+dominant component; the exact-source pass remains too small to justify further
+complexity.
+
+### Coverage and upload results
+
+Every cold/warm final gate reported the same accepted metrics:
+
+| Metric | Covered / total | Percent |
+| --- | ---: | ---: |
+| Lines | 2930 / 2947 | 99.42% |
+| Statements | 3264 / 3307 | 98.70% |
+| Branches | 756 / 798 | 94.74% |
+| Functions | 458 / 458 | 100% |
+
+Every partition reported all 35 production files. The retained merge also
+requires the same per-file line, branch, function, function-definition, and
+statement-byte-range denominators before it will write `coverage/lcov.info`.
+Each benchmark's Codecov action found exactly that newly generated LCOV and
+reported `Upload queued for processing complete`.
+
+### Cache and invalidation analysis
+
+There is intentionally no coverage compilation or LCOV cache:
+
+- A nominal exact hit still performs a complete fresh coverage rebuild and
+  produces the warm timings above.
+- A partial hit cannot occur for coverage evidence. Existing local shard
+  files are deleted before a lane runs; CI transports only artifacts whose
+  names contain the current workflow run ID and attempt.
+- Changes to Foundry/Solidity configuration, production Solidity,
+  deterministic tests, Forge Standard Library, the coverage runner,
+  partition definitions, exact-source shards, or exception data are consumed
+  directly from the fresh checkout and therefore always rebuild and revalidate
+  rather than relying on a cache key.
+- Dependency and tool-download caches may accelerate setup, but they contain
+  no bytecode, source maps, test results, LCOV, denominators, or exceptions and
+  cannot make coverage green.
+- Missing, truncated, malformed, stale, or mismatched transported artifacts
+  fail the required matrix dependency or the merge validation. They cannot be
+  uploaded as a fresh report.
+
+This avoids the unsafe cache-key problem entirely while preserving the
+production-like ordinary Foundry cache and compiler settings.
