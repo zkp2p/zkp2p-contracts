@@ -273,6 +273,10 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         assertEq(IOrchestratorV3(address(orchestrator)).getIntentCancellation(intentHash), cancelledAt);
         assertEq(vault.lockedStake(safe), INTENT_AMOUNT);
 
+        vm.prank(taker);
+        vm.expectRevert(abi.encodeWithSelector(IRiskManager.IntentStateMismatch.selector, intentHash));
+        manager.extendIntent(intentHash, 1 hours);
+
         vm.prank(other);
         vm.expectRevert(
             abi.encodeWithSelector(

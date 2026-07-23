@@ -165,8 +165,8 @@ interface IRiskManager is IIntentRiskHook {
     event RiskTakingPausedUpdated(bool paused);
 
     error ZeroAddress();
+    error InvalidContract(address dependency);
     error ZeroAmount();
-    error EmptyBatch();
     error UnauthorizedOrchestrator(address caller);
     error RiskTakingPaused();
     error InvalidPlatformConfig(bytes32 paymentMethod);
@@ -186,13 +186,8 @@ interface IRiskManager is IIntentRiskHook {
     error ExtensionExceedsIntentLifetime(uint64 newExpiry, uint64 maximumExpiry);
     error CancellationNotRecorded(bytes32 intentHash);
     error IntentTokenMismatch(address expectedToken, address actualToken);
-    error InvalidSettlementAmounts(uint256 grossAmount, uint256 executableAmount);
-    error DeferredStakeRecipientMismatch(address expectedStakeOwner, address recipient);
     error DeferredStakeTransferMismatch(uint256 expectedAmount, uint256 actualAmount);
     error DeferredPostIntentHookUnsupported(bytes32 intentHash, address postIntentHook);
-    error InvalidFeeAllocationCount(uint256 count, uint256 maximum);
-    error InvalidFeeAllocation(address recipient, uint256 amount);
-    error InvalidFeeAllocations(uint256 expectedAmount, uint256 actualAmount);
     error PositionNotMature(uint64 coverageDeadline, uint64 currentTime);
     error InvalidAttestation();
     error InvalidPaymentBinding(bytes32 intentHash, bytes32 nullifier);

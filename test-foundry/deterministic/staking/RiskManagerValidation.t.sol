@@ -2,42 +2,68 @@
 
 pragma solidity ^0.8.18;
 
-import {RiskManager} from "../../../contracts/RiskManager.sol";
 import {IIntentRiskHook} from "../../../contracts/interfaces/IIntentRiskHook.sol";
-import {INullifierRegistryV2} from "../../../contracts/interfaces/INullifierRegistryV2.sol";
-import {IOrchestratorV3} from "../../../contracts/interfaces/IOrchestratorV3.sol";
 import {IRiskManager} from "../../../contracts/interfaces/IRiskManager.sol";
+import {NullifierRegistry} from "../../../contracts/registries/NullifierRegistry.sol";
+import {NullifierRegistryV2} from "../../../contracts/registries/NullifierRegistryV2.sol";
+import {OrchestratorRegistry} from "../../../contracts/registries/OrchestratorRegistry.sol";
+import {SimpleAttestationVerifier} from "../../../contracts/unifiedVerifier/SimpleAttestationVerifier.sol";
+import {UnifiedPaymentVerifierV3} from "../../../contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol";
 import {RiskAttestationVerifierMock, RiskManagerFixture} from "../helpers/RiskManagerFixture.sol";
 
 contract RiskManagerValidationTest is RiskManagerFixture {
-    function test_ConstructorRejectsZeroAndNonContractDependencies() public {
-        vm.expectRevert(IRiskManager.ZeroAddress.selector);
-        new RiskManager(
-            address(0),
-            IOrchestratorV3(address(orchestrator)),
-            vault,
-            verifier,
-            INullifierRegistryV2(address(nullifierRegistry))
-        );
+    function test_RiskAndPaymentVerificationShareVerifierWithoutCrossDomainReplay() public {
+        uint256 witnessKey = 0xA11CE;
+        SimpleAttestationVerifier sharedVerifier = new SimpleAttestationVerifier(vm.addr(witnessKey));
+        NullifierRegistry legacyNullifierRegistry = new NullifierRegistry();
+        NullifierRegistryV2 sharedNullifierRegistry = new NullifierRegistryV2(legacyNullifierRegistry);
+        OrchestratorRegistry sharedOrchestratorRegistry = new OrchestratorRegistry();
+        UnifiedPaymentVerifierV3 paymentVerifier =
+            new UnifiedPaymentVerifierV3(sharedOrchestratorRegistry, sharedNullifierRegistry, sharedVerifier);
 
-        vm.expectRevert(IRiskManager.ZeroAddress.selector);
-        new RiskManager(
-            owner,
-            IOrchestratorV3(makeAddr("nonContractOrchestrator")),
-            vault,
-            verifier,
-            INullifierRegistryV2(address(nullifierRegistry))
-        );
+        vm.prank(owner);
+        manager.setAttestationVerifier(address(sharedVerifier));
+
+        assertEq(address(paymentVerifier.attestationVerifier()), address(sharedVerifier));
+        assertEq(address(manager.attestationVerifier()), address(sharedVerifier));
+
+        bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
+        orchestrator.settle(manager, _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, true));
+
+        IRiskManager.ChargebackDetails memory details = IRiskManager.ChargebackDetails({
+            paymentMethod: PAYMENT_METHOD,
+            originalPaymentId: keccak256("shared-payment"),
+            disputeId: keccak256("shared-dispute"),
+            paymentAmount: 1,
+            paymentCurrency: keccak256("USD")
+        });
+        bytes memory data = abi.encode(details);
+        IRiskManager.ChargebackAttestation memory attestation = IRiskManager.ChargebackAttestation({
+            intentHash: intentHash, dataHash: keccak256(data), signatures: new bytes[](1), data: data
+        });
+
+        bytes32 paymentTypeHash =
+            keccak256("PaymentAttestation(bytes32 intentHash,uint256 releaseAmount,bytes32 dataHash)");
+        bytes32 paymentStructHash =
+            keccak256(abi.encode(paymentTypeHash, intentHash, INTENT_AMOUNT, attestation.dataHash));
+        bytes32 paymentDigest =
+            keccak256(abi.encodePacked("\x19\x01", paymentVerifier.DOMAIN_SEPARATOR(), paymentStructHash));
+        attestation.signatures[0] = _signDigest(witnessKey, paymentDigest);
+
+        vm.expectRevert(bytes("ThresholdSigVerifierUtils: Not enough valid witness signatures"));
+        manager.submitChargeback(attestation);
+
+        bytes32 chargebackDigest = manager.hashChargebackAttestation(attestation);
+        attestation.signatures[0] = _signDigest(witnessKey, chargebackDigest);
+
+        vm.expectRevert(bytes("ThresholdSigVerifierUtils: Not enough valid witness signatures"));
+        sharedVerifier.verify(paymentDigest, attestation.signatures, data);
+
+        manager.submitChargeback(attestation);
+        assertEq(uint256(manager.getRiskPosition(intentHash).status), uint256(IRiskManager.PositionStatus.SLASHED));
     }
 
-    function test_AdmissionRejectsMalformedDisabledAndMismatchedInputs() public {
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.IntentStateMismatch.selector, bytes32(0)));
-        orchestrator.admit(manager, bytes32(0));
-
-        bytes32 missingIntent = keccak256("missing-intent");
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.IntentStateMismatch.selector, missingIntent));
-        orchestrator.admit(manager, missingIntent);
-
+    function test_AdmissionRejectsDisabledAndMismatchedProtocolBoundaries() public {
         IRiskManager.PlatformRiskConfig memory disabledConfig = IRiskManager.PlatformRiskConfig({
             enabled: false,
             chargeback: IRiskManager.ChargebackConfig({
@@ -82,7 +108,7 @@ contract RiskManagerValidationTest is RiskManagerFixture {
         orchestrator.admit(manager, intentHash);
     }
 
-    function test_ExtensionRejectsEveryStaleIntentShape() public {
+    function test_ExtensionRejectsInvalidPublicRequests() public {
         bytes32 zeroAmountIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
         vm.prank(taker);
         vm.expectRevert(IRiskManager.ZeroAmount.selector);
@@ -92,48 +118,17 @@ contract RiskManagerValidationTest is RiskManagerFixture {
         vm.expectPartialRevert(IRiskManager.PositionNotPending.selector);
         manager.extendIntent(unknownIntent, 1 hours);
 
-        bytes32 ownerMismatchIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        IRiskManager.RiskPosition memory ownerMismatchPosition = manager.getRiskPosition(ownerMismatchIntent);
-        orchestrator.setIntent(
-            ownerMismatchIntent,
-            makeAddr("replacementTaker"),
-            payoutRecipient,
-            address(escrow),
-            INTENT_AMOUNT,
-            PAYMENT_METHOD,
-            ownerMismatchPosition.createdAt
-        );
-        vm.prank(taker);
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.IntentStateMismatch.selector, ownerMismatchIntent));
-        manager.extendIntent(ownerMismatchIntent, 1 hours);
-
-        bytes32 timestampMismatchIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        IRiskManager.RiskPosition memory timestampMismatchPosition = manager.getRiskPosition(timestampMismatchIntent);
-        escrow.setIntent(timestampMismatchIntent, INTENT_AMOUNT, timestampMismatchPosition.createdAt + 1);
-        vm.prank(taker);
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.IntentStateMismatch.selector, timestampMismatchIntent));
-        manager.extendIntent(timestampMismatchIntent, 1 hours);
-
         bytes32 expiredIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
         IRiskManager.RiskPosition memory expiredPosition = manager.getRiskPosition(expiredIntent);
         vm.warp(expiredPosition.baseIntentExpiry);
         vm.prank(taker);
         vm.expectPartialRevert(IRiskManager.IntentAlreadyExpired.selector);
         manager.extendIntent(expiredIntent, 1 hours);
-
-        bytes32 expiryMismatchIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        IRiskManager.RiskPosition memory expiryMismatchPosition = manager.getRiskPosition(expiryMismatchIntent);
-        escrow.setIntentExpiry(expiryMismatchIntent, uint256(expiryMismatchPosition.baseIntentExpiry) + 1);
-        vm.prank(taker);
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.IntentStateMismatch.selector, expiryMismatchIntent));
-        manager.extendIntent(expiryMismatchIntent, 1 hours);
     }
 
     function test_BatchCancellationAndMaturityValidateAndProcessEveryPosition() public {
         bytes32[] memory empty = new bytes32[](0);
-        vm.expectRevert(IRiskManager.EmptyBatch.selector);
         manager.reconcileCancellations(empty);
-        vm.expectRevert(IRiskManager.EmptyBatch.selector);
         manager.releaseMaturedPositions(empty);
 
         bytes32 unrecordedIntent = keccak256("unrecorded-cancellation");
@@ -189,7 +184,12 @@ contract RiskManagerValidationTest is RiskManagerFixture {
 
         vm.prank(owner);
         vm.expectRevert(IRiskManager.ZeroAddress.selector);
-        manager.setAttestationVerifier(makeAddr("nonContractVerifier"));
+        manager.setAttestationVerifier(address(0));
+
+        address nonContractVerifier = makeAddr("nonContractVerifier");
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(IRiskManager.InvalidContract.selector, nonContractVerifier));
+        manager.setAttestationVerifier(nonContractVerifier);
 
         RiskAttestationVerifierMock replacement = new RiskAttestationVerifierMock();
         vm.prank(owner);
@@ -215,43 +215,32 @@ contract RiskManagerValidationTest is RiskManagerFixture {
         manager.renounceOwnership();
     }
 
-    function test_SettlementRejectsInvalidAmountsRecipientAndFeePlan() public {
+    function test_SettlementRequiresPendingStateButTrustsCanonicalContextShape() public {
         bytes32 unknownIntent = keccak256("unknown-settlement-intent");
         vm.expectPartialRevert(IRiskManager.PositionNotPending.selector);
         orchestrator.settle(manager, _settlementContext(unknownIntent, INTENT_AMOUNT, 10e6, 5e6, false));
 
+        _setConfig(false, false, 0, EXTENSION_SLOPE);
         bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
         IIntentRiskHook.RiskSettlementContext memory context =
             _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, false);
         context.grossAmount = 0;
-        vm.expectPartialRevert(IRiskManager.InvalidSettlementAmounts.selector);
-        orchestrator.settle(manager, context);
-
-        context = _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, false);
+        context.executableAmount = type(uint256).max;
         context.recipient = makeAddr("wrongRecipient");
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.IntentStateMismatch.selector, intentHash));
-        orchestrator.settle(manager, context);
-
-        context = _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, false);
+        context.token = address(otherToken);
         context.feeAllocations = new IIntentRiskHook.FeeAllocation[](13);
-        vm.expectPartialRevert(IRiskManager.InvalidFeeAllocationCount.selector);
+        context.feeAllocations[0].recipient = address(0);
         orchestrator.settle(manager, context);
 
-        context = _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, false);
-        context.feeAllocations[0].recipient = address(0);
-        vm.expectPartialRevert(IRiskManager.InvalidFeeAllocation.selector);
-        orchestrator.settle(manager, context);
+        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        assertEq(uint256(position.status), uint256(IRiskManager.PositionStatus.RELEASED));
+        assertEq(position.grossReleasedAmount, 0);
+        assertEq(position.executableAmount, type(uint256).max);
     }
 
-    function test_DeferredSettlementRejectsFundingMismatches() public {
-        address firstDeferredTaker = makeAddr("firstDeferredTaker");
-        bytes32 recipientMismatchIntent = _admit(firstDeferredTaker, payoutRecipient, INTENT_AMOUNT);
-        manager.setPositionStakeOwner(recipientMismatchIntent, makeAddr("wrongStakeOwner"));
-        vm.expectPartialRevert(IRiskManager.DeferredStakeRecipientMismatch.selector);
-        orchestrator.settle(manager, _settlementContext(recipientMismatchIntent, INTENT_AMOUNT, 10e6, 5e6, false));
-
-        address secondDeferredTaker = makeAddr("secondDeferredTaker");
-        bytes32 transferMismatchIntent = _admit(secondDeferredTaker, payoutRecipient, INTENT_AMOUNT);
+    function test_DeferredSettlementRejectsTransferAmountMismatch() public {
+        address deferredTaker = makeAddr("deferredTaker");
+        bytes32 transferMismatchIntent = _admit(deferredTaker, payoutRecipient, INTENT_AMOUNT);
         token.setTransferFeeEnabled(true);
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -283,15 +272,27 @@ contract RiskManagerValidationTest is RiskManagerFixture {
     }
 
     function test_DefensiveModeGuardsRejectContradictoryPositionState() public {
+        bytes32 cancellationIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
+        manager.setPositionMode(cancellationIntent, IRiskManager.RiskMode.NONE);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IRiskManager.PositionModeMismatch.selector, cancellationIntent, IRiskManager.RiskMode.NONE
+            )
+        );
+        orchestrator.cancel(manager, cancellationIntent);
+        assertEq(
+            uint256(manager.getRiskPosition(cancellationIntent).status), uint256(IRiskManager.PositionStatus.PENDING)
+        );
+
         bytes32 pendingIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
         manager.setPositionMode(pendingIntent, IRiskManager.RiskMode.NONE);
         vm.expectRevert(
-            abi.encodeWithSelector(IRiskManager.PositionModeMismatch.selector, pendingIntent, IRiskManager.RiskMode.NONE)
+            abi.encodeWithSelector(
+                IRiskManager.PositionModeMismatch.selector, pendingIntent, IRiskManager.RiskMode.NONE
+            )
         );
         orchestrator.settle(manager, _settlementContext(pendingIntent, INTENT_AMOUNT, 10e6, 5e6, false));
-        assertEq(
-            uint256(manager.getRiskPosition(pendingIntent).status), uint256(IRiskManager.PositionStatus.PENDING)
-        );
+        assertEq(uint256(manager.getRiskPosition(pendingIntent).status), uint256(IRiskManager.PositionStatus.PENDING));
 
         bytes32 chargebackIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
         orchestrator.settle(manager, _settlementContext(chargebackIntent, INTENT_AMOUNT, 10e6, 5e6, true));
@@ -319,12 +320,24 @@ contract RiskManagerValidationTest is RiskManagerFixture {
             )
         );
         manager.releaseMaturedPosition(maturityIntent);
-        assertEq(
-            uint256(manager.getRiskPosition(maturityIntent).status), uint256(IRiskManager.PositionStatus.SETTLED)
-        );
+        assertEq(uint256(manager.getRiskPosition(maturityIntent).status), uint256(IRiskManager.PositionStatus.SETTLED));
     }
 
-    function test_ChargebackRejectsInvalidHashAndDetails() public {
+    function test_SettlementAndMaturityRejectTimestampOverflow() public {
+        bytes32 settlementIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
+        vm.warp(type(uint64).max);
+        vm.expectPartialRevert(IRiskManager.TimestampOverflow.selector);
+        orchestrator.settle(manager, _settlementContext(settlementIntent, INTENT_AMOUNT, 10e6, 5e6, false));
+
+        vm.warp(1);
+        bytes32 maturityIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
+        orchestrator.settle(manager, _settlementContext(maturityIntent, INTENT_AMOUNT, 10e6, 5e6, false));
+        vm.warp(uint256(type(uint64).max) + 1);
+        vm.expectPartialRevert(IRiskManager.TimestampOverflow.selector);
+        manager.releaseMaturedPosition(maturityIntent);
+    }
+
+    function test_ChargebackValidatesBindingsButAcceptsUnusedZeroFields() public {
         bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
         orchestrator.settle(manager, _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, true));
 
@@ -347,11 +360,33 @@ contract RiskManagerValidationTest is RiskManagerFixture {
         });
         vm.expectRevert(IRiskManager.InvalidAttestation.selector);
         manager.submitChargeback(invalidDetails);
+
+        IRiskManager.ChargebackDetails memory zeroUnusedDetails = IRiskManager.ChargebackDetails({
+            paymentMethod: PAYMENT_METHOD,
+            originalPaymentId: bytes32(0),
+            disputeId: bytes32(0),
+            paymentAmount: 0,
+            paymentCurrency: bytes32(0)
+        });
+        bytes memory zeroUnusedData = abi.encode(zeroUnusedDetails);
+        IRiskManager.ChargebackAttestation memory zeroUnusedAttestation = IRiskManager.ChargebackAttestation({
+            intentHash: intentHash,
+            dataHash: keccak256(zeroUnusedData),
+            signatures: new bytes[](0),
+            data: zeroUnusedData
+        });
+        manager.submitChargeback(zeroUnusedAttestation);
+        assertEq(uint256(manager.getRiskPosition(intentHash).status), uint256(IRiskManager.PositionStatus.SLASHED));
     }
 
     function test_CancellationRejectsNonPendingPosition() public {
         bytes32 unknownIntent = keccak256("unknown-cancellation-intent");
         vm.expectPartialRevert(IRiskManager.PositionNotPending.selector);
         orchestrator.cancel(manager, unknownIntent);
+    }
+
+    function _signDigest(uint256 _signerKey, bytes32 _digest) private pure returns (bytes memory signature) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(_signerKey, _digest);
+        signature = abi.encodePacked(r, s, v);
     }
 }

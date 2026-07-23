@@ -159,24 +159,20 @@ contract RiskManagerSettlementTest is RiskManagerFixture {
         assertEq(vault.totalClaimable(), 0);
     }
 
-    function test_InvalidSettlementContextRevertsBeforeAnyLockChanges() public {
+    function test_StakeBackedSettlementTrustsCanonicalOrchestratorContextShape() public {
         bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
         IIntentRiskHook.RiskSettlementContext memory context =
             _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, false);
         context.feeAllocations[0].amount += 1;
-
-        vm.expectRevert(abi.encodeWithSelector(IRiskManager.InvalidFeeAllocations.selector, 15e6, 15e6 + 1));
+        context.token = address(otherToken);
+        context.recipient = makeAddr("canonicalContextIsTrusted");
         orchestrator.settle(manager, context);
+
+        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
         (, uint256 lockAmount, uint64 maturesAt) = vault.locks(intentHash);
         assertEq(lockAmount, INTENT_AMOUNT);
-        assertEq(maturesAt, type(uint64).max);
-
-        context = _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, false);
-        context.token = address(otherToken);
-        vm.expectRevert(
-            abi.encodeWithSelector(IRiskManager.IntentTokenMismatch.selector, address(token), address(otherToken))
-        );
-        orchestrator.settle(manager, context);
+        assertEq(maturesAt, position.coverageDeadline);
+        assertEq(uint256(position.status), uint256(IRiskManager.PositionStatus.SETTLED));
     }
 
     function test_StakeBackedChargebackAtWindowStartCreatesFullLpClaim() public {

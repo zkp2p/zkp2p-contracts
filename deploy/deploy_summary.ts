@@ -66,7 +66,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     OrchestratorV3:                     ${tryGetAddress(network, "OrchestratorV3")}
     StakeVault:                         ${tryGetAddress(network, "StakeVault")}
     RiskManager:                        ${tryGetAddress(network, "RiskManager")}
-    RiskAttestationVerifier:            ${tryGetAddress(network, "RiskAttestationVerifier")}
     NullifierRegistryV2:                ${tryGetAddress(network, "NullifierRegistryV2")}
     UnifiedPaymentVerifierV3:           ${tryGetAddress(network, "UnifiedPaymentVerifierV3")}
     `
