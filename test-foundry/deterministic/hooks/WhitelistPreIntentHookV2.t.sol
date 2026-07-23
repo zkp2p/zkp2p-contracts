@@ -588,4 +588,112 @@ contract WhitelistPreIntentHookV2Test is Test {
         _add(depositor, _address(taker));
         assertTrue(hook.isAllowedTaker(address(escrow), 0, taker));
     }
+    /* ============ configuration persistence and lifecycle ============ */
+
+    function test_ConfigPersistsAcrossHookUnsetAndReattach() public {
+        uint256 groupId = _newGroup(depositor);
+        _attach(depositor, _groupIds(groupId));
+        _add(depositor, _address(taker));
+
+        // unset hook slot => whitelist paused, anyone can signal
+        vm.prank(depositor);
+        orchestrator.setDepositWhitelistHook(address(escrow), 0, IPreIntentHook(address(0)));
+        vm.prank(unauthorized);
+        orchestrator.signalIntent(_paramsFor(unauthorized));
+        assertEq(orchestrator.getAccountIntents(unauthorized).length, 1);
+
+        // reattach => dormant config resumes: direct entry and attached group intact
+        vm.prank(depositor);
+        orchestrator.setDepositWhitelistHook(address(escrow), 0, IPreIntentHook(address(hook)));
+        assertTrue(hook.isWhitelisted(address(escrow), 0, taker));
+        assertTrue(hook.isGroupAttached(address(escrow), 0, groupId));
+        _expectNotWhitelistedRevertFor(takerTwo);
+        vm.prank(takerTwo);
+        orchestrator.signalIntent(_paramsFor(takerTwo));
+    }
+
+    function test_MembershipRemovalDoesNotInvalidateSignaledIntent() public {
+        uint256 groupId = _newGroup(depositor);
+        vm.prank(depositor);
+        groupRegistry.addMembers(groupId, _address(taker));
+        _attach(depositor, _groupIds(groupId));
+        _signalCall();
+        bytes32[] memory intents = orchestrator.getAccountIntents(taker);
+        assertEq(intents.length, 1);
+
+        vm.prank(depositor);
+        groupRegistry.removeMembers(groupId, _address(taker));
+        // the already-signaled intent still exists and is untouched
+        assertEq(orchestrator.getAccountIntents(taker).length, 1);
+        // but a new signal is rejected (point-in-time admission)
+        _expectNotWhitelistedRevert();
+        _signalCall();
+    }
+
+    function test_SetupRaceWindowIsRealBeforeHookAttachment() public {
+        // Demonstrates the documented limitation: a second deposit (id 1) accepts intents
+        // between createDeposit and setDepositWhitelistHook.
+        vm.startPrank(depositor);
+        token.approve(address(escrow), 10_000e6);
+        _createDeposit(); // deposit id 1, no hook configured yet
+        vm.stopPrank();
+
+        IOrchestratorV3.SignalIntentParams memory params = _paramsFor(unauthorized);
+        params.depositId = 1;
+        vm.prank(unauthorized);
+        orchestrator.signalIntent(params); // succeeds — window is open
+        assertEq(orchestrator.getAccountIntents(unauthorized).length, 1);
+    }
+
+    function test_HookRejectionPrecedesLiquidityCheck() public {
+        // Validation order under test: OrchestratorV3.signalIntent runs _validateSignalIntent
+        // (no liquidity check), then the hooks, and only locks funds afterwards — so a
+        // non-member must get TakerNotWhitelisted even when the deposit is drained, while a
+        // whitelisted taker passes the hook and then hits InsufficientDepositLiquidity.
+        _add(depositor, _address(taker));
+        IOrchestratorV3.SignalIntentParams memory params = _signalParams();
+        params.amount = 100e6; // drain the entire deposit
+        vm.prank(taker);
+        orchestrator.signalIntent(params);
+
+        _expectNotWhitelistedRevertFor(takerTwo);
+        vm.prank(takerTwo);
+        orchestrator.signalIntent(_paramsFor(takerTwo));
+
+        _add(depositor, _address(takerTwo));
+        vm.expectRevert(
+            abi.encodeWithSelector(IEscrowV2.InsufficientDepositLiquidity.selector, 0, 0, INTENT_AMOUNT)
+        );
+        vm.prank(takerTwo);
+        orchestrator.signalIntent(_paramsFor(takerTwo));
+    }
+
+    function test_NewDelegateGainsConfigRightsOldDelegateLosesThem() public {
+        address newDelegate = makeAddr("newDelegate");
+        vm.prank(depositor);
+        escrow.setDelegate(0, newDelegate);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                WhitelistPreIntentHookV2.UnauthorizedCallerOrDelegate.selector, delegate, depositor, newDelegate
+            )
+        );
+        _add(delegate, _address(taker));
+
+        _add(newDelegate, _address(taker));
+        assertTrue(hook.isWhitelisted(address(escrow), 0, taker));
+    }
+
+    /* ============ helpers for the above ============ */
+
+    function _paramsFor(address signaler) internal view returns (IOrchestratorV3.SignalIntentParams memory params) {
+        params = _signalParams();
+        params.to = signaler;
+    }
+
+    function _expectNotWhitelistedRevertFor(address who) internal {
+        vm.expectRevert(
+            abi.encodeWithSelector(WhitelistPreIntentHookV2.TakerNotWhitelisted.selector, who, address(escrow), 0)
+        );
+    }
 }
