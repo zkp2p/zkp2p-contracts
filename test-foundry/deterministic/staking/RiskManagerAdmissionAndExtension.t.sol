@@ -288,4 +288,25 @@ contract RiskManagerAdmissionAndExtensionTest is RiskManagerFixture {
         manager.extendIntent(limitedIntent, 1);
         assertEq(vault.lockedStake(safe), lockedBefore);
     }
+
+    function test_ExtensionRejectsTotalTimeOverflowBeforeMutatingVault() public {
+        bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
+        IRiskManager.RiskPosition memory position = manager.getRiskPosition(intentHash);
+        uint64 totalExtensionTime = type(uint64).max - position.baseIntentExpiry;
+        uint64 additionalTime = position.baseIntentExpiry + 1;
+
+        manager.setPositionTotalExtensionTime(intentHash, totalExtensionTime);
+        escrow.setIntentExpiry(intentHash, type(uint64).max);
+
+        uint256 lockedBefore = vault.lockedStake(safe);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IRiskManager.ExtensionTimeOverflow.selector, uint256(totalExtensionTime) + additionalTime
+            )
+        );
+        vm.prank(taker);
+        manager.extendIntent(intentHash, additionalTime);
+
+        assertEq(vault.lockedStake(safe), lockedBefore);
+    }
 }

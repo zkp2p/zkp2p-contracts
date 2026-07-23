@@ -188,6 +188,45 @@ contract StakeVaultTest is Test {
         vault.claim();
     }
 
+    function test_DelegationLockAndGovernanceBoundaryInputsRevert() public {
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InvalidTaker.selector, address(0)));
+        vm.prank(safeA);
+        vault.setTakerAuthorization(address(0), true);
+
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InvalidTaker.selector, safeA));
+        vm.prank(safeA);
+        vault.setTakerAuthorization(safeA, true);
+
+        vm.expectRevert(IStakeVault.ZeroAddress.selector);
+        vm.prank(taker);
+        vault.selectStakeOwner(address(0));
+
+        vm.expectRevert(IStakeVault.ZeroAddress.selector);
+        vm.prank(taker);
+        vault.selectStakeOwner(taker);
+
+        vm.expectRevert(IStakeVault.ZeroAmount.selector);
+        vm.prank(controller);
+        vault.increaseLock(keccak256("missing-increase"), 0);
+
+        vm.expectRevert(IStakeVault.ZeroAmount.selector);
+        vm.prank(controller);
+        vault.resizeLock(keccak256("missing-resize"), 0, NEVER_MATURES);
+
+        vm.expectRevert(IStakeVault.ZeroAddress.selector);
+        vault.initializeController(address(0));
+
+        vm.expectRevert(IStakeVault.ZeroAddress.selector);
+        vault.proposeController(address(0));
+    }
+
+    function test_ControllerProposalRejectsTimestampOverflow() public {
+        vm.warp(uint256(type(uint64).max) + 1);
+
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.TimestampOverflow.selector, block.timestamp));
+        vault.proposeController(nextController);
+    }
+
     function test_DelegationRequiresOwnerAuthorizationAndTakerSelection() public {
         vm.prank(safeA);
         vault.setTakerAuthorization(taker, true);

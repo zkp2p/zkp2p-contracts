@@ -58,6 +58,10 @@ contract RiskManagerHarness is RiskManager {
     function setPositionCoverageAmount(bytes32 _intentHash, uint256 _coverageAmount) external {
         riskPositions[_intentHash].coverageAmount = _coverageAmount;
     }
+
+    function setPositionTotalExtensionTime(bytes32 _intentHash, uint64 _totalExtensionTime) external {
+        riskPositions[_intentHash].totalExtensionTime = _totalExtensionTime;
+    }
 }
 
 contract RiskAttestationVerifierMock is IAttestationVerifier {
