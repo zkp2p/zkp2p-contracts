@@ -20,7 +20,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const addressGroupRegistry = await deploy("AddressGroupRegistry", {
     from: deployer,
-    args: [],
+    args: [[]],
   });
   console.log("AddressGroupRegistry deployed at", addressGroupRegistry.address);
   await waitForDeploymentDelay(hre);

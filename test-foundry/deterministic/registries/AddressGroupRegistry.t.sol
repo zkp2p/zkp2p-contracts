@@ -3,6 +3,7 @@ pragma solidity ^0.8.18;
 
 import {Test} from "forge-std/Test.sol";
 
+import {IAddressGroupRegistry} from "contracts/interfaces/IAddressGroupRegistry.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 
 contract AddressGroupRegistryTest is Test {
@@ -12,6 +13,7 @@ contract AddressGroupRegistryTest is Test {
     event GroupOwnershipTransferred(uint256 indexed groupId, address indexed previousOwner, address indexed newOwner);
     event MemberAdded(uint256 indexed groupId, address indexed member);
     event MemberRemoved(uint256 indexed groupId, address indexed member);
+    event GroupVisibilityChanged(uint256 indexed groupId, bool isPublic);
 
     AddressGroupRegistry internal registry;
     address internal alice;
@@ -19,7 +21,7 @@ contract AddressGroupRegistryTest is Test {
     address internal carol;
 
     function setUp() public {
-        registry = new AddressGroupRegistry();
+        registry = new AddressGroupRegistry(new IAddressGroupRegistry.GroupSeed[](0));
         alice = makeAddr("alice");
         bob = makeAddr("bob");
         carol = makeAddr("carol");
@@ -55,16 +57,18 @@ contract AddressGroupRegistryTest is Test {
 
     function test_CreateGroupSetsCallerAsOwner() public {
         uint256 groupId = _createGroup(alice);
-        (address owner, address pendingOwner, address resolver, bool exists) = registry.getGroup(groupId);
+        (address owner, address pendingOwner, address resolver, bool isPublic, bool exists) =
+            registry.getGroup(groupId);
         assertEq(owner, alice);
         assertEq(pendingOwner, address(0));
         assertEq(resolver, address(0));
+        assertFalse(isPublic);
         assertTrue(exists);
     }
 
     function test_GroupZeroDoesNotExist() public view {
         assertFalse(registry.groupExists(0));
-        (,,, bool exists) = registry.getGroup(0);
+        (,,,, bool exists) = registry.getGroup(0);
         assertFalse(exists);
     }
 
@@ -80,7 +84,7 @@ contract AddressGroupRegistryTest is Test {
         emit GroupOwnershipTransferStarted(groupId, alice, bob);
         vm.prank(alice);
         registry.transferGroupOwnership(groupId, bob);
-        (address owner, address pendingOwner,,) = registry.getGroup(groupId);
+        (address owner, address pendingOwner,,,) = registry.getGroup(groupId);
         assertEq(owner, alice);
         assertEq(pendingOwner, bob);
     }
@@ -91,7 +95,7 @@ contract AddressGroupRegistryTest is Test {
         registry.transferGroupOwnership(groupId, bob);
         vm.prank(alice);
         registry.transferGroupOwnership(groupId, carol);
-        (, address pendingOwner,,) = registry.getGroup(groupId);
+        (, address pendingOwner,,,) = registry.getGroup(groupId);
         assertEq(pendingOwner, carol);
     }
 
@@ -123,7 +127,7 @@ contract AddressGroupRegistryTest is Test {
         emit GroupOwnershipTransferCancelled(groupId, bob);
         vm.prank(alice);
         registry.cancelGroupOwnershipTransfer(groupId);
-        (, address pendingOwner,,) = registry.getGroup(groupId);
+        (, address pendingOwner,,,) = registry.getGroup(groupId);
         assertEq(pendingOwner, address(0));
     }
 
@@ -142,7 +146,7 @@ contract AddressGroupRegistryTest is Test {
         emit GroupOwnershipTransferred(groupId, alice, bob);
         vm.prank(bob);
         registry.acceptGroupOwnership(groupId);
-        (address owner, address pendingOwner,,) = registry.getGroup(groupId);
+        (address owner, address pendingOwner,,,) = registry.getGroup(groupId);
         assertEq(owner, bob);
         assertEq(pendingOwner, address(0));
     }
@@ -332,5 +336,164 @@ contract AddressGroupRegistryTest is Test {
         vm.expectRevert(expected);
         vm.prank(bob);
         registry.setResolver(groupId, address(registry));
+    }
+
+    /* ============ visibility ============ */
+
+    function test_OwnerTogglesVisibilityAndEmitsEveryTime() public {
+        uint256 groupId = _createGroup(alice);
+
+        vm.expectEmit(true, true, true, true, address(registry));
+        emit GroupVisibilityChanged(groupId, true);
+        vm.prank(alice);
+        registry.setGroupVisibility(groupId, true);
+        (,,, bool isPublic,) = registry.getGroup(groupId);
+        assertTrue(isPublic);
+
+        vm.expectEmit(true, true, true, true, address(registry));
+        emit GroupVisibilityChanged(groupId, false);
+        vm.prank(alice);
+        registry.setGroupVisibility(groupId, false);
+        (,,, isPublic,) = registry.getGroup(groupId);
+        assertFalse(isPublic);
+
+        vm.expectEmit(true, true, true, true, address(registry));
+        emit GroupVisibilityChanged(groupId, false);
+        vm.prank(alice);
+        registry.setGroupVisibility(groupId, false);
+    }
+
+    function test_NonOwnerCannotSetVisibility() public {
+        uint256 groupId = _createGroup(alice);
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupOwner.selector, bob, alice));
+        vm.prank(bob);
+        registry.setGroupVisibility(groupId, true);
+    }
+
+    function test_SetVisibilityOnNonexistentGroupReverts() public {
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.GroupDoesNotExist.selector, 7));
+        registry.setGroupVisibility(7, true);
+    }
+
+    /* ============ public self-service membership ============ */
+
+    function test_PublicGroupMemberJoinsAndRejoinIsSilent() public {
+        uint256 groupId = _createGroup(alice);
+        vm.prank(alice);
+        registry.setGroupVisibility(groupId, true);
+
+        vm.expectEmit(true, true, true, true, address(registry));
+        emit MemberAdded(groupId, bob);
+        vm.prank(bob);
+        registry.joinGroup(groupId);
+        assertTrue(registry.isMember(groupId, bob));
+
+        vm.recordLogs();
+        vm.prank(bob);
+        registry.joinGroup(groupId);
+        assertEq(vm.getRecordedLogs().length, 0);
+        assertTrue(registry.isMember(groupId, bob));
+    }
+
+    function test_CuratedMemberJoiningPublicGroupIsSilent() public {
+        uint256 groupId = _createGroup(alice);
+        vm.startPrank(alice);
+        registry.addMembers(groupId, _members(bob));
+        registry.setGroupVisibility(groupId, true);
+        vm.stopPrank();
+
+        vm.recordLogs();
+        vm.prank(bob);
+        registry.joinGroup(groupId);
+        assertEq(vm.getRecordedLogs().length, 0);
+    }
+
+    function test_JoinPrivateGroupReverts() public {
+        uint256 groupId = _createGroup(alice);
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.GroupNotPublic.selector, groupId));
+        vm.prank(bob);
+        registry.joinGroup(groupId);
+    }
+
+    function test_JoinNonexistentGroupReverts() public {
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.GroupDoesNotExist.selector, 7));
+        vm.prank(bob);
+        registry.joinGroup(7);
+    }
+
+    function test_PublicGroupMemberLeavesAndRepeatedLeaveIsSilent() public {
+        uint256 groupId = _createGroup(alice);
+        vm.prank(alice);
+        registry.setGroupVisibility(groupId, true);
+        vm.prank(bob);
+        registry.joinGroup(groupId);
+
+        vm.expectEmit(true, true, true, true, address(registry));
+        emit MemberRemoved(groupId, bob);
+        vm.prank(bob);
+        registry.leaveGroup(groupId);
+        assertFalse(registry.isMember(groupId, bob));
+
+        vm.recordLogs();
+        vm.prank(bob);
+        registry.leaveGroup(groupId);
+        assertEq(vm.getRecordedLogs().length, 0);
+    }
+
+    function test_LeavePrivateGroupRevertsAndKeepsMembership() public {
+        uint256 groupId = _createGroup(alice);
+        vm.prank(alice);
+        registry.setGroupVisibility(groupId, true);
+        vm.prank(bob);
+        registry.joinGroup(groupId);
+        vm.prank(alice);
+        registry.setGroupVisibility(groupId, false);
+
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.GroupNotPublic.selector, groupId));
+        vm.prank(bob);
+        registry.leaveGroup(groupId);
+        assertTrue(registry.isMember(groupId, bob));
+    }
+
+    function test_LeaveNonexistentGroupReverts() public {
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.GroupDoesNotExist.selector, 7));
+        vm.prank(bob);
+        registry.leaveGroup(7);
+    }
+
+    function test_VisibilityTransitionsPreserveMembersAndEnableJoining() public {
+        uint256 groupId = _createGroup(alice);
+        vm.startPrank(alice);
+        registry.addMembers(groupId, _members(bob));
+        registry.setGroupVisibility(groupId, true);
+        registry.setGroupVisibility(groupId, false);
+        vm.stopPrank();
+        assertTrue(registry.isMember(groupId, bob));
+
+        vm.prank(alice);
+        registry.setGroupVisibility(groupId, true);
+        vm.prank(carol);
+        registry.joinGroup(groupId);
+        assertTrue(registry.isMember(groupId, carol));
+    }
+
+    function test_OwnerCurationAndSelfServiceComposeOnPublicGroup() public {
+        uint256 groupId = _createGroup(alice);
+        vm.startPrank(alice);
+        registry.setGroupVisibility(groupId, true);
+        registry.addMembers(groupId, _members(bob));
+        registry.removeMembers(groupId, _members(bob));
+        vm.stopPrank();
+        assertFalse(registry.isMember(groupId, bob));
+
+        vm.prank(bob);
+        registry.joinGroup(groupId);
+        assertTrue(registry.isMember(groupId, bob));
+
+        vm.prank(bob);
+        registry.leaveGroup(groupId);
+        vm.prank(alice);
+        registry.addMembers(groupId, _members(bob));
+        assertTrue(registry.isMember(groupId, bob));
     }
 }

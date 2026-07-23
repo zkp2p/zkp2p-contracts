@@ -3,6 +3,7 @@ pragma solidity ^0.8.18;
 
 import {Test} from "forge-std/Test.sol";
 
+import {IAddressGroupRegistry} from "contracts/interfaces/IAddressGroupRegistry.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {AddressGroupRegistryGasHarness} from "contracts/mocks/AddressGroupRegistryGasHarness.sol";
 import {WhitelistResolverMock} from "contracts/mocks/WhitelistResolverMock.sol";
@@ -17,7 +18,7 @@ contract AddressGroupRegistryResolverTest is Test {
     uint256 internal groupId;
 
     function setUp() public {
-        registry = new AddressGroupRegistry();
+        registry = new AddressGroupRegistry(new IAddressGroupRegistry.GroupSeed[](0));
         resolver = new WhitelistResolverMock();
         alice = makeAddr("alice");
         bob = makeAddr("bob");
@@ -36,7 +37,7 @@ contract AddressGroupRegistryResolverTest is Test {
         vm.expectEmit(true, true, true, true, address(registry));
         emit ResolverSet(groupId, address(0), address(resolver));
         _setResolver(address(resolver));
-        (,, address stored,) = registry.getGroup(groupId);
+        (,, address stored,,) = registry.getGroup(groupId);
         assertEq(stored, address(resolver));
     }
 
@@ -45,7 +46,7 @@ contract AddressGroupRegistryResolverTest is Test {
         vm.expectEmit(true, true, true, true, address(registry));
         emit ResolverSet(groupId, address(resolver), address(0));
         _setResolver(address(0));
-        (,, address stored,) = registry.getGroup(groupId);
+        (,, address stored,,) = registry.getGroup(groupId);
         assertEq(stored, address(0));
     }
 
@@ -81,6 +82,35 @@ contract AddressGroupRegistryResolverTest is Test {
 
     function test_NoResolverNoCuratedMeansFalse() public view {
         assertFalse(registry.isMember(groupId, bob));
+    }
+
+    function test_LeaveClearsCuratedMembershipButResolverStillGrants() public {
+        _setResolver(address(resolver));
+        resolver.setMemberOf(groupId, bob, true);
+        vm.prank(alice);
+        registry.setGroupVisibility(groupId, true);
+        vm.prank(bob);
+        registry.joinGroup(groupId);
+
+        vm.prank(bob);
+        registry.leaveGroup(groupId);
+
+        assertFalse(registry.members(groupId, bob));
+        assertTrue(registry.isMember(groupId, bob));
+    }
+
+    function test_ResolverOnlyMemberLeaveIsSilentNoOp() public {
+        _setResolver(address(resolver));
+        resolver.setMemberOf(groupId, bob, true);
+        vm.prank(alice);
+        registry.setGroupVisibility(groupId, true);
+
+        vm.recordLogs();
+        vm.prank(bob);
+        registry.leaveGroup(groupId);
+
+        assertEq(vm.getRecordedLogs().length, 0);
+        assertTrue(registry.isMember(groupId, bob));
     }
 
     /* ============ fail-closed matrix ============ */

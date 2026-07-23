@@ -6,6 +6,7 @@ import {Test} from "forge-std/Test.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {WhitelistPreIntentHookV2} from "contracts/hooks/WhitelistPreIntentHookV2.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
+import {IAddressGroupRegistry} from "contracts/interfaces/IAddressGroupRegistry.sol";
 import {IEscrow} from "contracts/interfaces/IEscrow.sol";
 
 // Minimal escrow stand-in: the hook's config functions only read depositor/delegate.
@@ -33,7 +34,7 @@ contract WhitelistHookV2AttachFuzzTest is Test {
 
     function setUp() public {
         depositor = makeAddr("depositor");
-        registry = new AddressGroupRegistry();
+        registry = new AddressGroupRegistry(new IAddressGroupRegistry.GroupSeed[](0));
         hook = new WhitelistPreIntentHookV2(address(new OrchestratorRegistry()), address(registry));
         escrow = new EscrowGetDepositMock(depositor);
         for (uint256 i = 0; i < GROUP_POOL; i++) {

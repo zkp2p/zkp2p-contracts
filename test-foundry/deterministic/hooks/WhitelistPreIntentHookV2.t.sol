@@ -14,6 +14,7 @@ import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
+import {IAddressGroupRegistry} from "contracts/interfaces/IAddressGroupRegistry.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
@@ -86,7 +87,7 @@ contract WhitelistPreIntentHookV2Test is Test {
         orchestratorRegistry.addOrchestrator(address(orchestrator));
         verifier.setVerificationContext(address(orchestrator), address(escrow));
 
-        groupRegistry = new AddressGroupRegistry();
+        groupRegistry = new AddressGroupRegistry(new IAddressGroupRegistry.GroupSeed[](0));
         hook = new WhitelistPreIntentHookV2(address(orchestratorRegistry), address(groupRegistry));
         resolverMock = new WhitelistResolverMock();
 

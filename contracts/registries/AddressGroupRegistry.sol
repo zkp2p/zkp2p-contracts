@@ -26,6 +26,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
         address owner;
         address pendingOwner;
         address resolver;
+        bool isPublic;
     }
 
     /* ============ Events ============ */
@@ -37,6 +38,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
     event MemberAdded(uint256 indexed groupId, address indexed member);
     event MemberRemoved(uint256 indexed groupId, address indexed member);
     event ResolverSet(uint256 indexed groupId, address indexed oldResolver, address indexed newResolver);
+    event GroupVisibilityChanged(uint256 indexed groupId, bool isPublic);
 
     /* ============ Errors ============ */
 
@@ -47,6 +49,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
     error ZeroAddress();
     error EmptyArray();
     error ResolverNotContract(address resolver);
+    error GroupNotPublic(uint256 groupId);
 
     /* ============ Constants ============ */
 
@@ -62,6 +65,20 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
     // groupId => account => curated membership
     mapping(uint256 => mapping(address => bool)) public members;
 
+    /* ============ Constructor ============ */
+
+    constructor(IAddressGroupRegistry.GroupSeed[] memory _seeds) {
+        for (uint256 i = 0; i < _seeds.length; i++) {
+            IAddressGroupRegistry.GroupSeed memory seed = _seeds[i];
+            if (seed.owner == address(0)) revert ZeroAddress();
+
+            uint256 groupId = _createGroup(seed.owner, seed.isPublic, seed.name);
+            for (uint256 j = 0; j < seed.members.length; j++) {
+                _addMember(groupId, seed.members[j]);
+            }
+        }
+    }
+
     /* ============ External Functions ============ */
 
     /**
@@ -69,9 +86,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
      * @param _name    Human-readable label, emitted in the event only (not stored).
      */
     function createGroup(string calldata _name) external override returns (uint256 groupId) {
-        groupId = ++groupCount;
-        groups[groupId].owner = msg.sender;
-        emit GroupCreated(groupId, msg.sender, _name);
+        return _createGroup(msg.sender, false, _name);
     }
 
     /**
@@ -126,12 +141,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
         if (_members.length == 0) revert EmptyArray();
 
         for (uint256 i = 0; i < _members.length; i++) {
-            address member = _members[i];
-            if (member == address(0)) revert ZeroAddress();
-            if (!members[_groupId][member]) {
-                members[_groupId][member] = true;
-                emit MemberAdded(_groupId, member);
-            }
+            _addMember(_groupId, _members[i]);
         }
     }
 
@@ -151,6 +161,38 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
                 members[_groupId][member] = false;
                 emit MemberRemoved(_groupId, member);
             }
+        }
+    }
+
+    /**
+     * @notice Sets whether a group permits self-service membership.
+     * @param _groupId    Group id.
+     * @param _isPublic   Whether the group is public.
+     */
+    function setGroupVisibility(uint256 _groupId, bool _isPublic) external override {
+        Group storage group = _requireGroupOwner(_groupId);
+        group.isPublic = _isPublic;
+        emit GroupVisibilityChanged(_groupId, _isPublic);
+    }
+
+    /**
+     * @notice Joins a public group as the caller.
+     * @param _groupId    Group id.
+     */
+    function joinGroup(uint256 _groupId) external override {
+        _requirePublicGroup(_groupId);
+        _addMember(_groupId, msg.sender);
+    }
+
+    /**
+     * @notice Leaves a public group's curated membership as the caller.
+     * @param _groupId    Group id.
+     */
+    function leaveGroup(uint256 _groupId) external override {
+        _requirePublicGroup(_groupId);
+        if (members[_groupId][msg.sender]) {
+            members[_groupId][msg.sender] = false;
+            emit MemberRemoved(_groupId, msg.sender);
         }
     }
 
@@ -203,18 +245,39 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
         external
         view
         override
-        returns (address owner, address pendingOwner, address resolver, bool exists)
+        returns (address owner, address pendingOwner, address resolver, bool isPublic, bool exists)
     {
         Group storage group = groups[_groupId];
-        return (group.owner, group.pendingOwner, group.resolver, group.owner != address(0));
+        return (group.owner, group.pendingOwner, group.resolver, group.isPublic, group.owner != address(0));
     }
 
     /* ============ Internal Functions ============ */
+
+    function _createGroup(address _owner, bool _isPublic, string memory _name) internal returns (uint256 groupId) {
+        groupId = ++groupCount;
+        groups[groupId].owner = _owner;
+        groups[groupId].isPublic = _isPublic;
+        emit GroupCreated(groupId, _owner, _name);
+    }
+
+    function _addMember(uint256 _groupId, address _member) internal {
+        if (_member == address(0)) revert ZeroAddress();
+        if (!members[_groupId][_member]) {
+            members[_groupId][_member] = true;
+            emit MemberAdded(_groupId, _member);
+        }
+    }
 
     function _requireGroupOwner(uint256 _groupId) internal view returns (Group storage group) {
         group = groups[_groupId];
         if (group.owner == address(0)) revert GroupDoesNotExist(_groupId);
         if (msg.sender != group.owner) revert UnauthorizedGroupOwner(msg.sender, group.owner);
+    }
+
+    function _requirePublicGroup(uint256 _groupId) internal view {
+        Group storage group = groups[_groupId];
+        if (group.owner == address(0)) revert GroupDoesNotExist(_groupId);
+        if (!group.isPublic) revert GroupNotPublic(_groupId);
     }
 
     /**
