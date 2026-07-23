@@ -273,7 +273,7 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
         onlyController
     {
         _validateNewLock(_stakeOwner, _lockId, _amount, _maturesAt);
-        _consumeFreeStake(_stakeOwner, _amount);
+        _requireFreeStake(_stakeOwner, _amount);
         _storeLock(_stakeOwner, _lockId, _amount, _maturesAt);
     }
 
@@ -321,7 +321,7 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
         }
 
         address stakeOwner = stakeLock.stakeOwner;
-        _consumeFreeStake(stakeOwner, _additionalAmount);
+        _requireFreeStake(stakeOwner, _additionalAmount);
         uint256 previousAmount = stakeLock.amount;
         stakeLock.amount = previousAmount + _additionalAmount;
         lockedStake[stakeOwner] += _additionalAmount;
@@ -370,7 +370,7 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
      * @param _lockId Identifier of the active lock to delete.
      */
     function unlockStake(bytes32 _lockId) external override onlyController {
-        StakeLock memory stakeLock = _takeLock(_lockId);
+        StakeLock memory stakeLock = _removeLock(_lockId);
         emit StakeUnlocked(_lockId, stakeLock.stakeOwner, stakeLock.amount, lockedStake[stakeLock.stakeOwner]);
     }
 
@@ -397,7 +397,7 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
         }
         if (claimsAmount > stakeLock.amount) revert ClaimsExceedLock(stakeLock.amount, claimsAmount);
 
-        _takeLock(_lockId);
+        _removeLock(_lockId);
         if (claimsAmount != 0) {
             stakeBalance[stakeLock.stakeOwner] -= claimsAmount;
             totalStaked -= claimsAmount;
@@ -590,7 +590,7 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
      * @param _stakeOwner Owner whose free stake backs the operation.
      * @param _amount Amount of free stake required.
      */
-    function _consumeFreeStake(address _stakeOwner, uint256 _amount) internal view {
+    function _requireFreeStake(address _stakeOwner, uint256 _amount) internal view {
         uint256 available = freeStake(_stakeOwner);
         if (available < _amount) revert InsufficientFreeStake(_stakeOwner, available, _amount);
     }
@@ -611,10 +611,10 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
     /**
      * @dev Loads and deletes one active lock, returning its complete principal to the owner's free subtotal. Callers may
      *      subsequently move some of that principal into claims as part of the same transaction.
-     * @param _lockId Identifier of the active lock to consume.
+     * @param _lockId Identifier of the active lock to remove.
      * @return stakeLock Deleted lock snapshot used by the caller's terminal accounting.
      */
-    function _takeLock(bytes32 _lockId) internal returns (StakeLock memory stakeLock) {
+    function _removeLock(bytes32 _lockId) internal returns (StakeLock memory stakeLock) {
         stakeLock = locks[_lockId];
         if (stakeLock.stakeOwner == address(0)) revert LockNotFound(_lockId);
         delete locks[_lockId];
