@@ -289,6 +289,9 @@ contract RiskManagerValidationTest is RiskManagerFixture {
             abi.encodeWithSelector(IRiskManager.PositionModeMismatch.selector, pendingIntent, IRiskManager.RiskMode.NONE)
         );
         orchestrator.settle(manager, _settlementContext(pendingIntent, INTENT_AMOUNT, 10e6, 5e6, false));
+        assertEq(
+            uint256(manager.getRiskPosition(pendingIntent).status), uint256(IRiskManager.PositionStatus.PENDING)
+        );
 
         bytes32 chargebackIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
         orchestrator.settle(manager, _settlementContext(chargebackIntent, INTENT_AMOUNT, 10e6, 5e6, true));
@@ -300,6 +303,9 @@ contract RiskManagerValidationTest is RiskManagerFixture {
         );
         manager.submitChargeback(
             _chargebackAttestation(chargebackIntent, keccak256("mode-payment"), keccak256("mode-dispute"))
+        );
+        assertEq(
+            uint256(manager.getRiskPosition(chargebackIntent).status), uint256(IRiskManager.PositionStatus.SETTLED)
         );
 
         bytes32 maturityIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
@@ -313,6 +319,9 @@ contract RiskManagerValidationTest is RiskManagerFixture {
             )
         );
         manager.releaseMaturedPosition(maturityIntent);
+        assertEq(
+            uint256(manager.getRiskPosition(maturityIntent).status), uint256(IRiskManager.PositionStatus.SETTLED)
+        );
     }
 
     function test_ChargebackRejectsInvalidHashAndDetails() public {
