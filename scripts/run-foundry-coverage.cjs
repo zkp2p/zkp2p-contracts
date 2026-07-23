@@ -242,8 +242,19 @@ function containsTestFile(directory) {
 }
 
 function validateDeterministicPartitions() {
-    const expectedDirectories = fs
-        .readdirSync(path.join(repositoryRoot, deterministicTestRoot), { withFileTypes: true })
+    const deterministicEntries = fs
+        .readdirSync(path.join(repositoryRoot, deterministicTestRoot), { withFileTypes: true });
+    const rootTestFiles = deterministicEntries
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".t.sol"))
+        .map((entry) => `${deterministicTestRoot}/${entry.name}`)
+        .sort();
+    if (rootTestFiles.length > 0) {
+        fail(
+            `root-level deterministic tests are not assigned to a coverage partition: ${rootTestFiles.join(", ")}`
+        );
+    }
+
+    const expectedDirectories = deterministicEntries
         .filter((entry) => entry.isDirectory())
         .map((entry) => path.join(repositoryRoot, deterministicTestRoot, entry.name))
         .filter(containsTestFile)

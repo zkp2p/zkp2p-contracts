@@ -182,6 +182,7 @@ restored after the probe.
 | Truncated debug/summary log | 1 | Missing statement anchors |
 | Invalid timing JSON | 1 | JSON parse/contents failure |
 | New unassigned deterministic test directory | 1 | Partition inventory mismatch before compilation |
+| New root-level deterministic test file | 1 | Explicit unassigned-root-test error before compilation |
 | Intentional failing deterministic test in an assigned directory | 1 | Forge failure propagated through the lane |
 
 The inherited `--resume` behavior was removed. Neither local nor CI coverage
