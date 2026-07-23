@@ -57,8 +57,9 @@ import {IStakeVault} from "./interfaces/IStakeVault.sol";
  *      5. Token-bearing settlement is fail-closed. Cancellation may fail open in OrchestratorV3 for liquidity liveness;
  *         reconciliation uses the durable original cancellation timestamp so delay cannot increase extension fees.
  *      6. Chargeback compensation is full-only: coverage must equal the gross Escrow release in both backed modes.
- *      7. This contract never retains tokens. Deferred proceeds move directly from OrchestratorV3 to StakeVault, the
- *         sole custody boundary, and balance-delta validation rejects fee-on-transfer shortfalls.
+ *      7. This contract receives a temporary allowance but never receives settlement tokens. For deferred settlement
+ *         it spends that allowance by transferring proceeds directly from OrchestratorV3 to StakeVault, the sole
+ *         custody boundary; balance-delta validation rejects fee-on-transfer shortfalls.
  *      8. Escrow intent amounts and StakeVault liabilities use the same immutable token so raw accounting units match.
  *      9. Proof-based chargebacks must bind the supplied payment ID to the exact intent in both registry directions.
  *         Manual releases instead rely on an EIP-712 witness signature binding evidence to the exact intent, while
