@@ -123,8 +123,6 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
       unifiedPaymentVerifierV2: await ethers.getContractAt("UnifiedPaymentVerifier", unifiedPaymentVerifierV2Address),
     };
 
-    await assertGenericZelleProtected(contracts, unifiedPaymentVerifierV2Address);
-
     const legacyPaymentMethods = await contracts.legacyUnifiedPaymentVerifier.getPaymentMethods();
     const v2PaymentMethods = await contracts.unifiedPaymentVerifierV2.getPaymentMethods();
     const legacyMethodsAbsent = await Promise.all(
@@ -135,7 +133,12 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
       )
     );
 
-    return legacyMethodsAbsent.every(Boolean);
+    if (legacyMethodsAbsent.every(Boolean)) {
+      return true;
+    }
+
+    await assertGenericZelleProtected(contracts, unifiedPaymentVerifierV2Address);
+    return false;
   } catch {
     return false;
   }

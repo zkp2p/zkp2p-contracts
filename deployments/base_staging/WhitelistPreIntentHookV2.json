@@ -1,0 +1,794 @@
+{
+  "address": "0xf121d047f8261E91fbb3E9c775046Fc926269666",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_orchestratorRegistry",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_groupRegistry",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [],
+      "name": "EmptyArray",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "groupId",
+          "type": "uint256"
+        }
+      ],
+      "name": "GroupDoesNotExist",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "attempted",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "max",
+          "type": "uint256"
+        }
+      ],
+      "name": "MaxGroupsExceeded",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "taker",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        }
+      ],
+      "name": "TakerNotWhitelisted",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "delegate",
+          "type": "address"
+        }
+      ],
+      "name": "UnauthorizedCallerOrDelegate",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        }
+      ],
+      "name": "UnauthorizedOrchestratorCaller",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroAddress",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "groupId",
+          "type": "uint256"
+        }
+      ],
+      "name": "GroupAttached",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "groupId",
+          "type": "uint256"
+        }
+      ],
+      "name": "GroupDetached",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "taker",
+          "type": "address"
+        }
+      ],
+      "name": "TakerRemovedFromWhitelist",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "taker",
+          "type": "address"
+        }
+      ],
+      "name": "TakerWhitelisted",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "MAX_GROUPS_PER_DEPOSIT",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address[]",
+          "name": "_takers",
+          "type": "address[]"
+        }
+      ],
+      "name": "addToWhitelist",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "_groupIds",
+          "type": "uint256[]"
+        }
+      ],
+      "name": "attachGroups",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "_groupIds",
+          "type": "uint256[]"
+        }
+      ],
+      "name": "detachGroups",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getAttachedGroups",
+      "outputs": [
+        {
+          "internalType": "uint256[]",
+          "name": "",
+          "type": "uint256[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "groupRegistry",
+      "outputs": [
+        {
+          "internalType": "contract IAddressGroupRegistry",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "_taker",
+          "type": "address"
+        }
+      ],
+      "name": "isAllowedTaker",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_groupId",
+          "type": "uint256"
+        }
+      ],
+      "name": "isGroupAttached",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "_taker",
+          "type": "address"
+        }
+      ],
+      "name": "isWhitelisted",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "orchestratorRegistry",
+      "outputs": [
+        {
+          "internalType": "contract IOrchestratorRegistry",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address[]",
+          "name": "_takers",
+          "type": "address[]"
+        }
+      ],
+      "name": "removeFromWhitelist",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "to",
+              "type": "address"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "fiatCurrency",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "conversionRate",
+              "type": "uint256"
+            },
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "recipient",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "fee",
+                  "type": "uint256"
+                }
+              ],
+              "internalType": "struct IReferralFee.ReferralFee[]",
+              "name": "referralFees",
+              "type": "tuple[]"
+            },
+            {
+              "internalType": "bytes",
+              "name": "preIntentHookData",
+              "type": "bytes"
+            }
+          ],
+          "internalType": "struct IPreIntentHook.PreIntentContext",
+          "name": "_ctx",
+          "type": "tuple"
+        }
+      ],
+      "name": "validateSignalIntent",
+      "outputs": [],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "whitelist",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0x866c48579cdcaee552ca1cb37d67a66b8c64c2f980af62fea67b0f57050a9efd",
+  "receipt": {
+    "to": null,
+    "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "contractAddress": "0xf121d047f8261E91fbb3E9c775046Fc926269666",
+    "transactionIndex": 15,
+    "gasUsed": "947378",
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "transactionHash": "0x866c48579cdcaee552ca1cb37d67a66b8c64c2f980af62fea67b0f57050a9efd",
+    "logs": [],
+    "blockNumber": 49013887,
+    "cumulativeGasUsed": "5890416",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [
+    "0xfA6384EB6176cfEC049540526A3d2126C3666d8A",
+    "0x3A52189dC9FE5a4913D2b772e6fd93cccb244dE6"
+  ],
+  "numDeployments": 1,
+  "solcInputHash": "f1958a6ae244f23dcaf4126acd310bc5",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_orchestratorRegistry\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_groupRegistry\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"EmptyArray\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"groupId\",\"type\":\"uint256\"}],\"name\":\"GroupDoesNotExist\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"attempted\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"max\",\"type\":\"uint256\"}],\"name\":\"MaxGroupsExceeded\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"}],\"name\":\"TakerNotWhitelisted\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"delegate\",\"type\":\"address\"}],\"name\":\"UnauthorizedCallerOrDelegate\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"}],\"name\":\"UnauthorizedOrchestratorCaller\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAddress\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"groupId\",\"type\":\"uint256\"}],\"name\":\"GroupAttached\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"groupId\",\"type\":\"uint256\"}],\"name\":\"GroupDetached\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"}],\"name\":\"TakerRemovedFromWhitelist\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"}],\"name\":\"TakerWhitelisted\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"MAX_GROUPS_PER_DEPOSIT\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"address[]\",\"name\":\"_takers\",\"type\":\"address[]\"}],\"name\":\"addToWhitelist\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"uint256[]\",\"name\":\"_groupIds\",\"type\":\"uint256[]\"}],\"name\":\"attachGroups\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"uint256[]\",\"name\":\"_groupIds\",\"type\":\"uint256[]\"}],\"name\":\"detachGroups\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"}],\"name\":\"getAttachedGroups\",\"outputs\":[{\"internalType\":\"uint256[]\",\"name\":\"\",\"type\":\"uint256[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"groupRegistry\",\"outputs\":[{\"internalType\":\"contract IAddressGroupRegistry\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"_taker\",\"type\":\"address\"}],\"name\":\"isAllowedTaker\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"_groupId\",\"type\":\"uint256\"}],\"name\":\"isGroupAttached\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"_taker\",\"type\":\"address\"}],\"name\":\"isWhitelisted\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"orchestratorRegistry\",\"outputs\":[{\"internalType\":\"contract IOrchestratorRegistry\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"address[]\",\"name\":\"_takers\",\"type\":\"address[]\"}],\"name\":\"removeFromWhitelist\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"fiatCurrency\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"conversionRate\",\"type\":\"uint256\"},{\"components\":[{\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"internalType\":\"struct IReferralFee.ReferralFee[]\",\"name\":\"referralFees\",\"type\":\"tuple[]\"},{\"internalType\":\"bytes\",\"name\":\"preIntentHookData\",\"type\":\"bytes\"}],\"internalType\":\"struct IPreIntentHook.PreIntentContext\",\"name\":\"_ctx\",\"type\":\"tuple\"}],\"name\":\"validateSignalIntent\",\"outputs\":[],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"whitelist\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"}],\"devdoc\":{\"details\":\"Supersedes WhitelistPreIntentHook for new deposits. Configuration is keyed by (escrow, depositId) and persists if the deposit's orchestrator whitelist-hook slot is unset (whitelist paused) and later reattached (resumed). Membership is point-in-time admission authorization: removal does not invalidate already-signaled intents. TRUST MODEL: attaching a group delegates ongoing admission policy for the deposit to that group's controller set (current/future owner and resolver) \\u2014 see AddressGroupRegistry.\",\"kind\":\"dev\",\"methods\":{\"addToWhitelist(address,uint256,address[])\":{\"params\":{\"_depositId\":\"Deposit id.\",\"_escrow\":\"Escrow address.\",\"_takers\":\"Taker addresses to whitelist.\"}},\"attachGroups(address,uint256,uint256[])\":{\"params\":{\"_depositId\":\"Deposit id.\",\"_escrow\":\"Escrow address.\",\"_groupIds\":\"Group ids to attach (max MAX_GROUPS_PER_DEPOSIT attached in total).\"}},\"detachGroups(address,uint256,uint256[])\":{\"params\":{\"_depositId\":\"Deposit id.\",\"_escrow\":\"Escrow address.\",\"_groupIds\":\"Group ids to detach.\"}},\"getAttachedGroups(address,uint256)\":{\"params\":{\"_depositId\":\"Deposit id.\",\"_escrow\":\"Escrow address.\"}},\"isAllowedTaker(address,uint256,address)\":{\"params\":{\"_depositId\":\"Deposit id.\",\"_escrow\":\"Escrow address.\",\"_taker\":\"Taker address to check.\"}},\"isGroupAttached(address,uint256,uint256)\":{\"params\":{\"_depositId\":\"Deposit id.\",\"_escrow\":\"Escrow address.\",\"_groupId\":\"Group id.\"}},\"isWhitelisted(address,uint256,address)\":{\"params\":{\"_depositId\":\"Deposit id.\",\"_escrow\":\"Escrow address.\",\"_taker\":\"Taker address to check.\"}},\"removeFromWhitelist(address,uint256,address[])\":{\"params\":{\"_depositId\":\"Deposit id.\",\"_escrow\":\"Escrow address.\",\"_takers\":\"Taker addresses to remove.\"}},\"validateSignalIntent((address,address,uint256,uint256,address,bytes32,bytes32,uint256,(address,uint256)[],bytes))\":{\"details\":\"Implementations should revert to reject the incoming intent.\",\"params\":{\"_ctx\":\"Incoming intent context.\"}}},\"title\":\"WhitelistPreIntentHookV2\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"addToWhitelist(address,uint256,address[])\":{\"notice\":\"Adds takers to a deposit's direct whitelist. Idempotent: already-whitelisted takers are skipped (no event).\"},\"attachGroups(address,uint256,uint256[])\":{\"notice\":\"Attaches groups to a deposit. Idempotent: already-attached ids are skipped (no event). Validates each group exists in the registry (input validation only \\u2014 not a trust guarantee about the group's governance).\"},\"detachGroups(address,uint256,uint256[])\":{\"notice\":\"Detaches groups from a deposit. Idempotent: ids not currently attached are skipped (no event). Detachment does not invalidate already-signaled intents.\"},\"getAttachedGroups(address,uint256)\":{\"notice\":\"Returns all group ids attached to a deposit.\"},\"isAllowedTaker(address,uint256,address)\":{\"notice\":\"Full effective admission check \\u2014 same semantics as validateSignalIntent without the orchestrator gate or revert.\"},\"isGroupAttached(address,uint256,uint256)\":{\"notice\":\"Returns whether a group is attached to a deposit.\"},\"isWhitelisted(address,uint256,address)\":{\"notice\":\"Returns whether a taker is on the deposit's direct whitelist (groups excluded).\"},\"removeFromWhitelist(address,uint256,address[])\":{\"notice\":\"Removes takers from a deposit's direct whitelist. Idempotent: absent takers are skipped (no event). Removal does not invalidate already-signaled intents.\"},\"validateSignalIntent((address,address,uint256,uint256,address,bytes32,bytes32,uint256,(address,uint256)[],bytes))\":{\"notice\":\"Called by the Orchestrator during signalIntent before state changes.\"}},\"notice\":\"Unified whitelist hook: a taker may signal against a deposit when they are directly whitelisted OR a member of any attached AddressGroupRegistry group. Allow-only; no blocklist.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/hooks/WhitelistPreIntentHookV2.sol\":\"WhitelistPreIntentHookV2\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"@openzeppelin/contracts/token/ERC20/IERC20.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (token/ERC20/IERC20.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Interface of the ERC20 standard as defined in the EIP.\\n */\\ninterface IERC20 {\\n    /**\\n     * @dev Emitted when `value` tokens are moved from one account (`from`) to\\n     * another (`to`).\\n     *\\n     * Note that `value` may be zero.\\n     */\\n    event Transfer(address indexed from, address indexed to, uint256 value);\\n\\n    /**\\n     * @dev Emitted when the allowance of a `spender` for an `owner` is set by\\n     * a call to {approve}. `value` is the new allowance.\\n     */\\n    event Approval(address indexed owner, address indexed spender, uint256 value);\\n\\n    /**\\n     * @dev Returns the amount of tokens in existence.\\n     */\\n    function totalSupply() external view returns (uint256);\\n\\n    /**\\n     * @dev Returns the amount of tokens owned by `account`.\\n     */\\n    function balanceOf(address account) external view returns (uint256);\\n\\n    /**\\n     * @dev Moves `amount` tokens from the caller's account to `to`.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transfer(address to, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Returns the remaining number of tokens that `spender` will be\\n     * allowed to spend on behalf of `owner` through {transferFrom}. This is\\n     * zero by default.\\n     *\\n     * This value changes when {approve} or {transferFrom} are called.\\n     */\\n    function allowance(address owner, address spender) external view returns (uint256);\\n\\n    /**\\n     * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * IMPORTANT: Beware that changing an allowance with this method brings the risk\\n     * that someone may use both the old and the new allowance by unfortunate\\n     * transaction ordering. One possible solution to mitigate this race\\n     * condition is to first reduce the spender's allowance to 0 and set the\\n     * desired value afterwards:\\n     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729\\n     *\\n     * Emits an {Approval} event.\\n     */\\n    function approve(address spender, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Moves `amount` tokens from `from` to `to` using the\\n     * allowance mechanism. `amount` is then deducted from the caller's\\n     * allowance.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transferFrom(address from, address to, uint256 amount) external returns (bool);\\n}\\n\",\"keccak256\":\"0x287b55befed2961a7eabd7d7b1b2839cbca8a5b80ef8dcbb25ed3d4c2002c305\",\"license\":\"MIT\"},\"contracts/hooks/WhitelistPreIntentHookV2.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IAddressGroupRegistry } from \\\"../interfaces/IAddressGroupRegistry.sol\\\";\\nimport { IEscrow } from \\\"../interfaces/IEscrow.sol\\\";\\nimport { IOrchestratorRegistry } from \\\"../interfaces/IOrchestratorRegistry.sol\\\";\\nimport { IPreIntentHook } from \\\"../interfaces/IPreIntentHook.sol\\\";\\n\\n/**\\n * @title WhitelistPreIntentHookV2\\n * @notice Unified whitelist hook: a taker may signal against a deposit when they are directly\\n * whitelisted OR a member of any attached AddressGroupRegistry group. Allow-only; no blocklist.\\n * @dev Supersedes WhitelistPreIntentHook for new deposits. Configuration is keyed by\\n * (escrow, depositId) and persists if the deposit's orchestrator whitelist-hook slot is unset\\n * (whitelist paused) and later reattached (resumed). Membership is point-in-time admission\\n * authorization: removal does not invalidate already-signaled intents.\\n *\\n * TRUST MODEL: attaching a group delegates ongoing admission policy for the deposit to that\\n * group's controller set (current/future owner and resolver) \\u2014 see AddressGroupRegistry.\\n */\\ncontract WhitelistPreIntentHookV2 is IPreIntentHook {\\n\\n    /* ============ Events ============ */\\n\\n    event TakerWhitelisted(address indexed escrow, uint256 indexed depositId, address indexed taker);\\n    event TakerRemovedFromWhitelist(address indexed escrow, uint256 indexed depositId, address indexed taker);\\n    event GroupAttached(address indexed escrow, uint256 indexed depositId, uint256 indexed groupId);\\n    event GroupDetached(address indexed escrow, uint256 indexed depositId, uint256 indexed groupId);\\n\\n    /* ============ Errors ============ */\\n\\n    error ZeroAddress();\\n    error EmptyArray();\\n    error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);\\n    error UnauthorizedOrchestratorCaller(address caller);\\n    error TakerNotWhitelisted(address taker, address escrow, uint256 depositId);\\n    error GroupDoesNotExist(uint256 groupId);\\n    error MaxGroupsExceeded(uint256 attempted, uint256 max);\\n\\n    /* ============ Constants ============ */\\n\\n    uint256 public constant MAX_GROUPS_PER_DEPOSIT = 10;\\n\\n    /* ============ State Variables ============ */\\n\\n    IOrchestratorRegistry public immutable orchestratorRegistry;\\n    IAddressGroupRegistry public immutable groupRegistry;\\n\\n    // escrow => depositId => taker => whitelisted\\n    mapping(address => mapping(uint256 => mapping(address => bool))) public whitelist;\\n    // escrow => depositId => attached group ids (enumerable, max MAX_GROUPS_PER_DEPOSIT)\\n    mapping(address => mapping(uint256 => uint256[])) internal attachedGroups;\\n    // escrow => depositId => groupId => index+1 in attachedGroups (0 = not attached)\\n    mapping(address => mapping(uint256 => mapping(uint256 => uint256))) internal attachedGroupIndexPlusOne;\\n\\n    /* ============ Constructor ============ */\\n\\n    constructor(address _orchestratorRegistry, address _groupRegistry) {\\n        if (_orchestratorRegistry == address(0) || _groupRegistry == address(0)) revert ZeroAddress();\\n\\n        orchestratorRegistry = IOrchestratorRegistry(_orchestratorRegistry);\\n        groupRegistry = IAddressGroupRegistry(_groupRegistry);\\n    }\\n\\n    /* ============ External Functions ============ */\\n\\n    /**\\n     * @notice Adds takers to a deposit's direct whitelist. Idempotent: already-whitelisted\\n     * takers are skipped (no event).\\n     * @param _escrow      Escrow address.\\n     * @param _depositId   Deposit id.\\n     * @param _takers      Taker addresses to whitelist.\\n     */\\n    function addToWhitelist(address _escrow, uint256 _depositId, address[] calldata _takers) external {\\n        if (_escrow == address(0)) revert ZeroAddress();\\n        if (_takers.length == 0) revert EmptyArray();\\n\\n        _validateDepositorOrDelegate(_escrow, _depositId);\\n\\n        for (uint256 i = 0; i < _takers.length; i++) {\\n            address taker = _takers[i];\\n            if (taker == address(0)) revert ZeroAddress();\\n            if (!whitelist[_escrow][_depositId][taker]) {\\n                whitelist[_escrow][_depositId][taker] = true;\\n                emit TakerWhitelisted(_escrow, _depositId, taker);\\n            }\\n        }\\n    }\\n\\n    /**\\n     * @notice Removes takers from a deposit's direct whitelist. Idempotent: absent takers are\\n     * skipped (no event). Removal does not invalidate already-signaled intents.\\n     * @param _escrow      Escrow address.\\n     * @param _depositId   Deposit id.\\n     * @param _takers      Taker addresses to remove.\\n     */\\n    function removeFromWhitelist(address _escrow, uint256 _depositId, address[] calldata _takers) external {\\n        if (_escrow == address(0)) revert ZeroAddress();\\n        if (_takers.length == 0) revert EmptyArray();\\n\\n        _validateDepositorOrDelegate(_escrow, _depositId);\\n\\n        for (uint256 i = 0; i < _takers.length; i++) {\\n            address taker = _takers[i];\\n            if (taker == address(0)) revert ZeroAddress();\\n            if (whitelist[_escrow][_depositId][taker]) {\\n                whitelist[_escrow][_depositId][taker] = false;\\n                emit TakerRemovedFromWhitelist(_escrow, _depositId, taker);\\n            }\\n        }\\n    }\\n\\n    /**\\n     * @inheritdoc IPreIntentHook\\n     */\\n    function validateSignalIntent(PreIntentContext calldata _ctx) external view override {\\n        if (!orchestratorRegistry.isOrchestrator(msg.sender)) revert UnauthorizedOrchestratorCaller(msg.sender);\\n\\n        if (whitelist[_ctx.escrow][_ctx.depositId][_ctx.taker]) return;\\n\\n        uint256[] storage groupIds = attachedGroups[_ctx.escrow][_ctx.depositId];\\n        for (uint256 i = 0; i < groupIds.length; i++) {\\n            if (groupRegistry.isMember(groupIds[i], _ctx.taker)) return;\\n        }\\n\\n        revert TakerNotWhitelisted(_ctx.taker, _ctx.escrow, _ctx.depositId);\\n    }\\n\\n    /**\\n     * @notice Attaches groups to a deposit. Idempotent: already-attached ids are skipped\\n     * (no event). Validates each group exists in the registry (input validation only \\u2014 not a\\n     * trust guarantee about the group's governance).\\n     * @param _escrow      Escrow address.\\n     * @param _depositId   Deposit id.\\n     * @param _groupIds    Group ids to attach (max MAX_GROUPS_PER_DEPOSIT attached in total).\\n     */\\n    function attachGroups(address _escrow, uint256 _depositId, uint256[] calldata _groupIds) external {\\n        if (_escrow == address(0)) revert ZeroAddress();\\n        if (_groupIds.length == 0) revert EmptyArray();\\n\\n        _validateDepositorOrDelegate(_escrow, _depositId);\\n\\n        uint256[] storage attached = attachedGroups[_escrow][_depositId];\\n        for (uint256 i = 0; i < _groupIds.length; i++) {\\n            uint256 groupId = _groupIds[i];\\n            if (!groupRegistry.groupExists(groupId)) revert GroupDoesNotExist(groupId);\\n            if (attachedGroupIndexPlusOne[_escrow][_depositId][groupId] != 0) continue;\\n            if (attached.length >= MAX_GROUPS_PER_DEPOSIT) {\\n                revert MaxGroupsExceeded(attached.length + 1, MAX_GROUPS_PER_DEPOSIT);\\n            }\\n            attached.push(groupId);\\n            attachedGroupIndexPlusOne[_escrow][_depositId][groupId] = attached.length;\\n            emit GroupAttached(_escrow, _depositId, groupId);\\n        }\\n    }\\n\\n    /**\\n     * @notice Detaches groups from a deposit. Idempotent: ids not currently attached are\\n     * skipped (no event). Detachment does not invalidate already-signaled intents.\\n     * @param _escrow      Escrow address.\\n     * @param _depositId   Deposit id.\\n     * @param _groupIds    Group ids to detach.\\n     */\\n    function detachGroups(address _escrow, uint256 _depositId, uint256[] calldata _groupIds) external {\\n        if (_escrow == address(0)) revert ZeroAddress();\\n        if (_groupIds.length == 0) revert EmptyArray();\\n\\n        _validateDepositorOrDelegate(_escrow, _depositId);\\n\\n        uint256[] storage attached = attachedGroups[_escrow][_depositId];\\n        for (uint256 i = 0; i < _groupIds.length; i++) {\\n            uint256 groupId = _groupIds[i];\\n            uint256 indexPlusOne = attachedGroupIndexPlusOne[_escrow][_depositId][groupId];\\n            if (indexPlusOne == 0) continue;\\n\\n            uint256 lastId = attached[attached.length - 1];\\n            attached[indexPlusOne - 1] = lastId;\\n            attachedGroupIndexPlusOne[_escrow][_depositId][lastId] = indexPlusOne;\\n            attached.pop();\\n            delete attachedGroupIndexPlusOne[_escrow][_depositId][groupId];\\n            emit GroupDetached(_escrow, _depositId, groupId);\\n        }\\n    }\\n    /* ============ External View Functions ============ */\\n\\n    /**\\n     * @notice Returns whether a taker is on the deposit's direct whitelist (groups excluded).\\n     * @param _escrow      Escrow address.\\n     * @param _depositId   Deposit id.\\n     * @param _taker       Taker address to check.\\n     */\\n    function isWhitelisted(address _escrow, uint256 _depositId, address _taker) external view returns (bool) {\\n        return whitelist[_escrow][_depositId][_taker];\\n    }\\n\\n    /**\\n     * @notice Returns all group ids attached to a deposit.\\n     * @param _escrow      Escrow address.\\n     * @param _depositId   Deposit id.\\n     */\\n    function getAttachedGroups(address _escrow, uint256 _depositId) external view returns (uint256[] memory) {\\n        return attachedGroups[_escrow][_depositId];\\n    }\\n\\n    /**\\n     * @notice Returns whether a group is attached to a deposit.\\n     * @param _escrow      Escrow address.\\n     * @param _depositId   Deposit id.\\n     * @param _groupId     Group id.\\n     */\\n    function isGroupAttached(address _escrow, uint256 _depositId, uint256 _groupId) external view returns (bool) {\\n        return attachedGroupIndexPlusOne[_escrow][_depositId][_groupId] != 0;\\n    }\\n\\n    /**\\n     * @notice Full effective admission check \\u2014 same semantics as validateSignalIntent without\\n     * the orchestrator gate or revert.\\n     * @param _escrow      Escrow address.\\n     * @param _depositId   Deposit id.\\n     * @param _taker       Taker address to check.\\n     */\\n    function isAllowedTaker(address _escrow, uint256 _depositId, address _taker) external view returns (bool) {\\n        if (whitelist[_escrow][_depositId][_taker]) return true;\\n\\n        uint256[] storage groupIds = attachedGroups[_escrow][_depositId];\\n        for (uint256 i = 0; i < groupIds.length; i++) {\\n            if (groupRegistry.isMember(groupIds[i], _taker)) return true;\\n        }\\n        return false;\\n    }\\n    /* ============ Internal Functions ============ */\\n\\n    function _validateDepositorOrDelegate(address _escrow, uint256 _depositId) internal view {\\n        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);\\n        bool isDepositorOrDelegate = msg.sender == deposit.depositor\\n            || (deposit.delegate != address(0) && msg.sender == deposit.delegate);\\n        if (!isDepositorOrDelegate) {\\n            revert UnauthorizedCallerOrDelegate(msg.sender, deposit.depositor, deposit.delegate);\\n        }\\n    }\\n}\\n\",\"keccak256\":\"0x68506a31920000b9c1425bbe53d0f6bea32f6c4bf670866f90e609c5a3ad9ae9\",\"license\":\"MIT\"},\"contracts/interfaces/IAddressGroupRegistry.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IAddressGroupRegistry\\n * @notice Permissionless registry of owner-managed address groups with optional resolvers.\\n */\\ninterface IAddressGroupRegistry {\\n    /**\\n     * @notice Creates a new group owned by the caller; the name is emitted, not stored.\\n     */\\n    function createGroup(string calldata _name) external returns (uint256 groupId);\\n\\n    /**\\n     * @notice Starts a two-step ownership transfer; replaces any existing pending owner.\\n     */\\n    function transferGroupOwnership(uint256 _groupId, address _newOwner) external;\\n\\n    /**\\n     * @notice Cancels a pending ownership transfer.\\n     */\\n    function cancelGroupOwnershipTransfer(uint256 _groupId) external;\\n\\n    /**\\n     * @notice Completes a pending ownership transfer; callable only by the pending owner.\\n     */\\n    function acceptGroupOwnership(uint256 _groupId) external;\\n\\n    /**\\n     * @notice Adds members to a group (owner only; idempotent).\\n     */\\n    function addMembers(uint256 _groupId, address[] calldata _members) external;\\n\\n    /**\\n     * @notice Removes members from a group (owner only; idempotent).\\n     */\\n    function removeMembers(uint256 _groupId, address[] calldata _members) external;\\n\\n    /**\\n     * @notice Sets or clears the group's resolver (owner only; nonzero resolver must have code).\\n     */\\n    function setResolver(uint256 _groupId, address _resolver) external;\\n\\n    /**\\n     * @notice Returns whether an account is a member (curated OR resolver; fail-closed).\\n     */\\n    function isMember(uint256 _groupId, address _account) external view returns (bool);\\n\\n    /**\\n     * @notice Returns whether a group exists (input validation only, not a trust guarantee).\\n     */\\n    function groupExists(uint256 _groupId) external view returns (bool);\\n\\n    /**\\n     * @notice Returns a group's governance state for atomic inspection.\\n     */\\n    function getGroup(uint256 _groupId)\\n        external\\n        view\\n        returns (address owner, address pendingOwner, address resolver, bool exists);\\n\\n    /**\\n     * @notice Returns the last assigned group id (ids start at 1).\\n     */\\n    function groupCount() external view returns (uint256);\\n}\\n\",\"keccak256\":\"0x2724d2bb87e7332e81d3d8b3c09556ef2a6068aeb5b67ff5c6d790c0c14439ad\",\"license\":\"MIT\"},\"contracts/interfaces/IEscrow.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IERC20 } from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\nimport { IPostIntentHook } from \\\"./IPostIntentHook.sol\\\";\\n\\ninterface IEscrow {\\n    \\n    /* ============ Structs ============ */\\n\\n    struct Intent {\\n        bytes32 intentHash;                        // Unique identifier for the intent\\n        uint256 amount;                            // Amount locked\\n        uint256 timestamp;                         // When this intent was created\\n        uint256 expiryTime;                        // When this intent expires\\n    }\\n\\n    struct Range {\\n        uint256 min;                                // Minimum value\\n        uint256 max;                                // Maximum value\\n    }\\n\\n    struct Deposit {\\n        address depositor;                          // Address of depositor\\n        address delegate;                           // Address that can manage this deposit (address(0) if no delegate)\\n        IERC20 token;                               // Address of deposit token\\n        Range intentAmountRange;                    // Range of take amount per intent\\n        // Deposit state\\n        bool acceptingIntents;                      // State: True if the deposit is accepting intents, False otherwise\\n        uint256 remainingDeposits;                  // State: Amount of liquidity immediately available to lock\\n        uint256 outstandingIntentAmount;            // State: Amount of outstanding intents (may include expired intents)\\n        // Intent guardian\\n        address intentGuardian;                     // Address that can extend intent expiry times (address(0) if no guardian)\\n        // Retention behavior\\n        bool retainOnEmpty;                         // If true, do not auto-close/sweep when empty; keep config for reuse\\n    }\\n\\n    struct Currency {\\n        bytes32 code;                               // Currency code (keccak256 hash of the currency code)\\n        uint256 minConversionRate;                  // Minimum rate of deposit token to fiat currency (in preciseUnits)\\n    }\\n\\n    struct DepositPaymentMethodData {\\n        address intentGatingService;                // Public key of gating service that will be used to verify intents\\n        bytes32 payeeDetails;                       // Payee details, has to be hash of payee details\\n        bytes data;                                 // Verification Data: Additional data used for payment verification; Can hold attester address\\n                                                    // in case of TLS proofs, domain key hash in case of zkEmail proofs, currency code etc.\\n    }\\n\\n    struct CreateDepositParams {\\n        IERC20 token;                                // The token to be deposited\\n        uint256 amount;                              // The amount of token to deposit\\n        Range intentAmountRange;                     // The max and min take amount for each intent\\n        bytes32[] paymentMethods;                    // The payment methods that deposit supports\\n        DepositPaymentMethodData[] paymentMethodData;// The payment verification data for each payment method that deposit supports\\n        Currency[][] currencies;                     // The currencies for each payment method that deposit supports\\n        address delegate;                            // Optional delegate address that can manage this deposit (address(0) for no delegate)\\n        address intentGuardian;                      // Optional intent guardian address that can extend intent expiry times (address(0) for no guardian)\\n        bool retainOnEmpty;                          // Opt-in: keep deposit and config when empty\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event DepositReceived(uint256 indexed depositId, address indexed depositor, IERC20 indexed token, uint256 amount, Range intentAmountRange, address delegate, address intentGuardian);\\n\\n    event DepositPaymentMethodAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed payeeDetails, address intentGatingService);\\n    event DepositPaymentMethodActiveUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bool active);\\n\\n    event DepositCurrencyAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 minConversionRate);\\n    event DepositMinConversionRateUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 newMinConversionRate);\\n    \\n    event DepositFundsAdded(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositWithdrawn(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositClosed(uint256 depositId, address depositor);\\n    event DepositAcceptingIntentsUpdated(uint256 indexed depositId, bool acceptingIntents);\\n\\n    event DepositIntentAmountRangeUpdated(uint256 indexed depositId, Range intentAmountRange);\\n    event DepositRetainOnEmptyUpdated(uint256 indexed depositId, bool retainOnEmpty);\\n\\n    event DepositDelegateSet(uint256 indexed depositId, address indexed depositor, address indexed delegate);\\n    event DepositDelegateRemoved(uint256 indexed depositId, address indexed depositor);\\n\\n    event MinDepositAmountSet(uint256 minDepositAmount);\\n\\n    event OrchestratorUpdated(address indexed orchestrator);\\n    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);\\n\\n    event FundsLocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount, uint256 expiryTime);\\n    event FundsUnlocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount);\\n    event FundsUnlockedAndTransferred(\\n        uint256 indexed depositId, \\n        bytes32 indexed intentHash, \\n        uint256 unlockedAmount, \\n        uint256 transferredAmount, \\n        address to\\n    );\\n    event IntentExpiryExtended(uint256 indexed depositId, bytes32 indexed intentHash, uint256 newExpiryTime);\\n\\n    event DustRecipientUpdated(address indexed dustRecipient);\\n    event DustCollected(uint256 indexed depositId, uint256 dustAmount, address indexed dustRecipient);\\n    event DustThresholdUpdated(uint256 dustThreshold);\\n    event MaxIntentsPerDepositUpdated(uint256 maxIntentsPerDeposit);\\n    event IntentExpirationPeriodUpdated(uint256 intentExpirationPeriod);\\n\\n    /* ============ Standardized Custom Errors ============ */\\n    \\n    // Zero value errors\\n    error ZeroAddress();\\n    error ZeroValue();\\n    error ZeroMinValue();\\n    error ZeroConversionRate();\\n\\n    // Authorization errors\\n    error UnauthorizedCaller(address caller, address authorized);\\n    error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);\\n    error CannotDelegateToSelf(address depositor);\\n\\n    // Range and amount errors\\n    error InvalidRange(uint256 min, uint256 max);\\n    error AmountBelowMin(uint256 amount, uint256 min);\\n    error AmountAboveMax(uint256 amount, uint256 max);\\n    error AmountExceedsAvailable(uint256 requested, uint256 available);\\n\\n    // Not found errors\\n    error DepositNotFound(uint256 depositId);\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodNotActive(uint256 depositId, bytes32 paymentMethod);\\n    error PaymentMethodNotListed(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyNotFound(bytes32 paymentMethod, bytes32 currency);\\n    error DelegateNotFound(uint256 depositId);\\n\\n    // Already exists errors\\n    error PaymentMethodAlreadyExists(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyAlreadyExists(bytes32 paymentMethod, bytes32 currency);\\n    error IntentAlreadyExists(uint256 depositId, bytes32 intentHash);\\n\\n    // State errors\\n    error DepositNotAcceptingIntents(uint256 depositId);\\n    error DepositAlreadyInState(uint256 depositId, bool currentState);\\n    error InsufficientDepositLiquidity(uint256 depositId, uint256 available, uint256 required);\\n    error MaxIntentsExceeded(uint256 depositId, uint256 current, uint256 max);\\n\\n    // Validation errors\\n    error EmptyPayeeDetails();\\n    error ArrayLengthMismatch(uint256 length1, uint256 length2);\\n\\n    // Payment method errors\\n    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n\\n    \\n    /* ============ External Functions for Orchestrator ============ */\\n\\n    function lockFunds(uint256 _depositId, bytes32 _intentHash, uint256 _amount) external;\\n    function unlockFunds(uint256 _depositId, bytes32 _intentHash) external;\\n    function unlockAndTransferFunds(uint256 _depositId, bytes32 _intentHash, uint256 _transferAmount, address _to) external;\\n    function extendIntentExpiry(uint256 _depositId, bytes32 _intentHash, uint256 _additionalTime) external;\\n\\n    /* ============ View Functions ============ */\\n\\n    function getDeposit(uint256 _depositId) external view returns (Deposit memory);\\n    function getDepositIntent(uint256 _depositId, bytes32 _intentHash) external view returns (Intent memory);\\n    function getDepositPaymentMethods(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getDepositCurrencies(uint256 _depositId, bytes32 _paymentMethod) external view returns (bytes32[] memory);\\n    function getDepositCurrencyMinRate(uint256 _depositId, bytes32 _paymentMethod, bytes32 _currencyCode) external view returns (uint256);\\n    function getDepositPaymentMethodData(uint256 _depositId, bytes32 _paymentMethod) external view returns (DepositPaymentMethodData memory);\\n    function getDepositPaymentMethodActive(uint256 _depositId, bytes32 _paymentMethod) external view returns (bool);\\n    function getDepositGatingService(uint256 _depositId, bytes32 _paymentMethod) external view returns (address);\\n    function getDepositIntentHashes(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getExpiredIntents(uint256 _depositId) external view returns (bytes32[] memory expiredIntents, uint256 reclaimableAmount);\\n}\\n\",\"keccak256\":\"0x02077e75865a2db8887a3d4b3f4c0c398c0d2589f05506f489fb8189b223d60c\",\"license\":\"MIT\"},\"contracts/interfaces/IOrchestrator.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IERC20 } from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\nimport { IPostIntentHook } from \\\"./IPostIntentHook.sol\\\";\\n\\ninterface IOrchestrator {\\n    \\n    /* ============ Structs ============ */\\n\\n    struct Intent {\\n        address owner;                              // Address of the intent owner  \\n        address to;                                 // Address to forward funds to (can be same as owner)\\n        address escrow;                             // Address of the escrow contract holding the deposit\\n        uint256 depositId;                          // ID of the deposit the intent is associated with\\n        uint256 amount;                             // Amount of the deposit.token the owner wants to take\\n        uint256 timestamp;                          // Timestamp of the intent\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // Currency code that the owner is paying in offchain (keccak256 hash of the currency code)\\n        uint256 conversionRate;                     // Conversion rate of deposit token to fiat currency at the time of intent\\n        bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain\\n        address referrer;                           // Address of the referrer who brought this intent (if any)\\n        uint256 referrerFee;                        // Fee to be paid to the referrer in preciseUnits (1e16 = 1%)\\n        IPostIntentHook postIntentHook;             // Address of the post-intent hook that will execute any post-intent actions\\n        bytes data;                                 // Additional data to be passed to the post-intent hook contract\\n    }\\n\\n    struct SignalIntentParams {\\n        address escrow;                             // The escrow contract where the deposit is held\\n        uint256 depositId;                          // The ID of the deposit the taker intends to use\\n        uint256 amount;                             // The amount of deposit.token the user wants to take\\n        address to;                                 // Address to forward funds to\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // The currency code for offchain payment\\n        uint256 conversionRate;                     // The conversion rate agreed offchain\\n        address referrer;                           // Address of the referrer (address(0) if no referrer)\\n        uint256 referrerFee;                        // Fee to be paid to the referrer\\n        bytes gatingServiceSignature;               // Signature from the deposit's gating service\\n        uint256 signatureExpiration;                // Timestamp when the gating service signature expires\\n        IPostIntentHook postIntentHook;             // Optional post-intent hook (address(0) for no hook)\\n        bytes data;                                 // Additional data for the intent\\n    }\\n\\n    struct FulfillIntentParams {\\n        bytes paymentProof;                         // Payment proof. Can be Groth16 Proof, TLSNotary proof, TLSProxy proof, attestation etc.\\n        bytes32 intentHash;                         // Identifier of intent being fulfilled\\n        bytes verificationData;                     // Additional data for payment verifier\\n        bytes postIntentHookData;                   // Additional data for post intent hook\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event IntentSignaled(\\n        bytes32 indexed intentHash, \\n        address indexed escrow,\\n        uint256 indexed depositId, \\n        bytes32 paymentMethod, \\n        address owner, \\n        address to, \\n        uint256 amount, \\n        bytes32 fiatCurrency, \\n        uint256 conversionRate, \\n        uint256 timestamp\\n    );\\n\\n    event IntentPruned(\\n        bytes32 indexed intentHash\\n    );\\n\\n    event IntentFulfilled(\\n        bytes32 indexed intentHash,\\n        address indexed fundsTransferredTo,   // Address that funds were transferred to; can be intent.to or postIntentHook address\\n        uint256 amount,\\n        bool isManualRelease\\n    );\\n\\n    event AllowMultipleIntentsUpdated(bool allowMultiple);\\n\\n    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);\\n    event PostIntentHookRegistryUpdated(address indexed postIntentHookRegistry);\\n    event RelayerRegistryUpdated(address indexed relayerRegistry);\\n    event EscrowRegistryUpdated(address indexed escrowRegistry);\\n\\n    event ProtocolFeeUpdated(uint256 protocolFee);\\n    event ProtocolFeeRecipientUpdated(address indexed protocolFeeRecipient);\\n    event PartialManualReleaseDelayUpdated(uint256 partialManualReleaseDelay);\\n\\n    /* ============ Standardized Custom Errors ============ */\\n    \\n    // Zero value errors\\n    error ZeroAddress();\\n    error ZeroValue();\\n    \\n    // Authorization errors\\n    error UnauthorizedEscrowCaller(address caller);\\n    error UnauthorizedCaller(address caller, address authorized);\\n    \\n    // Not found errors\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodDoesNotExist(bytes32 paymentMethod);\\n    error PaymentMethodNotSupported(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n    \\n    // Whitelist errors\\n    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);\\n    error PostIntentHookNotWhitelisted(address hook);\\n    error EscrowNotWhitelisted(address escrow);\\n    \\n    // Amount and fee errors\\n    error AmountBelowMin(uint256 amount, uint256 min);\\n    error AmountAboveMax(uint256 amount, uint256 max);\\n    error AmountExceedsLimit(uint256 amount, uint256 limit);\\n    error FeeExceedsMaximum(uint256 fee, uint256 maximum);\\n    error RateBelowMinimum(uint256 rate, uint256 minRate);\\n    \\n    // Validation errors\\n    error AccountHasActiveIntent(address account, bytes32 existingIntent);\\n    error InvalidReferrerFeeConfiguration();\\n    error InvalidSignature();\\n    error SignatureExpired(uint256 expiration, uint256 currentTime);\\n    error PartialReleaseNotAllowedYet(uint256 currentTime, uint256 allowedTime);\\n\\n    // Verification errors\\n    error PaymentVerificationFailed();\\n    error HashMismatch(bytes32 expected, bytes32 actual);\\n     \\n    // Transfer errors\\n    error TransferFailed(address recipient, uint256 amount);\\n    error EscrowLockFailed();\\n\\n    /* ============ View Functions ============ */\\n\\n    function getIntent(bytes32 intentHash) external view returns (Intent memory);\\n    function getAccountIntents(address account) external view returns (bytes32[] memory);\\n    \\n    /* ============ External Functions for Users ============ */\\n\\n    function signalIntent(SignalIntentParams calldata params) external;\\n\\n    function cancelIntent(bytes32 intentHash) external;\\n\\n    function fulfillIntent(FulfillIntentParams calldata params) external;\\n\\n    function releaseFundsToPayer(bytes32 intentHash) external;\\n\\n    /* ============ External Functions for Escrow ============ */\\n\\n    function pruneIntents(bytes32[] calldata intentIds) external;\\n}\",\"keccak256\":\"0xcf8db7a4c1481049dbdc2516f47cc0a4ea3a6e71093ee7c637a51294096accbf\",\"license\":\"MIT\"},\"contracts/interfaces/IOrchestratorRegistry.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IOrchestratorRegistry\\n * @notice Interface for EscrowV2 orchestrator authorization registry.\\n */\\ninterface IOrchestratorRegistry {\\n    /**\\n     * @notice Adds an orchestrator to the allowlist.\\n     * @param _orchestrator Orchestrator address to add.\\n     */\\n    function addOrchestrator(address _orchestrator) external;\\n\\n    /**\\n     * @notice Removes an orchestrator from the allowlist.\\n     * @param _orchestrator Orchestrator address to remove.\\n     */\\n    function removeOrchestrator(address _orchestrator) external;\\n\\n    /**\\n     * @notice Returns whether an address is currently allowlisted as orchestrator.\\n     * @param _orchestrator Address to check.\\n     * @return allowed True when `_orchestrator` is authorized.\\n     */\\n    function isOrchestrator(address _orchestrator) external view returns (bool allowed);\\n}\\n\",\"keccak256\":\"0xbb2d52f475b9ebd4aadd233040b62a438cf296463fd7b269d12f28c273d0a040\",\"license\":\"MIT\"},\"contracts/interfaces/IPostIntentHook.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IOrchestrator } from \\\"./IOrchestrator.sol\\\";\\n\\n/**\\n * @title IPostIntentHook\\n * @notice Interface for post-intent hooks\\n */\\ninterface IPostIntentHook {\\n\\n    /**\\n     * @notice Post-intent hook\\n     * @param _intent The intent data structure containing all intent information\\n     * @param _fulfillIntentData The data passed to fulfillIntent\\n     */\\n    function execute(\\n        IOrchestrator.Intent memory _intent,\\n        uint256 _amountNetFees,\\n        bytes calldata _fulfillIntentData\\n    ) external;\\n}\\n\",\"keccak256\":\"0x72ae0d60c98f89eb2363f455445466c1dfaddfb338a63d65d3eb8469cbd9484d\",\"license\":\"MIT\"},\"contracts/interfaces/IPreIntentHook.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IReferralFee } from \\\"./IReferralFee.sol\\\";\\n\\n/**\\n * @title IPreIntentHook\\n * @notice Interface for pre-intent hooks that run during signalIntent.\\n */\\ninterface IPreIntentHook {\\n    struct PreIntentContext {\\n        address taker;\\n        address escrow;\\n        uint256 depositId;\\n        uint256 amount;\\n        address to;\\n        bytes32 paymentMethod;\\n        bytes32 fiatCurrency;\\n        uint256 conversionRate;\\n        IReferralFee.ReferralFee[] referralFees;\\n        bytes preIntentHookData; // Ephemeral hook-specific data from SignalIntentParams.preIntentHookData\\n    }\\n\\n    /**\\n     * @notice Called by the Orchestrator during signalIntent before state changes.\\n     * @dev Implementations should revert to reject the incoming intent.\\n     * @param _ctx Incoming intent context.\\n     */\\n    function validateSignalIntent(PreIntentContext calldata _ctx) external;\\n}\\n\",\"keccak256\":\"0x8ad7d0dde36a89a77491a59294c8d7e3e15c47c268fcce836795b1e7d282c1f7\",\"license\":\"MIT\"},\"contracts/interfaces/IReferralFee.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\ninterface IReferralFee {\\n    struct ReferralFee {\\n        address recipient;\\n        uint256 fee;\\n    }\\n\\n    error ReferralFeeExceedsMaximum(uint256 totalFee, uint256 maximum);\\n    error ReferralFeeCountExceedsMaximum(uint256 count, uint256 maximum);\\n    error DuplicateReferralFeeRecipient(address recipient);\\n    error InvalidReferralFeeConfiguration();\\n}\\n\",\"keccak256\":\"0x117db0f8a3b705230a4139323f80dc534470d2c1a3a08364750ad0f9039ed1a5\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x60c0346100ca57601f61111838819003918201601f19168301916001600160401b038311848410176100cf5780849260409485528339810103126100ca57610052602061004b836100e5565b92016100e5565b6001600160a01b03918216801580156100c0575b6100ae576080521660a05260405161101e90816100fa82396080518181816108580152610aa8015260a05181818161065e015281816108df01528181610b4e0152610d250152f35b60405163d92e233d60e01b8152600490fd5b5082821615610066565b600080fd5b634e487b7160e01b600052604160045260246000fd5b51906001600160a01b03821682036100ca5756fe608060408181526004918236101561001657600080fd5b600092833560e01c918263165273ce146108cb5750816316bbe4b31461088757816349fb59e8146104e45781635e7859051461084357816365bee322146106075781637dbdd22c14610528578163866fd38e146104e45781639d85c50b14610436578163a4dd4dd214610261578163c767633814610245578163e2967fad1461012857508063e68c695d146101045763f44b204c146100b457600080fd5b346101005760603660031901126101005760209181906001600160a01b036100da61090e565b168152600284528181206024358252845281812060443582528452205415159051908152f35b5080fd5b50346101005760209061011f61011936610929565b91610cd4565b90519015158152f35b91905034610241576101393661095d565b909391926001600160a01b03808216939290918415610231578115610221578561016291610e29565b875b81811061016f578880f35b8261018361017e83858b6109e7565b610a0d565b16801561021157906101bb91868b5260208b8152868c20898d528152868c20828d52815260ff878d205416156101c0575b50506109c2565b610164565b878c528b8152868c20898d528152868c20828d529052858b20805460ff1916600117905587877f05a86b1bbd6df799d3990592478928407f16e8d122a292d2980c032267eeda7e8d80a438806101b4565b845163d92e233d60e01b81528990fd5b835163521299a960e01b81528890fd5b835163d92e233d60e01b81528890fd5b8280fd5b50503461010057816003193601126101005760209051600a8152f35b91905034610241576102723661095d565b909390926001600160a01b03811691908215610426578415610416578361029891610e29565b818752602060018152818820848952815281882094885b8181106102ba578980f35b6102c581838a6109e7565b35858b526002808552858c20888d528552858c20828d528552858c2054801561040a57895460001991908281019081116103f657610303908c610a66565b90549060031b1c8282018281116103e1578f9091610340818f8d9561032791610a66565b90919082549060031b91821b91600019901b1916179055565b8b8252858a528282208d83528a5282822090825289522055895480156103ce577f6fc4c9b5ad9eb87df07086dedb4a3dc3d1ec29cf018c013ab76099d19cb32db08e6103c9969594848e8e968e96019161039a8383610a66565b909182549160031b1b1916905555838252895289812084825289528981208582528952808a81205580a46109c2565b6102af565b634e487b7160e01b8e5260318d5260248efd5b5050634e487b7160e01b8e5260118d5260248efd5b50634e487b7160e01b8e5260118d5260248efd5b5050506103c9906109c2565b815163521299a960e01b81528790fd5b815163d92e233d60e01b81528790fd5b5050346101005780600319360112610100576001600160a01b0361045861090e565b16825260016020928184528281206024358252845282812093835190818187549182815201908197855282852090855b8181106104d1575050508261049e910383610a21565b8451948186019282875251809352850195925b8281106104be5785870386f35b83518752958101959281019284016104b1565b8254845292840192918701918701610488565b5050346101005760ff816020936104fa36610929565b6001600160a01b03928316845283885284842091845290875283832091168252855220549151911615158152f35b91905034610241576105393661095d565b909391926001600160a01b03808216939290918415610231578115610221578561056291610e29565b875b81811061056f578880f35b8261057e61017e83858b6109e7565b16801561021157906105b491868b5260208b8152868c20898d528152868c20828d52815260ff878d2054166105b95750506109c2565b610564565b878c528b8152868c20898d528152868c20828d529052858b20805460ff1916905587877fdc04c7452cc3caa015e89464953fd4cd7675bb0e4f18c9f235ecc83acb6e5fe28d80a438806101b4565b905034610241576106173661095d565b6001600160a01b0395909492938681169392908415610834578615610825578561064391989798610e29565b8388526001602093818552838a20878b528552838a20918a987f000000000000000000000000000000000000000000000000000000000000000016985b8a811061068b578b80f35b610696818c876109e7565b35878d8c8951928380926317aa4c7b60e31b8252868a83015260249586915afa91821561081a57916107e1575b50156107cd578d908a825288600292838c528d8282209082528c528181208582528c5220546107c157865490600a8083101561078457506801000000000000000082101561077357508a8f7f8216bd0ee872cb49867972c44b4108b75a950f9126c012cabf5a2e3c8cd12c77908c8f949561074c88610327898f8e61076e9e9d9c018155610a66565b8b5485845291528c82208583528e528c82208683528e528c82205580a46109c2565b610680565b8f604188634e487b7160e01b835252fd5b945092509050878e959482018092116107af575163c25a332560e01b81529384015282015260449150fd5b634e487b7160e01b8652601185528286fd5b50505061076e906109c2565b8751630eda8f7f60e21b8152808601839052fd5b90508981813d8311610813575b6107f88183610a21565b8101031261080f5761080990610a59565b386106c3565b8e80fd5b503d6107ee565b8a51903d90823e3d90fd5b50505163521299a960e01b8152fd5b50505163d92e233d60e01b8152fd5b505034610100578160031936011261010057517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b839034610100576003196020368201126102415781359067ffffffffffffffff82116108c757610140908236030112610241576108c49101610a7e565b80f35b8380fd5b8490346101005781600319360112610100577f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b600435906001600160a01b038216820361092457565b600080fd5b6060906003190112610924576001600160a01b03600435818116810361092457916024359160443590811681036109245790565b906060600319830112610924576004356001600160a01b038116810361092457916024359160443567ffffffffffffffff9283821161092457806023830112156109245781600401359384116109245760248460051b83010111610924576024019190565b60001981146109d15760010190565b634e487b7160e01b600052601160045260246000fd5b91908110156109f75760051b0190565b634e487b7160e01b600052603260045260246000fd5b356001600160a01b03811681036109245790565b90601f8019910116810190811067ffffffffffffffff821117610a4357604052565b634e487b7160e01b600052604160045260246000fd5b5190811515820361092457565b80548210156109f75760005260206000200190600090565b906040805163d701dcbd60e01b8152600491338383015260209260018060a01b03928481602481877f0000000000000000000000000000000000000000000000000000000000000000165afa908115610cc957600091610c94575b5015610c7e578386019483610aed87610a0d565b1660005260008552826000209483880135958660005281528360002085610b138a610a0d565b16600052815260ff846000205416610c745784610b2f88610a0d565b16600052600181528360002086600052815283600020906000825492877f000000000000000000000000000000000000000000000000000000000000000016915b848110610bb15750505050505082610b92610b8c606498610a0d565b96610a0d565b925163691a1b2d60e01b81529516908501521660248301526044820152fd5b610bc9848d610bc08486610a66565b93905491610a0d565b8b51637d9e10f560e01b815260039490941b9190911c8a84019081526001600160a01b039091166020820152829081906040010381875afa908115610c6957600091610c31575b50610c2357610c1e906109c2565b610b70565b505050505095505050505050565b908582813d8311610c62575b610c478183610a21565b81010312610c5f5750610c5990610a59565b38610c10565b80fd5b503d610c3d565b89513d6000823e3d90fd5b5095505050505050565b6024915190630256d21960e31b82523390820152fd5b908582813d8311610cc2575b610caa8183610a21565b81010312610c5f5750610cbc90610a59565b38610ad9565b503d610ca0565b83513d6000823e3d90fd5b6001600160a01b0390811660008181526020818152604080832086845282528083208786168452825280832054929593909260ff16610e0957855260018082528286209386529281528185208054947f00000000000000000000000000000000000000000000000000000000000000001690865b868110610d5b5750505050505050905090565b8884610d678385610a66565b90548851637d9e10f560e01b815260039290921b1c60048201526001600160a01b0392909216602483015281604481875afa908115610dff578991610dc6575b50610dba57610db5906109c2565b610d48565b50505050509250505090565b90508481813d8311610df8575b610ddd8183610a21565b81010312610df457610dee90610a59565b38610da7565b8880fd5b503d610dd3565b86513d8b823e3d90fd5b50505050505050600190565b51906001600160a01b038216820361092457565b6040908151926313f3f72d60e31b8452600484015261014092838160248160018060a01b038096165afa938415610cc957600094610ec8575b505080835116928333148015610ea6575b15610e7e5750505050565b606494506020015116905191639a313e5960e01b835233600484015260248301526044820152fd5b50816020820151168015159081610ebe575b50610e73565b9050331438610eb8565b81819593953d8311610fe1575b610edf8183610a21565b810103908112610241578351926101209167ffffffffffffffff9083860182811187821017610fcd578752610f1385610e15565b8652610f2160208601610e15565b60208701528685015188811681036108c75786880152605f190186136101005785519182870191821183831017610fb957508552606083810151825260808401516020830152840152610fad90610f7a60a08401610a59565b608085015260c083015160a085015260e083015160c085015261010092610fa2848201610e15565b60e086015201610a59565b90820152913880610e62565b634e487b7160e01b81526041600452602490fd5b634e487b7160e01b84526041600452602484fd5b503d610ed556fea26469706673582212205b9d29a59edb5a766e549966d228a9bfad2a2ec1df4cce6d2ca3df85dff7d41064736f6c63430008120033",
+  "deployedBytecode": "0x608060408181526004918236101561001657600080fd5b600092833560e01c918263165273ce146108cb5750816316bbe4b31461088757816349fb59e8146104e45781635e7859051461084357816365bee322146106075781637dbdd22c14610528578163866fd38e146104e45781639d85c50b14610436578163a4dd4dd214610261578163c767633814610245578163e2967fad1461012857508063e68c695d146101045763f44b204c146100b457600080fd5b346101005760603660031901126101005760209181906001600160a01b036100da61090e565b168152600284528181206024358252845281812060443582528452205415159051908152f35b5080fd5b50346101005760209061011f61011936610929565b91610cd4565b90519015158152f35b91905034610241576101393661095d565b909391926001600160a01b03808216939290918415610231578115610221578561016291610e29565b875b81811061016f578880f35b8261018361017e83858b6109e7565b610a0d565b16801561021157906101bb91868b5260208b8152868c20898d528152868c20828d52815260ff878d205416156101c0575b50506109c2565b610164565b878c528b8152868c20898d528152868c20828d529052858b20805460ff1916600117905587877f05a86b1bbd6df799d3990592478928407f16e8d122a292d2980c032267eeda7e8d80a438806101b4565b845163d92e233d60e01b81528990fd5b835163521299a960e01b81528890fd5b835163d92e233d60e01b81528890fd5b8280fd5b50503461010057816003193601126101005760209051600a8152f35b91905034610241576102723661095d565b909390926001600160a01b03811691908215610426578415610416578361029891610e29565b818752602060018152818820848952815281882094885b8181106102ba578980f35b6102c581838a6109e7565b35858b526002808552858c20888d528552858c20828d528552858c2054801561040a57895460001991908281019081116103f657610303908c610a66565b90549060031b1c8282018281116103e1578f9091610340818f8d9561032791610a66565b90919082549060031b91821b91600019901b1916179055565b8b8252858a528282208d83528a5282822090825289522055895480156103ce577f6fc4c9b5ad9eb87df07086dedb4a3dc3d1ec29cf018c013ab76099d19cb32db08e6103c9969594848e8e968e96019161039a8383610a66565b909182549160031b1b1916905555838252895289812084825289528981208582528952808a81205580a46109c2565b6102af565b634e487b7160e01b8e5260318d5260248efd5b5050634e487b7160e01b8e5260118d5260248efd5b50634e487b7160e01b8e5260118d5260248efd5b5050506103c9906109c2565b815163521299a960e01b81528790fd5b815163d92e233d60e01b81528790fd5b5050346101005780600319360112610100576001600160a01b0361045861090e565b16825260016020928184528281206024358252845282812093835190818187549182815201908197855282852090855b8181106104d1575050508261049e910383610a21565b8451948186019282875251809352850195925b8281106104be5785870386f35b83518752958101959281019284016104b1565b8254845292840192918701918701610488565b5050346101005760ff816020936104fa36610929565b6001600160a01b03928316845283885284842091845290875283832091168252855220549151911615158152f35b91905034610241576105393661095d565b909391926001600160a01b03808216939290918415610231578115610221578561056291610e29565b875b81811061056f578880f35b8261057e61017e83858b6109e7565b16801561021157906105b491868b5260208b8152868c20898d528152868c20828d52815260ff878d2054166105b95750506109c2565b610564565b878c528b8152868c20898d528152868c20828d529052858b20805460ff1916905587877fdc04c7452cc3caa015e89464953fd4cd7675bb0e4f18c9f235ecc83acb6e5fe28d80a438806101b4565b905034610241576106173661095d565b6001600160a01b0395909492938681169392908415610834578615610825578561064391989798610e29565b8388526001602093818552838a20878b528552838a20918a987f000000000000000000000000000000000000000000000000000000000000000016985b8a811061068b578b80f35b610696818c876109e7565b35878d8c8951928380926317aa4c7b60e31b8252868a83015260249586915afa91821561081a57916107e1575b50156107cd578d908a825288600292838c528d8282209082528c528181208582528c5220546107c157865490600a8083101561078457506801000000000000000082101561077357508a8f7f8216bd0ee872cb49867972c44b4108b75a950f9126c012cabf5a2e3c8cd12c77908c8f949561074c88610327898f8e61076e9e9d9c018155610a66565b8b5485845291528c82208583528e528c82208683528e528c82205580a46109c2565b610680565b8f604188634e487b7160e01b835252fd5b945092509050878e959482018092116107af575163c25a332560e01b81529384015282015260449150fd5b634e487b7160e01b8652601185528286fd5b50505061076e906109c2565b8751630eda8f7f60e21b8152808601839052fd5b90508981813d8311610813575b6107f88183610a21565b8101031261080f5761080990610a59565b386106c3565b8e80fd5b503d6107ee565b8a51903d90823e3d90fd5b50505163521299a960e01b8152fd5b50505163d92e233d60e01b8152fd5b505034610100578160031936011261010057517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b839034610100576003196020368201126102415781359067ffffffffffffffff82116108c757610140908236030112610241576108c49101610a7e565b80f35b8380fd5b8490346101005781600319360112610100577f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b600435906001600160a01b038216820361092457565b600080fd5b6060906003190112610924576001600160a01b03600435818116810361092457916024359160443590811681036109245790565b906060600319830112610924576004356001600160a01b038116810361092457916024359160443567ffffffffffffffff9283821161092457806023830112156109245781600401359384116109245760248460051b83010111610924576024019190565b60001981146109d15760010190565b634e487b7160e01b600052601160045260246000fd5b91908110156109f75760051b0190565b634e487b7160e01b600052603260045260246000fd5b356001600160a01b03811681036109245790565b90601f8019910116810190811067ffffffffffffffff821117610a4357604052565b634e487b7160e01b600052604160045260246000fd5b5190811515820361092457565b80548210156109f75760005260206000200190600090565b906040805163d701dcbd60e01b8152600491338383015260209260018060a01b03928481602481877f0000000000000000000000000000000000000000000000000000000000000000165afa908115610cc957600091610c94575b5015610c7e578386019483610aed87610a0d565b1660005260008552826000209483880135958660005281528360002085610b138a610a0d565b16600052815260ff846000205416610c745784610b2f88610a0d565b16600052600181528360002086600052815283600020906000825492877f000000000000000000000000000000000000000000000000000000000000000016915b848110610bb15750505050505082610b92610b8c606498610a0d565b96610a0d565b925163691a1b2d60e01b81529516908501521660248301526044820152fd5b610bc9848d610bc08486610a66565b93905491610a0d565b8b51637d9e10f560e01b815260039490941b9190911c8a84019081526001600160a01b039091166020820152829081906040010381875afa908115610c6957600091610c31575b50610c2357610c1e906109c2565b610b70565b505050505095505050505050565b908582813d8311610c62575b610c478183610a21565b81010312610c5f5750610c5990610a59565b38610c10565b80fd5b503d610c3d565b89513d6000823e3d90fd5b5095505050505050565b6024915190630256d21960e31b82523390820152fd5b908582813d8311610cc2575b610caa8183610a21565b81010312610c5f5750610cbc90610a59565b38610ad9565b503d610ca0565b83513d6000823e3d90fd5b6001600160a01b0390811660008181526020818152604080832086845282528083208786168452825280832054929593909260ff16610e0957855260018082528286209386529281528185208054947f00000000000000000000000000000000000000000000000000000000000000001690865b868110610d5b5750505050505050905090565b8884610d678385610a66565b90548851637d9e10f560e01b815260039290921b1c60048201526001600160a01b0392909216602483015281604481875afa908115610dff578991610dc6575b50610dba57610db5906109c2565b610d48565b50505050509250505090565b90508481813d8311610df8575b610ddd8183610a21565b81010312610df457610dee90610a59565b38610da7565b8880fd5b503d610dd3565b86513d8b823e3d90fd5b50505050505050600190565b51906001600160a01b038216820361092457565b6040908151926313f3f72d60e31b8452600484015261014092838160248160018060a01b038096165afa938415610cc957600094610ec8575b505080835116928333148015610ea6575b15610e7e5750505050565b606494506020015116905191639a313e5960e01b835233600484015260248301526044820152fd5b50816020820151168015159081610ebe575b50610e73565b9050331438610eb8565b81819593953d8311610fe1575b610edf8183610a21565b810103908112610241578351926101209167ffffffffffffffff9083860182811187821017610fcd578752610f1385610e15565b8652610f2160208601610e15565b60208701528685015188811681036108c75786880152605f190186136101005785519182870191821183831017610fb957508552606083810151825260808401516020830152840152610fad90610f7a60a08401610a59565b608085015260c083015160a085015260e083015160c085015261010092610fa2848201610e15565b60e086015201610a59565b90820152913880610e62565b634e487b7160e01b81526041600452602490fd5b634e487b7160e01b84526041600452602484fd5b503d610ed556fea26469706673582212205b9d29a59edb5a766e549966d228a9bfad2a2ec1df4cce6d2ca3df85dff7d41064736f6c63430008120033",
+  "devdoc": {
+    "details": "Supersedes WhitelistPreIntentHook for new deposits. Configuration is keyed by (escrow, depositId) and persists if the deposit's orchestrator whitelist-hook slot is unset (whitelist paused) and later reattached (resumed). Membership is point-in-time admission authorization: removal does not invalidate already-signaled intents. TRUST MODEL: attaching a group delegates ongoing admission policy for the deposit to that group's controller set (current/future owner and resolver) — see AddressGroupRegistry.",
+    "kind": "dev",
+    "methods": {
+      "addToWhitelist(address,uint256,address[])": {
+        "params": {
+          "_depositId": "Deposit id.",
+          "_escrow": "Escrow address.",
+          "_takers": "Taker addresses to whitelist."
+        }
+      },
+      "attachGroups(address,uint256,uint256[])": {
+        "params": {
+          "_depositId": "Deposit id.",
+          "_escrow": "Escrow address.",
+          "_groupIds": "Group ids to attach (max MAX_GROUPS_PER_DEPOSIT attached in total)."
+        }
+      },
+      "detachGroups(address,uint256,uint256[])": {
+        "params": {
+          "_depositId": "Deposit id.",
+          "_escrow": "Escrow address.",
+          "_groupIds": "Group ids to detach."
+        }
+      },
+      "getAttachedGroups(address,uint256)": {
+        "params": {
+          "_depositId": "Deposit id.",
+          "_escrow": "Escrow address."
+        }
+      },
+      "isAllowedTaker(address,uint256,address)": {
+        "params": {
+          "_depositId": "Deposit id.",
+          "_escrow": "Escrow address.",
+          "_taker": "Taker address to check."
+        }
+      },
+      "isGroupAttached(address,uint256,uint256)": {
+        "params": {
+          "_depositId": "Deposit id.",
+          "_escrow": "Escrow address.",
+          "_groupId": "Group id."
+        }
+      },
+      "isWhitelisted(address,uint256,address)": {
+        "params": {
+          "_depositId": "Deposit id.",
+          "_escrow": "Escrow address.",
+          "_taker": "Taker address to check."
+        }
+      },
+      "removeFromWhitelist(address,uint256,address[])": {
+        "params": {
+          "_depositId": "Deposit id.",
+          "_escrow": "Escrow address.",
+          "_takers": "Taker addresses to remove."
+        }
+      },
+      "validateSignalIntent((address,address,uint256,uint256,address,bytes32,bytes32,uint256,(address,uint256)[],bytes))": {
+        "details": "Implementations should revert to reject the incoming intent.",
+        "params": {
+          "_ctx": "Incoming intent context."
+        }
+      }
+    },
+    "title": "WhitelistPreIntentHookV2",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "addToWhitelist(address,uint256,address[])": {
+        "notice": "Adds takers to a deposit's direct whitelist. Idempotent: already-whitelisted takers are skipped (no event)."
+      },
+      "attachGroups(address,uint256,uint256[])": {
+        "notice": "Attaches groups to a deposit. Idempotent: already-attached ids are skipped (no event). Validates each group exists in the registry (input validation only — not a trust guarantee about the group's governance)."
+      },
+      "detachGroups(address,uint256,uint256[])": {
+        "notice": "Detaches groups from a deposit. Idempotent: ids not currently attached are skipped (no event). Detachment does not invalidate already-signaled intents."
+      },
+      "getAttachedGroups(address,uint256)": {
+        "notice": "Returns all group ids attached to a deposit."
+      },
+      "isAllowedTaker(address,uint256,address)": {
+        "notice": "Full effective admission check — same semantics as validateSignalIntent without the orchestrator gate or revert."
+      },
+      "isGroupAttached(address,uint256,uint256)": {
+        "notice": "Returns whether a group is attached to a deposit."
+      },
+      "isWhitelisted(address,uint256,address)": {
+        "notice": "Returns whether a taker is on the deposit's direct whitelist (groups excluded)."
+      },
+      "removeFromWhitelist(address,uint256,address[])": {
+        "notice": "Removes takers from a deposit's direct whitelist. Idempotent: absent takers are skipped (no event). Removal does not invalidate already-signaled intents."
+      },
+      "validateSignalIntent((address,address,uint256,uint256,address,bytes32,bytes32,uint256,(address,uint256)[],bytes))": {
+        "notice": "Called by the Orchestrator during signalIntent before state changes."
+      }
+    },
+    "notice": "Unified whitelist hook: a taker may signal against a deposit when they are directly whitelisted OR a member of any attached AddressGroupRegistry group. Allow-only; no blocklist.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 12189,
+        "contract": "contracts/hooks/WhitelistPreIntentHookV2.sol:WhitelistPreIntentHookV2",
+        "label": "whitelist",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_mapping(t_address,t_mapping(t_uint256,t_mapping(t_address,t_bool)))"
+      },
+      {
+        "astId": 12196,
+        "contract": "contracts/hooks/WhitelistPreIntentHookV2.sol:WhitelistPreIntentHookV2",
+        "label": "attachedGroups",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_mapping(t_address,t_mapping(t_uint256,t_array(t_uint256)dyn_storage))"
+      },
+      {
+        "astId": 12204,
+        "contract": "contracts/hooks/WhitelistPreIntentHookV2.sol:WhitelistPreIntentHookV2",
+        "label": "attachedGroupIndexPlusOne",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_mapping(t_address,t_mapping(t_uint256,t_mapping(t_uint256,t_uint256)))"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_array(t_uint256)dyn_storage": {
+        "base": "t_uint256",
+        "encoding": "dynamic_array",
+        "label": "uint256[]",
+        "numberOfBytes": "32"
+      },
+      "t_bool": {
+        "encoding": "inplace",
+        "label": "bool",
+        "numberOfBytes": "1"
+      },
+      "t_mapping(t_address,t_bool)": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => bool)",
+        "numberOfBytes": "32",
+        "value": "t_bool"
+      },
+      "t_mapping(t_address,t_mapping(t_uint256,t_array(t_uint256)dyn_storage))": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => mapping(uint256 => uint256[]))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)"
+      },
+      "t_mapping(t_address,t_mapping(t_uint256,t_mapping(t_address,t_bool)))": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => mapping(uint256 => mapping(address => bool)))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_uint256,t_mapping(t_address,t_bool))"
+      },
+      "t_mapping(t_address,t_mapping(t_uint256,t_mapping(t_uint256,t_uint256)))": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => mapping(uint256 => mapping(uint256 => uint256)))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_uint256,t_mapping(t_uint256,t_uint256))"
+      },
+      "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)": {
+        "encoding": "mapping",
+        "key": "t_uint256",
+        "label": "mapping(uint256 => uint256[])",
+        "numberOfBytes": "32",
+        "value": "t_array(t_uint256)dyn_storage"
+      },
+      "t_mapping(t_uint256,t_mapping(t_address,t_bool))": {
+        "encoding": "mapping",
+        "key": "t_uint256",
+        "label": "mapping(uint256 => mapping(address => bool))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_address,t_bool)"
+      },
+      "t_mapping(t_uint256,t_mapping(t_uint256,t_uint256))": {
+        "encoding": "mapping",
+        "key": "t_uint256",
+        "label": "mapping(uint256 => mapping(uint256 => uint256))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_uint256,t_uint256)"
+      },
+      "t_mapping(t_uint256,t_uint256)": {
+        "encoding": "mapping",
+        "key": "t_uint256",
+        "label": "mapping(uint256 => uint256)",
+        "numberOfBytes": "32",
+        "value": "t_uint256"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      }
+    }
+  }
+}
