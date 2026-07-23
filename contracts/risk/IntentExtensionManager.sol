@@ -206,9 +206,10 @@ abstract contract IntentExtensionManager is IRiskManager {
 
     /**
      * @dev Locates the immutable Escrow route for an active Orchestrator intent and reads its live expiry. Immutable
-     *      intent fields are not revalidated. The Escrow existence check covers the short orphan window before
+     *      intent fields are not revalidated. The route check covers the failed-open cancellation window after
      *      Orchestrator cleanup, while the expiry check prevents resurrection because Escrow permits extending an
-     *      expired intent that has not yet been pruned.
+     *      expired intent that has not yet been pruned. A missing Escrow intent has a zero expiry and fails the same
+     *      expiry check.
      */
     function _getLiveExtensionTarget(bytes32 _intentHash)
         private
@@ -216,12 +217,13 @@ abstract contract IntentExtensionManager is IRiskManager {
         returns (IEscrowV2 escrow, uint256 depositId, uint64 currentExpiry)
     {
         IOrchestratorV3.RiskIntentData memory intent = _orchestrator().getRiskIntent(_intentHash);
-        if (intent.escrow == address(0)) revert IntentStateMismatch(_intentHash);
+        if (intent.escrow == address(0)) {
+            revert IntentStateMismatch(_intentHash);
+        }
 
         escrow = IEscrowV2(intent.escrow);
         depositId = intent.depositId;
         IEscrowV2.Intent memory escrowIntent = escrow.getDepositIntent(depositId, _intentHash);
-        if (escrowIntent.intentHash != _intentHash) revert IntentStateMismatch(_intentHash);
 
         currentExpiry = _toExtensionTimestamp(escrowIntent.expiryTime);
         uint64 currentTime = _currentExtensionTimestamp();
