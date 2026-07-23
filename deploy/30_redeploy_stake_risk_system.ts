@@ -64,6 +64,37 @@ function riskPlatformPolicyForNetwork(network: string): {
   return policy;
 }
 
+async function redeployFullyWired(network: string): Promise<boolean> {
+  const policy = STAKE_RISK_PLATFORM_POLICY[network];
+  if (!policy) return false;
+
+  const stakeVaultAddress = getDeployedContractAddress(network, "StakeVault");
+  const riskManagerAddress = getDeployedContractAddress(network, "RiskManager");
+  const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
+
+  const stakeVault = await ethers.getContractAt("StakeVault", stakeVaultAddress);
+  const riskManager = await ethers.getContractAt("RiskManager", riskManagerAddress);
+  const paymentVerifierRegistry = await ethers.getContractAt(
+    "PaymentVerifierRegistry",
+    paymentVerifierRegistryAddress,
+  );
+
+  const controller: string = await stakeVault.controller();
+  if (controller.toLowerCase() !== riskManagerAddress.toLowerCase()) return false;
+
+  const paymentMethods: string[] = await paymentVerifierRegistry.getPaymentMethods();
+  for (const paymentMethod of paymentMethods) {
+    const expectedConfig = CHARGEBACKABLE_PAYMENT_METHODS.has(paymentMethod)
+      ? policy.reversible
+      : policy.nonChargebackable;
+    const actualConfig: PlatformRiskConfig = await riskManager.getPlatformRiskConfig(paymentMethod);
+    if (!platformRiskConfigMatches(actualConfig, expectedConfig)) return false;
+  }
+
+  // Do not check owner(): Ownable2Step keeps the deployer as owner until the multisig accepts ownership.
+  return true;
+}
+
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deploy, save } = hre.deployments;
   const network = hre.deployments.getNetworkName();
@@ -166,10 +197,13 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   try {
     const currentStakeVault = getDeployedContractAddress(network, "StakeVault");
     const currentRiskManager = getDeployedContractAddress(network, "RiskManager");
-    return (
+    const bothAddressesReplaced = (
       currentStakeVault.toLowerCase() !== oldStakeVault.toLowerCase() &&
       currentRiskManager.toLowerCase() !== OLD_RISK_MANAGER[network].toLowerCase()
     );
+    if (!bothAddressesReplaced) return false;
+
+    return await redeployFullyWired(network);
   } catch (error) {
     return false;
   }
