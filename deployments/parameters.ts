@@ -141,9 +141,9 @@ const INITIAL_STAKE_RISK_PLATFORM_POLICY = {
     chargeback: {
       chargebackable: true,
       deferredPayoutEnabled: true,
-      riskWindow: ONE_DAY_IN_SECONDS.mul(30),
+      riskWindow: ONE_DAY_IN_SECONDS.mul(14),
     },
-    extensionPenaltyBpsPerHour: 10,
+    extensionPenaltyBpsPerHour: 2,
   },
   nonChargebackable: {
     enabled: true,
@@ -152,7 +152,7 @@ const INITIAL_STAKE_RISK_PLATFORM_POLICY = {
       deferredPayoutEnabled: false,
       riskWindow: 0,
     },
-    extensionPenaltyBpsPerHour: 10,
+    extensionPenaltyBpsPerHour: 2,
   },
 };
 

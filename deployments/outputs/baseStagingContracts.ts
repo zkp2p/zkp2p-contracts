@@ -931,6 +931,487 @@ export default {
         }
       ]
     },
+    "AddressGroupRegistry": {
+      "address": "0x3A52189dC9FE5a4913D2b772e6fd93cccb244dE6",
+      "abi": [
+        {
+          "inputs": [],
+          "name": "EmptyArray",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "groupId",
+              "type": "uint256"
+            }
+          ],
+          "name": "GroupDoesNotExist",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "groupId",
+              "type": "uint256"
+            }
+          ],
+          "name": "NoPendingTransfer",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "resolver",
+              "type": "address"
+            }
+          ],
+          "name": "ResolverNotContract",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "owner",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedGroupOwner",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "pendingOwner",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedPendingOwner",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroAddress",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "groupId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
+              "name": "name",
+              "type": "string"
+            }
+          ],
+          "name": "GroupCreated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "groupId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "cancelledPendingOwner",
+              "type": "address"
+            }
+          ],
+          "name": "GroupOwnershipTransferCancelled",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "groupId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "pendingOwner",
+              "type": "address"
+            }
+          ],
+          "name": "GroupOwnershipTransferStarted",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "groupId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "GroupOwnershipTransferred",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "groupId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "member",
+              "type": "address"
+            }
+          ],
+          "name": "MemberAdded",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "groupId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "member",
+              "type": "address"
+            }
+          ],
+          "name": "MemberRemoved",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "groupId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "oldResolver",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newResolver",
+              "type": "address"
+            }
+          ],
+          "name": "ResolverSet",
+          "type": "event"
+        },
+        {
+          "inputs": [],
+          "name": "RESOLVER_GAS_LIMIT",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_groupId",
+              "type": "uint256"
+            }
+          ],
+          "name": "acceptGroupOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_groupId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address[]",
+              "name": "_members",
+              "type": "address[]"
+            }
+          ],
+          "name": "addMembers",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_groupId",
+              "type": "uint256"
+            }
+          ],
+          "name": "cancelGroupOwnershipTransfer",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "string",
+              "name": "_name",
+              "type": "string"
+            }
+          ],
+          "name": "createGroup",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "groupId",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_groupId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getGroup",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "pendingOwner",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "resolver",
+              "type": "address"
+            },
+            {
+              "internalType": "bool",
+              "name": "exists",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "groupCount",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_groupId",
+              "type": "uint256"
+            }
+          ],
+          "name": "groupExists",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_groupId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_account",
+              "type": "address"
+            }
+          ],
+          "name": "isMember",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "name": "members",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_groupId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address[]",
+              "name": "_members",
+              "type": "address[]"
+            }
+          ],
+          "name": "removeMembers",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_groupId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_resolver",
+              "type": "address"
+            }
+          ],
+          "name": "setResolver",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_groupId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "transferGroupOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
     "BoundedCall": {
       "address": "0xAc2495fbfa858cb19AcCc62427523271E695077F",
       "abi": [
@@ -16255,7 +16736,7 @@ export default {
       ]
     },
     "RiskManager": {
-      "address": "0x3AC412E433D28a3D7Adb961A1F25146C93F8fC54",
+      "address": "0x08eF591C431Bb1B935Acb83B05F91cac8A6fe827",
       "abi": [
         {
           "inputs": [
@@ -16266,12 +16747,12 @@ export default {
             },
             {
               "internalType": "contract IOrchestratorV3",
-              "name": "_orchestrator",
+              "name": "_orchestratorContract",
               "type": "address"
             },
             {
               "internalType": "contract IStakeVault",
-              "name": "_stakeVault",
+              "name": "_stakeVaultContract",
               "type": "address"
             },
             {
@@ -16287,11 +16768,6 @@ export default {
           ],
           "stateMutability": "nonpayable",
           "type": "constructor"
-        },
-        {
-          "inputs": [],
-          "name": "AdmissionPaused",
-          "type": "error"
         },
         {
           "inputs": [],
@@ -16339,17 +16815,17 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "address",
-              "name": "expectedStakeOwner",
-              "type": "address"
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
             },
             {
               "internalType": "address",
-              "name": "recipient",
+              "name": "postIntentHook",
               "type": "address"
             }
           ],
-          "name": "DeferredStakeRecipientMismatch",
+          "name": "DeferredPostIntentHookUnsupported",
           "type": "error"
         },
         {
@@ -16366,11 +16842,6 @@ export default {
             }
           ],
           "name": "DeferredStakeTransferMismatch",
-          "type": "error"
-        },
-        {
-          "inputs": [],
-          "name": "EmptyBatch",
           "type": "error"
         },
         {
@@ -16409,6 +16880,17 @@ export default {
             }
           ],
           "name": "ExtensionTimeOverflow",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "ExtensionsDisabled",
           "type": "error"
         },
         {
@@ -16457,7 +16939,7 @@ export default {
             },
             {
               "internalType": "uint64",
-              "name": "expiryTime",
+              "name": "expiry",
               "type": "uint64"
             },
             {
@@ -16504,33 +16986,12 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "uint256",
-              "name": "count",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "maximum",
-              "type": "uint256"
+              "internalType": "address",
+              "name": "dependency",
+              "type": "address"
             }
           ],
-          "name": "InvalidFeeAllocationCount",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint256",
-              "name": "expectedAmount",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "actualAmount",
-              "type": "uint256"
-            }
-          ],
-          "name": "InvalidFeeAllocations",
+          "name": "InvalidContract",
           "type": "error"
         },
         {
@@ -16577,24 +17038,13 @@ export default {
           "type": "error"
         },
         {
-          "inputs": [
-            {
-              "internalType": "uint256",
-              "name": "grossAmount",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "executableAmount",
-              "type": "uint256"
-            }
-          ],
-          "name": "InvalidSettlementAmounts",
+          "inputs": [],
+          "name": "InvalidShortString",
           "type": "error"
         },
         {
           "inputs": [],
-          "name": "InvalidShortString",
+          "name": "OwnershipRenunciationDisabled",
           "type": "error"
         },
         {
@@ -16684,19 +17134,8 @@ export default {
           "type": "error"
         },
         {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "stakeOwner",
-              "type": "address"
-            }
-          ],
-          "name": "StakeOwnerExiting",
+          "inputs": [],
+          "name": "RiskTakingPaused",
           "type": "error"
         },
         {
@@ -16767,19 +17206,6 @@ export default {
           "anonymous": false,
           "inputs": [
             {
-              "indexed": false,
-              "internalType": "bool",
-              "name": "paused",
-              "type": "bool"
-            }
-          ],
-          "name": "AdmissionPausedUpdated",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
               "indexed": true,
               "internalType": "address",
               "name": "previousVerifier",
@@ -16825,12 +17251,6 @@ export default {
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "grossReleasedAmount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
               "name": "compensatedAmount",
               "type": "uint256"
             },
@@ -16856,7 +17276,7 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
-              "name": "staker",
+              "name": "payoutRecipient",
               "type": "address"
             },
             {
@@ -16874,13 +17294,7 @@ export default {
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "feeAmount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "chargebackCoverage",
+              "name": "deferredFees",
               "type": "uint256"
             },
             {
@@ -16935,19 +17349,19 @@ export default {
             {
               "indexed": false,
               "internalType": "uint64",
-              "name": "newExpiryTime",
+              "name": "newExpiry",
               "type": "uint64"
             },
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "additionalReservation",
+              "name": "additionalAmount",
               "type": "uint256"
             },
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "totalReservation",
+              "name": "totalAmount",
               "type": "uint256"
             }
           ],
@@ -16977,12 +17391,6 @@ export default {
             },
             {
               "indexed": false,
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
-            },
-            {
-              "indexed": false,
               "internalType": "uint64",
               "name": "terminalAt",
               "type": "uint64"
@@ -17002,11 +17410,30 @@ export default {
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "releasedReservation",
+              "name": "releasedAmount",
               "type": "uint256"
             }
           ],
-          "name": "IntentExtensionCharged",
+          "name": "IntentExtensionResolved",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferStarted",
           "type": "event"
         },
         {
@@ -17054,12 +17481,6 @@ export default {
               "internalType": "bool",
               "name": "deferredPayoutEnabled",
               "type": "bool"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint16",
-              "name": "reserveBps",
-              "type": "uint16"
             },
             {
               "indexed": false,
@@ -17113,7 +17534,7 @@ export default {
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "releasedReservation",
+              "name": "releasedCoverage",
               "type": "uint256"
             }
           ],
@@ -17167,9 +17588,9 @@ export default {
             },
             {
               "indexed": false,
-              "internalType": "uint64",
-              "name": "createdAt",
-              "type": "uint64"
+              "internalType": "uint256",
+              "name": "coverageAmount",
+              "type": "uint256"
             },
             {
               "indexed": false,
@@ -17179,33 +17600,15 @@ export default {
             },
             {
               "indexed": false,
-              "internalType": "uint32",
-              "name": "extensionPenaltyBpsPerHour",
-              "type": "uint32"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint16",
-              "name": "chargebackReserveBps",
-              "type": "uint16"
-            },
-            {
-              "indexed": false,
               "internalType": "uint64",
               "name": "riskWindow",
               "type": "uint64"
             },
             {
               "indexed": false,
-              "internalType": "uint256",
-              "name": "chargebackReserve",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "initialReservation",
-              "type": "uint256"
+              "internalType": "uint32",
+              "name": "extensionPenaltyBpsPerHour",
+              "type": "uint32"
             }
           ],
           "name": "RiskPositionCreated",
@@ -17272,7 +17675,7 @@ export default {
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "grossReleasedAmount",
+              "name": "grossAmount",
               "type": "uint256"
             },
             {
@@ -17284,20 +17687,8 @@ export default {
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "chargebackCoverage",
+              "name": "coverageAmount",
               "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "releasedReservation",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "settledAt",
-              "type": "uint64"
             },
             {
               "indexed": false,
@@ -17313,6 +17704,19 @@ export default {
             }
           ],
           "name": "RiskPositionSettled",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": false,
+              "internalType": "bool",
+              "name": "paused",
+              "type": "bool"
+            }
+          ],
+          "name": "RiskTakingPausedUpdated",
           "type": "event"
         },
         {
@@ -17356,7 +17760,7 @@ export default {
         },
         {
           "inputs": [],
-          "name": "EXTENSION_RESERVATION_NAMESPACE",
+          "name": "EXTENSION_LOCK_NAMESPACE",
           "outputs": [
             {
               "internalType": "bytes32",
@@ -17408,6 +17812,19 @@ export default {
         },
         {
           "inputs": [],
+          "name": "NEVER_MATURES",
+          "outputs": [
+            {
+              "internalType": "uint64",
+              "name": "",
+              "type": "uint64"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
           "name": "SECONDS_PER_HOUR",
           "outputs": [
             {
@@ -17421,22 +17838,16 @@ export default {
         },
         {
           "inputs": [],
-          "name": "acceptVaultController",
+          "name": "acceptOwnership",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
         },
         {
           "inputs": [],
-          "name": "admissionPaused",
-          "outputs": [
-            {
-              "internalType": "bool",
-              "name": "",
-              "type": "bool"
-            }
-          ],
-          "stateMutability": "view",
+          "name": "acceptVaultController",
+          "outputs": [],
+          "stateMutability": "nonpayable",
           "type": "function"
         },
         {
@@ -17450,30 +17861,6 @@ export default {
             }
           ],
           "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint256",
-              "name": "_amount",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint16",
-              "name": "_reserveBps",
-              "type": "uint16"
-            }
-          ],
-          "name": "calculateChargebackReserve",
-          "outputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
-            }
-          ],
-          "stateMutability": "pure",
           "type": "function"
         },
         {
@@ -17618,7 +18005,7 @@ export default {
               "type": "bytes32"
             }
           ],
-          "name": "extensionReservationId",
+          "name": "extensionLockId",
           "outputs": [
             {
               "internalType": "bytes32",
@@ -17627,6 +18014,42 @@ export default {
             }
           ],
           "stateMutability": "pure",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_intentHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getDeferredFeeAllocations",
+          "outputs": [
+            {
+              "components": [
+                {
+                  "internalType": "enum IIntentRiskHook.FeeType",
+                  "name": "feeType",
+                  "type": "uint8"
+                },
+                {
+                  "internalType": "address",
+                  "name": "recipient",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "amount",
+                  "type": "uint256"
+                }
+              ],
+              "internalType": "struct IIntentRiskHook.FeeAllocation[]",
+              "name": "allocations",
+              "type": "tuple[]"
+            }
+          ],
+          "stateMutability": "view",
           "type": "function"
         },
         {
@@ -17659,11 +18082,6 @@ export default {
                       "type": "bool"
                     },
                     {
-                      "internalType": "uint16",
-                      "name": "reserveBps",
-                      "type": "uint16"
-                    },
-                    {
                       "internalType": "uint64",
                       "name": "riskWindow",
                       "type": "uint64"
@@ -17674,16 +18092,9 @@ export default {
                   "type": "tuple"
                 },
                 {
-                  "components": [
-                    {
-                      "internalType": "uint32",
-                      "name": "extensionPenaltyBpsPerHour",
-                      "type": "uint32"
-                    }
-                  ],
-                  "internalType": "struct IRiskManager.IntentExtensionConfig",
-                  "name": "intentExtension",
-                  "type": "tuple"
+                  "internalType": "uint32",
+                  "name": "extensionPenaltyBpsPerHour",
+                  "type": "uint32"
                 }
               ],
               "internalType": "struct IRiskManager.PlatformRiskConfig",
@@ -17718,7 +18129,17 @@ export default {
                 },
                 {
                   "internalType": "address",
+                  "name": "extensionStakeOwner",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
                   "name": "lp",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "payoutRecipient",
                   "type": "address"
                 },
                 {
@@ -17737,14 +18158,9 @@ export default {
                   "type": "uint8"
                 },
                 {
-                  "internalType": "address",
-                  "name": "payoutRecipient",
-                  "type": "address"
-                },
-                {
-                  "internalType": "uint16",
-                  "name": "chargebackReserveBps",
-                  "type": "uint16"
+                  "internalType": "bool",
+                  "name": "isManualRelease",
+                  "type": "bool"
                 },
                 {
                   "internalType": "uint32",
@@ -17773,23 +18189,8 @@ export default {
                 },
                 {
                   "internalType": "uint64",
-                  "name": "cancelledAt",
-                  "type": "uint64"
-                },
-                {
-                  "internalType": "uint64",
-                  "name": "settledAt",
-                  "type": "uint64"
-                },
-                {
-                  "internalType": "uint64",
                   "name": "coverageDeadline",
                   "type": "uint64"
-                },
-                {
-                  "internalType": "bool",
-                  "name": "isManualRelease",
-                  "type": "bool"
                 },
                 {
                   "internalType": "uint256",
@@ -17797,28 +18198,13 @@ export default {
                   "type": "uint256"
                 },
                 {
-                  "internalType": "address",
-                  "name": "extensionStakeOwner",
-                  "type": "address"
-                },
-                {
                   "internalType": "uint256",
-                  "name": "extensionReservation",
+                  "name": "extensionAmount",
                   "type": "uint256"
                 },
                 {
                   "internalType": "uint256",
-                  "name": "extensionPenalty",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "initialReservation",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "reservedAmount",
+                  "name": "coverageAmount",
                   "type": "uint256"
                 },
                 {
@@ -17830,15 +18216,10 @@ export default {
                   "internalType": "uint256",
                   "name": "executableAmount",
                   "type": "uint256"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "slashedAmount",
-                  "type": "uint256"
                 }
               ],
               "internalType": "struct IRiskManager.RiskPosition",
-              "name": "",
+              "name": "position",
               "type": "tuple"
             }
           ],
@@ -17867,18 +18248,13 @@ export default {
             },
             {
               "internalType": "uint256",
-              "name": "reserved",
+              "name": "lockedStake",
               "type": "uint256"
             },
             {
               "internalType": "uint256",
-              "name": "free",
+              "name": "freeStake",
               "type": "uint256"
-            },
-            {
-              "internalType": "bool",
-              "name": "exiting",
-              "type": "bool"
             }
           ],
           "stateMutability": "view",
@@ -17906,11 +18282,6 @@ export default {
                 {
                   "internalType": "bytes",
                   "name": "data",
-                  "type": "bytes"
-                },
-                {
-                  "internalType": "bytes",
-                  "name": "metadata",
                   "type": "bytes"
                 }
               ],
@@ -17996,6 +18367,19 @@ export default {
           "type": "function"
         },
         {
+          "inputs": [],
+          "name": "pendingOwner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
           "inputs": [
             {
               "internalType": "bytes32",
@@ -18051,20 +18435,20 @@ export default {
           "inputs": [],
           "name": "renounceOwnership",
           "outputs": [],
-          "stateMutability": "nonpayable",
+          "stateMutability": "view",
           "type": "function"
         },
         {
-          "inputs": [
+          "inputs": [],
+          "name": "riskTakingPaused",
+          "outputs": [
             {
               "internalType": "bool",
-              "name": "_paused",
+              "name": "",
               "type": "bool"
             }
           ],
-          "name": "setAdmissionPaused",
-          "outputs": [],
-          "stateMutability": "nonpayable",
+          "stateMutability": "view",
           "type": "function"
         },
         {
@@ -18107,11 +18491,6 @@ export default {
                       "type": "bool"
                     },
                     {
-                      "internalType": "uint16",
-                      "name": "reserveBps",
-                      "type": "uint16"
-                    },
-                    {
                       "internalType": "uint64",
                       "name": "riskWindow",
                       "type": "uint64"
@@ -18122,16 +18501,9 @@ export default {
                   "type": "tuple"
                 },
                 {
-                  "components": [
-                    {
-                      "internalType": "uint32",
-                      "name": "extensionPenaltyBpsPerHour",
-                      "type": "uint32"
-                    }
-                  ],
-                  "internalType": "struct IRiskManager.IntentExtensionConfig",
-                  "name": "intentExtension",
-                  "type": "tuple"
+                  "internalType": "uint32",
+                  "name": "extensionPenaltyBpsPerHour",
+                  "type": "uint32"
                 }
               ],
               "internalType": "struct IRiskManager.PlatformRiskConfig",
@@ -18140,6 +18512,19 @@ export default {
             }
           ],
           "name": "setPlatformRiskConfig",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bool",
+              "name": "_paused",
+              "type": "bool"
+            }
+          ],
+          "name": "setRiskTakingPaused",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
@@ -18246,11 +18631,6 @@ export default {
                 {
                   "internalType": "bytes",
                   "name": "data",
-                  "type": "bytes"
-                },
-                {
-                  "internalType": "bytes",
-                  "name": "metadata",
                   "type": "bytes"
                 }
               ],
@@ -18861,7 +19241,7 @@ export default {
       ]
     },
     "StakeVault": {
-      "address": "0xD7c468ABbc5e265EDdc362F8858C34CaC1c14A62",
+      "address": "0xd12ae0d7B7970a766C2d8D73624eD55E0B71A001",
       "abi": [
         {
           "inputs": [
@@ -18882,11 +19262,6 @@ export default {
             },
             {
               "internalType": "uint64",
-              "name": "_baseExitDelay",
-              "type": "uint64"
-            },
-            {
-              "internalType": "uint64",
               "name": "_controllerChangeDelay",
               "type": "uint64"
             }
@@ -18897,28 +19272,17 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
+              "internalType": "uint256",
+              "name": "lockAmount",
+              "type": "uint256"
             },
             {
               "internalType": "uint256",
-              "name": "reservedAmount",
+              "name": "claimsAmount",
               "type": "uint256"
             }
           ],
-          "name": "ActiveReservations",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            }
-          ],
-          "name": "AlreadyExiting",
+          "name": "ClaimsExceedLock",
           "type": "error"
         },
         {
@@ -18930,6 +19294,22 @@ export default {
             }
           ],
           "name": "ControllerAlreadyInitialized",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "totalStaked",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "totalClaimable",
+              "type": "uint256"
+            }
+          ],
+          "name": "ControllerInitializationWithLiabilities",
           "type": "error"
         },
         {
@@ -18951,99 +19331,8 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "DeferredStakeAlreadyExists",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "DeferredStakeAlreadyFunded",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "DeferredStakeNotFound",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint64",
-              "name": "releaseTime",
-              "type": "uint64"
-            },
-            {
-              "internalType": "uint64",
-              "name": "currentTime",
-              "type": "uint64"
-            }
-          ],
-          "name": "DeferredStakeNotMature",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
               "internalType": "address",
-              "name": "expected",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "actual",
-              "type": "address"
-            }
-          ],
-          "name": "DeferredStakeOwnerMismatch",
-          "type": "error"
-        },
-        {
-          "inputs": [],
-          "name": "EmptyBatch",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint64",
-              "name": "availableAt",
-              "type": "uint64"
-            },
-            {
-              "internalType": "uint64",
-              "name": "currentTime",
-              "type": "uint64"
-            }
-          ],
-          "name": "ExitNotReady",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "staker",
+              "name": "stakeOwner",
               "type": "address"
             },
             {
@@ -19079,8 +19368,24 @@ export default {
         {
           "inputs": [
             {
+              "internalType": "address",
+              "name": "beneficiary",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            }
+          ],
+          "name": "InvalidClaim",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
               "internalType": "uint64",
-              "name": "delay",
+              "name": "suppliedDelay",
               "type": "uint64"
             }
           ],
@@ -19091,32 +19396,48 @@ export default {
           "inputs": [
             {
               "internalType": "uint256",
-              "name": "grossAmount",
+              "name": "newAmount",
               "type": "uint256"
             },
             {
               "internalType": "uint256",
-              "name": "feeAmount",
+              "name": "currentAmount",
               "type": "uint256"
             }
           ],
-          "name": "InvalidDeferredFeeTotal",
+          "name": "InvalidLockAmount",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint64",
+              "name": "maturity",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint64",
+              "name": "currentTime",
+              "type": "uint64"
+            }
+          ],
+          "name": "InvalidMaturity",
           "type": "error"
         },
         {
           "inputs": [
             {
               "internalType": "uint256",
-              "name": "amount",
+              "name": "expected",
               "type": "uint256"
             },
             {
               "internalType": "uint256",
-              "name": "reservedAmount",
+              "name": "received",
               "type": "uint256"
             }
           ],
-          "name": "InvalidReservationAmount",
+          "name": "InvalidReceivedAmount",
           "type": "error"
         },
         {
@@ -19133,137 +19454,24 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
+              "internalType": "bytes32",
+              "name": "lockId",
+              "type": "bytes32"
             }
           ],
-          "name": "NoDelegatedStakeOwner",
-          "type": "error"
-        },
-        {
-          "inputs": [],
-          "name": "NoPendingController",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            }
-          ],
-          "name": "NotExiting",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "stakeOwner",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "PendingStakeWithdrawal",
+          "name": "LockAlreadyExists",
           "type": "error"
         },
         {
           "inputs": [
             {
               "internalType": "bytes32",
-              "name": "intentHash",
+              "name": "lockId",
               "type": "bytes32"
-            }
-          ],
-          "name": "ReservationAlreadyExists",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "ReservationNotFound",
-          "type": "error"
-        },
-        {
-          "inputs": [],
-          "name": "StakeActionPaused",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
-            }
-          ],
-          "name": "StakeDelegationDisabled",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
             },
-            {
-              "internalType": "address",
-              "name": "stakeOwner",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "allowedStakeOwner",
-              "type": "address"
-            }
-          ],
-          "name": "StakeOwnerNotAllowed",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "stakeOwner",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "StakeWithdrawalAlreadyRequested",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "stakeOwner",
-              "type": "address"
-            }
-          ],
-          "name": "StakeWithdrawalNotFound",
-          "type": "error"
-        },
-        {
-          "inputs": [
             {
               "internalType": "uint64",
-              "name": "availableAt",
+              "name": "maturesAt",
               "type": "uint64"
             },
             {
@@ -19272,39 +19480,39 @@ export default {
               "type": "uint64"
             }
           ],
-          "name": "StakeWithdrawalNotReady",
+          "name": "LockAlreadyMatured",
           "type": "error"
         },
         {
           "inputs": [
             {
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "stakeOwner",
-              "type": "address"
+              "internalType": "bytes32",
+              "name": "lockId",
+              "type": "bytes32"
             }
           ],
-          "name": "TakerAlreadyAuthorized",
+          "name": "LockNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "NoPendingController",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "OwnershipRenunciationDisabled",
           "type": "error"
         },
         {
           "inputs": [
             {
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "stakeOwner",
-              "type": "address"
+              "internalType": "uint256",
+              "name": "timestamp",
+              "type": "uint256"
             }
           ],
-          "name": "TakerAuthorizationNotFound",
+          "name": "TimestampOverflow",
           "type": "error"
         },
         {
@@ -19327,27 +19535,27 @@ export default {
             },
             {
               "internalType": "address",
-              "name": "expectedController",
+              "name": "pendingController",
               "type": "address"
             }
           ],
-          "name": "UnauthorizedPositionController",
+          "name": "UnauthorizedPendingController",
           "type": "error"
         },
         {
           "inputs": [
             {
-              "internalType": "uint256",
-              "name": "expected",
-              "type": "uint256"
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
             },
             {
-              "internalType": "uint256",
-              "name": "received",
-              "type": "uint256"
+              "internalType": "address",
+              "name": "stakeOwner",
+              "type": "address"
             }
           ],
-          "name": "UnexpectedTokenAmount",
+          "name": "UnauthorizedStakeOwner",
           "type": "error"
         },
         {
@@ -19361,23 +19569,9 @@ export default {
           "type": "error"
         },
         {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "allowedStakeOwner",
-              "type": "address"
-            }
-          ],
-          "name": "AllowedStakeOwnerUpdated",
-          "type": "event"
+          "inputs": [],
+          "name": "ZeroLockId",
+          "type": "error"
         },
         {
           "anonymous": false,
@@ -19385,13 +19579,13 @@ export default {
             {
               "indexed": true,
               "internalType": "bytes32",
-              "name": "intentHash",
+              "name": "lockId",
               "type": "bytes32"
             },
             {
               "indexed": true,
               "internalType": "address",
-              "name": "maker",
+              "name": "beneficiary",
               "type": "address"
             },
             {
@@ -19407,7 +19601,7 @@ export default {
               "type": "uint256"
             }
           ],
-          "name": "CompensationCredited",
+          "name": "ClaimCreated",
           "type": "event"
         },
         {
@@ -19416,13 +19610,7 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
-              "name": "maker",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "recipient",
+              "name": "beneficiary",
               "type": "address"
             },
             {
@@ -19432,7 +19620,7 @@ export default {
               "type": "uint256"
             }
           ],
-          "name": "CompensationWithdrawn",
+          "name": "ClaimWithdrawn",
           "type": "event"
         },
         {
@@ -19473,6 +19661,19 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
+              "name": "pendingController",
+              "type": "address"
+            }
+          ],
+          "name": "ControllerProposalCancelled",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
               "name": "currentController",
               "type": "address"
             },
@@ -19498,82 +19699,14 @@ export default {
             {
               "indexed": true,
               "internalType": "bytes32",
-              "name": "intentHash",
+              "name": "lockId",
               "type": "bytes32"
             },
             {
               "indexed": true,
               "internalType": "address",
-              "name": "recipient",
+              "name": "stakeOwner",
               "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "enum IIntentRiskHook.FeeType",
-              "name": "feeType",
-              "type": "uint8"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "DeferredFeeCancelled",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "recipient",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "enum IIntentRiskHook.FeeType",
-              "name": "feeType",
-              "type": "uint8"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "DeferredFeeContingent",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "recipient",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "enum IIntentRiskHook.FeeType",
-              "name": "feeType",
-              "type": "uint8"
             },
             {
               "indexed": false,
@@ -19584,184 +19717,11 @@ export default {
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "newClaimableBalance",
+              "name": "newStakeBalance",
               "type": "uint256"
             }
           ],
-          "name": "DeferredFeeVested",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "controller",
-              "type": "address"
-            }
-          ],
-          "name": "DeferredStakeAuthorizationReleased",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "controller",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "releaseTime",
-              "type": "uint64"
-            }
-          ],
-          "name": "DeferredStakeAuthorized",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "grossAmount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "feeAmount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "netAmount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "releaseTime",
-              "type": "uint64"
-            }
-          ],
-          "name": "DeferredStakeFunded",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "releasedGrossAmount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "vestedFeeAmount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "netStakeReleased",
-              "type": "uint256"
-            }
-          ],
-          "name": "DeferredStakeReleased",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "maker",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "slashedGrossAmount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "cancelledFeeAmount",
-              "type": "uint256"
-            }
-          ],
-          "name": "DeferredStakeSlashed",
+          "name": "LockFunded",
           "type": "event"
         },
         {
@@ -19770,61 +19730,17 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            }
-          ],
-          "name": "ExitCancelled",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "requestedAt",
-              "type": "uint64"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "availableAt",
-              "type": "uint64"
-            }
-          ],
-          "name": "ExitRequested",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "beneficiary",
+              "name": "previousOwner",
               "type": "address"
             },
             {
               "indexed": true,
               "internalType": "address",
-              "name": "recipient",
+              "name": "newOwner",
               "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
             }
           ],
-          "name": "FeeClaimWithdrawn",
+          "name": "OwnershipTransferStarted",
           "type": "event"
         },
         {
@@ -19852,26 +19768,7 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
-              "name": "taker",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "bool",
-              "name": "enabled",
-              "type": "bool"
-            }
-          ],
-          "name": "StakeDelegationEnabledUpdated",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
+              "name": "stakeOwner",
               "type": "address"
             },
             {
@@ -19894,65 +19791,15 @@ export default {
           "anonymous": false,
           "inputs": [
             {
-              "indexed": false,
-              "internalType": "bool",
-              "name": "depositsPaused",
-              "type": "bool"
-            },
-            {
-              "indexed": false,
-              "internalType": "bool",
-              "name": "reservationsPaused",
-              "type": "bool"
-            }
-          ],
-          "name": "StakeOperationsPausedUpdated",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
               "indexed": true,
               "internalType": "bytes32",
-              "name": "intentHash",
+              "name": "lockId",
               "type": "bytes32"
             },
             {
               "indexed": true,
               "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "totalReserved",
-              "type": "uint256"
-            }
-          ],
-          "name": "StakeReservationReleased",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
+              "name": "stakeOwner",
               "type": "address"
             },
             {
@@ -19970,17 +19817,11 @@ export default {
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "totalReserved",
+              "name": "totalLockedStake",
               "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "releaseTime",
-              "type": "uint64"
             }
           ],
-          "name": "StakeReservationUpdated",
+          "name": "StakeLockIncreased",
           "type": "event"
         },
         {
@@ -19989,19 +19830,167 @@ export default {
             {
               "indexed": true,
               "internalType": "bytes32",
-              "name": "intentHash",
+              "name": "lockId",
               "type": "bytes32"
             },
             {
               "indexed": true,
               "internalType": "address",
-              "name": "staker",
+              "name": "stakeOwner",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "previousAmount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "newAmount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint64",
+              "name": "previousMaturity",
+              "type": "uint64"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint64",
+              "name": "newMaturity",
+              "type": "uint64"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "totalLockedStake",
+              "type": "uint256"
+            }
+          ],
+          "name": "StakeLockResized",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "lockId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "stakeOwner",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "lockAmount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "unlockedAmount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "claimedAmount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "totalLockedStake",
+              "type": "uint256"
+            }
+          ],
+          "name": "StakeLockResolved",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "lockId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "stakeOwner",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint64",
+              "name": "maturesAt",
+              "type": "uint64"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "totalLockedStake",
+              "type": "uint256"
+            }
+          ],
+          "name": "StakeLocked",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "taker",
               "type": "address"
             },
             {
               "indexed": true,
               "internalType": "address",
-              "name": "controller",
+              "name": "previousStakeOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newStakeOwner",
+              "type": "address"
+            }
+          ],
+          "name": "StakeOwnerSelected",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "lockId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "stakeOwner",
               "type": "address"
             },
             {
@@ -20013,60 +20002,11 @@ export default {
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "totalReserved",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "releaseTime",
-              "type": "uint64"
-            }
-          ],
-          "name": "StakeReserved",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "maker",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "remainingStake",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "remainingReservation",
+              "name": "totalLockedStake",
               "type": "uint256"
             }
           ],
-          "name": "StakeSlashed",
+          "name": "StakeUnlocked",
           "type": "event"
         },
         {
@@ -20083,61 +20023,11 @@ export default {
               "internalType": "uint256",
               "name": "amount",
               "type": "uint256"
-            }
-          ],
-          "name": "StakeWithdrawalCancelled",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "stakeOwner",
-              "type": "address"
             },
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "requestedAt",
-              "type": "uint64"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "availableAt",
-              "type": "uint64"
-            }
-          ],
-          "name": "StakeWithdrawalRequested",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "recipient",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "amount",
+              "name": "newStakeBalance",
               "type": "uint256"
             }
           ],
@@ -20184,61 +20074,50 @@ export default {
         },
         {
           "inputs": [],
+          "name": "NEVER_MATURES",
+          "outputs": [
+            {
+              "internalType": "uint64",
+              "name": "",
+              "type": "uint64"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
           "name": "acceptController",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
         },
         {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_taker",
-              "type": "address"
-            }
-          ],
-          "name": "allowedStakeOwner",
-          "outputs": [
-            {
-              "internalType": "address",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "stateMutability": "view",
+          "inputs": [],
+          "name": "acceptOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
           "type": "function"
         },
         {
           "inputs": [
             {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
+              "internalType": "address",
+              "name": "",
+              "type": "address"
             },
             {
               "internalType": "address",
-              "name": "_staker",
+              "name": "",
               "type": "address"
-            },
-            {
-              "internalType": "uint64",
-              "name": "_releaseTime",
-              "type": "uint64"
             }
           ],
-          "name": "authorizeDeferredStake",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "baseExitDelay",
+          "name": "authorizedTakers",
           "outputs": [
             {
-              "internalType": "uint64",
+              "internalType": "bool",
               "name": "",
-              "type": "uint64"
+              "type": "bool"
             }
           ],
           "stateMutability": "view",
@@ -20246,14 +20125,14 @@ export default {
         },
         {
           "inputs": [],
-          "name": "cancelExit",
+          "name": "cancelControllerProposal",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
         },
         {
           "inputs": [],
-          "name": "cancelStakeWithdrawal",
+          "name": "claim",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
@@ -20266,26 +20145,7 @@ export default {
               "type": "address"
             }
           ],
-          "name": "claimableCompensation",
-          "outputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "name": "claimableFees",
+          "name": "claimable",
           "outputs": [
             {
               "internalType": "uint256",
@@ -20346,57 +20206,7 @@ export default {
           "inputs": [
             {
               "internalType": "address",
-              "name": "_taker",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "depositStakeFor",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "depositsPaused",
-          "outputs": [
-            {
-              "internalType": "bool",
-              "name": "",
-              "type": "bool"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_staker",
-              "type": "address"
-            }
-          ],
-          "name": "eligibleStake",
-          "outputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_staker",
+              "name": "_stakeOwner",
               "type": "address"
             }
           ],
@@ -20414,213 +20224,13 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "getDeferredFeeAllocations",
-          "outputs": [
-            {
-              "components": [
-                {
-                  "internalType": "enum IIntentRiskHook.FeeType",
-                  "name": "feeType",
-                  "type": "uint8"
-                },
-                {
-                  "internalType": "address",
-                  "name": "recipient",
-                  "type": "address"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "amount",
-                  "type": "uint256"
-                }
-              ],
-              "internalType": "struct IIntentRiskHook.FeeAllocation[]",
-              "name": "",
-              "type": "tuple[]"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "getDeferredStake",
-          "outputs": [
-            {
-              "components": [
-                {
-                  "internalType": "address",
-                  "name": "staker",
-                  "type": "address"
-                },
-                {
-                  "internalType": "address",
-                  "name": "controller",
-                  "type": "address"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "grossAmount",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "feeAmount",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint64",
-                  "name": "releaseTime",
-                  "type": "uint64"
-                },
-                {
-                  "internalType": "bool",
-                  "name": "funded",
-                  "type": "bool"
-                }
-              ],
-              "internalType": "struct IStakeVault.DeferredStake",
-              "name": "",
-              "type": "tuple"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
               "internalType": "address",
-              "name": "_staker",
+              "name": "_stakeOwner",
               "type": "address"
-            }
-          ],
-          "name": "getExitRequest",
-          "outputs": [
-            {
-              "components": [
-                {
-                  "internalType": "bool",
-                  "name": "exiting",
-                  "type": "bool"
-                },
-                {
-                  "internalType": "uint64",
-                  "name": "requestedAt",
-                  "type": "uint64"
-                },
-                {
-                  "internalType": "uint64",
-                  "name": "availableAt",
-                  "type": "uint64"
-                }
-              ],
-              "internalType": "struct IStakeVault.ExitRequest",
-              "name": "",
-              "type": "tuple"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
+            },
             {
               "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "getReservation",
-          "outputs": [
-            {
-              "components": [
-                {
-                  "internalType": "address",
-                  "name": "staker",
-                  "type": "address"
-                },
-                {
-                  "internalType": "address",
-                  "name": "controller",
-                  "type": "address"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "amount",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint64",
-                  "name": "releaseTime",
-                  "type": "uint64"
-                },
-                {
-                  "internalType": "bool",
-                  "name": "active",
-                  "type": "bool"
-                }
-              ],
-              "internalType": "struct IStakeVault.Reservation",
-              "name": "",
-              "type": "tuple"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_staker",
-              "type": "address"
-            }
-          ],
-          "name": "getStakeWithdrawalRequest",
-          "outputs": [
-            {
-              "components": [
-                {
-                  "internalType": "uint256",
-                  "name": "amount",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint64",
-                  "name": "requestedAt",
-                  "type": "uint64"
-                },
-                {
-                  "internalType": "uint64",
-                  "name": "availableAt",
-                  "type": "uint64"
-                }
-              ],
-              "internalType": "struct IStakeVault.StakeWithdrawalRequest",
-              "name": "",
-              "type": "tuple"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_positionId",
+              "name": "_lockId",
               "type": "bytes32"
             },
             {
@@ -20630,11 +20240,29 @@ export default {
             },
             {
               "internalType": "uint64",
-              "name": "_releaseTime",
+              "name": "_maturesAt",
               "type": "uint64"
             }
           ],
-          "name": "increaseReservation",
+          "name": "fundLock",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_lockId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_additionalAmount",
+              "type": "uint256"
+            }
+          ],
+          "name": "increaseLock",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
@@ -20655,17 +20283,93 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "address",
-              "name": "_staker",
-              "type": "address"
+              "internalType": "bytes32",
+              "name": "_lockId",
+              "type": "bytes32"
             }
           ],
-          "name": "isExiting",
+          "name": "isLockMature",
           "outputs": [
             {
               "internalType": "bool",
               "name": "",
               "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_stakeOwner",
+              "type": "address"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_lockId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_amount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint64",
+              "name": "_maturesAt",
+              "type": "uint64"
+            }
+          ],
+          "name": "lockStake",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "name": "lockedStake",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "",
+              "type": "bytes32"
+            }
+          ],
+          "name": "locks",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "stakeOwner",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint64",
+              "name": "maturesAt",
+              "type": "uint64"
             }
           ],
           "stateMutability": "view",
@@ -20711,6 +20415,19 @@ export default {
           "type": "function"
         },
         {
+          "inputs": [],
+          "name": "pendingOwner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
           "inputs": [
             {
               "internalType": "address",
@@ -20724,37 +20441,47 @@ export default {
           "type": "function"
         },
         {
+          "inputs": [],
+          "name": "renounceOwnership",
+          "outputs": [],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
           "inputs": [
             {
               "internalType": "bytes32",
-              "name": "_intentHash",
+              "name": "_lockId",
               "type": "bytes32"
             },
             {
-              "internalType": "address",
-              "name": "_staker",
-              "type": "address"
-            },
-            {
               "internalType": "uint256",
-              "name": "_grossAmount",
+              "name": "_newAmount",
               "type": "uint256"
             },
             {
               "internalType": "uint64",
-              "name": "_releaseTime",
+              "name": "_newMaturesAt",
               "type": "uint64"
+            }
+          ],
+          "name": "resizeLock",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_lockId",
+              "type": "bytes32"
             },
             {
               "components": [
                 {
-                  "internalType": "enum IIntentRiskHook.FeeType",
-                  "name": "feeType",
-                  "type": "uint8"
-                },
-                {
                   "internalType": "address",
-                  "name": "recipient",
+                  "name": "beneficiary",
                   "type": "address"
                 },
                 {
@@ -20763,140 +20490,14 @@ export default {
                   "type": "uint256"
                 }
               ],
-              "internalType": "struct IIntentRiskHook.FeeAllocation[]",
-              "name": "_feeAllocations",
+              "internalType": "struct IStakeVault.Claim[]",
+              "name": "_claims",
               "type": "tuple[]"
             }
           ],
-          "name": "recordDeferredStake",
+          "name": "resolveLock",
           "outputs": [],
           "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "releaseDeferredStake",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "releaseDeferredStakeAuthorization",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "releaseReservation",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "renounceOwnership",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "requestExit",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint256",
-              "name": "_amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "requestStakeWithdrawal",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "reservationsPaused",
-          "outputs": [
-            {
-              "internalType": "bool",
-              "name": "",
-              "type": "bool"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_staker",
-              "type": "address"
-            },
-            {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_amount",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint64",
-              "name": "_releaseTime",
-              "type": "uint64"
-            }
-          ],
-          "name": "reserveStake",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "name": "reservedStake",
-          "outputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
-            }
-          ],
-          "stateMutability": "view",
           "type": "function"
         },
         {
@@ -20907,7 +20508,7 @@ export default {
               "type": "address"
             }
           ],
-          "name": "setAllowedStakeOwner",
+          "name": "selectStakeOwner",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
@@ -20915,32 +20516,20 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "bool",
-              "name": "_enabled",
-              "type": "bool"
+              "internalType": "address",
+              "name": "",
+              "type": "address"
             }
           ],
-          "name": "setStakeDelegationEnabled",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
+          "name": "selectedStakeOwner",
+          "outputs": [
             {
-              "internalType": "bool",
-              "name": "_depositsPaused",
-              "type": "bool"
-            },
-            {
-              "internalType": "bool",
-              "name": "_reservationsPaused",
-              "type": "bool"
+              "internalType": "address",
+              "name": "",
+              "type": "address"
             }
           ],
-          "name": "setStakeOperationsPaused",
-          "outputs": [],
-          "stateMutability": "nonpayable",
+          "stateMutability": "view",
           "type": "function"
         },
         {
@@ -20964,65 +20553,6 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "address[]",
-              "name": "_takers",
-              "type": "address[]"
-            },
-            {
-              "internalType": "bool",
-              "name": "_authorized",
-              "type": "bool"
-            }
-          ],
-          "name": "setTakerAuthorizations",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "address",
-              "name": "_maker",
-              "type": "address"
-            }
-          ],
-          "name": "slashDeferredStake",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "address",
-              "name": "_maker",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "slashReservation",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
               "internalType": "address",
               "name": "",
               "type": "address"
@@ -21034,25 +20564,6 @@ export default {
               "internalType": "uint256",
               "name": "",
               "type": "uint256"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_taker",
-              "type": "address"
-            }
-          ],
-          "name": "stakeDelegationEnabled",
-          "outputs": [
-            {
-              "internalType": "bool",
-              "name": "",
-              "type": "bool"
             }
           ],
           "stateMutability": "view",
@@ -21092,7 +20603,7 @@ export default {
         },
         {
           "inputs": [],
-          "name": "totalClaimableCompensation",
+          "name": "totalAccounted",
           "outputs": [
             {
               "internalType": "uint256",
@@ -21105,33 +20616,7 @@ export default {
         },
         {
           "inputs": [],
-          "name": "totalClaimableFees",
-          "outputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "totalDeferredFees",
-          "outputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "totalLiabilities",
+          "name": "totalClaimable",
           "outputs": [
             {
               "internalType": "uint256",
@@ -21169,86 +20654,37 @@ export default {
           "type": "function"
         },
         {
+          "inputs": [],
+          "name": "unaccountedBalance",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
           "inputs": [
             {
               "internalType": "bytes32",
-              "name": "_intentHash",
+              "name": "_lockId",
               "type": "bytes32"
-            },
+            }
+          ],
+          "name": "unlockStake",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
             {
               "internalType": "uint256",
-              "name": "_newAmount",
+              "name": "_amount",
               "type": "uint256"
-            },
-            {
-              "internalType": "uint64",
-              "name": "_releaseTime",
-              "type": "uint64"
-            }
-          ],
-          "name": "updateReservation",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_recipient",
-              "type": "address"
-            }
-          ],
-          "name": "withdrawCompensation",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_recipient",
-              "type": "address"
-            }
-          ],
-          "name": "withdrawFeeClaim",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_beneficiary",
-              "type": "address"
-            }
-          ],
-          "name": "withdrawFeeClaimFor",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_recipient",
-              "type": "address"
-            }
-          ],
-          "name": "withdrawRequestedStake",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_recipient",
-              "type": "address"
             }
           ],
           "name": "withdrawStake",
@@ -21259,7 +20695,7 @@ export default {
       ]
     },
     "StakeVaultRiskSettlement": {
-      "address": "0xD7c468ABbc5e265EDdc362F8858C34CaC1c14A62",
+      "address": "0xd12ae0d7B7970a766C2d8D73624eD55E0B71A001",
       "abi": [
         {
           "inputs": [
@@ -21280,11 +20716,6 @@ export default {
             },
             {
               "internalType": "uint64",
-              "name": "_baseExitDelay",
-              "type": "uint64"
-            },
-            {
-              "internalType": "uint64",
               "name": "_controllerChangeDelay",
               "type": "uint64"
             }
@@ -21295,28 +20726,17 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
+              "internalType": "uint256",
+              "name": "lockAmount",
+              "type": "uint256"
             },
             {
               "internalType": "uint256",
-              "name": "reservedAmount",
+              "name": "claimsAmount",
               "type": "uint256"
             }
           ],
-          "name": "ActiveReservations",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            }
-          ],
-          "name": "AlreadyExiting",
+          "name": "ClaimsExceedLock",
           "type": "error"
         },
         {
@@ -21328,6 +20748,22 @@ export default {
             }
           ],
           "name": "ControllerAlreadyInitialized",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "totalStaked",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "totalClaimable",
+              "type": "uint256"
+            }
+          ],
+          "name": "ControllerInitializationWithLiabilities",
           "type": "error"
         },
         {
@@ -21349,99 +20785,8 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "DeferredStakeAlreadyExists",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "DeferredStakeAlreadyFunded",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "DeferredStakeNotFound",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint64",
-              "name": "releaseTime",
-              "type": "uint64"
-            },
-            {
-              "internalType": "uint64",
-              "name": "currentTime",
-              "type": "uint64"
-            }
-          ],
-          "name": "DeferredStakeNotMature",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
               "internalType": "address",
-              "name": "expected",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "actual",
-              "type": "address"
-            }
-          ],
-          "name": "DeferredStakeOwnerMismatch",
-          "type": "error"
-        },
-        {
-          "inputs": [],
-          "name": "EmptyBatch",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint64",
-              "name": "availableAt",
-              "type": "uint64"
-            },
-            {
-              "internalType": "uint64",
-              "name": "currentTime",
-              "type": "uint64"
-            }
-          ],
-          "name": "ExitNotReady",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "staker",
+              "name": "stakeOwner",
               "type": "address"
             },
             {
@@ -21477,8 +20822,24 @@ export default {
         {
           "inputs": [
             {
+              "internalType": "address",
+              "name": "beneficiary",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            }
+          ],
+          "name": "InvalidClaim",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
               "internalType": "uint64",
-              "name": "delay",
+              "name": "suppliedDelay",
               "type": "uint64"
             }
           ],
@@ -21489,32 +20850,48 @@ export default {
           "inputs": [
             {
               "internalType": "uint256",
-              "name": "grossAmount",
+              "name": "newAmount",
               "type": "uint256"
             },
             {
               "internalType": "uint256",
-              "name": "feeAmount",
+              "name": "currentAmount",
               "type": "uint256"
             }
           ],
-          "name": "InvalidDeferredFeeTotal",
+          "name": "InvalidLockAmount",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint64",
+              "name": "maturity",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint64",
+              "name": "currentTime",
+              "type": "uint64"
+            }
+          ],
+          "name": "InvalidMaturity",
           "type": "error"
         },
         {
           "inputs": [
             {
               "internalType": "uint256",
-              "name": "amount",
+              "name": "expected",
               "type": "uint256"
             },
             {
               "internalType": "uint256",
-              "name": "reservedAmount",
+              "name": "received",
               "type": "uint256"
             }
           ],
-          "name": "InvalidReservationAmount",
+          "name": "InvalidReceivedAmount",
           "type": "error"
         },
         {
@@ -21531,137 +20908,24 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
+              "internalType": "bytes32",
+              "name": "lockId",
+              "type": "bytes32"
             }
           ],
-          "name": "NoDelegatedStakeOwner",
-          "type": "error"
-        },
-        {
-          "inputs": [],
-          "name": "NoPendingController",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            }
-          ],
-          "name": "NotExiting",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "stakeOwner",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "PendingStakeWithdrawal",
+          "name": "LockAlreadyExists",
           "type": "error"
         },
         {
           "inputs": [
             {
               "internalType": "bytes32",
-              "name": "intentHash",
+              "name": "lockId",
               "type": "bytes32"
-            }
-          ],
-          "name": "ReservationAlreadyExists",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "ReservationNotFound",
-          "type": "error"
-        },
-        {
-          "inputs": [],
-          "name": "StakeActionPaused",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
-            }
-          ],
-          "name": "StakeDelegationDisabled",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
             },
-            {
-              "internalType": "address",
-              "name": "stakeOwner",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "allowedStakeOwner",
-              "type": "address"
-            }
-          ],
-          "name": "StakeOwnerNotAllowed",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "stakeOwner",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "StakeWithdrawalAlreadyRequested",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "stakeOwner",
-              "type": "address"
-            }
-          ],
-          "name": "StakeWithdrawalNotFound",
-          "type": "error"
-        },
-        {
-          "inputs": [
             {
               "internalType": "uint64",
-              "name": "availableAt",
+              "name": "maturesAt",
               "type": "uint64"
             },
             {
@@ -21670,39 +20934,39 @@ export default {
               "type": "uint64"
             }
           ],
-          "name": "StakeWithdrawalNotReady",
+          "name": "LockAlreadyMatured",
           "type": "error"
         },
         {
           "inputs": [
             {
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "stakeOwner",
-              "type": "address"
+              "internalType": "bytes32",
+              "name": "lockId",
+              "type": "bytes32"
             }
           ],
-          "name": "TakerAlreadyAuthorized",
+          "name": "LockNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "NoPendingController",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "OwnershipRenunciationDisabled",
           "type": "error"
         },
         {
           "inputs": [
             {
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "stakeOwner",
-              "type": "address"
+              "internalType": "uint256",
+              "name": "timestamp",
+              "type": "uint256"
             }
           ],
-          "name": "TakerAuthorizationNotFound",
+          "name": "TimestampOverflow",
           "type": "error"
         },
         {
@@ -21725,27 +20989,27 @@ export default {
             },
             {
               "internalType": "address",
-              "name": "expectedController",
+              "name": "pendingController",
               "type": "address"
             }
           ],
-          "name": "UnauthorizedPositionController",
+          "name": "UnauthorizedPendingController",
           "type": "error"
         },
         {
           "inputs": [
             {
-              "internalType": "uint256",
-              "name": "expected",
-              "type": "uint256"
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
             },
             {
-              "internalType": "uint256",
-              "name": "received",
-              "type": "uint256"
+              "internalType": "address",
+              "name": "stakeOwner",
+              "type": "address"
             }
           ],
-          "name": "UnexpectedTokenAmount",
+          "name": "UnauthorizedStakeOwner",
           "type": "error"
         },
         {
@@ -21759,23 +21023,9 @@ export default {
           "type": "error"
         },
         {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "allowedStakeOwner",
-              "type": "address"
-            }
-          ],
-          "name": "AllowedStakeOwnerUpdated",
-          "type": "event"
+          "inputs": [],
+          "name": "ZeroLockId",
+          "type": "error"
         },
         {
           "anonymous": false,
@@ -21783,13 +21033,13 @@ export default {
             {
               "indexed": true,
               "internalType": "bytes32",
-              "name": "intentHash",
+              "name": "lockId",
               "type": "bytes32"
             },
             {
               "indexed": true,
               "internalType": "address",
-              "name": "maker",
+              "name": "beneficiary",
               "type": "address"
             },
             {
@@ -21805,7 +21055,7 @@ export default {
               "type": "uint256"
             }
           ],
-          "name": "CompensationCredited",
+          "name": "ClaimCreated",
           "type": "event"
         },
         {
@@ -21814,13 +21064,7 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
-              "name": "maker",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "recipient",
+              "name": "beneficiary",
               "type": "address"
             },
             {
@@ -21830,7 +21074,7 @@ export default {
               "type": "uint256"
             }
           ],
-          "name": "CompensationWithdrawn",
+          "name": "ClaimWithdrawn",
           "type": "event"
         },
         {
@@ -21871,6 +21115,19 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
+              "name": "pendingController",
+              "type": "address"
+            }
+          ],
+          "name": "ControllerProposalCancelled",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
               "name": "currentController",
               "type": "address"
             },
@@ -21896,82 +21153,14 @@ export default {
             {
               "indexed": true,
               "internalType": "bytes32",
-              "name": "intentHash",
+              "name": "lockId",
               "type": "bytes32"
             },
             {
               "indexed": true,
               "internalType": "address",
-              "name": "recipient",
+              "name": "stakeOwner",
               "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "enum IIntentRiskHook.FeeType",
-              "name": "feeType",
-              "type": "uint8"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "DeferredFeeCancelled",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "recipient",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "enum IIntentRiskHook.FeeType",
-              "name": "feeType",
-              "type": "uint8"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "DeferredFeeContingent",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "recipient",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "enum IIntentRiskHook.FeeType",
-              "name": "feeType",
-              "type": "uint8"
             },
             {
               "indexed": false,
@@ -21982,184 +21171,11 @@ export default {
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "newClaimableBalance",
+              "name": "newStakeBalance",
               "type": "uint256"
             }
           ],
-          "name": "DeferredFeeVested",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "controller",
-              "type": "address"
-            }
-          ],
-          "name": "DeferredStakeAuthorizationReleased",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "controller",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "releaseTime",
-              "type": "uint64"
-            }
-          ],
-          "name": "DeferredStakeAuthorized",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "grossAmount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "feeAmount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "netAmount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "releaseTime",
-              "type": "uint64"
-            }
-          ],
-          "name": "DeferredStakeFunded",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "releasedGrossAmount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "vestedFeeAmount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "netStakeReleased",
-              "type": "uint256"
-            }
-          ],
-          "name": "DeferredStakeReleased",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "maker",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "slashedGrossAmount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "cancelledFeeAmount",
-              "type": "uint256"
-            }
-          ],
-          "name": "DeferredStakeSlashed",
+          "name": "LockFunded",
           "type": "event"
         },
         {
@@ -22168,61 +21184,17 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            }
-          ],
-          "name": "ExitCancelled",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "requestedAt",
-              "type": "uint64"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "availableAt",
-              "type": "uint64"
-            }
-          ],
-          "name": "ExitRequested",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "beneficiary",
+              "name": "previousOwner",
               "type": "address"
             },
             {
               "indexed": true,
               "internalType": "address",
-              "name": "recipient",
+              "name": "newOwner",
               "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
             }
           ],
-          "name": "FeeClaimWithdrawn",
+          "name": "OwnershipTransferStarted",
           "type": "event"
         },
         {
@@ -22250,26 +21222,7 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
-              "name": "taker",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "bool",
-              "name": "enabled",
-              "type": "bool"
-            }
-          ],
-          "name": "StakeDelegationEnabledUpdated",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
+              "name": "stakeOwner",
               "type": "address"
             },
             {
@@ -22292,65 +21245,15 @@ export default {
           "anonymous": false,
           "inputs": [
             {
-              "indexed": false,
-              "internalType": "bool",
-              "name": "depositsPaused",
-              "type": "bool"
-            },
-            {
-              "indexed": false,
-              "internalType": "bool",
-              "name": "reservationsPaused",
-              "type": "bool"
-            }
-          ],
-          "name": "StakeOperationsPausedUpdated",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
               "indexed": true,
               "internalType": "bytes32",
-              "name": "intentHash",
+              "name": "lockId",
               "type": "bytes32"
             },
             {
               "indexed": true,
               "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "totalReserved",
-              "type": "uint256"
-            }
-          ],
-          "name": "StakeReservationReleased",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
+              "name": "stakeOwner",
               "type": "address"
             },
             {
@@ -22368,17 +21271,11 @@ export default {
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "totalReserved",
+              "name": "totalLockedStake",
               "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "releaseTime",
-              "type": "uint64"
             }
           ],
-          "name": "StakeReservationUpdated",
+          "name": "StakeLockIncreased",
           "type": "event"
         },
         {
@@ -22387,19 +21284,167 @@ export default {
             {
               "indexed": true,
               "internalType": "bytes32",
-              "name": "intentHash",
+              "name": "lockId",
               "type": "bytes32"
             },
             {
               "indexed": true,
               "internalType": "address",
-              "name": "staker",
+              "name": "stakeOwner",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "previousAmount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "newAmount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint64",
+              "name": "previousMaturity",
+              "type": "uint64"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint64",
+              "name": "newMaturity",
+              "type": "uint64"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "totalLockedStake",
+              "type": "uint256"
+            }
+          ],
+          "name": "StakeLockResized",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "lockId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "stakeOwner",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "lockAmount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "unlockedAmount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "claimedAmount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "totalLockedStake",
+              "type": "uint256"
+            }
+          ],
+          "name": "StakeLockResolved",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "lockId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "stakeOwner",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint64",
+              "name": "maturesAt",
+              "type": "uint64"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "totalLockedStake",
+              "type": "uint256"
+            }
+          ],
+          "name": "StakeLocked",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "taker",
               "type": "address"
             },
             {
               "indexed": true,
               "internalType": "address",
-              "name": "controller",
+              "name": "previousStakeOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newStakeOwner",
+              "type": "address"
+            }
+          ],
+          "name": "StakeOwnerSelected",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "lockId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "stakeOwner",
               "type": "address"
             },
             {
@@ -22411,60 +21456,11 @@ export default {
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "totalReserved",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "releaseTime",
-              "type": "uint64"
-            }
-          ],
-          "name": "StakeReserved",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "bytes32",
-              "name": "intentHash",
-              "type": "bytes32"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "maker",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "remainingStake",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "remainingReservation",
+              "name": "totalLockedStake",
               "type": "uint256"
             }
           ],
-          "name": "StakeSlashed",
+          "name": "StakeUnlocked",
           "type": "event"
         },
         {
@@ -22481,61 +21477,11 @@ export default {
               "internalType": "uint256",
               "name": "amount",
               "type": "uint256"
-            }
-          ],
-          "name": "StakeWithdrawalCancelled",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "stakeOwner",
-              "type": "address"
             },
             {
               "indexed": false,
               "internalType": "uint256",
-              "name": "amount",
-              "type": "uint256"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "requestedAt",
-              "type": "uint64"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint64",
-              "name": "availableAt",
-              "type": "uint64"
-            }
-          ],
-          "name": "StakeWithdrawalRequested",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "staker",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "recipient",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "uint256",
-              "name": "amount",
+              "name": "newStakeBalance",
               "type": "uint256"
             }
           ],
@@ -22582,61 +21528,50 @@ export default {
         },
         {
           "inputs": [],
+          "name": "NEVER_MATURES",
+          "outputs": [
+            {
+              "internalType": "uint64",
+              "name": "",
+              "type": "uint64"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
           "name": "acceptController",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
         },
         {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_taker",
-              "type": "address"
-            }
-          ],
-          "name": "allowedStakeOwner",
-          "outputs": [
-            {
-              "internalType": "address",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "stateMutability": "view",
+          "inputs": [],
+          "name": "acceptOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
           "type": "function"
         },
         {
           "inputs": [
             {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
+              "internalType": "address",
+              "name": "",
+              "type": "address"
             },
             {
               "internalType": "address",
-              "name": "_staker",
+              "name": "",
               "type": "address"
-            },
-            {
-              "internalType": "uint64",
-              "name": "_releaseTime",
-              "type": "uint64"
             }
           ],
-          "name": "authorizeDeferredStake",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "baseExitDelay",
+          "name": "authorizedTakers",
           "outputs": [
             {
-              "internalType": "uint64",
+              "internalType": "bool",
               "name": "",
-              "type": "uint64"
+              "type": "bool"
             }
           ],
           "stateMutability": "view",
@@ -22644,14 +21579,14 @@ export default {
         },
         {
           "inputs": [],
-          "name": "cancelExit",
+          "name": "cancelControllerProposal",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
         },
         {
           "inputs": [],
-          "name": "cancelStakeWithdrawal",
+          "name": "claim",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
@@ -22664,26 +21599,7 @@ export default {
               "type": "address"
             }
           ],
-          "name": "claimableCompensation",
-          "outputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "name": "claimableFees",
+          "name": "claimable",
           "outputs": [
             {
               "internalType": "uint256",
@@ -22744,57 +21660,7 @@ export default {
           "inputs": [
             {
               "internalType": "address",
-              "name": "_taker",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "depositStakeFor",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "depositsPaused",
-          "outputs": [
-            {
-              "internalType": "bool",
-              "name": "",
-              "type": "bool"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_staker",
-              "type": "address"
-            }
-          ],
-          "name": "eligibleStake",
-          "outputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_staker",
+              "name": "_stakeOwner",
               "type": "address"
             }
           ],
@@ -22812,213 +21678,13 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "getDeferredFeeAllocations",
-          "outputs": [
-            {
-              "components": [
-                {
-                  "internalType": "enum IIntentRiskHook.FeeType",
-                  "name": "feeType",
-                  "type": "uint8"
-                },
-                {
-                  "internalType": "address",
-                  "name": "recipient",
-                  "type": "address"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "amount",
-                  "type": "uint256"
-                }
-              ],
-              "internalType": "struct IIntentRiskHook.FeeAllocation[]",
-              "name": "",
-              "type": "tuple[]"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "getDeferredStake",
-          "outputs": [
-            {
-              "components": [
-                {
-                  "internalType": "address",
-                  "name": "staker",
-                  "type": "address"
-                },
-                {
-                  "internalType": "address",
-                  "name": "controller",
-                  "type": "address"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "grossAmount",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "feeAmount",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint64",
-                  "name": "releaseTime",
-                  "type": "uint64"
-                },
-                {
-                  "internalType": "bool",
-                  "name": "funded",
-                  "type": "bool"
-                }
-              ],
-              "internalType": "struct IStakeVault.DeferredStake",
-              "name": "",
-              "type": "tuple"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
               "internalType": "address",
-              "name": "_staker",
+              "name": "_stakeOwner",
               "type": "address"
-            }
-          ],
-          "name": "getExitRequest",
-          "outputs": [
-            {
-              "components": [
-                {
-                  "internalType": "bool",
-                  "name": "exiting",
-                  "type": "bool"
-                },
-                {
-                  "internalType": "uint64",
-                  "name": "requestedAt",
-                  "type": "uint64"
-                },
-                {
-                  "internalType": "uint64",
-                  "name": "availableAt",
-                  "type": "uint64"
-                }
-              ],
-              "internalType": "struct IStakeVault.ExitRequest",
-              "name": "",
-              "type": "tuple"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
+            },
             {
               "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "getReservation",
-          "outputs": [
-            {
-              "components": [
-                {
-                  "internalType": "address",
-                  "name": "staker",
-                  "type": "address"
-                },
-                {
-                  "internalType": "address",
-                  "name": "controller",
-                  "type": "address"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "amount",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint64",
-                  "name": "releaseTime",
-                  "type": "uint64"
-                },
-                {
-                  "internalType": "bool",
-                  "name": "active",
-                  "type": "bool"
-                }
-              ],
-              "internalType": "struct IStakeVault.Reservation",
-              "name": "",
-              "type": "tuple"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_staker",
-              "type": "address"
-            }
-          ],
-          "name": "getStakeWithdrawalRequest",
-          "outputs": [
-            {
-              "components": [
-                {
-                  "internalType": "uint256",
-                  "name": "amount",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint64",
-                  "name": "requestedAt",
-                  "type": "uint64"
-                },
-                {
-                  "internalType": "uint64",
-                  "name": "availableAt",
-                  "type": "uint64"
-                }
-              ],
-              "internalType": "struct IStakeVault.StakeWithdrawalRequest",
-              "name": "",
-              "type": "tuple"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_positionId",
+              "name": "_lockId",
               "type": "bytes32"
             },
             {
@@ -23028,11 +21694,29 @@ export default {
             },
             {
               "internalType": "uint64",
-              "name": "_releaseTime",
+              "name": "_maturesAt",
               "type": "uint64"
             }
           ],
-          "name": "increaseReservation",
+          "name": "fundLock",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_lockId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_additionalAmount",
+              "type": "uint256"
+            }
+          ],
+          "name": "increaseLock",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
@@ -23053,17 +21737,93 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "address",
-              "name": "_staker",
-              "type": "address"
+              "internalType": "bytes32",
+              "name": "_lockId",
+              "type": "bytes32"
             }
           ],
-          "name": "isExiting",
+          "name": "isLockMature",
           "outputs": [
             {
               "internalType": "bool",
               "name": "",
               "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_stakeOwner",
+              "type": "address"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_lockId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_amount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint64",
+              "name": "_maturesAt",
+              "type": "uint64"
+            }
+          ],
+          "name": "lockStake",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "name": "lockedStake",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "",
+              "type": "bytes32"
+            }
+          ],
+          "name": "locks",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "stakeOwner",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint64",
+              "name": "maturesAt",
+              "type": "uint64"
             }
           ],
           "stateMutability": "view",
@@ -23109,6 +21869,19 @@ export default {
           "type": "function"
         },
         {
+          "inputs": [],
+          "name": "pendingOwner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
           "inputs": [
             {
               "internalType": "address",
@@ -23122,37 +21895,47 @@ export default {
           "type": "function"
         },
         {
+          "inputs": [],
+          "name": "renounceOwnership",
+          "outputs": [],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
           "inputs": [
             {
               "internalType": "bytes32",
-              "name": "_intentHash",
+              "name": "_lockId",
               "type": "bytes32"
             },
             {
-              "internalType": "address",
-              "name": "_staker",
-              "type": "address"
-            },
-            {
               "internalType": "uint256",
-              "name": "_grossAmount",
+              "name": "_newAmount",
               "type": "uint256"
             },
             {
               "internalType": "uint64",
-              "name": "_releaseTime",
+              "name": "_newMaturesAt",
               "type": "uint64"
+            }
+          ],
+          "name": "resizeLock",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_lockId",
+              "type": "bytes32"
             },
             {
               "components": [
                 {
-                  "internalType": "enum IIntentRiskHook.FeeType",
-                  "name": "feeType",
-                  "type": "uint8"
-                },
-                {
                   "internalType": "address",
-                  "name": "recipient",
+                  "name": "beneficiary",
                   "type": "address"
                 },
                 {
@@ -23161,140 +21944,14 @@ export default {
                   "type": "uint256"
                 }
               ],
-              "internalType": "struct IIntentRiskHook.FeeAllocation[]",
-              "name": "_feeAllocations",
+              "internalType": "struct IStakeVault.Claim[]",
+              "name": "_claims",
               "type": "tuple[]"
             }
           ],
-          "name": "recordDeferredStake",
+          "name": "resolveLock",
           "outputs": [],
           "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "releaseDeferredStake",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "releaseDeferredStakeAuthorization",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "releaseReservation",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "renounceOwnership",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "requestExit",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint256",
-              "name": "_amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "requestStakeWithdrawal",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "reservationsPaused",
-          "outputs": [
-            {
-              "internalType": "bool",
-              "name": "",
-              "type": "bool"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_staker",
-              "type": "address"
-            },
-            {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_amount",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint64",
-              "name": "_releaseTime",
-              "type": "uint64"
-            }
-          ],
-          "name": "reserveStake",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "name": "reservedStake",
-          "outputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
-            }
-          ],
-          "stateMutability": "view",
           "type": "function"
         },
         {
@@ -23305,7 +21962,7 @@ export default {
               "type": "address"
             }
           ],
-          "name": "setAllowedStakeOwner",
+          "name": "selectStakeOwner",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
@@ -23313,32 +21970,20 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "bool",
-              "name": "_enabled",
-              "type": "bool"
+              "internalType": "address",
+              "name": "",
+              "type": "address"
             }
           ],
-          "name": "setStakeDelegationEnabled",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
+          "name": "selectedStakeOwner",
+          "outputs": [
             {
-              "internalType": "bool",
-              "name": "_depositsPaused",
-              "type": "bool"
-            },
-            {
-              "internalType": "bool",
-              "name": "_reservationsPaused",
-              "type": "bool"
+              "internalType": "address",
+              "name": "",
+              "type": "address"
             }
           ],
-          "name": "setStakeOperationsPaused",
-          "outputs": [],
-          "stateMutability": "nonpayable",
+          "stateMutability": "view",
           "type": "function"
         },
         {
@@ -23362,65 +22007,6 @@ export default {
         {
           "inputs": [
             {
-              "internalType": "address[]",
-              "name": "_takers",
-              "type": "address[]"
-            },
-            {
-              "internalType": "bool",
-              "name": "_authorized",
-              "type": "bool"
-            }
-          ],
-          "name": "setTakerAuthorizations",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "address",
-              "name": "_maker",
-              "type": "address"
-            }
-          ],
-          "name": "slashDeferredStake",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            },
-            {
-              "internalType": "address",
-              "name": "_maker",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "slashReservation",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
               "internalType": "address",
               "name": "",
               "type": "address"
@@ -23432,25 +22018,6 @@ export default {
               "internalType": "uint256",
               "name": "",
               "type": "uint256"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_taker",
-              "type": "address"
-            }
-          ],
-          "name": "stakeDelegationEnabled",
-          "outputs": [
-            {
-              "internalType": "bool",
-              "name": "",
-              "type": "bool"
             }
           ],
           "stateMutability": "view",
@@ -23490,7 +22057,7 @@ export default {
         },
         {
           "inputs": [],
-          "name": "totalClaimableCompensation",
+          "name": "totalAccounted",
           "outputs": [
             {
               "internalType": "uint256",
@@ -23503,33 +22070,7 @@ export default {
         },
         {
           "inputs": [],
-          "name": "totalClaimableFees",
-          "outputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "totalDeferredFees",
-          "outputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "totalLiabilities",
+          "name": "totalClaimable",
           "outputs": [
             {
               "internalType": "uint256",
@@ -23567,86 +22108,37 @@ export default {
           "type": "function"
         },
         {
+          "inputs": [],
+          "name": "unaccountedBalance",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
           "inputs": [
             {
               "internalType": "bytes32",
-              "name": "_intentHash",
+              "name": "_lockId",
               "type": "bytes32"
-            },
+            }
+          ],
+          "name": "unlockStake",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
             {
               "internalType": "uint256",
-              "name": "_newAmount",
+              "name": "_amount",
               "type": "uint256"
-            },
-            {
-              "internalType": "uint64",
-              "name": "_releaseTime",
-              "type": "uint64"
-            }
-          ],
-          "name": "updateReservation",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_recipient",
-              "type": "address"
-            }
-          ],
-          "name": "withdrawCompensation",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_recipient",
-              "type": "address"
-            }
-          ],
-          "name": "withdrawFeeClaim",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_beneficiary",
-              "type": "address"
-            }
-          ],
-          "name": "withdrawFeeClaimFor",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_recipient",
-              "type": "address"
-            }
-          ],
-          "name": "withdrawRequestedStake",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_recipient",
-              "type": "address"
             }
           ],
           "name": "withdrawStake",
@@ -24926,6 +23418,565 @@ export default {
           "name": "addToWhitelist",
           "outputs": [],
           "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_taker",
+              "type": "address"
+            }
+          ],
+          "name": "isWhitelisted",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "orchestratorRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IOrchestratorRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address[]",
+              "name": "_takers",
+              "type": "address[]"
+            }
+          ],
+          "name": "removeFromWhitelist",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "taker",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "escrow",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "depositId",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "amount",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "address",
+                  "name": "to",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "paymentMethod",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "fiatCurrency",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "conversionRate",
+                  "type": "uint256"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "recipient",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "fee",
+                      "type": "uint256"
+                    }
+                  ],
+                  "internalType": "struct IReferralFee.ReferralFee[]",
+                  "name": "referralFees",
+                  "type": "tuple[]"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "preIntentHookData",
+                  "type": "bytes"
+                }
+              ],
+              "internalType": "struct IPreIntentHook.PreIntentContext",
+              "name": "_ctx",
+              "type": "tuple"
+            }
+          ],
+          "name": "validateSignalIntent",
+          "outputs": [],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "name": "whitelist",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        }
+      ]
+    },
+    "WhitelistPreIntentHookV2": {
+      "address": "0xf121d047f8261E91fbb3E9c775046Fc926269666",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_orchestratorRegistry",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "_groupRegistry",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [],
+          "name": "EmptyArray",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "groupId",
+              "type": "uint256"
+            }
+          ],
+          "name": "GroupDoesNotExist",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "attempted",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "max",
+              "type": "uint256"
+            }
+          ],
+          "name": "MaxGroupsExceeded",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "TakerNotWhitelisted",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "delegate",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedCallerOrDelegate",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedOrchestratorCaller",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroAddress",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "groupId",
+              "type": "uint256"
+            }
+          ],
+          "name": "GroupAttached",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "groupId",
+              "type": "uint256"
+            }
+          ],
+          "name": "GroupDetached",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            }
+          ],
+          "name": "TakerRemovedFromWhitelist",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            }
+          ],
+          "name": "TakerWhitelisted",
+          "type": "event"
+        },
+        {
+          "inputs": [],
+          "name": "MAX_GROUPS_PER_DEPOSIT",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address[]",
+              "name": "_takers",
+              "type": "address[]"
+            }
+          ],
+          "name": "addToWhitelist",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256[]",
+              "name": "_groupIds",
+              "type": "uint256[]"
+            }
+          ],
+          "name": "attachGroups",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256[]",
+              "name": "_groupIds",
+              "type": "uint256[]"
+            }
+          ],
+          "name": "detachGroups",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getAttachedGroups",
+          "outputs": [
+            {
+              "internalType": "uint256[]",
+              "name": "",
+              "type": "uint256[]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "groupRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IAddressGroupRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_taker",
+              "type": "address"
+            }
+          ],
+          "name": "isAllowedTaker",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_groupId",
+              "type": "uint256"
+            }
+          ],
+          "name": "isGroupAttached",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
           "type": "function"
         },
         {
