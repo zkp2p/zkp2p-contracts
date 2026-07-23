@@ -52,7 +52,9 @@ Solidity 0.8.18 cannot compile several stack-heavy production contracts after or
 
 Fuzz and invariant tests remain mandatory in the separate complete-suite CI job, but are deliberately excluded from coverage. Coverage measures stable deterministic behavior rather than giving randomized exploration credit toward the project threshold.
 
-CI runs this deterministic coverage workflow once and uploads its LCOV to Codecov.
+The local command uses one complete minimal-IR pass. CI partitions the same deterministic tree across four isolated runners, transfers only artifacts generated in the current workflow attempt, and then runs the exact-source shards and merge gate. Every partition must report the complete production-file denominator and identical line, branch, function, and statement anchor shapes. Statement hits are reconstructed by exact source byte range before the permanent floors are enforced. A missing, malformed, partial, or mismatched partition fails the merge.
+
+The CI artifact names include the workflow run ID and attempt. They are transport between jobs, not a reusable coverage cache; every applicable pull request and push to `main` recompiles and reruns all deterministic tests before generating LCOV.
 
 Generated artifacts are:
 
@@ -81,4 +83,4 @@ There are no fork-dependent tests. Chain-dependent behavior was replaced with de
 
 ## Expected local runtimes
 
-On the recorded Apple M5 Max / Foundry v1.7.1 host, deterministic tests take about 0.8s warm and the complete suite takes about 5.6s warm. Deterministic coverage takes about 5 minutes locally: roughly 288 seconds for the complete minimal-IR pass and about 12 seconds for all exact-source mapping shards. PR #197 measured the equivalent deterministic coverage producer at 8m46s on a fresh GitHub-hosted runner. Subsequent normal test runs use Foundry's content-addressed cache, while correctness never depends on cache state.
+On the recorded Apple M5 Max / Foundry v1.7.1 host, deterministic tests take about 0.8s warm and the complete suite takes about 5.6s warm. The local monolithic coverage command takes about 5 minutes: roughly 288 seconds for the complete minimal-IR pass and about 12 seconds for all exact-source mapping shards. The four CI coverage lanes are balanced independently because GitHub-hosted runners are slower than the local host. Subsequent normal test runs use Foundry's content-addressed cache, while coverage correctness never depends on cache state.

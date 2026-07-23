@@ -8,7 +8,9 @@ const repositoryRoot = path.resolve(__dirname, "..");
 const coverageDirectory = path.join(repositoryRoot, "coverage");
 const shardDirectory = path.join(coverageDirectory, "shards");
 const exceptionsPath = path.join(repositoryRoot, "test-foundry/coverage-exceptions.json");
-const resume = process.argv.includes("--resume");
+const mergePartitions = process.argv.includes("--merge-partitions");
+const laneArgument = process.argv.find((argument) => argument.startsWith("--lane="));
+const lane = laneArgument?.slice("--lane=".length);
 const coverageSeed = "0x0000000000000000000000000000000000000000000000000000000000000001";
 const deterministicTestRoot = "test-foundry/deterministic";
 const coverageFloors = {
@@ -36,12 +38,76 @@ const legacyOrchestratorTests = [
     "OrchestratorViews.t.sol",
 ].map((file) => `test-foundry/deterministic/orchestrator/${file}`);
 
-const coverageRuns = [
+const monolithicCoverageRun = {
+    name: "full-ir",
+    irMinimum: true,
+    test: deterministicTestRoot,
+};
+
+const deterministicCoverageRuns = [
     {
-        name: "full-ir",
+        name: "deterministic-deployment",
         irMinimum: true,
-        test: deterministicTestRoot,
+        test: "test-foundry/deterministic/deployment",
     },
+    {
+        name: "deterministic-escrow",
+        irMinimum: true,
+        test: "test-foundry/deterministic/escrow",
+    },
+    {
+        name: "deterministic-hooks",
+        irMinimum: true,
+        test: "test-foundry/deterministic/hooks",
+    },
+    {
+        name: "deterministic-integration",
+        irMinimum: true,
+        test: "test-foundry/deterministic/integration",
+    },
+    {
+        name: "deterministic-libs",
+        irMinimum: true,
+        test: "test-foundry/deterministic/libs",
+    },
+    {
+        name: "deterministic-oracles",
+        irMinimum: true,
+        test: "test-foundry/deterministic/oracles",
+    },
+    {
+        name: "deterministic-orchestrator",
+        irMinimum: true,
+        test: "test-foundry/deterministic/orchestrator",
+    },
+    {
+        name: "deterministic-periphery",
+        irMinimum: true,
+        test: "test-foundry/deterministic/periphery",
+    },
+    {
+        name: "deterministic-rate-manager",
+        irMinimum: true,
+        test: "test-foundry/deterministic/rateManager",
+    },
+    {
+        name: "deterministic-registries",
+        irMinimum: true,
+        test: "test-foundry/deterministic/registries",
+    },
+    {
+        name: "deterministic-staking",
+        irMinimum: true,
+        test: "test-foundry/deterministic/staking",
+    },
+    {
+        name: "deterministic-verifiers",
+        irMinimum: true,
+        test: "test-foundry/deterministic/verifiers",
+    },
+].map((run) => ({ ...run, debugStatements: true }));
+
+const exactSourceCoverageRuns = [
     {
         name: "registries",
         source: "contracts/registries",
@@ -79,14 +145,37 @@ const coverageRuns = [
     })),
 ];
 
+const coverageLanes = new Map([
+    ["escrow", ["deterministic-escrow", "deterministic-integration"]],
+    ["staking", ["deterministic-staking", "deterministic-verifiers"]],
+    ["orchestrator", ["deterministic-orchestrator", "deterministic-rate-manager", "deterministic-libs"]],
+    [
+        "remaining",
+        [
+            "deterministic-deployment",
+            "deterministic-hooks",
+            "deterministic-oracles",
+            "deterministic-periphery",
+            "deterministic-registries",
+        ],
+    ],
+]);
+
 function fail(message) {
     console.error(message);
     process.exit(1);
 }
 
+function pathsForRun(run) {
+    return {
+        reportPath: path.join(shardDirectory, `${run.name}.lcov`),
+        logPath: path.join(shardDirectory, `${run.name}.log`),
+        timingPath: path.join(shardDirectory, `${run.name}.timing.json`),
+    };
+}
+
 function runCoverage(run) {
-    const reportPath = path.join(shardDirectory, `${run.name}.lcov`);
-    const logPath = path.join(shardDirectory, `${run.name}.log`);
+    const { reportPath, logPath, timingPath } = pathsForRun(run);
     const args = [
         "coverage",
         "--fuzz-seed",
@@ -99,6 +188,7 @@ function runCoverage(run) {
         reportPath,
     ];
     if (run.irMinimum) args.push("--ir-minimum");
+    if (run.debugStatements) args.push("--report", "debug");
     if (run.matchTest) args.push("--match-test", run.matchTest);
     if (run.noMatchTest) args.push("--no-match-test", run.noMatchTest);
     if (run.matchContract) args.push("--match-contract", run.matchContract);
@@ -121,13 +211,19 @@ function runCoverage(run) {
     if (result.error || result.status !== 0) {
         const diagnosticLimit = 64 * 1024;
         const diagnostic = output.length > diagnosticLimit
-            ? `... coverage output truncated to final ${diagnosticLimit} bytes ...\n${output.slice(-diagnosticLimit)}`
+            ? [
+                `... coverage output truncated to first and final ${diagnosticLimit / 2} bytes ...`,
+                output.slice(0, diagnosticLimit / 2),
+                "... middle of coverage output omitted ...",
+                output.slice(-diagnosticLimit / 2),
+            ].join("\n")
             : output;
         process.stderr.write(diagnostic);
         fail(
             `coverage shard ${run.name} failed after ${elapsedSeconds.toFixed(2)}s (status=${result.status}, signal=${result.signal || "none"}, error=${result.error?.message || "none"})`
         );
     }
+    fs.writeFileSync(timingPath, `${JSON.stringify({ name: run.name, elapsedSeconds })}\n`);
     console.log(`coverage: ${run.name} passed in ${elapsedSeconds.toFixed(2)}s`);
     return { name: run.name, elapsedSeconds };
 }
@@ -136,6 +232,37 @@ function normalizeSource(source) {
     const normalized = source.replaceAll("\\", "/");
     const root = repositoryRoot.replaceAll("\\", "/");
     return normalized.startsWith(`${root}/`) ? normalized.slice(root.length + 1) : normalized;
+}
+
+function containsTestFile(directory) {
+    return fs.readdirSync(directory, { withFileTypes: true }).some((entry) => {
+        const entryPath = path.join(directory, entry.name);
+        return entry.isDirectory() ? containsTestFile(entryPath) : entry.isFile() && entry.name.endsWith(".t.sol");
+    });
+}
+
+function validateDeterministicPartitions() {
+    const expectedDirectories = fs
+        .readdirSync(path.join(repositoryRoot, deterministicTestRoot), { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => path.join(repositoryRoot, deterministicTestRoot, entry.name))
+        .filter(containsTestFile)
+        .map(normalizeSource)
+        .sort();
+    const configuredDirectories = deterministicCoverageRuns.map((run) => run.test).sort();
+    if (JSON.stringify(expectedDirectories) !== JSON.stringify(configuredDirectories)) {
+        fail(
+            `deterministic coverage partition mismatch; expected ${expectedDirectories.join(", ")}, configured ${configuredDirectories.join(", ")}`
+        );
+    }
+
+    const configuredRunNames = deterministicCoverageRuns.map((run) => run.name).sort();
+    const assignedRunNames = [...coverageLanes.values()].flat().sort();
+    if (JSON.stringify(configuredRunNames) !== JSON.stringify(assignedRunNames)) {
+        fail(
+            `coverage lane assignment mismatch; configured ${configuredRunNames.join(", ")}, assigned ${assignedRunNames.join(", ")}`
+        );
+    }
 }
 
 function discoverProductionFiles() {
@@ -212,6 +339,115 @@ function parseLcov(contents) {
         }
     }
     return records;
+}
+
+function sortedMapKeys(map) {
+    return [...map.keys()].sort();
+}
+
+function recordShape(record) {
+    return {
+        lines: sortedMapKeys(record.lines),
+        branches: sortedMapKeys(record.branches),
+        functions: sortedMapKeys(record.functions),
+        functionDefinitions: record.functionDefinitions
+            .map((definition) => `${definition.line}:${definition.name}`)
+            .sort(),
+    };
+}
+
+function validateCompleteProductionRecords(records, productionFiles, runName) {
+    const productionFileSet = new Set(productionFiles);
+    const actualProduction = [...records.keys()].filter((file) => productionFileSet.has(file)).sort();
+    if (JSON.stringify(actualProduction) !== JSON.stringify(productionFiles)) {
+        const missing = productionFiles.filter((file) => !records.has(file));
+        const extra = actualProduction.filter((file) => !productionFileSet.has(file));
+        fail(
+            `${runName} production denominator does not match the current source set; missing: ${missing.join(", ") || "none"}; extra: ${extra.join(", ") || "none"}`
+        );
+    }
+}
+
+function validatePartitionShapes(partitionRecords, productionFiles) {
+    const [baseline, ...others] = partitionRecords;
+    for (const { run, records } of partitionRecords) {
+        validateCompleteProductionRecords(records, productionFiles, run.name);
+    }
+    for (const { run, records } of others) {
+        for (const source of productionFiles) {
+            if (JSON.stringify(recordShape(records.get(source))) !== JSON.stringify(recordShape(baseline.records.get(source)))) {
+                fail(
+                    `coverage anchor shape changed for ${source} between ${baseline.run.name} and ${run.name}`
+                );
+            }
+        }
+    }
+}
+
+function parseTestResult(contents, runName) {
+    const matches = [...contents.matchAll(
+        /^Ran (\d+) test suites? in .+: (\d+) tests passed, 0 failed, 0 skipped \((\d+) total tests\)$/gm
+    )];
+    if (matches.length !== 1) {
+        fail(`coverage shard ${runName} lacks one unambiguous all-passing test summary`);
+    }
+    const [, suites, passed, total] = matches[0];
+    if (passed !== total) fail(`coverage shard ${runName} did not execute every reported test`);
+    return { suites: Number(suites), tests: Number(total) };
+}
+
+function parseDebugStatements(contents, productionFiles, runName) {
+    const productionFileSet = new Set(productionFiles);
+    const statements = new Map(productionFiles.map((source) => [source, new Map()]));
+    let currentSource = null;
+    for (const line of contents.split(/\r?\n/)) {
+        const sourceMatch = line.match(/^(.+\.sol):$/);
+        if (sourceMatch) {
+            const source = normalizeSource(sourceMatch[1]);
+            currentSource = productionFileSet.has(source) ? source : null;
+            continue;
+        }
+        if (!currentSource) continue;
+        const statementMatch = line.match(
+            /^- Statement \(location: \(source ID: \d+, lines: [^,]+, bytes: (\d+)\.\.(\d+)\), hits: (\d+)\)/
+        );
+        if (!statementMatch) continue;
+        const key = `${statementMatch[1]}:${statementMatch[2]}`;
+        const hits = Number(statementMatch[3]);
+        const existing = statements.get(currentSource).get(key);
+        if (existing !== undefined && existing !== hits) {
+            fail(`duplicate statement anchor ${currentSource}:${key} has conflicting hits in ${runName}`);
+        }
+        statements.get(currentSource).set(key, hits);
+    }
+    for (const source of productionFiles) {
+        if (statements.get(source).size === 0) {
+            fail(`coverage shard ${runName} lacks debug statement anchors for ${source}`);
+        }
+    }
+    return statements;
+}
+
+function reconstructPartitionStatements(partitionRuns, productionFiles) {
+    const parsed = partitionRuns.map(({ run, log }) => ({
+        run,
+        statements: parseDebugStatements(log, productionFiles, run.name),
+    }));
+    const reconstructed = new Map();
+    for (const source of productionFiles) {
+        const baselineKeys = sortedMapKeys(parsed[0].statements.get(source));
+        for (const { run, statements } of parsed.slice(1)) {
+            const keys = sortedMapKeys(statements.get(source));
+            if (JSON.stringify(keys) !== JSON.stringify(baselineKeys)) {
+                fail(`statement anchor shape changed for ${source} in ${run.name}`);
+            }
+        }
+        const hits = baselineKeys.map((key) =>
+            Math.max(...parsed.map(({ statements }) => statements.get(source).get(key)))
+        );
+        reconstructed.set(source, metricFromValues(hits));
+    }
+    return reconstructed;
 }
 
 function mergeLcov(baseRecords, shardRecords, productionFiles) {
@@ -300,7 +536,7 @@ function metricFromValues(values) {
     };
 }
 
-function mergeStatements(summaryReports, productionFiles) {
+function mergeStatements(summaryReports, productionFiles, reconstructedStatements = null) {
     const statements = new Map();
     for (const source of productionFiles) {
         const candidates = summaryReports.map((report) => report.get(source)).filter(Boolean);
@@ -309,8 +545,17 @@ function mergeStatements(summaryReports, productionFiles) {
         if (totals.size !== 1) {
             fail(`statement denominator changed across coverage configurations for ${source}`);
         }
+        const reconstructed = reconstructedStatements?.get(source);
+        if (reconstructed && reconstructed.total !== candidates[0].statements.total) {
+            fail(
+                `debug statement denominator ${reconstructed.total} does not match summary denominator ${candidates[0].statements.total} for ${source}`
+            );
+        }
         statements.set(source, {
-            covered: Math.max(...candidates.map((metrics) => metrics.statements.covered)),
+            covered: Math.max(
+                reconstructed?.covered || 0,
+                ...candidates.map((metrics) => metrics.statements.covered)
+            ),
             total: candidates[0].statements.total,
         });
     }
@@ -370,41 +615,70 @@ function checkCoverage(summary, exceptions) {
     if (failures.length > 0) fail(`Foundry coverage gate failed:\n- ${failures.join("\n- ")}`);
 }
 
-function mergeAndCheck(runTimings) {
+function mergeAndCheck(runs, runTimings) {
     const productionFiles = discoverProductionFiles();
-    const lcovPaths = coverageRuns.map((run) => path.join(shardDirectory, `${run.name}.lcov`));
-    const logPaths = coverageRuns.map((run) => path.join(shardDirectory, `${run.name}.log`));
-    for (const file of [...lcovPaths, ...logPaths]) {
+    const runFiles = runs.map((run) => ({ run, ...pathsForRun(run) }));
+    for (const file of runFiles.flatMap(({ reportPath, logPath }) => [reportPath, logPath])) {
         if (!fs.existsSync(file)) fail(`missing coverage input ${path.relative(repositoryRoot, file)}`);
     }
 
-    const baseRecords = parseLcov(fs.readFileSync(lcovPaths[0], "utf8"));
-    const productionFileSet = new Set(productionFiles);
-    const actualProduction = [...baseRecords.keys()].filter((file) => productionFileSet.has(file)).sort();
-    if (JSON.stringify(actualProduction) !== JSON.stringify(productionFiles)) {
-        const missing = productionFiles.filter((file) => !baseRecords.has(file));
-        fail(
-            `full Foundry coverage denominator does not match the current production source set; missing records: ${missing.join(", ") || "none"}`
-        );
+    const parsedRuns = runFiles.map(({ run, reportPath, logPath }) => ({
+        run,
+        records: parseLcov(fs.readFileSync(reportPath, "utf8")),
+        log: fs.readFileSync(logPath, "utf8"),
+    }));
+    const partitioned = deterministicCoverageRuns.every((partition) =>
+        runs.some((run) => run.name === partition.name)
+    );
+    const denominatorRuns = partitioned
+        ? deterministicCoverageRuns.map((partition) =>
+            parsedRuns.find(({ run }) => run.name === partition.name)
+        )
+        : [parsedRuns[0]];
+    if (partitioned) {
+        validatePartitionShapes(denominatorRuns, productionFiles);
+    } else {
+        validateCompleteProductionRecords(denominatorRuns[0].records, productionFiles, denominatorRuns[0].run.name);
     }
-    const shardRecords = lcovPaths.slice(1).map((file) => parseLcov(fs.readFileSync(file, "utf8")));
+
+    const baseRecords = denominatorRuns[0].records;
+    const shardRecords = parsedRuns
+        .filter(({ run }) => run.name !== denominatorRuns[0].run.name)
+        .map(({ records }) => records);
     mergeLcov(baseRecords, shardRecords, productionFiles);
     fs.writeFileSync(path.join(coverageDirectory, "lcov.info"), renderLcov(baseRecords, productionFiles));
 
-    const summaries = logPaths.map((file) => parseSummary(fs.readFileSync(file, "utf8")));
-    const statementMetrics = mergeStatements(summaries, productionFiles);
+    const summaries = parsedRuns.map(({ log }) => parseSummary(log));
+    const reconstructedStatements = partitioned
+        ? reconstructPartitionStatements(denominatorRuns, productionFiles)
+        : null;
+    const statementMetrics = mergeStatements(summaries, productionFiles, reconstructedStatements);
     const { files, overall } = coverageMetrics(baseRecords, statementMetrics, productionFiles);
+    const testResults = partitioned
+        ? denominatorRuns.map(({ run, log }) => ({ name: run.name, ...parseTestResult(log, run.name) }))
+        : [{ name: denominatorRuns[0].run.name, ...parseTestResult(denominatorRuns[0].log, denominatorRuns[0].run.name) }];
+    const testExecution = testResults.reduce(
+        (total, result) => ({
+            suites: total.suites + result.suites,
+            tests: total.tests + result.tests,
+        }),
+        { suites: 0, tests: 0 }
+    );
 
     const summary = {
-        schemaVersion: 3,
-        source: "Deterministic Foundry coverage with exact-source mapping shards merged onto the complete minimal-IR denominator",
+        schemaVersion: 4,
+        source: partitioned
+            ? "Partitioned deterministic Foundry coverage with exact-source mapping shards merged onto identical complete minimal-IR denominators"
+            : "Deterministic Foundry coverage with exact-source mapping shards merged onto the complete minimal-IR denominator",
         coverageSeed,
         coverageFloors,
         coverageSelection: {
             included: "all deterministic unit, integration, deployment, and regression tests",
             excluded: "Foundry-native fuzz and invariant tests; these remain mandatory in the separate complete-suite CI job",
             testRoot: deterministicTestRoot,
+            partitions: partitioned ? deterministicCoverageRuns.map((run) => run.test) : [deterministicTestRoot],
         },
+        testExecution,
         productionFileCount: productionFiles.length,
         overall,
         files,
@@ -446,16 +720,58 @@ function mergeAndCheck(runTimings) {
     );
 }
 
-fs.mkdirSync(coverageDirectory, { recursive: true });
-if (!resume) fs.rmSync(shardDirectory, { recursive: true, force: true });
-fs.mkdirSync(shardDirectory, { recursive: true });
-const runTimings = coverageRuns.map((run) => {
-    const reportPath = path.join(shardDirectory, `${run.name}.lcov`);
-    const logPath = path.join(shardDirectory, `${run.name}.log`);
-    if (resume && fs.existsSync(reportPath) && fs.existsSync(logPath)) {
-        console.log(`coverage: ${run.name} already passed`);
-        return { name: run.name, elapsedSeconds: null, resumed: true };
+function clearRunOutputs(runs) {
+    for (const run of runs) {
+        for (const file of Object.values(pathsForRun(run))) fs.rmSync(file, { force: true });
     }
-    return runCoverage(run);
-});
-mergeAndCheck(runTimings);
+}
+
+function executeRuns(runs) {
+    return runs.map(runCoverage);
+}
+
+function readRunTiming(run) {
+    const { timingPath } = pathsForRun(run);
+    if (!fs.existsSync(timingPath)) {
+        fail(`missing coverage timing ${path.relative(repositoryRoot, timingPath)}`);
+    }
+    let timing;
+    try {
+        timing = JSON.parse(fs.readFileSync(timingPath, "utf8"));
+    } catch (error) {
+        fail(`invalid coverage timing ${path.relative(repositoryRoot, timingPath)}: ${error.message}`);
+    }
+    if (
+        timing.name !== run.name
+        || typeof timing.elapsedSeconds !== "number"
+        || !Number.isFinite(timing.elapsedSeconds)
+        || timing.elapsedSeconds < 0
+    ) {
+        fail(`invalid coverage timing contents for ${run.name}`);
+    }
+    return timing;
+}
+
+validateDeterministicPartitions();
+fs.mkdirSync(coverageDirectory, { recursive: true });
+fs.mkdirSync(shardDirectory, { recursive: true });
+
+if (lane) {
+    if (mergePartitions) fail("--lane and --merge-partitions cannot be combined");
+    const laneRunNames = coverageLanes.get(lane);
+    if (!laneRunNames) fail(`unknown coverage lane ${lane}`);
+    const laneRuns = laneRunNames.map((name) => deterministicCoverageRuns.find((run) => run.name === name));
+    clearRunOutputs(laneRuns);
+    executeRuns(laneRuns);
+} else if (mergePartitions) {
+    clearRunOutputs(exactSourceCoverageRuns);
+    executeRuns(exactSourceCoverageRuns);
+    const runs = [...deterministicCoverageRuns, ...exactSourceCoverageRuns];
+    mergeAndCheck(runs, runs.map(readRunTiming));
+} else {
+    const runs = [monolithicCoverageRun, ...exactSourceCoverageRuns];
+    fs.rmSync(shardDirectory, { recursive: true, force: true });
+    fs.mkdirSync(shardDirectory, { recursive: true });
+    const runTimings = executeRuns(runs);
+    mergeAndCheck(runs, runTimings);
+}

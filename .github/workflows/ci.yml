@@ -99,8 +99,54 @@ jobs:
       - name: Deploy production scripts to localhost
         run: corepack yarn deploy:localhost
 
+  coverage-shards:
+    name: Foundry coverage shard (${{ matrix.lane }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        lane:
+          - escrow
+          - staking
+          - orchestrator
+          - remaining
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: recursive
+      - name: Install pinned Foundry
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+      - name: Install dependencies reproducibly
+        run: |
+          corepack enable
+          corepack yarn install --immutable
+      - name: Prepare local environment
+        run: cp .env.default .env
+      - name: Run deterministic Foundry coverage lane
+        run: corepack yarn coverage --lane=${{ matrix.lane }}
+      - name: Upload fresh coverage shard outputs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: foundry-coverage-${{ matrix.lane }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            coverage/shards/deterministic-*.lcov
+            coverage/shards/deterministic-*.log
+            coverage/shards/deterministic-*.timing.json
+          if-no-files-found: error
+          retention-days: 1
+
   coverage:
     name: Foundry coverage and Codecov
+    needs: coverage-shards
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -125,8 +171,14 @@ jobs:
           corepack yarn install --immutable
       - name: Prepare local environment
         run: cp .env.default .env
-      - name: Run deterministic Foundry coverage and enforce baseline floors
-        run: corepack yarn coverage
+      - name: Download fresh deterministic coverage shards
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: foundry-coverage-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: coverage/shards
+          merge-multiple: true
+      - name: Merge deterministic coverage and enforce baseline floors
+        run: corepack yarn coverage --merge-partitions
       - name: Upload Foundry LCOV to Codecov with OIDC
         uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac
         with:
