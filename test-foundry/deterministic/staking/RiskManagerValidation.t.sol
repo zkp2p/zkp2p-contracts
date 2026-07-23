@@ -282,6 +282,39 @@ contract RiskManagerValidationTest is RiskManagerFixture {
         );
     }
 
+    function test_DefensiveModeGuardsRejectContradictoryPositionState() public {
+        bytes32 pendingIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
+        manager.setPositionMode(pendingIntent, IRiskManager.RiskMode.NONE);
+        vm.expectRevert(
+            abi.encodeWithSelector(IRiskManager.PositionModeMismatch.selector, pendingIntent, IRiskManager.RiskMode.NONE)
+        );
+        orchestrator.settle(manager, _settlementContext(pendingIntent, INTENT_AMOUNT, 10e6, 5e6, false));
+
+        bytes32 chargebackIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
+        orchestrator.settle(manager, _settlementContext(chargebackIntent, INTENT_AMOUNT, 10e6, 5e6, true));
+        manager.setPositionMode(chargebackIntent, IRiskManager.RiskMode.NONE);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IRiskManager.PositionModeMismatch.selector, chargebackIntent, IRiskManager.RiskMode.NONE
+            )
+        );
+        manager.submitChargeback(
+            _chargebackAttestation(chargebackIntent, keccak256("mode-payment"), keccak256("mode-dispute"))
+        );
+
+        bytes32 maturityIntent = _admit(taker, payoutRecipient, INTENT_AMOUNT);
+        orchestrator.settle(manager, _settlementContext(maturityIntent, INTENT_AMOUNT, 10e6, 5e6, false));
+        uint64 deadline = manager.getRiskPosition(maturityIntent).coverageDeadline;
+        manager.setPositionMode(maturityIntent, IRiskManager.RiskMode.NONE);
+        vm.warp(deadline);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IRiskManager.PositionModeMismatch.selector, maturityIntent, IRiskManager.RiskMode.NONE
+            )
+        );
+        manager.releaseMaturedPosition(maturityIntent);
+    }
+
     function test_ChargebackRejectsInvalidHashAndDetails() public {
         bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
         orchestrator.settle(manager, _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, true));

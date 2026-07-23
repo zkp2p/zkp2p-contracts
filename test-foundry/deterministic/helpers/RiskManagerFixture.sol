@@ -62,6 +62,10 @@ contract RiskManagerHarness is RiskManager {
     function setPositionTotalExtensionTime(bytes32 _intentHash, uint64 _totalExtensionTime) external {
         riskPositions[_intentHash].totalExtensionTime = _totalExtensionTime;
     }
+
+    function setPositionMode(bytes32 _intentHash, RiskMode _mode) external {
+        riskPositions[_intentHash].mode = _mode;
+    }
 }
 
 contract RiskAttestationVerifierMock is IAttestationVerifier {
