@@ -49,7 +49,7 @@ async function executeOrQueueGovernanceCall(
 async function systemFullyWired(network: string): Promise<boolean> {
   const registryAddress = getDeployedContractAddress(network, "AddressGroupRegistry");
   const policyAddress = getDeployedContractAddress(network, "MakerGroupPolicy");
-  const hookAddress = getDeployedContractAddress(network, "MakerGroupRiskHook");
+  const hookAddress = getDeployedContractAddress(network, "IntentLifecycleHookV1");
   const orchestratorAddress = getDeployedContractAddress(network, "OrchestratorV3");
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
   const escrowRegistryAddress = getDeployedContractAddress(network, "EscrowRegistry");
@@ -57,7 +57,7 @@ async function systemFullyWired(network: string): Promise<boolean> {
 
   const registry = await ethers.getContractAt("AddressGroupRegistry", registryAddress);
   const policy = await ethers.getContractAt("MakerGroupPolicy", policyAddress);
-  const hook = await ethers.getContractAt("MakerGroupRiskHook", hookAddress);
+  const hook = await ethers.getContractAt("IntentLifecycleHookV1", hookAddress);
   const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorAddress);
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
   const escrowRegistry = await ethers.getContractAt("EscrowRegistry", escrowRegistryAddress);
@@ -173,7 +173,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     await waitForDeploymentDelay(hre);
   }
 
-  const makerGroupRiskHook = await deploy("MakerGroupRiskHook", {
+  const intentLifecycleHook = await deploy("IntentLifecycleHookV1", {
     from: deployer,
     args: [
       orchestratorV3.address,
@@ -181,19 +181,19 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       addressGroupRegistry.address,
     ],
   });
-  if (makerGroupRiskHook.newlyDeployed) {
-    console.log("MakerGroupRiskHook deployed at", makerGroupRiskHook.address);
+  if (intentLifecycleHook.newlyDeployed) {
+    console.log("IntentLifecycleHookV1 deployed at", intentLifecycleHook.address);
     await waitForDeploymentDelay(hre);
   }
 
   const orchestratorV3Contract = await ethers.getContractAt("OrchestratorV3", orchestratorV3.address);
-  if ((await orchestratorV3Contract.riskHook()).toLowerCase() !== makerGroupRiskHook.address.toLowerCase()) {
+  if ((await orchestratorV3Contract.riskHook()).toLowerCase() !== intentLifecycleHook.address.toLowerCase()) {
     await executeOrQueueGovernanceCall(
       hre,
       orchestratorV3Contract,
       "setRiskHook",
-      [makerGroupRiskHook.address],
-      `OrchestratorV3.setRiskHook(${makerGroupRiskHook.address})`,
+      [intentLifecycleHook.address],
+      `OrchestratorV3.setRiskHook(${intentLifecycleHook.address})`,
     );
   }
 
@@ -209,7 +209,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("OrchestratorV3:", orchestratorV3.address);
   console.log("AddressGroupRegistry:", addressGroupRegistry.address);
   console.log("MakerGroupPolicy:", makerGroupPolicy.address);
-  console.log("MakerGroupRiskHook:", makerGroupRiskHook.address);
+  console.log("IntentLifecycleHookV1:", intentLifecycleHook.address);
   console.log("EscrowV2 reused without redeployment:", escrowV2Address);
 };
 

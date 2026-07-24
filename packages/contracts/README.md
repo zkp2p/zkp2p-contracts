@@ -36,9 +36,9 @@ import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils
 // Import stable source ABIs for the V3 lifecycle boundary and maker-group policy
 import {
   AddressGroupRegistry,
-  IIntentRiskHook,
+  IIntentLifecycleHook,
   MakerGroupPolicy,
-  MakerGroupRiskHook,
+  IntentLifecycleHookV1,
   OrchestratorV3,
 } from "@zkp2p/contracts-v2/abis/contracts"
 import { calculateRequiredCoverage, selectRiskMode } from "@zkp2p/contracts-v2/utils/riskMath"

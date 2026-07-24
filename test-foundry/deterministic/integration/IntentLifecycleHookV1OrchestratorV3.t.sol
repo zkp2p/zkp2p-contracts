@@ -2,19 +2,19 @@
 
 pragma solidity ^0.8.18;
 
-import {IIntentRiskHook} from "contracts/interfaces/IIntentRiskHook.sol";
+import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
-import {MakerGroupRiskHook} from "contracts/hooks/MakerGroupRiskHook.sol";
+import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {BoundedCall} from "contracts/lib/BoundedCall.sol";
-import {IntentRiskHookMock} from "contracts/mocks/IntentRiskHookMock.sol";
+import {IntentLifecycleHookV1Mock} from "contracts/mocks/IntentLifecycleHookV1Mock.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {MakerGroupPolicy} from "contracts/risk/MakerGroupPolicy.sol";
 
 import {OrchestratorV2LegacyFixture} from "../helpers/OrchestratorV2LegacyFixture.sol";
 
-contract MakerGroupRiskHookOrchestratorV3Test is OrchestratorV2LegacyFixture {
+contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture {
     bytes32 internal constant PAYPAL = keccak256("paypal");
     bytes32 internal constant PEERS = keccak256("peers");
     bytes32 internal constant PEER_PLUSES = keccak256("peer-pluses");
@@ -24,7 +24,7 @@ contract MakerGroupRiskHookOrchestratorV3Test is OrchestratorV2LegacyFixture {
 
     AddressGroupRegistry internal groupRegistry;
     MakerGroupPolicy internal policy;
-    MakerGroupRiskHook internal groupHook;
+    IntentLifecycleHookV1 internal groupHook;
 
     function setUp() public override {
         super.setUp();
@@ -37,7 +37,7 @@ contract MakerGroupRiskHookOrchestratorV3Test is OrchestratorV2LegacyFixture {
         groupRegistry.registerGroup(PEER_MERCHANTS, "Peer Merchants", curator);
 
         policy = new MakerGroupPolicy(groupRegistry);
-        groupHook = new MakerGroupRiskHook(IOrchestratorV3(address(orchestrator)), policy, groupRegistry);
+        groupHook = new IntentLifecycleHookV1(IOrchestratorV3(address(orchestrator)), policy, groupRegistry);
         IOrchestratorV3(address(orchestrator)).setRiskHook(groupHook);
 
         _addPaypalToDeposit();
@@ -59,7 +59,7 @@ contract MakerGroupRiskHookOrchestratorV3Test is OrchestratorV2LegacyFixture {
         uint256 availableBefore = escrow.getDeposit(depositId).remainingDeposits;
 
         bytes memory emptyPolicyRevert =
-            abi.encodeWithSelector(MakerGroupRiskHook.NoAllowedGroupsConfigured.selector, depositor, METHOD);
+            abi.encodeWithSelector(IntentLifecycleHookV1.NoAllowedGroupsConfigured.selector, depositor, METHOD);
         vm.expectRevert(
             abi.encodeWithSelector(
                 BoundedCall.RiskHookAdmissionFailed.selector, rejectedIntent, address(groupHook), emptyPolicyRevert
@@ -81,7 +81,7 @@ contract MakerGroupRiskHookOrchestratorV3Test is OrchestratorV2LegacyFixture {
 
         bytes32 rejectedIntent = _intentHash(orchestrator.intentCounter());
         bytes memory nonMemberRevert =
-            abi.encodeWithSelector(MakerGroupRiskHook.TakerNotInAllowedGroup.selector, depositor, METHOD, taker);
+            abi.encodeWithSelector(IntentLifecycleHookV1.TakerNotInAllowedGroup.selector, depositor, METHOD, taker);
         vm.expectRevert(
             abi.encodeWithSelector(
                 BoundedCall.RiskHookAdmissionFailed.selector, rejectedIntent, address(groupHook), nonMemberRevert
@@ -182,7 +182,7 @@ contract MakerGroupRiskHookOrchestratorV3Test is OrchestratorV2LegacyFixture {
         bytes32 inFlight = _signalDefault();
         assertEq(address(riskOrchestrator.getIntentRiskHook(inFlight)), address(groupHook));
 
-        IntentRiskHookMock replacementHook = new IntentRiskHookMock();
+        IntentLifecycleHookV1Mock replacementHook = new IntentLifecycleHookV1Mock();
         riskOrchestrator.setRiskHook(replacementHook);
 
         vm.prank(taker);
@@ -215,24 +215,24 @@ contract MakerGroupRiskHookOrchestratorV3Test is OrchestratorV2LegacyFixture {
 
     function test_OnlyConfiguredOrchestratorMayCallLifecycleCallbacks() public {
         bytes32 intentHash = keccak256("intent");
-        vm.expectRevert(abi.encodeWithSelector(MakerGroupRiskHook.UnauthorizedOrchestrator.selector, other));
+        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.UnauthorizedOrchestrator.selector, other));
         vm.prank(other);
         groupHook.onIntentCreated(intentHash);
 
-        vm.expectRevert(abi.encodeWithSelector(MakerGroupRiskHook.UnauthorizedOrchestrator.selector, other));
+        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.UnauthorizedOrchestrator.selector, other));
         vm.prank(other);
         groupHook.onIntentCancelled(intentHash);
 
-        IIntentRiskHook.RiskSettlementContext memory context = IIntentRiskHook.RiskSettlementContext({
+        IIntentLifecycleHook.RiskSettlementContext memory context = IIntentLifecycleHook.RiskSettlementContext({
             intentHash: intentHash,
             token: address(token),
             recipient: taker,
             grossAmount: 0,
             executableAmount: 0,
             isManualRelease: false,
-            feeAllocations: new IIntentRiskHook.FeeAllocation[](0)
+            feeAllocations: new IIntentLifecycleHook.FeeAllocation[](0)
         });
-        vm.expectRevert(abi.encodeWithSelector(MakerGroupRiskHook.UnauthorizedOrchestrator.selector, other));
+        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.UnauthorizedOrchestrator.selector, other));
         vm.prank(other);
         groupHook.settleIntent(context);
     }
@@ -241,10 +241,10 @@ contract MakerGroupRiskHookOrchestratorV3Test is OrchestratorV2LegacyFixture {
         AddressGroupRegistry otherRegistry = new AddressGroupRegistry(address(this));
         vm.expectRevert(
             abi.encodeWithSelector(
-                MakerGroupRiskHook.GroupRegistryMismatch.selector, address(groupRegistry), address(otherRegistry)
+                IntentLifecycleHookV1.GroupRegistryMismatch.selector, address(groupRegistry), address(otherRegistry)
             )
         );
-        new MakerGroupRiskHook(IOrchestratorV3(address(orchestrator)), policy, otherRegistry);
+        new IntentLifecycleHookV1(IOrchestratorV3(address(orchestrator)), policy, otherRegistry);
     }
 
     function _enablePeerPolicyAndAddTaker() internal {

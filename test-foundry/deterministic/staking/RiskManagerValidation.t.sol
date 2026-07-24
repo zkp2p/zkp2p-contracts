@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.18;
 
-import {IIntentRiskHook} from "../../../contracts/interfaces/IIntentRiskHook.sol";
+import {IIntentLifecycleHook} from "../../../contracts/interfaces/IIntentLifecycleHook.sol";
 import {IRiskManager} from "../../../contracts/interfaces/IRiskManager.sol";
 import {NullifierRegistry} from "../../../contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "../../../contracts/registries/NullifierRegistryV2.sol";
@@ -222,13 +222,13 @@ contract RiskManagerValidationTest is RiskManagerFixture {
 
         _setConfig(false, false, 0, EXTENSION_SLOPE);
         bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        IIntentRiskHook.RiskSettlementContext memory context =
+        IIntentLifecycleHook.RiskSettlementContext memory context =
             _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, false);
         context.grossAmount = 0;
         context.executableAmount = type(uint256).max;
         context.recipient = makeAddr("wrongRecipient");
         context.token = address(otherToken);
-        context.feeAllocations = new IIntentRiskHook.FeeAllocation[](13);
+        context.feeAllocations = new IIntentLifecycleHook.FeeAllocation[](13);
         context.feeAllocations[0].recipient = address(0);
         orchestrator.settle(manager, context);
 

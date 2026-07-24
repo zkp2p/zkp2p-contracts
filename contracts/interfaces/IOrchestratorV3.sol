@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.18;
 
-import { IIntentRiskHook } from "./IIntentRiskHook.sol";
+import { IIntentLifecycleHook } from "./IIntentLifecycleHook.sol";
 import { IPostIntentHookV2 } from "./IPostIntentHookV2.sol";
 import { IPreIntentHook } from "./IPreIntentHook.sol";
 import { IReferralFee } from "./IReferralFee.sol";
@@ -68,7 +68,7 @@ interface IOrchestratorV3 {
 
     struct IntentCancellation {
         uint64 cancelledAt;
-        IIntentRiskHook riskHook;
+        IIntentLifecycleHook riskHook;
     }
 
     /* ============ Events ============ */
@@ -99,7 +99,7 @@ interface IOrchestratorV3 {
 
     event IntentFeeDistributed(
         bytes32 indexed intentHash,
-        IIntentRiskHook.FeeType feeType,
+        IIntentLifecycleHook.FeeType feeType,
         address indexed recipient,
         uint256 amount
     );
@@ -213,7 +213,7 @@ interface IOrchestratorV3 {
 
     /* ============ Governance Functions ============ */
 
-    function setRiskHook(IIntentRiskHook _hook) external;
+    function setRiskHook(IIntentLifecycleHook _hook) external;
     function setRiskCallbackGasLimit(uint256 _gasLimit) external;
 
     /* ============ View Functions ============ */
@@ -221,8 +221,8 @@ interface IOrchestratorV3 {
     function getIntent(bytes32 intentHash) external view returns (Intent memory);
     function getAccountIntents(address account) external view returns (bytes32[] memory);
     function getDepositPreIntentHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
-    function riskHook() external view returns (IIntentRiskHook);
-    function getIntentRiskHook(bytes32 _intentHash) external view returns (IIntentRiskHook);
+    function riskHook() external view returns (IIntentLifecycleHook);
+    function getIntentRiskHook(bytes32 _intentHash) external view returns (IIntentLifecycleHook);
     function getRiskIntent(bytes32 _intentHash) external view returns (RiskIntentData memory);
     /**
      * @notice Returns the liquidity-unlock timestamp when a cancellation callback failed open.

@@ -16,7 +16,7 @@ import { IReferralFee } from "./interfaces/IReferralFee.sol";
 import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
-import { IIntentRiskHook } from "./interfaces/IIntentRiskHook.sol";
+import { IIntentLifecycleHook } from "./interfaces/IIntentLifecycleHook.sol";
 import { IPreIntentHook } from "./interfaces/IPreIntentHook.sol";
 import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
 import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
@@ -67,8 +67,8 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     mapping(address => mapping(uint256 => IPreIntentHook)) internal depositPreIntentHooks;
 
     // Governance-selected lifecycle risk hook; snapshotted per intent at signal.
-    IIntentRiskHook public riskHook;
-    mapping(bytes32 => IIntentRiskHook) internal intentRiskHooks;
+    IIntentLifecycleHook public riskHook;
+    mapping(bytes32 => IIntentLifecycleHook) internal intentRiskHooks;
     mapping(bytes32 => IntentCancellation) internal failedIntentCancellations;
     mapping(bytes32 => bool) public usedGatingSignatureDigests;
 
@@ -197,7 +197,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         emit IntentManagerFeeSnapshotted(intentHash, managerFeeRecipient, managerFee);
 
         // Snapshot and execute fail-closed admission for the governance-selected global hook.
-        IIntentRiskHook snapshottedRiskHook = riskHook;
+        IIntentLifecycleHook snapshottedRiskHook = riskHook;
         intentRiskHooks[intentHash] = snapshottedRiskHook;
 
         BoundedCall.executeRiskAdmission(
@@ -424,7 +424,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
      *
      * @param _hook   New global risk hook
      */
-    function setRiskHook(IIntentRiskHook _hook) external onlyOwner {
+    function setRiskHook(IIntentLifecycleHook _hook) external onlyOwner {
         address hookAddress = address(_hook);
         if (hookAddress != address(0) && hookAddress.code.length == 0) {
             revert InvalidRiskHook(hookAddress);
@@ -527,7 +527,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     /**
      * @notice Returns the immutable hook snapshot for an active intent.
      */
-    function getIntentRiskHook(bytes32 _intentHash) external view returns (IIntentRiskHook) {
+    function getIntentRiskHook(bytes32 _intentHash) external view returns (IIntentLifecycleHook) {
         return intentRiskHooks[_intentHash];
     }
 
@@ -563,7 +563,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
      */
     function _resolveCancelledIntent(bytes32 _intentHash) internal {
         uint64 cancelledAt = uint64(block.timestamp);
-        IIntentRiskHook snapshottedRiskHook = intentRiskHooks[_intentHash];
+        IIntentLifecycleHook snapshottedRiskHook = intentRiskHooks[_intentHash];
         _pruneIntent(_intentHash);
         delete intentRiskHooks[_intentHash];
 
@@ -722,7 +722,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         uint256 _managerFee,
         bool _isManualRelease
     ) internal {
-        IIntentRiskHook snapshottedRiskHook = intentRiskHooks[_intentHash];
+        IIntentLifecycleHook snapshottedRiskHook = intentRiskHooks[_intentHash];
         (address fundsTransferredTo, uint256 reportedAmount) = FeeSettlementLib.executeSettlement(
             _token,
             snapshottedRiskHook,

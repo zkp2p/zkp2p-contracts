@@ -3,7 +3,7 @@
 pragma solidity ^0.8.18;
 
 import {IAttestationVerifier} from "./IAttestationVerifier.sol";
-import {IIntentRiskHook} from "./IIntentRiskHook.sol";
+import {IIntentLifecycleHook} from "./IIntentLifecycleHook.sol";
 import {INullifierRegistryV2} from "./INullifierRegistryV2.sol";
 import {IOrchestratorV3} from "./IOrchestratorV3.sol";
 import {IStakeVault} from "./IStakeVault.sol";
@@ -12,7 +12,7 @@ import {IStakeVault} from "./IStakeVault.sol";
  * @title IRiskManager
  * @notice Intent-extension and chargeback policy for the generic StakeVault ledger.
  */
-interface IRiskManager is IIntentRiskHook {
+interface IRiskManager is IIntentLifecycleHook {
     enum RiskMode {
         NONE,
         UNBONDED,

@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
+import { IIntentLifecycleHook } from "../interfaces/IIntentLifecycleHook.sol";
 
 interface IOrchestratorV3ReentryTarget {
     function cancelIntent(bytes32 _intentHash) external;
     function cleanupOrphanedIntents(bytes32[] calldata _intentHashes) external;
-    function setRiskHook(IIntentRiskHook _hook) external;
+    function setRiskHook(IIntentLifecycleHook _hook) external;
 }
 
 /** @notice Risk hook that catches deliberate attempts to reenter each guarded V3 entrypoint. */
-contract OrchestratorV3ReentrantRiskHook is IIntentRiskHook {
+contract OrchestratorV3ReentrantRiskHook is IIntentLifecycleHook {
     IOrchestratorV3ReentryTarget public immutable orchestrator;
     bool public reenterOnCreate;
     bool public setterReentrySucceeded;

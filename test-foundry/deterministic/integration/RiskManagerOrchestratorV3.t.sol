@@ -7,7 +7,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {RiskManager} from "../../../contracts/RiskManager.sol";
 import {StakeVault} from "../../../contracts/StakeVault.sol";
 import {IEscrowV2} from "../../../contracts/interfaces/IEscrowV2.sol";
-import {IIntentRiskHook} from "../../../contracts/interfaces/IIntentRiskHook.sol";
+import {IIntentLifecycleHook} from "../../../contracts/interfaces/IIntentLifecycleHook.sol";
 import {INullifierRegistryV2} from "../../../contracts/interfaces/INullifierRegistryV2.sol";
 import {IOrchestratorV2} from "../../../contracts/interfaces/IOrchestratorV2.sol";
 import {IOrchestratorV3} from "../../../contracts/interfaces/IOrchestratorV3.sol";
@@ -15,7 +15,7 @@ import {IPostIntentHookV2} from "../../../contracts/interfaces/IPostIntentHookV2
 import {IReferralFee} from "../../../contracts/interfaces/IReferralFee.sol";
 import {IRiskManager} from "../../../contracts/interfaces/IRiskManager.sol";
 import {BoundedCall} from "../../../contracts/lib/BoundedCall.sol";
-import {IntentRiskHookMock} from "../../../contracts/mocks/IntentRiskHookMock.sol";
+import {IntentLifecycleHookV1Mock} from "../../../contracts/mocks/IntentLifecycleHookV1Mock.sol";
 import {RiskAttestationVerifierMock, RiskNullifierRegistryMock} from "../helpers/RiskManagerFixture.sol";
 import {OrchestratorV2LegacyFixture} from "../helpers/OrchestratorV2LegacyFixture.sol";
 
@@ -154,7 +154,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         assertEq(vault.stakeBalance(deferredTaker), INTENT_AMOUNT);
         assertEq(vault.lockedStake(deferredTaker), INTENT_AMOUNT);
 
-        IIntentRiskHook.FeeAllocation[] memory allocations = manager.getDeferredFeeAllocations(intentHash);
+        IIntentLifecycleHook.FeeAllocation[] memory allocations = manager.getDeferredFeeAllocations(intentHash);
         assertEq(allocations.length, 1);
         assertEq(allocations[0].recipient, protocolFeeRecipient);
         assertEq(allocations[0].amount, 0.5e6);
@@ -243,7 +243,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         riskOrchestrator.setRiskCallbackGasLimit(749_999);
 
         vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.InvalidRiskHook.selector, other));
-        riskOrchestrator.setRiskHook(IIntentRiskHook(other));
+        riskOrchestrator.setRiskHook(IIntentLifecycleHook(other));
 
         vm.prank(other);
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
@@ -261,7 +261,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
 
         vm.expectEmit(true, true, false, true, address(orchestrator));
         emit RiskHookUpdated(address(manager), address(0));
-        riskOrchestrator.setRiskHook(IIntentRiskHook(address(0)));
+        riskOrchestrator.setRiskHook(IIntentLifecycleHook(address(0)));
 
         bytes32 first = _signalRiskIntent(taker, taker);
         assertEq(address(riskOrchestrator.getIntentRiskHook(first)), address(0));
@@ -285,7 +285,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         assertEq(vault.lockedStake(safe), INTENT_AMOUNT);
 
         IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
-        riskOrchestrator.setRiskHook(IIntentRiskHook(address(0)));
+        riskOrchestrator.setRiskHook(IIntentLifecycleHook(address(0)));
 
         bytes32 fresh = _signalRiskIntent(taker, taker);
         assertEq(address(riskOrchestrator.getIntentRiskHook(fresh)), address(0));
@@ -303,8 +303,8 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         bytes32 inFlight = _signalRiskIntent(taker, taker);
         assertEq(address(riskOrchestrator.getIntentRiskHook(inFlight)), address(manager));
 
-        IntentRiskHookMock replacementHook = new IntentRiskHookMock();
-        riskOrchestrator.setRiskHook(IIntentRiskHook(address(replacementHook)));
+        IntentLifecycleHookV1Mock replacementHook = new IntentLifecycleHookV1Mock();
+        riskOrchestrator.setRiskHook(IIntentLifecycleHook(address(replacementHook)));
 
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(inFlight);

@@ -9,7 +9,7 @@ import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 import {IPreIntentHook} from "contracts/interfaces/IPreIntentHook.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
-import {IIntentRiskHook} from "contracts/interfaces/IIntentRiskHook.sol";
+import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 
 contract OrchestratorV2HooksGovernanceTest is OrchestratorV2LegacyFixture {
     event DepositPreIntentHookSet(
@@ -25,7 +25,7 @@ contract OrchestratorV2HooksGovernanceTest is OrchestratorV2LegacyFixture {
     event ProtocolFeeRecipientUpdated(address indexed recipient);
     event IntentFeeDistributed(
         bytes32 indexed intentHash,
-        IIntentRiskHook.FeeType feeType,
+        IIntentLifecycleHook.FeeType feeType,
         address indexed recipient,
         uint256 amount
     );
@@ -270,9 +270,9 @@ contract OrchestratorV2HooksGovernanceTest is OrchestratorV2LegacyFixture {
         bytes32 intentHash = _signal(taker, params);
         if (_usesStandaloneV3Format()) {
             vm.expectEmit(true, true, false, true, address(orchestrator));
-            emit IntentFeeDistributed(intentHash, IIntentRiskHook.FeeType.REFERRAL, referrer, 150_000);
+            emit IntentFeeDistributed(intentHash, IIntentLifecycleHook.FeeType.REFERRAL, referrer, 150_000);
             vm.expectEmit(true, true, false, true, address(orchestrator));
-            emit IntentFeeDistributed(intentHash, IIntentRiskHook.FeeType.REFERRAL, other, 100_000);
+            emit IntentFeeDistributed(intentHash, IIntentLifecycleHook.FeeType.REFERRAL, other, 100_000);
         } else {
             vm.expectEmit(true, true, false, true, address(orchestrator));
             emit IntentReferralFeeDistributed(intentHash, referrer, 150_000);

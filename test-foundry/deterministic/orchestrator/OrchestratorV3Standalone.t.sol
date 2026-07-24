@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 import {OrchestratorV2} from "contracts/OrchestratorV2.sol";
 import {OrchestratorV3} from "contracts/OrchestratorV3.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
-import {IIntentRiskHook} from "contracts/interfaces/IIntentRiskHook.sol";
+import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
@@ -107,7 +107,7 @@ contract OrchestratorV3HooksGovernanceTest is OrchestratorV2HooksGovernanceTest 
         vm.expectRevert(IOrchestratorV3.ZeroAddress.selector);
         orchestrator.setProtocolFeeRecipient(address(0));
         vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.InvalidRiskHook.selector, other));
-        IOrchestratorV3(address(orchestrator)).setRiskHook(IIntentRiskHook(other));
+        IOrchestratorV3(address(orchestrator)).setRiskHook(IIntentLifecycleHook(other));
     }
 
     function test_GovernanceRejectsEveryNonOwnerCall() public override {
@@ -123,7 +123,7 @@ contract OrchestratorV3HooksGovernanceTest is OrchestratorV2HooksGovernanceTest 
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
         orchestrator.setProtocolFeeRecipient(other);
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
-        IOrchestratorV3(address(orchestrator)).setRiskHook(IIntentRiskHook(address(0)));
+        IOrchestratorV3(address(orchestrator)).setRiskHook(IIntentLifecycleHook(address(0)));
         vm.stopPrank();
     }
 

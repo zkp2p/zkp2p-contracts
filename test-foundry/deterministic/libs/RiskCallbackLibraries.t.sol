@@ -3,14 +3,14 @@ pragma solidity ^0.8.18;
 
 import {Test} from "forge-std/Test.sol";
 
-import {IIntentRiskHook} from "contracts/interfaces/IIntentRiskHook.sol";
+import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 import {BoundedCall} from "contracts/lib/BoundedCall.sol";
 import {PostIntentHookExecutor} from "contracts/lib/PostIntentHookExecutor.sol";
 import {RiskSettlementExecutor} from "contracts/lib/RiskSettlementExecutor.sol";
-import {IntentRiskHookMock} from "contracts/mocks/IntentRiskHookMock.sol";
+import {IntentLifecycleHookV1Mock} from "contracts/mocks/IntentLifecycleHookV1Mock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 
 contract ExactPullPostIntentHook is IPostIntentHookV2 {
@@ -37,21 +37,21 @@ contract RiskCallbackLibrariesTest is Test {
     uint256 internal constant GROSS_AMOUNT = 100e6;
     address internal constant RECIPIENT = address(0xBEEF);
 
-    IntentRiskHookMock internal hook;
+    IntentLifecycleHookV1Mock internal hook;
     ExactPullPostIntentHook internal postIntentHook;
     USDCMock internal token;
 
     function setUp() public {
-        hook = new IntentRiskHookMock();
+        hook = new IntentLifecycleHookV1Mock();
         postIntentHook = new ExactPullPostIntentHook();
         token = new USDCMock(1_000e6, "USD Coin", "USDC");
     }
 
     function test_BoundedAdmissionHandlesAbsentValidAndFailingHooks() public {
-        BoundedCall.executeRiskAdmission(IIntentRiskHook(address(0)), INTENT_HASH, 500_000, 64);
+        BoundedCall.executeRiskAdmission(IIntentLifecycleHook(address(0)), INTENT_HASH, 500_000, 64);
 
         vm.expectPartialRevert(BoundedCall.RiskHookAdmissionFailed.selector);
-        BoundedCall.executeRiskAdmission(IIntentRiskHook(address(1)), INTENT_HASH, 500_000, 64);
+        BoundedCall.executeRiskAdmission(IIntentLifecycleHook(address(1)), INTENT_HASH, 500_000, 64);
 
         BoundedCall.executeRiskAdmission(hook, INTENT_HASH, 500_000, 64);
         assertEq(hook.createdCalls(), 1);
@@ -63,8 +63,8 @@ contract RiskCallbackLibrariesTest is Test {
     }
 
     function test_BoundedCancellationIsFailOpenAndRejectsUnforwardableGas() public {
-        assertTrue(BoundedCall.executeRiskCancellation(IIntentRiskHook(address(0)), INTENT_HASH, 500_000, 64));
-        assertFalse(BoundedCall.executeRiskCancellation(IIntentRiskHook(address(1)), INTENT_HASH, 500_000, 64));
+        assertTrue(BoundedCall.executeRiskCancellation(IIntentLifecycleHook(address(0)), INTENT_HASH, 500_000, 64));
+        assertFalse(BoundedCall.executeRiskCancellation(IIntentLifecycleHook(address(1)), INTENT_HASH, 500_000, 64));
 
         assertTrue(BoundedCall.executeRiskCancellation(hook, INTENT_HASH, 500_000, 64));
         assertEq(hook.cancelledCalls(), 1);
@@ -78,7 +78,7 @@ contract RiskCallbackLibrariesTest is Test {
     }
 
     function test_BoundedSettlementPropagatesSuccessAndBoundedFailure() public {
-        IIntentRiskHook.RiskSettlementContext memory context = _context();
+        IIntentLifecycleHook.RiskSettlementContext memory context = _context();
         BoundedCall.executeRiskSettlement(hook, context, 500_000, 64);
         assertEq(hook.settlementCalls(), 1);
 
@@ -88,10 +88,10 @@ contract RiskCallbackLibrariesTest is Test {
     }
 
     function test_RiskSettlementExecutorHandlesAbsentAndInvalidHooks() public {
-        assertFalse(RiskSettlementExecutor.execute(IIntentRiskHook(address(0)), token, _context(), 500_000, 64));
+        assertFalse(RiskSettlementExecutor.execute(IIntentLifecycleHook(address(0)), token, _context(), 500_000, 64));
 
         vm.expectRevert(abi.encodeWithSelector(RiskSettlementExecutor.InvalidRiskHook.selector, address(1)));
-        RiskSettlementExecutor.execute(IIntentRiskHook(address(1)), token, _context(), 500_000, 64);
+        RiskSettlementExecutor.execute(IIntentLifecycleHook(address(1)), token, _context(), 500_000, 64);
     }
 
     function test_RiskSettlementExecutorAcceptsOnlyZeroOrExactConsumption() public {
@@ -159,15 +159,15 @@ contract RiskCallbackLibrariesTest is Test {
         PostIntentHookExecutor.transferOrExecute(token, INTENT_HASH, intent, 10e6, "");
     }
 
-    function _context() internal view returns (IIntentRiskHook.RiskSettlementContext memory) {
-        return IIntentRiskHook.RiskSettlementContext({
+    function _context() internal view returns (IIntentLifecycleHook.RiskSettlementContext memory) {
+        return IIntentLifecycleHook.RiskSettlementContext({
             intentHash: INTENT_HASH,
             token: address(token),
             recipient: RECIPIENT,
             grossAmount: GROSS_AMOUNT,
             executableAmount: 98e6,
             isManualRelease: false,
-            feeAllocations: new IIntentRiskHook.FeeAllocation[](0)
+            feeAllocations: new IIntentLifecycleHook.FeeAllocation[](0)
         });
     }
 

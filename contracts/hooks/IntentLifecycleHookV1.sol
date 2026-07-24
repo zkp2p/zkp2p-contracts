@@ -4,17 +4,17 @@ pragma solidity ^0.8.18;
 
 import {IEscrow} from "../interfaces/IEscrow.sol";
 import {IAddressGroupRegistry} from "../interfaces/IAddressGroupRegistry.sol";
-import {IIntentRiskHook} from "../interfaces/IIntentRiskHook.sol";
+import {IIntentLifecycleHook} from "../interfaces/IIntentLifecycleHook.sol";
 import {IMakerGroupPolicy} from "../interfaces/IMakerGroupPolicy.sol";
 import {IOrchestratorV3} from "../interfaces/IOrchestratorV3.sol";
 
 /**
- * @title MakerGroupRiskHook
+ * @title IntentLifecycleHookV1
  * @notice Stateless OrchestratorV3 lifecycle hook enforcing maker-owned, payment-method-specific
  * curated group policies during admission. Settlement and cancellation are no-ops in this version.
  * @dev Group iteration is bounded by MakerGroupPolicy.MAX_GROUPS_PER_PAYMENT_METHOD.
  */
-contract MakerGroupRiskHook is IIntentRiskHook {
+contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     /* ============ State Variables ============ */
 
     IOrchestratorV3 public immutable orchestrator;
@@ -55,7 +55,7 @@ contract MakerGroupRiskHook is IIntentRiskHook {
     /* ============ Lifecycle Callbacks ============ */
 
     /**
-     * @inheritdoc IIntentRiskHook
+     * @inheritdoc IIntentLifecycleHook
      */
     function onIntentCreated(bytes32 _intentHash) external view override onlyOrchestrator {
         IOrchestratorV3.RiskIntentData memory intent = orchestrator.getRiskIntent(_intentHash);
@@ -78,12 +78,12 @@ contract MakerGroupRiskHook is IIntentRiskHook {
     }
 
     /**
-     * @inheritdoc IIntentRiskHook
+     * @inheritdoc IIntentLifecycleHook
      */
     function onIntentCancelled(bytes32) external view override onlyOrchestrator {}
 
     /**
-     * @inheritdoc IIntentRiskHook
+     * @inheritdoc IIntentLifecycleHook
      */
     function settleIntent(RiskSettlementContext calldata) external view override onlyOrchestrator {}
 

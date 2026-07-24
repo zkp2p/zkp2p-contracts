@@ -5,7 +5,7 @@ pragma solidity ^0.8.18;
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
+import { IIntentLifecycleHook } from "../interfaces/IIntentLifecycleHook.sol";
 import { BoundedCall } from "./BoundedCall.sol";
 
 /**
@@ -47,9 +47,9 @@ library RiskSettlementExecutor {
      * @return fundsConsumed Whether the hook consumed the exact gross amount before ordinary distribution.
      */
     function execute(
-        IIntentRiskHook _riskHook,
+        IIntentLifecycleHook _riskHook,
         IERC20 _token,
-        IIntentRiskHook.RiskSettlementContext memory _context,
+        IIntentLifecycleHook.RiskSettlementContext memory _context,
         uint256 _gasLimit,
         uint256 _maxReturnDataSize
     ) public returns (bool fundsConsumed) {

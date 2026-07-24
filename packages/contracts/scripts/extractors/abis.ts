@@ -23,13 +23,13 @@ const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
   RiskManager: 'contracts/RiskManager.sol/RiskManager.json',
   StakeVault: 'contracts/StakeVault.sol/StakeVault.json',
   OrchestratorV3: 'contracts/OrchestratorV3.sol/OrchestratorV3.json',
-  IIntentRiskHook: 'contracts/interfaces/IIntentRiskHook.sol/IIntentRiskHook.json',
+  IIntentLifecycleHook: 'contracts/interfaces/IIntentLifecycleHook.sol/IIntentLifecycleHook.json',
   NullifierRegistryV2: 'contracts/registries/NullifierRegistryV2.sol/NullifierRegistryV2.json',
   UnifiedPaymentVerifierV3:
     'contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol/UnifiedPaymentVerifierV3.json',
   AddressGroupRegistry: 'contracts/registries/AddressGroupRegistry.sol/AddressGroupRegistry.json',
   MakerGroupPolicy: 'contracts/risk/MakerGroupPolicy.sol/MakerGroupPolicy.json',
-  MakerGroupRiskHook: 'contracts/hooks/MakerGroupRiskHook.sol/MakerGroupRiskHook.json',
+  IntentLifecycleHookV1: 'contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json',
 };
 
 function ensureDir(dir: string) {

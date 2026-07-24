@@ -90,7 +90,7 @@ The first minimal global hook is the independent maker-group stack:
   onchain.
 - `MakerGroupPolicy`: each maker owns a bounded list of up to 10 allowed groups for each payment method,
   plus an explicit `groupsEnabled` switch. The policy survives global hook replacement.
-- `MakerGroupRiskHook`: a stateless admission hook that allows a taker when the maker's policy is disabled
+- `IntentLifecycleHookV1`: a stateless admission hook that allows a taker when the maker's policy is disabled
   or when the taker belongs to at least one configured active group. Enabled policies with no configured
   groups fail closed. Settlement and cancellation are no-ops in this version.
 

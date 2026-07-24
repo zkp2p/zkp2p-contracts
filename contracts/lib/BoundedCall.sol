@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.18;
 
-import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
+import { IIntentLifecycleHook } from "../interfaces/IIntentLifecycleHook.sol";
 
 /**
  * @title BoundedCall
@@ -35,7 +35,7 @@ library BoundedCall {
      * @param _maxReturnDataSize Maximum revert-data bytes copied from the hook.
      */
     function executeRiskAdmission(
-        IIntentRiskHook _riskHook,
+        IIntentLifecycleHook _riskHook,
         bytes32 _intentHash,
         uint256 _gasLimit,
         uint256 _maxReturnDataSize
@@ -49,7 +49,7 @@ library BoundedCall {
             address(_riskHook),
             _gasLimit,
             _maxReturnDataSize,
-            abi.encodeCall(IIntentRiskHook.onIntentCreated, (_intentHash))
+            abi.encodeCall(IIntentLifecycleHook.onIntentCreated, (_intentHash))
         );
         if (!success) revert RiskHookAdmissionFailed(_intentHash, address(_riskHook), revertData);
     }
@@ -64,8 +64,8 @@ library BoundedCall {
      * @param _maxReturnDataSize Maximum revert-data bytes copied from the hook.
      */
     function executeRiskSettlement(
-        IIntentRiskHook _riskHook,
-        IIntentRiskHook.RiskSettlementContext memory _context,
+        IIntentLifecycleHook _riskHook,
+        IIntentLifecycleHook.RiskSettlementContext memory _context,
         uint256 _gasLimit,
         uint256 _maxReturnDataSize
     ) public {
@@ -73,7 +73,7 @@ library BoundedCall {
             address(_riskHook),
             _gasLimit,
             _maxReturnDataSize,
-            abi.encodeCall(IIntentRiskHook.settleIntent, (_context))
+            abi.encodeCall(IIntentLifecycleHook.settleIntent, (_context))
         );
         if (!success) {
             revert RiskHookSettlementFailed(_context.intentHash, address(_riskHook), revertData);
@@ -93,7 +93,7 @@ library BoundedCall {
      * @return success Whether the callback completed successfully.
      */
     function executeRiskCancellation(
-        IIntentRiskHook _riskHook,
+        IIntentLifecycleHook _riskHook,
         bytes32 _intentHash,
         uint256 _gasLimit,
         uint256 _maxReturnDataSize
@@ -103,7 +103,7 @@ library BoundedCall {
             emit RiskHookCallbackFailed(
                 _intentHash,
                 address(_riskHook),
-                IIntentRiskHook.onIntentCancelled.selector,
+                IIntentLifecycleHook.onIntentCancelled.selector,
                 bytes("")
             );
             return false;
@@ -124,13 +124,13 @@ library BoundedCall {
             address(_riskHook),
             _gasLimit,
             _maxReturnDataSize,
-            abi.encodeCall(IIntentRiskHook.onIntentCancelled, (_intentHash))
+            abi.encodeCall(IIntentLifecycleHook.onIntentCancelled, (_intentHash))
         );
         if (!success) {
             emit RiskHookCallbackFailed(
                 _intentHash,
                 address(_riskHook),
-                IIntentRiskHook.onIntentCancelled.selector,
+                IIntentLifecycleHook.onIntentCancelled.selector,
                 revertData
             );
         }

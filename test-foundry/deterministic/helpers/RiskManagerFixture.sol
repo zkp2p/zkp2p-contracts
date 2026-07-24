@@ -11,7 +11,7 @@ import {RiskManager} from "../../../contracts/RiskManager.sol";
 import {StakeVault} from "../../../contracts/StakeVault.sol";
 import {IAttestationVerifier} from "../../../contracts/interfaces/IAttestationVerifier.sol";
 import {IEscrowV2} from "../../../contracts/interfaces/IEscrowV2.sol";
-import {IIntentRiskHook} from "../../../contracts/interfaces/IIntentRiskHook.sol";
+import {IIntentLifecycleHook} from "../../../contracts/interfaces/IIntentLifecycleHook.sol";
 import {INullifierRegistryV2} from "../../../contracts/interfaces/INullifierRegistryV2.sol";
 import {IOrchestratorV3} from "../../../contracts/interfaces/IOrchestratorV3.sol";
 import {IPostIntentHookV2} from "../../../contracts/interfaces/IPostIntentHookV2.sol";
@@ -211,7 +211,7 @@ contract RiskOrchestratorMock {
         cancellationAt[_intentHash] = _cancelledAt;
     }
 
-    function settle(RiskManager _manager, IIntentRiskHook.RiskSettlementContext calldata _context) external {
+    function settle(RiskManager _manager, IIntentLifecycleHook.RiskSettlementContext calldata _context) external {
         IERC20 token = IERC20(_context.token);
         token.approve(address(_manager), _context.grossAmount);
         _manager.settleIntent(_context);
@@ -317,14 +317,14 @@ abstract contract RiskManagerFixture is Test {
     function _feePlan(uint256 _grossAmount, uint256 _protocolFee, uint256 _referralFee)
         internal
         view
-        returns (IIntentRiskHook.FeeAllocation[] memory allocations, uint256 executableAmount)
+        returns (IIntentLifecycleHook.FeeAllocation[] memory allocations, uint256 executableAmount)
     {
-        allocations = new IIntentRiskHook.FeeAllocation[](2);
-        allocations[0] = IIntentRiskHook.FeeAllocation({
-            feeType: IIntentRiskHook.FeeType.PROTOCOL, recipient: protocolFeeRecipient, amount: _protocolFee
+        allocations = new IIntentLifecycleHook.FeeAllocation[](2);
+        allocations[0] = IIntentLifecycleHook.FeeAllocation({
+            feeType: IIntentLifecycleHook.FeeType.PROTOCOL, recipient: protocolFeeRecipient, amount: _protocolFee
         });
-        allocations[1] = IIntentRiskHook.FeeAllocation({
-            feeType: IIntentRiskHook.FeeType.REFERRAL, recipient: referralFeeRecipient, amount: _referralFee
+        allocations[1] = IIntentLifecycleHook.FeeAllocation({
+            feeType: IIntentLifecycleHook.FeeType.REFERRAL, recipient: referralFeeRecipient, amount: _referralFee
         });
         executableAmount = _grossAmount - _protocolFee - _referralFee;
     }
@@ -335,10 +335,10 @@ abstract contract RiskManagerFixture is Test {
         uint256 _protocolFee,
         uint256 _referralFee,
         bool _isManualRelease
-    ) internal view returns (IIntentRiskHook.RiskSettlementContext memory context) {
-        (IIntentRiskHook.FeeAllocation[] memory allocations, uint256 executableAmount) =
+    ) internal view returns (IIntentLifecycleHook.RiskSettlementContext memory context) {
+        (IIntentLifecycleHook.FeeAllocation[] memory allocations, uint256 executableAmount) =
             _feePlan(_grossAmount, _protocolFee, _referralFee);
-        context = IIntentRiskHook.RiskSettlementContext({
+        context = IIntentLifecycleHook.RiskSettlementContext({
             intentHash: _intentHash,
             token: address(token),
             recipient: payoutRecipient,

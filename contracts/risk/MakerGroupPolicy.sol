@@ -11,7 +11,7 @@ import {IMakerGroupPolicy} from "../interfaces/IMakerGroupPolicy.sol";
  * deployment. Each maker explicitly toggles enforcement and maintains a bounded group list
  * for each payment method.
  * @dev Enabling an empty policy is allowed and intentionally fails closed when evaluated by
- * MakerGroupRiskHook. This makes the master switch safe during partial configuration.
+ * IntentLifecycleHookV1. This makes the master switch safe during partial configuration.
  */
 contract MakerGroupPolicy is IMakerGroupPolicy {
     /* ============ Constants ============ */
