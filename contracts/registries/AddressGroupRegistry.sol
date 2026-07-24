@@ -8,9 +8,10 @@ import { IWhitelistResolver } from "../interfaces/IWhitelistResolver.sol";
 /**
  * @title AddressGroupRegistry
  * @notice Permissionless registry of curator-managed address groups. Groups are identified by a
- * sequential uint256 id (starting at 1) and are never deleted. Only the group curator mutates
- * members and the resolver; shared control is achieved by using a multisig as the curator.
- * @dev The integer id is only unique within one registry deployment on one chain — off-chain
+ * bytes32 id derived as keccak256(abi.encode(curator, groupCount)) and are never deleted. Only
+ * the group curator mutates members and the resolver; shared control is achieved by using a
+ * multisig as the curator.
+ * @dev The id is only unique within one registry deployment on one chain — off-chain
  * consumers must key groups by (chainId, registryAddress, groupId).
  *
  * TRUST MODEL: attaching a group to a maker's admission policy via WhitelistPolicy.addAllowedGroups
@@ -31,25 +32,25 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
 
     /* ============ Events ============ */
 
-    event GroupCreated(uint256 indexed groupId, address indexed curator, string name);
-    event GroupCuratorTransferStarted(uint256 indexed groupId, address indexed curator, address indexed pendingCurator);
-    event GroupCuratorTransferCancelled(uint256 indexed groupId, address indexed cancelledPendingCurator);
-    event GroupCuratorTransferred(uint256 indexed groupId, address indexed previousCurator, address indexed newCurator);
-    event MemberAdded(uint256 indexed groupId, address indexed member);
-    event MemberRemoved(uint256 indexed groupId, address indexed member);
-    event ResolverSet(uint256 indexed groupId, address indexed oldResolver, address indexed newResolver);
-    event GroupVisibilityChanged(uint256 indexed groupId, bool isPublic);
+    event GroupCreated(bytes32 indexed groupId, address indexed curator, string name);
+    event GroupCuratorTransferStarted(bytes32 indexed groupId, address indexed curator, address indexed pendingCurator);
+    event GroupCuratorTransferCancelled(bytes32 indexed groupId, address indexed cancelledPendingCurator);
+    event GroupCuratorTransferred(bytes32 indexed groupId, address indexed previousCurator, address indexed newCurator);
+    event MemberAdded(bytes32 indexed groupId, address indexed member);
+    event MemberRemoved(bytes32 indexed groupId, address indexed member);
+    event ResolverSet(bytes32 indexed groupId, address indexed oldResolver, address indexed newResolver);
+    event GroupVisibilityChanged(bytes32 indexed groupId, bool isPublic);
 
     /* ============ Errors ============ */
 
-    error GroupDoesNotExist(uint256 groupId);
+    error GroupDoesNotExist(bytes32 groupId);
     error UnauthorizedGroupCurator(address caller, address curator);
     error UnauthorizedPendingCurator(address caller, address pendingCurator);
-    error NoPendingTransfer(uint256 groupId);
+    error NoPendingTransfer(bytes32 groupId);
     error ZeroAddress();
     error EmptyArray();
     error ResolverNotContract(address resolver);
-    error GroupNotPublic(uint256 groupId);
+    error GroupNotPublic(bytes32 groupId);
 
     /* ============ Constants ============ */
 
@@ -59,19 +60,21 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
 
     /* ============ State Variables ============ */
 
-    uint256 public override groupCount;                                 // last assigned id; ids start at 1
+    /// @notice Number of groups created (the counter used to derive group ids).
+    uint256 public override groupCount;
 
-    mapping(uint256 => Group) internal groups;
+    mapping(bytes32 => Group) internal groups;
     // groupId => account => curated membership
-    mapping(uint256 => mapping(address => bool)) public members;
+    mapping(bytes32 => mapping(address => bool)) public members;
 
     /* ============ External Functions ============ */
 
     /**
-     * @notice Creates a new group curated by the caller.
+     * @notice Creates a new group curated by the caller, with an id derived from the curator
+     * and global counter.
      * @param _name    Human-readable label, emitted in the event only (not stored).
      */
-    function createGroup(string calldata _name) external override returns (uint256 groupId) {
+    function createGroup(string calldata _name) external override returns (bytes32 groupId) {
         return _createGroup(msg.sender, false, _name);
     }
 
@@ -80,7 +83,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
      * @param _groupId    Group id.
      * @param _newCurator   Proposed new curator (must be nonzero; cancellation is a dedicated function).
      */
-    function transferGroupCurator(uint256 _groupId, address _newCurator) external override {
+    function transferGroupCurator(bytes32 _groupId, address _newCurator) external override {
         Group storage group = _requireGroupCurator(_groupId);
         if (_newCurator == address(0)) revert ZeroAddress();
 
@@ -92,7 +95,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
      * @notice Cancels a pending curator transfer.
      * @param _groupId    Group id.
      */
-    function cancelGroupCuratorTransfer(uint256 _groupId) external override {
+    function cancelGroupCuratorTransfer(bytes32 _groupId) external override {
         Group storage group = _requireGroupCurator(_groupId);
         address pendingCurator = group.pendingCurator;
         if (pendingCurator == address(0)) revert NoPendingTransfer(_groupId);
@@ -106,7 +109,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
      * The previous curator retains no access after acceptance.
      * @param _groupId    Group id.
      */
-    function acceptGroupCurator(uint256 _groupId) external override {
+    function acceptGroupCurator(bytes32 _groupId) external override {
         Group storage group = groups[_groupId];
         if (group.curator == address(0)) revert GroupDoesNotExist(_groupId);
         if (msg.sender != group.pendingCurator) revert UnauthorizedPendingCurator(msg.sender, group.pendingCurator);
@@ -122,7 +125,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
      * @param _groupId    Group id.
      * @param _members    Members to add.
      */
-    function addMembers(uint256 _groupId, address[] calldata _members) external override {
+    function addMembers(bytes32 _groupId, address[] calldata _members) external override {
         _requireGroupCurator(_groupId);
         if (_members.length == 0) revert EmptyArray();
 
@@ -136,7 +139,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
      * @param _groupId    Group id.
      * @param _members    Members to remove.
      */
-    function removeMembers(uint256 _groupId, address[] calldata _members) external override {
+    function removeMembers(bytes32 _groupId, address[] calldata _members) external override {
         _requireGroupCurator(_groupId);
         if (_members.length == 0) revert EmptyArray();
 
@@ -155,7 +158,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
      * @param _groupId    Group id.
      * @param _isPublic   Whether the group is public.
      */
-    function setGroupVisibility(uint256 _groupId, bool _isPublic) external override {
+    function setGroupVisibility(bytes32 _groupId, bool _isPublic) external override {
         Group storage group = _requireGroupCurator(_groupId);
         group.isPublic = _isPublic;
         emit GroupVisibilityChanged(_groupId, _isPublic);
@@ -165,7 +168,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
      * @notice Joins a public group as the caller.
      * @param _groupId    Group id.
      */
-    function joinGroup(uint256 _groupId) external override {
+    function joinGroup(bytes32 _groupId) external override {
         _requirePublicGroup(_groupId);
         _addMember(_groupId, msg.sender);
     }
@@ -174,7 +177,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
      * @notice Leaves a public group's curated membership as the caller.
      * @param _groupId    Group id.
      */
-    function leaveGroup(uint256 _groupId) external override {
+    function leaveGroup(bytes32 _groupId) external override {
         _requirePublicGroup(_groupId);
         if (members[_groupId][msg.sender]) {
             members[_groupId][msg.sender] = false;
@@ -189,7 +192,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
      * @param _groupId    Group id.
      * @param _resolver   Resolver contract (address(0) to clear).
      */
-    function setResolver(uint256 _groupId, address _resolver) external override {
+    function setResolver(bytes32 _groupId, address _resolver) external override {
         Group storage group = _requireGroupCurator(_groupId);
         if (_resolver != address(0) && _resolver.code.length == 0) revert ResolverNotContract(_resolver);
 
@@ -206,7 +209,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
      * @param _groupId    Group id.
      * @param _account    Account to check.
      */
-    function isMember(uint256 _groupId, address _account) public view override returns (bool) {
+    function isMember(bytes32 _groupId, address _account) public view override returns (bool) {
         if (members[_groupId][_account]) return true;
 
         address resolver = groups[_groupId].resolver;
@@ -219,7 +222,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
      * @notice Returns whether a group exists (input validation only — not a trust guarantee).
      * @param _groupId    Group id.
      */
-    function groupExists(uint256 _groupId) external view override returns (bool) {
+    function groupExists(bytes32 _groupId) external view override returns (bool) {
         return groups[_groupId].curator != address(0);
     }
 
@@ -227,7 +230,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
      * @notice Returns a group's governance state for atomic inspection.
      * @param _groupId    Group id.
      */
-    function getGroup(uint256 _groupId)
+    function getGroup(bytes32 _groupId)
         external
         view
         override
@@ -239,14 +242,15 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
 
     /* ============ Internal Functions ============ */
 
-    function _createGroup(address _curator, bool _isPublic, string memory _name) internal returns (uint256 groupId) {
-        groupId = ++groupCount;
+    function _createGroup(address _curator, bool _isPublic, string memory _name) internal returns (bytes32 groupId) {
+        groupId = keccak256(abi.encode(_curator, groupCount));
+        ++groupCount;
         groups[groupId].curator = _curator;
         groups[groupId].isPublic = _isPublic;
         emit GroupCreated(groupId, _curator, _name);
     }
 
-    function _addMember(uint256 _groupId, address _member) internal {
+    function _addMember(bytes32 _groupId, address _member) internal {
         if (_member == address(0)) revert ZeroAddress();
         if (!members[_groupId][_member]) {
             members[_groupId][_member] = true;
@@ -254,13 +258,13 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
         }
     }
 
-    function _requireGroupCurator(uint256 _groupId) internal view returns (Group storage group) {
+    function _requireGroupCurator(bytes32 _groupId) internal view returns (Group storage group) {
         group = groups[_groupId];
         if (group.curator == address(0)) revert GroupDoesNotExist(_groupId);
         if (msg.sender != group.curator) revert UnauthorizedGroupCurator(msg.sender, group.curator);
     }
 
-    function _requirePublicGroup(uint256 _groupId) internal view {
+    function _requirePublicGroup(bytes32 _groupId) internal view {
         Group storage group = groups[_groupId];
         if (group.curator == address(0)) revert GroupDoesNotExist(_groupId);
         if (!group.isPublic) revert GroupNotPublic(_groupId);
@@ -273,7 +277,7 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
      * 32 bytes of returndata, and the first word to be exactly 1. Any failure (revert,
      * out-of-gas, short or malformed return, no code at call time) evaluates to false.
      */
-    function _resolverSaysYes(address _resolver, uint256 _groupId, address _account) internal view returns (bool result) {
+    function _resolverSaysYes(address _resolver, bytes32 _groupId, address _account) internal view returns (bool result) {
         bytes memory callData = abi.encodeWithSelector(IWhitelistResolver.isMember.selector, _groupId, _account);
         uint256 gasLimit = _resolverGasLimit();
         assembly ("memory-safe") {

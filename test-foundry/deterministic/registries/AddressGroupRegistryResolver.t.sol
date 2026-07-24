@@ -8,13 +8,13 @@ import {AddressGroupRegistryGasHarness} from "contracts/mocks/AddressGroupRegist
 import {WhitelistResolverMock} from "contracts/mocks/WhitelistResolverMock.sol";
 
 contract AddressGroupRegistryResolverTest is Test {
-    event ResolverSet(uint256 indexed groupId, address indexed oldResolver, address indexed newResolver);
+    event ResolverSet(bytes32 indexed groupId, address indexed oldResolver, address indexed newResolver);
 
     AddressGroupRegistry internal registry;
     WhitelistResolverMock internal resolver;
     address internal alice;
     address internal bob;
-    uint256 internal groupId;
+    bytes32 internal groupId;
 
     function setUp() public {
         registry = new AddressGroupRegistry();
@@ -184,7 +184,7 @@ contract AddressGroupRegistryResolverTest is Test {
     function test_HarnessOneMegabyteReturndataCopiesOnlyBoundedResult() public {
         AddressGroupRegistryGasHarness harness = new AddressGroupRegistryGasHarness();
         vm.prank(alice);
-        uint256 harnessGroup = harness.createGroup("harness");
+        bytes32 harnessGroup = harness.createGroup("harness");
         vm.prank(alice);
         harness.setResolver(harnessGroup, address(resolver));
         harness.setResolverGasLimit(30_000_000);

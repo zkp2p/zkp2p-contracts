@@ -14,5 +14,5 @@ interface IWhitelistResolver {
      * @param _groupId    Group id in the calling registry.
      * @param _account    Account to check.
      */
-    function isMember(uint256 _groupId, address _account) external view returns (bool);
+    function isMember(bytes32 _groupId, address _account) external view returns (bool);
 }

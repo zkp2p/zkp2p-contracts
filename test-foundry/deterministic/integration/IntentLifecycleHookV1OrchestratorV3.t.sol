@@ -14,9 +14,9 @@ import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.so
 import {OrchestratorV2LegacyFixture} from "../helpers/OrchestratorV2LegacyFixture.sol";
 
 contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture {
-    uint256 internal PEERS;
-    uint256 internal PEER_PLUSES;
-    uint256 internal PEER_MERCHANTS;
+    bytes32 internal PEERS;
+    bytes32 internal PEER_PLUSES;
+    bytes32 internal PEER_MERCHANTS;
 
     AddressGroupRegistry internal groupRegistry;
     WhitelistPolicy internal policy;
@@ -177,7 +177,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
     }
 
     function test_MaximumPolicySizeCompletesWithinMinimumBoundedCallbackGas() public {
-        uint256[] memory groups = new uint256[](10);
+        bytes32[] memory groups = new bytes32[](10);
         groups[0] = PEERS;
         for (uint256 i = 1; i < groups.length; i++) {
             groups[i] = groupRegistry.createGroup("Bounded Group");
@@ -232,21 +232,21 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         _addMembers(PEERS, taker);
     }
 
-    function _addMembers(uint256 _groupId, address _member) internal {
+    function _addMembers(bytes32 _groupId, address _member) internal {
         groupRegistry.addMembers(_groupId, _addresses(_member));
     }
 
-    function _groupIds(uint256 _first) internal pure returns (uint256[] memory groupIds) {
-        groupIds = new uint256[](1);
+    function _groupIds(bytes32 _first) internal pure returns (bytes32[] memory groupIds) {
+        groupIds = new bytes32[](1);
         groupIds[0] = _first;
     }
 
-    function _groupIds(uint256 _first, uint256 _second, uint256 _third)
+    function _groupIds(bytes32 _first, bytes32 _second, bytes32 _third)
         internal
         pure
-        returns (uint256[] memory groupIds)
+        returns (bytes32[] memory groupIds)
     {
-        groupIds = new uint256[](3);
+        groupIds = new bytes32[](3);
         groupIds[0] = _first;
         groupIds[1] = _second;
         groupIds[2] = _third;
