@@ -85,19 +85,19 @@ owner-controlled global `lifecycleHook` for future intents:
 
 The first minimal global hook is the independent maker whitelist stack:
 
-- `AddressGroupRegistry`: governance registers stable public group IDs, manages metadata and active state,
-  and assigns curators. Curators add or remove members; membership is event-indexed rather than enumerable
-  onchain.
-- `WhitelistPolicy`: each maker owns a direct address whitelist and a bounded list of up to 10 allowed groups,
-  plus an explicit `enabled` switch. The policy survives global hook replacement.
+- `AddressGroupRegistry`: anyone may create a curator-managed group. Curators can add or remove members,
+  transfer control, configure an optional membership resolver, and opt into self-service membership.
+- `WhitelistPolicy`: each maker owns a maker-wide direct address whitelist plus a payment-method-specific
+  `enabled` switch and bounded list of up to 10 allowed groups. The policy survives global hook replacement.
 - `IntentLifecycleHookV1`: a stateless admission hook that delegates to `WhitelistPolicy`, allowing a taker when
-  the maker's policy is disabled, the taker is directly whitelisted, or the taker belongs to at least one
-  configured active group. Enabled policies with no matching address or group fail closed. Settlement and
-  cancellation are no-ops in this version.
+  enforcement is disabled for the intent's payment method, the taker is directly whitelisted by the maker, or
+  the taker belongs to at least one group enabled for that payment method. Enabled policies with no matching
+  address or group fail closed. Settlement and cancellation are no-ops in this version.
 
-Canonical deployment IDs are `keccak256` hashes of `peers`, `peer-pluses`, and `peer-merchants`. Group
-enforcement is maker-level, not payment-method- or deposit-level. These V3 changes do not modify
-`EscrowV2`, require an Escrow redeployment, or alter the production `OrchestratorV2` whitelist path.
+Group IDs are derived from the curator and registry group counter, and offchain consumers must key them by
+chain, registry address, and group ID. Group enforcement is scoped by maker and payment method, while direct
+address trust is maker-wide; neither is deposit-specific. These V3 changes do not modify `EscrowV2`, require
+an Escrow redeployment, or alter the production `OrchestratorV2` whitelist path.
 
 ## V2 Contract Inventory
 

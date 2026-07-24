@@ -8,6 +8,9 @@ import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 
 contract WhitelistPolicyTest is Test {
+    bytes32 internal constant VENMO = keccak256("venmo");
+    bytes32 internal constant ZELLE = keccak256("zelle");
+
     bytes32 internal PEERS;
     bytes32 internal PEER_PLUSES;
     bytes32 internal PEER_MERCHANTS;
@@ -20,11 +23,11 @@ contract WhitelistPolicyTest is Test {
     AddressGroupRegistry internal registry;
     WhitelistPolicy internal policy;
 
-    event EnabledUpdated(address indexed maker, bool enabled);
+    event EnabledUpdated(address indexed maker, bytes32 indexed paymentMethod, bool enabled);
     event AddressWhitelisted(address indexed maker, address indexed taker);
     event AddressRemovedFromWhitelist(address indexed maker, address indexed taker);
-    event AllowedGroupAdded(address indexed maker, bytes32 indexed groupId);
-    event AllowedGroupRemoved(address indexed maker, bytes32 indexed groupId);
+    event AllowedGroupAdded(address indexed maker, bytes32 indexed paymentMethod, bytes32 indexed groupId);
+    event AllowedGroupRemoved(address indexed maker, bytes32 indexed paymentMethod, bytes32 indexed groupId);
 
     function setUp() public {
         maker = makeAddr("maker");
@@ -46,18 +49,19 @@ contract WhitelistPolicyTest is Test {
         new WhitelistPolicy(AddressGroupRegistry(maker));
     }
 
-    function test_SetEnabledIsScopedToMaker() public {
-        vm.expectEmit(true, false, false, true, address(policy));
-        emit EnabledUpdated(maker, true);
+    function test_SetEnabledIsScopedToMakerAndPaymentMethod() public {
+        vm.expectEmit(true, true, false, true, address(policy));
+        emit EnabledUpdated(maker, VENMO, true);
         vm.prank(maker);
-        policy.setEnabled(true);
+        policy.setEnabled(VENMO, true);
 
-        assertTrue(policy.enabled(maker));
-        assertFalse(policy.enabled(otherMaker));
+        assertTrue(policy.enabled(maker, VENMO));
+        assertFalse(policy.enabled(maker, ZELLE));
+        assertFalse(policy.enabled(otherMaker, VENMO));
 
         vm.prank(maker);
-        policy.setEnabled(false);
-        assertFalse(policy.enabled(maker));
+        policy.setEnabled(VENMO, false);
+        assertFalse(policy.enabled(maker, VENMO));
     }
 
     function test_AddWhitelistedAddressesIsIdempotentAndEnumerableByGetter() public {
@@ -119,36 +123,38 @@ contract WhitelistPolicyTest is Test {
     function test_AddAllowedGroupsSupportsViewsAndDeduplicates() public {
         bytes32[] memory groups = _groupIds(PEERS, PEER_PLUSES);
 
-        vm.expectEmit(true, true, false, true, address(policy));
-        emit AllowedGroupAdded(maker, PEERS);
-        vm.expectEmit(true, true, false, true, address(policy));
-        emit AllowedGroupAdded(maker, PEER_PLUSES);
+        vm.expectEmit(true, true, true, true, address(policy));
+        emit AllowedGroupAdded(maker, VENMO, PEERS);
+        vm.expectEmit(true, true, true, true, address(policy));
+        emit AllowedGroupAdded(maker, VENMO, PEER_PLUSES);
         vm.prank(maker);
-        policy.addAllowedGroups(groups);
+        policy.addAllowedGroups(VENMO, groups);
 
-        assertEq(policy.getAllowedGroups(maker), groups);
-        assertTrue(policy.isGroupAllowed(maker, PEERS));
-        assertTrue(policy.isGroupAllowed(maker, PEER_PLUSES));
-        assertFalse(policy.isGroupAllowed(otherMaker, PEERS));
+        assertEq(policy.getAllowedGroups(maker, VENMO), groups);
+        assertEq(policy.getAllowedGroups(maker, ZELLE).length, 0);
+        assertTrue(policy.isGroupAllowed(maker, VENMO, PEERS));
+        assertTrue(policy.isGroupAllowed(maker, VENMO, PEER_PLUSES));
+        assertFalse(policy.isGroupAllowed(maker, ZELLE, PEERS));
+        assertFalse(policy.isGroupAllowed(otherMaker, VENMO, PEERS));
 
         vm.recordLogs();
         vm.prank(maker);
-        policy.addAllowedGroups(groups);
+        policy.addAllowedGroups(VENMO, groups);
         assertEq(vm.getRecordedLogs().length, 0);
-        assertEq(policy.getAllowedGroups(maker).length, 2);
+        assertEq(policy.getAllowedGroups(maker, VENMO).length, 2);
     }
 
     function test_AddAllowedGroupsRejectsEmptyAndUnknownGroups() public {
         vm.expectRevert(WhitelistPolicy.EmptyArray.selector);
         vm.prank(maker);
-        policy.addAllowedGroups(new bytes32[](0));
+        policy.addAllowedGroups(VENMO, new bytes32[](0));
 
         bytes32 unknownGroup = bytes32(uint256(999));
         vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.GroupDoesNotExist.selector, unknownGroup));
         vm.prank(maker);
-        policy.addAllowedGroups(_groupIds(unknownGroup));
+        policy.addAllowedGroups(VENMO, _groupIds(unknownGroup));
 
-        assertEq(policy.getAllowedGroups(maker).length, 0);
+        assertEq(policy.getAllowedGroups(maker, VENMO).length, 0);
     }
 
     function test_AddAllowedGroupsRejectsEleventhUniqueGroup() public {
@@ -158,85 +164,96 @@ contract WhitelistPolicyTest is Test {
         }
 
         vm.prank(maker);
-        policy.addAllowedGroups(firstTen);
-        assertEq(policy.getAllowedGroups(maker).length, policy.MAX_GROUPS_PER_MAKER());
+        policy.addAllowedGroups(VENMO, firstTen);
+        assertEq(policy.getAllowedGroups(maker, VENMO).length, policy.MAX_GROUPS_PER_PAYMENT_METHOD());
 
         bytes32 eleventh = registry.createGroup("Eleventh Group");
         vm.expectRevert(
             abi.encodeWithSelector(
-                WhitelistPolicy.TooManyGroups.selector, policy.MAX_GROUPS_PER_MAKER() + 1, policy.MAX_GROUPS_PER_MAKER()
+                WhitelistPolicy.TooManyGroups.selector,
+                policy.MAX_GROUPS_PER_PAYMENT_METHOD() + 1,
+                policy.MAX_GROUPS_PER_PAYMENT_METHOD()
             )
         );
         vm.prank(maker);
-        policy.addAllowedGroups(_groupIds(eleventh));
+        policy.addAllowedGroups(VENMO, _groupIds(eleventh));
+
+        vm.prank(maker);
+        policy.addAllowedGroups(ZELLE, _groupIds(eleventh));
+        assertTrue(policy.isGroupAllowed(maker, ZELLE, eleventh));
     }
 
     function test_RemoveAllowedGroupsUsesSwapAndPopAndIsIdempotent() public {
         vm.prank(maker);
-        policy.addAllowedGroups(_groupIds(PEERS, PEER_PLUSES, PEER_MERCHANTS));
+        policy.addAllowedGroups(VENMO, _groupIds(PEERS, PEER_PLUSES, PEER_MERCHANTS));
 
-        vm.expectEmit(true, true, false, true, address(policy));
-        emit AllowedGroupRemoved(maker, PEERS);
+        vm.expectEmit(true, true, true, true, address(policy));
+        emit AllowedGroupRemoved(maker, VENMO, PEERS);
         vm.prank(maker);
-        policy.removeAllowedGroups(_groupIds(PEERS));
+        policy.removeAllowedGroups(VENMO, _groupIds(PEERS));
 
-        bytes32[] memory remaining = policy.getAllowedGroups(maker);
+        bytes32[] memory remaining = policy.getAllowedGroups(maker, VENMO);
         assertEq(remaining.length, 2);
         assertEq(remaining[0], PEER_MERCHANTS);
         assertEq(remaining[1], PEER_PLUSES);
-        assertFalse(policy.isGroupAllowed(maker, PEERS));
-        assertTrue(policy.isGroupAllowed(maker, PEER_PLUSES));
-        assertTrue(policy.isGroupAllowed(maker, PEER_MERCHANTS));
+        assertFalse(policy.isGroupAllowed(maker, VENMO, PEERS));
+        assertTrue(policy.isGroupAllowed(maker, VENMO, PEER_PLUSES));
+        assertTrue(policy.isGroupAllowed(maker, VENMO, PEER_MERCHANTS));
 
         vm.recordLogs();
         vm.prank(maker);
-        policy.removeAllowedGroups(_groupIds(PEERS));
+        policy.removeAllowedGroups(VENMO, _groupIds(PEERS));
         assertEq(vm.getRecordedLogs().length, 0);
     }
 
     function test_RemoveAllowedGroupsRejectsEmptyArray() public {
         vm.expectRevert(WhitelistPolicy.EmptyArray.selector);
         vm.prank(maker);
-        policy.removeAllowedGroups(new bytes32[](0));
+        policy.removeAllowedGroups(VENMO, new bytes32[](0));
     }
 
     function test_IsTakerAllowedReturnsTrueWhenPolicyDisabled() public view {
-        assertTrue(policy.isTakerAllowed(maker, taker));
+        assertTrue(policy.isTakerAllowed(maker, VENMO, taker));
     }
 
-    function test_IsTakerAllowedReturnsTrueForDirectWhitelist() public {
+    function test_DirectWhitelistIsMakerWideAcrossEnabledPaymentMethods() public {
         vm.startPrank(maker);
-        policy.setEnabled(true);
+        policy.setEnabled(VENMO, true);
+        policy.setEnabled(ZELLE, true);
         policy.addWhitelistedAddresses(_addresses(taker));
         vm.stopPrank();
 
-        assertTrue(policy.isTakerAllowed(maker, taker));
+        assertTrue(policy.isTakerAllowed(maker, VENMO, taker));
+        assertTrue(policy.isTakerAllowed(maker, ZELLE, taker));
     }
 
-    function test_IsTakerAllowedReturnsTrueForGroupMember() public {
+    function test_GroupAdmissionIsScopedToPaymentMethod() public {
         vm.startPrank(maker);
-        policy.setEnabled(true);
-        policy.addAllowedGroups(_groupIds(PEERS));
+        policy.setEnabled(VENMO, true);
+        policy.setEnabled(ZELLE, true);
+        policy.addAllowedGroups(VENMO, _groupIds(PEERS));
         vm.stopPrank();
         registry.addMembers(PEERS, _addresses(taker));
 
-        assertTrue(policy.isTakerAllowed(maker, taker));
+        assertTrue(policy.isTakerAllowed(maker, VENMO, taker));
+        assertFalse(policy.isTakerAllowed(maker, ZELLE, taker));
     }
 
     function test_IsTakerAllowedReturnsFalseForEnabledEmptyPolicy() public {
         vm.prank(maker);
-        policy.setEnabled(true);
+        policy.setEnabled(VENMO, true);
 
-        assertFalse(policy.isTakerAllowed(maker, taker));
+        assertFalse(policy.isTakerAllowed(maker, VENMO, taker));
+        assertTrue(policy.isTakerAllowed(maker, ZELLE, taker));
     }
 
     function test_IsTakerAllowedReturnsFalseForNonMember() public {
         vm.startPrank(maker);
-        policy.setEnabled(true);
-        policy.addAllowedGroups(_groupIds(PEERS));
+        policy.setEnabled(VENMO, true);
+        policy.addAllowedGroups(VENMO, _groupIds(PEERS));
         vm.stopPrank();
 
-        assertFalse(policy.isTakerAllowed(maker, taker));
+        assertFalse(policy.isTakerAllowed(maker, VENMO, taker));
     }
 
     function _groupIds(bytes32 _first) internal pure returns (bytes32[] memory groupIds) {

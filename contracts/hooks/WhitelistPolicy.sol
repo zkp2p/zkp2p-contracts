@@ -8,29 +8,29 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 /**
  * @title WhitelistPolicy
  * @notice Persistent maker-owned taker admission settings, independent from any lifecycle-hook deployment.
- * Each maker can allow direct addresses or members of a bounded list of curated groups.
- * @dev Enabling an empty policy is allowed and intentionally fails closed when evaluated.
+ * Each maker can trust direct addresses globally and configure a bounded list of curated groups per payment method.
+ * @dev Enabling an empty payment-method policy is allowed and intentionally fails closed when evaluated.
  */
 contract WhitelistPolicy is IWhitelistPolicy {
     /* ============ Constants ============ */
 
-    uint256 public constant MAX_GROUPS_PER_MAKER = 10;
+    uint256 public constant MAX_GROUPS_PER_PAYMENT_METHOD = 10;
 
     /* ============ State Variables ============ */
 
     IAddressGroupRegistry public immutable override groupRegistry;
 
-    mapping(address => bool) public override enabled;
+    mapping(address => mapping(bytes32 => bool)) public override enabled;
     mapping(address => mapping(address => bool)) public override isWhitelisted;
-    mapping(address => bytes32[]) internal allowedGroups;
+    mapping(address => mapping(bytes32 => bytes32[])) internal allowedGroups;
 
     /* ============ Events ============ */
 
-    event EnabledUpdated(address indexed maker, bool enabled);
+    event EnabledUpdated(address indexed maker, bytes32 indexed paymentMethod, bool enabled);
     event AddressWhitelisted(address indexed maker, address indexed taker);
     event AddressRemovedFromWhitelist(address indexed maker, address indexed taker);
-    event AllowedGroupAdded(address indexed maker, bytes32 indexed groupId);
-    event AllowedGroupRemoved(address indexed maker, bytes32 indexed groupId);
+    event AllowedGroupAdded(address indexed maker, bytes32 indexed paymentMethod, bytes32 indexed groupId);
+    event AllowedGroupRemoved(address indexed maker, bytes32 indexed paymentMethod, bytes32 indexed groupId);
 
     /* ============ Errors ============ */
 
@@ -55,9 +55,9 @@ contract WhitelistPolicy is IWhitelistPolicy {
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function setEnabled(bool _enabled) external override {
-        enabled[msg.sender] = _enabled;
-        emit EnabledUpdated(msg.sender, _enabled);
+    function setEnabled(bytes32 _paymentMethod, bool _enabled) external override {
+        enabled[msg.sender][_paymentMethod] = _enabled;
+        emit EnabledUpdated(msg.sender, _paymentMethod, _enabled);
     }
 
     /**
@@ -94,38 +94,38 @@ contract WhitelistPolicy is IWhitelistPolicy {
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function addAllowedGroups(bytes32[] calldata _groupIds) external override {
+    function addAllowedGroups(bytes32 _paymentMethod, bytes32[] calldata _groupIds) external override {
         if (_groupIds.length == 0) revert EmptyArray();
 
-        bytes32[] storage makerGroups = allowedGroups[msg.sender];
+        bytes32[] storage paymentMethodGroups = allowedGroups[msg.sender][_paymentMethod];
         for (uint256 i = 0; i < _groupIds.length; ++i) {
             bytes32 groupId = _groupIds[i];
             if (!groupRegistry.groupExists(groupId)) revert GroupDoesNotExist(groupId);
-            if (_containsGroup(makerGroups, groupId)) continue;
-            if (makerGroups.length == MAX_GROUPS_PER_MAKER) {
-                revert TooManyGroups(makerGroups.length + 1, MAX_GROUPS_PER_MAKER);
+            if (_containsGroup(paymentMethodGroups, groupId)) continue;
+            if (paymentMethodGroups.length == MAX_GROUPS_PER_PAYMENT_METHOD) {
+                revert TooManyGroups(paymentMethodGroups.length + 1, MAX_GROUPS_PER_PAYMENT_METHOD);
             }
 
-            makerGroups.push(groupId);
-            emit AllowedGroupAdded(msg.sender, groupId);
+            paymentMethodGroups.push(groupId);
+            emit AllowedGroupAdded(msg.sender, _paymentMethod, groupId);
         }
     }
 
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function removeAllowedGroups(bytes32[] calldata _groupIds) external override {
+    function removeAllowedGroups(bytes32 _paymentMethod, bytes32[] calldata _groupIds) external override {
         if (_groupIds.length == 0) revert EmptyArray();
 
-        bytes32[] storage makerGroups = allowedGroups[msg.sender];
+        bytes32[] storage paymentMethodGroups = allowedGroups[msg.sender][_paymentMethod];
         for (uint256 i = 0; i < _groupIds.length; ++i) {
             bytes32 groupId = _groupIds[i];
-            uint256 groupIndex = _findGroupIndex(makerGroups, groupId);
-            if (groupIndex == makerGroups.length) continue;
+            uint256 groupIndex = _findGroupIndex(paymentMethodGroups, groupId);
+            if (groupIndex == paymentMethodGroups.length) continue;
 
-            makerGroups[groupIndex] = makerGroups[makerGroups.length - 1];
-            makerGroups.pop();
-            emit AllowedGroupRemoved(msg.sender, groupId);
+            paymentMethodGroups[groupIndex] = paymentMethodGroups[paymentMethodGroups.length - 1];
+            paymentMethodGroups.pop();
+            emit AllowedGroupRemoved(msg.sender, _paymentMethod, groupId);
         }
     }
 
@@ -134,27 +134,42 @@ contract WhitelistPolicy is IWhitelistPolicy {
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function getAllowedGroups(address _maker) external view override returns (bytes32[] memory) {
-        return allowedGroups[_maker];
+    function getAllowedGroups(address _maker, bytes32 _paymentMethod)
+        external
+        view
+        override
+        returns (bytes32[] memory)
+    {
+        return allowedGroups[_maker][_paymentMethod];
     }
 
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function isGroupAllowed(address _maker, bytes32 _groupId) external view override returns (bool) {
-        return _containsGroup(allowedGroups[_maker], _groupId);
+    function isGroupAllowed(address _maker, bytes32 _paymentMethod, bytes32 _groupId)
+        external
+        view
+        override
+        returns (bool)
+    {
+        return _containsGroup(allowedGroups[_maker][_paymentMethod], _groupId);
     }
 
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function isTakerAllowed(address _maker, address _taker) external view override returns (bool) {
-        if (!enabled[_maker]) return true;
+    function isTakerAllowed(address _maker, bytes32 _paymentMethod, address _taker)
+        external
+        view
+        override
+        returns (bool)
+    {
+        if (!enabled[_maker][_paymentMethod]) return true;
         if (isWhitelisted[_maker][_taker]) return true;
 
-        bytes32[] storage makerGroups = allowedGroups[_maker];
-        for (uint256 i = 0; i < makerGroups.length; ++i) {
-            if (groupRegistry.isMember(makerGroups[i], _taker)) return true;
+        bytes32[] storage paymentMethodGroups = allowedGroups[_maker][_paymentMethod];
+        for (uint256 i = 0; i < paymentMethodGroups.length; ++i) {
+            if (groupRegistry.isMember(paymentMethodGroups[i], _taker)) return true;
         }
         return false;
     }

@@ -11,8 +11,9 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 /**
  * @title IntentLifecycleHookV1
  * @notice Stateless lifecycle hook admitting any orchestrator registered in OrchestratorRegistry and enforcing
- * maker-owned whitelist policies. A taker is admitted when enforcement is disabled or when the policy allows the
- * taker directly or through an allowed group. Settlement and cancellation are no-ops in this version.
+ * maker-owned whitelist policies. A taker is admitted when enforcement is disabled for the intent's payment method
+ * or when the policy allows the taker through the maker-wide direct whitelist or a payment-method group.
+ * Settlement and cancellation are no-ops in this version.
  * @dev Reads intent context from the calling orchestrator and delegates admission to WhitelistPolicy.
  */
 contract IntentLifecycleHookV1 is IIntentLifecycleHook {
@@ -27,7 +28,7 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     error InvalidDependency(address dependency);
     error UnauthorizedOrchestrator(address caller);
     error IntentNotFound(bytes32 intentHash);
-    error TakerNotWhitelisted(address maker, address taker);
+    error TakerNotWhitelisted(address maker, bytes32 paymentMethod, address taker);
 
     /* ============ Constructor ============ */
 
@@ -49,8 +50,8 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
         address maker = IEscrow(intent.escrow).getDeposit(intent.depositId).depositor;
-        if (!whitelistPolicy.isTakerAllowed(maker, intent.owner)) {
-            revert TakerNotWhitelisted(maker, intent.owner);
+        if (!whitelistPolicy.isTakerAllowed(maker, intent.paymentMethod, intent.owner)) {
+            revert TakerNotWhitelisted(maker, intent.paymentMethod, intent.owner);
         }
     }
 
