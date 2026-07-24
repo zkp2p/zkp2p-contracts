@@ -655,7 +655,6 @@ The deploy scripts also reference current network parameters such as:
 - multisig address
 - protocol fee recipient
 - dust recipient
-- Across SpokePool address
 - Pyth contract address
 
 These parameters live in `deployments/parameters.ts`.

@@ -80,13 +80,6 @@ export const USDC: any = {
   "base_staging": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 };
 
-export const ACROSS_SPOKE_POOL: any = {
-  "base": "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64",
-  "base_staging": "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64",
-  "localhost": "", // Fake address for local testing
-  "hardhat": "",
-};
-
 // V2 Parameters
 export const ESCROW_V2_INTENT_EXPIRATION_PERIOD: any = {
   "localhost": ONE_DAY_IN_SECONDS,
