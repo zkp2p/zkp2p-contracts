@@ -269,7 +269,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const intentGuardian = await deploy("IntentGuardian", {
     from: deployer,
-    args: [deployer, escrowV2Address],
+    args: [deployer, escrowRegistryAddress],
   });
   if (intentGuardian.newlyDeployed) {
     console.log("IntentGuardian deployed at", intentGuardian.address);

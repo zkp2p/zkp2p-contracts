@@ -8,6 +8,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {IEscrowV2} from "./interfaces/IEscrowV2.sol";
+import {IEscrowRegistry} from "./interfaces/IEscrowRegistry.sol";
 import {IIntentGuardian} from "./interfaces/IIntentGuardian.sol";
 
 /**
@@ -23,11 +24,11 @@ contract IntentGuardian is IIntentGuardian, Ownable2Step {
     uint256 public constant EXTENSION_FEE_DENOMINATOR = BPS_DENOMINATOR * SECONDS_PER_HOUR;
     uint256 public constant MAX_TOTAL_INTENT_LIFETIME = 5 days;
 
-    IEscrowV2 public immutable override escrow;
+    IEscrowRegistry public immutable override escrowRegistry;
     uint256 public override extensionFeeBpsPerHour;
 
-    constructor(address _owner, IEscrowV2 _escrow) {
-        escrow = _escrow;
+    constructor(address _owner, IEscrowRegistry _escrowRegistry) {
+        escrowRegistry = _escrowRegistry;
         _transferOwnership(_owner);
     }
 
@@ -46,26 +47,34 @@ contract IntentGuardian is IIntentGuardian, Ownable2Step {
 
     /**
      * @notice Prepays the deposit's maker to extend a live intent.
+     * @param _escrow Whitelisted escrow holding the deposit and intent.
      * @param _depositId Escrow deposit containing the intent.
      * @param _intentHash Identifier of the intent to extend.
      * @param _additionalTime Number of seconds to add to the current expiry.
      * @param _maxCost Maximum fee the payer agrees to transfer.
      */
-    function extendIntent(uint256 _depositId, bytes32 _intentHash, uint256 _additionalTime, uint256 _maxCost)
-        external
-        override
-    {
+    function extendIntent(
+        IEscrowV2 _escrow,
+        uint256 _depositId,
+        bytes32 _intentHash,
+        uint256 _additionalTime,
+        uint256 _maxCost
+    ) external override {
         uint256 feeBpsPerHour = extensionFeeBpsPerHour;
         if (feeBpsPerHour == 0) revert ExtensionsDisabled();
 
-        IEscrowV2.Deposit memory deposit = escrow.getDeposit(_depositId);
-        IEscrowV2.Intent memory intent = escrow.getDepositIntent(_depositId, _intentHash);
+        if (!escrowRegistry.isAcceptingAllEscrows() && !escrowRegistry.isWhitelistedEscrow(address(_escrow))) {
+            revert EscrowNotWhitelisted(address(_escrow));
+        }
+
+        IEscrowV2.Deposit memory deposit = _escrow.getDeposit(_depositId);
+        IEscrowV2.Intent memory intent = _escrow.getDepositIntent(_depositId, _intentHash);
 
         if (block.timestamp >= intent.expiryTime) {
             revert IntentAlreadyExpired(_intentHash, intent.expiryTime, block.timestamp);
         }
 
-        escrow.extendIntentExpiry(_depositId, _intentHash, _additionalTime);
+        _escrow.extendIntentExpiry(_depositId, _intentHash, _additionalTime);
 
         uint256 cost = Math.mulDiv(
             intent.amount,

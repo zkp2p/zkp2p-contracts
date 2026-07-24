@@ -5,6 +5,8 @@ pragma solidity ^0.8.18;
 import {Test} from "forge-std/Test.sol";
 
 import {IntentGuardian} from "../../contracts/IntentGuardian.sol";
+import {EscrowRegistry} from "../../contracts/registries/EscrowRegistry.sol";
+import {IEscrowRegistry} from "../../contracts/interfaces/IEscrowRegistry.sol";
 import {IEscrowV2} from "../../contracts/interfaces/IEscrowV2.sol";
 import {
     GuardianEscrowMock,
@@ -22,12 +24,15 @@ contract IntentGuardianFuzzTest is Test {
 
     GuardianTokenMock internal token;
     GuardianEscrowMock internal escrow;
+    EscrowRegistry internal escrowRegistry;
     IntentGuardian internal guardian;
 
     function setUp() public {
         token = new GuardianTokenMock();
         escrow = new GuardianEscrowMock();
-        guardian = new IntentGuardian(owner, IEscrowV2(address(escrow)));
+        escrowRegistry = new EscrowRegistry();
+        escrowRegistry.addEscrow(address(escrow));
+        guardian = new IntentGuardian(owner, escrowRegistry);
         escrow.configureDeposit(depositor, token, address(guardian));
     }
 
@@ -48,7 +53,7 @@ contract IntentGuardianFuzzTest is Test {
         vm.prank(payer);
         token.approve(address(guardian), quote);
         vm.prank(payer);
-        guardian.extendIntent(DEPOSIT_ID, INTENT_HASH, additionalTime, quote);
+        guardian.extendIntent(IEscrowV2(address(escrow)), DEPOSIT_ID, INTENT_HASH, additionalTime, quote);
 
         uint256 numerator = amount * fee * additionalTime;
         assertEq(token.balanceOf(depositor), quote);

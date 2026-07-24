@@ -58,7 +58,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
             INullifierRegistryV2(address(nullifierRegistry)),
             groupRegistry
         );
-        guardian = new IntentGuardian(address(this), IEscrowV2(address(escrow)));
+        guardian = new IntentGuardian(address(this), escrowRegistry);
         guardian.setExtensionFeeBpsPerHour(10);
         vault.initializeController(address(manager));
 
@@ -99,7 +99,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         assertEq(vault.lockedStake(safe), INTENT_AMOUNT);
 
         vm.expectRevert(abi.encodeWithSelector(IEscrowV2.AmountAboveMax.selector, 5 days, 5 days));
-        guardian.extendIntent(riskDepositId, intentHash, 5 days, type(uint256).max);
+        guardian.extendIntent(IEscrowV2(address(escrow)), riskDepositId, intentHash, 5 days, type(uint256).max);
 
         IEscrowV2.Intent memory escrowIntent = escrow.getDepositIntent(riskDepositId, intentHash);
         uint256 extensionCost = guardian.quoteExtensionCost(escrowIntent.amount, 2 hours);
@@ -108,7 +108,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         uint256 depositorBalanceBefore = token.balanceOf(depositor);
         vm.startPrank(taker);
         token.approve(address(guardian), extensionCost);
-        guardian.extendIntent(riskDepositId, intentHash, 2 hours, extensionCost);
+        guardian.extendIntent(IEscrowV2(address(escrow)), riskDepositId, intentHash, 2 hours, extensionCost);
         vm.stopPrank();
 
         escrowIntent = escrow.getDepositIntent(riskDepositId, intentHash);

@@ -8,6 +8,8 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {IntentGuardian} from "../../../contracts/IntentGuardian.sol";
+import {EscrowRegistry} from "../../../contracts/registries/EscrowRegistry.sol";
+import {IEscrowRegistry} from "../../../contracts/interfaces/IEscrowRegistry.sol";
 import {IEscrowV2} from "../../../contracts/interfaces/IEscrowV2.sol";
 import {IIntentGuardian} from "../../../contracts/interfaces/IIntentGuardian.sol";
 
@@ -99,14 +101,17 @@ contract IntentGuardianTest is Test {
 
     GuardianTokenMock internal token;
     GuardianEscrowMock internal escrow;
+    EscrowRegistry internal escrowRegistry;
     IntentGuardian internal guardian;
 
     function setUp() public {
         token = new GuardianTokenMock();
         escrow = new GuardianEscrowMock();
-        guardian = new IntentGuardian(owner, IEscrowV2(address(escrow)));
+        escrowRegistry = new EscrowRegistry();
+        escrowRegistry.addEscrow(address(escrow));
+        guardian = new IntentGuardian(owner, escrowRegistry);
         escrow.configureDeposit(depositor, token, address(guardian));
-        _setLiveIntent(INTENT_HASH, INTENT_AMOUNT, 1 days);
+        _setLiveIntent(escrow, INTENT_HASH, INTENT_AMOUNT, 1 days);
         token.mint(payer, INTENT_AMOUNT);
 
         vm.prank(owner);
@@ -114,11 +119,11 @@ contract IntentGuardianTest is Test {
     }
 
     function test_FreshDeployDisablesExtensionsWithAZeroFee() public {
-        IntentGuardian freshGuardian = new IntentGuardian(owner, IEscrowV2(address(escrow)));
+        IntentGuardian freshGuardian = new IntentGuardian(owner, escrowRegistry);
         assertEq(freshGuardian.extensionFeeBpsPerHour(), 0);
 
         vm.expectRevert(IIntentGuardian.ExtensionsDisabled.selector);
-        freshGuardian.extendIntent(DEPOSIT_ID, INTENT_HASH, 1 hours, type(uint256).max);
+        freshGuardian.extendIntent(IEscrowV2(address(escrow)), DEPOSIT_ID, INTENT_HASH, 1 hours, type(uint256).max);
     }
 
     function test_OwnerCanSetTheMaximumFeeEmitTheUpdateAndDisableExtensionsAgain() public {
@@ -139,7 +144,7 @@ contract IntentGuardianTest is Test {
         vm.prank(owner);
         guardian.setExtensionFeeBpsPerHour(0);
         vm.expectRevert(IIntentGuardian.ExtensionsDisabled.selector);
-        guardian.extendIntent(DEPOSIT_ID, INTENT_HASH, 1 hours, type(uint256).max);
+        guardian.extendIntent(IEscrowV2(address(escrow)), DEPOSIT_ID, INTENT_HASH, 1 hours, type(uint256).max);
     }
 
     function test_UnrelatedPayerPrepaysTheDepositorAndExtendsTheIntentImmediately() public {
@@ -154,12 +159,71 @@ contract IntentGuardianTest is Test {
         vm.prank(payer);
         vm.expectEmit(true, true, true, true, address(guardian));
         emit IntentExtended(DEPOSIT_ID, INTENT_HASH, payer, additionalTime, cost);
-        guardian.extendIntent(DEPOSIT_ID, INTENT_HASH, additionalTime, cost);
+        guardian.extendIntent(IEscrowV2(address(escrow)), DEPOSIT_ID, INTENT_HASH, additionalTime, cost);
 
         assertEq(escrow.getDepositIntent(DEPOSIT_ID, INTENT_HASH).expiryTime, expiryBefore + additionalTime);
         assertEq(token.balanceOf(payer), payerBalanceBefore - cost);
         assertEq(token.balanceOf(depositor), depositorBalanceBefore + cost);
         assertEq(token.balanceOf(address(guardian)), 0);
+    }
+
+    function test_ExtendRevertsForAnEscrowThatIsNotWhitelisted() public {
+        GuardianEscrowMock otherEscrow = new GuardianEscrowMock();
+        otherEscrow.configureDeposit(depositor, token, address(guardian));
+        _setLiveIntent(otherEscrow, INTENT_HASH, INTENT_AMOUNT, 1 days);
+
+        vm.prank(payer);
+        token.approve(address(guardian), type(uint256).max);
+        vm.prank(payer);
+        vm.expectRevert(
+            abi.encodeWithSelector(IIntentGuardian.EscrowNotWhitelisted.selector, address(otherEscrow))
+        );
+        guardian.extendIntent(IEscrowV2(address(otherEscrow)), DEPOSIT_ID, INTENT_HASH, 1 hours, type(uint256).max);
+    }
+
+    function test_AcceptingAllEscrowsLetsThroughAnUnwhitelistedEscrow() public {
+        GuardianEscrowMock otherEscrow = new GuardianEscrowMock();
+        otherEscrow.configureDeposit(depositor, token, address(guardian));
+        _setLiveIntent(otherEscrow, INTENT_HASH, INTENT_AMOUNT, 1 days);
+        escrowRegistry.setAcceptAllEscrows(true);
+
+        uint256 additionalTime = 1 hours;
+        uint256 cost = guardian.quoteExtensionCost(INTENT_AMOUNT, additionalTime);
+        uint256 expiryBefore = otherEscrow.getDepositIntent(DEPOSIT_ID, INTENT_HASH).expiryTime;
+
+        vm.prank(payer);
+        token.approve(address(guardian), cost);
+        vm.prank(payer);
+        guardian.extendIntent(IEscrowV2(address(otherEscrow)), DEPOSIT_ID, INTENT_HASH, additionalTime, cost);
+
+        assertEq(otherEscrow.getDepositIntent(DEPOSIT_ID, INTENT_HASH).expiryTime, expiryBefore + additionalTime);
+    }
+
+    function test_OneGuardianExtendsIntentsAcrossTwoWhitelistedEscrows() public {
+        GuardianEscrowMock secondEscrow = new GuardianEscrowMock();
+        escrowRegistry.addEscrow(address(secondEscrow));
+        secondEscrow.configureDeposit(depositor, token, address(guardian));
+        bytes32 secondIntent = keccak256("second-intent");
+        _setLiveIntent(secondEscrow, secondIntent, INTENT_AMOUNT, 1 days);
+
+        uint256 additionalTime = 1 hours;
+        uint256 cost = guardian.quoteExtensionCost(INTENT_AMOUNT, additionalTime);
+        token.mint(payer, cost * 2);
+
+        uint256 firstExpiryBefore = escrow.getDepositIntent(DEPOSIT_ID, INTENT_HASH).expiryTime;
+        uint256 secondExpiryBefore = secondEscrow.getDepositIntent(DEPOSIT_ID, secondIntent).expiryTime;
+
+        vm.startPrank(payer);
+        token.approve(address(guardian), cost * 2);
+        guardian.extendIntent(IEscrowV2(address(escrow)), DEPOSIT_ID, INTENT_HASH, additionalTime, cost);
+        guardian.extendIntent(IEscrowV2(address(secondEscrow)), DEPOSIT_ID, secondIntent, additionalTime, cost);
+        vm.stopPrank();
+
+        assertEq(escrow.getDepositIntent(DEPOSIT_ID, INTENT_HASH).expiryTime, firstExpiryBefore + additionalTime);
+        assertEq(
+            secondEscrow.getDepositIntent(DEPOSIT_ID, secondIntent).expiryTime,
+            secondExpiryBefore + additionalTime
+        );
     }
 
     function test_QuoteRoundsUpToTheNextTokenUnit() public {
@@ -184,10 +248,10 @@ contract IntentGuardianTest is Test {
         token.approve(address(guardian), newCost);
         vm.prank(payer);
         vm.expectRevert(abi.encodeWithSelector(IIntentGuardian.ExtensionCostExceedsMax.selector, newCost, oldQuote));
-        guardian.extendIntent(DEPOSIT_ID, INTENT_HASH, additionalTime, oldQuote);
+        guardian.extendIntent(IEscrowV2(address(escrow)), DEPOSIT_ID, INTENT_HASH, additionalTime, oldQuote);
 
         vm.prank(payer);
-        guardian.extendIntent(DEPOSIT_ID, INTENT_HASH, additionalTime, newCost);
+        guardian.extendIntent(IEscrowV2(address(escrow)), DEPOSIT_ID, INTENT_HASH, additionalTime, newCost);
     }
 
     function test_ExpiredAndUnknownIntentsCannotBeExtended() public {
@@ -198,7 +262,7 @@ contract IntentGuardianTest is Test {
                 IIntentGuardian.IntentAlreadyExpired.selector, INTENT_HASH, expiryTime, block.timestamp
             )
         );
-        guardian.extendIntent(DEPOSIT_ID, INTENT_HASH, 1 hours, type(uint256).max);
+        guardian.extendIntent(IEscrowV2(address(escrow)), DEPOSIT_ID, INTENT_HASH, 1 hours, type(uint256).max);
 
         bytes32 unknownIntentHash = keccak256("unknown");
         vm.expectRevert(
@@ -206,31 +270,31 @@ contract IntentGuardianTest is Test {
                 IIntentGuardian.IntentAlreadyExpired.selector, unknownIntentHash, 0, block.timestamp
             )
         );
-        guardian.extendIntent(DEPOSIT_ID, unknownIntentHash, 1 hours, type(uint256).max);
+        guardian.extendIntent(IEscrowV2(address(escrow)), DEPOSIT_ID, unknownIntentHash, 1 hours, type(uint256).max);
     }
 
     function test_EscrowEnforcesZeroTimeAndTheCumulativeFiveDayLifetimeCap() public {
         vm.expectRevert(IEscrowV2.ZeroValue.selector);
-        guardian.extendIntent(DEPOSIT_ID, INTENT_HASH, 0, type(uint256).max);
+        guardian.extendIntent(IEscrowV2(address(escrow)), DEPOSIT_ID, INTENT_HASH, 0, type(uint256).max);
 
         vm.expectRevert(abi.encodeWithSelector(IEscrowV2.AmountAboveMax.selector, 5 days, 5 days));
-        guardian.extendIntent(DEPOSIT_ID, INTENT_HASH, 5 days, type(uint256).max);
+        guardian.extendIntent(IEscrowV2(address(escrow)), DEPOSIT_ID, INTENT_HASH, 5 days, type(uint256).max);
 
         _approveGuardian(type(uint256).max);
         vm.prank(payer);
-        guardian.extendIntent(DEPOSIT_ID, INTENT_HASH, 2 days, type(uint256).max);
+        guardian.extendIntent(IEscrowV2(address(escrow)), DEPOSIT_ID, INTENT_HASH, 2 days, type(uint256).max);
         vm.prank(payer);
-        guardian.extendIntent(DEPOSIT_ID, INTENT_HASH, 2 days, type(uint256).max);
+        guardian.extendIntent(IEscrowV2(address(escrow)), DEPOSIT_ID, INTENT_HASH, 2 days, type(uint256).max);
         vm.prank(payer);
         vm.expectRevert(abi.encodeWithSelector(IEscrowV2.AmountAboveMax.selector, 1, 5 days));
-        guardian.extendIntent(DEPOSIT_ID, INTENT_HASH, 1, type(uint256).max);
+        guardian.extendIntent(IEscrowV2(address(escrow)), DEPOSIT_ID, INTENT_HASH, 1, type(uint256).max);
     }
 
     function test_PrepaidExtensionIsNotRefundedWhenTheIntentTerminatesImmediately() public {
         uint256 cost = guardian.quoteExtensionCost(INTENT_AMOUNT, 1 hours);
         _approveGuardian(cost);
         vm.prank(payer);
-        guardian.extendIntent(DEPOSIT_ID, INTENT_HASH, 1 hours, cost);
+        guardian.extendIntent(IEscrowV2(address(escrow)), DEPOSIT_ID, INTENT_HASH, 1 hours, cost);
         uint256 payerBalanceAfterExtension = token.balanceOf(payer);
         uint256 depositorBalanceAfterExtension = token.balanceOf(depositor);
 
@@ -241,8 +305,10 @@ contract IntentGuardianTest is Test {
         assertEq(token.balanceOf(address(guardian)), 0);
     }
 
-    function _setLiveIntent(bytes32 _intentHash, uint256 _amount, uint256 _duration) internal {
-        escrow.setIntent(_intentHash, _amount, block.timestamp, block.timestamp + _duration);
+    function _setLiveIntent(GuardianEscrowMock _escrow, bytes32 _intentHash, uint256 _amount, uint256 _duration)
+        internal
+    {
+        _escrow.setIntent(_intentHash, _amount, block.timestamp, block.timestamp + _duration);
     }
 
     function _approveGuardian(uint256 _amount) internal {
