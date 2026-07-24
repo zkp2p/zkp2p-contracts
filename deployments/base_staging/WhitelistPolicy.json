@@ -1,0 +1,469 @@
+{
+  "address": "0x7D74A69C46606bDd14e48a202DC52989Af670236",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "contract IAddressGroupRegistry",
+          "name": "_groupRegistry",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [],
+      "name": "EmptyArray",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "GroupDoesNotExist",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "registry",
+          "type": "address"
+        }
+      ],
+      "name": "InvalidGroupRegistry",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "attempted",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "maximum",
+          "type": "uint256"
+        }
+      ],
+      "name": "TooManyGroups",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroAddress",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "maker",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "taker",
+          "type": "address"
+        }
+      ],
+      "name": "AddressRemovedFromWhitelist",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "maker",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "taker",
+          "type": "address"
+        }
+      ],
+      "name": "AddressWhitelisted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "maker",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "AllowedGroupAdded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "maker",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "groupId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "AllowedGroupRemoved",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "maker",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "enabled",
+          "type": "bool"
+        }
+      ],
+      "name": "EnabledUpdated",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "MAX_GROUPS_PER_MAKER",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32[]",
+          "name": "_groupIds",
+          "type": "bytes32[]"
+        }
+      ],
+      "name": "addAllowedGroups",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address[]",
+          "name": "_takers",
+          "type": "address[]"
+        }
+      ],
+      "name": "addWhitelistedAddresses",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "enabled",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_maker",
+          "type": "address"
+        }
+      ],
+      "name": "getAllowedGroups",
+      "outputs": [
+        {
+          "internalType": "bytes32[]",
+          "name": "",
+          "type": "bytes32[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "groupRegistry",
+      "outputs": [
+        {
+          "internalType": "contract IAddressGroupRegistry",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_maker",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_groupId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "isGroupAllowed",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_maker",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_taker",
+          "type": "address"
+        }
+      ],
+      "name": "isTakerAllowed",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "isWhitelisted",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32[]",
+          "name": "_groupIds",
+          "type": "bytes32[]"
+        }
+      ],
+      "name": "removeAllowedGroups",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address[]",
+          "name": "_takers",
+          "type": "address[]"
+        }
+      ],
+      "name": "removeWhitelistedAddresses",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bool",
+          "name": "_enabled",
+          "type": "bool"
+        }
+      ],
+      "name": "setEnabled",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0x3911135942b0c156d1fe5b664b0b3f7a9acf21c078bdf7275f4015adff915afa",
+  "receipt": {
+    "to": null,
+    "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "contractAddress": "0x7D74A69C46606bDd14e48a202DC52989Af670236",
+    "transactionIndex": 125,
+    "gasUsed": "669932",
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "transactionHash": "0x3911135942b0c156d1fe5b664b0b3f7a9acf21c078bdf7275f4015adff915afa",
+    "logs": [],
+    "blockNumber": 49057476,
+    "cumulativeGasUsed": "26506999",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [
+    "0xE11044811237170c0Fa8F0bfB38f5B6F07cf5dBF"
+  ],
+  "numDeployments": 1,
+  "solcInputHash": "194eb108599bdbead0397e81af31d9bc",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"contract IAddressGroupRegistry\",\"name\":\"_groupRegistry\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"EmptyArray\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"}],\"name\":\"GroupDoesNotExist\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"registry\",\"type\":\"address\"}],\"name\":\"InvalidGroupRegistry\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"attempted\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"maximum\",\"type\":\"uint256\"}],\"name\":\"TooManyGroups\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAddress\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"maker\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"}],\"name\":\"AddressRemovedFromWhitelist\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"maker\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"}],\"name\":\"AddressWhitelisted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"maker\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"}],\"name\":\"AllowedGroupAdded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"maker\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"}],\"name\":\"AllowedGroupRemoved\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"maker\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"enabled\",\"type\":\"bool\"}],\"name\":\"EnabledUpdated\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"MAX_GROUPS_PER_MAKER\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"_groupIds\",\"type\":\"bytes32[]\"}],\"name\":\"addAllowedGroups\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address[]\",\"name\":\"_takers\",\"type\":\"address[]\"}],\"name\":\"addWhitelistedAddresses\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"enabled\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_maker\",\"type\":\"address\"}],\"name\":\"getAllowedGroups\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"groupRegistry\",\"outputs\":[{\"internalType\":\"contract IAddressGroupRegistry\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_maker\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"}],\"name\":\"isGroupAllowed\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_maker\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_taker\",\"type\":\"address\"}],\"name\":\"isTakerAllowed\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"isWhitelisted\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"_groupIds\",\"type\":\"bytes32[]\"}],\"name\":\"removeAllowedGroups\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address[]\",\"name\":\"_takers\",\"type\":\"address[]\"}],\"name\":\"removeWhitelistedAddresses\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bool\",\"name\":\"_enabled\",\"type\":\"bool\"}],\"name\":\"setEnabled\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"details\":\"Enabling an empty policy is allowed and intentionally fails closed when evaluated.\",\"kind\":\"dev\",\"methods\":{},\"title\":\"WhitelistPolicy\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{},\"notice\":\"Persistent maker-owned taker admission settings, independent from any lifecycle-hook deployment. Each maker can allow direct addresses or members of a bounded list of curated groups.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/hooks/WhitelistPolicy.sol\":\"WhitelistPolicy\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"contracts/hooks/WhitelistPolicy.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {IAddressGroupRegistry} from \\\"../interfaces/IAddressGroupRegistry.sol\\\";\\nimport {IWhitelistPolicy} from \\\"../interfaces/IWhitelistPolicy.sol\\\";\\n\\n/**\\n * @title WhitelistPolicy\\n * @notice Persistent maker-owned taker admission settings, independent from any lifecycle-hook deployment.\\n * Each maker can allow direct addresses or members of a bounded list of curated groups.\\n * @dev Enabling an empty policy is allowed and intentionally fails closed when evaluated.\\n */\\ncontract WhitelistPolicy is IWhitelistPolicy {\\n    /* ============ Constants ============ */\\n\\n    uint256 public constant MAX_GROUPS_PER_MAKER = 10;\\n\\n    /* ============ State Variables ============ */\\n\\n    IAddressGroupRegistry public immutable override groupRegistry;\\n\\n    mapping(address => bool) public override enabled;\\n    mapping(address => mapping(address => bool)) public override isWhitelisted;\\n    mapping(address => bytes32[]) internal allowedGroups;\\n\\n    /* ============ Events ============ */\\n\\n    event EnabledUpdated(address indexed maker, bool enabled);\\n    event AddressWhitelisted(address indexed maker, address indexed taker);\\n    event AddressRemovedFromWhitelist(address indexed maker, address indexed taker);\\n    event AllowedGroupAdded(address indexed maker, bytes32 indexed groupId);\\n    event AllowedGroupRemoved(address indexed maker, bytes32 indexed groupId);\\n\\n    /* ============ Errors ============ */\\n\\n    error ZeroAddress();\\n    error EmptyArray();\\n    error InvalidGroupRegistry(address registry);\\n    error GroupDoesNotExist(bytes32 groupId);\\n    error TooManyGroups(uint256 attempted, uint256 maximum);\\n\\n    /* ============ Constructor ============ */\\n\\n    constructor(IAddressGroupRegistry _groupRegistry) {\\n        address registryAddress = address(_groupRegistry);\\n        if (registryAddress == address(0)) revert ZeroAddress();\\n        if (registryAddress.code.length == 0) revert InvalidGroupRegistry(registryAddress);\\n\\n        groupRegistry = _groupRegistry;\\n    }\\n\\n    /* ============ Maker Functions ============ */\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function setEnabled(bool _enabled) external override {\\n        enabled[msg.sender] = _enabled;\\n        emit EnabledUpdated(msg.sender, _enabled);\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function addWhitelistedAddresses(address[] calldata _takers) external override {\\n        if (_takers.length == 0) revert EmptyArray();\\n\\n        for (uint256 i = 0; i < _takers.length; ++i) {\\n            address taker = _takers[i];\\n            if (taker == address(0)) revert ZeroAddress();\\n            if (isWhitelisted[msg.sender][taker]) continue;\\n\\n            isWhitelisted[msg.sender][taker] = true;\\n            emit AddressWhitelisted(msg.sender, taker);\\n        }\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function removeWhitelistedAddresses(address[] calldata _takers) external override {\\n        if (_takers.length == 0) revert EmptyArray();\\n\\n        for (uint256 i = 0; i < _takers.length; ++i) {\\n            address taker = _takers[i];\\n            if (!isWhitelisted[msg.sender][taker]) continue;\\n\\n            isWhitelisted[msg.sender][taker] = false;\\n            emit AddressRemovedFromWhitelist(msg.sender, taker);\\n        }\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function addAllowedGroups(bytes32[] calldata _groupIds) external override {\\n        if (_groupIds.length == 0) revert EmptyArray();\\n\\n        bytes32[] storage makerGroups = allowedGroups[msg.sender];\\n        for (uint256 i = 0; i < _groupIds.length; ++i) {\\n            bytes32 groupId = _groupIds[i];\\n            if (!groupRegistry.groupExists(groupId)) revert GroupDoesNotExist(groupId);\\n            if (_containsGroup(makerGroups, groupId)) continue;\\n            if (makerGroups.length == MAX_GROUPS_PER_MAKER) {\\n                revert TooManyGroups(makerGroups.length + 1, MAX_GROUPS_PER_MAKER);\\n            }\\n\\n            makerGroups.push(groupId);\\n            emit AllowedGroupAdded(msg.sender, groupId);\\n        }\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function removeAllowedGroups(bytes32[] calldata _groupIds) external override {\\n        if (_groupIds.length == 0) revert EmptyArray();\\n\\n        bytes32[] storage makerGroups = allowedGroups[msg.sender];\\n        for (uint256 i = 0; i < _groupIds.length; ++i) {\\n            bytes32 groupId = _groupIds[i];\\n            uint256 groupIndex = _findGroupIndex(makerGroups, groupId);\\n            if (groupIndex == makerGroups.length) continue;\\n\\n            makerGroups[groupIndex] = makerGroups[makerGroups.length - 1];\\n            makerGroups.pop();\\n            emit AllowedGroupRemoved(msg.sender, groupId);\\n        }\\n    }\\n\\n    /* ============ View Functions ============ */\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function getAllowedGroups(address _maker) external view override returns (bytes32[] memory) {\\n        return allowedGroups[_maker];\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function isGroupAllowed(address _maker, bytes32 _groupId) external view override returns (bool) {\\n        return _containsGroup(allowedGroups[_maker], _groupId);\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function isTakerAllowed(address _maker, address _taker) external view override returns (bool) {\\n        if (!enabled[_maker]) return true;\\n        if (isWhitelisted[_maker][_taker]) return true;\\n\\n        bytes32[] storage makerGroups = allowedGroups[_maker];\\n        for (uint256 i = 0; i < makerGroups.length; ++i) {\\n            if (groupRegistry.isMember(makerGroups[i], _taker)) return true;\\n        }\\n        return false;\\n    }\\n\\n    /* ============ Internal Functions ============ */\\n\\n    function _containsGroup(bytes32[] storage _groups, bytes32 _groupId) internal view returns (bool) {\\n        return _findGroupIndex(_groups, _groupId) != _groups.length;\\n    }\\n\\n    function _findGroupIndex(bytes32[] storage _groups, bytes32 _groupId) internal view returns (uint256) {\\n        for (uint256 i = 0; i < _groups.length; ++i) {\\n            if (_groups[i] == _groupId) return i;\\n        }\\n        return _groups.length;\\n    }\\n}\\n\",\"keccak256\":\"0xca8cce943c78e76062ae5e1db632af312360374578cb8d217706d4bb03ff5c63\",\"license\":\"MIT\"},\"contracts/interfaces/IAddressGroupRegistry.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IAddressGroupRegistry\\n * @notice Permissionless registry of curator-managed address groups with optional resolvers.\\n */\\ninterface IAddressGroupRegistry {\\n    /**\\n     * @notice Creates a new group curated by the caller; its id is derived from the curator and global counter.\\n     */\\n    function createGroup(string calldata _name) external returns (bytes32 groupId);\\n\\n    /**\\n     * @notice Starts a two-step curator transfer; replaces any existing pending curator.\\n     */\\n    function transferGroupCurator(bytes32 _groupId, address _newCurator) external;\\n\\n    /**\\n     * @notice Cancels a pending curator transfer.\\n     */\\n    function cancelGroupCuratorTransfer(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Completes a pending curator transfer; callable only by the pending curator.\\n     */\\n    function acceptGroupCurator(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Adds members to a group (curator only; idempotent).\\n     */\\n    function addMembers(bytes32 _groupId, address[] calldata _members) external;\\n\\n    /**\\n     * @notice Removes members from a group (curator only; idempotent).\\n     */\\n    function removeMembers(bytes32 _groupId, address[] calldata _members) external;\\n\\n    /**\\n     * @notice Sets whether a group permits self-service membership (curator only).\\n     */\\n    function setGroupVisibility(bytes32 _groupId, bool _isPublic) external;\\n\\n    /**\\n     * @notice Joins a public group as the caller.\\n     */\\n    function joinGroup(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Leaves a public group's curated membership as the caller.\\n     */\\n    function leaveGroup(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Sets or clears the group's resolver (curator only; nonzero resolver must have code).\\n     */\\n    function setResolver(bytes32 _groupId, address _resolver) external;\\n\\n    /**\\n     * @notice Returns whether an account is a member (curated OR resolver; fail-closed).\\n     */\\n    function isMember(bytes32 _groupId, address _account) external view returns (bool);\\n\\n    /**\\n     * @notice Returns whether a group exists (input validation only, not a trust guarantee).\\n     */\\n    function groupExists(bytes32 _groupId) external view returns (bool);\\n\\n    /**\\n     * @notice Returns a group's governance state for atomic inspection.\\n     */\\n    function getGroup(bytes32 _groupId)\\n        external\\n        view\\n        returns (address curator, address pendingCurator, address resolver, bool isPublic, bool exists);\\n\\n    /**\\n     * @notice Returns the number of groups created (the counter used to derive group ids).\\n     */\\n    function groupCount() external view returns (uint256);\\n}\\n\",\"keccak256\":\"0x41e10d83a114968c72ceb864e9f4c43b9789fe4689c1e6734352ca33d4eb16fc\",\"license\":\"MIT\"},\"contracts/interfaces/IWhitelistPolicy.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {IAddressGroupRegistry} from \\\"./IAddressGroupRegistry.sol\\\";\\n\\ninterface IWhitelistPolicy {\\n    function groupRegistry() external view returns (IAddressGroupRegistry);\\n    function enabled(address maker) external view returns (bool);\\n    function isWhitelisted(address maker, address taker) external view returns (bool);\\n    function getAllowedGroups(address maker) external view returns (bytes32[] memory);\\n    function isGroupAllowed(address maker, bytes32 groupId) external view returns (bool);\\n    function isTakerAllowed(address maker, address taker) external view returns (bool);\\n\\n    function setEnabled(bool enabled) external;\\n    function addWhitelistedAddresses(address[] calldata takers) external;\\n    function removeWhitelistedAddresses(address[] calldata takers) external;\\n    function addAllowedGroups(bytes32[] calldata groupIds) external;\\n    function removeAllowedGroups(bytes32[] calldata groupIds) external;\\n}\\n\",\"keccak256\":\"0x136989b835c8c4a748262a2dfb2bf63580f59e32a487255323792dc5ffe55b86\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x60a0346100b057601f610bda38819003918201601f19168301916001600160401b038311848410176100b5578084926020946040528339810103126100b057516001600160a01b0381168082036100b057801561009e57803b156100865750608052604051610b0e90816100cc823960805181818160ee0152818161082401526109cc0152f35b6024906040519063be161c7160e01b82526004820152fd5b60405163d92e233d60e01b8152600490fd5b600080fd5b634e487b7160e01b600052604160045260246000fdfe6080604081815260048036101561001557600080fd5b600092833560e01c908163165273ce1461081057508063328d8f72146107ae578063795c1b481461077757806385a679b81461062357806398afdfe3146105e65780639936c2e7146105a0578063b6b3527214610552578063bf4c04c41461047a578063ca2cfc201461037f578063e26bac9d1461035f578063e4b1623d146102af5763f377ad05146100a757600080fd5b346102ab576020806003193601126102a757813567ffffffffffffffff81116102a3576100d79036908401610884565b9290918315610294573386526002815284862092937f00000000000000000000000000000000000000000000000000000000000000006001600160a01b0316939290875b818110610126578880f35b6101318183896108da565b35885163162da67d60e31b81528185820152602490868183818c5afa90811561028a578c9161025d575b50156102495761016b8288610a9a565b90875480920361023d57600a8083146102035750680100000000000000008210156101f25750906101c3816101aa8460016101ed9796018b558a610964565b90919082549060031b91821b91600019901b1916179055565b337f0e0adb357f7a85af5b21cc08893608cd2b0f32057fd6c23f9c4920712341913b8c80a36108b5565b61011b565b634e487b7160e01b8c52604186528bfd5b8691838d8f9560010180921161022b575163d1dcbd5f60e01b81529384015282015260449150fd5b634e487b7160e01b8652601185528286fd5b5050506101ed906108b5565b8951636742e58360e01b8152808601839052fd5b61027d9150873d8911610283575b6102758183610914565b81019061094c565b3861015b565b503d61026b565b8b513d8e823e3d90fd5b50835163521299a960e01b8152fd5b8480fd5b8380fd5b8280fd5b82843461035c576020908160031936011261035c5782906001600160a01b036102d6610853565b16815260028352818120908251808584549182815201908194845286842090845b818110610348575050508161030d910382610914565b83519485948186019282875251809352850193925b82811061033157505050500390f35b835185528695509381019392810192600101610322565b8254845292880192600192830192016102f7565b80fd5b50503461037b578160031936011261037b5760209051600a8152f35b5080fd5b5090346102ab57602090816003193601126102a757823567ffffffffffffffff81116102a3576103b29036908501610884565b9290831561046a57855b8481106103c7578680f35b6001600160a01b036103e26103dd8388866108da565b610900565b16801561045a579061044e913389526001808652868a20828b52865260ff878b20541661045357338a52808652868a20828b528652868a209060ff19825416179055337f3d8a67432904f5c76d317bd3d7568237471009d9a286cd487736d0e2d103e6ad8a80a36108b5565b6103bc565b50506108b5565b845163d92e233d60e01b81528790fd5b825163521299a960e01b81528590fd5b5090346102ab57602090816003193601126102a757823567ffffffffffffffff81116102a3576104ad9036908501610884565b909381156105445750845b8181106104c3578580f35b806104d56103dd61053f9385896108da565b33885260018087528589206001600160a01b03909216808a529187528589205460ff1615610453573389528652848820818952865284882060ff198154169055337f5a76ef3d09a09d8a99c3d9ddddfb7770d906de670d79b5119a8c2cba903814bb8980a36108b5565b6104b8565b825163521299a960e01b8152fd5b50503461037b578060031936011261037b5760ff81602093610572610853565b61057a61086e565b6001600160a01b0391821683526001875283832091168252855220549151911615158152f35b50503461037b578060031936011261037b5760209181906001600160a01b036105c7610853565b16815260028452206105db60243582610a9a565b905414159051908152f35b50503461037b57602036600319011261037b5760209160ff9082906001600160a01b03610611610853565b16815280855220541690519015158152f35b5090346102ab5760203660031901126102ab57813567ffffffffffffffff81116102a7576106549036908401610884565b90918115610768573385526002602052842090845b818110610674578580f35b61067f8183866108da565b3561068a8185610a9a565b84549081811461075c5760001991808301908111610749576106be92916106b46106dd9289610964565b9490549189610964565b9091600395861b1c9082549060031b91821b91600019901b1916179055565b855480156107365790806107319594939201916106fa8389610964565b81939154921b1b191690558555337f62b86a9260af6863788b85da4c44aed95c8cecf00b7b391dc544eecc04f30db38980a36108b5565b610669565b634e487b7160e01b8a526031895260248afd5b634e487b7160e01b8a526011895260248afd5b505050610731906108b5565b5163521299a960e01b81528390fd5b50503461037b578060031936011261037b576020906107a5610797610853565b61079f61086e565b9061097c565b90519015158152f35b50346102ab5760203660031901126102ab5735908115158092036102ab573383528260205280832060ff1981541660ff8416179055519081527fda614b07481cb565fd4a249b1ee3f7516c33b801e022554da94abe935386510360203392a280f35b84903461037b578160031936011261037b577f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b600435906001600160a01b038216820361086957565b600080fd5b602435906001600160a01b038216820361086957565b9181601f840112156108695782359167ffffffffffffffff8311610869576020808501948460051b01011161086957565b60001981146108c45760010190565b634e487b7160e01b600052601160045260246000fd5b91908110156108ea5760051b0190565b634e487b7160e01b600052603260045260246000fd5b356001600160a01b03811681036108695790565b90601f8019910116810190811067ffffffffffffffff82111761093657604052565b634e487b7160e01b600052604160045260246000fd5b90816020910312610869575180151581036108695790565b80548210156108ea5760005260206000200190600090565b60018060a01b0380911660009281845260209084825260409160ff838720541615610a8f5760019384825285848820931692838852825260ff8488205416610a85578652600281528286208054957f00000000000000000000000000000000000000000000000000000000000000001690875b878110610a0157505050505050505090565b610a0b8183610964565b90548751916310ad56b360e01b835260031b1c60048201528560248201528481604481875afa908115610a7b578a91610a5e575b50610a5257610a4d906108b5565b6109ef565b50505050505091505090565b610a759150853d8711610283576102758183610914565b38610a3f565b87513d8c823e3d90fd5b5050505091505090565b505050505050600190565b9060005b8254811015610ad25781610ab28285610964565b90549060031b1c14610acc57610ac7906108b5565b610a9e565b91505090565b5050549056fea26469706673582212205f44a81759333ef5b71527b9aa9a94dab80801fc32f164866f8ef591bf83bcf664736f6c63430008120033",
+  "deployedBytecode": "0x6080604081815260048036101561001557600080fd5b600092833560e01c908163165273ce1461081057508063328d8f72146107ae578063795c1b481461077757806385a679b81461062357806398afdfe3146105e65780639936c2e7146105a0578063b6b3527214610552578063bf4c04c41461047a578063ca2cfc201461037f578063e26bac9d1461035f578063e4b1623d146102af5763f377ad05146100a757600080fd5b346102ab576020806003193601126102a757813567ffffffffffffffff81116102a3576100d79036908401610884565b9290918315610294573386526002815284862092937f00000000000000000000000000000000000000000000000000000000000000006001600160a01b0316939290875b818110610126578880f35b6101318183896108da565b35885163162da67d60e31b81528185820152602490868183818c5afa90811561028a578c9161025d575b50156102495761016b8288610a9a565b90875480920361023d57600a8083146102035750680100000000000000008210156101f25750906101c3816101aa8460016101ed9796018b558a610964565b90919082549060031b91821b91600019901b1916179055565b337f0e0adb357f7a85af5b21cc08893608cd2b0f32057fd6c23f9c4920712341913b8c80a36108b5565b61011b565b634e487b7160e01b8c52604186528bfd5b8691838d8f9560010180921161022b575163d1dcbd5f60e01b81529384015282015260449150fd5b634e487b7160e01b8652601185528286fd5b5050506101ed906108b5565b8951636742e58360e01b8152808601839052fd5b61027d9150873d8911610283575b6102758183610914565b81019061094c565b3861015b565b503d61026b565b8b513d8e823e3d90fd5b50835163521299a960e01b8152fd5b8480fd5b8380fd5b8280fd5b82843461035c576020908160031936011261035c5782906001600160a01b036102d6610853565b16815260028352818120908251808584549182815201908194845286842090845b818110610348575050508161030d910382610914565b83519485948186019282875251809352850193925b82811061033157505050500390f35b835185528695509381019392810192600101610322565b8254845292880192600192830192016102f7565b80fd5b50503461037b578160031936011261037b5760209051600a8152f35b5080fd5b5090346102ab57602090816003193601126102a757823567ffffffffffffffff81116102a3576103b29036908501610884565b9290831561046a57855b8481106103c7578680f35b6001600160a01b036103e26103dd8388866108da565b610900565b16801561045a579061044e913389526001808652868a20828b52865260ff878b20541661045357338a52808652868a20828b528652868a209060ff19825416179055337f3d8a67432904f5c76d317bd3d7568237471009d9a286cd487736d0e2d103e6ad8a80a36108b5565b6103bc565b50506108b5565b845163d92e233d60e01b81528790fd5b825163521299a960e01b81528590fd5b5090346102ab57602090816003193601126102a757823567ffffffffffffffff81116102a3576104ad9036908501610884565b909381156105445750845b8181106104c3578580f35b806104d56103dd61053f9385896108da565b33885260018087528589206001600160a01b03909216808a529187528589205460ff1615610453573389528652848820818952865284882060ff198154169055337f5a76ef3d09a09d8a99c3d9ddddfb7770d906de670d79b5119a8c2cba903814bb8980a36108b5565b6104b8565b825163521299a960e01b8152fd5b50503461037b578060031936011261037b5760ff81602093610572610853565b61057a61086e565b6001600160a01b0391821683526001875283832091168252855220549151911615158152f35b50503461037b578060031936011261037b5760209181906001600160a01b036105c7610853565b16815260028452206105db60243582610a9a565b905414159051908152f35b50503461037b57602036600319011261037b5760209160ff9082906001600160a01b03610611610853565b16815280855220541690519015158152f35b5090346102ab5760203660031901126102ab57813567ffffffffffffffff81116102a7576106549036908401610884565b90918115610768573385526002602052842090845b818110610674578580f35b61067f8183866108da565b3561068a8185610a9a565b84549081811461075c5760001991808301908111610749576106be92916106b46106dd9289610964565b9490549189610964565b9091600395861b1c9082549060031b91821b91600019901b1916179055565b855480156107365790806107319594939201916106fa8389610964565b81939154921b1b191690558555337f62b86a9260af6863788b85da4c44aed95c8cecf00b7b391dc544eecc04f30db38980a36108b5565b610669565b634e487b7160e01b8a526031895260248afd5b634e487b7160e01b8a526011895260248afd5b505050610731906108b5565b5163521299a960e01b81528390fd5b50503461037b578060031936011261037b576020906107a5610797610853565b61079f61086e565b9061097c565b90519015158152f35b50346102ab5760203660031901126102ab5735908115158092036102ab573383528260205280832060ff1981541660ff8416179055519081527fda614b07481cb565fd4a249b1ee3f7516c33b801e022554da94abe935386510360203392a280f35b84903461037b578160031936011261037b577f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b600435906001600160a01b038216820361086957565b600080fd5b602435906001600160a01b038216820361086957565b9181601f840112156108695782359167ffffffffffffffff8311610869576020808501948460051b01011161086957565b60001981146108c45760010190565b634e487b7160e01b600052601160045260246000fd5b91908110156108ea5760051b0190565b634e487b7160e01b600052603260045260246000fd5b356001600160a01b03811681036108695790565b90601f8019910116810190811067ffffffffffffffff82111761093657604052565b634e487b7160e01b600052604160045260246000fd5b90816020910312610869575180151581036108695790565b80548210156108ea5760005260206000200190600090565b60018060a01b0380911660009281845260209084825260409160ff838720541615610a8f5760019384825285848820931692838852825260ff8488205416610a85578652600281528286208054957f00000000000000000000000000000000000000000000000000000000000000001690875b878110610a0157505050505050505090565b610a0b8183610964565b90548751916310ad56b360e01b835260031b1c60048201528560248201528481604481875afa908115610a7b578a91610a5e575b50610a5257610a4d906108b5565b6109ef565b50505050505091505090565b610a759150853d8711610283576102758183610914565b38610a3f565b87513d8c823e3d90fd5b5050505091505090565b505050505050600190565b9060005b8254811015610ad25781610ab28285610964565b90549060031b1c14610acc57610ac7906108b5565b610a9e565b91505090565b5050549056fea26469706673582212205f44a81759333ef5b71527b9aa9a94dab80801fc32f164866f8ef591bf83bcf664736f6c63430008120033",
+  "devdoc": {
+    "details": "Enabling an empty policy is allowed and intentionally fails closed when evaluated.",
+    "kind": "dev",
+    "methods": {},
+    "title": "WhitelistPolicy",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {},
+    "notice": "Persistent maker-owned taker admission settings, independent from any lifecycle-hook deployment. Each maker can allow direct addresses or members of a bounded list of curated groups.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 24036,
+        "contract": "contracts/hooks/WhitelistPolicy.sol:WhitelistPolicy",
+        "label": "enabled",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_mapping(t_address,t_bool)"
+      },
+      {
+        "astId": 24043,
+        "contract": "contracts/hooks/WhitelistPolicy.sol:WhitelistPolicy",
+        "label": "isWhitelisted",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_mapping(t_address,t_mapping(t_address,t_bool))"
+      },
+      {
+        "astId": 24048,
+        "contract": "contracts/hooks/WhitelistPolicy.sol:WhitelistPolicy",
+        "label": "allowedGroups",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_mapping(t_address,t_array(t_bytes32)dyn_storage)"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_array(t_bytes32)dyn_storage": {
+        "base": "t_bytes32",
+        "encoding": "dynamic_array",
+        "label": "bytes32[]",
+        "numberOfBytes": "32"
+      },
+      "t_bool": {
+        "encoding": "inplace",
+        "label": "bool",
+        "numberOfBytes": "1"
+      },
+      "t_bytes32": {
+        "encoding": "inplace",
+        "label": "bytes32",
+        "numberOfBytes": "32"
+      },
+      "t_mapping(t_address,t_array(t_bytes32)dyn_storage)": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => bytes32[])",
+        "numberOfBytes": "32",
+        "value": "t_array(t_bytes32)dyn_storage"
+      },
+      "t_mapping(t_address,t_bool)": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => bool)",
+        "numberOfBytes": "32",
+        "value": "t_bool"
+      },
+      "t_mapping(t_address,t_mapping(t_address,t_bool))": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => mapping(address => bool))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_address,t_bool)"
+      }
+    }
+  }
+}
