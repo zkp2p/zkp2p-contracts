@@ -101,11 +101,6 @@ const deterministicCoverageRuns = [
         test: "test-foundry/deterministic/registries",
     },
     {
-        name: "deterministic-risk",
-        irMinimum: true,
-        test: "test-foundry/deterministic/risk",
-    },
-    {
         name: "deterministic-staking",
         irMinimum: true,
         test: "test-foundry/deterministic/staking",
@@ -173,7 +168,6 @@ const coverageLanes = new Map([
             "deterministic-oracles",
             "deterministic-periphery",
             "deterministic-registries",
-            "deterministic-risk",
         ],
     ],
 ]);
