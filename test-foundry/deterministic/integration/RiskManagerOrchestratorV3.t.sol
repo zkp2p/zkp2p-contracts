@@ -23,7 +23,8 @@ import {RiskAttestationVerifierMock, RiskNullifierRegistryMock} from "../helpers
 import {OrchestratorV2LegacyFixture} from "../helpers/OrchestratorV2LegacyFixture.sol";
 
 contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture {
-    event RiskHookUpdated(address indexed oldHook, address indexed newHook);
+    event DefaultRiskHookUpdated(address indexed oldHook, address indexed newHook);
+    event MakerRiskHookSet(address indexed maker, address indexed oldHook, address indexed newHook, address setter);
 
     uint64 internal constant RISK_WINDOW = 30 days;
     uint256 internal constant SAFE_STAKE = 500e6;
@@ -77,7 +78,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         vm.startPrank(depositor);
         riskDepositId = _createRiskDeposit(address(guardian));
         vm.stopPrank();
-        IOrchestratorV3(address(orchestrator)).setRiskHook(manager);
+        IOrchestratorV3(address(orchestrator)).setDefaultRiskHook(manager);
 
         token.transfer(safe, SAFE_STAKE);
         vm.startPrank(safe);
@@ -251,7 +252,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
 
     function test_RiskHookGovernanceAndViewsExposeConfiguredSnapshots() public {
         IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
-        assertEq(address(riskOrchestrator.riskHook()), address(manager));
+        assertEq(address(riskOrchestrator.defaultRiskHook()), address(manager));
 
         bytes32 intentHash = _signalRiskIntent(taker, taker);
         assertEq(address(riskOrchestrator.getIntentRiskHook(intentHash)), address(manager));
@@ -261,11 +262,11 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         riskOrchestrator.setRiskCallbackGasLimit(749_999);
 
         vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.InvalidRiskHook.selector, other));
-        riskOrchestrator.setRiskHook(IIntentRiskHook(other));
+        riskOrchestrator.setDefaultRiskHook(IIntentRiskHook(other));
 
         vm.prank(other);
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
-        riskOrchestrator.setRiskHook(manager);
+        riskOrchestrator.setDefaultRiskHook(manager);
 
         bytes32 missingCancellation = keccak256("missing-cancellation");
         vm.expectRevert(
@@ -274,12 +275,12 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         riskOrchestrator.acknowledgeIntentCancellation(missingCancellation);
     }
 
-    function test_SetRiskHookFromZeroEnablesCallbacksOnlyForNewIntents() public {
+    function test_SetDefaultRiskHookFromZeroEnablesCallbacksOnlyForNewIntents() public {
         IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
 
         vm.expectEmit(true, true, false, true, address(orchestrator));
-        emit RiskHookUpdated(address(manager), address(0));
-        riskOrchestrator.setRiskHook(IIntentRiskHook(address(0)));
+        emit DefaultRiskHookUpdated(address(manager), address(0));
+        riskOrchestrator.setDefaultRiskHook(IIntentRiskHook(address(0)));
 
         bytes32 first = _signalRiskIntent(taker, taker);
         assertEq(address(riskOrchestrator.getIntentRiskHook(first)), address(0));
@@ -290,20 +291,20 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         orchestrator.releaseFundsToPayer(first);
 
         vm.expectEmit(true, true, false, true, address(orchestrator));
-        emit RiskHookUpdated(address(0), address(manager));
-        riskOrchestrator.setRiskHook(manager);
+        emit DefaultRiskHookUpdated(address(0), address(manager));
+        riskOrchestrator.setDefaultRiskHook(manager);
 
         bytes32 second = _signalRiskIntent(taker, taker);
         assertEq(address(riskOrchestrator.getIntentRiskHook(second)), address(manager));
         assertEq(uint256(manager.getRiskPosition(second).status), uint256(IRiskManager.PositionStatus.PENDING));
     }
 
-    function test_SetRiskHookToZeroKeepsInFlightIntentOnSnapshot() public {
+    function test_SetDefaultRiskHookToZeroKeepsInFlightIntentOnSnapshot() public {
         bytes32 inFlight = _signalRiskIntent(taker, taker);
         assertEq(vault.lockedStake(safe), INTENT_AMOUNT);
 
         IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
-        riskOrchestrator.setRiskHook(IIntentRiskHook(address(0)));
+        riskOrchestrator.setDefaultRiskHook(IIntentRiskHook(address(0)));
 
         bytes32 fresh = _signalRiskIntent(taker, taker);
         assertEq(address(riskOrchestrator.getIntentRiskHook(fresh)), address(0));
@@ -316,13 +317,13 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         assertEq(vault.lockedStake(safe), 0);
     }
 
-    function test_SetRiskHookChangeSettlesInFlightIntentThroughSnapshot() public {
+    function test_DefaultRiskHookChangeSettlesInFlightIntentThroughSnapshot() public {
         IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
         bytes32 inFlight = _signalRiskIntent(taker, taker);
         assertEq(address(riskOrchestrator.getIntentRiskHook(inFlight)), address(manager));
 
         IntentRiskHookMock mockB = new IntentRiskHookMock();
-        riskOrchestrator.setRiskHook(IIntentRiskHook(address(mockB)));
+        riskOrchestrator.setDefaultRiskHook(IIntentRiskHook(address(mockB)));
 
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(inFlight);
@@ -335,6 +336,147 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         assertEq(address(riskOrchestrator.getIntentRiskHook(fresh)), address(mockB));
         assertEq(mockB.createdCalls(), 1);
         assertEq(uint256(manager.getRiskPosition(fresh).status), uint256(IRiskManager.PositionStatus.NONE));
+    }
+
+    function test_UnsetMakerFallsBackToDefaultRiskHookAndSnapshotsIt() public {
+        IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
+
+        assertEq(address(riskOrchestrator.makerRiskHooks(depositor)), address(0));
+        assertEq(address(riskOrchestrator.getMakerRiskHook(depositor)), address(manager));
+
+        bytes32 intentHash = _signalRiskIntent(taker, taker);
+        assertEq(address(riskOrchestrator.getIntentRiskHook(intentHash)), address(manager));
+    }
+
+    function test_MakerCanSetOverrideAndReturnToDefaultRiskHook() public {
+        IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
+        IntentRiskHookMock mockB = new IntentRiskHookMock();
+
+        vm.expectEmit(true, true, true, true, address(orchestrator));
+        emit MakerRiskHookSet(depositor, address(0), address(mockB), depositor);
+        vm.prank(depositor);
+        riskOrchestrator.setMakerRiskHook(IIntentRiskHook(address(mockB)));
+
+        assertEq(address(riskOrchestrator.makerRiskHooks(depositor)), address(mockB));
+        assertEq(address(riskOrchestrator.getMakerRiskHook(depositor)), address(mockB));
+
+        bytes32 overriddenIntent = _signalRiskIntent(taker, taker);
+        assertEq(address(riskOrchestrator.getIntentRiskHook(overriddenIntent)), address(mockB));
+        assertEq(mockB.createdCalls(), 1);
+        assertEq(uint256(manager.getRiskPosition(overriddenIntent).status), uint256(IRiskManager.PositionStatus.NONE));
+
+        vm.expectEmit(true, true, true, true, address(orchestrator));
+        emit MakerRiskHookSet(depositor, address(mockB), address(0), depositor);
+        vm.prank(depositor);
+        riskOrchestrator.setMakerRiskHook(IIntentRiskHook(address(0)));
+
+        assertEq(address(riskOrchestrator.makerRiskHooks(depositor)), address(0));
+        assertEq(address(riskOrchestrator.getMakerRiskHook(depositor)), address(manager));
+
+        bytes32 defaultedIntent = _signalRiskIntent(taker, taker);
+        assertEq(address(riskOrchestrator.getIntentRiskHook(defaultedIntent)), address(manager));
+        assertEq(uint256(manager.getRiskPosition(defaultedIntent).status), uint256(IRiskManager.PositionStatus.PENDING));
+    }
+
+    function test_SetMakerRiskHookIsScopedToCaller() public {
+        IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
+        IntentRiskHookMock mockB = new IntentRiskHookMock();
+
+        vm.prank(other);
+        riskOrchestrator.setMakerRiskHook(IIntentRiskHook(address(mockB)));
+
+        assertEq(address(riskOrchestrator.makerRiskHooks(other)), address(mockB));
+        assertEq(address(riskOrchestrator.makerRiskHooks(depositor)), address(0));
+
+        bytes32 intentHash = _signalRiskIntent(taker, taker);
+        assertEq(address(riskOrchestrator.getIntentRiskHook(intentHash)), address(manager));
+        assertEq(uint256(manager.getRiskPosition(intentHash).status), uint256(IRiskManager.PositionStatus.PENDING));
+    }
+
+    function test_SetMakerRiskHookRejectsCodelessHook() public {
+        vm.prank(depositor);
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.InvalidRiskHook.selector, other));
+        IOrchestratorV3(address(orchestrator)).setMakerRiskHook(IIntentRiskHook(other));
+    }
+
+    function test_MigrateMakerRiskHooksRetargetsListedMakersAndCanReturnToDefault() public {
+        IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
+        IntentRiskHookMock mockB = new IntentRiskHookMock();
+        IntentRiskHookMock mockC = new IntentRiskHookMock();
+        address secondMaker = makeAddr("secondMaker");
+        address thirdMaker = makeAddr("thirdMaker");
+
+        vm.prank(depositor);
+        riskOrchestrator.setMakerRiskHook(IIntentRiskHook(address(mockB)));
+
+        address[] memory makers = new address[](2);
+        makers[0] = depositor;
+        makers[1] = secondMaker;
+
+        vm.expectEmit(true, true, true, true, address(orchestrator));
+        emit MakerRiskHookSet(depositor, address(mockB), address(mockC), address(this));
+        vm.expectEmit(true, true, true, true, address(orchestrator));
+        emit MakerRiskHookSet(secondMaker, address(0), address(mockC), address(this));
+        riskOrchestrator.migrateMakerRiskHooks(makers, IIntentRiskHook(address(mockC)));
+
+        assertEq(address(riskOrchestrator.makerRiskHooks(depositor)), address(mockC));
+        assertEq(address(riskOrchestrator.makerRiskHooks(secondMaker)), address(mockC));
+        assertEq(address(riskOrchestrator.makerRiskHooks(thirdMaker)), address(0));
+        assertEq(address(riskOrchestrator.getMakerRiskHook(thirdMaker)), address(manager));
+
+        bytes32 migratedIntent = _signalRiskIntent(taker, taker);
+        assertEq(address(riskOrchestrator.getIntentRiskHook(migratedIntent)), address(mockC));
+        assertEq(mockC.createdCalls(), 1);
+
+        address[] memory depositorOnly = new address[](1);
+        depositorOnly[0] = depositor;
+        vm.expectEmit(true, true, true, true, address(orchestrator));
+        emit MakerRiskHookSet(depositor, address(mockC), address(0), address(this));
+        riskOrchestrator.migrateMakerRiskHooks(depositorOnly, IIntentRiskHook(address(0)));
+
+        assertEq(address(riskOrchestrator.makerRiskHooks(depositor)), address(0));
+        assertEq(address(riskOrchestrator.getMakerRiskHook(depositor)), address(manager));
+    }
+
+    function test_MigrateMakerRiskHooksRejectsCodelessHook() public {
+        address[] memory makers = new address[](1);
+        makers[0] = depositor;
+
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.InvalidRiskHook.selector, other));
+        IOrchestratorV3(address(orchestrator)).migrateMakerRiskHooks(makers, IIntentRiskHook(other));
+    }
+
+    function test_RiskHookGovernanceSettersAreOnlyOwner() public {
+        IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
+        address[] memory makers = new address[](1);
+        makers[0] = depositor;
+
+        vm.prank(other);
+        vm.expectRevert(bytes("Ownable: caller is not the owner"));
+        riskOrchestrator.setDefaultRiskHook(manager);
+
+        vm.prank(other);
+        vm.expectRevert(bytes("Ownable: caller is not the owner"));
+        riskOrchestrator.migrateMakerRiskHooks(makers, manager);
+    }
+
+    function test_MakerRiskHookChangeKeepsInFlightIntentOnSnapshot() public {
+        IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
+        bytes32 inFlight = _signalRiskIntent(taker, taker);
+        IntentRiskHookMock mockB = new IntentRiskHookMock();
+
+        vm.prank(depositor);
+        riskOrchestrator.setMakerRiskHook(IIntentRiskHook(address(mockB)));
+
+        vm.prank(depositor);
+        orchestrator.releaseFundsToPayer(inFlight);
+
+        assertEq(uint256(manager.getRiskPosition(inFlight).status), uint256(IRiskManager.PositionStatus.SETTLED));
+        assertEq(mockB.settlementCalls(), 0);
+
+        bytes32 fresh = _signalRiskIntent(taker, taker);
+        assertEq(address(riskOrchestrator.getIntentRiskHook(fresh)), address(mockB));
+        assertEq(mockB.createdCalls(), 1);
     }
 
     function test_RealFailedCancellationCanReconcileAfterControllerRecovery() public {

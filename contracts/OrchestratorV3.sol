@@ -28,8 +28,8 @@ import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
  * @title OrchestratorV3
  * @notice Standalone V3 orchestrator for the ZKP2P protocol. Owns the complete intent (order)
  * lifecycle — signal, cancel, fulfill, manual release, prune, orphan cleanup — and extends it
- * with snapshotted governance-selected risk callbacks: fail-closed admission and settlement,
- * fail-open cancellation with durable recovery data.
+ * with snapshotted per-maker risk callbacks resolved with a governance default fallback:
+ * fail-closed admission and settlement, fail-open cancellation with durable recovery data.
  */
 contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
 
@@ -66,8 +66,9 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     // Optional pre-intent hooks configured per escrow + depositId.
     mapping(address => mapping(uint256 => IPreIntentHook)) internal depositPreIntentHooks;
 
-    // Governance-selected risk hook; snapshotted per intent at signal.
-    IIntentRiskHook public riskHook;
+    // Risk hook resolved per maker (deposit.depositor) at signal, falling back to the default; snapshotted per intent.
+    IIntentRiskHook public defaultRiskHook;
+    mapping(address => IIntentRiskHook) public makerRiskHooks;
     mapping(bytes32 => IIntentRiskHook) internal intentRiskHooks;
     mapping(bytes32 => IntentCancellation) internal failedIntentCancellations;
     mapping(bytes32 => bool) public usedGatingSignatureDigests;
@@ -124,8 +125,8 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
      * @notice Signals intent to pay the depositor defined in the _depositId the _amount * deposit conversionRate off-chain at
      * their given _payeeId in order to unlock _amount of funds on-chain. Caller must provide a signature from the deposit's gating
      * service to prove their eligibility to take liquidity. This function captures and stores all values required for fullfilling
-     * the intent to give strong guarantees to the buyer. Snapshots the global risk hook and executes fail-closed risk
-     * admission before locking liquidity for the corresponding deposit on the escrow contract.
+     * the intent to give strong guarantees to the buyer. Resolves and snapshots the deposit maker's risk hook with the
+     * governance default fallback, then executes fail-closed risk admission before locking liquidity.
      *
      * @param _params                   Struct containing all the intent parameters
      */
@@ -196,8 +197,8 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         // Emit manager fee snapshot last for easier indexing
         emit IntentManagerFeeSnapshotted(intentHash, managerFeeRecipient, managerFee);
 
-        // Snapshot and execute fail-closed risk admission for the global risk hook.
-        IIntentRiskHook snapshottedRiskHook = riskHook;
+        // Resolve the hook for the deposit's maker, then snapshot and execute fail-closed risk admission.
+        IIntentRiskHook snapshottedRiskHook = _resolveMakerRiskHook(dep.depositor);
         intentRiskHooks[intentHash] = snapshottedRiskHook;
 
         BoundedCall.executeRiskAdmission(
@@ -247,6 +248,21 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         depositPreIntentHooks[_escrow][_depositId] = _hook;
 
         emit DepositPreIntentHookSet(_escrow, _depositId, address(_hook), msg.sender);
+    }
+
+    /**
+     * @notice Sets the caller's own risk hook, overriding the default for every deposit they own.
+     *
+     * @param _hook   Risk hook for msg.sender (address(0) to follow the default risk hook)
+     */
+    function setMakerRiskHook(IIntentRiskHook _hook) external {
+        address hookAddress = address(_hook);
+        if (hookAddress != address(0) && hookAddress.code.length == 0) {
+            revert InvalidRiskHook(hookAddress);
+        }
+
+        emit MakerRiskHookSet(msg.sender, address(makerRiskHooks[msg.sender]), hookAddress, msg.sender);
+        makerRiskHooks[msg.sender] = _hook;
     }
 
     /**
@@ -418,19 +434,39 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     /* ============ Governance Functions ============ */
 
     /**
-     * @notice GOVERNANCE ONLY: Updates the global risk hook used by future intents.
+     * @notice GOVERNANCE ONLY: Updates the default risk hook applied to makers without their own hook.
      *
-     * @param _hook   New risk hook (address(0) to disable)
+     * @param _hook   New default risk hook (address(0) to disable)
      */
-    function setRiskHook(IIntentRiskHook _hook) external onlyOwner {
+    function setDefaultRiskHook(IIntentRiskHook _hook) external onlyOwner {
         address hookAddress = address(_hook);
         if (hookAddress != address(0) && hookAddress.code.length == 0) {
             revert InvalidRiskHook(hookAddress);
         }
 
-        IIntentRiskHook oldHook = riskHook;
-        emit RiskHookUpdated(address(oldHook), hookAddress);
-        riskHook = _hook;
+        IIntentRiskHook oldHook = defaultRiskHook;
+        emit DefaultRiskHookUpdated(address(oldHook), hookAddress);
+        defaultRiskHook = _hook;
+    }
+
+    /**
+     * @notice GOVERNANCE ONLY: Retargets the risk hook for an explicit list of makers.
+     * @dev Repeatable; migrates makers onto an upgraded hook without asking each maker to act.
+     *
+     * @param _makers   Makers whose risk hook is being retargeted
+     * @param _hook     Risk hook written for every listed maker (address(0) returns them to the default)
+     */
+    function migrateMakerRiskHooks(address[] calldata _makers, IIntentRiskHook _hook) external onlyOwner {
+        address hookAddress = address(_hook);
+        if (hookAddress != address(0) && hookAddress.code.length == 0) {
+            revert InvalidRiskHook(hookAddress);
+        }
+
+        for (uint256 i = 0; i < _makers.length; ++i) {
+            address maker = _makers[i];
+            emit MakerRiskHookSet(maker, address(makerRiskHooks[maker]), hookAddress, msg.sender);
+            makerRiskHooks[maker] = _hook;
+        }
     }
 
     /**
@@ -523,6 +559,13 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     }
 
     /**
+     * @notice Returns the effective risk hook a maker's new intents resolve to after default fallback.
+     */
+    function getMakerRiskHook(address _maker) external view returns (IIntentRiskHook) {
+        return _resolveMakerRiskHook(_maker);
+    }
+
+    /**
      * @notice Returns the immutable hook snapshot for an active intent.
      */
     function getIntentRiskHook(bytes32 _intentHash) external view returns (IIntentRiskHook) {
@@ -553,6 +596,14 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     }
 
     /* ============ Internal Functions ============ */
+
+    /**
+     * @notice Resolves the effective risk hook for a maker: their own hook when set, otherwise the default.
+     */
+    function _resolveMakerRiskHook(address _maker) internal view returns (IIntentRiskHook) {
+        IIntentRiskHook makerHook = makerRiskHooks[_maker];
+        return address(makerHook) == address(0) ? defaultRiskHook : makerHook;
+    }
 
     /**
      * @notice Resolves a cancelled (cancel / escrow prune / orphan cleanup) intent: prunes state, then

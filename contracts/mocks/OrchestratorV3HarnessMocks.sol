@@ -6,7 +6,7 @@ import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
 interface IOrchestratorV3ReentryTarget {
     function cancelIntent(bytes32 _intentHash) external;
     function cleanupOrphanedIntents(bytes32[] calldata _intentHashes) external;
-    function setRiskHook(IIntentRiskHook _hook) external;
+    function setDefaultRiskHook(IIntentRiskHook _hook) external;
 }
 
 /** @notice Risk hook that catches deliberate attempts to reenter each guarded V3 entrypoint. */
@@ -27,7 +27,7 @@ contract OrchestratorV3ReentrantRiskHook is IIntentRiskHook {
 
     function onIntentCreated(bytes32) external override {
         if (reenterOnCreate) {
-            try orchestrator.setRiskHook(this) {
+            try orchestrator.setDefaultRiskHook(this) {
                 setterReentrySucceeded = true;
             } catch { }
         }
@@ -53,7 +53,7 @@ contract OrchestratorV3ReentrantRiskHook is IIntentRiskHook {
         try orchestrator.cleanupOrphanedIntents(intentHashes) {
             cleanupReentrySucceeded = true;
         } catch { }
-        try orchestrator.setRiskHook(this) {
+        try orchestrator.setDefaultRiskHook(this) {
             setterReentrySucceeded = true;
         } catch { }
     }

@@ -10,8 +10,8 @@ import { IReferralFee } from "./IReferralFee.sol";
 /**
  * @title IOrchestratorV3
  * @notice Standalone interface for the V3 orchestrator: the full V2 intent lifecycle surface
- *         (pre-intent hooks, manager fees, orphan cleanup) plus snapshotted
- *         governance-selected risk callbacks. Deliberately relayer-free.
+ *         (pre-intent hooks, manager fees, orphan cleanup) plus snapshotted per-maker
+ *         risk callbacks resolved with a governance default fallback. Deliberately relayer-free.
  */
 interface IOrchestratorV3 {
 
@@ -113,7 +113,8 @@ interface IOrchestratorV3 {
     event ProtocolFeeRecipientUpdated(address indexed protocolFeeRecipient);
     event PartialManualReleaseDelayUpdated(uint256 partialManualReleaseDelay);
 
-    event RiskHookUpdated(address indexed oldHook, address indexed newHook);
+    event DefaultRiskHookUpdated(address indexed oldHook, address indexed newHook);
+    event MakerRiskHookSet(address indexed maker, address indexed oldHook, address indexed newHook, address setter);
     event IntentRiskHookSnapshotted(bytes32 indexed intentHash, address indexed riskHook);
     event IntentRiskSettlementExecuted(
         bytes32 indexed intentHash,
@@ -192,6 +193,7 @@ interface IOrchestratorV3 {
 
     function signalIntent(SignalIntentParams calldata params) external;
     function setDepositPreIntentHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
+    function setMakerRiskHook(IIntentRiskHook _hook) external;
 
     function cancelIntent(bytes32 intentHash) external;
 
@@ -213,7 +215,8 @@ interface IOrchestratorV3 {
 
     /* ============ Governance Functions ============ */
 
-    function setRiskHook(IIntentRiskHook _hook) external;
+    function setDefaultRiskHook(IIntentRiskHook _hook) external;
+    function migrateMakerRiskHooks(address[] calldata _makers, IIntentRiskHook _hook) external;
     function setRiskCallbackGasLimit(uint256 _gasLimit) external;
 
     /* ============ View Functions ============ */
@@ -221,7 +224,9 @@ interface IOrchestratorV3 {
     function getIntent(bytes32 intentHash) external view returns (Intent memory);
     function getAccountIntents(address account) external view returns (bytes32[] memory);
     function getDepositPreIntentHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
-    function riskHook() external view returns (IIntentRiskHook);
+    function defaultRiskHook() external view returns (IIntentRiskHook);
+    function makerRiskHooks(address _maker) external view returns (IIntentRiskHook);
+    function getMakerRiskHook(address _maker) external view returns (IIntentRiskHook);
     function getIntentRiskHook(bytes32 _intentHash) external view returns (IIntentRiskHook);
     function getRiskIntent(bytes32 _intentHash) external view returns (RiskIntentData memory);
     /**
