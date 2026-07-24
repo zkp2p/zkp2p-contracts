@@ -68,7 +68,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     StakeVault:                         ${tryGetAddress(network, "StakeVault")}
     RiskManager:                        ${tryGetAddress(network, "RiskManager")}
     AddressGroupRegistry:               ${tryGetAddress(network, "AddressGroupRegistry")}
-    MakerGroupPolicy:                   ${tryGetAddress(network, "MakerGroupPolicy")}
+    WhitelistPolicy:                   ${tryGetAddress(network, "WhitelistPolicy")}
     IntentLifecycleHookV1:             ${tryGetAddress(network, "IntentLifecycleHookV1")}
     NullifierRegistryV2:                ${tryGetAddress(network, "NullifierRegistryV2")}
     UnifiedPaymentVerifierV3:           ${tryGetAddress(network, "UnifiedPaymentVerifierV3")}

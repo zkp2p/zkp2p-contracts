@@ -28,7 +28,7 @@ const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
   UnifiedPaymentVerifierV3:
     'contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol/UnifiedPaymentVerifierV3.json',
   AddressGroupRegistry: 'contracts/registries/AddressGroupRegistry.sol/AddressGroupRegistry.json',
-  MakerGroupPolicy: 'contracts/risk/MakerGroupPolicy.sol/MakerGroupPolicy.json',
+  WhitelistPolicy: 'contracts/hooks/WhitelistPolicy.sol/WhitelistPolicy.json',
   IntentLifecycleHookV1: 'contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json',
 };
 

@@ -83,19 +83,20 @@ owner-controlled global `lifecycleHook` for future intents:
 - The existing generic per-deposit pre-intent hook remains available. V3 has no dedicated per-deposit
   whitelist slot and no maker- or deposit-selected lifecycle hook.
 
-The first minimal global hook is the independent maker-group stack:
+The first minimal global hook is the independent maker whitelist stack:
 
 - `AddressGroupRegistry`: governance registers stable public group IDs, manages metadata and active state,
   and assigns curators. Curators add or remove members; membership is event-indexed rather than enumerable
   onchain.
-- `MakerGroupPolicy`: each maker owns a bounded list of up to 10 allowed groups for each payment method,
-  plus an explicit `groupsEnabled` switch. The policy survives global hook replacement.
-- `IntentLifecycleHookV1`: a stateless admission hook that allows a taker when the maker's policy is disabled
-  or when the taker belongs to at least one configured active group. Enabled policies with no configured
-  groups fail closed. Settlement and cancellation are no-ops in this version.
+- `WhitelistPolicy`: each maker owns a direct address whitelist and a bounded list of up to 10 allowed groups,
+  plus an explicit `enabled` switch. The policy survives global hook replacement.
+- `IntentLifecycleHookV1`: a stateless admission hook that delegates to `WhitelistPolicy`, allowing a taker when
+  the maker's policy is disabled, the taker is directly whitelisted, or the taker belongs to at least one
+  configured active group. Enabled policies with no matching address or group fail closed. Settlement and
+  cancellation are no-ops in this version.
 
 Canonical deployment IDs are `keccak256` hashes of `peers`, `peer-pluses`, and `peer-merchants`. Group
-enforcement is maker-level and payment-method-specific, not deposit-level. These V3 changes do not modify
+enforcement is maker-level, not payment-method- or deposit-level. These V3 changes do not modify
 `EscrowV2`, require an Escrow redeployment, or alter the production `OrchestratorV2` whitelist path.
 
 ## V2 Contract Inventory

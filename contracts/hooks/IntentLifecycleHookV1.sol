@@ -3,55 +3,40 @@
 pragma solidity ^0.8.18;
 
 import {IEscrow} from "../interfaces/IEscrow.sol";
-import {IAddressGroupRegistry} from "../interfaces/IAddressGroupRegistry.sol";
 import {IIntentLifecycleHook} from "../interfaces/IIntentLifecycleHook.sol";
-import {IMakerGroupPolicy} from "../interfaces/IMakerGroupPolicy.sol";
 import {IOrchestratorRegistry} from "../interfaces/IOrchestratorRegistry.sol";
 import {IOrchestratorV3} from "../interfaces/IOrchestratorV3.sol";
+import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 
 /**
  * @title IntentLifecycleHookV1
  * @notice Stateless lifecycle hook admitting any orchestrator registered in OrchestratorRegistry and enforcing
- * maker-owned, payment-method-specific curated group policies. Settlement and cancellation are no-ops in this version.
- * @dev Reads intent context from the calling orchestrator. Group iteration is bounded by
- * MakerGroupPolicy.MAX_GROUPS_PER_PAYMENT_METHOD.
+ * maker-owned whitelist policies. A taker is admitted when enforcement is disabled or when the policy allows the
+ * taker directly or through an allowed group. Settlement and cancellation are no-ops in this version.
+ * @dev Reads intent context from the calling orchestrator and delegates admission to WhitelistPolicy.
  */
 contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     /* ============ State Variables ============ */
 
     IOrchestratorRegistry public immutable orchestratorRegistry;
-    IMakerGroupPolicy public immutable makerGroupPolicy;
-    IAddressGroupRegistry public immutable groupRegistry;
+    IWhitelistPolicy public immutable whitelistPolicy;
 
     /* ============ Errors ============ */
 
     error ZeroAddress();
     error InvalidDependency(address dependency);
-    error GroupRegistryMismatch(address policyRegistry, address hookRegistry);
     error UnauthorizedOrchestrator(address caller);
     error IntentNotFound(bytes32 intentHash);
-    error NoAllowedGroupsConfigured(address maker, bytes32 paymentMethod);
-    error TakerNotInAllowedGroup(address maker, bytes32 paymentMethod, address taker);
+    error TakerNotWhitelisted(address maker, address taker);
 
     /* ============ Constructor ============ */
 
-    constructor(
-        IOrchestratorRegistry _orchestratorRegistry,
-        IMakerGroupPolicy _makerGroupPolicy,
-        IAddressGroupRegistry _groupRegistry
-    ) {
+    constructor(IOrchestratorRegistry _orchestratorRegistry, IWhitelistPolicy _whitelistPolicy) {
         _validateDependency(address(_orchestratorRegistry));
-        _validateDependency(address(_makerGroupPolicy));
-        _validateDependency(address(_groupRegistry));
-
-        address policyRegistry = address(_makerGroupPolicy.groupRegistry());
-        if (policyRegistry != address(_groupRegistry)) {
-            revert GroupRegistryMismatch(policyRegistry, address(_groupRegistry));
-        }
+        _validateDependency(address(_whitelistPolicy));
 
         orchestratorRegistry = _orchestratorRegistry;
-        makerGroupPolicy = _makerGroupPolicy;
-        groupRegistry = _groupRegistry;
+        whitelistPolicy = _whitelistPolicy;
     }
 
     /* ============ Lifecycle Callbacks ============ */
@@ -63,20 +48,10 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
         IOrchestratorV3.IntentContext memory intent = IOrchestratorV3(msg.sender).getIntentContext(_intentHash);
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
-        IEscrow.Deposit memory deposit = IEscrow(intent.escrow).getDeposit(intent.depositId);
-        address maker = deposit.depositor;
-        if (!makerGroupPolicy.groupsEnabled(maker, intent.paymentMethod)) return;
-
-        bytes32[] memory groupIds = makerGroupPolicy.getAllowedGroups(maker, intent.paymentMethod);
-        if (groupIds.length == 0) {
-            revert NoAllowedGroupsConfigured(maker, intent.paymentMethod);
+        address maker = IEscrow(intent.escrow).getDeposit(intent.depositId).depositor;
+        if (!whitelistPolicy.isTakerAllowed(maker, intent.owner)) {
+            revert TakerNotWhitelisted(maker, intent.owner);
         }
-
-        for (uint256 i = 0; i < groupIds.length; i++) {
-            if (groupRegistry.isMember(groupIds[i], intent.owner)) return;
-        }
-
-        revert TakerNotInAllowedGroup(maker, intent.paymentMethod, intent.owner);
     }
 
     /**

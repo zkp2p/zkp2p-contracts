@@ -48,7 +48,7 @@ async function executeOrQueueGovernanceCall(
 
 async function systemFullyWired(network: string): Promise<boolean> {
   const registryAddress = getDeployedContractAddress(network, "AddressGroupRegistry");
-  const policyAddress = getDeployedContractAddress(network, "MakerGroupPolicy");
+  const policyAddress = getDeployedContractAddress(network, "WhitelistPolicy");
   const hookAddress = getDeployedContractAddress(network, "IntentLifecycleHookV1");
   const orchestratorAddress = getDeployedContractAddress(network, "OrchestratorV3");
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
@@ -56,15 +56,14 @@ async function systemFullyWired(network: string): Promise<boolean> {
   const escrowV2Address = getDeployedContractAddress(network, "EscrowV2");
 
   const registry = await ethers.getContractAt("AddressGroupRegistry", registryAddress);
-  const policy = await ethers.getContractAt("MakerGroupPolicy", policyAddress);
+  const policy = await ethers.getContractAt("WhitelistPolicy", policyAddress);
   const hook = await ethers.getContractAt("IntentLifecycleHookV1", hookAddress);
   const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorAddress);
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
   const escrowRegistry = await ethers.getContractAt("EscrowRegistry", escrowRegistryAddress);
 
   if ((await policy.groupRegistry()).toLowerCase() !== registryAddress.toLowerCase()) return false;
-  if ((await hook.makerGroupPolicy()).toLowerCase() !== policyAddress.toLowerCase()) return false;
-  if ((await hook.groupRegistry()).toLowerCase() !== registryAddress.toLowerCase()) return false;
+  if ((await hook.whitelistPolicy()).toLowerCase() !== policyAddress.toLowerCase()) return false;
   if ((await hook.orchestratorRegistry()).toLowerCase() !== orchestratorRegistryAddress.toLowerCase()) return false;
   if ((await orchestrator.lifecycleHook()).toLowerCase() !== hookAddress.toLowerCase()) return false;
   if (!(await orchestratorRegistry.isOrchestrator(orchestratorAddress))) return false;
@@ -90,7 +89,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
   const escrowV2Address = getDeployedContractAddress(network, "EscrowV2");
 
-  console.log("=== Deploying minimal OrchestratorV3 maker-group risk system ===");
+  console.log("=== Deploying minimal OrchestratorV3 maker whitelist risk system ===");
 
   const boundedCall = await deploy("BoundedCall", {
     from: deployer,
@@ -164,22 +163,18 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     }
   }
 
-  const makerGroupPolicy = await deploy("MakerGroupPolicy", {
+  const whitelistPolicy = await deploy("WhitelistPolicy", {
     from: deployer,
     args: [addressGroupRegistry.address],
   });
-  if (makerGroupPolicy.newlyDeployed) {
-    console.log("MakerGroupPolicy deployed at", makerGroupPolicy.address);
+  if (whitelistPolicy.newlyDeployed) {
+    console.log("WhitelistPolicy deployed at", whitelistPolicy.address);
     await waitForDeploymentDelay(hre);
   }
 
   const intentLifecycleHook = await deploy("IntentLifecycleHookV1", {
     from: deployer,
-    args: [
-      orchestratorRegistryAddress,
-      makerGroupPolicy.address,
-      addressGroupRegistry.address,
-    ],
+    args: [orchestratorRegistryAddress, whitelistPolicy.address],
   });
   if (intentLifecycleHook.newlyDeployed) {
     console.log("IntentLifecycleHookV1 deployed at", intentLifecycleHook.address);
@@ -208,7 +203,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("=== Minimal V3 risk system deployment prepared ===");
   console.log("OrchestratorV3:", orchestratorV3.address);
   console.log("AddressGroupRegistry:", addressGroupRegistry.address);
-  console.log("MakerGroupPolicy:", makerGroupPolicy.address);
+  console.log("WhitelistPolicy:", whitelistPolicy.address);
   console.log("IntentLifecycleHookV1:", intentLifecycleHook.address);
   console.log("EscrowV2 reused without redeployment:", escrowV2Address);
 };
