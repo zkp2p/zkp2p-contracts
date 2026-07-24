@@ -7,6 +7,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IntentGuardian} from "../../../contracts/IntentGuardian.sol";
 import {RiskManager} from "../../../contracts/RiskManager.sol";
 import {StakeVault} from "../../../contracts/StakeVault.sol";
+import {AddressGroupRegistry} from "../../../contracts/registries/AddressGroupRegistry.sol";
+import {IAddressGroupRegistry} from "../../../contracts/interfaces/IAddressGroupRegistry.sol";
 import {IEscrowV2} from "../../../contracts/interfaces/IEscrowV2.sol";
 import {IIntentRiskHook} from "../../../contracts/interfaces/IIntentRiskHook.sol";
 import {INullifierRegistryV2} from "../../../contracts/interfaces/INullifierRegistryV2.sol";
@@ -34,6 +36,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
     IntentGuardian internal guardian;
     RiskAttestationVerifierMock internal attestationVerifier;
     RiskNullifierRegistryMock internal nullifierRegistry;
+    AddressGroupRegistry internal groupRegistry;
     uint256 internal riskDepositId;
 
     function setUp() public override {
@@ -44,13 +47,15 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         deferredTaker = makeAddr("deferredTaker");
         attestationVerifier = new RiskAttestationVerifierMock();
         nullifierRegistry = new RiskNullifierRegistryMock();
+        groupRegistry = new AddressGroupRegistry(new IAddressGroupRegistry.GroupSeed[](0));
         vault = new StakeVault(address(this), IERC20(address(token)), address(0), 1 days);
         manager = new RiskManager(
             address(this),
             IOrchestratorV3(address(orchestrator)),
             vault,
             attestationVerifier,
-            INullifierRegistryV2(address(nullifierRegistry))
+            INullifierRegistryV2(address(nullifierRegistry)),
+            groupRegistry
         );
         guardian = new IntentGuardian(address(this), IEscrowV2(address(escrow)));
         guardian.setExtensionFeeBpsPerHour(10);
@@ -65,6 +70,8 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
                 })
             })
         );
+        vm.prank(depositor);
+        manager.setChargebackProtection(METHOD, true);
         orchestrator.setProtocolFee(1e16);
 
         vm.startPrank(depositor);

@@ -127,10 +127,10 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
     /**
      * @dev Snapshots chargeback policy and reserves admission coverage when configured.
      *
-     *      The coordinator must first validate the common intent lifecycle, platform enabled state, deposit token, and
-     *      intent guardian. For chargebackable policy, the selected stake owner is preferred when its free stake covers
-     *      the complete intent amount. Otherwise deferred payout is selected when enabled. Deferred admission rejects a
-     *      post-intent hook because deferred settlement consumes the complete gross release.
+     *      When the admission matrix selects the staking path, the selected stake owner is preferred when its free
+     *      stake covers the complete intent amount. Otherwise deferred payout is selected when enabled. Deferred
+     *      admission rejects a post-intent hook because deferred settlement consumes the complete gross release.
+     *      Pass-through admission skips escalation and records an UNBONDED position.
      *
      *      Canonical parties and amounts come from the authenticated Orchestrator admission path and are not subjected
      *      to redundant shape or zero-value checks here.
@@ -139,6 +139,7 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
      * @param _payoutRecipient Recipient that will own a future deferred funded lock.
      * @param _paymentMethod Payment method selecting the chargeback policy.
      * @param _intentAmount Complete intent amount requiring admission coverage.
+     * @param _enforceChargeback Whether the admission matrix selected the staking path.
      * @return mode Snapshotted coverage mode.
      * @return stakeOwner Owner of existing or future funded coverage.
      * @return coverageAmount Amount locked at admission, or zero for unbonded and deferred positions.
@@ -149,7 +150,8 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
         address _taker,
         address _payoutRecipient,
         bytes32 _paymentMethod,
-        uint256 _intentAmount
+        uint256 _intentAmount,
+        bool _enforceChargeback
     ) internal returns (RiskMode mode, address stakeOwner, uint256 coverageAmount, uint64 riskWindow) {
         IStakeVault vault = _stakeVault();
         ChargebackConfig memory config = chargebackConfigs[_paymentMethod];
@@ -157,7 +159,7 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
         mode = RiskMode.UNBONDED;
         riskWindow = config.riskWindow;
 
-        if (config.chargebackable) {
+        if (_enforceChargeback) {
             uint256 available = vault.freeStake(stakeOwner);
             if (available >= _intentAmount) {
                 mode = RiskMode.STAKE_BACKED;

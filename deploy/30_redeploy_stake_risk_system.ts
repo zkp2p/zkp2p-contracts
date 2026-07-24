@@ -103,6 +103,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const orchestratorV3Address = getDeployedContractAddress(network, "OrchestratorV3");
   const riskAttestationVerifierAddress = getDeployedContractAddress(network, "RiskAttestationVerifier");
   const nullifierRegistryV2Address = getDeployedContractAddress(network, "NullifierRegistryV2");
+  const addressGroupRegistryAddress = getDeployedContractAddress(network, "AddressGroupRegistry");
   const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
   const stakeToken = USDC[network];
   if (!stakeToken) {
@@ -135,6 +136,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       stakeVault.address,
       riskAttestationVerifierAddress,
       nullifierRegistryV2Address,
+      addressGroupRegistryAddress,
     ],
   });
   console.log("New RiskManager deployed at", riskManager.address);

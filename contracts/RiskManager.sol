@@ -6,12 +6,14 @@ import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 import {IAttestationVerifier} from "./interfaces/IAttestationVerifier.sol";
+import {IAddressGroupRegistry} from "./interfaces/IAddressGroupRegistry.sol";
 import {IEscrowV2} from "./interfaces/IEscrowV2.sol";
 import {INullifierRegistryV2} from "./interfaces/INullifierRegistryV2.sol";
 import {IOrchestratorV3} from "./interfaces/IOrchestratorV3.sol";
 import {IRiskManager} from "./interfaces/IRiskManager.sol";
 import {IStakeVault} from "./interfaces/IStakeVault.sol";
 import {ChargebackManager} from "./risk/ChargebackManager.sol";
+import {MakerProtectionManager} from "./risk/MakerProtectionManager.sol";
 
 /**
  * @title RiskManager
@@ -19,9 +21,10 @@ import {ChargebackManager} from "./risk/ChargebackManager.sol";
  *
  * @dev ARCHITECTURE
  *      This is the only deployed risk-policy contract and the only StakeVault controller. Common intent identity and
- *      lifecycle state live here. `ChargebackManager` owns chargeback policy and the raw-intent coverage lock. The
- *      module exposes only internal entrypoints, so Orchestrator integration remains one contract and every terminal
- *      transition stays atomic.
+ *      lifecycle state live here. `ChargebackManager` owns chargeback policy and the raw-intent coverage lock.
+ *      `MakerProtectionManager` owns maker-scoped whitelist and chargeback opt-ins. The modules expose only internal
+ *      lifecycle entrypoints, so Orchestrator integration remains one contract and every terminal transition stays
+ *      atomic.
  *
  * @dev TRUST MODEL
  *      Orchestrator callbacks are authenticated and their canonical intent or settlement values are not redundantly
@@ -33,7 +36,7 @@ import {ChargebackManager} from "./risk/ChargebackManager.sol";
  *      settlement retains full gross coverage until clean maturity or a valid chargeback. Failed-open cancellation
  *      callbacks can be reconciled permissionlessly using Orchestrator's durable original cancellation timestamp.
  */
-contract RiskManager is ChargebackManager, Ownable2Step, ReentrancyGuard {
+contract RiskManager is ChargebackManager, MakerProtectionManager, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
 
     /// @notice Compatibility getter for the sentinel maturity used by pending risk exposure.
@@ -95,14 +98,16 @@ contract RiskManager is ChargebackManager, Ownable2Step, ReentrancyGuard {
      * @param _stakeVaultContract Shared custody and accounting ledger controlled by this contract after handover.
      * @param _attestationVerifier Initial verifier for signed chargeback evidence.
      * @param _nullifierRegistry Registry binding verified payment nullifiers to fulfilled intents.
+     * @param _groupRegistry Registry resolving attached maker whitelist groups.
      */
     constructor(
         address _owner,
         IOrchestratorV3 _orchestratorContract,
         IStakeVault _stakeVaultContract,
         IAttestationVerifier _attestationVerifier,
-        INullifierRegistryV2 _nullifierRegistry
-    ) ChargebackManager(_attestationVerifier, _nullifierRegistry) {
+        INullifierRegistryV2 _nullifierRegistry,
+        IAddressGroupRegistry _groupRegistry
+    ) ChargebackManager(_attestationVerifier, _nullifierRegistry) MakerProtectionManager(_groupRegistry) {
         orchestrator = _orchestratorContract;
         stakeVault = _stakeVaultContract;
         _transferOwnership(_owner);
@@ -112,22 +117,28 @@ contract RiskManager is ChargebackManager, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Records a canonical newly created intent and initializes chargeback policy.
-     * @dev ORCHESTRATOR ONLY. Admission is fail-closed and blocked while risk taking is paused. The payment method must
-     *      be enabled and the Escrow deposit must use the Vault token. Chargeback admission may reserve full coverage.
+     * @dev ORCHESTRATOR ONLY. Maker protection preferences select pass-through, whitelist rejection, or the staking
+     *      path. Only the staking path applies pause, platform, and Vault-token gates and may reserve full coverage.
      * @param _intentHash Identifier of the intent readable from the calling Orchestrator.
      */
     function onIntentCreated(bytes32 _intentHash) external override onlyOrchestrator nonReentrant {
-        if (riskTakingPaused) revert RiskTakingPaused();
-
         IntentPosition storage position = intentPositions[_intentHash];
         if (position.status != PositionStatus.NONE) revert PositionAlreadyExists(_intentHash);
 
         IOrchestratorV3.RiskIntentData memory intent = orchestrator.getRiskIntent(_intentHash);
-        if (!platformEnabled[intent.paymentMethod]) revert PlatformDisabled(intent.paymentMethod);
-
         IEscrowV2 escrow = IEscrowV2(intent.escrow);
         IEscrowV2.Deposit memory deposit = escrow.getDeposit(intent.depositId);
-        _validateAdmissionBoundary(deposit);
+        AdmissionOutcome admission = _getEffectiveAdmission(deposit.depositor, intent.paymentMethod, intent.owner);
+        if (admission == AdmissionOutcome.REJECT_NOT_WHITELISTED) {
+            revert TakerNotWhitelisted(intent.owner, deposit.depositor);
+        }
+
+        bool stakingPath = admission == AdmissionOutcome.STAKING_PATH;
+        if (stakingPath) {
+            if (riskTakingPaused) revert RiskTakingPaused();
+            if (!platformEnabled[intent.paymentMethod]) revert PlatformDisabled(intent.paymentMethod);
+            _validateAdmissionBoundary(deposit);
+        }
 
         position.taker = intent.owner;
         position.depositor = deposit.depositor;
@@ -138,7 +149,7 @@ contract RiskManager is ChargebackManager, Ownable2Step, ReentrancyGuard {
         position.intentAmount = intent.amount;
 
         (RiskMode mode, address stakeOwner, uint256 coverageAmount, uint64 riskWindow) =
-            _admitChargeback(_intentHash, intent.owner, intent.to, intent.paymentMethod, intent.amount);
+            _admitChargeback(_intentHash, intent.owner, intent.to, intent.paymentMethod, intent.amount, stakingPath);
 
         emit RiskPositionCreated(
             _intentHash,
@@ -261,6 +272,15 @@ contract RiskManager is ChargebackManager, Ownable2Step, ReentrancyGuard {
     /* ============ Governance ============ */
 
     /**
+     * @notice GOVERNANCE ONLY: Seeds existing makers' protection opt-ins after redeployment.
+     * @dev This one-time initialization reverts after its first successful call.
+     * @param _makers Existing maker configurations to seed.
+     */
+    function initializeMakerConfigs(MakerInit[] calldata _makers) external override onlyOwner {
+        _initializeMakerConfigs(_makers);
+    }
+
+    /**
      * @notice GOVERNANCE ONLY: Sets policy used by future intents for one payment method.
      * @dev Existing positions retain their snapshots.
      * @param _paymentMethod Payment-method key whose future policy is configured.
@@ -326,9 +346,25 @@ contract RiskManager is ChargebackManager, Ownable2Step, ReentrancyGuard {
      */
     function getPlatformRiskConfig(bytes32 _paymentMethod) external view override returns (PlatformRiskConfig memory) {
         return PlatformRiskConfig({
-            enabled: platformEnabled[_paymentMethod],
-            chargeback: _getChargebackConfig(_paymentMethod)
+            enabled: platformEnabled[_paymentMethod], chargeback: _getChargebackConfig(_paymentMethod)
         });
+    }
+
+    /**
+     * @notice Returns the maker protection matrix outcome for a maker, payment method, and taker.
+     * @dev This view excludes pause, platform-enabled, token, and live free-stake checks.
+     * @param _maker Maker whose protection preferences apply.
+     * @param _paymentMethod Payment method selecting maker and platform chargeback policy.
+     * @param _taker Taker evaluated against the maker's direct and group whitelist.
+     * @return outcome Pass-through admission, whitelist rejection, or the staking path.
+     */
+    function getEffectiveAdmission(address _maker, bytes32 _paymentMethod, address _taker)
+        external
+        view
+        override
+        returns (AdmissionOutcome outcome)
+    {
+        return _getEffectiveAdmission(_maker, _paymentMethod, _taker);
     }
 
     /**
@@ -412,6 +448,30 @@ contract RiskManager is ChargebackManager, Ownable2Step, ReentrancyGuard {
     }
 
     /* ============ Internal Lifecycle ============ */
+
+    function _getEffectiveAdmission(address _maker, bytes32 _paymentMethod, address _taker)
+        internal
+        view
+        returns (AdmissionOutcome)
+    {
+        MakerProtectionConfig storage config = makerProtectionConfigs[_maker];
+        bool whitelistEnabled = config.whitelistEnabled;
+        bool effectiveChargeback =
+            chargebackProtectionEnabled[_maker][_paymentMethod] && chargebackConfigs[_paymentMethod].chargebackable;
+
+        if (!whitelistEnabled) {
+            return effectiveChargeback ? AdmissionOutcome.STAKING_PATH : AdmissionOutcome.ADMIT_UNBONDED;
+        }
+
+        bool whitelistPassed = _isTakerAllowed(_maker, _taker);
+        if (!effectiveChargeback) {
+            return whitelistPassed ? AdmissionOutcome.ADMIT_UNBONDED : AdmissionOutcome.REJECT_NOT_WHITELISTED;
+        }
+        if (config.requireBothProtections) {
+            return whitelistPassed ? AdmissionOutcome.STAKING_PATH : AdmissionOutcome.REJECT_NOT_WHITELISTED;
+        }
+        return whitelistPassed ? AdmissionOutcome.ADMIT_UNBONDED : AdmissionOutcome.STAKING_PATH;
+    }
 
     /**
      * @dev Resolves pending chargeback exposure and records cancellation.

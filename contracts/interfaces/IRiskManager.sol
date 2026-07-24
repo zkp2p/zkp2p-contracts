@@ -3,6 +3,7 @@
 pragma solidity ^0.8.18;
 
 import {IAttestationVerifier} from "./IAttestationVerifier.sol";
+import {IAddressGroupRegistry} from "./IAddressGroupRegistry.sol";
 import {IIntentRiskHook} from "./IIntentRiskHook.sol";
 import {INullifierRegistryV2} from "./INullifierRegistryV2.sol";
 import {IOrchestratorV3} from "./IOrchestratorV3.sol";
@@ -27,6 +28,24 @@ interface IRiskManager is IIntentRiskHook {
         SETTLED,
         RELEASED,
         SLASHED
+    }
+
+    enum AdmissionOutcome {
+        ADMIT_UNBONDED,
+        REJECT_NOT_WHITELISTED,
+        STAKING_PATH
+    }
+
+    struct MakerProtectionConfig {
+        bool whitelistEnabled;
+        bool requireBothProtections;
+    }
+
+    struct MakerInit {
+        address maker;
+        bool whitelistEnabled;
+        bool requireBothProtections;
+        bytes32[] chargebackPlatforms;
     }
 
     struct ChargebackConfig {
@@ -78,11 +97,7 @@ interface IRiskManager is IIntentRiskHook {
     }
 
     event PlatformRiskConfigUpdated(
-        bytes32 indexed paymentMethod,
-        bool enabled,
-        bool chargebackable,
-        bool deferredPayoutEnabled,
-        uint64 riskWindow
+        bytes32 indexed paymentMethod, bool enabled, bool chargebackable, bool deferredPayoutEnabled, uint64 riskWindow
     );
     event RiskPositionCreated(
         bytes32 indexed intentHash,
@@ -134,8 +149,17 @@ interface IRiskManager is IIntentRiskHook {
     );
     event AttestationVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
     event RiskTakingPausedUpdated(bool paused);
+    event MakerWhitelistProtectionUpdated(address indexed maker, bool enabled);
+    event MakerChargebackProtectionUpdated(address indexed maker, bytes32 indexed paymentMethod, bool enabled);
+    event MakerProtectionModeUpdated(address indexed maker, bool requireBothProtections);
+    event TakerWhitelisted(address indexed maker, address indexed taker);
+    event TakerRemovedFromWhitelist(address indexed maker, address indexed taker);
+    event GroupAttached(address indexed maker, uint256 indexed groupId);
+    event GroupDetached(address indexed maker, uint256 indexed groupId);
+    event MakerConfigsInitialized(uint256 makerCount);
 
     error ZeroAddress();
+    error EmptyArray();
     error InvalidContract(address dependency);
     error UnauthorizedOrchestrator(address caller);
     error RiskTakingPaused();
@@ -159,11 +183,23 @@ interface IRiskManager is IIntentRiskHook {
     error AttestationVerificationFailed();
     error TimestampOverflow(uint256 timestamp);
     error OwnershipRenunciationDisabled();
+    error TakerNotWhitelisted(address taker, address maker);
+    error GroupDoesNotExist(uint256 groupId);
+    error MaxGroupsExceeded(uint256 attempted, uint256 max);
+    error MakerConfigsAlreadyInitialized();
 
     function setPlatformRiskConfig(bytes32 _paymentMethod, PlatformRiskConfig calldata _config) external;
     function setAttestationVerifier(address _verifier) external;
     function setRiskTakingPaused(bool _paused) external;
     function acceptVaultController() external;
+    function setWhitelistProtection(bool _enabled) external;
+    function setChargebackProtection(bytes32 _paymentMethod, bool _enabled) external;
+    function setProtectionMode(bool _requireBothProtections) external;
+    function addToWhitelist(address[] calldata _takers) external;
+    function removeFromWhitelist(address[] calldata _takers) external;
+    function attachGroups(uint256[] calldata _groupIds) external;
+    function detachGroups(uint256[] calldata _groupIds) external;
+    function initializeMakerConfigs(MakerInit[] calldata _makers) external;
 
     function reconcileCancellation(bytes32 _intentHash) external;
     function reconcileCancellations(bytes32[] calldata _intentHashes) external;
@@ -179,6 +215,12 @@ interface IRiskManager is IIntentRiskHook {
         view
         returns (address stakeOwner, uint256 totalStake, uint256 lockedStake, uint256 freeStake);
     function hashChargebackAttestation(ChargebackAttestation calldata _attestation) external view returns (bytes32);
+    function getMakerProtectionConfig(address _maker) external view returns (MakerProtectionConfig memory);
+    function getAttachedGroups(address _maker) external view returns (uint256[] memory);
+    function getEffectiveAdmission(address _maker, bytes32 _paymentMethod, address _taker)
+        external
+        view
+        returns (AdmissionOutcome);
 
     function orchestrator() external view returns (IOrchestratorV3);
     function stakeVault() external view returns (IStakeVault);
@@ -186,4 +228,8 @@ interface IRiskManager is IIntentRiskHook {
     function attestationVerifier() external view returns (IAttestationVerifier);
     function riskTakingPaused() external view returns (bool);
     function usedChargebackNullifiers(bytes32 _nullifier) external view returns (bool);
+    function chargebackProtectionEnabled(address _maker, bytes32 _paymentMethod) external view returns (bool);
+    function whitelist(address _maker, address _taker) external view returns (bool);
+    function makerConfigsInitialized() external view returns (bool);
+    function groupRegistry() external view returns (IAddressGroupRegistry);
 }

@@ -9,6 +9,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {RiskManager} from "../../../contracts/RiskManager.sol";
 import {StakeVault} from "../../../contracts/StakeVault.sol";
+import {AddressGroupRegistry} from "../../../contracts/registries/AddressGroupRegistry.sol";
+import {IAddressGroupRegistry} from "../../../contracts/interfaces/IAddressGroupRegistry.sol";
 import {IAttestationVerifier} from "../../../contracts/interfaces/IAttestationVerifier.sol";
 import {IEscrowV2} from "../../../contracts/interfaces/IEscrowV2.sol";
 import {IIntentRiskHook} from "../../../contracts/interfaces/IIntentRiskHook.sol";
@@ -48,8 +50,9 @@ contract RiskManagerHarness is RiskManager {
         IOrchestratorV3 _orchestrator,
         StakeVault _stakeVault,
         IAttestationVerifier _attestationVerifier,
-        INullifierRegistryV2 _nullifierRegistry
-    ) RiskManager(_owner, _orchestrator, _stakeVault, _attestationVerifier, _nullifierRegistry) {}
+        INullifierRegistryV2 _nullifierRegistry,
+        IAddressGroupRegistry _groupRegistry
+    ) RiskManager(_owner, _orchestrator, _stakeVault, _attestationVerifier, _nullifierRegistry, _groupRegistry) {}
 
     function setPositionCoverageAmount(bytes32 _intentHash, uint256 _coverageAmount) external {
         chargebackPositions[_intentHash].coverageAmount = _coverageAmount;
@@ -85,22 +88,27 @@ contract RiskNullifierRegistryMock {
 }
 
 contract RiskEscrowMock {
-    IEscrowV2.Deposit internal deposit;
+    mapping(uint256 => IEscrowV2.Deposit) internal deposits;
 
     function configureDeposit(address _lp, IERC20 _token) external {
-        deposit.depositor = _lp;
-        deposit.token = _token;
-        deposit.acceptingIntents = true;
+        deposits[1].depositor = _lp;
+        deposits[1].token = _token;
+        deposits[1].acceptingIntents = true;
+    }
+
+    function configureDepositAt(uint256 _depositId, address _lp, IERC20 _token) external {
+        deposits[_depositId].depositor = _lp;
+        deposits[_depositId].token = _token;
+        deposits[_depositId].acceptingIntents = true;
     }
 
     function setToken(IERC20 _token) external {
-        deposit.token = _token;
+        deposits[1].token = _token;
     }
 
-    function getDeposit(uint256) external view returns (IEscrowV2.Deposit memory) {
-        return deposit;
+    function getDeposit(uint256 _depositId) external view returns (IEscrowV2.Deposit memory) {
+        return deposits[_depositId];
     }
-
 }
 
 contract RiskOrchestratorMock {
@@ -123,6 +131,27 @@ contract RiskOrchestratorMock {
             to: _recipient,
             escrow: _escrow,
             depositId: 1,
+            amount: _amount,
+            paymentMethod: _paymentMethod,
+            createdAt: _createdAt
+        });
+    }
+
+    function setIntentForDeposit(
+        bytes32 _intentHash,
+        address _owner,
+        address _recipient,
+        address _escrow,
+        uint256 _depositId,
+        uint256 _amount,
+        bytes32 _paymentMethod,
+        uint64 _createdAt
+    ) external {
+        intents[_intentHash] = IOrchestratorV3.RiskIntentData({
+            owner: _owner,
+            to: _recipient,
+            escrow: _escrow,
+            depositId: _depositId,
             amount: _amount,
             paymentMethod: _paymentMethod,
             createdAt: _createdAt
@@ -201,6 +230,7 @@ abstract contract RiskManagerFixture is Test {
     RiskEscrowMock internal escrow;
     RiskAttestationVerifierMock internal verifier;
     RiskNullifierRegistryMock internal nullifierRegistry;
+    AddressGroupRegistry internal groupRegistry;
 
     uint256 internal nextIntentId = 1;
 
@@ -211,19 +241,23 @@ abstract contract RiskManagerFixture is Test {
         escrow = new RiskEscrowMock();
         verifier = new RiskAttestationVerifierMock();
         nullifierRegistry = new RiskNullifierRegistryMock();
+        groupRegistry = new AddressGroupRegistry(new IAddressGroupRegistry.GroupSeed[](0));
         vault = new StakeVault(owner, token, address(0), 1 days);
         manager = new RiskManagerHarness(
             owner,
             IOrchestratorV3(address(orchestrator)),
             vault,
             verifier,
-            INullifierRegistryV2(address(nullifierRegistry))
+            INullifierRegistryV2(address(nullifierRegistry)),
+            groupRegistry
         );
 
         vm.prank(owner);
         vault.initializeController(address(manager));
         escrow.configureDeposit(lp, token);
         _setConfig(true, true, RISK_WINDOW);
+        vm.prank(lp);
+        manager.setChargebackProtection(PAYMENT_METHOD, true);
 
         token.mint(safe, 100_000e6);
         token.mint(taker, 100_000e6);
@@ -262,6 +296,17 @@ abstract contract RiskManagerFixture is Test {
         createdAt = uint64(block.timestamp);
         orchestrator.setIntent(
             intentHash, _intentTaker, _recipient, address(escrow), _amount, PAYMENT_METHOD, createdAt
+        );
+    }
+
+    function _newIntentForDeposit(uint256 _depositId, address _intentTaker, address _recipient, uint256 _amount)
+        internal
+        returns (bytes32 intentHash, uint64 createdAt)
+    {
+        intentHash = keccak256(abi.encode("intent", nextIntentId++));
+        createdAt = uint64(block.timestamp);
+        orchestrator.setIntentForDeposit(
+            intentHash, _intentTaker, _recipient, address(escrow), _depositId, _amount, PAYMENT_METHOD, createdAt
         );
     }
 

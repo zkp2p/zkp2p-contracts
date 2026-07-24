@@ -53,6 +53,11 @@ contract RiskManagerInvariantHandler {
         try vault.selectStakeOwner(_sponsor) {} catch {}
     }
 
+    function toggleMakerChargebackProtection(bool _enabled) external {
+        vm.prank(lp);
+        manager.setChargebackProtection(paymentMethod, _enabled);
+    }
+
     function admit(uint96 _rawAmount) external {
         uint256 amount = 1 + uint256(_rawAmount) % 2_000e6;
         bytes32 intentHash = keccak256(abi.encode("invariant-intent", ++nonce));
@@ -134,7 +139,6 @@ contract RiskManagerInvariantHandler {
     function intentHashAt(uint256 _index) external view returns (bytes32) {
         return intentHashes[_index];
     }
-
 }
 
 contract RiskManagerInvariantTest is RiskManagerFixture {

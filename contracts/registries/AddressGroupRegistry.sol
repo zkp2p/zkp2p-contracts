@@ -13,7 +13,8 @@ import { IWhitelistResolver } from "../interfaces/IWhitelistResolver.sol";
  * @dev The integer id is only unique within one registry deployment on one chain — off-chain
  * consumers must key groups by (chainId, registryAddress, groupId).
  *
- * TRUST MODEL: attaching a group to any consumer (e.g. WhitelistPreIntentHookV2) delegates
+ * TRUST MODEL: attaching a group to RiskManager's maker-level protection config (makers attach
+ * groups via RiskManager.attachGroups) delegates
  * ongoing admission policy to the group's controller set: the current owner, any future owner
  * after transfer, and the current and any future resolver. Any of these can admit arbitrary
  * accounts at any time.
