@@ -52,7 +52,6 @@ Anyone -- fulfillIntent --> OrchestratorV2 -- verifyPayment --> UnifiedPaymentVe
 | RelayerRegistry | `contracts/registries/RelayerRegistry.sol` | ~50 |
 | SignatureGatingPreIntentHook | `contracts/hooks/SignatureGatingPreIntentHook.sol` | ~80 |
 | WhitelistPreIntentHook | `contracts/hooks/WhitelistPreIntentHook.sol` | ~60 |
-| AcrossBridgeHookV2 | `contracts/hooks/AcrossBridgeHookV2.sol` | ~120 |
 | ChainlinkOracleAdapter | `contracts/oracles/ChainlinkOracleAdapter.sol` | ~80 |
 | PythOracleAdapter | `contracts/oracles/PythOracleAdapter.sol` | ~100 |
 

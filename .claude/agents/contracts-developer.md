@@ -51,7 +51,6 @@ Anyone -- fulfillIntent --> OrchestratorV2 -- verifyPayment --> UnifiedPaymentVe
 Pre/post-intent hooks for extensibility:
 - `SignatureGatingPreIntentHook` — Require off-chain authorization signature
 - `WhitelistPreIntentHook` — Restrict takers to a whitelist
-- `AcrossBridgeHook` — Cross-chain bridge integration
 
 ## Build & Test (Dual Hardhat + Foundry)
 

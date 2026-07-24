@@ -87,7 +87,6 @@ Anyone -- fulfillIntent --> OrchestratorV2 -- verifyPayment --> UnifiedPaymentVe
 
 | Hook | Purpose |
 |------|---------|
-| `AcrossBridgeHook` / `AcrossBridgeHookV2` | Post-intent hook that bridges released funds via Across |
 | `SignatureGatingPreIntentHook` | Pre-intent hook requiring EIP-712 gating signature |
 | `WhitelistPreIntentHook` | Pre-intent hook restricting to whitelisted addresses |
 
@@ -138,7 +137,6 @@ test-foundry/                         # Foundry tests (*.t.sol)
   fuzz/                               # EscrowCriticalPathFuzz, OrchestratorCriticalPathFuzz, PythOracleAdapterFuzz
   invariant/                          # EscrowInvariant, OrchestratorInvariant, V2RateFlowInvariantSkeleton
   unit/                               # OrchestratorPruneOnSignal, PythOracleAdapter
-  fork/                               # AcrossBridgeHookFork
 
 deploy/                               # Hardhat Deploy scripts (NN_description.ts)
   00-13: V1 system + payment methods
@@ -247,7 +245,6 @@ import { getAccounts } from "@utils/test";
 - **Witness (prod staging)**: `0x4ab950AE1e3326578Bf7e643a2031E858aBa2927`
 - **Witness (prod)**: `0x5106A86819ED6Bb82c77CcBfC151250E1d369DbA`
 - **Pyth (Base)**: `0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a`
-- **Across SpokePool (Base)**: `0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64`
 
 ## Configuration
 

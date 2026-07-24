@@ -42,7 +42,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     NullifierRegistry:                  ${getDeployedContractAddress(network, "NullifierRegistry")}
     UnifiedPaymentVerifier:             ${getDeployedContractAddress(network, "UnifiedPaymentVerifier")}
     SimpleAttestationVerifier:          ${getDeployedContractAddress(network, "SimpleAttestationVerifier")}
-    AcrossBridgeHook:                   ${getDeployedContractAddress(network, "AcrossBridgeHook")}
     USDC:                               ${USDC[network] ? USDC[network] : getDeployedContractAddress(network, "USDCMock")}
     ----------------------------------------------------------------------
     V2 Contracts:
@@ -52,7 +51,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     UnifiedPaymentVerifierV2:           ${tryGetAddress(network, "UnifiedPaymentVerifierV2")}
     WhitelistPreIntentHook:             ${tryGetAddress(network, "WhitelistPreIntentHook")}
     SignatureGatingPreIntentHook:       ${tryGetAddress(network, "SignatureGatingPreIntentHook")}
-    AcrossBridgeHookV2:                 ${tryGetAddress(network, "AcrossBridgeHookV2")}
     RateManagerV1:                      ${tryGetAddress(network, "RateManagerV1")}
     ChainlinkOracleAdapter:             ${tryGetAddress(network, "ChainlinkOracleAdapter")}
     PythOracleAdapter:                  ${tryGetAddress(network, "PythOracleAdapter")}

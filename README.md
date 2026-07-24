@@ -34,7 +34,7 @@ The repository still contains legacy v1 contracts and deploy scripts because v2 
 
 The v2 surface was built out rapidly between February 20, 2026 and March 11, 2026. The main additions in that window are:
 
-- `2026-03-02`: `EscrowV2`, `OrchestratorV2`, `ProtocolViewerV2`, `RateManagerV1`, `AcrossBridgeHookV2`, `SignatureGatingPreIntentHook`, `WhitelistPreIntentHook`, `ChainlinkOracleAdapter`, `OrchestratorRegistry`, and the supporting v2 interfaces/mocks/tests landed.
+- `2026-03-02`: `EscrowV2`, `OrchestratorV2`, `ProtocolViewerV2`, `RateManagerV1`, `SignatureGatingPreIntentHook`, `WhitelistPreIntentHook`, `ChainlinkOracleAdapter`, `OrchestratorRegistry`, and the supporting v2 interfaces/mocks/tests landed.
 - `2026-03-02`: the dedicated v2 deployment pipeline landed in `deploy/14_deploy_v2_system.ts`, `deploy/15_deploy_v2_periphery.ts`, and `deploy/16_configure_v2_payment_methods.ts`, with matching deployment tests.
 - `2026-03-03`: `PythOracleAdapter` and its deployment/test coverage were added for Pyth FX feeds.
 - `2026-03-04`: mainnet deployment scripts for `EscrowV2`, `OrchestratorV2`, and `RateManagerV1` landed.
@@ -206,19 +206,6 @@ An off-chain allowlist / RFQ gate:
 
 This is useful for private liquidity, per-trade approval, or off-chain risk checks.
 
-#### `AcrossBridgeHookV2`
-
-A post-intent hook that bridges fulfilled tokens through Across `depositNow`.
-
-Design constraints:
-
-- intended for stablecoin-to-stablecoin routes
-- the signal step commits destination chain, output token, recipient, and minimum output amount
-- the fulfill step supplies just-in-time Across route data
-- if the bridge cannot proceed, the hook falls back to a direct source-chain transfer instead of reverting the entire settlement
-
-That fallback behavior is important because the user may already have made the off-chain fiat payment.
-
 ### Oracle Adapters
 
 #### `ChainlinkOracleAdapter`
@@ -383,7 +370,6 @@ Executed during `fulfillIntent`, after verification and escrow release:
 
 - direct recipient settlement remains the default
 - hooks can route fulfilled funds into external workflows
-- `AcrossBridgeHookV2` is the canonical example
 
 ### Registries as Safety Gates
 
@@ -572,12 +558,9 @@ Deploys:
 
 - `WhitelistPreIntentHook`
 - `SignatureGatingPreIntentHook`
-- `AcrossBridgeHookV2`
 - `RateManagerV1`
 - `ChainlinkOracleAdapter`
 - `ProtocolViewerV2`
-
-Then registers `AcrossBridgeHookV2` in `PostIntentHookRegistry`.
 
 #### `deploy/16_configure_v2_payment_methods.ts`
 
@@ -672,7 +655,6 @@ The deploy scripts also reference current network parameters such as:
 - multisig address
 - protocol fee recipient
 - dust recipient
-- Across SpokePool address
 - Pyth contract address
 
 These parameters live in `deployments/parameters.ts`.
@@ -683,7 +665,6 @@ These parameters live in `deployments/parameters.ts`.
 - `EscrowV2` and `OrchestratorV2` both use reentrancy guards on state-changing flows that interact with external contracts.
 - Payment replay protection depends on `NullifierRegistry`.
 - Oracle safety depends on both adapter validation and escrow-side `maxStaleness`.
-- `AcrossBridgeHookV2` is intentionally biased toward successful settlement; it falls back to a direct transfer instead of reverting bridge failures.
 - Manager fees are capped and snapshotted at signal time.
 - The README is not a full audit report. Contract behavior should be read alongside the source and tests before making deployment or integration assumptions.
 
