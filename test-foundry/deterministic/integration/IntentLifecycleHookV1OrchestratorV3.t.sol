@@ -217,6 +217,13 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         lifecycleHook.settleIntent(context);
     }
 
+    function test_RegisteredOrchestratorWithUnknownIntentFailsClosed() public {
+        bytes32 unknownIntent = keccak256("unknown-intent");
+        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.IntentNotFound.selector, unknownIntent));
+        vm.prank(address(orchestrator));
+        lifecycleHook.onIntentCreated(unknownIntent);
+    }
+
     function _enablePeerPolicyAndAddTaker() internal {
         vm.startPrank(depositor);
         policy.addAllowedGroups(_groupIds(PEERS));
