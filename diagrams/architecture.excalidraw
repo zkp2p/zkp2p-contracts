@@ -289,17 +289,6 @@
       "containerId": "posthook_box", "lineHeight": 1.25
     },
     {
-      "type": "text", "id": "posthook_items", "x": 360, "y": 455, "width": 200, "height": 18,
-      "text": "AcrossBridgeHookV2",
-      "originalText": "AcrossBridgeHookV2",
-      "fontSize": 10, "fontFamily": 3, "textAlign": "left", "verticalAlign": "top",
-      "strokeColor": "#64748b", "backgroundColor": "transparent",
-      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0, "opacity": 100,
-      "angle": 0, "seed": 200104, "version": 1, "versionNonce": 200105,
-      "isDeleted": false, "groupIds": [], "boundElements": null, "link": null, "locked": false,
-      "containerId": null, "lineHeight": 1.25
-    },
-    {
       "type": "arrow", "id": "arrow_orch_posthook", "x": 297, "y": 395, "width": 61, "height": 30,
       "strokeColor": "#047857", "backgroundColor": "transparent",
       "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "dashed", "roughness": 0, "opacity": 100,

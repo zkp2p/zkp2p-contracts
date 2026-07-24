@@ -52,7 +52,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     UnifiedPaymentVerifierV2:           ${tryGetAddress(network, "UnifiedPaymentVerifierV2")}
     WhitelistPreIntentHook:             ${tryGetAddress(network, "WhitelistPreIntentHook")}
     SignatureGatingPreIntentHook:       ${tryGetAddress(network, "SignatureGatingPreIntentHook")}
-    AcrossBridgeHookV2:                 ${tryGetAddress(network, "AcrossBridgeHookV2")}
     RateManagerV1:                      ${tryGetAddress(network, "RateManagerV1")}
     ChainlinkOracleAdapter:             ${tryGetAddress(network, "ChainlinkOracleAdapter")}
     PythOracleAdapter:                  ${tryGetAddress(network, "PythOracleAdapter")}
