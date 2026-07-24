@@ -27,7 +27,7 @@ abstract contract IntentGuardianCompatibilityTestBase is Test {
     function setUp() public virtual {
         token = new GuardianTokenMock();
         escrowRegistry = new EscrowRegistry();
-        guardian = new IntentGuardian(escrowRegistry, 10);
+        guardian = new IntentGuardian(address(this), escrowRegistry, 10);
         token.mint(payer, INTENT_AMOUNT);
     }
 

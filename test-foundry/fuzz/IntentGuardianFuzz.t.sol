@@ -53,7 +53,7 @@ contract IntentGuardianFuzzTest is Test {
         uint256 amount = bound(uint256(rawAmount), 1, type(uint96).max);
         uint256 additionalTime = bound(uint256(rawTime), 1, 5 days);
         uint256 fee = bound(uint256(rawFee), 1, 83);
-        IntentGuardian guardian = new IntentGuardian(escrowRegistry, fee);
+        IntentGuardian guardian = new IntentGuardian(address(this), escrowRegistry, fee);
 
         assertLe(guardian.quoteExtensionCost(amount, additionalTime), amount);
     }
@@ -82,7 +82,7 @@ contract IntentGuardianFuzzTest is Test {
     }
 
     function _configureGuardian(uint256 _amount, uint256 _fee) internal returns (IntentGuardian guardian) {
-        guardian = new IntentGuardian(escrowRegistry, _fee);
+        guardian = new IntentGuardian(address(this), escrowRegistry, _fee);
         escrow.configureDeposit(depositor, token, address(guardian));
         escrow.setIntent(INTENT_HASH, _amount, block.timestamp, block.timestamp + 1 hours);
         token.mint(payer, _amount);

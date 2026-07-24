@@ -3,7 +3,10 @@ import "module-alias/register";
 import {HardhatRuntimeEnvironment} from "hardhat/types";
 import {DeployFunction} from "hardhat-deploy/types";
 
-import {INTENT_GUARDIAN_EXTENSION_FEE_BPS_PER_HOUR} from "../deployments/parameters";
+import {
+  INTENT_GUARDIAN_EXTENSION_FEE_BPS_PER_HOUR,
+  MULTI_SIG,
+} from "../deployments/parameters";
 import {
   getDeployedContractAddress,
   waitForDeploymentDelay,
@@ -13,16 +16,17 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const {deploy} = hre.deployments;
   const network = hre.deployments.getNetworkName();
   const [deployer] = await hre.getUnnamedAccounts();
+  const owner = MULTI_SIG[network] || deployer;
   const extensionFeeBpsPerHour = INTENT_GUARDIAN_EXTENSION_FEE_BPS_PER_HOUR[network];
 
   if (extensionFeeBpsPerHour === undefined) {
-    throw new Error(`No immutable IntentGuardian fee configured for network: ${network}`);
+    throw new Error(`No initial IntentGuardian fee configured for network: ${network}`);
   }
 
   const escrowRegistry = getDeployedContractAddress(network, "EscrowRegistry");
   const guardian = await deploy("IntentGuardian", {
     from: deployer,
-    args: [escrowRegistry, extensionFeeBpsPerHour],
+    args: [owner, escrowRegistry, extensionFeeBpsPerHour],
     log: true,
   });
 
@@ -30,7 +34,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     console.log(
       "IntentGuardian deployed at",
       guardian.address,
-      "with immutable fee",
+      "with governance owner",
+      owner,
+      "and initial fee",
       extensionFeeBpsPerHour,
       "bps/hour",
     );
