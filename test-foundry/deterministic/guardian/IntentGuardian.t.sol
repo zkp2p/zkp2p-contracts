@@ -69,6 +69,8 @@ contract GuardianEscrowMock {
 }
 
 contract IntentGuardianTest is Test {
+    event ExtensionFeeBpsPerHourUpdated(uint256 previousFeeBpsPerHour, uint256 newFeeBpsPerHour);
+
     event IntentExtended(
         address indexed escrow,
         uint256 indexed depositId,
@@ -96,33 +98,76 @@ contract IntentGuardianTest is Test {
         escrow = new GuardianEscrowMock();
         escrowRegistry = new EscrowRegistry();
         escrowRegistry.addEscrow(address(escrow));
-        guardian = new IntentGuardian(escrowRegistry, EXTENSION_FEE_BPS_PER_HOUR);
+        guardian = new IntentGuardian(address(this), escrowRegistry, EXTENSION_FEE_BPS_PER_HOUR);
         escrow.configureDeposit(depositor, token, address(guardian));
         _setLiveIntent(escrow, INTENT_HASH, INTENT_AMOUNT, 1 days);
         token.mint(payer, INTENT_AMOUNT);
     }
 
-    function test_ConstructorFixesFeeAndRejectsInvalidConfiguration() public {
+    function test_ConstructorSetsGovernanceAndRejectsInvalidConfiguration() public {
         assertEq(guardian.extensionFeeBpsPerHour(), EXTENSION_FEE_BPS_PER_HOUR);
         assertEq(address(guardian.escrowRegistry()), address(escrowRegistry));
+        assertEq(guardian.owner(), address(this));
         assertEq(guardian.MAX_EXTENSION_FEE_BPS_PER_HOUR(), 83);
 
         vm.expectRevert(IIntentGuardian.ZeroAddress.selector);
-        new IntentGuardian(IEscrowRegistry(address(0)), EXTENSION_FEE_BPS_PER_HOUR);
+        new IntentGuardian(address(0), escrowRegistry, EXTENSION_FEE_BPS_PER_HOUR);
+
+        vm.expectRevert(IIntentGuardian.ZeroAddress.selector);
+        new IntentGuardian(address(this), IEscrowRegistry(address(0)), EXTENSION_FEE_BPS_PER_HOUR);
 
         vm.expectRevert(abi.encodeWithSelector(IIntentGuardian.ExtensionFeeExceedsIntentAmount.selector, 84));
-        new IntentGuardian(escrowRegistry, 84);
+        new IntentGuardian(address(this), escrowRegistry, 84);
     }
 
-    function test_ThereIsNoFeeMutationSurface() public {
-        (bool success,) = address(guardian).call(abi.encodeWithSignature("setExtensionFeeBpsPerHour(uint256)", 1));
+    function test_OwnerUpdatesFeeAndQuoteWhileNonOwnerCannot() public {
+        vm.prank(payer);
+        vm.expectRevert("Ownable: caller is not the owner");
+        guardian.setExtensionFeeBpsPerHour(1);
 
-        assertFalse(success);
+        uint256 previousQuote = guardian.quoteExtensionCost(INTENT_AMOUNT, 1 hours);
+        vm.expectEmit(false, false, false, true, address(guardian));
+        emit ExtensionFeeBpsPerHourUpdated(EXTENSION_FEE_BPS_PER_HOUR, 20);
+        guardian.setExtensionFeeBpsPerHour(20);
+
+        assertEq(guardian.extensionFeeBpsPerHour(), 20);
+        assertEq(guardian.quoteExtensionCost(INTENT_AMOUNT, 1 hours), previousQuote * 2);
+    }
+
+    function test_FeeUpdateRejectsAboveMaximumAndCanDisableExtensions() public {
+        vm.expectRevert(abi.encodeWithSelector(IIntentGuardian.ExtensionFeeExceedsIntentAmount.selector, 84));
+        guardian.setExtensionFeeBpsPerHour(84);
         assertEq(guardian.extensionFeeBpsPerHour(), EXTENSION_FEE_BPS_PER_HOUR);
+
+        vm.expectEmit(false, false, false, true, address(guardian));
+        emit ExtensionFeeBpsPerHourUpdated(EXTENSION_FEE_BPS_PER_HOUR, 0);
+        guardian.setExtensionFeeBpsPerHour(0);
+
+        vm.expectRevert(IIntentGuardian.ExtensionsDisabled.selector);
+        guardian.extendIntent(address(escrow), DEPOSIT_ID, INTENT_HASH, 1 hours, type(uint256).max);
+    }
+
+    function test_TwoStepOwnershipTransferMovesFeeAuthority() public {
+        address nextOwner = makeAddr("nextOwner");
+        guardian.transferOwnership(nextOwner);
+        assertEq(guardian.owner(), address(this));
+        assertEq(guardian.pendingOwner(), nextOwner);
+
+        vm.prank(nextOwner);
+        guardian.acceptOwnership();
+        assertEq(guardian.owner(), nextOwner);
+        assertEq(guardian.pendingOwner(), address(0));
+
+        vm.expectRevert("Ownable: caller is not the owner");
+        guardian.setExtensionFeeBpsPerHour(20);
+
+        vm.prank(nextOwner);
+        guardian.setExtensionFeeBpsPerHour(20);
+        assertEq(guardian.extensionFeeBpsPerHour(), 20);
     }
 
     function test_ZeroFeeDeploymentDisablesExtensions() public {
-        IntentGuardian disabledGuardian = new IntentGuardian(escrowRegistry, 0);
+        IntentGuardian disabledGuardian = new IntentGuardian(address(this), escrowRegistry, 0);
         escrow.configureDeposit(depositor, token, address(disabledGuardian));
 
         vm.expectRevert(IIntentGuardian.ExtensionsDisabled.selector);
@@ -197,7 +242,7 @@ contract IntentGuardianTest is Test {
     }
 
     function test_QuoteRoundsUpToNextTokenUnit() public {
-        IntentGuardian oneBpsGuardian = new IntentGuardian(escrowRegistry, 1);
+        IntentGuardian oneBpsGuardian = new IntentGuardian(address(this), escrowRegistry, 1);
         assertEq(oneBpsGuardian.quoteExtensionCost(1, 1), 1);
 
         uint256 amount = 1_000_003;

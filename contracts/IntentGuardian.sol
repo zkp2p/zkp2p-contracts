@@ -2,6 +2,7 @@
 
 pragma solidity ^0.8.18;
 
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -14,11 +15,10 @@ import {IIntentGuardian} from "./interfaces/IIntentGuardian.sol";
 /**
  * @title IntentGuardian
  * @notice Extends live Escrow intents in exchange for a prepaid, non-refundable fee.
- * @dev Escrow and EscrowV2 expose the same Deposit and Intent ABI used here. A deposit opts into a
- *      specific guardian address, so the constructor-fixed fee cannot be changed beneath its maker.
- *      A different fee requires a new guardian deployment and an explicit opt-in on a new deposit.
+ * @dev Escrow and EscrowV2 expose the same Deposit and Intent ABI used here. Governance can update
+ *      the extension fee for every deposit using this guardian address.
  */
-contract IntentGuardian is IIntentGuardian, ReentrancyGuard {
+contract IntentGuardian is IIntentGuardian, Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     uint256 public constant BPS_DENOMINATOR = 10_000;
@@ -28,16 +28,20 @@ contract IntentGuardian is IIntentGuardian, ReentrancyGuard {
     uint256 public constant MAX_EXTENSION_FEE_BPS_PER_HOUR = EXTENSION_FEE_DENOMINATOR / MAX_TOTAL_INTENT_LIFETIME;
 
     IEscrowRegistry public immutable override escrowRegistry;
-    uint256 public immutable override extensionFeeBpsPerHour;
+    uint256 public override extensionFeeBpsPerHour;
 
-    constructor(IEscrowRegistry _escrowRegistry, uint256 _extensionFeeBpsPerHour) {
+    constructor(address _owner, IEscrowRegistry _escrowRegistry, uint256 _extensionFeeBpsPerHour) {
+        if (_owner == address(0)) revert ZeroAddress();
         if (address(_escrowRegistry) == address(0)) revert ZeroAddress();
-        if (_extensionFeeBpsPerHour > MAX_EXTENSION_FEE_BPS_PER_HOUR) {
-            revert ExtensionFeeExceedsIntentAmount(_extensionFeeBpsPerHour);
-        }
 
         escrowRegistry = _escrowRegistry;
-        extensionFeeBpsPerHour = _extensionFeeBpsPerHour;
+        _transferOwnership(_owner);
+        _setExtensionFeeBpsPerHour(_extensionFeeBpsPerHour);
+    }
+
+    /// @inheritdoc IIntentGuardian
+    function setExtensionFeeBpsPerHour(uint256 _extensionFeeBpsPerHour) external override onlyOwner {
+        _setExtensionFeeBpsPerHour(_extensionFeeBpsPerHour);
     }
 
     /**
@@ -93,5 +97,15 @@ contract IntentGuardian is IIntentGuardian, ReentrancyGuard {
         returns (uint256)
     {
         return Math.mulDiv(_intentAmount, _feeBpsPerHour * _additionalTime, EXTENSION_FEE_DENOMINATOR, Math.Rounding.Up);
+    }
+
+    function _setExtensionFeeBpsPerHour(uint256 _extensionFeeBpsPerHour) internal {
+        if (_extensionFeeBpsPerHour > MAX_EXTENSION_FEE_BPS_PER_HOUR) {
+            revert ExtensionFeeExceedsIntentAmount(_extensionFeeBpsPerHour);
+        }
+
+        uint256 previousFeeBpsPerHour = extensionFeeBpsPerHour;
+        extensionFeeBpsPerHour = _extensionFeeBpsPerHour;
+        emit ExtensionFeeBpsPerHourUpdated(previousFeeBpsPerHour, _extensionFeeBpsPerHour);
     }
 }
