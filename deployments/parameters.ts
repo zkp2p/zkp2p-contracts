@@ -160,21 +160,6 @@ export const STAKE_RISK_PLATFORM_POLICY: any = {
   base_staging: INITIAL_STAKE_RISK_PLATFORM_POLICY,
 };
 
-// Address-group seeds passed to the AddressGroupRegistry constructor. Sequential group ids are
-// assigned in array order. No group policy is ratified for any network yet.
-export interface AddressGroupSeed {
-  name: string;
-  owner: string;
-  isPublic: boolean;
-  members: string[];
-}
-
-export const ADDRESS_GROUP_SEEDS: Record<string, AddressGroupSeed[]> = {
-  localhost: [],
-  hardhat: [],
-  base_staging: [],
-};
-
 // One-time RiskManager maker-protection seeding, applied before the risk hook is activated.
 // Empty until governance ratifies which existing makers opt into which protections.
 export interface RiskMakerInit {

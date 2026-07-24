@@ -66,20 +66,6 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
     // groupId => account => curated membership
     mapping(uint256 => mapping(address => bool)) public members;
 
-    /* ============ Constructor ============ */
-
-    constructor(IAddressGroupRegistry.GroupSeed[] memory _seeds) {
-        for (uint256 i = 0; i < _seeds.length; i++) {
-            IAddressGroupRegistry.GroupSeed memory seed = _seeds[i];
-            if (seed.owner == address(0)) revert ZeroAddress();
-
-            uint256 groupId = _createGroup(seed.owner, seed.isPublic, seed.name);
-            for (uint256 j = 0; j < seed.members.length; j++) {
-                _addMember(groupId, seed.members[j]);
-            }
-        }
-    }
-
     /* ============ External Functions ============ */
 
     /**

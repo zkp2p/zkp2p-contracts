@@ -5,7 +5,6 @@ import { DeployFunction } from "hardhat-deploy/types";
 import { ethers } from "hardhat";
 
 import {
-  ADDRESS_GROUP_SEEDS,
   INTENT_GUARDIAN_EXTENSION_FEE_BPS_PER_HOUR,
   MULTI_SIG,
   MULTI_WITNESS_ADDRESSES,
@@ -212,7 +211,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const addressGroupRegistry = await deploy("AddressGroupRegistry", {
     from: deployer,
-    args: [ADDRESS_GROUP_SEEDS[network] ?? []],
+    args: [],
   });
   if (addressGroupRegistry.newlyDeployed) {
     console.log("AddressGroupRegistry deployed at", addressGroupRegistry.address);

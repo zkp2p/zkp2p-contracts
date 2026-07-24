@@ -8,7 +8,6 @@ import {IntentGuardian} from "../../../contracts/IntentGuardian.sol";
 import {RiskManager} from "../../../contracts/RiskManager.sol";
 import {StakeVault} from "../../../contracts/StakeVault.sol";
 import {AddressGroupRegistry} from "../../../contracts/registries/AddressGroupRegistry.sol";
-import {IAddressGroupRegistry} from "../../../contracts/interfaces/IAddressGroupRegistry.sol";
 import {IEscrowV2} from "../../../contracts/interfaces/IEscrowV2.sol";
 import {IIntentRiskHook} from "../../../contracts/interfaces/IIntentRiskHook.sol";
 import {INullifierRegistryV2} from "../../../contracts/interfaces/INullifierRegistryV2.sol";
@@ -48,7 +47,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         deferredTaker = makeAddr("deferredTaker");
         attestationVerifier = new RiskAttestationVerifierMock();
         nullifierRegistry = new RiskNullifierRegistryMock();
-        groupRegistry = new AddressGroupRegistry(new IAddressGroupRegistry.GroupSeed[](0));
+        groupRegistry = new AddressGroupRegistry();
         vault = new StakeVault(address(this), IERC20(address(token)), address(0), 1 days);
         manager = new RiskManager(
             address(this),

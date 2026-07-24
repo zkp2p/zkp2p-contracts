@@ -3,7 +3,6 @@ pragma solidity ^0.8.18;
 
 import {Test} from "forge-std/Test.sol";
 
-import {IAddressGroupRegistry} from "contracts/interfaces/IAddressGroupRegistry.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {AddressGroupRegistryGasHarness} from "contracts/mocks/AddressGroupRegistryGasHarness.sol";
 import {WhitelistResolverMock} from "contracts/mocks/WhitelistResolverMock.sol";
@@ -18,7 +17,7 @@ contract AddressGroupRegistryResolverTest is Test {
     uint256 internal groupId;
 
     function setUp() public {
-        registry = new AddressGroupRegistry(new IAddressGroupRegistry.GroupSeed[](0));
+        registry = new AddressGroupRegistry();
         resolver = new WhitelistResolverMock();
         alice = makeAddr("alice");
         bob = makeAddr("bob");

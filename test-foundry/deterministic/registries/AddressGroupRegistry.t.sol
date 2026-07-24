@@ -3,7 +3,6 @@ pragma solidity ^0.8.18;
 
 import {Test} from "forge-std/Test.sol";
 
-import {IAddressGroupRegistry} from "contracts/interfaces/IAddressGroupRegistry.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 
 contract AddressGroupRegistryTest is Test {
@@ -21,7 +20,7 @@ contract AddressGroupRegistryTest is Test {
     address internal carol;
 
     function setUp() public {
-        registry = new AddressGroupRegistry(new IAddressGroupRegistry.GroupSeed[](0));
+        registry = new AddressGroupRegistry();
         alice = makeAddr("alice");
         bob = makeAddr("bob");
         carol = makeAddr("carol");

@@ -7,13 +7,6 @@ pragma solidity ^0.8.18;
  * @notice Permissionless registry of owner-managed address groups with optional resolvers.
  */
 interface IAddressGroupRegistry {
-    struct GroupSeed {
-        string name;
-        address owner;
-        bool isPublic;
-        address[] members;
-    }
-
     /**
      * @notice Creates a new group owned by the caller; the name is emitted, not stored.
      */

@@ -241,7 +241,7 @@ abstract contract RiskManagerFixture is Test {
         escrow = new RiskEscrowMock();
         verifier = new RiskAttestationVerifierMock();
         nullifierRegistry = new RiskNullifierRegistryMock();
-        groupRegistry = new AddressGroupRegistry(new IAddressGroupRegistry.GroupSeed[](0));
+        groupRegistry = new AddressGroupRegistry();
         vault = new StakeVault(owner, token, address(0), 1 days);
         manager = new RiskManagerHarness(
             owner,
