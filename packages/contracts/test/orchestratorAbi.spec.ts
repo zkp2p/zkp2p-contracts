@@ -10,10 +10,21 @@ describe("active orchestrator package ABI", () => {
     const retiredNames = new Set([
       "AccountHasActiveIntent",
       "AllowMultipleIntentsUpdated",
+      "DepositRiskHookSet",
+      "DepositWhitelistHookSet",
       "RelayerRegistryUpdated",
       "allowMultipleIntents",
+      "defaultRiskHook",
+      "getDepositRiskHook",
+      "getDepositWhitelistHook",
+      "makerRiskHooks",
+      "migrateMakerRiskHooks",
       "relayerRegistry",
       "setAllowMultipleIntents",
+      "setDefaultRiskHook",
+      "setDepositRiskHook",
+      "setDepositWhitelistHook",
+      "setMakerRiskHook",
       "setRelayerRegistry",
     ]);
 
@@ -27,5 +38,7 @@ describe("active orchestrator package ABI", () => {
       "_riskCallbackGasLimit",
     ]);
     expect(abi.filter((entry: { name?: string }) => entry.name && retiredNames.has(entry.name))).toEqual([]);
+    expect(abi.some((entry: { name?: string }) => entry.name === "riskHook")).toBe(true);
+    expect(abi.some((entry: { name?: string }) => entry.name === "setRiskHook")).toBe(true);
   });
 });

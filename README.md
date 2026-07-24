@@ -16,6 +16,7 @@ The repository still contains legacy v1 contracts and deploy scripts because v2 
 
 - [What Landed Recently](#what-landed-recently)
 - [System Overview](#system-overview)
+- [V3 Lifecycle Risk and Maker Groups](#v3-lifecycle-risk-and-maker-groups)
 - [V2 Contract Inventory](#v2-contract-inventory)
 - [Core Lifecycle](#core-lifecycle)
 - [Rate Management Model](#rate-management-model)
@@ -68,6 +69,34 @@ The v2 system is built around four layers:
 ### Contract Architecture
 
 ![ZKP2P V2 Contract Architecture](diagrams/architecture.png)
+
+## V3 Lifecycle Risk and Maker Groups
+
+`OrchestratorV3` is a staging-only, relayer-free lifecycle coordinator. It has exactly one
+owner-controlled global `riskHook` for future intents:
+
+- Admission executes with bounded gas and fails closed before Escrow locks funds.
+- The global hook is snapshotted into each intent, so later governance changes affect only new intents.
+- Settlement gives the snapshotted hook first refusal over gross funds and validates exact token consumption.
+- Cancellation invokes the snapshot with bounded gas, fails open for liquidity liveness, and persists failed
+  callback recovery data until the snapshotted hook acknowledges reconciliation.
+- The existing generic per-deposit pre-intent hook remains available. V3 has no dedicated per-deposit
+  whitelist slot and no maker- or deposit-selected lifecycle risk hook.
+
+The first minimal global hook is the independent maker-group stack:
+
+- `AddressGroupRegistry`: governance registers stable public group IDs, manages metadata and active state,
+  and assigns curators. Curators add or remove members; membership is event-indexed rather than enumerable
+  onchain.
+- `MakerGroupPolicy`: each maker owns a bounded list of up to 10 allowed groups for each payment method,
+  plus an explicit `groupsEnabled` switch. The policy survives global hook replacement.
+- `MakerGroupRiskHook`: a stateless admission hook that allows a taker when the maker's policy is disabled
+  or when the taker belongs to at least one configured active group. Enabled policies with no configured
+  groups fail closed. Settlement and cancellation are no-ops in this version.
+
+Canonical deployment IDs are `keccak256` hashes of `peers`, `peer-pluses`, and `peer-merchants`. Group
+enforcement is maker-level and payment-method-specific, not deposit-level. These V3 changes do not modify
+`EscrowV2`, require an Escrow redeployment, or alter the production `OrchestratorV2` whitelist path.
 
 ## V2 Contract Inventory
 

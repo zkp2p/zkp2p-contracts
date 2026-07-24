@@ -10,8 +10,8 @@ import { IReferralFee } from "./IReferralFee.sol";
 /**
  * @title IOrchestratorV3
  * @notice Standalone interface for the V3 orchestrator: the full V2 intent lifecycle surface
- *         (pre-intent hooks, whitelist hooks, manager fees, orphan cleanup) plus snapshotted
- *         depositor-selected risk callbacks. Deliberately relayer-free.
+ *         (pre-intent hooks, manager fees, orphan cleanup) plus snapshotted
+ *         governance-selected risk callbacks. Deliberately relayer-free.
  */
 interface IOrchestratorV3 {
 
@@ -105,7 +105,6 @@ interface IOrchestratorV3 {
     );
     event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
     event DepositPreIntentHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
-    event DepositWhitelistHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
 
     event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);
     event EscrowRegistryUpdated(address indexed escrowRegistry);
@@ -114,7 +113,7 @@ interface IOrchestratorV3 {
     event ProtocolFeeRecipientUpdated(address indexed protocolFeeRecipient);
     event PartialManualReleaseDelayUpdated(uint256 partialManualReleaseDelay);
 
-    event DepositRiskHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
+    event RiskHookUpdated(address indexed previousHook, address indexed newHook);
     event IntentRiskHookSnapshotted(bytes32 indexed intentHash, address indexed riskHook);
     event IntentRiskSettlementExecuted(
         bytes32 indexed intentHash,
@@ -193,8 +192,6 @@ interface IOrchestratorV3 {
 
     function signalIntent(SignalIntentParams calldata params) external;
     function setDepositPreIntentHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
-    function setDepositWhitelistHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
-    function setDepositRiskHook(address _escrow, uint256 _depositId, IIntentRiskHook _hook) external;
 
     function cancelIntent(bytes32 intentHash) external;
 
@@ -216,6 +213,7 @@ interface IOrchestratorV3 {
 
     /* ============ Governance Functions ============ */
 
+    function setRiskHook(IIntentRiskHook _hook) external;
     function setRiskCallbackGasLimit(uint256 _gasLimit) external;
 
     /* ============ View Functions ============ */
@@ -223,8 +221,7 @@ interface IOrchestratorV3 {
     function getIntent(bytes32 intentHash) external view returns (Intent memory);
     function getAccountIntents(address account) external view returns (bytes32[] memory);
     function getDepositPreIntentHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
-    function getDepositWhitelistHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
-    function getDepositRiskHook(address _escrow, uint256 _depositId) external view returns (IIntentRiskHook);
+    function riskHook() external view returns (IIntentRiskHook);
     function getIntentRiskHook(bytes32 _intentHash) external view returns (IIntentRiskHook);
     function getRiskIntent(bytes32 _intentHash) external view returns (RiskIntentData memory);
     /**

@@ -4,64 +4,73 @@ pragma solidity ^0.8.18;
 
 /**
  * @title IAddressGroupRegistry
- * @notice Permissionless registry of owner-managed address groups with optional resolvers.
+ * @notice Governance-curated registry of public address groups.
  */
 interface IAddressGroupRegistry {
-    /**
-     * @notice Creates a new group owned by the caller; the name is emitted, not stored.
-     */
-    function createGroup(string calldata _name) external returns (uint256 groupId);
+    struct Group {
+        string name;
+        address curator;
+        bool active;
+        bool exists;
+    }
 
     /**
-     * @notice Starts a two-step ownership transfer; replaces any existing pending owner.
+     * @notice Registers a stable group identifier and assigns its curator.
      */
-    function transferGroupOwnership(uint256 _groupId, address _newOwner) external;
+    function registerGroup(bytes32 _groupId, string calldata _name, address _curator) external;
 
     /**
-     * @notice Cancels a pending ownership transfer.
+     * @notice Updates the client-facing name for a registered group.
      */
-    function cancelGroupOwnershipTransfer(uint256 _groupId) external;
+    function setGroupName(bytes32 _groupId, string calldata _name) external;
 
     /**
-     * @notice Completes a pending ownership transfer; callable only by the pending owner.
+     * @notice Reassigns membership authority for a registered group.
      */
-    function acceptGroupOwnership(uint256 _groupId) external;
+    function setGroupCurator(bytes32 _groupId, address _curator) external;
 
     /**
-     * @notice Adds members to a group (owner only; idempotent).
+     * @notice Enables or disables a group for admission decisions.
      */
-    function addMembers(uint256 _groupId, address[] calldata _members) external;
+    function setGroupActive(bytes32 _groupId, bool _active) external;
 
     /**
-     * @notice Removes members from a group (owner only; idempotent).
+     * @notice Adds members to a group. Callable only by the assigned curator.
      */
-    function removeMembers(uint256 _groupId, address[] calldata _members) external;
+    function addMembers(bytes32 _groupId, address[] calldata _members) external;
 
     /**
-     * @notice Sets or clears the group's resolver (owner only; nonzero resolver must have code).
+     * @notice Removes members from a group. Callable only by the assigned curator.
      */
-    function setResolver(uint256 _groupId, address _resolver) external;
+    function removeMembers(bytes32 _groupId, address[] calldata _members) external;
 
     /**
-     * @notice Returns whether an account is a member (curated OR resolver; fail-closed).
+     * @notice Returns effective membership. Inactive and unknown groups return false.
      */
-    function isMember(uint256 _groupId, address _account) external view returns (bool);
+    function isMember(bytes32 _groupId, address _account) external view returns (bool);
 
     /**
-     * @notice Returns whether a group exists (input validation only, not a trust guarantee).
+     * @notice Returns whether a stable group identifier has been registered.
      */
-    function groupExists(uint256 _groupId) external view returns (bool);
+    function groupExists(bytes32 _groupId) external view returns (bool);
 
     /**
-     * @notice Returns a group's governance state for atomic inspection.
+     * @notice Returns whether a registered group is active for admission.
      */
-    function getGroup(uint256 _groupId)
-        external
-        view
-        returns (address owner, address pendingOwner, address resolver, bool exists);
+    function isGroupActive(bytes32 _groupId) external view returns (bool);
 
     /**
-     * @notice Returns the last assigned group id (ids start at 1).
+     * @notice Returns a group's public metadata and authority state.
+     */
+    function getGroup(bytes32 _groupId) external view returns (Group memory);
+
+    /**
+     * @notice Returns the number of registered groups.
      */
     function groupCount() external view returns (uint256);
+
+    /**
+     * @notice Returns the stable group identifier at an enumerable index.
+     */
+    function groupIdAt(uint256 _index) external view returns (bytes32);
 }

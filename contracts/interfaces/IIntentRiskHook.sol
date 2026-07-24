@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 
 /**
  * @title IIntentRiskHook
- * @notice Lifecycle callbacks used by OrchestratorV3 for depositor-selected risk policy.
+ * @notice Lifecycle callbacks used by OrchestratorV3 for governance-selected risk policy.
  * @dev Admission and token-bearing settlement are fail-closed. Cancellation is a separate
  *      liveness path that may be handled fail-open by the orchestrator and reconciled later.
  */

@@ -4,8 +4,10 @@ pragma solidity ^0.8.18;
 import {OrchestratorV2} from "contracts/OrchestratorV2.sol";
 import {OrchestratorV3} from "contracts/OrchestratorV3.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
+import {IIntentRiskHook} from "contracts/interfaces/IIntentRiskHook.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
+import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 
 import {OrchestratorV2LifecycleTest} from "./OrchestratorV2Lifecycle.t.sol";
 import {OrchestratorV2HooksGovernanceTest} from "./OrchestratorV2HooksGovernance.t.sol";
@@ -32,6 +34,54 @@ contract OrchestratorV3HooksGovernanceTest is OrchestratorV2HooksGovernanceTest 
         return true;
     }
 
+    function test_DepositorSetsWhitelistHookAndEmits() public override {
+        vm.prank(depositor);
+        (bool success,) = address(orchestrator).call(
+            abi.encodeWithSignature(
+                "setDepositWhitelistHook(address,uint256,address)",
+                address(escrow),
+                depositId,
+                address(whitelistHook)
+            )
+        );
+        assertFalse(success);
+    }
+
+    function test_SetDepositWhitelistHookRejectsWhenReentrancyGuardIsEntered() public override {
+        vm.prank(depositor);
+        (bool success,) = address(orchestrator).call(
+            abi.encodeWithSignature(
+                "setDepositWhitelistHook(address,uint256,address)",
+                address(escrow),
+                depositId,
+                address(whitelistHook)
+            )
+        );
+        assertFalse(success);
+    }
+
+    function test_SignalExecutesBothHooksWithReferralFeeContext() public override {
+        vm.prank(depositor);
+        orchestrator.setDepositPreIntentHook(address(escrow), depositId, preIntentHook);
+        IReferralFee.ReferralFee[] memory fees = _twoReferralFees();
+        IOrchestratorV2.SignalIntentParams memory params = _defaultParams();
+        params.referralFees = fees;
+        _signal(taker, params);
+        assertEq(preIntentHook.callCount(), 1);
+        assertEq(preIntentHook.lastReferralFeesCount(), 2);
+        assertEq(preIntentHook.lastReferralFeesHash(), _referralHash(fees));
+    }
+
+    function test_HookGettersExposeIndependentConfiguredHooks() public override {
+        vm.prank(depositor);
+        orchestrator.setDepositPreIntentHook(address(escrow), depositId, preIntentHook);
+        assertEq(address(orchestrator.getDepositPreIntentHook(address(escrow), depositId)), address(preIntentHook));
+        (bool success,) = address(orchestrator).staticcall(
+            abi.encodeWithSignature("getDepositWhitelistHook(address,uint256)", address(escrow), depositId)
+        );
+        assertFalse(success);
+    }
+
     function test_GovernanceUpdatesRegistriesFeesAndPauseState() public override {
         EscrowRegistry newRegistry = new EscrowRegistry();
         vm.expectEmit(true, false, false, true, address(orchestrator));
@@ -56,6 +106,8 @@ contract OrchestratorV3HooksGovernanceTest is OrchestratorV2HooksGovernanceTest 
         orchestrator.setProtocolFee(6e16);
         vm.expectRevert(IOrchestratorV3.ZeroAddress.selector);
         orchestrator.setProtocolFeeRecipient(address(0));
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.InvalidRiskHook.selector, other));
+        IOrchestratorV3(address(orchestrator)).setRiskHook(IIntentRiskHook(other));
     }
 
     function test_GovernanceRejectsEveryNonOwnerCall() public override {
@@ -70,6 +122,8 @@ contract OrchestratorV3HooksGovernanceTest is OrchestratorV2HooksGovernanceTest 
         orchestrator.setProtocolFee(1e16);
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
         orchestrator.setProtocolFeeRecipient(other);
+        vm.expectRevert(bytes("Ownable: caller is not the owner"));
+        IOrchestratorV3(address(orchestrator)).setRiskHook(IIntentRiskHook(address(0)));
         vm.stopPrank();
     }
 

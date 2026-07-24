@@ -2,127 +2,115 @@
 
 pragma solidity ^0.8.18;
 
-import { IAddressGroupRegistry } from "../interfaces/IAddressGroupRegistry.sol";
-import { IWhitelistResolver } from "../interfaces/IWhitelistResolver.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
+import {IAddressGroupRegistry} from "../interfaces/IAddressGroupRegistry.sol";
 
 /**
  * @title AddressGroupRegistry
- * @notice Permissionless registry of owner-managed address groups. Groups are identified by a
- * sequential uint256 id (starting at 1) and are never deleted. Only the group owner mutates
- * members and the resolver; shared control is achieved by using a multisig as the owner.
- * @dev The integer id is only unique within one registry deployment on one chain — off-chain
- * consumers must key groups by (chainId, registryAddress, groupId).
- *
- * TRUST MODEL: attaching a group to any consumer (e.g. WhitelistPreIntentHookV2) delegates
- * ongoing admission policy to the group's controller set: the current owner, any future owner
- * after transfer, and the current and any future resolver. Any of these can admit arbitrary
- * accounts at any time.
+ * @notice Governance registers stable, publicly discoverable groups and assigns one curator
+ * per group. Curators manage membership; governance manages metadata, curator assignment, and
+ * whether a group is active for admission.
+ * @dev Membership is intentionally mapping-only and non-enumerable. Clients discover groups
+ * onchain and index membership events without imposing member enumeration costs on the protocol.
  */
-contract AddressGroupRegistry is IAddressGroupRegistry {
-
-    /* ============ Structs ============ */
-
-    struct Group {
-        address owner;
-        address pendingOwner;
-        address resolver;
-    }
-
-    /* ============ Events ============ */
-
-    event GroupCreated(uint256 indexed groupId, address indexed owner, string name);
-    event GroupOwnershipTransferStarted(uint256 indexed groupId, address indexed owner, address indexed pendingOwner);
-    event GroupOwnershipTransferCancelled(uint256 indexed groupId, address indexed cancelledPendingOwner);
-    event GroupOwnershipTransferred(uint256 indexed groupId, address indexed previousOwner, address indexed newOwner);
-    event MemberAdded(uint256 indexed groupId, address indexed member);
-    event MemberRemoved(uint256 indexed groupId, address indexed member);
-    event ResolverSet(uint256 indexed groupId, address indexed oldResolver, address indexed newResolver);
-
-    /* ============ Errors ============ */
-
-    error GroupDoesNotExist(uint256 groupId);
-    error UnauthorizedGroupOwner(address caller, address owner);
-    error UnauthorizedPendingOwner(address caller, address pendingOwner);
-    error NoPendingTransfer(uint256 groupId);
-    error ZeroAddress();
-    error EmptyArray();
-    error ResolverNotContract(address resolver);
-
+contract AddressGroupRegistry is Ownable, IAddressGroupRegistry {
     /* ============ Constants ============ */
 
-    // Gas forwarded to resolver staticcalls. Sized so mapping- or balanceOf-style checks fit
-    // comfortably while bounding the cost a malicious resolver can impose on callers.
-    uint256 public constant RESOLVER_GAS_LIMIT = 50_000;
+    uint256 public constant MAX_GROUP_NAME_LENGTH = 64;
 
     /* ============ State Variables ============ */
 
-    uint256 public override groupCount;                                 // last assigned id; ids start at 1
+    bytes32[] internal groupIds;
+    mapping(bytes32 => Group) internal groups;
+    mapping(bytes32 => mapping(address => bool)) internal members;
 
-    mapping(uint256 => Group) internal groups;
-    // groupId => account => curated membership
-    mapping(uint256 => mapping(address => bool)) public members;
+    /* ============ Events ============ */
 
-    /* ============ External Functions ============ */
+    event GroupRegistered(bytes32 indexed groupId, string name, address indexed curator);
+    event GroupNameUpdated(bytes32 indexed groupId, string name);
+    event GroupCuratorUpdated(bytes32 indexed groupId, address indexed previousCurator, address indexed newCurator);
+    event GroupActiveUpdated(bytes32 indexed groupId, bool active);
+    event MemberAdded(bytes32 indexed groupId, address indexed member);
+    event MemberRemoved(bytes32 indexed groupId, address indexed member);
+
+    /* ============ Errors ============ */
+
+    error ZeroAddress();
+    error ZeroGroupId();
+    error EmptyArray();
+    error EmptyGroupName();
+    error GroupNameTooLong(uint256 length, uint256 maximum);
+    error GroupAlreadyExists(bytes32 groupId);
+    error GroupDoesNotExist(bytes32 groupId);
+    error GroupAlreadyInState(bytes32 groupId, bool active);
+    error UnauthorizedCurator(address caller, address curator);
+
+    /* ============ Constructor ============ */
+
+    constructor(address _owner) {
+        if (_owner == address(0)) revert ZeroAddress();
+        transferOwnership(_owner);
+    }
+
+    /* ============ Governance Functions ============ */
 
     /**
-     * @notice Creates a new group owned by the caller.
-     * @param _name    Human-readable label, emitted in the event only (not stored).
+     * @inheritdoc IAddressGroupRegistry
      */
-    function createGroup(string calldata _name) external override returns (uint256 groupId) {
-        groupId = ++groupCount;
-        groups[groupId].owner = msg.sender;
-        emit GroupCreated(groupId, msg.sender, _name);
+    function registerGroup(bytes32 _groupId, string calldata _name, address _curator) external override onlyOwner {
+        if (_groupId == bytes32(0)) revert ZeroGroupId();
+        if (groups[_groupId].exists) revert GroupAlreadyExists(_groupId);
+        if (_curator == address(0)) revert ZeroAddress();
+        _validateName(_name);
+
+        groups[_groupId] = Group({name: _name, curator: _curator, active: true, exists: true});
+        groupIds.push(_groupId);
+
+        emit GroupRegistered(_groupId, _name, _curator);
     }
 
     /**
-     * @notice Starts a two-step ownership transfer. Replaces any existing pending owner.
-     * @param _groupId    Group id.
-     * @param _newOwner   Proposed new owner (must be nonzero; cancellation is a dedicated function).
+     * @inheritdoc IAddressGroupRegistry
      */
-    function transferGroupOwnership(uint256 _groupId, address _newOwner) external override {
-        Group storage group = _requireGroupOwner(_groupId);
-        if (_newOwner == address(0)) revert ZeroAddress();
+    function setGroupName(bytes32 _groupId, string calldata _name) external override onlyOwner {
+        Group storage group = _getExistingGroup(_groupId);
+        _validateName(_name);
 
-        group.pendingOwner = _newOwner;
-        emit GroupOwnershipTransferStarted(_groupId, msg.sender, _newOwner);
+        group.name = _name;
+        emit GroupNameUpdated(_groupId, _name);
     }
 
     /**
-     * @notice Cancels a pending ownership transfer.
-     * @param _groupId    Group id.
+     * @inheritdoc IAddressGroupRegistry
      */
-    function cancelGroupOwnershipTransfer(uint256 _groupId) external override {
-        Group storage group = _requireGroupOwner(_groupId);
-        address pendingOwner = group.pendingOwner;
-        if (pendingOwner == address(0)) revert NoPendingTransfer(_groupId);
+    function setGroupCurator(bytes32 _groupId, address _curator) external override onlyOwner {
+        if (_curator == address(0)) revert ZeroAddress();
+        Group storage group = _getExistingGroup(_groupId);
 
-        delete group.pendingOwner;
-        emit GroupOwnershipTransferCancelled(_groupId, pendingOwner);
+        address previousCurator = group.curator;
+        group.curator = _curator;
+        emit GroupCuratorUpdated(_groupId, previousCurator, _curator);
     }
 
     /**
-     * @notice Completes a pending ownership transfer. Callable only by the pending owner.
-     * The previous owner retains no access after acceptance.
-     * @param _groupId    Group id.
+     * @inheritdoc IAddressGroupRegistry
      */
-    function acceptGroupOwnership(uint256 _groupId) external override {
-        Group storage group = groups[_groupId];
-        if (group.owner == address(0)) revert GroupDoesNotExist(_groupId);
-        if (msg.sender != group.pendingOwner) revert UnauthorizedPendingOwner(msg.sender, group.pendingOwner);
+    function setGroupActive(bytes32 _groupId, bool _active) external override onlyOwner {
+        Group storage group = _getExistingGroup(_groupId);
+        if (group.active == _active) revert GroupAlreadyInState(_groupId, _active);
 
-        address previousOwner = group.owner;
-        group.owner = msg.sender;
-        delete group.pendingOwner;
-        emit GroupOwnershipTransferred(_groupId, previousOwner, msg.sender);
+        group.active = _active;
+        emit GroupActiveUpdated(_groupId, _active);
     }
 
+    /* ============ Curator Functions ============ */
+
     /**
-     * @notice Adds members to a group. Idempotent: already-present members are skipped (no event).
-     * @param _groupId    Group id.
-     * @param _members    Members to add.
+     * @inheritdoc IAddressGroupRegistry
      */
-    function addMembers(uint256 _groupId, address[] calldata _members) external override {
-        _requireGroupOwner(_groupId);
+    function addMembers(bytes32 _groupId, address[] calldata _members) external override {
+        _requireCurator(_groupId);
         if (_members.length == 0) revert EmptyArray();
 
         for (uint256 i = 0; i < _members.length; i++) {
@@ -136,109 +124,83 @@ contract AddressGroupRegistry is IAddressGroupRegistry {
     }
 
     /**
-     * @notice Removes members from a group. Idempotent: absent members are skipped (no event).
-     * @param _groupId    Group id.
-     * @param _members    Members to remove.
+     * @inheritdoc IAddressGroupRegistry
      */
-    function removeMembers(uint256 _groupId, address[] calldata _members) external override {
-        _requireGroupOwner(_groupId);
+    function removeMembers(bytes32 _groupId, address[] calldata _members) external override {
+        _requireCurator(_groupId);
         if (_members.length == 0) revert EmptyArray();
 
         for (uint256 i = 0; i < _members.length; i++) {
             address member = _members[i];
             if (member == address(0)) revert ZeroAddress();
             if (members[_groupId][member]) {
-                members[_groupId][member] = false;
+                delete members[_groupId][member];
                 emit MemberRemoved(_groupId, member);
             }
         }
     }
 
-    /**
-     * @notice Sets or clears the group's resolver. A nonzero resolver must have code; note this
-     * does not make upgradeable or malicious resolvers safe — the resolver is part of the
-     * group's trust surface.
-     * @param _groupId    Group id.
-     * @param _resolver   Resolver contract (address(0) to clear).
-     */
-    function setResolver(uint256 _groupId, address _resolver) external override {
-        Group storage group = _requireGroupOwner(_groupId);
-        if (_resolver != address(0) && _resolver.code.length == 0) revert ResolverNotContract(_resolver);
-
-        emit ResolverSet(_groupId, group.resolver, _resolver);
-        group.resolver = _resolver;
-    }
-
-    /* ============ External View Functions ============ */
+    /* ============ View Functions ============ */
 
     /**
-     * @notice Returns whether an account is a member of a group (curated OR resolver).
-     * Returns false for nonexistent groups. Resolver failures fail closed for that resolver
-     * only — they never revert this call.
-     * @param _groupId    Group id.
-     * @param _account    Account to check.
+     * @inheritdoc IAddressGroupRegistry
      */
-    function isMember(uint256 _groupId, address _account) public view override returns (bool) {
-        if (members[_groupId][_account]) return true;
-
-        address resolver = groups[_groupId].resolver;
-        if (resolver == address(0)) return false;
-
-        return _resolverSaysYes(resolver, _groupId, _account);
+    function isMember(bytes32 _groupId, address _account) external view override returns (bool) {
+        return groups[_groupId].active && members[_groupId][_account];
     }
 
     /**
-     * @notice Returns whether a group exists (input validation only — not a trust guarantee).
-     * @param _groupId    Group id.
+     * @inheritdoc IAddressGroupRegistry
      */
-    function groupExists(uint256 _groupId) external view override returns (bool) {
-        return groups[_groupId].owner != address(0);
+    function groupExists(bytes32 _groupId) external view override returns (bool) {
+        return groups[_groupId].exists;
     }
 
     /**
-     * @notice Returns a group's governance state for atomic inspection.
-     * @param _groupId    Group id.
+     * @inheritdoc IAddressGroupRegistry
      */
-    function getGroup(uint256 _groupId)
-        external
-        view
-        override
-        returns (address owner, address pendingOwner, address resolver, bool exists)
-    {
-        Group storage group = groups[_groupId];
-        return (group.owner, group.pendingOwner, group.resolver, group.owner != address(0));
+    function isGroupActive(bytes32 _groupId) external view override returns (bool) {
+        return groups[_groupId].active;
+    }
+
+    /**
+     * @inheritdoc IAddressGroupRegistry
+     */
+    function getGroup(bytes32 _groupId) external view override returns (Group memory) {
+        return groups[_groupId];
+    }
+
+    /**
+     * @inheritdoc IAddressGroupRegistry
+     */
+    function groupCount() external view override returns (uint256) {
+        return groupIds.length;
+    }
+
+    /**
+     * @inheritdoc IAddressGroupRegistry
+     */
+    function groupIdAt(uint256 _index) external view override returns (bytes32) {
+        return groupIds[_index];
     }
 
     /* ============ Internal Functions ============ */
 
-    function _requireGroupOwner(uint256 _groupId) internal view returns (Group storage group) {
+    function _getExistingGroup(bytes32 _groupId) internal view returns (Group storage group) {
         group = groups[_groupId];
-        if (group.owner == address(0)) revert GroupDoesNotExist(_groupId);
-        if (msg.sender != group.owner) revert UnauthorizedGroupOwner(msg.sender, group.owner);
+        if (!group.exists) revert GroupDoesNotExist(_groupId);
     }
 
-    /**
-     * @dev Invokes the resolver with a fixed gas stipend and bounded returndata handling.
-     * Uses the 0x00-0x3f scratch space as the 32-byte output buffer; never copies
-     * attacker-controlled returndata sizes. Success requires the call to succeed, at least
-     * 32 bytes of returndata, and the first word to be exactly 1. Any failure (revert,
-     * out-of-gas, short or malformed return, no code at call time) evaluates to false.
-     */
-    function _resolverSaysYes(address _resolver, uint256 _groupId, address _account) internal view returns (bool result) {
-        bytes memory callData = abi.encodeWithSelector(IWhitelistResolver.isMember.selector, _groupId, _account);
-        uint256 gasLimit = _resolverGasLimit();
-        assembly ("memory-safe") {
-            let success := staticcall(gasLimit, _resolver, add(callData, 0x20), mload(callData), 0x00, 0x20)
-            if and(success, gt(returndatasize(), 0x1f)) {
-                result := eq(mload(0x00), 1)
-            }
+    function _requireCurator(bytes32 _groupId) internal view {
+        Group storage group = _getExistingGroup(_groupId);
+        if (msg.sender != group.curator) revert UnauthorizedCurator(msg.sender, group.curator);
+    }
+
+    function _validateName(string calldata _name) internal pure {
+        uint256 nameLength = bytes(_name).length;
+        if (nameLength == 0) revert EmptyGroupName();
+        if (nameLength > MAX_GROUP_NAME_LENGTH) {
+            revert GroupNameTooLong(nameLength, MAX_GROUP_NAME_LENGTH);
         }
-    }
-
-    /**
-     * @dev Virtual so the gas-harness mock can raise the limit for the bounded-copy proof test.
-     */
-    function _resolverGasLimit() internal view virtual returns (uint256) {
-        return RESOLVER_GAS_LIMIT;
     }
 }

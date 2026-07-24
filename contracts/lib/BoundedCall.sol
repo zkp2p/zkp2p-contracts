@@ -29,7 +29,7 @@ library BoundedCall {
      * @notice Executes a fail-closed risk admission callback with fixed gas and bounded revert data.
      * @dev A zero hook is an intentional no-op. A non-zero hook must contain deployed code and successfully execute
      *      `onIntentCreated`; otherwise the complete outer intent admission reverts with `RiskHookAdmissionFailed`.
-     * @param _riskHook Snapshotted hook selected by the deposit, or zero when no risk policy applies.
+     * @param _riskHook Snapshotted governance-selected hook, or zero when no risk policy applies.
      * @param _intentHash Newly created intent identifier readable from the calling orchestrator.
      * @param _gasLimit Exact gas allowance supplied to the callback call.
      * @param _maxReturnDataSize Maximum revert-data bytes copied from the hook.
@@ -86,7 +86,7 @@ library BoundedCall {
      *      and returns false so OrchestratorV3 can store durable recovery state. Before calling, the function verifies
      *      EIP-150 permits the complete configured gas allowance to be forwarded; insufficient outer gas reverts rather
      *      than being misclassified as a hook failure.
-     * @param _riskHook Snapshotted hook selected when the intent was created, or zero when none applied.
+     * @param _riskHook Snapshotted governance-selected hook, or zero when none applied.
      * @param _intentHash Cancelled intent identifier included in the callback and any failure event.
      * @param _gasLimit Exact gas allowance supplied to the callback call.
      * @param _maxReturnDataSize Maximum revert-data bytes copied from the hook.
