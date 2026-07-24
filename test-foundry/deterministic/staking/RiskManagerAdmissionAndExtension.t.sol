@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.18;
 
-import {IIntentRiskHook} from "../../../contracts/interfaces/IIntentRiskHook.sol";
+import {IIntentLifecycleHook} from "../../../contracts/interfaces/IIntentLifecycleHook.sol";
 import {IRiskManager} from "../../../contracts/interfaces/IRiskManager.sol";
 import {IPostIntentHookV2} from "../../../contracts/interfaces/IPostIntentHookV2.sol";
 import {RiskManagerFixture} from "../helpers/RiskManagerFixture.sol";
@@ -103,7 +103,7 @@ contract RiskManagerAdmissionAndExtensionTest is RiskManagerFixture {
         vm.expectRevert(abi.encodeWithSelector(IRiskManager.UnauthorizedOrchestrator.selector, address(this)));
         manager.onIntentCancelled(intentHash);
 
-        IIntentRiskHook.RiskSettlementContext memory context =
+        IIntentLifecycleHook.SettlementContext memory context =
             _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, false);
         vm.expectRevert(abi.encodeWithSelector(IRiskManager.UnauthorizedOrchestrator.selector, address(this)));
         manager.settleIntent(context);

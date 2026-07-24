@@ -5,19 +5,19 @@ pragma solidity ^0.8.18;
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
+import { IIntentLifecycleHook } from "../interfaces/IIntentLifecycleHook.sol";
 import { IOrchestratorV3 } from "../interfaces/IOrchestratorV3.sol";
 import { IReferralFee } from "../interfaces/IReferralFee.sol";
 import { PostIntentHookExecutor } from "./PostIntentHookExecutor.sol";
-import { RiskSettlementExecutor } from "./RiskSettlementExecutor.sol";
+import { LifecycleSettlementExecutor } from "./LifecycleSettlementExecutor.sol";
 
 /**
  * @title FeeSettlementLib
  * @notice Builds and executes the exact fee and net-payout plan used by OrchestratorV3 settlement.
  * @dev Settlement follows one of two mutually exclusive paths:
- *      1. A configured risk hook consumes the complete gross release under a temporary allowance. No fee or net-payout
+ *      1. A configured lifecycle hook consumes the complete gross release under a temporary allowance. No fee or net-payout
  *         transfer is then executed by the orchestrator; the hook owns the complete downstream accounting decision.
- *      2. The risk hook consumes nothing, each fee line is transferred directly, and the executable remainder is sent
+ *      2. The lifecycle hook consumes nothing, each fee line is transferred directly, and the executable remainder is sent
  *         either to the intent recipient or through its snapshotted post-intent hook.
  *
  *      Protocol, referral, and manager fees are calculated independently from the gross release and rounded down before
@@ -29,13 +29,13 @@ library FeeSettlementLib {
     /// @dev Denominator for protocol, referral, and manager fee rates expressed in 1e18 precise units.
     uint256 internal constant PRECISE_UNIT = 1e18;
 
-    /// @dev Maximum callback return or revert data copied by the risk settlement boundary.
+    /// @dev Maximum callback return or revert data copied by the lifecycle settlement boundary.
     uint256 internal constant MAX_RISK_CALLBACK_RETURN_DATA = 2_048;
 
     /// @notice Emitted for every fee line paid directly by the ordinary settlement path.
     event IntentFeeDistributed(
         bytes32 indexed intentHash,
-        IIntentRiskHook.FeeType feeType,
+        IIntentLifecycleHook.FeeType feeType,
         address indexed recipient,
         uint256 amount
     );
@@ -52,44 +52,44 @@ library FeeSettlementLib {
     }
 
     /**
-     * @notice Gives the risk hook first refusal over gross funds, then executes ordinary fees and payout if unconsumed.
-     * @dev Builds the exact fee plan and executable amount before invoking the risk hook. The hook may consume either zero
-     *      or exactly the gross release; `RiskSettlementExecutor` rejects every other balance delta. Full consumption
+     * @notice Gives the lifecycle hook first refusal over gross funds, then executes ordinary fees and payout if unconsumed.
+     * @dev Builds the exact fee plan and executable amount before invoking the lifecycle hook. The hook may consume either zero
+     *      or exactly the gross release; `LifecycleSettlementExecutor` rejects every other balance delta. Full consumption
      *      returns immediately without paying fees or invoking a post-intent hook. Zero consumption distributes every fee
      *      line and routes the executable remainder through `PostIntentHookExecutor`.
      * @param _token Settlement token currently held by OrchestratorV3.
-     * @param _riskHook Snapshotted risk hook, or zero to use ordinary settlement directly.
+     * @param _lifecycleHook Snapshotted lifecycle hook, or zero to use ordinary settlement directly.
      * @param _intentHash Identifier included in callbacks and settlement events.
      * @param _intent Snapshotted intent containing recipient, referral fees, and optional post-intent hook.
      * @param _releaseAmount Gross amount released from Escrow for this settlement.
      * @param _postIntentHookData Fulfillment-time data forwarded only when the ordinary path invokes a post-intent hook.
      * @param _feeConfig Current protocol terms and snapshotted per-intent manager terms.
      * @param _isManualRelease Whether settlement was initiated through depositor manual release.
-     * @param _riskCallbackGasLimit Maximum gas forwarded to the risk settlement callback.
-     * @return fundsTransferredTo Address reported as handling the settled amount: risk hook, direct recipient, or post hook.
-     * @return reportedAmount Gross amount when the risk hook consumes funds; otherwise the executable amount.
+     * @param _callbackGasLimit Maximum gas forwarded to the lifecycle settlement callback.
+     * @return fundsTransferredTo Address reported as handling the settled amount: lifecycle hook, direct recipient, or post hook.
+     * @return reportedAmount Gross amount when the lifecycle hook consumes funds; otherwise the executable amount.
      */
     function executeSettlement(
         IERC20 _token,
-        IIntentRiskHook _riskHook,
+        IIntentLifecycleHook _lifecycleHook,
         bytes32 _intentHash,
         IOrchestratorV3.Intent memory _intent,
         uint256 _releaseAmount,
         bytes memory _postIntentHookData,
         FeeConfig memory _feeConfig,
         bool _isManualRelease,
-        uint256 _riskCallbackGasLimit
+        uint256 _callbackGasLimit
     ) public returns (address fundsTransferredTo, uint256 reportedAmount) {
         (
-            IIntentRiskHook.FeeAllocation[] memory feeAllocations,
+            IIntentLifecycleHook.FeeAllocation[] memory feeAllocations,
             uint256 totalFees
         ) = _calculateFeeAllocations(_intent, _releaseAmount, _feeConfig);
         uint256 netAmount = _releaseAmount - totalFees;
 
-        bool fundsConsumed = RiskSettlementExecutor.execute(
-            _riskHook,
+        bool fundsConsumed = LifecycleSettlementExecutor.execute(
+            _lifecycleHook,
             _token,
-            IIntentRiskHook.RiskSettlementContext({
+            IIntentLifecycleHook.SettlementContext({
                 intentHash: _intentHash,
                 token: address(_token),
                 recipient: _intent.to,
@@ -98,11 +98,11 @@ library FeeSettlementLib {
                 isManualRelease: _isManualRelease,
                 feeAllocations: feeAllocations
             }),
-            _riskCallbackGasLimit,
+            _callbackGasLimit,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
 
-        if (fundsConsumed) return (address(_riskHook), _releaseAmount);
+        if (fundsConsumed) return (address(_lifecycleHook), _releaseAmount);
 
         _transferFeeAllocations(_token, _intentHash, feeAllocations);
         fundsTransferredTo = PostIntentHookExecutor.transferOrExecute(
@@ -129,20 +129,20 @@ library FeeSettlementLib {
         IOrchestratorV3.Intent memory _intent,
         uint256 _releaseAmount,
         FeeConfig memory _feeConfig
-    ) internal pure returns (IIntentRiskHook.FeeAllocation[] memory allocations, uint256 totalFees) {
+    ) internal pure returns (IIntentLifecycleHook.FeeAllocation[] memory allocations, uint256 totalFees) {
         bool hasProtocolFee = _feeConfig.protocolFeeRecipient != address(0) && _feeConfig.protocolFee != 0;
         bool hasManagerFee = _feeConfig.managerFeeRecipient != address(0) && _feeConfig.managerFee != 0;
         uint256 allocationCount = _intent.referralFees.length;
         if (hasProtocolFee) allocationCount++;
         if (hasManagerFee) allocationCount++;
 
-        allocations = new IIntentRiskHook.FeeAllocation[](allocationCount);
+        allocations = new IIntentLifecycleHook.FeeAllocation[](allocationCount);
         uint256 allocationIndex;
 
         if (hasProtocolFee) {
             uint256 feeAmount = (_releaseAmount * _feeConfig.protocolFee) / PRECISE_UNIT;
-            allocations[allocationIndex++] = IIntentRiskHook.FeeAllocation({
-                feeType: IIntentRiskHook.FeeType.PROTOCOL,
+            allocations[allocationIndex++] = IIntentLifecycleHook.FeeAllocation({
+                feeType: IIntentLifecycleHook.FeeType.PROTOCOL,
                 recipient: _feeConfig.protocolFeeRecipient,
                 amount: feeAmount
             });
@@ -152,8 +152,8 @@ library FeeSettlementLib {
         for (uint256 referralIndex = 0; referralIndex < _intent.referralFees.length; referralIndex++) {
             IReferralFee.ReferralFee memory referralFee = _intent.referralFees[referralIndex];
             uint256 feeAmount = (_releaseAmount * referralFee.fee) / PRECISE_UNIT;
-            allocations[allocationIndex++] = IIntentRiskHook.FeeAllocation({
-                feeType: IIntentRiskHook.FeeType.REFERRAL,
+            allocations[allocationIndex++] = IIntentLifecycleHook.FeeAllocation({
+                feeType: IIntentLifecycleHook.FeeType.REFERRAL,
                 recipient: referralFee.recipient,
                 amount: feeAmount
             });
@@ -162,8 +162,8 @@ library FeeSettlementLib {
 
         if (hasManagerFee) {
             uint256 feeAmount = (_releaseAmount * _feeConfig.managerFee) / PRECISE_UNIT;
-            allocations[allocationIndex] = IIntentRiskHook.FeeAllocation({
-                feeType: IIntentRiskHook.FeeType.MANAGER,
+            allocations[allocationIndex] = IIntentLifecycleHook.FeeAllocation({
+                feeType: IIntentLifecycleHook.FeeType.MANAGER,
                 recipient: _feeConfig.managerFeeRecipient,
                 amount: feeAmount
             });
@@ -181,10 +181,10 @@ library FeeSettlementLib {
     function _transferFeeAllocations(
         IERC20 _token,
         bytes32 _intentHash,
-        IIntentRiskHook.FeeAllocation[] memory _allocations
+        IIntentLifecycleHook.FeeAllocation[] memory _allocations
     ) internal {
         for (uint256 allocationIndex = 0; allocationIndex < _allocations.length; allocationIndex++) {
-            IIntentRiskHook.FeeAllocation memory allocation = _allocations[allocationIndex];
+            IIntentLifecycleHook.FeeAllocation memory allocation = _allocations[allocationIndex];
             _token.safeTransfer(allocation.recipient, allocation.amount);
             emit IntentFeeDistributed(
                 _intentHash,

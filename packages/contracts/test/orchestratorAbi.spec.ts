@@ -10,10 +10,21 @@ describe("active orchestrator package ABI", () => {
     const retiredNames = new Set([
       "AccountHasActiveIntent",
       "AllowMultipleIntentsUpdated",
+      ["DepositRisk", "HookSet"].join(""),
+      "DepositWhitelistHookSet",
       "RelayerRegistryUpdated",
       "allowMultipleIntents",
+      ["defaultRisk", "Hook"].join(""),
+      ["getDepositRisk", "Hook"].join(""),
+      "getDepositWhitelistHook",
+      ["makerRisk", "Hooks"].join(""),
+      ["migrateMakerRisk", "Hooks"].join(""),
       "relayerRegistry",
       "setAllowMultipleIntents",
+      ["setDefaultRisk", "Hook"].join(""),
+      ["setDepositRisk", "Hook"].join(""),
+      "setDepositWhitelistHook",
+      ["setMakerRisk", "Hook"].join(""),
       "setRelayerRegistry",
     ]);
 
@@ -24,8 +35,10 @@ describe("active orchestrator package ABI", () => {
       "_paymentVerifierRegistry",
       "_protocolFee",
       "_protocolFeeRecipient",
-      "_riskCallbackGasLimit",
+      "_callbackGasLimit",
     ]);
     expect(abi.filter((entry: { name?: string }) => entry.name && retiredNames.has(entry.name))).toEqual([]);
+    expect(abi.some((entry: { name?: string }) => entry.name === "lifecycleHook")).toBe(true);
+    expect(abi.some((entry: { name?: string }) => entry.name === "setLifecycleHook")).toBe(true);
   });
 });

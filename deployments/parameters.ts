@@ -123,37 +123,7 @@ export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
   "base_staging": "",
 };
 
-export const STAKE_VAULT_CONTROLLER_CHANGE_DELAY = ONE_DAY_IN_SECONDS.mul(2);
-export const RISK_CALLBACK_GAS_LIMIT = 2_000_000;
-
-// Initial policy approved in STAKE_RISK_POLICY_SPEC.md for local validation and the
-// Base staging E2E rollout. Production remains an explicit governance decision.
-const INITIAL_STAKE_RISK_PLATFORM_POLICY = {
-  reversible: {
-    enabled: true,
-    chargeback: {
-      chargebackable: true,
-      deferredPayoutEnabled: true,
-      riskWindow: ONE_DAY_IN_SECONDS.mul(14),
-    },
-    extensionPenaltyBpsPerHour: 2,
-  },
-  nonChargebackable: {
-    enabled: true,
-    chargeback: {
-      chargebackable: false,
-      deferredPayoutEnabled: false,
-      riskWindow: 0,
-    },
-    extensionPenaltyBpsPerHour: 2,
-  },
-};
-
-export const STAKE_RISK_PLATFORM_POLICY: any = {
-  localhost: INITIAL_STAKE_RISK_PLATFORM_POLICY,
-  hardhat: INITIAL_STAKE_RISK_PLATFORM_POLICY,
-  base_staging: INITIAL_STAKE_RISK_PLATFORM_POLICY,
-};
+export const CALLBACK_GAS_LIMIT = 2_000_000;
 
 // Initial hourly fee for the standalone IntentGuardian, denominated in basis points of the
 // locked intent amount. Governance can update this value on the deployed guardian. Production

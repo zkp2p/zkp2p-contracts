@@ -232,7 +232,7 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
      * @return coverageAmount Gross amount held through the risk window, or zero for unbonded settlement.
      * @return coverageDeadline Half-open chargeback deadline, or zero for unbonded settlement.
      */
-    function _settleChargeback(RiskSettlementContext calldata _context)
+    function _settleChargeback(SettlementContext calldata _context)
         internal
         returns (address stakeOwner, RiskMode mode, uint256 coverageAmount, uint64 coverageDeadline)
     {
@@ -427,7 +427,7 @@ abstract contract ChargebackManager is IRiskManager, EIP712 {
      * @param _coverageDeadline Half-open chargeback deadline assigned to the funded lock.
      */
     function _fundDeferredCoverage(
-        RiskSettlementContext calldata _context,
+        SettlementContext calldata _context,
         ChargebackPosition storage _position,
         uint64 _coverageDeadline
     ) private {

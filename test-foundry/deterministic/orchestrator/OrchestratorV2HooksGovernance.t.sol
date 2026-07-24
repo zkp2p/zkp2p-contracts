@@ -9,7 +9,7 @@ import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 import {IPreIntentHook} from "contracts/interfaces/IPreIntentHook.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
-import {IIntentRiskHook} from "contracts/interfaces/IIntentRiskHook.sol";
+import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 
 contract OrchestratorV2HooksGovernanceTest is OrchestratorV2LegacyFixture {
     event DepositPreIntentHookSet(
@@ -25,7 +25,7 @@ contract OrchestratorV2HooksGovernanceTest is OrchestratorV2LegacyFixture {
     event ProtocolFeeRecipientUpdated(address indexed recipient);
     event IntentFeeDistributed(
         bytes32 indexed intentHash,
-        IIntentRiskHook.FeeType feeType,
+        IIntentLifecycleHook.FeeType feeType,
         address indexed recipient,
         uint256 amount
     );
@@ -39,14 +39,14 @@ contract OrchestratorV2HooksGovernanceTest is OrchestratorV2LegacyFixture {
         orchestrator.setDepositPreIntentHook(address(escrow), depositId, preIntentHook);
     }
 
-    function test_DepositorSetsWhitelistHookAndEmits() public {
+    function test_DepositorSetsWhitelistHookAndEmits() public virtual {
         vm.expectEmit(true, true, true, true, address(orchestrator));
         emit DepositWhitelistHookSet(address(escrow), depositId, address(whitelistHook), depositor);
         vm.prank(depositor);
         orchestrator.setDepositWhitelistHook(address(escrow), depositId, whitelistHook);
     }
 
-    function test_SetDepositWhitelistHookRejectsWhenReentrancyGuardIsEntered() public {
+    function test_SetDepositWhitelistHookRejectsWhenReentrancyGuardIsEntered() public virtual {
         vm.store(address(orchestrator), bytes32(uint256(1)), bytes32(uint256(2)));
         vm.expectRevert("ReentrancyGuard: reentrant call");
         vm.prank(depositor);
@@ -73,7 +73,7 @@ contract OrchestratorV2HooksGovernanceTest is OrchestratorV2LegacyFixture {
         orchestrator.setDepositPreIntentHook(address(escrow), depositId, IPreIntentHook(other));
     }
 
-    function test_SignalExecutesBothHooksWithReferralFeeContext() public {
+    function test_SignalExecutesBothHooksWithReferralFeeContext() public virtual {
         vm.startPrank(depositor);
         orchestrator.setDepositPreIntentHook(address(escrow), depositId, preIntentHook);
         orchestrator.setDepositWhitelistHook(address(escrow), depositId, whitelistHook);
@@ -90,7 +90,7 @@ contract OrchestratorV2HooksGovernanceTest is OrchestratorV2LegacyFixture {
         assertEq(whitelistHook.lastReferralFeesHash(), _referralHash(fees));
     }
 
-    function test_HookGettersExposeIndependentConfiguredHooks() public {
+    function test_HookGettersExposeIndependentConfiguredHooks() public virtual {
         vm.startPrank(depositor);
         orchestrator.setDepositPreIntentHook(address(escrow), depositId, preIntentHook);
         orchestrator.setDepositWhitelistHook(address(escrow), depositId, whitelistHook);
@@ -270,9 +270,9 @@ contract OrchestratorV2HooksGovernanceTest is OrchestratorV2LegacyFixture {
         bytes32 intentHash = _signal(taker, params);
         if (_usesStandaloneV3Format()) {
             vm.expectEmit(true, true, false, true, address(orchestrator));
-            emit IntentFeeDistributed(intentHash, IIntentRiskHook.FeeType.REFERRAL, referrer, 150_000);
+            emit IntentFeeDistributed(intentHash, IIntentLifecycleHook.FeeType.REFERRAL, referrer, 150_000);
             vm.expectEmit(true, true, false, true, address(orchestrator));
-            emit IntentFeeDistributed(intentHash, IIntentRiskHook.FeeType.REFERRAL, other, 100_000);
+            emit IntentFeeDistributed(intentHash, IIntentLifecycleHook.FeeType.REFERRAL, other, 100_000);
         } else {
             vm.expectEmit(true, true, false, true, address(orchestrator));
             emit IntentReferralFeeDistributed(intentHash, referrer, 150_000);

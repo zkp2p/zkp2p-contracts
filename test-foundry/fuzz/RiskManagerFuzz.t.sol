@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.18;
 
-import {IIntentRiskHook} from "../../contracts/interfaces/IIntentRiskHook.sol";
+import {IIntentLifecycleHook} from "../../contracts/interfaces/IIntentLifecycleHook.sol";
 import {IRiskManager} from "../../contracts/interfaces/IRiskManager.sol";
 import {RiskManagerFixture} from "../deterministic/helpers/RiskManagerFixture.sol";
 
@@ -51,8 +51,8 @@ contract RiskManagerFuzzTest is RiskManagerFixture {
         uint256 grossAmount = bound(uint256(rawGrossAmount), 1, intentAmount);
         bytes32 intentHash = _admit(taker, payoutRecipient, intentAmount);
 
-        IIntentRiskHook.FeeAllocation[] memory allocations = new IIntentRiskHook.FeeAllocation[](0);
-        IIntentRiskHook.RiskSettlementContext memory context = IIntentRiskHook.RiskSettlementContext({
+        IIntentLifecycleHook.FeeAllocation[] memory allocations = new IIntentLifecycleHook.FeeAllocation[](0);
+        IIntentLifecycleHook.SettlementContext memory context = IIntentLifecycleHook.SettlementContext({
             intentHash: intentHash,
             token: address(token),
             recipient: payoutRecipient,
@@ -87,7 +87,7 @@ contract RiskManagerFuzzTest is RiskManagerFixture {
         address unstakedTaker = makeAddr("unstakedTaker");
         bytes32 intentHash = _admit(unstakedTaker, payoutRecipient, intentAmount);
 
-        IIntentRiskHook.RiskSettlementContext memory context =
+        IIntentLifecycleHook.SettlementContext memory context =
             _settlementContext(intentHash, grossAmount, protocolFee, referralFee, false);
         orchestrator.settle(manager, context);
         vm.warp(manager.getRiskPosition(intentHash).coverageDeadline);

@@ -16,6 +16,7 @@ The repository still contains legacy v1 contracts and deploy scripts because v2 
 
 - [What Landed Recently](#what-landed-recently)
 - [System Overview](#system-overview)
+- [V3 Lifecycle Risk and Maker Groups](#v3-lifecycle-risk-and-maker-groups)
 - [V2 Contract Inventory](#v2-contract-inventory)
 - [Core Lifecycle](#core-lifecycle)
 - [Rate Management Model](#rate-management-model)
@@ -68,6 +69,35 @@ The v2 system is built around four layers:
 ### Contract Architecture
 
 ![ZKP2P V2 Contract Architecture](diagrams/architecture.png)
+
+## V3 Lifecycle Risk and Maker Groups
+
+`OrchestratorV3` is a staging-only, relayer-free lifecycle coordinator. It has exactly one
+owner-controlled global `lifecycleHook` for future intents:
+
+- Admission executes with bounded gas and fails closed before Escrow locks funds.
+- The global hook is snapshotted into each intent, so later governance changes affect only new intents.
+- Settlement gives the snapshotted hook first refusal over gross funds and validates exact token consumption.
+- Cancellation invokes the snapshot with bounded gas, fails open for liquidity liveness, and persists failed
+  callback recovery data until the snapshotted hook acknowledges reconciliation.
+- The existing generic per-deposit pre-intent hook remains available. V3 has no dedicated per-deposit
+  whitelist slot and no maker- or deposit-selected lifecycle hook.
+
+The first minimal global hook is the independent maker whitelist stack:
+
+- `AddressGroupRegistry`: governance registers stable public group IDs, manages metadata and active state,
+  and assigns curators. Curators add or remove members; membership is event-indexed rather than enumerable
+  onchain.
+- `WhitelistPolicy`: each maker owns a direct address whitelist and a bounded list of up to 10 allowed groups,
+  plus an explicit `enabled` switch. The policy survives global hook replacement.
+- `IntentLifecycleHookV1`: a stateless admission hook that delegates to `WhitelistPolicy`, allowing a taker when
+  the maker's policy is disabled, the taker is directly whitelisted, or the taker belongs to at least one
+  configured active group. Enabled policies with no matching address or group fail closed. Settlement and
+  cancellation are no-ops in this version.
+
+Canonical deployment IDs are `keccak256` hashes of `peers`, `peer-pluses`, and `peer-merchants`. Group
+enforcement is maker-level, not payment-method- or deposit-level. These V3 changes do not modify
+`EscrowV2`, require an Escrow redeployment, or alter the production `OrchestratorV2` whitelist path.
 
 ## V2 Contract Inventory
 
@@ -136,7 +166,7 @@ Key v2 behavior:
 - Supports a generic pre-intent hook and a dedicated whitelist hook per deposit.
 - Supports optional post-intent hooks through `IPostIntentHookV2`.
 - Distributes protocol fees, manager fees, and multiple referral fees.
-- Allows every account to hold multiple concurrent intents; V3 admission is governed only by the selected risk hook.
+- Allows every account to hold multiple concurrent intents; V3 admission is governed only by the selected lifecycle hook.
 
 Recent addition:
 

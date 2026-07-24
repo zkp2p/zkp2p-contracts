@@ -8,13 +8,13 @@ import {AddressGroupRegistryGasHarness} from "contracts/mocks/AddressGroupRegist
 import {WhitelistResolverMock} from "contracts/mocks/WhitelistResolverMock.sol";
 
 contract AddressGroupRegistryResolverTest is Test {
-    event ResolverSet(uint256 indexed groupId, address indexed oldResolver, address indexed newResolver);
+    event ResolverSet(bytes32 indexed groupId, address indexed oldResolver, address indexed newResolver);
 
     AddressGroupRegistry internal registry;
     WhitelistResolverMock internal resolver;
     address internal alice;
     address internal bob;
-    uint256 internal groupId;
+    bytes32 internal groupId;
 
     function setUp() public {
         registry = new AddressGroupRegistry();
@@ -32,11 +32,11 @@ contract AddressGroupRegistryResolverTest is Test {
 
     /* ============ setResolver ============ */
 
-    function test_OwnerSetsResolverAndEmitsOldAndNew() public {
+    function test_CuratorSetsResolverAndEmitsOldAndNew() public {
         vm.expectEmit(true, true, true, true, address(registry));
         emit ResolverSet(groupId, address(0), address(resolver));
         _setResolver(address(resolver));
-        (,, address stored,) = registry.getGroup(groupId);
+        (,, address stored,,) = registry.getGroup(groupId);
         assertEq(stored, address(resolver));
     }
 
@@ -45,7 +45,7 @@ contract AddressGroupRegistryResolverTest is Test {
         vm.expectEmit(true, true, true, true, address(registry));
         emit ResolverSet(groupId, address(resolver), address(0));
         _setResolver(address(0));
-        (,, address stored,) = registry.getGroup(groupId);
+        (,, address stored,,) = registry.getGroup(groupId);
         assertEq(stored, address(0));
     }
 
@@ -54,8 +54,8 @@ contract AddressGroupRegistryResolverTest is Test {
         _setResolver(bob);
     }
 
-    function test_NonOwnerCannotSetResolver() public {
-        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupOwner.selector, bob, alice));
+    function test_NonCuratorCannotSetResolver() public {
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupCurator.selector, bob, alice));
         vm.prank(bob);
         registry.setResolver(groupId, address(resolver));
     }
@@ -81,6 +81,35 @@ contract AddressGroupRegistryResolverTest is Test {
 
     function test_NoResolverNoCuratedMeansFalse() public view {
         assertFalse(registry.isMember(groupId, bob));
+    }
+
+    function test_LeaveClearsCuratedMembershipButResolverStillGrants() public {
+        _setResolver(address(resolver));
+        resolver.setMemberOf(groupId, bob, true);
+        vm.prank(alice);
+        registry.setGroupVisibility(groupId, true);
+        vm.prank(bob);
+        registry.joinGroup(groupId);
+
+        vm.prank(bob);
+        registry.leaveGroup(groupId);
+
+        assertFalse(registry.members(groupId, bob));
+        assertTrue(registry.isMember(groupId, bob));
+    }
+
+    function test_ResolverOnlyMemberLeaveIsSilentNoOp() public {
+        _setResolver(address(resolver));
+        resolver.setMemberOf(groupId, bob, true);
+        vm.prank(alice);
+        registry.setGroupVisibility(groupId, true);
+
+        vm.recordLogs();
+        vm.prank(bob);
+        registry.leaveGroup(groupId);
+
+        assertEq(vm.getRecordedLogs().length, 0);
+        assertTrue(registry.isMember(groupId, bob));
     }
 
     /* ============ fail-closed matrix ============ */
@@ -155,7 +184,7 @@ contract AddressGroupRegistryResolverTest is Test {
     function test_HarnessOneMegabyteReturndataCopiesOnlyBoundedResult() public {
         AddressGroupRegistryGasHarness harness = new AddressGroupRegistryGasHarness();
         vm.prank(alice);
-        uint256 harnessGroup = harness.createGroup("harness");
+        bytes32 harnessGroup = harness.createGroup("harness");
         vm.prank(alice);
         harness.setResolver(harnessGroup, address(resolver));
         harness.setResolverGasLimit(30_000_000);

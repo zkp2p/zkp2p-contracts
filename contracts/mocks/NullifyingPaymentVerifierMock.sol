@@ -8,7 +8,7 @@ import { INullifierRegistryV2 } from "../interfaces/INullifierRegistryV2.sol";
 /**
  * @title NullifyingPaymentVerifierMock
  * @notice Test verifier that writes a deterministic payment-to-intent binding before returning success.
- * @dev Used to prove that a later risk-settlement revert rolls the verifier write back atomically.
+ * @dev Used to prove that a later lifecycle-settlement revert rolls the verifier write back atomically.
  */
 contract NullifyingPaymentVerifierMock is IPaymentVerifier {
     INullifierRegistryV2 public immutable nullifierRegistry;

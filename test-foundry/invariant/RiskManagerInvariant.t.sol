@@ -6,7 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 
 import {RiskManager} from "../../contracts/RiskManager.sol";
 import {StakeVault} from "../../contracts/StakeVault.sol";
-import {IIntentRiskHook} from "../../contracts/interfaces/IIntentRiskHook.sol";
+import {IIntentLifecycleHook} from "../../contracts/interfaces/IIntentLifecycleHook.sol";
 import {IRiskManager} from "../../contracts/interfaces/IRiskManager.sol";
 import {
     RiskEscrowMock,
@@ -96,11 +96,11 @@ contract RiskManagerInvariantHandler {
 
         uint256 grossAmount = 1 + uint256(_rawGross) % position.intentAmount;
         uint256 feeAmount = grossAmount / 100;
-        IIntentRiskHook.FeeAllocation[] memory fees = new IIntentRiskHook.FeeAllocation[](1);
-        fees[0] = IIntentRiskHook.FeeAllocation({
-            feeType: IIntentRiskHook.FeeType.PROTOCOL, recipient: feeRecipient, amount: feeAmount
+        IIntentLifecycleHook.FeeAllocation[] memory fees = new IIntentLifecycleHook.FeeAllocation[](1);
+        fees[0] = IIntentLifecycleHook.FeeAllocation({
+            feeType: IIntentLifecycleHook.FeeType.PROTOCOL, recipient: feeRecipient, amount: feeAmount
         });
-        IIntentRiskHook.RiskSettlementContext memory context = IIntentRiskHook.RiskSettlementContext({
+        IIntentLifecycleHook.SettlementContext memory context = IIntentLifecycleHook.SettlementContext({
             intentHash: intentHash,
             token: address(vault.stakeToken()),
             recipient: payoutRecipient,

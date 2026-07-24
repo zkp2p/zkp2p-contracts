@@ -127,7 +127,7 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
         IntentPosition storage position = intentPositions[_intentHash];
         if (position.status != PositionStatus.NONE) revert PositionAlreadyExists(_intentHash);
 
-        IOrchestratorV3.RiskIntentData memory intent = orchestrator.getRiskIntent(_intentHash);
+        IOrchestratorV3.IntentContext memory intent = orchestrator.getIntentContext(_intentHash);
         if (!platformEnabled[intent.paymentMethod]) revert PlatformDisabled(intent.paymentMethod);
 
         IEscrowV2 escrow = IEscrowV2(intent.escrow);
@@ -178,7 +178,7 @@ contract RiskManager is IntentExtensionManager, ChargebackManager, Ownable2Step,
      *      stake-backed settlement and exactly `grossAmount` for deferred settlement.
      * @param _context Canonical settlement amounts, fee plan, intent identifier, and release type.
      */
-    function settleIntent(RiskSettlementContext calldata _context) external override onlyOrchestrator nonReentrant {
+    function settleIntent(SettlementContext calldata _context) external override onlyOrchestrator nonReentrant {
         IntentPosition storage position = intentPositions[_context.intentHash];
         if (position.status != PositionStatus.PENDING) {
             revert PositionNotPending(_context.intentHash, position.status);

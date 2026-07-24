@@ -10,6 +10,8 @@ import { AddressGroupRegistry } from "../registries/AddressGroupRegistry.sol";
 contract AddressGroupRegistryGasHarness is AddressGroupRegistry {
     uint256 internal resolverGasLimitOverride = RESOLVER_GAS_LIMIT;
 
+    constructor() {}
+
     function setResolverGasLimit(uint256 _limit) external {
         resolverGasLimitOverride = _limit;
     }

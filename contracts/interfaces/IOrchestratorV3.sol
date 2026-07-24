@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.18;
 
-import { IIntentRiskHook } from "./IIntentRiskHook.sol";
+import { IIntentLifecycleHook } from "./IIntentLifecycleHook.sol";
 import { IPostIntentHookV2 } from "./IPostIntentHookV2.sol";
 import { IPreIntentHook } from "./IPreIntentHook.sol";
 import { IReferralFee } from "./IReferralFee.sol";
@@ -10,8 +10,8 @@ import { IReferralFee } from "./IReferralFee.sol";
 /**
  * @title IOrchestratorV3
  * @notice Standalone interface for the V3 orchestrator: the full V2 intent lifecycle surface
- *         (pre-intent hooks, whitelist hooks, manager fees, orphan cleanup) plus snapshotted
- *         depositor-selected risk callbacks. Deliberately relayer-free.
+ *         (pre-intent hooks, manager fees, orphan cleanup) plus snapshotted
+ *         governance-selected lifecycle callbacks. Deliberately relayer-free.
  */
 interface IOrchestratorV3 {
 
@@ -56,7 +56,7 @@ interface IOrchestratorV3 {
         bytes postIntentHookData;                   // Additional data for post intent hook
     }
 
-    struct RiskIntentData {
+    struct IntentContext {
         address owner;
         address to;
         address escrow;
@@ -68,7 +68,7 @@ interface IOrchestratorV3 {
 
     struct IntentCancellation {
         uint64 cancelledAt;
-        IIntentRiskHook riskHook;
+        IIntentLifecycleHook lifecycleHook;
     }
 
     /* ============ Events ============ */
@@ -99,13 +99,12 @@ interface IOrchestratorV3 {
 
     event IntentFeeDistributed(
         bytes32 indexed intentHash,
-        IIntentRiskHook.FeeType feeType,
+        IIntentLifecycleHook.FeeType feeType,
         address indexed recipient,
         uint256 amount
     );
     event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
     event DepositPreIntentHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
-    event DepositWhitelistHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
 
     event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);
     event EscrowRegistryUpdated(address indexed escrowRegistry);
@@ -114,26 +113,26 @@ interface IOrchestratorV3 {
     event ProtocolFeeRecipientUpdated(address indexed protocolFeeRecipient);
     event PartialManualReleaseDelayUpdated(uint256 partialManualReleaseDelay);
 
-    event DepositRiskHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
-    event IntentRiskHookSnapshotted(bytes32 indexed intentHash, address indexed riskHook);
-    event IntentRiskSettlementExecuted(
+    event LifecycleHookUpdated(address indexed previousHook, address indexed newHook);
+    event IntentLifecycleHookSnapshotted(bytes32 indexed intentHash, address indexed lifecycleHook);
+    event IntentSettlementExecuted(
         bytes32 indexed intentHash,
-        address indexed riskHook,
+        address indexed lifecycleHook,
         address indexed token,
         uint256 grossAmount,
         uint256 executableAmount,
         bool fundsConsumed,
         bool isManualRelease
     );
-    event RiskHookCallbackFailed(
+    event LifecycleHookCallbackFailed(
         bytes32 indexed intentHash,
-        address indexed riskHook,
+        address indexed lifecycleHook,
         bytes4 indexed callbackSelector,
         bytes revertData
     );
-    event RiskCallbackGasLimitUpdated(uint256 gasLimit);
+    event CallbackGasLimitUpdated(uint256 gasLimit);
     event IntentCancellationRecorded(bytes32 indexed intentHash, uint64 cancelledAt);
-    event IntentCancellationReconciled(bytes32 indexed intentHash, address indexed riskHook);
+    event IntentCancellationReconciled(bytes32 indexed intentHash, address indexed lifecycleHook);
 
     /* ============ Standardized Custom Errors ============ */
 
@@ -178,32 +177,30 @@ interface IOrchestratorV3 {
     error TransferFailed(address recipient, uint256 amount);
     error EscrowLockFailed();
 
-    // Risk hook errors
-    error InvalidRiskHook(address hook);
-    error RiskHookAdmissionFailed(bytes32 intentHash, address hook, bytes revertData);
-    error RiskHookSettlementFailed(bytes32 intentHash, address hook, bytes revertData);
-    error InsufficientGasForRiskCallback(uint256 availableGas, uint256 requiredGas);
-    error RiskHookSettlementBalanceIncreased(bytes32 intentHash, uint256 beforeBalance, uint256 afterBalance);
-    error InvalidRiskHookSettlementConsumption(bytes32 intentHash, uint256 consumed, uint256 grossAmount);
-    error RiskCallbackGasLimitTooLow(uint256 gasLimit, uint256 minimum);
+    // Lifecycle hook errors
+    error InvalidLifecycleHook(address hook);
+    error LifecycleHookAdmissionFailed(bytes32 intentHash, address hook, bytes revertData);
+    error LifecycleHookSettlementFailed(bytes32 intentHash, address hook, bytes revertData);
+    error InsufficientGasForCallback(uint256 availableGas, uint256 requiredGas);
+    error LifecycleHookSettlementBalanceIncreased(bytes32 intentHash, uint256 beforeBalance, uint256 afterBalance);
+    error InvalidLifecycleHookSettlementConsumption(bytes32 intentHash, uint256 consumed, uint256 grossAmount);
+    error CallbackGasLimitTooLow(uint256 gasLimit, uint256 minimum);
     error IntentCancellationNotRecorded(bytes32 intentHash);
-    error UnauthorizedCancellationAcknowledger(address caller, address riskHook);
+    error UnauthorizedCancellationAcknowledger(address caller, address lifecycleHook);
 
     /* ============ External Functions for Users ============ */
 
     function signalIntent(SignalIntentParams calldata params) external;
     function setDepositPreIntentHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
-    function setDepositWhitelistHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
-    function setDepositRiskHook(address _escrow, uint256 _depositId, IIntentRiskHook _hook) external;
 
     function cancelIntent(bytes32 intentHash) external;
 
     function fulfillIntent(FulfillIntentParams calldata params) external;
 
-    /** @notice Manually releases an intent through risk settlement and its configured post-intent hook, if any. */
+    /** @notice Manually releases an intent through lifecycle settlement and its configured post-intent hook, if any. */
     function releaseFundsToPayer(bytes32 intentHash) external;
 
-    /** @notice Clears durable recovery data after the failed risk hook completes reconciliation. */
+    /** @notice Clears durable recovery data after the failed lifecycle hook completes reconciliation. */
     function acknowledgeIntentCancellation(bytes32 _intentHash) external;
 
     /* ============ External Functions for Escrow ============ */
@@ -216,20 +213,20 @@ interface IOrchestratorV3 {
 
     /* ============ Governance Functions ============ */
 
-    function setRiskCallbackGasLimit(uint256 _gasLimit) external;
+    function setLifecycleHook(IIntentLifecycleHook _hook) external;
+    function setCallbackGasLimit(uint256 _gasLimit) external;
 
     /* ============ View Functions ============ */
 
     function getIntent(bytes32 intentHash) external view returns (Intent memory);
     function getAccountIntents(address account) external view returns (bytes32[] memory);
     function getDepositPreIntentHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
-    function getDepositWhitelistHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
-    function getDepositRiskHook(address _escrow, uint256 _depositId) external view returns (IIntentRiskHook);
-    function getIntentRiskHook(bytes32 _intentHash) external view returns (IIntentRiskHook);
-    function getRiskIntent(bytes32 _intentHash) external view returns (RiskIntentData memory);
+    function lifecycleHook() external view returns (IIntentLifecycleHook);
+    function getIntentLifecycleHook(bytes32 _intentHash) external view returns (IIntentLifecycleHook);
+    function getIntentContext(bytes32 _intentHash) external view returns (IntentContext memory);
     /**
      * @notice Returns the liquidity-unlock timestamp when a cancellation callback failed open.
-     * @dev The risk hook must use this timestamp during reconciliation rather than the later transaction time.
+     * @dev The lifecycle hook must use this timestamp during reconciliation rather than the later transaction time.
      */
     function getIntentCancellation(bytes32 _intentHash) external view returns (uint64 cancelledAt);
 }

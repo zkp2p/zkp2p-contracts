@@ -21,7 +21,7 @@ contract WhitelistResolverMock is IWhitelistResolver {
 
     Mode public mode;
     uint256 public payloadSize;
-    mapping(uint256 => mapping(address => bool)) public memberOf;
+    mapping(bytes32 => mapping(address => bool)) public memberOf;
 
     function setMode(Mode _mode) external {
         mode = _mode;
@@ -31,11 +31,11 @@ contract WhitelistResolverMock is IWhitelistResolver {
         payloadSize = _payloadSize;
     }
 
-    function setMemberOf(uint256 _groupId, address _account, bool _isMember) external {
+    function setMemberOf(bytes32 _groupId, address _account, bool _isMember) external {
         memberOf[_groupId][_account] = _isMember;
     }
 
-    function isMember(uint256 _groupId, address _account) external view override returns (bool) {
+    function isMember(bytes32 _groupId, address _account) external view override returns (bool) {
         Mode currentMode = mode;
         if (currentMode == Mode.MembershipMap) return memberOf[_groupId][_account];
         if (currentMode == Mode.ReturnTrue) return true;

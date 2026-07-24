@@ -2,16 +2,16 @@
 
 pragma solidity ^0.8.18;
 
-import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
+import { IIntentLifecycleHook } from "../interfaces/IIntentLifecycleHook.sol";
 import { IOrchestratorV3 } from "../interfaces/IOrchestratorV3.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
- * @title IntentRiskHookMock
+ * @title IntentLifecycleHookV1Mock
  * @notice Configurable lifecycle hook used to exercise OrchestratorV3 callback behavior.
  */
-contract IntentRiskHookMock is IIntentRiskHook {
+contract IntentLifecycleHookV1Mock is IIntentLifecycleHook {
     using SafeERC20 for IERC20;
 
     bool public revertOnCreate;
@@ -20,7 +20,7 @@ contract IntentRiskHookMock is IIntentRiskHook {
     uint256 public settlementPullAmount;
     uint256 public settlementTransferAmount;
     bytes32 public lastIntentHash;
-    RiskSettlementContext public lastSettlementContext;
+    SettlementContext public lastSettlementContext;
     uint256 public createdCalls;
     uint256 public cancelledCalls;
     uint256 public settlementCalls;
@@ -62,7 +62,7 @@ contract IntentRiskHookMock is IIntentRiskHook {
         cancelledCalls++;
     }
 
-    function settleIntent(RiskSettlementContext calldata _context) external override {
+    function settleIntent(SettlementContext calldata _context) external override {
         _revertWithConfiguredData();
         if (revertOnCallback) revert("risk settlement failed");
         lastIntentHash = _context.intentHash;

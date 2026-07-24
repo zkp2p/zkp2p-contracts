@@ -2,11 +2,11 @@
 
 pragma solidity ^0.8.18;
 
-import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
+import { IIntentLifecycleHook } from "../interfaces/IIntentLifecycleHook.sol";
 
 /**
  * @title BoundedCall
- * @notice Executes gas-limited risk-hook callbacks while bounding copied return and revert data.
+ * @notice Executes gas-limited lifecycle-hook callbacks while bounding copied return and revert data.
  * @dev This follows the excessively-safe-call pattern: the callee cannot force the caller to copy unbounded return data
  *      and exhaust gas during memory expansion. Admission and settlement are fail-closed and bubble bounded revert data
  *      through typed errors. Cancellation is fail-open for intent-liquidity liveness and emits bounded failure evidence
@@ -14,96 +14,96 @@ import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
  */
 library BoundedCall {
     /// @notice Emitted when a fail-open risk cancellation callback does not complete successfully.
-    event RiskHookCallbackFailed(
+    event LifecycleHookCallbackFailed(
         bytes32 indexed intentHash,
-        address indexed riskHook,
+        address indexed lifecycleHook,
         bytes4 indexed callbackSelector,
         bytes revertData
     );
 
-    error RiskHookAdmissionFailed(bytes32 intentHash, address hook, bytes revertData);
-    error RiskHookSettlementFailed(bytes32 intentHash, address hook, bytes revertData);
-    error InsufficientGasForRiskCallback(uint256 availableGas, uint256 requiredGas);
+    error LifecycleHookAdmissionFailed(bytes32 intentHash, address hook, bytes revertData);
+    error LifecycleHookSettlementFailed(bytes32 intentHash, address hook, bytes revertData);
+    error InsufficientGasForCallback(uint256 availableGas, uint256 requiredGas);
 
     /**
-     * @notice Executes a fail-closed risk admission callback with fixed gas and bounded revert data.
+     * @notice Executes a fail-closed lifecycle admission callback with fixed gas and bounded revert data.
      * @dev A zero hook is an intentional no-op. A non-zero hook must contain deployed code and successfully execute
-     *      `onIntentCreated`; otherwise the complete outer intent admission reverts with `RiskHookAdmissionFailed`.
-     * @param _riskHook Snapshotted hook selected by the deposit, or zero when no risk policy applies.
+     *      `onIntentCreated`; otherwise the complete outer intent admission reverts with `LifecycleHookAdmissionFailed`.
+     * @param _lifecycleHook Snapshotted governance-selected hook, or zero when no risk policy applies.
      * @param _intentHash Newly created intent identifier readable from the calling orchestrator.
      * @param _gasLimit Exact gas allowance supplied to the callback call.
      * @param _maxReturnDataSize Maximum revert-data bytes copied from the hook.
      */
-    function executeRiskAdmission(
-        IIntentRiskHook _riskHook,
+    function executeLifecycleAdmission(
+        IIntentLifecycleHook _lifecycleHook,
         bytes32 _intentHash,
         uint256 _gasLimit,
         uint256 _maxReturnDataSize
     ) public {
-        if (address(_riskHook) == address(0)) return;
-        if (address(_riskHook).code.length == 0) {
-            revert RiskHookAdmissionFailed(_intentHash, address(_riskHook), bytes(""));
+        if (address(_lifecycleHook) == address(0)) return;
+        if (address(_lifecycleHook).code.length == 0) {
+            revert LifecycleHookAdmissionFailed(_intentHash, address(_lifecycleHook), bytes(""));
         }
 
         (bool success, bytes memory revertData) = callWithBoundedReturnData(
-            address(_riskHook),
+            address(_lifecycleHook),
             _gasLimit,
             _maxReturnDataSize,
-            abi.encodeCall(IIntentRiskHook.onIntentCreated, (_intentHash))
+            abi.encodeCall(IIntentLifecycleHook.onIntentCreated, (_intentHash))
         );
-        if (!success) revert RiskHookAdmissionFailed(_intentHash, address(_riskHook), revertData);
+        if (!success) revert LifecycleHookAdmissionFailed(_intentHash, address(_lifecycleHook), revertData);
     }
 
     /**
      * @notice Executes a fail-closed settlement callback with bounded return data.
-     * @dev The caller must already validate that `_riskHook` is non-zero deployed code. Any callback failure reverts the
-     *      outer settlement with the intent-bound `RiskHookSettlementFailed` error and bounded revert data.
-     * @param _riskHook Snapshotted non-zero risk hook receiving settlement context.
+     * @dev The caller must already validate that `_lifecycleHook` is non-zero deployed code. Any callback failure reverts the
+     *      outer settlement with the intent-bound `LifecycleHookSettlementFailed` error and bounded revert data.
+     * @param _lifecycleHook Snapshotted non-zero lifecycle hook receiving settlement context.
      * @param _context Exact gross amount, executable amount, fee plan, token, recipient, and settlement type.
      * @param _gasLimit Exact gas allowance supplied to the callback call.
      * @param _maxReturnDataSize Maximum revert-data bytes copied from the hook.
      */
-    function executeRiskSettlement(
-        IIntentRiskHook _riskHook,
-        IIntentRiskHook.RiskSettlementContext memory _context,
+    function executeLifecycleSettlement(
+        IIntentLifecycleHook _lifecycleHook,
+        IIntentLifecycleHook.SettlementContext memory _context,
         uint256 _gasLimit,
         uint256 _maxReturnDataSize
     ) public {
         (bool success, bytes memory revertData) = callWithBoundedReturnData(
-            address(_riskHook),
+            address(_lifecycleHook),
             _gasLimit,
             _maxReturnDataSize,
-            abi.encodeCall(IIntentRiskHook.settleIntent, (_context))
+            abi.encodeCall(IIntentLifecycleHook.settleIntent, (_context))
         );
         if (!success) {
-            revert RiskHookSettlementFailed(_context.intentHash, address(_riskHook), revertData);
+            revert LifecycleHookSettlementFailed(_context.intentHash, address(_lifecycleHook), revertData);
         }
     }
 
     /**
      * @notice Executes a fail-open cancellation callback without allowing hook failure to trap intent liquidity.
-     * @dev A zero hook succeeds without a call. A non-contract hook or reverted callback emits `RiskHookCallbackFailed`
+     * @dev A zero hook succeeds without a call. A non-contract hook or reverted callback emits `LifecycleHookCallbackFailed`
      *      and returns false so OrchestratorV3 can store durable recovery state. Before calling, the function verifies
      *      EIP-150 permits the complete configured gas allowance to be forwarded; insufficient outer gas reverts rather
      *      than being misclassified as a hook failure.
-     * @param _riskHook Snapshotted hook selected when the intent was created, or zero when none applied.
+     * @param _lifecycleHook Snapshotted governance-selected hook, or zero when none applied.
      * @param _intentHash Cancelled intent identifier included in the callback and any failure event.
      * @param _gasLimit Exact gas allowance supplied to the callback call.
      * @param _maxReturnDataSize Maximum revert-data bytes copied from the hook.
      * @return success Whether the callback completed successfully.
      */
-    function executeRiskCancellation(
-        IIntentRiskHook _riskHook,
+    function executeLifecycleCancellation(
+        IIntentLifecycleHook _lifecycleHook,
         bytes32 _intentHash,
         uint256 _gasLimit,
         uint256 _maxReturnDataSize
     ) public returns (bool success) {
-        if (address(_riskHook) == address(0)) return true;
-        if (address(_riskHook).code.length == 0) {
-            emit RiskHookCallbackFailed(
+        if (address(_lifecycleHook) == address(0)) return true;
+        if (address(_lifecycleHook).code.length == 0) {
+            emit LifecycleHookCallbackFailed(
                 _intentHash,
-                address(_riskHook),
-                IIntentRiskHook.onIntentCancelled.selector,
+                address(_lifecycleHook),
+                IIntentLifecycleHook.onIntentCancelled.selector,
                 bytes("")
             );
             return false;
@@ -116,21 +116,21 @@ library BoundedCall {
         uint256 gasAfterMargin = availableGas > 5_000 ? availableGas - 5_000 : 0;
         uint256 forwardableGas = gasAfterMargin - (gasAfterMargin / 64);
         if (forwardableGas < _gasLimit) {
-            revert InsufficientGasForRiskCallback(availableGas, _gasLimit);
+            revert InsufficientGasForCallback(availableGas, _gasLimit);
         }
 
         bytes memory revertData;
         (success, revertData) = callWithBoundedReturnData(
-            address(_riskHook),
+            address(_lifecycleHook),
             _gasLimit,
             _maxReturnDataSize,
-            abi.encodeCall(IIntentRiskHook.onIntentCancelled, (_intentHash))
+            abi.encodeCall(IIntentLifecycleHook.onIntentCancelled, (_intentHash))
         );
         if (!success) {
-            emit RiskHookCallbackFailed(
+            emit LifecycleHookCallbackFailed(
                 _intentHash,
-                address(_riskHook),
-                IIntentRiskHook.onIntentCancelled.selector,
+                address(_lifecycleHook),
+                IIntentLifecycleHook.onIntentCancelled.selector,
                 revertData
             );
         }
