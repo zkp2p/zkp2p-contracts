@@ -19,12 +19,6 @@ import {
 } from "../deployments/helpers";
 import { safeBatchCollector } from "../deployments/safeBatchCollector";
 
-export const CANONICAL_ADDRESS_GROUPS = [
-  { id: ethers.utils.keccak256(ethers.utils.toUtf8Bytes("peers")), name: "Peers" },
-  { id: ethers.utils.keccak256(ethers.utils.toUtf8Bytes("peer-pluses")), name: "Peer Pluses" },
-  { id: ethers.utils.keccak256(ethers.utils.toUtf8Bytes("peer-merchants")), name: "Peer Merchants" },
-] as const;
-
 async function executeOrQueueGovernanceCall(
   hre: HardhatRuntimeEnvironment,
   contract: any,
@@ -55,7 +49,6 @@ async function systemFullyWired(network: string): Promise<boolean> {
   const escrowRegistryAddress = getDeployedContractAddress(network, "EscrowRegistry");
   const escrowV2Address = getDeployedContractAddress(network, "EscrowV2");
 
-  const registry = await ethers.getContractAt("AddressGroupRegistry", registryAddress);
   const policy = await ethers.getContractAt("WhitelistPolicy", policyAddress);
   const hook = await ethers.getContractAt("IntentLifecycleHookV1", hookAddress);
   const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorAddress);
@@ -69,11 +62,6 @@ async function systemFullyWired(network: string): Promise<boolean> {
   if (!(await orchestratorRegistry.isOrchestrator(orchestratorAddress))) return false;
   if (!(await escrowRegistry.isWhitelistedEscrow(escrowV2Address))) return false;
 
-  for (const group of CANONICAL_ADDRESS_GROUPS) {
-    if (!(await registry.groupExists(group.id)) || !(await registry.isGroupActive(group.id))) {
-      return false;
-    }
-  }
   return true;
 }
 
@@ -143,24 +131,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const addressGroupRegistry = await deploy("AddressGroupRegistry", {
     from: deployer,
-    args: [deployer],
+    args: [],
   });
   if (addressGroupRegistry.newlyDeployed) {
     console.log("AddressGroupRegistry deployed at", addressGroupRegistry.address);
     await waitForDeploymentDelay(hre);
-  }
-
-  const registry = await ethers.getContractAt("AddressGroupRegistry", addressGroupRegistry.address);
-  for (const group of CANONICAL_ADDRESS_GROUPS) {
-    if (!(await registry.groupExists(group.id))) {
-      await executeOrQueueGovernanceCall(
-        hre,
-        registry,
-        "registerGroup",
-        [group.id, group.name, governance],
-        `AddressGroupRegistry.registerGroup(${group.name}, curator=${governance})`,
-      );
-    }
   }
 
   const whitelistPolicy = await deploy("WhitelistPolicy", {
@@ -197,7 +172,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await addOrchestratorToRegistry(hre, orchestratorRegistry, orchestratorV3.address);
   await addEscrowToRegistry(hre, escrowRegistry, escrowV2Address);
 
-  await setNewOwner(hre, registry, governance);
   await setNewOwner(hre, orchestratorV3Contract, governance);
 
   console.log("=== Minimal V3 risk system deployment prepared ===");

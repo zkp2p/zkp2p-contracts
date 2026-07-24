@@ -8,15 +8,14 @@ import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 
 contract WhitelistPolicyTest is Test {
-    bytes32 internal constant PEERS = keccak256("peers");
-    bytes32 internal constant PEER_PLUSES = keccak256("peer-pluses");
-    bytes32 internal constant PEER_MERCHANTS = keccak256("peer-merchants");
+    uint256 internal PEERS;
+    uint256 internal PEER_PLUSES;
+    uint256 internal PEER_MERCHANTS;
 
     address internal maker;
     address internal otherMaker;
     address internal taker;
     address internal otherTaker;
-    address internal curator;
 
     AddressGroupRegistry internal registry;
     WhitelistPolicy internal policy;
@@ -24,20 +23,18 @@ contract WhitelistPolicyTest is Test {
     event EnabledUpdated(address indexed maker, bool enabled);
     event AddressWhitelisted(address indexed maker, address indexed taker);
     event AddressRemovedFromWhitelist(address indexed maker, address indexed taker);
-    event AllowedGroupAdded(address indexed maker, bytes32 indexed groupId);
-    event AllowedGroupRemoved(address indexed maker, bytes32 indexed groupId);
+    event AllowedGroupAdded(address indexed maker, uint256 indexed groupId);
+    event AllowedGroupRemoved(address indexed maker, uint256 indexed groupId);
 
     function setUp() public {
         maker = makeAddr("maker");
         otherMaker = makeAddr("otherMaker");
         taker = makeAddr("taker");
         otherTaker = makeAddr("otherTaker");
-        curator = makeAddr("curator");
-
-        registry = new AddressGroupRegistry(address(this));
-        registry.registerGroup(PEERS, "Peers", curator);
-        registry.registerGroup(PEER_PLUSES, "Peer Pluses", curator);
-        registry.registerGroup(PEER_MERCHANTS, "Peer Merchants", curator);
+        registry = new AddressGroupRegistry();
+        PEERS = registry.createGroup("Peers");
+        PEER_PLUSES = registry.createGroup("Peer Pluses");
+        PEER_MERCHANTS = registry.createGroup("Peer Merchants");
         policy = new WhitelistPolicy(registry);
     }
 
@@ -120,7 +117,7 @@ contract WhitelistPolicyTest is Test {
     }
 
     function test_AddAllowedGroupsSupportsViewsAndDeduplicates() public {
-        bytes32[] memory groups = _groupIds(PEERS, PEER_PLUSES);
+        uint256[] memory groups = _groupIds(PEERS, PEER_PLUSES);
 
         vm.expectEmit(true, true, false, true, address(policy));
         emit AllowedGroupAdded(maker, PEERS);
@@ -141,38 +138,30 @@ contract WhitelistPolicyTest is Test {
         assertEq(policy.getAllowedGroups(maker).length, 2);
     }
 
-    function test_AddAllowedGroupsRejectsEmptyUnknownAndInactiveGroups() public {
+    function test_AddAllowedGroupsRejectsEmptyAndUnknownGroups() public {
         vm.expectRevert(WhitelistPolicy.EmptyArray.selector);
         vm.prank(maker);
-        policy.addAllowedGroups(new bytes32[](0));
+        policy.addAllowedGroups(new uint256[](0));
 
-        bytes32 unknownGroup = keccak256("unknown");
+        uint256 unknownGroup = 999;
         vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.GroupDoesNotExist.selector, unknownGroup));
         vm.prank(maker);
         policy.addAllowedGroups(_groupIds(unknownGroup));
-
-        registry.setGroupActive(PEER_PLUSES, false);
-        vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.GroupNotActive.selector, PEER_PLUSES));
-        vm.prank(maker);
-        policy.addAllowedGroups(_groupIds(PEERS, PEER_PLUSES));
 
         assertEq(policy.getAllowedGroups(maker).length, 0);
     }
 
     function test_AddAllowedGroupsRejectsEleventhUniqueGroup() public {
-        bytes32[] memory firstTen = new bytes32[](10);
+        uint256[] memory firstTen = new uint256[](10);
         for (uint256 i = 0; i < firstTen.length; ++i) {
-            bytes32 groupId = keccak256(abi.encode("group", i));
-            registry.registerGroup(groupId, "Curated Group", curator);
-            firstTen[i] = groupId;
+            firstTen[i] = registry.createGroup("Curated Group");
         }
 
         vm.prank(maker);
         policy.addAllowedGroups(firstTen);
         assertEq(policy.getAllowedGroups(maker).length, policy.MAX_GROUPS_PER_MAKER());
 
-        bytes32 eleventh = keccak256("eleventh");
-        registry.registerGroup(eleventh, "Eleventh Group", curator);
+        uint256 eleventh = registry.createGroup("Eleventh Group");
         vm.expectRevert(
             abi.encodeWithSelector(
                 WhitelistPolicy.TooManyGroups.selector, policy.MAX_GROUPS_PER_MAKER() + 1, policy.MAX_GROUPS_PER_MAKER()
@@ -191,7 +180,7 @@ contract WhitelistPolicyTest is Test {
         vm.prank(maker);
         policy.removeAllowedGroups(_groupIds(PEERS));
 
-        bytes32[] memory remaining = policy.getAllowedGroups(maker);
+        uint256[] memory remaining = policy.getAllowedGroups(maker);
         assertEq(remaining.length, 2);
         assertEq(remaining[0], PEER_MERCHANTS);
         assertEq(remaining[1], PEER_PLUSES);
@@ -208,7 +197,7 @@ contract WhitelistPolicyTest is Test {
     function test_RemoveAllowedGroupsRejectsEmptyArray() public {
         vm.expectRevert(WhitelistPolicy.EmptyArray.selector);
         vm.prank(maker);
-        policy.removeAllowedGroups(new bytes32[](0));
+        policy.removeAllowedGroups(new uint256[](0));
     }
 
     function test_IsTakerAllowedReturnsTrueWhenPolicyDisabled() public view {
@@ -229,7 +218,6 @@ contract WhitelistPolicyTest is Test {
         policy.setEnabled(true);
         policy.addAllowedGroups(_groupIds(PEERS));
         vm.stopPrank();
-        vm.prank(curator);
         registry.addMembers(PEERS, _addresses(taker));
 
         assertTrue(policy.isTakerAllowed(maker, taker));
@@ -251,23 +239,23 @@ contract WhitelistPolicyTest is Test {
         assertFalse(policy.isTakerAllowed(maker, taker));
     }
 
-    function _groupIds(bytes32 _first) internal pure returns (bytes32[] memory groupIds) {
-        groupIds = new bytes32[](1);
+    function _groupIds(uint256 _first) internal pure returns (uint256[] memory groupIds) {
+        groupIds = new uint256[](1);
         groupIds[0] = _first;
     }
 
-    function _groupIds(bytes32 _first, bytes32 _second) internal pure returns (bytes32[] memory groupIds) {
-        groupIds = new bytes32[](2);
+    function _groupIds(uint256 _first, uint256 _second) internal pure returns (uint256[] memory groupIds) {
+        groupIds = new uint256[](2);
         groupIds[0] = _first;
         groupIds[1] = _second;
     }
 
-    function _groupIds(bytes32 _first, bytes32 _second, bytes32 _third)
+    function _groupIds(uint256 _first, uint256 _second, uint256 _third)
         internal
         pure
-        returns (bytes32[] memory groupIds)
+        returns (uint256[] memory groupIds)
     {
-        groupIds = new bytes32[](3);
+        groupIds = new uint256[](3);
         groupIds[0] = _first;
         groupIds[1] = _second;
         groupIds[2] = _third;

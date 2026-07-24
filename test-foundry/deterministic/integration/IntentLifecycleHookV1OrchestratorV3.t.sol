@@ -14,11 +14,9 @@ import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.so
 import {OrchestratorV2LegacyFixture} from "../helpers/OrchestratorV2LegacyFixture.sol";
 
 contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture {
-    bytes32 internal constant PEERS = keccak256("peers");
-    bytes32 internal constant PEER_PLUSES = keccak256("peer-pluses");
-    bytes32 internal constant PEER_MERCHANTS = keccak256("peer-merchants");
-
-    address internal curator;
+    uint256 internal PEERS;
+    uint256 internal PEER_PLUSES;
+    uint256 internal PEER_MERCHANTS;
 
     AddressGroupRegistry internal groupRegistry;
     WhitelistPolicy internal policy;
@@ -28,11 +26,10 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         super.setUp();
         _replaceOrchestratorWithStandaloneV3();
 
-        curator = makeAddr("curator");
-        groupRegistry = new AddressGroupRegistry(address(this));
-        groupRegistry.registerGroup(PEERS, "Peers", curator);
-        groupRegistry.registerGroup(PEER_PLUSES, "Peer Pluses", curator);
-        groupRegistry.registerGroup(PEER_MERCHANTS, "Peer Merchants", curator);
+        groupRegistry = new AddressGroupRegistry();
+        PEERS = groupRegistry.createGroup("Peers");
+        PEER_PLUSES = groupRegistry.createGroup("Peer Pluses");
+        PEER_MERCHANTS = groupRegistry.createGroup("Peer Merchants");
 
         policy = new WhitelistPolicy(groupRegistry);
         lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, policy);
@@ -137,7 +134,6 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         _enablePeerPolicyAndAddTaker();
         bytes32 activeIntent = _signalDefault();
 
-        vm.prank(curator);
         groupRegistry.removeMembers(PEERS, _addresses(taker));
         vm.prank(taker);
         orchestrator.cancelIntent(activeIntent);
@@ -149,19 +145,9 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         _signalCall(taker, _defaultParams());
     }
 
-    function test_GroupDeactivationFailsClosedWithoutMutatingMakerPolicy() public {
-        _enablePeerPolicyAndAddTaker();
-        groupRegistry.setGroupActive(PEERS, false);
-
-        assertTrue(policy.isGroupAllowed(depositor, PEERS));
-        vm.expectPartialRevert(BoundedCall.LifecycleHookAdmissionFailed.selector);
-        _signalCall(taker, _defaultParams());
-    }
-
     function test_SettlementIsNoOpAndDoesNotRecheckPointInTimeMembership() public {
         _enablePeerPolicyAndAddTaker();
         bytes32 intentHash = _signalDefault();
-        vm.prank(curator);
         groupRegistry.removeMembers(PEERS, _addresses(taker));
 
         uint256 takerBalanceBefore = token.balanceOf(taker);
@@ -191,12 +177,10 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
     }
 
     function test_MaximumPolicySizeCompletesWithinMinimumBoundedCallbackGas() public {
-        bytes32[] memory groups = new bytes32[](10);
+        uint256[] memory groups = new uint256[](10);
         groups[0] = PEERS;
         for (uint256 i = 1; i < groups.length; i++) {
-            bytes32 groupId = keccak256(abi.encode("bounded-group", i));
-            groupRegistry.registerGroup(groupId, "Bounded Group", curator);
-            groups[i] = groupId;
+            groups[i] = groupRegistry.createGroup("Bounded Group");
         }
 
         vm.startPrank(depositor);
@@ -241,22 +225,21 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         _addMembers(PEERS, taker);
     }
 
-    function _addMembers(bytes32 _groupId, address _member) internal {
-        vm.prank(curator);
+    function _addMembers(uint256 _groupId, address _member) internal {
         groupRegistry.addMembers(_groupId, _addresses(_member));
     }
 
-    function _groupIds(bytes32 _first) internal pure returns (bytes32[] memory groupIds) {
-        groupIds = new bytes32[](1);
+    function _groupIds(uint256 _first) internal pure returns (uint256[] memory groupIds) {
+        groupIds = new uint256[](1);
         groupIds[0] = _first;
     }
 
-    function _groupIds(bytes32 _first, bytes32 _second, bytes32 _third)
+    function _groupIds(uint256 _first, uint256 _second, uint256 _third)
         internal
         pure
-        returns (bytes32[] memory groupIds)
+        returns (uint256[] memory groupIds)
     {
-        groupIds = new bytes32[](3);
+        groupIds = new uint256[](3);
         groupIds[0] = _first;
         groupIds[1] = _second;
         groupIds[2] = _third;

@@ -22,23 +22,22 @@ contract WhitelistPolicy is IWhitelistPolicy {
 
     mapping(address => bool) public override enabled;
     mapping(address => mapping(address => bool)) public override isWhitelisted;
-    mapping(address => bytes32[]) internal allowedGroups;
+    mapping(address => uint256[]) internal allowedGroups;
 
     /* ============ Events ============ */
 
     event EnabledUpdated(address indexed maker, bool enabled);
     event AddressWhitelisted(address indexed maker, address indexed taker);
     event AddressRemovedFromWhitelist(address indexed maker, address indexed taker);
-    event AllowedGroupAdded(address indexed maker, bytes32 indexed groupId);
-    event AllowedGroupRemoved(address indexed maker, bytes32 indexed groupId);
+    event AllowedGroupAdded(address indexed maker, uint256 indexed groupId);
+    event AllowedGroupRemoved(address indexed maker, uint256 indexed groupId);
 
     /* ============ Errors ============ */
 
     error ZeroAddress();
     error EmptyArray();
     error InvalidGroupRegistry(address registry);
-    error GroupDoesNotExist(bytes32 groupId);
-    error GroupNotActive(bytes32 groupId);
+    error GroupDoesNotExist(uint256 groupId);
     error TooManyGroups(uint256 attempted, uint256 maximum);
 
     /* ============ Constructor ============ */
@@ -95,14 +94,13 @@ contract WhitelistPolicy is IWhitelistPolicy {
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function addAllowedGroups(bytes32[] calldata _groupIds) external override {
+    function addAllowedGroups(uint256[] calldata _groupIds) external override {
         if (_groupIds.length == 0) revert EmptyArray();
 
-        bytes32[] storage makerGroups = allowedGroups[msg.sender];
+        uint256[] storage makerGroups = allowedGroups[msg.sender];
         for (uint256 i = 0; i < _groupIds.length; ++i) {
-            bytes32 groupId = _groupIds[i];
+            uint256 groupId = _groupIds[i];
             if (!groupRegistry.groupExists(groupId)) revert GroupDoesNotExist(groupId);
-            if (!groupRegistry.isGroupActive(groupId)) revert GroupNotActive(groupId);
             if (_containsGroup(makerGroups, groupId)) continue;
             if (makerGroups.length == MAX_GROUPS_PER_MAKER) {
                 revert TooManyGroups(makerGroups.length + 1, MAX_GROUPS_PER_MAKER);
@@ -116,12 +114,12 @@ contract WhitelistPolicy is IWhitelistPolicy {
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function removeAllowedGroups(bytes32[] calldata _groupIds) external override {
+    function removeAllowedGroups(uint256[] calldata _groupIds) external override {
         if (_groupIds.length == 0) revert EmptyArray();
 
-        bytes32[] storage makerGroups = allowedGroups[msg.sender];
+        uint256[] storage makerGroups = allowedGroups[msg.sender];
         for (uint256 i = 0; i < _groupIds.length; ++i) {
-            bytes32 groupId = _groupIds[i];
+            uint256 groupId = _groupIds[i];
             uint256 groupIndex = _findGroupIndex(makerGroups, groupId);
             if (groupIndex == makerGroups.length) continue;
 
@@ -136,14 +134,14 @@ contract WhitelistPolicy is IWhitelistPolicy {
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function getAllowedGroups(address _maker) external view override returns (bytes32[] memory) {
+    function getAllowedGroups(address _maker) external view override returns (uint256[] memory) {
         return allowedGroups[_maker];
     }
 
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function isGroupAllowed(address _maker, bytes32 _groupId) external view override returns (bool) {
+    function isGroupAllowed(address _maker, uint256 _groupId) external view override returns (bool) {
         return _containsGroup(allowedGroups[_maker], _groupId);
     }
 
@@ -154,7 +152,7 @@ contract WhitelistPolicy is IWhitelistPolicy {
         if (!enabled[_maker]) return true;
         if (isWhitelisted[_maker][_taker]) return true;
 
-        bytes32[] storage makerGroups = allowedGroups[_maker];
+        uint256[] storage makerGroups = allowedGroups[_maker];
         for (uint256 i = 0; i < makerGroups.length; ++i) {
             if (groupRegistry.isMember(makerGroups[i], _taker)) return true;
         }
@@ -163,11 +161,11 @@ contract WhitelistPolicy is IWhitelistPolicy {
 
     /* ============ Internal Functions ============ */
 
-    function _containsGroup(bytes32[] storage _groups, bytes32 _groupId) internal view returns (bool) {
+    function _containsGroup(uint256[] storage _groups, uint256 _groupId) internal view returns (bool) {
         return _findGroupIndex(_groups, _groupId) != _groups.length;
     }
 
-    function _findGroupIndex(bytes32[] storage _groups, bytes32 _groupId) internal view returns (uint256) {
+    function _findGroupIndex(uint256[] storage _groups, uint256 _groupId) internal view returns (uint256) {
         for (uint256 i = 0; i < _groups.length; ++i) {
             if (_groups[i] == _groupId) return i;
         }
