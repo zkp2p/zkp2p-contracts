@@ -112,13 +112,7 @@ abstract contract MakerProtectionManager is IRiskManager {
             uint256 groupId = _groupIds[groupIndex];
             if (!groupRegistry.groupExists(groupId)) revert GroupDoesNotExist(groupId);
 
-            bool alreadyAttached;
-            for (uint256 attachedIndex = 0; attachedIndex < attached.length; attachedIndex++) {
-                if (attached[attachedIndex] == groupId) {
-                    alreadyAttached = true;
-                    break;
-                }
-            }
+            (bool alreadyAttached,) = _attachedGroupIndex(attached, groupId);
             if (alreadyAttached) continue;
             if (attached.length >= MAX_ATTACHED_GROUPS) {
                 revert MaxGroupsExceeded(attached.length + 1, MAX_ATTACHED_GROUPS);
@@ -139,14 +133,12 @@ abstract contract MakerProtectionManager is IRiskManager {
         uint256[] storage attached = attachedGroups[msg.sender];
         for (uint256 groupIndex = 0; groupIndex < _groupIds.length; groupIndex++) {
             uint256 groupId = _groupIds[groupIndex];
-            for (uint256 attachedIndex = 0; attachedIndex < attached.length; attachedIndex++) {
-                if (attached[attachedIndex] != groupId) continue;
+            (bool isAttached, uint256 attachedIndex) = _attachedGroupIndex(attached, groupId);
+            if (!isAttached) continue;
 
-                attached[attachedIndex] = attached[attached.length - 1];
-                attached.pop();
-                emit GroupDetached(msg.sender, groupId);
-                break;
-            }
+            attached[attachedIndex] = attached[attached.length - 1];
+            attached.pop();
+            emit GroupDetached(msg.sender, groupId);
         }
     }
 
@@ -222,10 +214,34 @@ abstract contract MakerProtectionManager is IRiskManager {
     function _isTakerAllowed(address _maker, address _taker) internal view returns (bool) {
         if (whitelist[_maker][_taker]) return true;
 
-        uint256[] storage groupIds = attachedGroups[_maker];
-        for (uint256 groupIndex = 0; groupIndex < groupIds.length; groupIndex++) {
-            if (groupRegistry.isMember(groupIds[groupIndex], _taker)) return true;
+        (bool isMember,) = _isMemberOfAttachedGroups(_maker, _taker);
+        return isMember;
+    }
+
+    function _attachedGroupIndex(uint256[] storage _attached, uint256 _groupId)
+        private
+        view
+        returns (bool found, uint256 index)
+    {
+        for (uint256 attachedIndex = 0; attachedIndex < _attached.length && !found; attachedIndex++) {
+            if (_attached[attachedIndex] == _groupId) {
+                found = true;
+                index = attachedIndex;
+            }
         }
-        return false;
+        return (found, index);
+    }
+
+    function _isMemberOfAttachedGroups(address _maker, address _taker)
+        private
+        view
+        returns (bool isMember, uint256 checkedGroups)
+    {
+        uint256[] storage groupIds = attachedGroups[_maker];
+        while (checkedGroups < groupIds.length && !isMember) {
+            isMember = groupRegistry.isMember(groupIds[checkedGroups], _taker);
+            checkedGroups++;
+        }
+        return (isMember, checkedGroups);
     }
 }

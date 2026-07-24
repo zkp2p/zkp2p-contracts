@@ -312,6 +312,16 @@ contract RiskManagerMakerProtectionTest is RiskManagerFixture {
         manager.removeFromWhitelist(zeroAddress);
     }
 
+    function test_GroupMutationsRejectEmptyArray() public {
+        uint256[] memory empty = new uint256[](0);
+        vm.expectRevert(IRiskManager.EmptyArray.selector);
+        vm.prank(protectedMaker);
+        manager.attachGroups(empty);
+        vm.expectRevert(IRiskManager.EmptyArray.selector);
+        vm.prank(protectedMaker);
+        manager.detachGroups(empty);
+    }
+
     function test_GroupMutationsEmitPerRealChange() public {
         uint256 firstGroup = _createGroupWithMember(taker);
         vm.prank(groupOwner);
