@@ -61,6 +61,11 @@ const deterministicCoverageRuns = [
         test: "test-foundry/deterministic/hooks",
     },
     {
+        name: "deterministic-guardian",
+        irMinimum: true,
+        test: "test-foundry/deterministic/guardian",
+    },
+    {
         name: "deterministic-integration",
         irMinimum: true,
         test: "test-foundry/deterministic/integration",
@@ -138,6 +143,11 @@ const exactSourceCoverageRuns = [
         source: "contracts/lib/BoundedCall.sol",
         test: "test-foundry/deterministic/libs",
     },
+    {
+        name: "intent-guardian",
+        source: "contracts/IntentGuardian.sol",
+        test: "test-foundry/deterministic/guardian",
+    },
     ...legacyOrchestratorTests.map((test, index) => ({
         name: `legacy-orchestrator-${index}`,
         source: "contracts/Orchestrator.sol",
@@ -153,6 +163,7 @@ const coverageLanes = new Map([
         "remaining",
         [
             "deterministic-deployment",
+            "deterministic-guardian",
             "deterministic-hooks",
             "deterministic-oracles",
             "deterministic-periphery",

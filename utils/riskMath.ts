@@ -1,4 +1,4 @@
-/** Exact client-side counterparts of RiskManager's integer formulas. */
+/** Exact client-side counterparts of IntentGuardian and RiskManager integer formulas. */
 
 export type IntegerLike = bigint | number | string | { toString(): string };
 
@@ -28,16 +28,29 @@ function ceilDiv(numerator: bigint, denominator: bigint): bigint {
   return ((numerator - 1n) / denominator) + 1n;
 }
 
-/** ceil(A * s * T / (10_000 * 1 hour)); returns zero when the curve is disabled. */
+/** Exact counterpart of IntentGuardian's ceil(A * s * T / (10_000 * 1 hour)) quote. */
+export function quoteIntentGuardianExtensionCost(
+  intentAmount: IntegerLike,
+  extensionTime: IntegerLike,
+  extensionFeeBpsPerHour: IntegerLike,
+): bigint {
+  const amount = integer(intentAmount, "intentAmount");
+  const duration = integer(extensionTime, "extensionTime");
+  const fee = integer(extensionFeeBpsPerHour, "extensionFeeBpsPerHour");
+  return ceilDiv(amount * fee * duration, RISK_EXTENSION_DENOMINATOR);
+}
+
+/** Backwards-compatible RiskManager name for the same integer pricing formula. */
 export function calculateIntentExtensionCost(
   intentAmount: IntegerLike,
   extensionTime: IntegerLike,
   extensionPenaltyBpsPerHour: IntegerLike,
 ): bigint {
-  const amount = integer(intentAmount, "intentAmount");
-  const duration = integer(extensionTime, "extensionTime");
-  const slope = integer(extensionPenaltyBpsPerHour, "extensionPenaltyBpsPerHour");
-  return ceilDiv(amount * slope * duration, RISK_EXTENSION_DENOMINATOR);
+  return quoteIntentGuardianExtensionCost(
+    intentAmount,
+    extensionTime,
+    extensionPenaltyBpsPerHour,
+  );
 }
 
 /** Charges elapsed post-expiry time, capped by the exact duration purchased. */
