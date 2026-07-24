@@ -162,6 +162,16 @@ export const STAKE_RISK_PLATFORM_POLICY: any = {
   base_staging: INITIAL_STAKE_RISK_PLATFORM_POLICY,
 };
 
+// Immutable hourly fee for the standalone IntentGuardian, denominated in basis points of the
+// locked intent amount. Changing this value deploys a new guardian version; makers that opted
+// into an earlier guardian keep that deployment's constructor-fixed economics. Production is
+// intentionally absent until governance ratifies a fee and deployment.
+export const INTENT_GUARDIAN_EXTENSION_FEE_BPS_PER_HOUR: Record<string, number> = {
+  localhost: 2,
+  hardhat: 2,
+  base_staging: 2,
+};
+
 // Pyth Network contract addresses
 export const PYTH_CONTRACT: any = {
   "localhost": "",

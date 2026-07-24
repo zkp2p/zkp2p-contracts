@@ -19,6 +19,7 @@ const PKG_ROOT = path.resolve(__dirname, '../..');
 const ABIS_DIR = path.join(PKG_ROOT, 'abis');
 
 const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
+  IntentGuardian: 'contracts/IntentGuardian.sol/IntentGuardian.json',
   RiskManager: 'contracts/RiskManager.sol/RiskManager.json',
   StakeVault: 'contracts/StakeVault.sol/StakeVault.json',
   OrchestratorV3: 'contracts/OrchestratorV3.sol/OrchestratorV3.json',

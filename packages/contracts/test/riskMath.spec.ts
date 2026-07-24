@@ -3,6 +3,7 @@ import {
   calculateIntentExtensionPenalty,
   calculateRequiredCoverage,
   calculateStakeBackedCapacity,
+  quoteIntentGuardianExtensionCost,
   selectRiskMode,
 } from "../../../utils/riskMath";
 
@@ -13,6 +14,12 @@ describe("risk math", () => {
     expect(calculateIntentExtensionCost(1_000_000_000n, 23n * HOUR, 10n)).toBe(23_000_000n);
     expect(calculateIntentExtensionCost(1n, 1n, 1n)).toBe(1n);
     expect(calculateIntentExtensionCost(1_000_000n, HOUR, 0n)).toBe(0n);
+  });
+
+  it("quotes the guardian's prepaid cost with the exact onchain rounding", () => {
+    expect(quoteIntentGuardianExtensionCost(1_000_000_000n, 2n * HOUR, 10n)).toBe(2_000_000n);
+    expect(quoteIntentGuardianExtensionCost(1n, 1n, 1n)).toBe(1n);
+    expect(quoteIntentGuardianExtensionCost(1_000_000n, HOUR, 0n)).toBe(0n);
   });
 
   it("charges only elapsed purchased time after the original expiry", () => {
@@ -43,6 +50,7 @@ describe("risk math", () => {
 
   it("rejects unsafe numbers", () => {
     expect(() => calculateIntentExtensionCost(Number.MAX_SAFE_INTEGER + 1, HOUR, 1)).toThrow(RangeError);
+    expect(() => quoteIntentGuardianExtensionCost(1, HOUR, -1)).toThrow(RangeError);
     expect(() => calculateRequiredCoverage(-1, true)).toThrow(RangeError);
   });
 });
