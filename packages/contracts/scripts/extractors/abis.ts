@@ -22,6 +22,7 @@ const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
   RiskManager: 'contracts/RiskManager.sol/RiskManager.json',
   StakeVault: 'contracts/StakeVault.sol/StakeVault.json',
   OrchestratorV3: 'contracts/OrchestratorV3.sol/OrchestratorV3.json',
+  IntentGuardian: 'contracts/IntentGuardian.sol/IntentGuardian.json',
   IIntentRiskHook: 'contracts/interfaces/IIntentRiskHook.sol/IIntentRiskHook.json',
   NullifierRegistryV2: 'contracts/registries/NullifierRegistryV2.sol/NullifierRegistryV2.json',
   UnifiedPaymentVerifierV3:

@@ -58,7 +58,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     PythOracleAdapter:                  ${tryGetAddress(network, "PythOracleAdapter")}
     ProtocolViewerV2:                   ${tryGetAddress(network, "ProtocolViewerV2")}
     ----------------------------------------------------------------------
-    Stake Risk Contracts:
+    V3 Risk Contracts:
+    AddressGroupRegistry:               ${tryGetAddress(network, "AddressGroupRegistry")}
+    NullifierRegistryV2:                ${tryGetAddress(network, "NullifierRegistryV2")}
+    RiskAttestationVerifier:            ${tryGetAddress(network, "RiskAttestationVerifier")}
     BoundedCall:                        ${tryGetAddress(network, "BoundedCall")}
     PostIntentHookExecutor:             ${tryGetAddress(network, "PostIntentHookExecutor")}
     RiskSettlementExecutor:             ${tryGetAddress(network, "RiskSettlementExecutor")}
@@ -66,7 +69,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     OrchestratorV3:                     ${tryGetAddress(network, "OrchestratorV3")}
     StakeVault:                         ${tryGetAddress(network, "StakeVault")}
     RiskManager:                        ${tryGetAddress(network, "RiskManager")}
-    NullifierRegistryV2:                ${tryGetAddress(network, "NullifierRegistryV2")}
+    IntentGuardian:                     ${tryGetAddress(network, "IntentGuardian")}
+    Note: Makers must pass IntentGuardian as their deposit intentGuardian at deposit creation.
     UnifiedPaymentVerifierV3:           ${tryGetAddress(network, "UnifiedPaymentVerifierV3")}
     `
   );

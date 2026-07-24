@@ -160,6 +160,44 @@ export const STAKE_RISK_PLATFORM_POLICY: any = {
   base_staging: INITIAL_STAKE_RISK_PLATFORM_POLICY,
 };
 
+// Address-group seeds passed to the AddressGroupRegistry constructor. Sequential group ids are
+// assigned in array order. No group policy is ratified for any network yet.
+export interface AddressGroupSeed {
+  name: string;
+  owner: string;
+  isPublic: boolean;
+  members: string[];
+}
+
+export const ADDRESS_GROUP_SEEDS: Record<string, AddressGroupSeed[]> = {
+  localhost: [],
+  hardhat: [],
+  base_staging: [],
+};
+
+// One-time RiskManager maker-protection seeding, applied before the risk hook is activated.
+// Empty until governance ratifies which existing makers opt into which protections.
+export interface RiskMakerInit {
+  maker: string;
+  whitelistEnabled: boolean;
+  requireBothProtections: boolean;
+  chargebackPlatforms: string[];
+}
+
+export const RISK_MAKER_INIT: Record<string, RiskMakerInit[]> = {
+  localhost: [],
+  hardhat: [],
+  base_staging: [],
+};
+
+// Hourly intent-extension fee in basis points of the intent amount. Zero disables extensions
+// entirely. Carried over from the extension penalty ratified for the staging stake-risk rollout.
+export const INTENT_GUARDIAN_EXTENSION_FEE_BPS_PER_HOUR: Record<string, number> = {
+  localhost: 2,
+  hardhat: 2,
+  base_staging: 2,
+};
+
 // Pyth Network contract addresses
 export const PYTH_CONTRACT: any = {
   "localhost": "",
