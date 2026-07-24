@@ -6,21 +6,19 @@ import { IIntentRiskHook } from "../interfaces/IIntentRiskHook.sol";
 interface IOrchestratorV3ReentryTarget {
     function cancelIntent(bytes32 _intentHash) external;
     function cleanupOrphanedIntents(bytes32[] calldata _intentHashes) external;
-    function setDepositRiskHook(address _escrow, uint256 _depositId, IIntentRiskHook _hook) external;
+    function setRiskHook(IIntentRiskHook _hook) external;
 }
 
 /** @notice Risk hook that catches deliberate attempts to reenter each guarded V3 entrypoint. */
 contract OrchestratorV3ReentrantRiskHook is IIntentRiskHook {
     IOrchestratorV3ReentryTarget public immutable orchestrator;
-    address public immutable escrow;
     bool public reenterOnCreate;
     bool public setterReentrySucceeded;
     bool public cancelReentrySucceeded;
     bool public cleanupReentrySucceeded;
 
-    constructor(IOrchestratorV3ReentryTarget _orchestrator, address _escrow) {
+    constructor(IOrchestratorV3ReentryTarget _orchestrator) {
         orchestrator = _orchestrator;
-        escrow = _escrow;
     }
 
     function setReenterOnCreate(bool _enabled) external {
@@ -29,7 +27,7 @@ contract OrchestratorV3ReentrantRiskHook is IIntentRiskHook {
 
     function onIntentCreated(bytes32) external override {
         if (reenterOnCreate) {
-            try orchestrator.setDepositRiskHook(escrow, 0, this) {
+            try orchestrator.setRiskHook(this) {
                 setterReentrySucceeded = true;
             } catch { }
         }
@@ -55,7 +53,7 @@ contract OrchestratorV3ReentrantRiskHook is IIntentRiskHook {
         try orchestrator.cleanupOrphanedIntents(intentHashes) {
             cleanupReentrySucceeded = true;
         } catch { }
-        try orchestrator.setDepositRiskHook(escrow, 0, this) {
+        try orchestrator.setRiskHook(this) {
             setterReentrySucceeded = true;
         } catch { }
     }

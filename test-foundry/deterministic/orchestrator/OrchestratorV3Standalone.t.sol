@@ -6,6 +6,7 @@ import {OrchestratorV3} from "contracts/OrchestratorV3.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
+import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 
 import {OrchestratorV2LifecycleTest} from "./OrchestratorV2Lifecycle.t.sol";
 import {OrchestratorV2HooksGovernanceTest} from "./OrchestratorV2HooksGovernance.t.sol";
@@ -30,6 +31,54 @@ contract OrchestratorV3HooksGovernanceTest is OrchestratorV2HooksGovernanceTest 
 
     function _usesStandaloneV3Format() internal pure override returns (bool) {
         return true;
+    }
+
+    function test_DepositorSetsWhitelistHookAndEmits() public override {
+        vm.prank(depositor);
+        (bool success,) = address(orchestrator).call(
+            abi.encodeWithSignature(
+                "setDepositWhitelistHook(address,uint256,address)",
+                address(escrow),
+                depositId,
+                address(whitelistHook)
+            )
+        );
+        assertFalse(success);
+    }
+
+    function test_SetDepositWhitelistHookRejectsWhenReentrancyGuardIsEntered() public override {
+        vm.prank(depositor);
+        (bool success,) = address(orchestrator).call(
+            abi.encodeWithSignature(
+                "setDepositWhitelistHook(address,uint256,address)",
+                address(escrow),
+                depositId,
+                address(whitelistHook)
+            )
+        );
+        assertFalse(success);
+    }
+
+    function test_SignalExecutesBothHooksWithReferralFeeContext() public override {
+        vm.prank(depositor);
+        orchestrator.setDepositPreIntentHook(address(escrow), depositId, preIntentHook);
+        IReferralFee.ReferralFee[] memory fees = _twoReferralFees();
+        IOrchestratorV2.SignalIntentParams memory params = _defaultParams();
+        params.referralFees = fees;
+        _signal(taker, params);
+        assertEq(preIntentHook.callCount(), 1);
+        assertEq(preIntentHook.lastReferralFeesCount(), 2);
+        assertEq(preIntentHook.lastReferralFeesHash(), _referralHash(fees));
+    }
+
+    function test_HookGettersExposeIndependentConfiguredHooks() public override {
+        vm.prank(depositor);
+        orchestrator.setDepositPreIntentHook(address(escrow), depositId, preIntentHook);
+        assertEq(address(orchestrator.getDepositPreIntentHook(address(escrow), depositId)), address(preIntentHook));
+        (bool success,) = address(orchestrator).staticcall(
+            abi.encodeWithSignature("getDepositWhitelistHook(address,uint256)", address(escrow), depositId)
+        );
+        assertFalse(success);
     }
 
     function test_GovernanceUpdatesRegistriesFeesAndPauseState() public override {

@@ -28,7 +28,7 @@ import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
  * @title OrchestratorV3
  * @notice Standalone V3 orchestrator for the ZKP2P protocol. Owns the complete intent (order)
  * lifecycle — signal, cancel, fulfill, manual release, prune, orphan cleanup — and extends it
- * with snapshotted depositor-selected risk callbacks: fail-closed admission and settlement,
+ * with snapshotted governance-selected risk callbacks: fail-closed admission and settlement,
  * fail-open cancellation with durable recovery data.
  */
 contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
@@ -66,11 +66,8 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     // Optional pre-intent hooks configured per escrow + depositId.
     mapping(address => mapping(uint256 => IPreIntentHook)) internal depositPreIntentHooks;
 
-    // Dedicated whitelist hooks configured per escrow + depositId.
-    mapping(address => mapping(uint256 => IPreIntentHook)) internal depositWhitelistHooks;
-
-    // Depositor-selected risk hooks configured per escrow + depositId; snapshotted per intent at signal.
-    mapping(address => mapping(uint256 => IIntentRiskHook)) internal depositRiskHooks;
+    // Governance-selected risk hook; snapshotted per intent at signal.
+    IIntentRiskHook public riskHook;
     mapping(bytes32 => IIntentRiskHook) internal intentRiskHooks;
     mapping(bytes32 => IntentCancellation) internal failedIntentCancellations;
     mapping(bytes32 => bool) public usedGatingSignatureDigests;
@@ -127,7 +124,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
      * @notice Signals intent to pay the depositor defined in the _depositId the _amount * deposit conversionRate off-chain at
      * their given _payeeId in order to unlock _amount of funds on-chain. Caller must provide a signature from the deposit's gating
      * service to prove their eligibility to take liquidity. This function captures and stores all values required for fullfilling
-     * the intent to give strong guarantees to the buyer. Snapshots the deposit's risk hook and executes fail-closed risk
+     * the intent to give strong guarantees to the buyer. Snapshots the global risk hook and executes fail-closed risk
      * admission before locking liquidity for the corresponding deposit on the escrow contract.
      *
      * @param _params                   Struct containing all the intent parameters
@@ -140,7 +137,6 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         // Checks
         _validateSignalIntent(_params);
         _executeHookIfSet(depositPreIntentHooks[_params.escrow][_params.depositId], _params);
-        _executeHookIfSet(depositWhitelistHooks[_params.escrow][_params.depositId], _params);
 
         // Effects
         bytes32 intentHash = _calculateIntentHash();
@@ -200,17 +196,17 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         // Emit manager fee snapshot last for easier indexing
         emit IntentManagerFeeSnapshotted(intentHash, managerFeeRecipient, managerFee);
 
-        // Snapshot and execute fail-closed risk admission for the deposit's configured risk hook.
-        IIntentRiskHook riskHook = depositRiskHooks[_params.escrow][_params.depositId];
-        intentRiskHooks[intentHash] = riskHook;
+        // Snapshot and execute fail-closed risk admission for the global risk hook.
+        IIntentRiskHook snapshottedRiskHook = riskHook;
+        intentRiskHooks[intentHash] = snapshottedRiskHook;
 
         BoundedCall.executeRiskAdmission(
-            riskHook,
+            snapshottedRiskHook,
             intentHash,
             riskCallbackGasLimit,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
-        emit IntentRiskHookSnapshotted(intentHash, address(riskHook));
+        emit IntentRiskHookSnapshotted(intentHash, address(snapshottedRiskHook));
 
         // Interactions
         IEscrow(_params.escrow).lockFunds(_params.depositId, intentHash, _params.amount);
@@ -251,51 +247,6 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         depositPreIntentHooks[_escrow][_depositId] = _hook;
 
         emit DepositPreIntentHookSet(_escrow, _depositId, address(_hook), msg.sender);
-    }
-
-    /**
-     * @notice Sets or removes the whitelist hook for a specific deposit.
-     * @dev Callable only by the deposit's depositor or delegate. The whitelist hook is a
-     * dedicated slot separate from the generic pre-intent hook, enabling private orderbook
-     * functionality without occupying the generic hook slot.
-     *
-     * @param _escrow       Escrow address.
-     * @param _depositId    Deposit id.
-     * @param _hook         Hook address (address(0) to remove).
-     */
-    function setDepositWhitelistHook(address _escrow, uint256 _depositId, IPreIntentHook _hook) external nonReentrant {
-        _validateAndAuthorizeHookSetter(_escrow, _depositId, _hook);
-
-        depositWhitelistHooks[_escrow][_depositId] = _hook;
-
-        emit DepositWhitelistHookSet(_escrow, _depositId, address(_hook), msg.sender);
-    }
-
-    /**
-     * @notice Sets or removes the risk hook used by future intents for one deposit.
-     * @dev Callable only by the deposit's depositor. Existing intents keep their snapshotted hook.
-     *
-     * @param _escrow       Escrow address.
-     * @param _depositId    Deposit id.
-     * @param _hook         Hook address (address(0) to remove).
-     */
-    function setDepositRiskHook(
-        address _escrow,
-        uint256 _depositId,
-        IIntentRiskHook _hook
-    ) external nonReentrant {
-        if (_escrow == address(0)) revert ZeroAddress();
-
-        address hookAddress = address(_hook);
-        if (hookAddress != address(0) && hookAddress.code.length == 0) {
-            revert InvalidRiskHook(hookAddress);
-        }
-
-        IEscrow.Deposit memory deposit = IEscrow(_escrow).getDeposit(_depositId);
-        if (msg.sender != deposit.depositor) revert UnauthorizedCaller(msg.sender, deposit.depositor);
-
-        depositRiskHooks[_escrow][_depositId] = _hook;
-        emit DepositRiskHookSet(_escrow, _depositId, hookAddress, msg.sender);
     }
 
     /**
@@ -467,6 +418,22 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     /* ============ Governance Functions ============ */
 
     /**
+     * @notice GOVERNANCE ONLY: Updates the global risk hook used by future intents.
+     *
+     * @param _hook   New risk hook (address(0) to disable)
+     */
+    function setRiskHook(IIntentRiskHook _hook) external onlyOwner {
+        address hookAddress = address(_hook);
+        if (hookAddress != address(0) && hookAddress.code.length == 0) {
+            revert InvalidRiskHook(hookAddress);
+        }
+
+        IIntentRiskHook oldHook = riskHook;
+        emit RiskHookUpdated(address(oldHook), hookAddress);
+        riskHook = _hook;
+    }
+
+    /**
      * @notice GOVERNANCE ONLY: Updates the escrow registry address.
      *
      * @param _escrowRegistry   New escrow registry address
@@ -551,22 +518,8 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         return depositPreIntentHooks[_escrow][_depositId];
     }
 
-    function getDepositWhitelistHook(address _escrow, uint256 _depositId) external view returns (IPreIntentHook) {
-        return depositWhitelistHooks[_escrow][_depositId];
-    }
-
     function getIntentMinAtSignal(bytes32 _intentHash) external view returns (uint256) {
         return intentMinAtSignal[_intentHash];
-    }
-
-    /**
-     * @notice Returns the risk hook currently selected for future deposit intents.
-     */
-    function getDepositRiskHook(
-        address _escrow,
-        uint256 _depositId
-    ) external view returns (IIntentRiskHook) {
-        return depositRiskHooks[_escrow][_depositId];
     }
 
     /**
@@ -682,7 +635,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
 
     /**
      * @notice Validates hook address and authorizes the caller as depositor or delegate.
-     * @dev Shared validation for setDepositPreIntentHook and setDepositWhitelistHook.
+     * @dev Validation for setDepositPreIntentHook.
      */
     function _validateAndAuthorizeHookSetter(address _escrow, uint256 _depositId, IPreIntentHook _hook) internal view {
         if (_escrow == address(0)) revert ZeroAddress();
@@ -702,7 +655,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
 
     /**
      * @notice Executes a pre-intent hook if the address is non-zero.
-     * @dev Shared by both the generic pre-intent hook and the dedicated whitelist hook.
+     * @dev Executes the deposit's configured pre-intent hook.
      */
     function _executeHookIfSet(IPreIntentHook _hook, SignalIntentParams calldata _params) internal {
         if (address(_hook) == address(0)) return;

@@ -99,9 +99,9 @@ contract WhitelistPreIntentHookV2GasTest is Test {
         vm.stopPrank();
 
         vm.prank(depositor);
-        orchestrator.setDepositWhitelistHook(address(escrow), 0, IPreIntentHook(address(hook)));
+        orchestrator.setDepositPreIntentHook(address(escrow), 0, IPreIntentHook(address(hook)));
         vm.prank(depositor);
-        orchestrator.setDepositWhitelistHook(address(escrow), 1, IPreIntentHook(address(hook)));
+        orchestrator.setDepositPreIntentHook(address(escrow), 1, IPreIntentHook(address(hook)));
 
         contractsToCool.push(address(token));
         contractsToCool.push(address(escrowRegistry));

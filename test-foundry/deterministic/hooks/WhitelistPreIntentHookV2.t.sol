@@ -97,7 +97,7 @@ contract WhitelistPreIntentHookV2Test is Test {
         vm.stopPrank();
 
         vm.prank(depositor);
-        orchestrator.setDepositWhitelistHook(address(escrow), 0, IPreIntentHook(address(hook)));
+        orchestrator.setDepositPreIntentHook(address(escrow), 0, IPreIntentHook(address(hook)));
     }
 
     function _createDeposit() internal {
@@ -607,14 +607,14 @@ contract WhitelistPreIntentHookV2Test is Test {
 
         // unset hook slot => whitelist paused, anyone can signal
         vm.prank(depositor);
-        orchestrator.setDepositWhitelistHook(address(escrow), 0, IPreIntentHook(address(0)));
+        orchestrator.setDepositPreIntentHook(address(escrow), 0, IPreIntentHook(address(0)));
         vm.prank(unauthorized);
         orchestrator.signalIntent(_paramsFor(unauthorized));
         assertEq(orchestrator.getAccountIntents(unauthorized).length, 1);
 
         // reattach => dormant config resumes: direct entry and attached group intact
         vm.prank(depositor);
-        orchestrator.setDepositWhitelistHook(address(escrow), 0, IPreIntentHook(address(hook)));
+        orchestrator.setDepositPreIntentHook(address(escrow), 0, IPreIntentHook(address(hook)));
         assertTrue(hook.isWhitelisted(address(escrow), 0, taker));
         assertTrue(hook.isGroupAttached(address(escrow), 0, groupId));
         _expectNotWhitelistedRevertFor(takerTwo);
@@ -642,7 +642,7 @@ contract WhitelistPreIntentHookV2Test is Test {
 
     function test_SetupRaceWindowIsRealBeforeHookAttachment() public {
         // Demonstrates the documented limitation: a second deposit (id 1) accepts intents
-        // between createDeposit and setDepositWhitelistHook.
+        // between createDeposit and setDepositPreIntentHook.
         vm.startPrank(depositor);
         token.approve(address(escrow), 10_000e6);
         _createDeposit(); // deposit id 1, no hook configured yet
