@@ -143,7 +143,7 @@ contract RiskEscrowMock {
 }
 
 contract RiskOrchestratorMock {
-    mapping(bytes32 => IOrchestratorV3.RiskIntentData) internal intents;
+    mapping(bytes32 => IOrchestratorV3.IntentContext) internal intents;
     mapping(bytes32 => IPostIntentHookV2) internal postIntentHooks;
     mapping(bytes32 => uint64) public cancellationAt;
     mapping(bytes32 => bool) public cancellationAcknowledged;
@@ -157,7 +157,7 @@ contract RiskOrchestratorMock {
         bytes32 _paymentMethod,
         uint64 _createdAt
     ) external {
-        intents[_intentHash] = IOrchestratorV3.RiskIntentData({
+        intents[_intentHash] = IOrchestratorV3.IntentContext({
             owner: _owner,
             to: _recipient,
             escrow: _escrow,
@@ -168,7 +168,7 @@ contract RiskOrchestratorMock {
         });
     }
 
-    function getRiskIntent(bytes32 _intentHash) external view returns (IOrchestratorV3.RiskIntentData memory) {
+    function getIntentContext(bytes32 _intentHash) external view returns (IOrchestratorV3.IntentContext memory) {
         return intents[_intentHash];
     }
 
@@ -177,14 +177,14 @@ contract RiskOrchestratorMock {
     }
 
     function getIntent(bytes32 _intentHash) external view returns (IOrchestratorV3.Intent memory intent) {
-        IOrchestratorV3.RiskIntentData memory riskIntent = intents[_intentHash];
-        intent.owner = riskIntent.owner;
-        intent.to = riskIntent.to;
-        intent.escrow = riskIntent.escrow;
-        intent.depositId = riskIntent.depositId;
-        intent.amount = riskIntent.amount;
-        intent.timestamp = riskIntent.createdAt;
-        intent.paymentMethod = riskIntent.paymentMethod;
+        IOrchestratorV3.IntentContext memory intentContext = intents[_intentHash];
+        intent.owner = intentContext.owner;
+        intent.to = intentContext.to;
+        intent.escrow = intentContext.escrow;
+        intent.depositId = intentContext.depositId;
+        intent.amount = intentContext.amount;
+        intent.timestamp = intentContext.createdAt;
+        intent.paymentMethod = intentContext.paymentMethod;
         intent.referralFees = new IReferralFee.ReferralFee[](0);
         intent.postIntentHook = postIntentHooks[_intentHash];
     }
@@ -211,7 +211,7 @@ contract RiskOrchestratorMock {
         cancellationAt[_intentHash] = _cancelledAt;
     }
 
-    function settle(RiskManager _manager, IIntentLifecycleHook.RiskSettlementContext calldata _context) external {
+    function settle(RiskManager _manager, IIntentLifecycleHook.SettlementContext calldata _context) external {
         IERC20 token = IERC20(_context.token);
         token.approve(address(_manager), _context.grossAmount);
         _manager.settleIntent(_context);
@@ -335,10 +335,10 @@ abstract contract RiskManagerFixture is Test {
         uint256 _protocolFee,
         uint256 _referralFee,
         bool _isManualRelease
-    ) internal view returns (IIntentLifecycleHook.RiskSettlementContext memory context) {
+    ) internal view returns (IIntentLifecycleHook.SettlementContext memory context) {
         (IIntentLifecycleHook.FeeAllocation[] memory allocations, uint256 executableAmount) =
             _feePlan(_grossAmount, _protocolFee, _referralFee);
-        context = IIntentLifecycleHook.RiskSettlementContext({
+        context = IIntentLifecycleHook.SettlementContext({
             intentHash: _intentHash,
             token: address(token),
             recipient: payoutRecipient,

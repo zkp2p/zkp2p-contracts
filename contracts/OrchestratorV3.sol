@@ -28,7 +28,7 @@ import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
  * @title OrchestratorV3
  * @notice Standalone V3 orchestrator for the ZKP2P protocol. Owns the complete intent (order)
  * lifecycle — signal, cancel, fulfill, manual release, prune, orphan cleanup — and extends it
- * with snapshotted governance-selected risk callbacks: fail-closed admission and settlement,
+ * with snapshotted governance-selected lifecycle callbacks: fail-closed admission and settlement,
  * fail-open cancellation with durable recovery data.
  */
 contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
@@ -45,7 +45,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     uint256 constant MAX_PROTOCOL_FEE = 5e16;      // 5% max protocol fee
     uint256 constant MAX_MANAGER_FEE = 5e16;       // 5% max manager fee
 
-    uint256 internal constant MIN_RISK_CALLBACK_GAS_LIMIT = 750_000;
+    uint256 internal constant MIN_CALLBACK_GAS_LIMIT = 750_000;
     uint256 internal constant MAX_RISK_CALLBACK_RETURN_DATA = 2_048;
 
     /* ============ State Variables ============ */
@@ -66,9 +66,9 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     // Optional pre-intent hooks configured per escrow + depositId.
     mapping(address => mapping(uint256 => IPreIntentHook)) internal depositPreIntentHooks;
 
-    // Governance-selected lifecycle risk hook; snapshotted per intent at signal.
-    IIntentLifecycleHook public riskHook;
-    mapping(bytes32 => IIntentLifecycleHook) internal intentRiskHooks;
+    // Governance-selected lifecycle hook; snapshotted per intent at signal.
+    IIntentLifecycleHook public lifecycleHook;
+    mapping(bytes32 => IIntentLifecycleHook) internal intentLifecycleHooks;
     mapping(bytes32 => IntentCancellation) internal failedIntentCancellations;
     mapping(bytes32 => bool) public usedGatingSignatureDigests;
 
@@ -82,7 +82,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
 
     uint256 public intentCounter;                                 // Counter for number of intents created; nonce for unique intent hashes
 
-    uint256 public riskCallbackGasLimit;                          // Gas forwarded to each risk callback
+    uint256 public callbackGasLimit;                          // Gas forwarded to each lifecycle callback
 
     /* ============ Constructor ============ */
 
@@ -94,7 +94,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
      * @param _paymentVerifierRegistry Registry of payment proof verifiers.
      * @param _protocolFee Protocol fee in 1e18 precise units.
      * @param _protocolFeeRecipient Protocol fee recipient.
-     * @param _riskCallbackGasLimit Gas forwarded to each risk callback.
+     * @param _callbackGasLimit Gas forwarded to each lifecycle callback.
      */
     constructor(
         address _owner,
@@ -103,7 +103,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         address _paymentVerifierRegistry,
         uint256 _protocolFee,
         address _protocolFeeRecipient,
-        uint256 _riskCallbackGasLimit
+        uint256 _callbackGasLimit
     )
         Ownable()
     {
@@ -115,7 +115,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
 
         transferOwnership(_owner);
 
-        _setRiskCallbackGasLimit(_riskCallbackGasLimit);
+        _setCallbackGasLimit(_callbackGasLimit);
     }
 
     /* ============ External Functions ============ */
@@ -124,7 +124,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
      * @notice Signals intent to pay the depositor defined in the _depositId the _amount * deposit conversionRate off-chain at
      * their given _payeeId in order to unlock _amount of funds on-chain. Caller must provide a signature from the deposit's gating
      * service to prove their eligibility to take liquidity. This function captures and stores all values required for fullfilling
-     * the intent to give strong guarantees to the buyer. Snapshots the global risk hook and executes fail-closed risk
+     * the intent to give strong guarantees to the buyer. Snapshots the global lifecycle hook and executes fail-closed risk
      * admission before locking liquidity for the corresponding deposit on the escrow contract.
      *
      * @param _params                   Struct containing all the intent parameters
@@ -197,16 +197,16 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         emit IntentManagerFeeSnapshotted(intentHash, managerFeeRecipient, managerFee);
 
         // Snapshot and execute fail-closed admission for the governance-selected global hook.
-        IIntentLifecycleHook snapshottedRiskHook = riskHook;
-        intentRiskHooks[intentHash] = snapshottedRiskHook;
+        IIntentLifecycleHook snapshottedLifecycleHook = lifecycleHook;
+        intentLifecycleHooks[intentHash] = snapshottedLifecycleHook;
 
-        BoundedCall.executeRiskAdmission(
-            snapshottedRiskHook,
+        BoundedCall.executeLifecycleAdmission(
+            snapshottedLifecycleHook,
             intentHash,
-            riskCallbackGasLimit,
+            callbackGasLimit,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
-        emit IntentRiskHookSnapshotted(intentHash, address(snapshottedRiskHook));
+        emit IntentLifecycleHookSnapshotted(intentHash, address(snapshottedLifecycleHook));
 
         // Interactions
         IEscrow(_params.escrow).lockFunds(_params.depositId, intentHash, _params.amount);
@@ -215,7 +215,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     /**
      * @notice Only callable by the originator of the intent. Cancels an outstanding intent. Unlocks liquidity
      * for the corresponding deposit on the escrow contract.
-     * @dev Guarded because cancellation invokes an external risk callback during resolution.
+     * @dev Guarded because cancellation invokes an external lifecycle callback during resolution.
      *
      * @param _intentHash    Hash of intent being cancelled
      */
@@ -252,7 +252,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     /**
      * @notice Anyone can submit a fulfill intent transaction, even if caller isn't the intent owner. Upon submission the
      * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated.
-     * Settlement gives the snapshotted risk hook first refusal over gross funds, then executes the exact fee plan and
+     * Settlement gives the snapshotted lifecycle hook first refusal over gross funds, then executes the exact fee plan and
      * transfers the deposit token to the intent.to address (or post-intent hook).
      * @dev This function adds a reentrancy guard as it's calling the post intent hook contract which itself might call
      * malicious contracts.
@@ -310,7 +310,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     /**
      * @notice Allows depositor to release funds to the payer in case of a failed fulfill intent or because of some other arrangement
      * between the two parties. Upon submission we check to make sure the msg.sender is the depositor, the intent is removed, and
-     * escrow state is updated. Manual release routes through the shared post-funds risk-settlement gate, then executes the
+     * escrow state is updated. Manual release routes through the shared post-funds lifecycle-settlement gate, then executes the
      * configured post-intent hook or transfers the deposit token directly to the payer when no hook is configured.
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
@@ -374,7 +374,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
      * @notice ANYONE: Cleans up orphaned intents that were pruned from the Escrow but not from the Orchestrator.
      * An intent is considered orphaned if it exists on the Orchestrator but no longer exists on the Escrow.
      * This can happen when Escrow._tryOrchestratorPruneIntents runs out of gas and the revert is silently caught.
-     * @dev Guarded because cleanup invokes an external risk callback during resolution.
+     * @dev Guarded because cleanup invokes an external lifecycle callback during resolution.
      *
      * @param _intentHashes    Array of intent hashes to check and clean up
      */
@@ -407,8 +407,8 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     function acknowledgeIntentCancellation(bytes32 _intentHash) external {
         IntentCancellation memory cancellation = failedIntentCancellations[_intentHash];
         if (cancellation.cancelledAt == 0) revert IntentCancellationNotRecorded(_intentHash);
-        if (msg.sender != address(cancellation.riskHook)) {
-            revert UnauthorizedCancellationAcknowledger(msg.sender, address(cancellation.riskHook));
+        if (msg.sender != address(cancellation.lifecycleHook)) {
+            revert UnauthorizedCancellationAcknowledger(msg.sender, address(cancellation.lifecycleHook));
         }
 
         delete failedIntentCancellations[_intentHash];
@@ -418,21 +418,21 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     /* ============ Governance Functions ============ */
 
     /**
-     * @notice GOVERNANCE ONLY: Updates the global lifecycle risk hook used by future intents.
+     * @notice GOVERNANCE ONLY: Updates the global lifecycle hook used by future intents.
      * @dev Existing intents retain their snapshotted hook. The zero address disables callbacks
      * for future intents.
      *
-     * @param _hook   New global risk hook
+     * @param _hook   New global lifecycle hook
      */
-    function setRiskHook(IIntentLifecycleHook _hook) external onlyOwner {
+    function setLifecycleHook(IIntentLifecycleHook _hook) external onlyOwner {
         address hookAddress = address(_hook);
         if (hookAddress != address(0) && hookAddress.code.length == 0) {
-            revert InvalidRiskHook(hookAddress);
+            revert InvalidLifecycleHook(hookAddress);
         }
 
-        address previousHook = address(riskHook);
-        riskHook = _hook;
-        emit RiskHookUpdated(previousHook, hookAddress);
+        address previousHook = address(lifecycleHook);
+        lifecycleHook = _hook;
+        emit LifecycleHookUpdated(previousHook, hookAddress);
     }
 
     /**
@@ -473,12 +473,12 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     }
 
     /**
-     * @notice GOVERNANCE ONLY: Updates gas forwarded to admission and terminal risk callbacks.
+     * @notice GOVERNANCE ONLY: Updates gas forwarded to admission and terminal lifecycle callbacks.
      *
      * @param _gasLimit   New per-callback gas allowance
      */
-    function setRiskCallbackGasLimit(uint256 _gasLimit) external onlyOwner {
-        _setRiskCallbackGasLimit(_gasLimit);
+    function setCallbackGasLimit(uint256 _gasLimit) external onlyOwner {
+        _setCallbackGasLimit(_gasLimit);
     }
 
     /**
@@ -527,16 +527,16 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     /**
      * @notice Returns the immutable hook snapshot for an active intent.
      */
-    function getIntentRiskHook(bytes32 _intentHash) external view returns (IIntentLifecycleHook) {
-        return intentRiskHooks[_intentHash];
+    function getIntentLifecycleHook(bytes32 _intentHash) external view returns (IIntentLifecycleHook) {
+        return intentLifecycleHooks[_intentHash];
     }
 
     /**
-     * @notice Returns the scalar intent fields required by a risk hook without copying dynamic intent data.
+     * @notice Returns the scalar intent fields required by a lifecycle hook without copying dynamic intent data.
      */
-    function getRiskIntent(bytes32 _intentHash) external view returns (RiskIntentData memory riskIntent) {
+    function getIntentContext(bytes32 _intentHash) external view returns (IntentContext memory intentContext) {
         Intent storage intent = intents[_intentHash];
-        riskIntent = RiskIntentData({
+        intentContext = IntentContext({
             owner: intent.owner,
             to: intent.to,
             escrow: intent.escrow,
@@ -558,25 +558,25 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
 
     /**
      * @notice Resolves a cancelled (cancel / escrow prune / orphan cleanup) intent: prunes state, then
-     * executes the fail-open cancellation callback on the snapshotted risk hook. A failed callback records
+     * executes the fail-open cancellation callback on the snapshotted lifecycle hook. A failed callback records
      * durable recovery data keyed by the cancellation timestamp so the hook can reconcile later.
      */
     function _resolveCancelledIntent(bytes32 _intentHash) internal {
         uint64 cancelledAt = uint64(block.timestamp);
-        IIntentLifecycleHook snapshottedRiskHook = intentRiskHooks[_intentHash];
+        IIntentLifecycleHook snapshottedLifecycleHook = intentLifecycleHooks[_intentHash];
         _pruneIntent(_intentHash);
-        delete intentRiskHooks[_intentHash];
+        delete intentLifecycleHooks[_intentHash];
 
-        bool callbackSucceeded = BoundedCall.executeRiskCancellation(
-            snapshottedRiskHook,
+        bool callbackSucceeded = BoundedCall.executeLifecycleCancellation(
+            snapshottedLifecycleHook,
             _intentHash,
-            riskCallbackGasLimit,
+            callbackGasLimit,
             MAX_RISK_CALLBACK_RETURN_DATA
         );
         if (!callbackSucceeded) {
             failedIntentCancellations[_intentHash] = IntentCancellation({
                 cancelledAt: cancelledAt,
-                riskHook: snapshottedRiskHook
+                lifecycleHook: snapshottedLifecycleHook
             });
             emit IntentCancellationRecorded(_intentHash, cancelledAt);
         }
@@ -711,7 +711,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         emit IntentPruned(_intentHash);
     }
 
-    /** @notice Gives risk settlement first refusal over gross funds, then executes the exact fee plan on zero consumption. */
+    /** @notice Gives lifecycle settlement first refusal over gross funds, then executes the exact fee plan on zero consumption. */
     function _collectFeesTransferFundsAndExecuteAction(
         IERC20 _token,
         bytes32 _intentHash,
@@ -722,10 +722,10 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         uint256 _managerFee,
         bool _isManualRelease
     ) internal {
-        IIntentLifecycleHook snapshottedRiskHook = intentRiskHooks[_intentHash];
+        IIntentLifecycleHook snapshottedLifecycleHook = intentLifecycleHooks[_intentHash];
         (address fundsTransferredTo, uint256 reportedAmount) = FeeSettlementLib.executeSettlement(
             _token,
-            snapshottedRiskHook,
+            snapshottedLifecycleHook,
             _intentHash,
             _intent,
             _releaseAmount,
@@ -737,20 +737,20 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
                 managerFee: _managerFee
             }),
             _isManualRelease,
-            riskCallbackGasLimit
+            callbackGasLimit
         );
-        delete intentRiskHooks[_intentHash];
+        delete intentLifecycleHooks[_intentHash];
 
         emit IntentFulfilled(_intentHash, fundsTransferredTo, reportedAmount, _isManualRelease);
     }
 
-    function _setRiskCallbackGasLimit(uint256 _gasLimit) internal {
-        if (_gasLimit < MIN_RISK_CALLBACK_GAS_LIMIT) {
-            revert RiskCallbackGasLimitTooLow(_gasLimit, MIN_RISK_CALLBACK_GAS_LIMIT);
+    function _setCallbackGasLimit(uint256 _gasLimit) internal {
+        if (_gasLimit < MIN_CALLBACK_GAS_LIMIT) {
+            revert CallbackGasLimitTooLow(_gasLimit, MIN_CALLBACK_GAS_LIMIT);
         }
 
-        riskCallbackGasLimit = _gasLimit;
-        emit RiskCallbackGasLimitUpdated(_gasLimit);
+        callbackGasLimit = _gasLimit;
+        emit CallbackGasLimitUpdated(_gasLimit);
     }
 
     /**

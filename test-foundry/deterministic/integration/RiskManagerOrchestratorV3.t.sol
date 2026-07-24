@@ -20,7 +20,7 @@ import {RiskAttestationVerifierMock, RiskNullifierRegistryMock} from "../helpers
 import {OrchestratorV2LegacyFixture} from "../helpers/OrchestratorV2LegacyFixture.sol";
 
 contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture {
-    event RiskHookUpdated(address indexed previousHook, address indexed newHook);
+    event LifecycleHookUpdated(address indexed previousHook, address indexed newHook);
 
     uint64 internal constant RISK_WINDOW = 30 days;
     uint32 internal constant EXTENSION_SLOPE = 10;
@@ -68,7 +68,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         vm.startPrank(depositor);
         riskDepositId = _createRiskDeposit(address(manager));
         vm.stopPrank();
-        IOrchestratorV3(address(orchestrator)).setRiskHook(manager);
+        IOrchestratorV3(address(orchestrator)).setLifecycleHook(manager);
 
         token.transfer(safe, SAFE_STAKE);
         vm.startPrank(safe);
@@ -186,10 +186,10 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         );
         bytes32 intentHash = _intentHash(orchestrator.intentCounter());
 
-        vm.expectPartialRevert(BoundedCall.RiskHookAdmissionFailed.selector);
+        vm.expectPartialRevert(BoundedCall.LifecycleHookAdmissionFailed.selector);
         _signalCall(deferredTaker, params);
 
-        assertEq(IOrchestratorV3(address(orchestrator)).getRiskIntent(intentHash).owner, address(0));
+        assertEq(IOrchestratorV3(address(orchestrator)).getIntentContext(intentHash).owner, address(0));
         assertEq(uint256(manager.getRiskPosition(intentHash).status), uint256(IRiskManager.PositionStatus.NONE));
         assertEq(escrow.getDepositIntent(riskDepositId, intentHash).intentHash, bytes32(0));
         assertEq(vault.stakeBalance(deferredTaker), 0);
@@ -231,23 +231,23 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         assertEq(vault.lockedStake(safe), 0);
     }
 
-    function test_RiskHookGovernanceAndViewsExposeConfiguredSnapshots() public {
+    function test_LifecycleHookGovernanceAndViewsExposeConfiguredSnapshots() public {
         IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
-        assertEq(address(riskOrchestrator.riskHook()), address(manager));
+        assertEq(address(riskOrchestrator.lifecycleHook()), address(manager));
 
         bytes32 intentHash = _signalRiskIntent(taker, taker);
-        assertEq(address(riskOrchestrator.getIntentRiskHook(intentHash)), address(manager));
+        assertEq(address(riskOrchestrator.getIntentLifecycleHook(intentHash)), address(manager));
 
-        riskOrchestrator.setRiskCallbackGasLimit(1_000_000);
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.RiskCallbackGasLimitTooLow.selector, 749_999, 750_000));
-        riskOrchestrator.setRiskCallbackGasLimit(749_999);
+        riskOrchestrator.setCallbackGasLimit(1_000_000);
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.CallbackGasLimitTooLow.selector, 749_999, 750_000));
+        riskOrchestrator.setCallbackGasLimit(749_999);
 
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.InvalidRiskHook.selector, other));
-        riskOrchestrator.setRiskHook(IIntentLifecycleHook(other));
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.InvalidLifecycleHook.selector, other));
+        riskOrchestrator.setLifecycleHook(IIntentLifecycleHook(other));
 
         vm.prank(other);
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
-        riskOrchestrator.setRiskHook(manager);
+        riskOrchestrator.setLifecycleHook(manager);
 
         bytes32 missingCancellation = keccak256("missing-cancellation");
         vm.expectRevert(
@@ -256,15 +256,15 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         riskOrchestrator.acknowledgeIntentCancellation(missingCancellation);
     }
 
-    function test_SetRiskHookFromZeroEnablesCallbacksOnlyForNewIntents() public {
+    function test_SetLifecycleHookFromZeroEnablesCallbacksOnlyForNewIntents() public {
         IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
 
         vm.expectEmit(true, true, false, true, address(orchestrator));
-        emit RiskHookUpdated(address(manager), address(0));
-        riskOrchestrator.setRiskHook(IIntentLifecycleHook(address(0)));
+        emit LifecycleHookUpdated(address(manager), address(0));
+        riskOrchestrator.setLifecycleHook(IIntentLifecycleHook(address(0)));
 
         bytes32 first = _signalRiskIntent(taker, taker);
-        assertEq(address(riskOrchestrator.getIntentRiskHook(first)), address(0));
+        assertEq(address(riskOrchestrator.getIntentLifecycleHook(first)), address(0));
         assertEq(uint256(manager.getRiskPosition(first).status), uint256(IRiskManager.PositionStatus.NONE));
         assertEq(vault.lockedStake(safe), 0);
 
@@ -272,23 +272,23 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         orchestrator.releaseFundsToPayer(first);
 
         vm.expectEmit(true, true, false, true, address(orchestrator));
-        emit RiskHookUpdated(address(0), address(manager));
-        riskOrchestrator.setRiskHook(manager);
+        emit LifecycleHookUpdated(address(0), address(manager));
+        riskOrchestrator.setLifecycleHook(manager);
 
         bytes32 second = _signalRiskIntent(taker, taker);
-        assertEq(address(riskOrchestrator.getIntentRiskHook(second)), address(manager));
+        assertEq(address(riskOrchestrator.getIntentLifecycleHook(second)), address(manager));
         assertEq(uint256(manager.getRiskPosition(second).status), uint256(IRiskManager.PositionStatus.PENDING));
     }
 
-    function test_SetRiskHookToZeroKeepsInFlightIntentOnSnapshot() public {
+    function test_SetLifecycleHookToZeroKeepsInFlightIntentOnSnapshot() public {
         bytes32 inFlight = _signalRiskIntent(taker, taker);
         assertEq(vault.lockedStake(safe), INTENT_AMOUNT);
 
         IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
-        riskOrchestrator.setRiskHook(IIntentLifecycleHook(address(0)));
+        riskOrchestrator.setLifecycleHook(IIntentLifecycleHook(address(0)));
 
         bytes32 fresh = _signalRiskIntent(taker, taker);
-        assertEq(address(riskOrchestrator.getIntentRiskHook(fresh)), address(0));
+        assertEq(address(riskOrchestrator.getIntentLifecycleHook(fresh)), address(0));
         assertEq(uint256(manager.getRiskPosition(fresh).status), uint256(IRiskManager.PositionStatus.NONE));
 
         vm.prank(taker);
@@ -298,13 +298,13 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         assertEq(vault.lockedStake(safe), 0);
     }
 
-    function test_SetRiskHookChangeSettlesInFlightIntentThroughSnapshot() public {
+    function test_SetLifecycleHookChangeSettlesInFlightIntentThroughSnapshot() public {
         IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
         bytes32 inFlight = _signalRiskIntent(taker, taker);
-        assertEq(address(riskOrchestrator.getIntentRiskHook(inFlight)), address(manager));
+        assertEq(address(riskOrchestrator.getIntentLifecycleHook(inFlight)), address(manager));
 
         IntentLifecycleHookV1Mock replacementHook = new IntentLifecycleHookV1Mock();
-        riskOrchestrator.setRiskHook(IIntentLifecycleHook(address(replacementHook)));
+        riskOrchestrator.setLifecycleHook(IIntentLifecycleHook(address(replacementHook)));
 
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(inFlight);
@@ -314,7 +314,7 @@ contract RiskManagerOrchestratorV3IntegrationTest is OrchestratorV2LegacyFixture
         assertEq(replacementHook.createdCalls(), 0);
 
         bytes32 fresh = _signalRiskIntent(taker, taker);
-        assertEq(address(riskOrchestrator.getIntentRiskHook(fresh)), address(replacementHook));
+        assertEq(address(riskOrchestrator.getIntentLifecycleHook(fresh)), address(replacementHook));
         assertEq(replacementHook.createdCalls(), 1);
         assertEq(uint256(manager.getRiskPosition(fresh).status), uint256(IRiskManager.PositionStatus.NONE));
     }

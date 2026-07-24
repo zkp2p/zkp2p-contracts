@@ -7,7 +7,7 @@ import {IMakerGroupPolicy} from "../interfaces/IMakerGroupPolicy.sol";
 
 /**
  * @title MakerGroupPolicy
- * @notice Persistent maker-owned group admission settings, independent from any risk-hook
+ * @notice Persistent maker-owned group admission settings, independent from any lifecycle-hook
  * deployment. Each maker explicitly toggles enforcement and maintains a bounded group list
  * for each payment method.
  * @dev Enabling an empty policy is allowed and intentionally fails closed when evaluated by

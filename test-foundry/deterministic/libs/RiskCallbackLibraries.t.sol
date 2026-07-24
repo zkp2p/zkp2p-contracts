@@ -9,7 +9,7 @@ import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 import {BoundedCall} from "contracts/lib/BoundedCall.sol";
 import {PostIntentHookExecutor} from "contracts/lib/PostIntentHookExecutor.sol";
-import {RiskSettlementExecutor} from "contracts/lib/RiskSettlementExecutor.sol";
+import {LifecycleSettlementExecutor} from "contracts/lib/LifecycleSettlementExecutor.sol";
 import {IntentLifecycleHookV1Mock} from "contracts/mocks/IntentLifecycleHookV1Mock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 
@@ -48,83 +48,83 @@ contract RiskCallbackLibrariesTest is Test {
     }
 
     function test_BoundedAdmissionHandlesAbsentValidAndFailingHooks() public {
-        BoundedCall.executeRiskAdmission(IIntentLifecycleHook(address(0)), INTENT_HASH, 500_000, 64);
+        BoundedCall.executeLifecycleAdmission(IIntentLifecycleHook(address(0)), INTENT_HASH, 500_000, 64);
 
-        vm.expectPartialRevert(BoundedCall.RiskHookAdmissionFailed.selector);
-        BoundedCall.executeRiskAdmission(IIntentLifecycleHook(address(1)), INTENT_HASH, 500_000, 64);
+        vm.expectPartialRevert(BoundedCall.LifecycleHookAdmissionFailed.selector);
+        BoundedCall.executeLifecycleAdmission(IIntentLifecycleHook(address(1)), INTENT_HASH, 500_000, 64);
 
-        BoundedCall.executeRiskAdmission(hook, INTENT_HASH, 500_000, 64);
+        BoundedCall.executeLifecycleAdmission(hook, INTENT_HASH, 500_000, 64);
         assertEq(hook.createdCalls(), 1);
         assertEq(hook.lastIntentHash(), INTENT_HASH);
 
         hook.setRevertOnCreate(true);
-        vm.expectPartialRevert(BoundedCall.RiskHookAdmissionFailed.selector);
-        BoundedCall.executeRiskAdmission(hook, INTENT_HASH, 500_000, 64);
+        vm.expectPartialRevert(BoundedCall.LifecycleHookAdmissionFailed.selector);
+        BoundedCall.executeLifecycleAdmission(hook, INTENT_HASH, 500_000, 64);
     }
 
     function test_BoundedCancellationIsFailOpenAndRejectsUnforwardableGas() public {
-        assertTrue(BoundedCall.executeRiskCancellation(IIntentLifecycleHook(address(0)), INTENT_HASH, 500_000, 64));
-        assertFalse(BoundedCall.executeRiskCancellation(IIntentLifecycleHook(address(1)), INTENT_HASH, 500_000, 64));
+        assertTrue(BoundedCall.executeLifecycleCancellation(IIntentLifecycleHook(address(0)), INTENT_HASH, 500_000, 64));
+        assertFalse(BoundedCall.executeLifecycleCancellation(IIntentLifecycleHook(address(1)), INTENT_HASH, 500_000, 64));
 
-        assertTrue(BoundedCall.executeRiskCancellation(hook, INTENT_HASH, 500_000, 64));
+        assertTrue(BoundedCall.executeLifecycleCancellation(hook, INTENT_HASH, 500_000, 64));
         assertEq(hook.cancelledCalls(), 1);
 
         hook.setCallbackRevertDataSize(1_024);
-        assertFalse(BoundedCall.executeRiskCancellation(hook, INTENT_HASH, 500_000, 64));
+        assertFalse(BoundedCall.executeLifecycleCancellation(hook, INTENT_HASH, 500_000, 64));
 
         hook.setCallbackRevertDataSize(0);
-        vm.expectPartialRevert(BoundedCall.InsufficientGasForRiskCallback.selector);
-        BoundedCall.executeRiskCancellation(hook, INTENT_HASH, type(uint256).max, 64);
+        vm.expectPartialRevert(BoundedCall.InsufficientGasForCallback.selector);
+        BoundedCall.executeLifecycleCancellation(hook, INTENT_HASH, type(uint256).max, 64);
     }
 
     function test_BoundedSettlementPropagatesSuccessAndBoundedFailure() public {
-        IIntentLifecycleHook.RiskSettlementContext memory context = _context();
-        BoundedCall.executeRiskSettlement(hook, context, 500_000, 64);
+        IIntentLifecycleHook.SettlementContext memory context = _context();
+        BoundedCall.executeLifecycleSettlement(hook, context, 500_000, 64);
         assertEq(hook.settlementCalls(), 1);
 
         hook.setCallbackRevertDataSize(1_024);
-        vm.expectPartialRevert(BoundedCall.RiskHookSettlementFailed.selector);
-        BoundedCall.executeRiskSettlement(hook, context, 500_000, 64);
+        vm.expectPartialRevert(BoundedCall.LifecycleHookSettlementFailed.selector);
+        BoundedCall.executeLifecycleSettlement(hook, context, 500_000, 64);
     }
 
-    function test_RiskSettlementExecutorHandlesAbsentAndInvalidHooks() public {
-        assertFalse(RiskSettlementExecutor.execute(IIntentLifecycleHook(address(0)), token, _context(), 500_000, 64));
+    function test_LifecycleSettlementExecutorHandlesAbsentAndInvalidHooks() public {
+        assertFalse(LifecycleSettlementExecutor.execute(IIntentLifecycleHook(address(0)), token, _context(), 500_000, 64));
 
-        vm.expectRevert(abi.encodeWithSelector(RiskSettlementExecutor.InvalidRiskHook.selector, address(1)));
-        RiskSettlementExecutor.execute(IIntentLifecycleHook(address(1)), token, _context(), 500_000, 64);
+        vm.expectRevert(abi.encodeWithSelector(LifecycleSettlementExecutor.InvalidLifecycleHook.selector, address(1)));
+        LifecycleSettlementExecutor.execute(IIntentLifecycleHook(address(1)), token, _context(), 500_000, 64);
     }
 
-    function test_RiskSettlementExecutorAcceptsOnlyZeroOrExactConsumption() public {
-        assertFalse(RiskSettlementExecutor.execute(hook, token, _context(), 500_000, 64));
+    function test_LifecycleSettlementExecutorAcceptsOnlyZeroOrExactConsumption() public {
+        assertFalse(LifecycleSettlementExecutor.execute(hook, token, _context(), 500_000, 64));
         assertEq(token.allowance(address(this), address(hook)), 0);
 
         hook.setSettlementPullAmount(GROSS_AMOUNT);
-        assertTrue(RiskSettlementExecutor.execute(hook, token, _context(), 500_000, 64));
+        assertTrue(LifecycleSettlementExecutor.execute(hook, token, _context(), 500_000, 64));
         assertEq(token.balanceOf(address(hook)), GROSS_AMOUNT);
         assertEq(token.allowance(address(this), address(hook)), 0);
 
         hook.setSettlementPullAmount(1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                RiskSettlementExecutor.InvalidRiskHookSettlementConsumption.selector, INTENT_HASH, 1, GROSS_AMOUNT
+                LifecycleSettlementExecutor.InvalidLifecycleHookSettlementConsumption.selector, INTENT_HASH, 1, GROSS_AMOUNT
             )
         );
-        RiskSettlementExecutor.execute(hook, token, _context(), 500_000, 64);
+        LifecycleSettlementExecutor.execute(hook, token, _context(), 500_000, 64);
     }
 
-    function test_RiskSettlementExecutorRejectsBalanceIncrease() public {
+    function test_LifecycleSettlementExecutorRejectsBalanceIncrease() public {
         token.transfer(address(hook), 1);
         hook.setSettlementTransferAmount(1);
         uint256 balanceBefore = token.balanceOf(address(this));
         vm.expectRevert(
             abi.encodeWithSelector(
-                RiskSettlementExecutor.RiskHookSettlementBalanceIncreased.selector,
+                LifecycleSettlementExecutor.LifecycleHookSettlementBalanceIncreased.selector,
                 INTENT_HASH,
                 balanceBefore,
                 balanceBefore + 1
             )
         );
-        RiskSettlementExecutor.execute(hook, token, _context(), 500_000, 64);
+        LifecycleSettlementExecutor.execute(hook, token, _context(), 500_000, 64);
     }
 
     function test_PostIntentExecutorTransfersDirectlyAndThroughExactPullHook() public {
@@ -159,8 +159,8 @@ contract RiskCallbackLibrariesTest is Test {
         PostIntentHookExecutor.transferOrExecute(token, INTENT_HASH, intent, 10e6, "");
     }
 
-    function _context() internal view returns (IIntentLifecycleHook.RiskSettlementContext memory) {
-        return IIntentLifecycleHook.RiskSettlementContext({
+    function _context() internal view returns (IIntentLifecycleHook.SettlementContext memory) {
+        return IIntentLifecycleHook.SettlementContext({
             intentHash: INTENT_HASH,
             token: address(token),
             recipient: RECIPIENT,

@@ -100,7 +100,7 @@ contract RiskManagerInvariantHandler {
         fees[0] = IIntentLifecycleHook.FeeAllocation({
             feeType: IIntentLifecycleHook.FeeType.PROTOCOL, recipient: feeRecipient, amount: feeAmount
         });
-        IIntentLifecycleHook.RiskSettlementContext memory context = IIntentLifecycleHook.RiskSettlementContext({
+        IIntentLifecycleHook.SettlementContext memory context = IIntentLifecycleHook.SettlementContext({
             intentHash: intentHash,
             token: address(vault.stakeToken()),
             recipient: payoutRecipient,

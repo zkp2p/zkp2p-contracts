@@ -106,8 +106,8 @@ contract OrchestratorV3HooksGovernanceTest is OrchestratorV2HooksGovernanceTest 
         orchestrator.setProtocolFee(6e16);
         vm.expectRevert(IOrchestratorV3.ZeroAddress.selector);
         orchestrator.setProtocolFeeRecipient(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.InvalidRiskHook.selector, other));
-        IOrchestratorV3(address(orchestrator)).setRiskHook(IIntentLifecycleHook(other));
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV3.InvalidLifecycleHook.selector, other));
+        IOrchestratorV3(address(orchestrator)).setLifecycleHook(IIntentLifecycleHook(other));
     }
 
     function test_GovernanceRejectsEveryNonOwnerCall() public override {
@@ -123,7 +123,7 @@ contract OrchestratorV3HooksGovernanceTest is OrchestratorV2HooksGovernanceTest 
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
         orchestrator.setProtocolFeeRecipient(other);
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
-        IOrchestratorV3(address(orchestrator)).setRiskHook(IIntentLifecycleHook(address(0)));
+        IOrchestratorV3(address(orchestrator)).setLifecycleHook(IIntentLifecycleHook(address(0)));
         vm.stopPrank();
     }
 

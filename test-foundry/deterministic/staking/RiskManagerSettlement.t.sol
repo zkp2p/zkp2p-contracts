@@ -13,7 +13,7 @@ contract RiskManagerSettlementTest is RiskManagerFixture {
 
         vm.prank(taker);
         manager.extendIntent(intentHash, 1 hours);
-        IIntentLifecycleHook.RiskSettlementContext memory context =
+        IIntentLifecycleHook.SettlementContext memory context =
             _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, true);
         orchestrator.settle(manager, context);
 
@@ -31,7 +31,7 @@ contract RiskManagerSettlementTest is RiskManagerFixture {
         vm.warp(uint256(admitted.baseIntentExpiry) + 1 hours);
 
         uint256 grossAmount = 800e6;
-        IIntentLifecycleHook.RiskSettlementContext memory context =
+        IIntentLifecycleHook.SettlementContext memory context =
             _settlementContext(intentHash, grossAmount, 8e6, 4e6, false);
         uint256 orchestratorBalanceBefore = token.balanceOf(address(orchestrator));
         orchestrator.settle(manager, context);
@@ -54,7 +54,7 @@ contract RiskManagerSettlementTest is RiskManagerFixture {
 
     function test_StakeBackedMaturityFreesCoverageWithoutCreatingClaim() public {
         bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        IIntentLifecycleHook.RiskSettlementContext memory context = _settlementContext(intentHash, 700e6, 7e6, 3e6, false);
+        IIntentLifecycleHook.SettlementContext memory context = _settlementContext(intentHash, 700e6, 7e6, 3e6, false);
         orchestrator.settle(manager, context);
         IRiskManager.RiskPosition memory settled = manager.getRiskPosition(intentHash);
 
@@ -77,7 +77,7 @@ contract RiskManagerSettlementTest is RiskManagerFixture {
     function test_UnbondedSettlementConsumesNoTokensAndNeedsNoMaturityAction() public {
         _setConfig(false, false, 0, EXTENSION_SLOPE);
         bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        IIntentLifecycleHook.RiskSettlementContext memory context =
+        IIntentLifecycleHook.SettlementContext memory context =
             _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, false);
         uint256 balanceBefore = token.balanceOf(address(orchestrator));
 
@@ -98,7 +98,7 @@ contract RiskManagerSettlementTest is RiskManagerFixture {
         address unstakedTaker = makeAddr("unstakedTaker");
         bytes32 intentHash = _admit(unstakedTaker, payoutRecipient, INTENT_AMOUNT);
         uint256 grossAmount = 800e6;
-        IIntentLifecycleHook.RiskSettlementContext memory context =
+        IIntentLifecycleHook.SettlementContext memory context =
             _settlementContext(intentHash, grossAmount, 8e6, 4e6, false);
         uint256 orchestratorBalanceBefore = token.balanceOf(address(orchestrator));
 
@@ -126,7 +126,7 @@ contract RiskManagerSettlementTest is RiskManagerFixture {
         uint256 grossAmount = 800e6;
         uint256 protocolFee = 8e6;
         uint256 referralFee = 4e6;
-        IIntentLifecycleHook.RiskSettlementContext memory context =
+        IIntentLifecycleHook.SettlementContext memory context =
             _settlementContext(intentHash, grossAmount, protocolFee, referralFee, false);
         orchestrator.settle(manager, context);
         uint64 deadline = manager.getRiskPosition(intentHash).coverageDeadline;
@@ -148,7 +148,7 @@ contract RiskManagerSettlementTest is RiskManagerFixture {
     function test_DeferredZeroValueFeeEntriesAreNotStoredOrConvertedIntoClaims() public {
         address unstakedTaker = makeAddr("unstakedTaker");
         bytes32 intentHash = _admit(unstakedTaker, payoutRecipient, 1);
-        IIntentLifecycleHook.RiskSettlementContext memory context = _settlementContext(intentHash, 1, 0, 0, false);
+        IIntentLifecycleHook.SettlementContext memory context = _settlementContext(intentHash, 1, 0, 0, false);
 
         orchestrator.settle(manager, context);
         assertEq(manager.getDeferredFeeAllocations(intentHash).length, 0);
@@ -161,7 +161,7 @@ contract RiskManagerSettlementTest is RiskManagerFixture {
 
     function test_StakeBackedSettlementTrustsCanonicalOrchestratorContextShape() public {
         bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        IIntentLifecycleHook.RiskSettlementContext memory context =
+        IIntentLifecycleHook.SettlementContext memory context =
             _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, false);
         context.feeAllocations[0].amount += 1;
         context.token = address(otherToken);
@@ -177,7 +177,7 @@ contract RiskManagerSettlementTest is RiskManagerFixture {
 
     function test_StakeBackedChargebackAtWindowStartCreatesFullLpClaim() public {
         bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        IIntentLifecycleHook.RiskSettlementContext memory context = _settlementContext(intentHash, 800e6, 8e6, 4e6, false);
+        IIntentLifecycleHook.SettlementContext memory context = _settlementContext(intentHash, 800e6, 8e6, 4e6, false);
         orchestrator.settle(manager, context);
 
         bytes32 paymentId = keccak256("payment");
@@ -197,7 +197,7 @@ contract RiskManagerSettlementTest is RiskManagerFixture {
     function test_DeferredChargebackCancelsFeesAndCompensatesGross() public {
         address unstakedTaker = makeAddr("unstakedTaker");
         bytes32 intentHash = _admit(unstakedTaker, payoutRecipient, INTENT_AMOUNT);
-        IIntentLifecycleHook.RiskSettlementContext memory context = _settlementContext(intentHash, 800e6, 8e6, 4e6, true);
+        IIntentLifecycleHook.SettlementContext memory context = _settlementContext(intentHash, 800e6, 8e6, 4e6, true);
         orchestrator.settle(manager, context);
 
         manager.submitChargeback(
@@ -213,7 +213,7 @@ contract RiskManagerSettlementTest is RiskManagerFixture {
 
     function test_ChargebackWindowIsHalfOpenAtExactDeadline() public {
         bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        IIntentLifecycleHook.RiskSettlementContext memory context = _settlementContext(intentHash, 800e6, 8e6, 4e6, true);
+        IIntentLifecycleHook.SettlementContext memory context = _settlementContext(intentHash, 800e6, 8e6, 4e6, true);
         orchestrator.settle(manager, context);
         uint64 deadline = manager.getRiskPosition(intentHash).coverageDeadline;
         vm.warp(deadline);

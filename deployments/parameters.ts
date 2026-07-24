@@ -130,7 +130,7 @@ export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
   "base_staging": "",
 };
 
-export const RISK_CALLBACK_GAS_LIMIT = 2_000_000;
+export const CALLBACK_GAS_LIMIT = 2_000_000;
 
 // Initial hourly fee for the standalone IntentGuardian, denominated in basis points of the
 // locked intent amount. Governance can update this value on the deployed guardian. Production

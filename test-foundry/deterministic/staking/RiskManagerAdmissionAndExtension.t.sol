@@ -103,7 +103,7 @@ contract RiskManagerAdmissionAndExtensionTest is RiskManagerFixture {
         vm.expectRevert(abi.encodeWithSelector(IRiskManager.UnauthorizedOrchestrator.selector, address(this)));
         manager.onIntentCancelled(intentHash);
 
-        IIntentLifecycleHook.RiskSettlementContext memory context =
+        IIntentLifecycleHook.SettlementContext memory context =
             _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, false);
         vm.expectRevert(abi.encodeWithSelector(IRiskManager.UnauthorizedOrchestrator.selector, address(this)));
         manager.settleIntent(context);

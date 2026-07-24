@@ -6,11 +6,11 @@ import { IIntentLifecycleHook } from "../interfaces/IIntentLifecycleHook.sol";
 interface IOrchestratorV3ReentryTarget {
     function cancelIntent(bytes32 _intentHash) external;
     function cleanupOrphanedIntents(bytes32[] calldata _intentHashes) external;
-    function setRiskHook(IIntentLifecycleHook _hook) external;
+    function setLifecycleHook(IIntentLifecycleHook _hook) external;
 }
 
-/** @notice Risk hook that catches deliberate attempts to reenter each guarded V3 entrypoint. */
-contract OrchestratorV3ReentrantRiskHook is IIntentLifecycleHook {
+/** @notice Lifecycle hook that catches deliberate attempts to reenter each guarded V3 entrypoint. */
+contract OrchestratorV3ReentrantLifecycleHook is IIntentLifecycleHook {
     IOrchestratorV3ReentryTarget public immutable orchestrator;
     bool public reenterOnCreate;
     bool public setterReentrySucceeded;
@@ -27,7 +27,7 @@ contract OrchestratorV3ReentrantRiskHook is IIntentLifecycleHook {
 
     function onIntentCreated(bytes32) external override {
         if (reenterOnCreate) {
-            try orchestrator.setRiskHook(this) {
+            try orchestrator.setLifecycleHook(this) {
                 setterReentrySucceeded = true;
             } catch { }
         }
@@ -44,7 +44,7 @@ contract OrchestratorV3ReentrantRiskHook is IIntentLifecycleHook {
         } catch { }
     }
 
-    function settleIntent(RiskSettlementContext calldata _context) external override {
+    function settleIntent(SettlementContext calldata _context) external override {
         try orchestrator.cancelIntent(_context.intentHash) {
             cancelReentrySucceeded = true;
         } catch { }
@@ -53,7 +53,7 @@ contract OrchestratorV3ReentrantRiskHook is IIntentLifecycleHook {
         try orchestrator.cleanupOrphanedIntents(intentHashes) {
             cleanupReentrySucceeded = true;
         } catch { }
-        try orchestrator.setRiskHook(this) {
+        try orchestrator.setLifecycleHook(this) {
             setterReentrySucceeded = true;
         } catch { }
     }

@@ -222,7 +222,7 @@ contract RiskManagerValidationTest is RiskManagerFixture {
 
         _setConfig(false, false, 0, EXTENSION_SLOPE);
         bytes32 intentHash = _admit(taker, payoutRecipient, INTENT_AMOUNT);
-        IIntentLifecycleHook.RiskSettlementContext memory context =
+        IIntentLifecycleHook.SettlementContext memory context =
             _settlementContext(intentHash, INTENT_AMOUNT, 10e6, 5e6, false);
         context.grossAmount = 0;
         context.executableAmount = type(uint256).max;

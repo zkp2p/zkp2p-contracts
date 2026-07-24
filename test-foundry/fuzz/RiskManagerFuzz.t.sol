@@ -52,7 +52,7 @@ contract RiskManagerFuzzTest is RiskManagerFixture {
         bytes32 intentHash = _admit(taker, payoutRecipient, intentAmount);
 
         IIntentLifecycleHook.FeeAllocation[] memory allocations = new IIntentLifecycleHook.FeeAllocation[](0);
-        IIntentLifecycleHook.RiskSettlementContext memory context = IIntentLifecycleHook.RiskSettlementContext({
+        IIntentLifecycleHook.SettlementContext memory context = IIntentLifecycleHook.SettlementContext({
             intentHash: intentHash,
             token: address(token),
             recipient: payoutRecipient,
@@ -87,7 +87,7 @@ contract RiskManagerFuzzTest is RiskManagerFixture {
         address unstakedTaker = makeAddr("unstakedTaker");
         bytes32 intentHash = _admit(unstakedTaker, payoutRecipient, intentAmount);
 
-        IIntentLifecycleHook.RiskSettlementContext memory context =
+        IIntentLifecycleHook.SettlementContext memory context =
             _settlementContext(intentHash, grossAmount, protocolFee, referralFee, false);
         orchestrator.settle(manager, context);
         vm.warp(manager.getRiskPosition(intentHash).coverageDeadline);

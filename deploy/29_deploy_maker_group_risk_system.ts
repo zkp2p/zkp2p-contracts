@@ -8,7 +8,7 @@ import {
   MULTI_SIG,
   ORCHESTRATOR_V2_PROTOCOL_FEE,
   ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT,
-  RISK_CALLBACK_GAS_LIMIT,
+  CALLBACK_GAS_LIMIT,
 } from "../deployments/parameters";
 import {
   addEscrowToRegistry,
@@ -65,8 +65,8 @@ async function systemFullyWired(network: string): Promise<boolean> {
   if ((await policy.groupRegistry()).toLowerCase() !== registryAddress.toLowerCase()) return false;
   if ((await hook.makerGroupPolicy()).toLowerCase() !== policyAddress.toLowerCase()) return false;
   if ((await hook.groupRegistry()).toLowerCase() !== registryAddress.toLowerCase()) return false;
-  if ((await hook.orchestrator()).toLowerCase() !== orchestratorAddress.toLowerCase()) return false;
-  if ((await orchestrator.riskHook()).toLowerCase() !== hookAddress.toLowerCase()) return false;
+  if ((await hook.orchestratorRegistry()).toLowerCase() !== orchestratorRegistryAddress.toLowerCase()) return false;
+  if ((await orchestrator.lifecycleHook()).toLowerCase() !== hookAddress.toLowerCase()) return false;
   if (!(await orchestratorRegistry.isOrchestrator(orchestratorAddress))) return false;
   if (!(await escrowRegistry.isWhitelistedEscrow(escrowV2Address))) return false;
 
@@ -104,7 +104,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   });
   if (postIntentHookExecutor.newlyDeployed) await waitForDeploymentDelay(hre);
 
-  const riskSettlementExecutor = await deploy("RiskSettlementExecutor", {
+  const riskSettlementExecutor = await deploy("LifecycleSettlementExecutor", {
     from: deployer,
     libraries: { BoundedCall: boundedCall.address },
     args: [],
@@ -115,7 +115,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     from: deployer,
     libraries: {
       PostIntentHookExecutor: postIntentHookExecutor.address,
-      RiskSettlementExecutor: riskSettlementExecutor.address,
+      LifecycleSettlementExecutor: riskSettlementExecutor.address,
     },
     args: [],
   });
@@ -134,7 +134,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       paymentVerifierRegistryAddress,
       ORCHESTRATOR_V2_PROTOCOL_FEE[network],
       ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT[network] || deployer,
-      RISK_CALLBACK_GAS_LIMIT,
+      CALLBACK_GAS_LIMIT,
     ],
   });
   if (orchestratorV3.newlyDeployed) {
@@ -176,7 +176,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const intentLifecycleHook = await deploy("IntentLifecycleHookV1", {
     from: deployer,
     args: [
-      orchestratorV3.address,
+      orchestratorRegistryAddress,
       makerGroupPolicy.address,
       addressGroupRegistry.address,
     ],
@@ -187,13 +187,13 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   }
 
   const orchestratorV3Contract = await ethers.getContractAt("OrchestratorV3", orchestratorV3.address);
-  if ((await orchestratorV3Contract.riskHook()).toLowerCase() !== intentLifecycleHook.address.toLowerCase()) {
+  if ((await orchestratorV3Contract.lifecycleHook()).toLowerCase() !== intentLifecycleHook.address.toLowerCase()) {
     await executeOrQueueGovernanceCall(
       hre,
       orchestratorV3Contract,
-      "setRiskHook",
+      "setLifecycleHook",
       [intentLifecycleHook.address],
-      `OrchestratorV3.setRiskHook(${intentLifecycleHook.address})`,
+      `OrchestratorV3.setLifecycleHook(${intentLifecycleHook.address})`,
     );
   }
 

@@ -6,18 +6,20 @@ import {IEscrow} from "../interfaces/IEscrow.sol";
 import {IAddressGroupRegistry} from "../interfaces/IAddressGroupRegistry.sol";
 import {IIntentLifecycleHook} from "../interfaces/IIntentLifecycleHook.sol";
 import {IMakerGroupPolicy} from "../interfaces/IMakerGroupPolicy.sol";
+import {IOrchestratorRegistry} from "../interfaces/IOrchestratorRegistry.sol";
 import {IOrchestratorV3} from "../interfaces/IOrchestratorV3.sol";
 
 /**
  * @title IntentLifecycleHookV1
- * @notice Stateless OrchestratorV3 lifecycle hook enforcing maker-owned, payment-method-specific
- * curated group policies during admission. Settlement and cancellation are no-ops in this version.
- * @dev Group iteration is bounded by MakerGroupPolicy.MAX_GROUPS_PER_PAYMENT_METHOD.
+ * @notice Stateless lifecycle hook admitting any orchestrator registered in OrchestratorRegistry and enforcing
+ * maker-owned, payment-method-specific curated group policies. Settlement and cancellation are no-ops in this version.
+ * @dev Reads intent context from the calling orchestrator. Group iteration is bounded by
+ * MakerGroupPolicy.MAX_GROUPS_PER_PAYMENT_METHOD.
  */
 contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     /* ============ State Variables ============ */
 
-    IOrchestratorV3 public immutable orchestrator;
+    IOrchestratorRegistry public immutable orchestratorRegistry;
     IMakerGroupPolicy public immutable makerGroupPolicy;
     IAddressGroupRegistry public immutable groupRegistry;
 
@@ -34,11 +36,11 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     /* ============ Constructor ============ */
 
     constructor(
-        IOrchestratorV3 _orchestrator,
+        IOrchestratorRegistry _orchestratorRegistry,
         IMakerGroupPolicy _makerGroupPolicy,
         IAddressGroupRegistry _groupRegistry
     ) {
-        _validateDependency(address(_orchestrator));
+        _validateDependency(address(_orchestratorRegistry));
         _validateDependency(address(_makerGroupPolicy));
         _validateDependency(address(_groupRegistry));
 
@@ -47,7 +49,7 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
             revert GroupRegistryMismatch(policyRegistry, address(_groupRegistry));
         }
 
-        orchestrator = _orchestrator;
+        orchestratorRegistry = _orchestratorRegistry;
         makerGroupPolicy = _makerGroupPolicy;
         groupRegistry = _groupRegistry;
     }
@@ -58,7 +60,7 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
      * @inheritdoc IIntentLifecycleHook
      */
     function onIntentCreated(bytes32 _intentHash) external view override onlyOrchestrator {
-        IOrchestratorV3.RiskIntentData memory intent = orchestrator.getRiskIntent(_intentHash);
+        IOrchestratorV3.IntentContext memory intent = IOrchestratorV3(msg.sender).getIntentContext(_intentHash);
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
         IEscrow.Deposit memory deposit = IEscrow(intent.escrow).getDeposit(intent.depositId);
@@ -85,12 +87,12 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     /**
      * @inheritdoc IIntentLifecycleHook
      */
-    function settleIntent(RiskSettlementContext calldata) external view override onlyOrchestrator {}
+    function settleIntent(SettlementContext calldata) external view override onlyOrchestrator {}
 
     /* ============ Modifiers ============ */
 
     modifier onlyOrchestrator() {
-        if (msg.sender != address(orchestrator)) revert UnauthorizedOrchestrator(msg.sender);
+        if (!orchestratorRegistry.isOrchestrator(msg.sender)) revert UnauthorizedOrchestrator(msg.sender);
         _;
     }
 

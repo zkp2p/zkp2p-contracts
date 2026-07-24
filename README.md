@@ -73,7 +73,7 @@ The v2 system is built around four layers:
 ## V3 Lifecycle Risk and Maker Groups
 
 `OrchestratorV3` is a staging-only, relayer-free lifecycle coordinator. It has exactly one
-owner-controlled global `riskHook` for future intents:
+owner-controlled global `lifecycleHook` for future intents:
 
 - Admission executes with bounded gas and fails closed before Escrow locks funds.
 - The global hook is snapshotted into each intent, so later governance changes affect only new intents.
@@ -81,7 +81,7 @@ owner-controlled global `riskHook` for future intents:
 - Cancellation invokes the snapshot with bounded gas, fails open for liquidity liveness, and persists failed
   callback recovery data until the snapshotted hook acknowledges reconciliation.
 - The existing generic per-deposit pre-intent hook remains available. V3 has no dedicated per-deposit
-  whitelist slot and no maker- or deposit-selected lifecycle risk hook.
+  whitelist slot and no maker- or deposit-selected lifecycle hook.
 
 The first minimal global hook is the independent maker-group stack:
 
@@ -165,7 +165,7 @@ Key v2 behavior:
 - Supports a generic pre-intent hook and a dedicated whitelist hook per deposit.
 - Supports optional post-intent hooks through `IPostIntentHookV2`.
 - Distributes protocol fees, manager fees, and multiple referral fees.
-- Allows every account to hold multiple concurrent intents; V3 admission is governed only by the selected risk hook.
+- Allows every account to hold multiple concurrent intents; V3 admission is governed only by the selected lifecycle hook.
 
 Recent addition:
 

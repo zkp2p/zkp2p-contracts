@@ -37,8 +37,8 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         groupRegistry.registerGroup(PEER_MERCHANTS, "Peer Merchants", curator);
 
         policy = new MakerGroupPolicy(groupRegistry);
-        groupHook = new IntentLifecycleHookV1(IOrchestratorV3(address(orchestrator)), policy, groupRegistry);
-        IOrchestratorV3(address(orchestrator)).setRiskHook(groupHook);
+        groupHook = new IntentLifecycleHookV1(orchestratorRegistry, policy, groupRegistry);
+        IOrchestratorV3(address(orchestrator)).setLifecycleHook(groupHook);
 
         _addPaypalToDeposit();
     }
@@ -46,7 +46,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
     function test_DisabledPolicyPassesThroughAndSnapshotsGlobalHook() public {
         bytes32 intentHash = _signalDefault();
 
-        assertEq(address(IOrchestratorV3(address(orchestrator)).getIntentRiskHook(intentHash)), address(groupHook));
+        assertEq(address(IOrchestratorV3(address(orchestrator)).getIntentLifecycleHook(intentHash)), address(groupHook));
         assertEq(escrow.getDepositIntent(depositId, intentHash).intentHash, intentHash);
     }
 
@@ -62,13 +62,13 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
             abi.encodeWithSelector(IntentLifecycleHookV1.NoAllowedGroupsConfigured.selector, depositor, METHOD);
         vm.expectRevert(
             abi.encodeWithSelector(
-                BoundedCall.RiskHookAdmissionFailed.selector, rejectedIntent, address(groupHook), emptyPolicyRevert
+                BoundedCall.LifecycleHookAdmissionFailed.selector, rejectedIntent, address(groupHook), emptyPolicyRevert
             )
         );
         _signalCall(taker, _defaultParams());
 
         assertEq(orchestrator.intentCounter(), counterBefore);
-        assertEq(IOrchestratorV3(address(orchestrator)).getRiskIntent(rejectedIntent).owner, address(0));
+        assertEq(IOrchestratorV3(address(orchestrator)).getIntentContext(rejectedIntent).owner, address(0));
         assertEq(escrow.getDepositIntent(depositId, rejectedIntent).intentHash, bytes32(0));
         assertEq(escrow.getDeposit(depositId).remainingDeposits, availableBefore);
     }
@@ -84,7 +84,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
             abi.encodeWithSelector(IntentLifecycleHookV1.TakerNotInAllowedGroup.selector, depositor, METHOD, taker);
         vm.expectRevert(
             abi.encodeWithSelector(
-                BoundedCall.RiskHookAdmissionFailed.selector, rejectedIntent, address(groupHook), nonMemberRevert
+                BoundedCall.LifecycleHookAdmissionFailed.selector, rejectedIntent, address(groupHook), nonMemberRevert
             )
         );
         _signalCall(taker, _defaultParams());
@@ -113,7 +113,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         vm.stopPrank();
         _addMembers(PEER_PLUSES, taker);
 
-        vm.expectPartialRevert(BoundedCall.RiskHookAdmissionFailed.selector);
+        vm.expectPartialRevert(BoundedCall.LifecycleHookAdmissionFailed.selector);
         _signalCall(taker, _defaultParams());
 
         IOrchestratorV2.SignalIntentParams memory paypalParams = _defaultParams();
@@ -130,7 +130,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
 
         IOrchestratorV2.SignalIntentParams memory secondDepositParams = _defaultParams();
         secondDepositParams.depositId = secondDepositId;
-        vm.expectPartialRevert(BoundedCall.RiskHookAdmissionFailed.selector);
+        vm.expectPartialRevert(BoundedCall.LifecycleHookAdmissionFailed.selector);
         _signalCall(taker, secondDepositParams);
 
         _addMembers(PEERS, taker);
@@ -149,7 +149,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         assertEq(escrow.getDepositIntent(depositId, activeIntent).intentHash, bytes32(0));
         assertEq(IOrchestratorV3(address(orchestrator)).getIntentCancellation(activeIntent), 0);
 
-        vm.expectPartialRevert(BoundedCall.RiskHookAdmissionFailed.selector);
+        vm.expectPartialRevert(BoundedCall.LifecycleHookAdmissionFailed.selector);
         _signalCall(taker, _defaultParams());
     }
 
@@ -158,7 +158,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         groupRegistry.setGroupActive(PEERS, false);
 
         assertTrue(policy.isGroupAllowed(depositor, METHOD, PEERS));
-        vm.expectPartialRevert(BoundedCall.RiskHookAdmissionFailed.selector);
+        vm.expectPartialRevert(BoundedCall.LifecycleHookAdmissionFailed.selector);
         _signalCall(taker, _defaultParams());
     }
 
@@ -173,24 +173,24 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         orchestrator.releaseFundsToPayer(intentHash);
 
         assertEq(token.balanceOf(taker) - takerBalanceBefore, INTENT_AMOUNT);
-        assertEq(address(IOrchestratorV3(address(orchestrator)).getIntentRiskHook(intentHash)), address(0));
+        assertEq(address(IOrchestratorV3(address(orchestrator)).getIntentLifecycleHook(intentHash)), address(0));
     }
 
     function test_GlobalHookReplacementDoesNotMutateActiveIntentSnapshot() public {
         _enablePeerPolicyAndAddTaker();
         IOrchestratorV3 riskOrchestrator = IOrchestratorV3(address(orchestrator));
         bytes32 inFlight = _signalDefault();
-        assertEq(address(riskOrchestrator.getIntentRiskHook(inFlight)), address(groupHook));
+        assertEq(address(riskOrchestrator.getIntentLifecycleHook(inFlight)), address(groupHook));
 
         IntentLifecycleHookV1Mock replacementHook = new IntentLifecycleHookV1Mock();
-        riskOrchestrator.setRiskHook(replacementHook);
+        riskOrchestrator.setLifecycleHook(replacementHook);
 
         vm.prank(taker);
         orchestrator.cancelIntent(inFlight);
         assertEq(replacementHook.cancelledCalls(), 0);
 
         bytes32 fresh = _signalDefault();
-        assertEq(address(riskOrchestrator.getIntentRiskHook(fresh)), address(replacementHook));
+        assertEq(address(riskOrchestrator.getIntentLifecycleHook(fresh)), address(replacementHook));
         assertEq(replacementHook.createdCalls(), 1);
     }
 
@@ -209,7 +209,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         vm.stopPrank();
         _addMembers(groups[groups.length - 1], taker);
 
-        IOrchestratorV3(address(orchestrator)).setRiskCallbackGasLimit(750_000);
+        IOrchestratorV3(address(orchestrator)).setCallbackGasLimit(750_000);
         assertNotEq(_signalDefault(), bytes32(0));
     }
 
@@ -223,7 +223,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         vm.prank(other);
         groupHook.onIntentCancelled(intentHash);
 
-        IIntentLifecycleHook.RiskSettlementContext memory context = IIntentLifecycleHook.RiskSettlementContext({
+        IIntentLifecycleHook.SettlementContext memory context = IIntentLifecycleHook.SettlementContext({
             intentHash: intentHash,
             token: address(token),
             recipient: taker,
@@ -244,7 +244,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
                 IntentLifecycleHookV1.GroupRegistryMismatch.selector, address(groupRegistry), address(otherRegistry)
             )
         );
-        new IntentLifecycleHookV1(IOrchestratorV3(address(orchestrator)), policy, otherRegistry);
+        new IntentLifecycleHookV1(orchestratorRegistry, policy, otherRegistry);
     }
 
     function _enablePeerPolicyAndAddTaker() internal {

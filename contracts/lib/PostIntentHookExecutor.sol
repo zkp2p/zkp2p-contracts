@@ -11,7 +11,7 @@ import { IPostIntentHookV2 } from "../interfaces/IPostIntentHookV2.sol";
 /**
  * @title PostIntentHookExecutor
  * @notice Transfers settled funds directly or executes a V2 post-intent hook with an exact allowance.
- * @dev This executor runs only after the risk hook declines gross-fund consumption and fees have been distributed.
+ * @dev This executor runs only after the lifecycle hook declines gross-fund consumption and fees have been distributed.
  *      Without a hook, it transfers the executable amount directly to the snapshotted intent recipient. With a hook, it
  *      grants a temporary exact allowance and requires the orchestrator's token balance to decrease by precisely that
  *      amount during execution. The complete settlement reverts on hook failure or any other balance delta.

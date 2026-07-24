@@ -216,7 +216,7 @@ abstract contract IntentExtensionManager is IRiskManager {
         view
         returns (IEscrowV2 escrow, uint256 depositId, uint64 currentExpiry)
     {
-        IOrchestratorV3.RiskIntentData memory intent = _orchestrator().getRiskIntent(_intentHash);
+        IOrchestratorV3.IntentContext memory intent = _orchestrator().getIntentContext(_intentHash);
         if (intent.escrow == address(0)) {
             revert IntentStateMismatch(_intentHash);
         }

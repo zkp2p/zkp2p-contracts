@@ -24,7 +24,7 @@ interface IIntentLifecycleHook {
     }
 
     /** @notice Complete token, fee, and lifecycle context for one atomic settlement decision. */
-    struct RiskSettlementContext {
+    struct SettlementContext {
         bytes32 intentHash;
         address token;
         address recipient;
@@ -53,5 +53,5 @@ interface IIntentLifecycleHook {
      *      return instructs the orchestrator to execute the supplied fee plan and ordinary payout.
      * @param _context Gross release, net executable amount, exact fee plan, token, recipient, and resolution type.
      */
-    function settleIntent(RiskSettlementContext calldata _context) external;
+    function settleIntent(SettlementContext calldata _context) external;
 }

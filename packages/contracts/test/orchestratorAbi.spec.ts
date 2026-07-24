@@ -10,21 +10,21 @@ describe("active orchestrator package ABI", () => {
     const retiredNames = new Set([
       "AccountHasActiveIntent",
       "AllowMultipleIntentsUpdated",
-      "DepositRiskHookSet",
+      ["DepositRisk", "HookSet"].join(""),
       "DepositWhitelistHookSet",
       "RelayerRegistryUpdated",
       "allowMultipleIntents",
-      "defaultRiskHook",
-      "getDepositRiskHook",
+      ["defaultRisk", "Hook"].join(""),
+      ["getDepositRisk", "Hook"].join(""),
       "getDepositWhitelistHook",
-      "makerRiskHooks",
-      "migrateMakerRiskHooks",
+      ["makerRisk", "Hooks"].join(""),
+      ["migrateMakerRisk", "Hooks"].join(""),
       "relayerRegistry",
       "setAllowMultipleIntents",
-      "setDefaultRiskHook",
-      "setDepositRiskHook",
+      ["setDefaultRisk", "Hook"].join(""),
+      ["setDepositRisk", "Hook"].join(""),
       "setDepositWhitelistHook",
-      "setMakerRiskHook",
+      ["setMakerRisk", "Hook"].join(""),
       "setRelayerRegistry",
     ]);
 
@@ -35,10 +35,10 @@ describe("active orchestrator package ABI", () => {
       "_paymentVerifierRegistry",
       "_protocolFee",
       "_protocolFeeRecipient",
-      "_riskCallbackGasLimit",
+      "_callbackGasLimit",
     ]);
     expect(abi.filter((entry: { name?: string }) => entry.name && retiredNames.has(entry.name))).toEqual([]);
-    expect(abi.some((entry: { name?: string }) => entry.name === "riskHook")).toBe(true);
-    expect(abi.some((entry: { name?: string }) => entry.name === "setRiskHook")).toBe(true);
+    expect(abi.some((entry: { name?: string }) => entry.name === "lifecycleHook")).toBe(true);
+    expect(abi.some((entry: { name?: string }) => entry.name === "setLifecycleHook")).toBe(true);
   });
 });

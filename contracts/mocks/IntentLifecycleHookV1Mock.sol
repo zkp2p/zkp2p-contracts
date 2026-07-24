@@ -20,7 +20,7 @@ contract IntentLifecycleHookV1Mock is IIntentLifecycleHook {
     uint256 public settlementPullAmount;
     uint256 public settlementTransferAmount;
     bytes32 public lastIntentHash;
-    RiskSettlementContext public lastSettlementContext;
+    SettlementContext public lastSettlementContext;
     uint256 public createdCalls;
     uint256 public cancelledCalls;
     uint256 public settlementCalls;
@@ -62,7 +62,7 @@ contract IntentLifecycleHookV1Mock is IIntentLifecycleHook {
         cancelledCalls++;
     }
 
-    function settleIntent(RiskSettlementContext calldata _context) external override {
+    function settleIntent(SettlementContext calldata _context) external override {
         _revertWithConfiguredData();
         if (revertOnCallback) revert("risk settlement failed");
         lastIntentHash = _context.intentHash;
