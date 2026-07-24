@@ -6,10 +6,10 @@ import {Test} from "forge-std/Test.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 
 contract AddressGroupRegistryTest is Test {
-    event GroupCreated(uint256 indexed groupId, address indexed owner, string name);
-    event GroupOwnershipTransferStarted(uint256 indexed groupId, address indexed owner, address indexed pendingOwner);
-    event GroupOwnershipTransferCancelled(uint256 indexed groupId, address indexed cancelledPendingOwner);
-    event GroupOwnershipTransferred(uint256 indexed groupId, address indexed previousOwner, address indexed newOwner);
+    event GroupCreated(uint256 indexed groupId, address indexed curator, string name);
+    event GroupCuratorTransferStarted(uint256 indexed groupId, address indexed curator, address indexed pendingCurator);
+    event GroupCuratorTransferCancelled(uint256 indexed groupId, address indexed cancelledPendingCurator);
+    event GroupCuratorTransferred(uint256 indexed groupId, address indexed previousCurator, address indexed newCurator);
     event MemberAdded(uint256 indexed groupId, address indexed member);
     event MemberRemoved(uint256 indexed groupId, address indexed member);
     event GroupVisibilityChanged(uint256 indexed groupId, bool isPublic);
@@ -37,8 +37,8 @@ contract AddressGroupRegistryTest is Test {
         values[1] = second;
     }
 
-    function _createGroup(address owner) internal returns (uint256 groupId) {
-        vm.prank(owner);
+    function _createGroup(address curator) internal returns (uint256 groupId) {
+        vm.prank(curator);
         groupId = registry.createGroup("test-group");
     }
 
@@ -54,12 +54,12 @@ contract AddressGroupRegistryTest is Test {
         assertEq(registry.groupCount(), 2);
     }
 
-    function test_CreateGroupSetsCallerAsOwner() public {
+    function test_CreateGroupSetsCallerAsCurator() public {
         uint256 groupId = _createGroup(alice);
-        (address owner, address pendingOwner, address resolver, bool isPublic, bool exists) =
+        (address curator, address pendingCurator, address resolver, bool isPublic, bool exists) =
             registry.getGroup(groupId);
-        assertEq(owner, alice);
-        assertEq(pendingOwner, address(0));
+        assertEq(curator, alice);
+        assertEq(pendingCurator, address(0));
         assertEq(resolver, address(0));
         assertFalse(isPublic);
         assertTrue(exists);
@@ -75,119 +75,119 @@ contract AddressGroupRegistryTest is Test {
         assertFalse(registry.groupExists(42));
     }
 
-    /* ============ ownership lifecycle ============ */
+    /* ============ curator transfer lifecycle ============ */
 
-    function test_OwnerStartsTransferAndEmits() public {
+    function test_CuratorStartsTransferAndEmits() public {
         uint256 groupId = _createGroup(alice);
         vm.expectEmit(true, true, true, true, address(registry));
-        emit GroupOwnershipTransferStarted(groupId, alice, bob);
+        emit GroupCuratorTransferStarted(groupId, alice, bob);
         vm.prank(alice);
-        registry.transferGroupOwnership(groupId, bob);
-        (address owner, address pendingOwner,,,) = registry.getGroup(groupId);
-        assertEq(owner, alice);
-        assertEq(pendingOwner, bob);
+        registry.transferGroupCurator(groupId, bob);
+        (address curator, address pendingCurator,,,) = registry.getGroup(groupId);
+        assertEq(curator, alice);
+        assertEq(pendingCurator, bob);
     }
 
-    function test_NewTransferReplacesPendingOwner() public {
+    function test_NewTransferReplacesPendingCurator() public {
         uint256 groupId = _createGroup(alice);
         vm.prank(alice);
-        registry.transferGroupOwnership(groupId, bob);
+        registry.transferGroupCurator(groupId, bob);
         vm.prank(alice);
-        registry.transferGroupOwnership(groupId, carol);
-        (, address pendingOwner,,,) = registry.getGroup(groupId);
-        assertEq(pendingOwner, carol);
+        registry.transferGroupCurator(groupId, carol);
+        (, address pendingCurator,,,) = registry.getGroup(groupId);
+        assertEq(pendingCurator, carol);
     }
 
     function test_TransferToZeroReverts() public {
         uint256 groupId = _createGroup(alice);
         vm.expectRevert(AddressGroupRegistry.ZeroAddress.selector);
         vm.prank(alice);
-        registry.transferGroupOwnership(groupId, address(0));
+        registry.transferGroupCurator(groupId, address(0));
     }
 
-    function test_NonOwnerCannotStartTransfer() public {
+    function test_NonCuratorCannotStartTransfer() public {
         uint256 groupId = _createGroup(alice);
-        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupOwner.selector, bob, alice));
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupCurator.selector, bob, alice));
         vm.prank(bob);
-        registry.transferGroupOwnership(groupId, bob);
+        registry.transferGroupCurator(groupId, bob);
     }
 
     function test_TransferOnNonexistentGroupReverts() public {
         vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.GroupDoesNotExist.selector, 7));
         vm.prank(alice);
-        registry.transferGroupOwnership(7, bob);
+        registry.transferGroupCurator(7, bob);
     }
 
-    function test_OwnerCancelsPendingTransferAndEmits() public {
+    function test_CuratorCancelsPendingTransferAndEmits() public {
         uint256 groupId = _createGroup(alice);
         vm.prank(alice);
-        registry.transferGroupOwnership(groupId, bob);
+        registry.transferGroupCurator(groupId, bob);
         vm.expectEmit(true, true, true, true, address(registry));
-        emit GroupOwnershipTransferCancelled(groupId, bob);
+        emit GroupCuratorTransferCancelled(groupId, bob);
         vm.prank(alice);
-        registry.cancelGroupOwnershipTransfer(groupId);
-        (, address pendingOwner,,,) = registry.getGroup(groupId);
-        assertEq(pendingOwner, address(0));
+        registry.cancelGroupCuratorTransfer(groupId);
+        (, address pendingCurator,,,) = registry.getGroup(groupId);
+        assertEq(pendingCurator, address(0));
     }
 
     function test_CancelWithoutPendingTransferReverts() public {
         uint256 groupId = _createGroup(alice);
         vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.NoPendingTransfer.selector, groupId));
         vm.prank(alice);
-        registry.cancelGroupOwnershipTransfer(groupId);
+        registry.cancelGroupCuratorTransfer(groupId);
     }
 
-    function test_PendingOwnerAcceptsAndEmits() public {
+    function test_PendingCuratorAcceptsAndEmits() public {
         uint256 groupId = _createGroup(alice);
         vm.prank(alice);
-        registry.transferGroupOwnership(groupId, bob);
+        registry.transferGroupCurator(groupId, bob);
         vm.expectEmit(true, true, true, true, address(registry));
-        emit GroupOwnershipTransferred(groupId, alice, bob);
+        emit GroupCuratorTransferred(groupId, alice, bob);
         vm.prank(bob);
-        registry.acceptGroupOwnership(groupId);
-        (address owner, address pendingOwner,,,) = registry.getGroup(groupId);
-        assertEq(owner, bob);
-        assertEq(pendingOwner, address(0));
+        registry.acceptGroupCurator(groupId);
+        (address curator, address pendingCurator,,,) = registry.getGroup(groupId);
+        assertEq(curator, bob);
+        assertEq(pendingCurator, address(0));
     }
 
-    function test_CannotAcceptOwnershipOfNonexistentGroup() public {
+    function test_CannotAcceptCuratorTransferOfNonexistentGroup() public {
         uint256 groupId = 42;
         vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.GroupDoesNotExist.selector, groupId));
-        registry.acceptGroupOwnership(groupId);
+        registry.acceptGroupCurator(groupId);
     }
 
-    function test_NonPendingOwnerCannotAccept() public {
+    function test_NonPendingCuratorCannotAccept() public {
         uint256 groupId = _createGroup(alice);
         vm.prank(alice);
-        registry.transferGroupOwnership(groupId, bob);
-        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedPendingOwner.selector, carol, bob));
+        registry.transferGroupCurator(groupId, bob);
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedPendingCurator.selector, carol, bob));
         vm.prank(carol);
-        registry.acceptGroupOwnership(groupId);
+        registry.acceptGroupCurator(groupId);
     }
 
-    function test_PendingOwnerHasNoAdminRightsBeforeAcceptance() public {
+    function test_PendingCuratorHasNoAdminRightsBeforeAcceptance() public {
         uint256 groupId = _createGroup(alice);
         vm.prank(alice);
-        registry.transferGroupOwnership(groupId, bob);
-        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupOwner.selector, bob, alice));
+        registry.transferGroupCurator(groupId, bob);
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupCurator.selector, bob, alice));
         vm.prank(bob);
         registry.addMembers(groupId, _members(carol));
     }
 
-    function test_PreviousOwnerHasNoAdminRightsAfterTransfer() public {
+    function test_PreviousCuratorHasNoAdminRightsAfterTransfer() public {
         uint256 groupId = _createGroup(alice);
         vm.prank(alice);
-        registry.transferGroupOwnership(groupId, bob);
+        registry.transferGroupCurator(groupId, bob);
         vm.prank(bob);
-        registry.acceptGroupOwnership(groupId);
-        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupOwner.selector, alice, bob));
+        registry.acceptGroupCurator(groupId);
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupCurator.selector, alice, bob));
         vm.prank(alice);
         registry.addMembers(groupId, _members(carol));
     }
 
     /* ============ member batches ============ */
 
-    function test_OwnerAddsMembersAndEmitsPerMember() public {
+    function test_CuratorAddsMembersAndEmitsPerMember() public {
         uint256 groupId = _createGroup(alice);
         vm.expectEmit(true, true, true, true, address(registry));
         emit MemberAdded(groupId, bob);
@@ -211,7 +211,7 @@ contract AddressGroupRegistryTest is Test {
         assertTrue(registry.isMember(groupId, bob));
     }
 
-    function test_OwnerRemovesMemberAndEmits() public {
+    function test_CuratorRemovesMemberAndEmits() public {
         uint256 groupId = _createGroup(alice);
         vm.prank(alice);
         registry.addMembers(groupId, _members(bob, carol));
@@ -251,12 +251,12 @@ contract AddressGroupRegistryTest is Test {
         registry.removeMembers(groupId, _members(address(0)));
     }
 
-    function test_NonOwnerCannotMutateMembers() public {
+    function test_NonCuratorCannotMutateMembers() public {
         uint256 groupId = _createGroup(alice);
-        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupOwner.selector, bob, alice));
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupCurator.selector, bob, alice));
         vm.prank(bob);
         registry.addMembers(groupId, _members(carol));
-        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupOwner.selector, bob, alice));
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupCurator.selector, bob, alice));
         vm.prank(bob);
         registry.removeMembers(groupId, _members(carol));
     }
@@ -293,19 +293,19 @@ contract AddressGroupRegistryTest is Test {
         assertTrue(registry.isMember(groupId, carol));
     }
 
-    /* ============ full admin-surface auth after ownership changes ============ */
+    /* ============ full admin-surface auth after curator changes ============ */
 
-    function test_PreviousOwnerCannotSetResolverOrRemoveMembersOrTransfer() public {
+    function test_PreviousCuratorCannotSetResolverOrRemoveMembersOrTransfer() public {
         uint256 groupId = _createGroup(alice);
         vm.prank(alice);
         registry.addMembers(groupId, _members(carol));
         vm.prank(alice);
-        registry.transferGroupOwnership(groupId, bob);
+        registry.transferGroupCurator(groupId, bob);
         vm.prank(bob);
-        registry.acceptGroupOwnership(groupId);
+        registry.acceptGroupCurator(groupId);
 
         bytes memory expected =
-            abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupOwner.selector, alice, bob);
+            abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupCurator.selector, alice, bob);
         vm.expectRevert(expected);
         vm.prank(alice);
         registry.removeMembers(groupId, _members(carol));
@@ -314,21 +314,21 @@ contract AddressGroupRegistryTest is Test {
         registry.setResolver(groupId, address(registry)); // any contract address suffices for the auth check
         vm.expectRevert(expected);
         vm.prank(alice);
-        registry.transferGroupOwnership(groupId, alice);
+        registry.transferGroupCurator(groupId, alice);
         vm.expectRevert(expected);
         vm.prank(alice);
-        registry.cancelGroupOwnershipTransfer(groupId);
+        registry.cancelGroupCuratorTransfer(groupId);
     }
 
-    function test_PendingOwnerCannotRemoveMembersOrSetResolver() public {
+    function test_PendingCuratorCannotRemoveMembersOrSetResolver() public {
         uint256 groupId = _createGroup(alice);
         vm.prank(alice);
         registry.addMembers(groupId, _members(carol));
         vm.prank(alice);
-        registry.transferGroupOwnership(groupId, bob);
+        registry.transferGroupCurator(groupId, bob);
 
         bytes memory expected =
-            abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupOwner.selector, bob, alice);
+            abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupCurator.selector, bob, alice);
         vm.expectRevert(expected);
         vm.prank(bob);
         registry.removeMembers(groupId, _members(carol));
@@ -339,7 +339,7 @@ contract AddressGroupRegistryTest is Test {
 
     /* ============ visibility ============ */
 
-    function test_OwnerTogglesVisibilityAndEmitsEveryTime() public {
+    function test_CuratorTogglesVisibilityAndEmitsEveryTime() public {
         uint256 groupId = _createGroup(alice);
 
         vm.expectEmit(true, true, true, true, address(registry));
@@ -362,9 +362,9 @@ contract AddressGroupRegistryTest is Test {
         registry.setGroupVisibility(groupId, false);
     }
 
-    function test_NonOwnerCannotSetVisibility() public {
+    function test_NonCuratorCannotSetVisibility() public {
         uint256 groupId = _createGroup(alice);
-        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupOwner.selector, bob, alice));
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupCurator.selector, bob, alice));
         vm.prank(bob);
         registry.setGroupVisibility(groupId, true);
     }
@@ -476,7 +476,7 @@ contract AddressGroupRegistryTest is Test {
         assertTrue(registry.isMember(groupId, carol));
     }
 
-    function test_OwnerCurationAndSelfServiceComposeOnPublicGroup() public {
+    function test_CuratorCurationAndSelfServiceComposeOnPublicGroup() public {
         uint256 groupId = _createGroup(alice);
         vm.startPrank(alice);
         registry.setGroupVisibility(groupId, true);

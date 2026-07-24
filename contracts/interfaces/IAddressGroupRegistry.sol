@@ -4,41 +4,41 @@ pragma solidity ^0.8.18;
 
 /**
  * @title IAddressGroupRegistry
- * @notice Permissionless registry of owner-managed address groups with optional resolvers.
+ * @notice Permissionless registry of curator-managed address groups with optional resolvers.
  */
 interface IAddressGroupRegistry {
     /**
-     * @notice Creates a new group owned by the caller; the name is emitted, not stored.
+     * @notice Creates a new group curated by the caller; the name is emitted, not stored.
      */
     function createGroup(string calldata _name) external returns (uint256 groupId);
 
     /**
-     * @notice Starts a two-step ownership transfer; replaces any existing pending owner.
+     * @notice Starts a two-step curator transfer; replaces any existing pending curator.
      */
-    function transferGroupOwnership(uint256 _groupId, address _newOwner) external;
+    function transferGroupCurator(uint256 _groupId, address _newCurator) external;
 
     /**
-     * @notice Cancels a pending ownership transfer.
+     * @notice Cancels a pending curator transfer.
      */
-    function cancelGroupOwnershipTransfer(uint256 _groupId) external;
+    function cancelGroupCuratorTransfer(uint256 _groupId) external;
 
     /**
-     * @notice Completes a pending ownership transfer; callable only by the pending owner.
+     * @notice Completes a pending curator transfer; callable only by the pending curator.
      */
-    function acceptGroupOwnership(uint256 _groupId) external;
+    function acceptGroupCurator(uint256 _groupId) external;
 
     /**
-     * @notice Adds members to a group (owner only; idempotent).
+     * @notice Adds members to a group (curator only; idempotent).
      */
     function addMembers(uint256 _groupId, address[] calldata _members) external;
 
     /**
-     * @notice Removes members from a group (owner only; idempotent).
+     * @notice Removes members from a group (curator only; idempotent).
      */
     function removeMembers(uint256 _groupId, address[] calldata _members) external;
 
     /**
-     * @notice Sets whether a group permits self-service membership (owner only).
+     * @notice Sets whether a group permits self-service membership (curator only).
      */
     function setGroupVisibility(uint256 _groupId, bool _isPublic) external;
 
@@ -53,7 +53,7 @@ interface IAddressGroupRegistry {
     function leaveGroup(uint256 _groupId) external;
 
     /**
-     * @notice Sets or clears the group's resolver (owner only; nonzero resolver must have code).
+     * @notice Sets or clears the group's resolver (curator only; nonzero resolver must have code).
      */
     function setResolver(uint256 _groupId, address _resolver) external;
 
@@ -73,7 +73,7 @@ interface IAddressGroupRegistry {
     function getGroup(uint256 _groupId)
         external
         view
-        returns (address owner, address pendingOwner, address resolver, bool isPublic, bool exists);
+        returns (address curator, address pendingCurator, address resolver, bool isPublic, bool exists);
 
     /**
      * @notice Returns the last assigned group id (ids start at 1).

@@ -32,7 +32,7 @@ contract AddressGroupRegistryResolverTest is Test {
 
     /* ============ setResolver ============ */
 
-    function test_OwnerSetsResolverAndEmitsOldAndNew() public {
+    function test_CuratorSetsResolverAndEmitsOldAndNew() public {
         vm.expectEmit(true, true, true, true, address(registry));
         emit ResolverSet(groupId, address(0), address(resolver));
         _setResolver(address(resolver));
@@ -54,8 +54,8 @@ contract AddressGroupRegistryResolverTest is Test {
         _setResolver(bob);
     }
 
-    function test_NonOwnerCannotSetResolver() public {
-        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupOwner.selector, bob, alice));
+    function test_NonCuratorCannotSetResolver() public {
+        vm.expectRevert(abi.encodeWithSelector(AddressGroupRegistry.UnauthorizedGroupCurator.selector, bob, alice));
         vm.prank(bob);
         registry.setResolver(groupId, address(resolver));
     }
