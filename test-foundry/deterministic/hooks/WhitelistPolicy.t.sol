@@ -90,7 +90,37 @@ contract WhitelistPolicyTest is Test {
         assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
     }
 
-    function test_ConfigureRevertsForUnknownDeposit() public {
+    function test_AllSixGatedEntryPointsRevertForNonDepositor() public {
+        bytes memory expectedRevert = abi.encodeWithSelector(
+            WhitelistPolicy.NotDepositor.selector, address(escrow), DEPOSIT_ONE, otherMaker
+        );
+
+        vm.expectRevert(expectedRevert);
+        vm.prank(otherMaker);
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, true);
+
+        vm.expectRevert(expectedRevert);
+        vm.prank(otherMaker);
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, new bytes32[](0), new address[](0));
+
+        vm.expectRevert(expectedRevert);
+        vm.prank(otherMaker);
+        policy.addWhitelistedAddresses(address(escrow), DEPOSIT_ONE, _addresses(taker));
+
+        vm.expectRevert(expectedRevert);
+        vm.prank(otherMaker);
+        policy.removeWhitelistedAddresses(address(escrow), DEPOSIT_ONE, _addresses(taker));
+
+        vm.expectRevert(expectedRevert);
+        vm.prank(otherMaker);
+        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, _groupIds(PEERS));
+
+        vm.expectRevert(expectedRevert);
+        vm.prank(otherMaker);
+        policy.removeAllowedGroups(address(escrow), DEPOSIT_ONE, _groupIds(PEERS));
+    }
+
+    function test_SetEnabledRevertsForUnknownDeposit() public {
         vm.expectRevert(
             abi.encodeWithSelector(WhitelistPolicy.DepositNotFound.selector, address(escrow), UNKNOWN_DEPOSIT)
         );
@@ -98,7 +128,7 @@ contract WhitelistPolicyTest is Test {
         policy.setEnabled(address(escrow), UNKNOWN_DEPOSIT, true);
     }
 
-    function test_ConfigureRevertsForUnregisteredEscrow() public {
+    function test_SetEnabledRevertsForUnregisteredEscrow() public {
         vm.expectRevert(
             abi.encodeWithSelector(WhitelistPolicy.EscrowNotWhitelisted.selector, address(unregisteredEscrow))
         );
@@ -321,7 +351,7 @@ contract WhitelistPolicyTest is Test {
         assertTrue(policy.isWhitelisted(address(escrow), DEPOSIT_ONE, otherTaker));
     }
 
-    function test_ConfigureDepositEmitsTheSameEventsAsGranularSetters() public {
+    function test_ConfigureDepositEmitsGranularEvents() public {
         vm.expectEmit(true, true, false, true, address(policy));
         emit EnabledUpdated(address(escrow), DEPOSIT_ONE, true);
         vm.expectEmit(true, true, true, true, address(policy));
@@ -387,6 +417,24 @@ contract WhitelistPolicyTest is Test {
         );
         vm.prank(otherMaker);
         policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, new bytes32[](0), new address[](0));
+    }
+
+    function test_ConfigureDepositWithEnabledFalseDisablesGateEvenWhenAppendingTakers() public {
+        vm.prank(maker);
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS), new address[](0));
+        assertTrue(policy.enabled(address(escrow), DEPOSIT_ONE));
+
+        vm.prank(maker);
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, false, new bytes32[](0), _addresses(taker));
+
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
+        assertTrue(policy.isWhitelisted(address(escrow), DEPOSIT_ONE, taker));
+
+        bytes32[] memory groups = policy.getAllowedGroups(address(escrow), DEPOSIT_ONE);
+        assertEq(groups.length, 1);
+        assertEq(groups[0], PEERS);
+
+        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, otherTaker));
     }
 
     /* ============ isTakerAllowed ============ */

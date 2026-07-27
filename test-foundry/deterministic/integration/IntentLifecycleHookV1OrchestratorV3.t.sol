@@ -105,6 +105,18 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         assertNotEq(_signalDefault(), bytes32(0));
     }
 
+    function test_DelegateIsNotAuthorizedToConfigureDeposit() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(WhitelistPolicy.NotDepositor.selector, address(escrow), depositId, delegate)
+        );
+        vm.prank(delegate);
+        policy.configureDeposit(address(escrow), depositId, true, new bytes32[](0), new address[](0));
+
+        vm.prank(depositor);
+        policy.configureDeposit(address(escrow), depositId, true, new bytes32[](0), new address[](0));
+        assertTrue(policy.enabled(address(escrow), depositId));
+    }
+
     function test_DepositPolicyAppliesAcrossAllPaymentMethodsOfTheDeposit() public {
         _addPaymentMethod(OTHER_METHOD);
 

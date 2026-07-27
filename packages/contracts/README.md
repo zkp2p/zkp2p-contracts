@@ -33,7 +33,7 @@ import type { Escrow, Orchestrator } from "@zkp2p/contracts-v2/types"
 // Import utility functions
 import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils/protocolUtils"
 
-// Import stable source ABIs for the V3 lifecycle boundary and maker whitelist policy
+// Import stable source ABIs for the V3 lifecycle boundary and deposit-scoped whitelist policy
 import {
   AddressGroupRegistry,
   IIntentLifecycleHook,

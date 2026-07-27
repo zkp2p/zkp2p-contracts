@@ -56,9 +56,9 @@ async function systemFullyWired(network: string): Promise<boolean> {
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
   const escrowRegistry = await ethers.getContractAt("EscrowRegistry", escrowRegistryAddress);
 
-  // Capability probe for the deposit-scoped policy schema. The previous payment-method-scoped policy
-  // exposes enabled(address,bytes32) rather than enabled(address,uint256), so this call reverts against
-  // stale bytecode and forces hardhat-deploy to process the changed policy/hook wiring.
+  // Capability probe for the deposit-scoped policy schema. The currently deployed policy is maker-scoped and
+  // exposes enabled(address) rather than enabled(address,uint256), so this call reverts against stale bytecode
+  // (argument-count mismatch) and forces hardhat-deploy to process the changed policy/hook wiring.
   await policy.enabled(ethers.constants.AddressZero, 0);
 
   if ((await policy.groupRegistry()).toLowerCase() !== registryAddress.toLowerCase()) return false;
