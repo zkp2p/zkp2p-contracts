@@ -2,7 +2,6 @@
 
 pragma solidity ^0.8.18;
 
-import {IEscrow} from "../interfaces/IEscrow.sol";
 import {IIntentLifecycleHook} from "../interfaces/IIntentLifecycleHook.sol";
 import {IOrchestratorRegistry} from "../interfaces/IOrchestratorRegistry.sol";
 import {IOrchestratorV3} from "../interfaces/IOrchestratorV3.sol";
@@ -11,8 +10,8 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 /**
  * @title IntentLifecycleHookV1
  * @notice Stateless lifecycle hook admitting any orchestrator registered in OrchestratorRegistry and enforcing
- * maker-owned whitelist policies. A taker is admitted when enforcement is disabled for the intent's payment method
- * or when the policy allows the taker through the maker-wide direct whitelist or a payment-method group.
+ * deposit-scoped whitelist policies. A taker is admitted when enforcement is disabled for the intent's deposit
+ * or when the policy allows the taker through that deposit's direct whitelist or one of its allowed groups.
  * Settlement and cancellation are no-ops in this version.
  * @dev Reads intent context from the calling orchestrator and delegates admission to WhitelistPolicy.
  */
@@ -28,7 +27,7 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     error InvalidDependency(address dependency);
     error UnauthorizedOrchestrator(address caller);
     error IntentNotFound(bytes32 intentHash);
-    error TakerNotWhitelisted(address maker, bytes32 paymentMethod, address taker);
+    error TakerNotWhitelisted(address escrow, uint256 depositId, address taker);
 
     /* ============ Constructor ============ */
 
@@ -49,9 +48,8 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
         IOrchestratorV3.IntentContext memory intent = IOrchestratorV3(msg.sender).getIntentContext(_intentHash);
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
-        address maker = IEscrow(intent.escrow).getDeposit(intent.depositId).depositor;
-        if (!whitelistPolicy.isTakerAllowed(maker, intent.paymentMethod, intent.owner)) {
-            revert TakerNotWhitelisted(maker, intent.paymentMethod, intent.owner);
+        if (!whitelistPolicy.isTakerAllowed(intent.escrow, intent.depositId, intent.owner)) {
+            revert TakerNotWhitelisted(intent.escrow, intent.depositId, intent.owner);
         }
     }
 
