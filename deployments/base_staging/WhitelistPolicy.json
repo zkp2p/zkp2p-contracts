@@ -1,5 +1,5 @@
 {
-  "address": "0x7D74A69C46606bDd14e48a202DC52989Af670236",
+  "address": "0x35B8E5D701aB950061E5978286568bA248710EdA",
   "abi": [
     {
       "inputs": [
@@ -7,14 +7,46 @@
           "internalType": "contract IAddressGroupRegistry",
           "name": "_groupRegistry",
           "type": "address"
+        },
+        {
+          "internalType": "contract IEscrowRegistry",
+          "name": "_escrowRegistry",
+          "type": "address"
         }
       ],
       "stateMutability": "nonpayable",
       "type": "constructor"
     },
     {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        }
+      ],
+      "name": "DepositNotFound",
+      "type": "error"
+    },
+    {
       "inputs": [],
       "name": "EmptyArray",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        }
+      ],
+      "name": "EscrowNotWhitelisted",
       "type": "error"
     },
     {
@@ -32,11 +64,32 @@
       "inputs": [
         {
           "internalType": "address",
-          "name": "registry",
+          "name": "dependency",
           "type": "address"
         }
       ],
-      "name": "InvalidGroupRegistry",
+      "name": "InvalidDependency",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        }
+      ],
+      "name": "NotDepositor",
       "type": "error"
     },
     {
@@ -66,8 +119,14 @@
         {
           "indexed": true,
           "internalType": "address",
-          "name": "maker",
+          "name": "escrow",
           "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
         },
         {
           "indexed": true,
@@ -85,8 +144,14 @@
         {
           "indexed": true,
           "internalType": "address",
-          "name": "maker",
+          "name": "escrow",
           "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
         },
         {
           "indexed": true,
@@ -104,8 +169,14 @@
         {
           "indexed": true,
           "internalType": "address",
-          "name": "maker",
+          "name": "escrow",
           "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
         },
         {
           "indexed": true,
@@ -123,8 +194,14 @@
         {
           "indexed": true,
           "internalType": "address",
-          "name": "maker",
+          "name": "escrow",
           "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
         },
         {
           "indexed": true,
@@ -142,8 +219,14 @@
         {
           "indexed": true,
           "internalType": "address",
-          "name": "maker",
+          "name": "escrow",
           "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
         },
         {
           "indexed": false,
@@ -156,8 +239,40 @@
       "type": "event"
     },
     {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "escrowRegistry",
+          "type": "address"
+        }
+      ],
+      "name": "EscrowRegistryUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
       "inputs": [],
-      "name": "MAX_GROUPS_PER_MAKER",
+      "name": "MAX_GROUPS_PER_DEPOSIT",
       "outputs": [
         {
           "internalType": "uint256",
@@ -171,6 +286,16 @@
     {
       "inputs": [
         {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
           "internalType": "bytes32[]",
           "name": "_groupIds",
           "type": "bytes32[]"
@@ -183,6 +308,16 @@
     },
     {
       "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
         {
           "internalType": "address[]",
           "name": "_takers",
@@ -198,8 +333,46 @@
       "inputs": [
         {
           "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "_enabled",
+          "type": "bool"
+        },
+        {
+          "internalType": "bytes32[]",
+          "name": "_groupIds",
+          "type": "bytes32[]"
+        },
+        {
+          "internalType": "address[]",
+          "name": "_takers",
+          "type": "address[]"
+        }
+      ],
+      "name": "configureDeposit",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
           "name": "",
           "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
         }
       ],
       "name": "enabled",
@@ -214,11 +387,29 @@
       "type": "function"
     },
     {
+      "inputs": [],
+      "name": "escrowRegistry",
+      "outputs": [
+        {
+          "internalType": "contract IEscrowRegistry",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [
         {
           "internalType": "address",
-          "name": "_maker",
+          "name": "_escrow",
           "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
         }
       ],
       "name": "getAllowedGroups",
@@ -249,8 +440,13 @@
       "inputs": [
         {
           "internalType": "address",
-          "name": "_maker",
+          "name": "_escrow",
           "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
         },
         {
           "internalType": "bytes32",
@@ -273,8 +469,13 @@
       "inputs": [
         {
           "internalType": "address",
-          "name": "_maker",
+          "name": "_escrow",
           "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
         },
         {
           "internalType": "address",
@@ -301,6 +502,11 @@
           "type": "address"
         },
         {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        },
+        {
           "internalType": "address",
           "name": "",
           "type": "address"
@@ -318,7 +524,30 @@
       "type": "function"
     },
     {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
         {
           "internalType": "bytes32[]",
           "name": "_groupIds",
@@ -333,6 +562,16 @@
     {
       "inputs": [
         {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
           "internalType": "address[]",
           "name": "_takers",
           "type": "address[]"
@@ -344,7 +583,24 @@
       "type": "function"
     },
     {
+      "inputs": [],
+      "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
       "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
         {
           "internalType": "bool",
           "name": "_enabled",
@@ -355,70 +611,161 @@
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "contract IEscrowRegistry",
+          "name": "_escrowRegistry",
+          "type": "address"
+        }
+      ],
+      "name": "setEscrowRegistry",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
     }
   ],
-  "transactionHash": "0x3911135942b0c156d1fe5b664b0b3f7a9acf21c078bdf7275f4015adff915afa",
+  "transactionHash": "0xdd9743d85de04bf2a49ee764b2a6a9a6fac8301c874f0b3db96c53efe7b2394e",
   "receipt": {
     "to": null,
     "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
-    "contractAddress": "0x7D74A69C46606bDd14e48a202DC52989Af670236",
-    "transactionIndex": 125,
-    "gasUsed": "669932",
-    "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "contractAddress": "0x35B8E5D701aB950061E5978286568bA248710EdA",
+    "transactionIndex": 22,
+    "gasUsed": "1585185",
+    "logsBloom": "0x00000000000000000000000000000000000000000000014000800000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000020000000000000000000800000000000000000000000000000000400000000000000000000000000000000000000000000000020001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000",
     "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-    "transactionHash": "0x3911135942b0c156d1fe5b664b0b3f7a9acf21c078bdf7275f4015adff915afa",
-    "logs": [],
-    "blockNumber": 49057476,
-    "cumulativeGasUsed": "26506999",
+    "transactionHash": "0xdd9743d85de04bf2a49ee764b2a6a9a6fac8301c874f0b3db96c53efe7b2394e",
+    "logs": [
+      {
+        "transactionIndex": 22,
+        "blockNumber": 49186824,
+        "transactionHash": "0xdd9743d85de04bf2a49ee764b2a6a9a6fac8301c874f0b3db96c53efe7b2394e",
+        "address": "0x35B8E5D701aB950061E5978286568bA248710EdA",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x00000000000000000000000084e113087c97cd80ea9d78983d4b8ff61eca1929"
+        ],
+        "data": "0x",
+        "logIndex": 58,
+        "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "blockNumber": 49186824,
+    "cumulativeGasUsed": "4548610",
     "status": 1,
     "byzantium": true
   },
   "args": [
-    "0xE11044811237170c0Fa8F0bfB38f5B6F07cf5dBF"
+    "0xE11044811237170c0Fa8F0bfB38f5B6F07cf5dBF",
+    "0xc545f336eC77E69bf115729acCbf2e557A00ac91"
   ],
-  "numDeployments": 1,
-  "solcInputHash": "194eb108599bdbead0397e81af31d9bc",
-  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"contract IAddressGroupRegistry\",\"name\":\"_groupRegistry\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"EmptyArray\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"}],\"name\":\"GroupDoesNotExist\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"registry\",\"type\":\"address\"}],\"name\":\"InvalidGroupRegistry\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"attempted\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"maximum\",\"type\":\"uint256\"}],\"name\":\"TooManyGroups\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAddress\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"maker\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"}],\"name\":\"AddressRemovedFromWhitelist\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"maker\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"}],\"name\":\"AddressWhitelisted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"maker\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"}],\"name\":\"AllowedGroupAdded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"maker\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"}],\"name\":\"AllowedGroupRemoved\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"maker\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"enabled\",\"type\":\"bool\"}],\"name\":\"EnabledUpdated\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"MAX_GROUPS_PER_MAKER\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"_groupIds\",\"type\":\"bytes32[]\"}],\"name\":\"addAllowedGroups\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address[]\",\"name\":\"_takers\",\"type\":\"address[]\"}],\"name\":\"addWhitelistedAddresses\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"enabled\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_maker\",\"type\":\"address\"}],\"name\":\"getAllowedGroups\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"groupRegistry\",\"outputs\":[{\"internalType\":\"contract IAddressGroupRegistry\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_maker\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"}],\"name\":\"isGroupAllowed\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_maker\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_taker\",\"type\":\"address\"}],\"name\":\"isTakerAllowed\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"isWhitelisted\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"_groupIds\",\"type\":\"bytes32[]\"}],\"name\":\"removeAllowedGroups\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address[]\",\"name\":\"_takers\",\"type\":\"address[]\"}],\"name\":\"removeWhitelistedAddresses\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bool\",\"name\":\"_enabled\",\"type\":\"bool\"}],\"name\":\"setEnabled\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"details\":\"Enabling an empty policy is allowed and intentionally fails closed when evaluated.\",\"kind\":\"dev\",\"methods\":{},\"title\":\"WhitelistPolicy\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{},\"notice\":\"Persistent maker-owned taker admission settings, independent from any lifecycle-hook deployment. Each maker can allow direct addresses or members of a bounded list of curated groups.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/hooks/WhitelistPolicy.sol\":\"WhitelistPolicy\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"contracts/hooks/WhitelistPolicy.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {IAddressGroupRegistry} from \\\"../interfaces/IAddressGroupRegistry.sol\\\";\\nimport {IWhitelistPolicy} from \\\"../interfaces/IWhitelistPolicy.sol\\\";\\n\\n/**\\n * @title WhitelistPolicy\\n * @notice Persistent maker-owned taker admission settings, independent from any lifecycle-hook deployment.\\n * Each maker can allow direct addresses or members of a bounded list of curated groups.\\n * @dev Enabling an empty policy is allowed and intentionally fails closed when evaluated.\\n */\\ncontract WhitelistPolicy is IWhitelistPolicy {\\n    /* ============ Constants ============ */\\n\\n    uint256 public constant MAX_GROUPS_PER_MAKER = 10;\\n\\n    /* ============ State Variables ============ */\\n\\n    IAddressGroupRegistry public immutable override groupRegistry;\\n\\n    mapping(address => bool) public override enabled;\\n    mapping(address => mapping(address => bool)) public override isWhitelisted;\\n    mapping(address => bytes32[]) internal allowedGroups;\\n\\n    /* ============ Events ============ */\\n\\n    event EnabledUpdated(address indexed maker, bool enabled);\\n    event AddressWhitelisted(address indexed maker, address indexed taker);\\n    event AddressRemovedFromWhitelist(address indexed maker, address indexed taker);\\n    event AllowedGroupAdded(address indexed maker, bytes32 indexed groupId);\\n    event AllowedGroupRemoved(address indexed maker, bytes32 indexed groupId);\\n\\n    /* ============ Errors ============ */\\n\\n    error ZeroAddress();\\n    error EmptyArray();\\n    error InvalidGroupRegistry(address registry);\\n    error GroupDoesNotExist(bytes32 groupId);\\n    error TooManyGroups(uint256 attempted, uint256 maximum);\\n\\n    /* ============ Constructor ============ */\\n\\n    constructor(IAddressGroupRegistry _groupRegistry) {\\n        address registryAddress = address(_groupRegistry);\\n        if (registryAddress == address(0)) revert ZeroAddress();\\n        if (registryAddress.code.length == 0) revert InvalidGroupRegistry(registryAddress);\\n\\n        groupRegistry = _groupRegistry;\\n    }\\n\\n    /* ============ Maker Functions ============ */\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function setEnabled(bool _enabled) external override {\\n        enabled[msg.sender] = _enabled;\\n        emit EnabledUpdated(msg.sender, _enabled);\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function addWhitelistedAddresses(address[] calldata _takers) external override {\\n        if (_takers.length == 0) revert EmptyArray();\\n\\n        for (uint256 i = 0; i < _takers.length; ++i) {\\n            address taker = _takers[i];\\n            if (taker == address(0)) revert ZeroAddress();\\n            if (isWhitelisted[msg.sender][taker]) continue;\\n\\n            isWhitelisted[msg.sender][taker] = true;\\n            emit AddressWhitelisted(msg.sender, taker);\\n        }\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function removeWhitelistedAddresses(address[] calldata _takers) external override {\\n        if (_takers.length == 0) revert EmptyArray();\\n\\n        for (uint256 i = 0; i < _takers.length; ++i) {\\n            address taker = _takers[i];\\n            if (!isWhitelisted[msg.sender][taker]) continue;\\n\\n            isWhitelisted[msg.sender][taker] = false;\\n            emit AddressRemovedFromWhitelist(msg.sender, taker);\\n        }\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function addAllowedGroups(bytes32[] calldata _groupIds) external override {\\n        if (_groupIds.length == 0) revert EmptyArray();\\n\\n        bytes32[] storage makerGroups = allowedGroups[msg.sender];\\n        for (uint256 i = 0; i < _groupIds.length; ++i) {\\n            bytes32 groupId = _groupIds[i];\\n            if (!groupRegistry.groupExists(groupId)) revert GroupDoesNotExist(groupId);\\n            if (_containsGroup(makerGroups, groupId)) continue;\\n            if (makerGroups.length == MAX_GROUPS_PER_MAKER) {\\n                revert TooManyGroups(makerGroups.length + 1, MAX_GROUPS_PER_MAKER);\\n            }\\n\\n            makerGroups.push(groupId);\\n            emit AllowedGroupAdded(msg.sender, groupId);\\n        }\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function removeAllowedGroups(bytes32[] calldata _groupIds) external override {\\n        if (_groupIds.length == 0) revert EmptyArray();\\n\\n        bytes32[] storage makerGroups = allowedGroups[msg.sender];\\n        for (uint256 i = 0; i < _groupIds.length; ++i) {\\n            bytes32 groupId = _groupIds[i];\\n            uint256 groupIndex = _findGroupIndex(makerGroups, groupId);\\n            if (groupIndex == makerGroups.length) continue;\\n\\n            makerGroups[groupIndex] = makerGroups[makerGroups.length - 1];\\n            makerGroups.pop();\\n            emit AllowedGroupRemoved(msg.sender, groupId);\\n        }\\n    }\\n\\n    /* ============ View Functions ============ */\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function getAllowedGroups(address _maker) external view override returns (bytes32[] memory) {\\n        return allowedGroups[_maker];\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function isGroupAllowed(address _maker, bytes32 _groupId) external view override returns (bool) {\\n        return _containsGroup(allowedGroups[_maker], _groupId);\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function isTakerAllowed(address _maker, address _taker) external view override returns (bool) {\\n        if (!enabled[_maker]) return true;\\n        if (isWhitelisted[_maker][_taker]) return true;\\n\\n        bytes32[] storage makerGroups = allowedGroups[_maker];\\n        for (uint256 i = 0; i < makerGroups.length; ++i) {\\n            if (groupRegistry.isMember(makerGroups[i], _taker)) return true;\\n        }\\n        return false;\\n    }\\n\\n    /* ============ Internal Functions ============ */\\n\\n    function _containsGroup(bytes32[] storage _groups, bytes32 _groupId) internal view returns (bool) {\\n        return _findGroupIndex(_groups, _groupId) != _groups.length;\\n    }\\n\\n    function _findGroupIndex(bytes32[] storage _groups, bytes32 _groupId) internal view returns (uint256) {\\n        for (uint256 i = 0; i < _groups.length; ++i) {\\n            if (_groups[i] == _groupId) return i;\\n        }\\n        return _groups.length;\\n    }\\n}\\n\",\"keccak256\":\"0xca8cce943c78e76062ae5e1db632af312360374578cb8d217706d4bb03ff5c63\",\"license\":\"MIT\"},\"contracts/interfaces/IAddressGroupRegistry.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IAddressGroupRegistry\\n * @notice Permissionless registry of curator-managed address groups with optional resolvers.\\n */\\ninterface IAddressGroupRegistry {\\n    /**\\n     * @notice Creates a new group curated by the caller; its id is derived from the curator and global counter.\\n     */\\n    function createGroup(string calldata _name) external returns (bytes32 groupId);\\n\\n    /**\\n     * @notice Starts a two-step curator transfer; replaces any existing pending curator.\\n     */\\n    function transferGroupCurator(bytes32 _groupId, address _newCurator) external;\\n\\n    /**\\n     * @notice Cancels a pending curator transfer.\\n     */\\n    function cancelGroupCuratorTransfer(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Completes a pending curator transfer; callable only by the pending curator.\\n     */\\n    function acceptGroupCurator(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Adds members to a group (curator only; idempotent).\\n     */\\n    function addMembers(bytes32 _groupId, address[] calldata _members) external;\\n\\n    /**\\n     * @notice Removes members from a group (curator only; idempotent).\\n     */\\n    function removeMembers(bytes32 _groupId, address[] calldata _members) external;\\n\\n    /**\\n     * @notice Sets whether a group permits self-service membership (curator only).\\n     */\\n    function setGroupVisibility(bytes32 _groupId, bool _isPublic) external;\\n\\n    /**\\n     * @notice Joins a public group as the caller.\\n     */\\n    function joinGroup(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Leaves a public group's curated membership as the caller.\\n     */\\n    function leaveGroup(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Sets or clears the group's resolver (curator only; nonzero resolver must have code).\\n     */\\n    function setResolver(bytes32 _groupId, address _resolver) external;\\n\\n    /**\\n     * @notice Returns whether an account is a member (curated OR resolver; fail-closed).\\n     */\\n    function isMember(bytes32 _groupId, address _account) external view returns (bool);\\n\\n    /**\\n     * @notice Returns whether a group exists (input validation only, not a trust guarantee).\\n     */\\n    function groupExists(bytes32 _groupId) external view returns (bool);\\n\\n    /**\\n     * @notice Returns a group's governance state for atomic inspection.\\n     */\\n    function getGroup(bytes32 _groupId)\\n        external\\n        view\\n        returns (address curator, address pendingCurator, address resolver, bool isPublic, bool exists);\\n\\n    /**\\n     * @notice Returns the number of groups created (the counter used to derive group ids).\\n     */\\n    function groupCount() external view returns (uint256);\\n}\\n\",\"keccak256\":\"0x41e10d83a114968c72ceb864e9f4c43b9789fe4689c1e6734352ca33d4eb16fc\",\"license\":\"MIT\"},\"contracts/interfaces/IWhitelistPolicy.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {IAddressGroupRegistry} from \\\"./IAddressGroupRegistry.sol\\\";\\n\\ninterface IWhitelistPolicy {\\n    function groupRegistry() external view returns (IAddressGroupRegistry);\\n    function enabled(address maker) external view returns (bool);\\n    function isWhitelisted(address maker, address taker) external view returns (bool);\\n    function getAllowedGroups(address maker) external view returns (bytes32[] memory);\\n    function isGroupAllowed(address maker, bytes32 groupId) external view returns (bool);\\n    function isTakerAllowed(address maker, address taker) external view returns (bool);\\n\\n    function setEnabled(bool enabled) external;\\n    function addWhitelistedAddresses(address[] calldata takers) external;\\n    function removeWhitelistedAddresses(address[] calldata takers) external;\\n    function addAllowedGroups(bytes32[] calldata groupIds) external;\\n    function removeAllowedGroups(bytes32[] calldata groupIds) external;\\n}\\n\",\"keccak256\":\"0x136989b835c8c4a748262a2dfb2bf63580f59e32a487255323792dc5ffe55b86\",\"license\":\"MIT\"}},\"version\":1}",
-  "bytecode": "0x60a0346100b057601f610bda38819003918201601f19168301916001600160401b038311848410176100b5578084926020946040528339810103126100b057516001600160a01b0381168082036100b057801561009e57803b156100865750608052604051610b0e90816100cc823960805181818160ee0152818161082401526109cc0152f35b6024906040519063be161c7160e01b82526004820152fd5b60405163d92e233d60e01b8152600490fd5b600080fd5b634e487b7160e01b600052604160045260246000fdfe6080604081815260048036101561001557600080fd5b600092833560e01c908163165273ce1461081057508063328d8f72146107ae578063795c1b481461077757806385a679b81461062357806398afdfe3146105e65780639936c2e7146105a0578063b6b3527214610552578063bf4c04c41461047a578063ca2cfc201461037f578063e26bac9d1461035f578063e4b1623d146102af5763f377ad05146100a757600080fd5b346102ab576020806003193601126102a757813567ffffffffffffffff81116102a3576100d79036908401610884565b9290918315610294573386526002815284862092937f00000000000000000000000000000000000000000000000000000000000000006001600160a01b0316939290875b818110610126578880f35b6101318183896108da565b35885163162da67d60e31b81528185820152602490868183818c5afa90811561028a578c9161025d575b50156102495761016b8288610a9a565b90875480920361023d57600a8083146102035750680100000000000000008210156101f25750906101c3816101aa8460016101ed9796018b558a610964565b90919082549060031b91821b91600019901b1916179055565b337f0e0adb357f7a85af5b21cc08893608cd2b0f32057fd6c23f9c4920712341913b8c80a36108b5565b61011b565b634e487b7160e01b8c52604186528bfd5b8691838d8f9560010180921161022b575163d1dcbd5f60e01b81529384015282015260449150fd5b634e487b7160e01b8652601185528286fd5b5050506101ed906108b5565b8951636742e58360e01b8152808601839052fd5b61027d9150873d8911610283575b6102758183610914565b81019061094c565b3861015b565b503d61026b565b8b513d8e823e3d90fd5b50835163521299a960e01b8152fd5b8480fd5b8380fd5b8280fd5b82843461035c576020908160031936011261035c5782906001600160a01b036102d6610853565b16815260028352818120908251808584549182815201908194845286842090845b818110610348575050508161030d910382610914565b83519485948186019282875251809352850193925b82811061033157505050500390f35b835185528695509381019392810192600101610322565b8254845292880192600192830192016102f7565b80fd5b50503461037b578160031936011261037b5760209051600a8152f35b5080fd5b5090346102ab57602090816003193601126102a757823567ffffffffffffffff81116102a3576103b29036908501610884565b9290831561046a57855b8481106103c7578680f35b6001600160a01b036103e26103dd8388866108da565b610900565b16801561045a579061044e913389526001808652868a20828b52865260ff878b20541661045357338a52808652868a20828b528652868a209060ff19825416179055337f3d8a67432904f5c76d317bd3d7568237471009d9a286cd487736d0e2d103e6ad8a80a36108b5565b6103bc565b50506108b5565b845163d92e233d60e01b81528790fd5b825163521299a960e01b81528590fd5b5090346102ab57602090816003193601126102a757823567ffffffffffffffff81116102a3576104ad9036908501610884565b909381156105445750845b8181106104c3578580f35b806104d56103dd61053f9385896108da565b33885260018087528589206001600160a01b03909216808a529187528589205460ff1615610453573389528652848820818952865284882060ff198154169055337f5a76ef3d09a09d8a99c3d9ddddfb7770d906de670d79b5119a8c2cba903814bb8980a36108b5565b6104b8565b825163521299a960e01b8152fd5b50503461037b578060031936011261037b5760ff81602093610572610853565b61057a61086e565b6001600160a01b0391821683526001875283832091168252855220549151911615158152f35b50503461037b578060031936011261037b5760209181906001600160a01b036105c7610853565b16815260028452206105db60243582610a9a565b905414159051908152f35b50503461037b57602036600319011261037b5760209160ff9082906001600160a01b03610611610853565b16815280855220541690519015158152f35b5090346102ab5760203660031901126102ab57813567ffffffffffffffff81116102a7576106549036908401610884565b90918115610768573385526002602052842090845b818110610674578580f35b61067f8183866108da565b3561068a8185610a9a565b84549081811461075c5760001991808301908111610749576106be92916106b46106dd9289610964565b9490549189610964565b9091600395861b1c9082549060031b91821b91600019901b1916179055565b855480156107365790806107319594939201916106fa8389610964565b81939154921b1b191690558555337f62b86a9260af6863788b85da4c44aed95c8cecf00b7b391dc544eecc04f30db38980a36108b5565b610669565b634e487b7160e01b8a526031895260248afd5b634e487b7160e01b8a526011895260248afd5b505050610731906108b5565b5163521299a960e01b81528390fd5b50503461037b578060031936011261037b576020906107a5610797610853565b61079f61086e565b9061097c565b90519015158152f35b50346102ab5760203660031901126102ab5735908115158092036102ab573383528260205280832060ff1981541660ff8416179055519081527fda614b07481cb565fd4a249b1ee3f7516c33b801e022554da94abe935386510360203392a280f35b84903461037b578160031936011261037b577f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b600435906001600160a01b038216820361086957565b600080fd5b602435906001600160a01b038216820361086957565b9181601f840112156108695782359167ffffffffffffffff8311610869576020808501948460051b01011161086957565b60001981146108c45760010190565b634e487b7160e01b600052601160045260246000fd5b91908110156108ea5760051b0190565b634e487b7160e01b600052603260045260246000fd5b356001600160a01b03811681036108695790565b90601f8019910116810190811067ffffffffffffffff82111761093657604052565b634e487b7160e01b600052604160045260246000fd5b90816020910312610869575180151581036108695790565b80548210156108ea5760005260206000200190600090565b60018060a01b0380911660009281845260209084825260409160ff838720541615610a8f5760019384825285848820931692838852825260ff8488205416610a85578652600281528286208054957f00000000000000000000000000000000000000000000000000000000000000001690875b878110610a0157505050505050505090565b610a0b8183610964565b90548751916310ad56b360e01b835260031b1c60048201528560248201528481604481875afa908115610a7b578a91610a5e575b50610a5257610a4d906108b5565b6109ef565b50505050505091505090565b610a759150853d8711610283576102758183610914565b38610a3f565b87513d8c823e3d90fd5b5050505091505090565b505050505050600190565b9060005b8254811015610ad25781610ab28285610964565b90549060031b1c14610acc57610ac7906108b5565b610a9e565b91505090565b5050549056fea26469706673582212205f44a81759333ef5b71527b9aa9a94dab80801fc32f164866f8ef591bf83bcf664736f6c63430008120033",
-  "deployedBytecode": "0x6080604081815260048036101561001557600080fd5b600092833560e01c908163165273ce1461081057508063328d8f72146107ae578063795c1b481461077757806385a679b81461062357806398afdfe3146105e65780639936c2e7146105a0578063b6b3527214610552578063bf4c04c41461047a578063ca2cfc201461037f578063e26bac9d1461035f578063e4b1623d146102af5763f377ad05146100a757600080fd5b346102ab576020806003193601126102a757813567ffffffffffffffff81116102a3576100d79036908401610884565b9290918315610294573386526002815284862092937f00000000000000000000000000000000000000000000000000000000000000006001600160a01b0316939290875b818110610126578880f35b6101318183896108da565b35885163162da67d60e31b81528185820152602490868183818c5afa90811561028a578c9161025d575b50156102495761016b8288610a9a565b90875480920361023d57600a8083146102035750680100000000000000008210156101f25750906101c3816101aa8460016101ed9796018b558a610964565b90919082549060031b91821b91600019901b1916179055565b337f0e0adb357f7a85af5b21cc08893608cd2b0f32057fd6c23f9c4920712341913b8c80a36108b5565b61011b565b634e487b7160e01b8c52604186528bfd5b8691838d8f9560010180921161022b575163d1dcbd5f60e01b81529384015282015260449150fd5b634e487b7160e01b8652601185528286fd5b5050506101ed906108b5565b8951636742e58360e01b8152808601839052fd5b61027d9150873d8911610283575b6102758183610914565b81019061094c565b3861015b565b503d61026b565b8b513d8e823e3d90fd5b50835163521299a960e01b8152fd5b8480fd5b8380fd5b8280fd5b82843461035c576020908160031936011261035c5782906001600160a01b036102d6610853565b16815260028352818120908251808584549182815201908194845286842090845b818110610348575050508161030d910382610914565b83519485948186019282875251809352850193925b82811061033157505050500390f35b835185528695509381019392810192600101610322565b8254845292880192600192830192016102f7565b80fd5b50503461037b578160031936011261037b5760209051600a8152f35b5080fd5b5090346102ab57602090816003193601126102a757823567ffffffffffffffff81116102a3576103b29036908501610884565b9290831561046a57855b8481106103c7578680f35b6001600160a01b036103e26103dd8388866108da565b610900565b16801561045a579061044e913389526001808652868a20828b52865260ff878b20541661045357338a52808652868a20828b528652868a209060ff19825416179055337f3d8a67432904f5c76d317bd3d7568237471009d9a286cd487736d0e2d103e6ad8a80a36108b5565b6103bc565b50506108b5565b845163d92e233d60e01b81528790fd5b825163521299a960e01b81528590fd5b5090346102ab57602090816003193601126102a757823567ffffffffffffffff81116102a3576104ad9036908501610884565b909381156105445750845b8181106104c3578580f35b806104d56103dd61053f9385896108da565b33885260018087528589206001600160a01b03909216808a529187528589205460ff1615610453573389528652848820818952865284882060ff198154169055337f5a76ef3d09a09d8a99c3d9ddddfb7770d906de670d79b5119a8c2cba903814bb8980a36108b5565b6104b8565b825163521299a960e01b8152fd5b50503461037b578060031936011261037b5760ff81602093610572610853565b61057a61086e565b6001600160a01b0391821683526001875283832091168252855220549151911615158152f35b50503461037b578060031936011261037b5760209181906001600160a01b036105c7610853565b16815260028452206105db60243582610a9a565b905414159051908152f35b50503461037b57602036600319011261037b5760209160ff9082906001600160a01b03610611610853565b16815280855220541690519015158152f35b5090346102ab5760203660031901126102ab57813567ffffffffffffffff81116102a7576106549036908401610884565b90918115610768573385526002602052842090845b818110610674578580f35b61067f8183866108da565b3561068a8185610a9a565b84549081811461075c5760001991808301908111610749576106be92916106b46106dd9289610964565b9490549189610964565b9091600395861b1c9082549060031b91821b91600019901b1916179055565b855480156107365790806107319594939201916106fa8389610964565b81939154921b1b191690558555337f62b86a9260af6863788b85da4c44aed95c8cecf00b7b391dc544eecc04f30db38980a36108b5565b610669565b634e487b7160e01b8a526031895260248afd5b634e487b7160e01b8a526011895260248afd5b505050610731906108b5565b5163521299a960e01b81528390fd5b50503461037b578060031936011261037b576020906107a5610797610853565b61079f61086e565b9061097c565b90519015158152f35b50346102ab5760203660031901126102ab5735908115158092036102ab573383528260205280832060ff1981541660ff8416179055519081527fda614b07481cb565fd4a249b1ee3f7516c33b801e022554da94abe935386510360203392a280f35b84903461037b578160031936011261037b577f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b600435906001600160a01b038216820361086957565b600080fd5b602435906001600160a01b038216820361086957565b9181601f840112156108695782359167ffffffffffffffff8311610869576020808501948460051b01011161086957565b60001981146108c45760010190565b634e487b7160e01b600052601160045260246000fd5b91908110156108ea5760051b0190565b634e487b7160e01b600052603260045260246000fd5b356001600160a01b03811681036108695790565b90601f8019910116810190811067ffffffffffffffff82111761093657604052565b634e487b7160e01b600052604160045260246000fd5b90816020910312610869575180151581036108695790565b80548210156108ea5760005260206000200190600090565b60018060a01b0380911660009281845260209084825260409160ff838720541615610a8f5760019384825285848820931692838852825260ff8488205416610a85578652600281528286208054957f00000000000000000000000000000000000000000000000000000000000000001690875b878110610a0157505050505050505090565b610a0b8183610964565b90548751916310ad56b360e01b835260031b1c60048201528560248201528481604481875afa908115610a7b578a91610a5e575b50610a5257610a4d906108b5565b6109ef565b50505050505091505090565b610a759150853d8711610283576102758183610914565b38610a3f565b87513d8c823e3d90fd5b5050505091505090565b505050505050600190565b9060005b8254811015610ad25781610ab28285610964565b90549060031b1c14610acc57610ac7906108b5565b610a9e565b91505090565b5050549056fea26469706673582212205f44a81759333ef5b71527b9aa9a94dab80801fc32f164866f8ef591bf83bcf664736f6c63430008120033",
+  "numDeployments": 2,
+  "solcInputHash": "bb6d39edba08fc74e3b46ec42f4440e7",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"contract IAddressGroupRegistry\",\"name\":\"_groupRegistry\",\"type\":\"address\"},{\"internalType\":\"contract IEscrowRegistry\",\"name\":\"_escrowRegistry\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"}],\"name\":\"DepositNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"EmptyArray\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"}],\"name\":\"EscrowNotWhitelisted\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"}],\"name\":\"GroupDoesNotExist\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"dependency\",\"type\":\"address\"}],\"name\":\"InvalidDependency\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"}],\"name\":\"NotDepositor\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"attempted\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"maximum\",\"type\":\"uint256\"}],\"name\":\"TooManyGroups\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAddress\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"}],\"name\":\"AddressRemovedFromWhitelist\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"}],\"name\":\"AddressWhitelisted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"}],\"name\":\"AllowedGroupAdded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"groupId\",\"type\":\"bytes32\"}],\"name\":\"AllowedGroupRemoved\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"enabled\",\"type\":\"bool\"}],\"name\":\"EnabledUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrowRegistry\",\"type\":\"address\"}],\"name\":\"EscrowRegistryUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"MAX_GROUPS_PER_DEPOSIT\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"bytes32[]\",\"name\":\"_groupIds\",\"type\":\"bytes32[]\"}],\"name\":\"addAllowedGroups\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"address[]\",\"name\":\"_takers\",\"type\":\"address[]\"}],\"name\":\"addWhitelistedAddresses\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"_enabled\",\"type\":\"bool\"},{\"internalType\":\"bytes32[]\",\"name\":\"_groupIds\",\"type\":\"bytes32[]\"},{\"internalType\":\"address[]\",\"name\":\"_takers\",\"type\":\"address[]\"}],\"name\":\"configureDeposit\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"enabled\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"escrowRegistry\",\"outputs\":[{\"internalType\":\"contract IEscrowRegistry\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"}],\"name\":\"getAllowedGroups\",\"outputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"\",\"type\":\"bytes32[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"groupRegistry\",\"outputs\":[{\"internalType\":\"contract IAddressGroupRegistry\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"_groupId\",\"type\":\"bytes32\"}],\"name\":\"isGroupAllowed\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"_taker\",\"type\":\"address\"}],\"name\":\"isTakerAllowed\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"isWhitelisted\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"bytes32[]\",\"name\":\"_groupIds\",\"type\":\"bytes32[]\"}],\"name\":\"removeAllowedGroups\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"address[]\",\"name\":\"_takers\",\"type\":\"address[]\"}],\"name\":\"removeWhitelistedAddresses\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"_enabled\",\"type\":\"bool\"}],\"name\":\"setEnabled\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"contract IEscrowRegistry\",\"name\":\"_escrowRegistry\",\"type\":\"address\"}],\"name\":\"setEscrowRegistry\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"details\":\"Enabling a deposit with no groups and no whitelisted addresses is allowed and intentionally fails closed when evaluated. Writes are authorized against the escrow's recorded depositor, so the deposit must already exist. While EscrowRegistry is in accept-all mode the registry check passes for any address, so passing an EOA or a contract without `getDeposit` reverts inside the escrow call with no reason data rather than a policy error. That path is a caller mistake on a governance-gated mode, and is not worth a per-write code-length check. `escrowRegistry` is governance-settable via `setEscrowRegistry` and MUST be kept in sync with the orchestrator's escrow registry (`OrchestratorV3.setEscrowRegistry`), because if the two diverge, deposits on an escrow admitted by only one of them can be neither gated nor revoked while the orchestrator keeps admitting intents for them.\",\"kind\":\"dev\",\"methods\":{\"configureDeposit(address,uint256,bool,bytes32[],address[])\":{\"details\":\"`enabled` REPLACES the deposit's current enforcement switch. `groupIds` and `takers` are APPENDED to the deposit's existing allowed-group list and direct whitelist; this call never removes or clears either list. Passing `enabled = false` disables enforcement on an already-gated deposit even while appending new groups or takers in the same call. Use `setEnabled` alone to toggle the gate without touching the lists.\",\"params\":{\"depositId\":\"Deposit to configure.\",\"enabled\":\"New value for the deposit's enforcement switch; replaces the prior value.\",\"escrow\":\"Whitelisted Escrow or EscrowV2 holding the deposit.\",\"groupIds\":\"Curated group ids to append to the deposit's allowed groups.\",\"takers\":\"Addresses to append to the deposit's direct whitelist.\"}},\"owner()\":{\"details\":\"Returns the address of the current owner.\"},\"renounceOwnership()\":{\"details\":\"Leaves the contract without owner. It will not be possible to call `onlyOwner` functions. Can only be called by the current owner. NOTE: Renouncing ownership will leave the contract without an owner, thereby disabling any functionality that is only available to the owner.\"},\"setEscrowRegistry(address)\":{\"details\":\"Governance-only (owner). The new registry must be a non-zero address with deployed code, else this call reverts. This value MUST be kept in sync with the orchestrator's escrow registry (`OrchestratorV3.setEscrowRegistry`), because if they diverge, deposits on an escrow admitted by only one registry can be neither gated nor revoked here while the orchestrator keeps admitting intents for them.\",\"params\":{\"escrowRegistry\":\"New escrow registry used to authorize deposit configuration.\"}},\"transferOwnership(address)\":{\"details\":\"Transfers ownership of the contract to a new account (`newOwner`). Can only be called by the current owner.\"}},\"title\":\"WhitelistPolicy\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"configureDeposit(address,uint256,bool,bytes32[],address[])\":{\"notice\":\"Bundles enabling/disabling the deposit's gate with appending groups and takers in one call.\"},\"setEscrowRegistry(address)\":{\"notice\":\"Updates the escrow registry used to authorize deposit configuration.\"}},\"notice\":\"Persistent deposit-scoped taker admission settings, independent from any lifecycle-hook deployment. Each deposit carries its own enforcement switch, direct address whitelist, and bounded list of curated groups, so one maker can run gated and open deposits side by side. The policy survives global hook replacement.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/hooks/WhitelistPolicy.sol\":\"WhitelistPolicy\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"@openzeppelin/contracts/access/Ownable.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (access/Ownable.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"../utils/Context.sol\\\";\\n\\n/**\\n * @dev Contract module which provides a basic access control mechanism, where\\n * there is an account (an owner) that can be granted exclusive access to\\n * specific functions.\\n *\\n * By default, the owner account will be the one that deploys the contract. This\\n * can later be changed with {transferOwnership}.\\n *\\n * This module is used through inheritance. It will make available the modifier\\n * `onlyOwner`, which can be applied to your functions to restrict their use to\\n * the owner.\\n */\\nabstract contract Ownable is Context {\\n    address private _owner;\\n\\n    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);\\n\\n    /**\\n     * @dev Initializes the contract setting the deployer as the initial owner.\\n     */\\n    constructor() {\\n        _transferOwnership(_msgSender());\\n    }\\n\\n    /**\\n     * @dev Throws if called by any account other than the owner.\\n     */\\n    modifier onlyOwner() {\\n        _checkOwner();\\n        _;\\n    }\\n\\n    /**\\n     * @dev Returns the address of the current owner.\\n     */\\n    function owner() public view virtual returns (address) {\\n        return _owner;\\n    }\\n\\n    /**\\n     * @dev Throws if the sender is not the owner.\\n     */\\n    function _checkOwner() internal view virtual {\\n        require(owner() == _msgSender(), \\\"Ownable: caller is not the owner\\\");\\n    }\\n\\n    /**\\n     * @dev Leaves the contract without owner. It will not be possible to call\\n     * `onlyOwner` functions. Can only be called by the current owner.\\n     *\\n     * NOTE: Renouncing ownership will leave the contract without an owner,\\n     * thereby disabling any functionality that is only available to the owner.\\n     */\\n    function renounceOwnership() public virtual onlyOwner {\\n        _transferOwnership(address(0));\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Can only be called by the current owner.\\n     */\\n    function transferOwnership(address newOwner) public virtual onlyOwner {\\n        require(newOwner != address(0), \\\"Ownable: new owner is the zero address\\\");\\n        _transferOwnership(newOwner);\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Internal function without access restriction.\\n     */\\n    function _transferOwnership(address newOwner) internal virtual {\\n        address oldOwner = _owner;\\n        _owner = newOwner;\\n        emit OwnershipTransferred(oldOwner, newOwner);\\n    }\\n}\\n\",\"keccak256\":\"0xba43b97fba0d32eb4254f6a5a297b39a19a247082a02d6e69349e071e2946218\",\"license\":\"MIT\"},\"@openzeppelin/contracts/token/ERC20/IERC20.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (token/ERC20/IERC20.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Interface of the ERC20 standard as defined in the EIP.\\n */\\ninterface IERC20 {\\n    /**\\n     * @dev Emitted when `value` tokens are moved from one account (`from`) to\\n     * another (`to`).\\n     *\\n     * Note that `value` may be zero.\\n     */\\n    event Transfer(address indexed from, address indexed to, uint256 value);\\n\\n    /**\\n     * @dev Emitted when the allowance of a `spender` for an `owner` is set by\\n     * a call to {approve}. `value` is the new allowance.\\n     */\\n    event Approval(address indexed owner, address indexed spender, uint256 value);\\n\\n    /**\\n     * @dev Returns the amount of tokens in existence.\\n     */\\n    function totalSupply() external view returns (uint256);\\n\\n    /**\\n     * @dev Returns the amount of tokens owned by `account`.\\n     */\\n    function balanceOf(address account) external view returns (uint256);\\n\\n    /**\\n     * @dev Moves `amount` tokens from the caller's account to `to`.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transfer(address to, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Returns the remaining number of tokens that `spender` will be\\n     * allowed to spend on behalf of `owner` through {transferFrom}. This is\\n     * zero by default.\\n     *\\n     * This value changes when {approve} or {transferFrom} are called.\\n     */\\n    function allowance(address owner, address spender) external view returns (uint256);\\n\\n    /**\\n     * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * IMPORTANT: Beware that changing an allowance with this method brings the risk\\n     * that someone may use both the old and the new allowance by unfortunate\\n     * transaction ordering. One possible solution to mitigate this race\\n     * condition is to first reduce the spender's allowance to 0 and set the\\n     * desired value afterwards:\\n     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729\\n     *\\n     * Emits an {Approval} event.\\n     */\\n    function approve(address spender, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Moves `amount` tokens from `from` to `to` using the\\n     * allowance mechanism. `amount` is then deducted from the caller's\\n     * allowance.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transferFrom(address from, address to, uint256 amount) external returns (bool);\\n}\\n\",\"keccak256\":\"0x287b55befed2961a7eabd7d7b1b2839cbca8a5b80ef8dcbb25ed3d4c2002c305\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/Context.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts v4.4.1 (utils/Context.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Provides information about the current execution context, including the\\n * sender of the transaction and its data. While these are generally available\\n * via msg.sender and msg.data, they should not be accessed in such a direct\\n * manner, since when dealing with meta-transactions the account sending and\\n * paying for execution may not be the actual sender (as far as an application\\n * is concerned).\\n *\\n * This contract is only required for intermediate, library-like contracts.\\n */\\nabstract contract Context {\\n    function _msgSender() internal view virtual returns (address) {\\n        return msg.sender;\\n    }\\n\\n    function _msgData() internal view virtual returns (bytes calldata) {\\n        return msg.data;\\n    }\\n}\\n\",\"keccak256\":\"0xe2e337e6dde9ef6b680e07338c493ebea1b5fd09b43424112868e9cc1706bca7\",\"license\":\"MIT\"},\"contracts/hooks/WhitelistPolicy.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {Ownable} from \\\"@openzeppelin/contracts/access/Ownable.sol\\\";\\n\\nimport {IAddressGroupRegistry} from \\\"../interfaces/IAddressGroupRegistry.sol\\\";\\nimport {IEscrow} from \\\"../interfaces/IEscrow.sol\\\";\\nimport {IEscrowRegistry} from \\\"../interfaces/IEscrowRegistry.sol\\\";\\nimport {IWhitelistPolicy} from \\\"../interfaces/IWhitelistPolicy.sol\\\";\\n\\n/**\\n * @title WhitelistPolicy\\n * @notice Persistent deposit-scoped taker admission settings, independent from any lifecycle-hook deployment.\\n * Each deposit carries its own enforcement switch, direct address whitelist, and bounded list of curated groups,\\n * so one maker can run gated and open deposits side by side. The policy survives global hook replacement.\\n * @dev Enabling a deposit with no groups and no whitelisted addresses is allowed and intentionally fails closed\\n * when evaluated. Writes are authorized against the escrow's recorded depositor, so the deposit must already exist.\\n * While EscrowRegistry is in accept-all mode the registry check passes for any address, so passing an EOA or a\\n * contract without `getDeposit` reverts inside the escrow call with no reason data rather than a policy error.\\n * That path is a caller mistake on a governance-gated mode, and is not worth a per-write code-length check.\\n * `escrowRegistry` is governance-settable via `setEscrowRegistry` and MUST be kept in sync with the orchestrator's\\n * escrow registry (`OrchestratorV3.setEscrowRegistry`), because if the two diverge, deposits on an escrow admitted\\n * by only one of them can be neither gated nor revoked while the orchestrator keeps admitting intents for them.\\n */\\ncontract WhitelistPolicy is Ownable, IWhitelistPolicy {\\n    /* ============ Constants ============ */\\n\\n    uint256 public constant MAX_GROUPS_PER_DEPOSIT = 10;\\n\\n    /* ============ State Variables ============ */\\n\\n    IAddressGroupRegistry public immutable override groupRegistry;\\n    IEscrowRegistry public override escrowRegistry;\\n\\n    mapping(address => mapping(uint256 => bool)) public override enabled;\\n    mapping(address => mapping(uint256 => mapping(address => bool))) public override isWhitelisted;\\n    mapping(address => mapping(uint256 => bytes32[])) internal allowedGroups;\\n\\n    /* ============ Events ============ */\\n\\n    event EnabledUpdated(address indexed escrow, uint256 indexed depositId, bool enabled);\\n    event AddressWhitelisted(address indexed escrow, uint256 indexed depositId, address indexed taker);\\n    event AddressRemovedFromWhitelist(address indexed escrow, uint256 indexed depositId, address indexed taker);\\n    event AllowedGroupAdded(address indexed escrow, uint256 indexed depositId, bytes32 indexed groupId);\\n    event AllowedGroupRemoved(address indexed escrow, uint256 indexed depositId, bytes32 indexed groupId);\\n    event EscrowRegistryUpdated(address indexed escrowRegistry);\\n\\n    /* ============ Errors ============ */\\n\\n    error ZeroAddress();\\n    error EmptyArray();\\n    error InvalidDependency(address dependency);\\n    error GroupDoesNotExist(bytes32 groupId);\\n    error TooManyGroups(uint256 attempted, uint256 maximum);\\n    error EscrowNotWhitelisted(address escrow);\\n    error DepositNotFound(address escrow, uint256 depositId);\\n    error NotDepositor(address escrow, uint256 depositId, address caller);\\n\\n    /* ============ Constructor ============ */\\n\\n    constructor(IAddressGroupRegistry _groupRegistry, IEscrowRegistry _escrowRegistry) Ownable() {\\n        _validateDependency(address(_groupRegistry));\\n        _validateDependency(address(_escrowRegistry));\\n\\n        groupRegistry = _groupRegistry;\\n        escrowRegistry = _escrowRegistry;\\n    }\\n\\n    /* ============ Modifiers ============ */\\n\\n    modifier onlyDepositor(address _escrow, uint256 _depositId) {\\n        if (!escrowRegistry.isWhitelistedEscrow(_escrow) && !escrowRegistry.isAcceptingAllEscrows()) {\\n            revert EscrowNotWhitelisted(_escrow);\\n        }\\n\\n        address depositor = IEscrow(_escrow).getDeposit(_depositId).depositor;\\n        if (depositor == address(0)) revert DepositNotFound(_escrow, _depositId);\\n        if (msg.sender != depositor) revert NotDepositor(_escrow, _depositId, msg.sender);\\n        _;\\n    }\\n\\n    /* ============ Governance Functions ============ */\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function setEscrowRegistry(IEscrowRegistry _escrowRegistry) external override onlyOwner {\\n        _validateDependency(address(_escrowRegistry));\\n\\n        escrowRegistry = _escrowRegistry;\\n        emit EscrowRegistryUpdated(address(_escrowRegistry));\\n    }\\n\\n    /* ============ Depositor Functions ============ */\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function configureDeposit(\\n        address _escrow,\\n        uint256 _depositId,\\n        bool _enabled,\\n        bytes32[] calldata _groupIds,\\n        address[] calldata _takers\\n    )\\n        external\\n        override\\n        onlyDepositor(_escrow, _depositId)\\n    {\\n        _setEnabled(_escrow, _depositId, _enabled);\\n        _addGroups(_escrow, _depositId, _groupIds);\\n        _addTakers(_escrow, _depositId, _takers);\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function setEnabled(address _escrow, uint256 _depositId, bool _enabled)\\n        external\\n        override\\n        onlyDepositor(_escrow, _depositId)\\n    {\\n        _setEnabled(_escrow, _depositId, _enabled);\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function addWhitelistedAddresses(address _escrow, uint256 _depositId, address[] calldata _takers)\\n        external\\n        override\\n        onlyDepositor(_escrow, _depositId)\\n    {\\n        if (_takers.length == 0) revert EmptyArray();\\n        _addTakers(_escrow, _depositId, _takers);\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function removeWhitelistedAddresses(address _escrow, uint256 _depositId, address[] calldata _takers)\\n        external\\n        override\\n        onlyDepositor(_escrow, _depositId)\\n    {\\n        if (_takers.length == 0) revert EmptyArray();\\n\\n        for (uint256 i = 0; i < _takers.length; ++i) {\\n            address taker = _takers[i];\\n            if (!isWhitelisted[_escrow][_depositId][taker]) continue;\\n\\n            isWhitelisted[_escrow][_depositId][taker] = false;\\n            emit AddressRemovedFromWhitelist(_escrow, _depositId, taker);\\n        }\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function addAllowedGroups(address _escrow, uint256 _depositId, bytes32[] calldata _groupIds)\\n        external\\n        override\\n        onlyDepositor(_escrow, _depositId)\\n    {\\n        if (_groupIds.length == 0) revert EmptyArray();\\n        _addGroups(_escrow, _depositId, _groupIds);\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function removeAllowedGroups(address _escrow, uint256 _depositId, bytes32[] calldata _groupIds)\\n        external\\n        override\\n        onlyDepositor(_escrow, _depositId)\\n    {\\n        if (_groupIds.length == 0) revert EmptyArray();\\n\\n        bytes32[] storage depositGroups = allowedGroups[_escrow][_depositId];\\n        for (uint256 i = 0; i < _groupIds.length; ++i) {\\n            bytes32 groupId = _groupIds[i];\\n            uint256 groupIndex = _findGroupIndex(depositGroups, groupId);\\n            if (groupIndex == depositGroups.length) continue;\\n\\n            depositGroups[groupIndex] = depositGroups[depositGroups.length - 1];\\n            depositGroups.pop();\\n            emit AllowedGroupRemoved(_escrow, _depositId, groupId);\\n        }\\n    }\\n\\n    /* ============ View Functions ============ */\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function getAllowedGroups(address _escrow, uint256 _depositId) external view override returns (bytes32[] memory) {\\n        return allowedGroups[_escrow][_depositId];\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function isGroupAllowed(address _escrow, uint256 _depositId, bytes32 _groupId)\\n        external\\n        view\\n        override\\n        returns (bool)\\n    {\\n        return _containsGroup(allowedGroups[_escrow][_depositId], _groupId);\\n    }\\n\\n    /**\\n     * @inheritdoc IWhitelistPolicy\\n     */\\n    function isTakerAllowed(address _escrow, uint256 _depositId, address _taker)\\n        external\\n        view\\n        override\\n        returns (bool)\\n    {\\n        if (!enabled[_escrow][_depositId]) return true;\\n        if (isWhitelisted[_escrow][_depositId][_taker]) return true;\\n\\n        bytes32[] storage depositGroups = allowedGroups[_escrow][_depositId];\\n        for (uint256 i = 0; i < depositGroups.length; ++i) {\\n            if (groupRegistry.isMember(depositGroups[i], _taker)) return true;\\n        }\\n        return false;\\n    }\\n\\n    /* ============ Internal Functions ============ */\\n\\n    function _setEnabled(address _escrow, uint256 _depositId, bool _enabled) internal {\\n        enabled[_escrow][_depositId] = _enabled;\\n        emit EnabledUpdated(_escrow, _depositId, _enabled);\\n    }\\n\\n    function _addTakers(address _escrow, uint256 _depositId, address[] calldata _takers) internal {\\n        for (uint256 i = 0; i < _takers.length; ++i) {\\n            address taker = _takers[i];\\n            if (taker == address(0)) revert ZeroAddress();\\n            if (isWhitelisted[_escrow][_depositId][taker]) continue;\\n\\n            isWhitelisted[_escrow][_depositId][taker] = true;\\n            emit AddressWhitelisted(_escrow, _depositId, taker);\\n        }\\n    }\\n\\n    function _addGroups(address _escrow, uint256 _depositId, bytes32[] calldata _groupIds) internal {\\n        bytes32[] storage depositGroups = allowedGroups[_escrow][_depositId];\\n        for (uint256 i = 0; i < _groupIds.length; ++i) {\\n            bytes32 groupId = _groupIds[i];\\n            if (!groupRegistry.groupExists(groupId)) revert GroupDoesNotExist(groupId);\\n            if (_containsGroup(depositGroups, groupId)) continue;\\n            if (depositGroups.length == MAX_GROUPS_PER_DEPOSIT) {\\n                revert TooManyGroups(depositGroups.length + 1, MAX_GROUPS_PER_DEPOSIT);\\n            }\\n\\n            depositGroups.push(groupId);\\n            emit AllowedGroupAdded(_escrow, _depositId, groupId);\\n        }\\n    }\\n\\n    function _containsGroup(bytes32[] storage _groups, bytes32 _groupId) internal view returns (bool) {\\n        return _findGroupIndex(_groups, _groupId) != _groups.length;\\n    }\\n\\n    function _findGroupIndex(bytes32[] storage _groups, bytes32 _groupId) internal view returns (uint256) {\\n        for (uint256 i = 0; i < _groups.length; ++i) {\\n            if (_groups[i] == _groupId) return i;\\n        }\\n        return _groups.length;\\n    }\\n\\n    function _validateDependency(address _dependency) internal view {\\n        if (_dependency == address(0)) revert ZeroAddress();\\n        if (_dependency.code.length == 0) revert InvalidDependency(_dependency);\\n    }\\n}\\n\",\"keccak256\":\"0x97f7b9575acb6c98b5262d8db0c5229db0a7770d1f8d3467c432fa16f9fece5c\",\"license\":\"MIT\"},\"contracts/interfaces/IAddressGroupRegistry.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IAddressGroupRegistry\\n * @notice Permissionless registry of curator-managed address groups with optional resolvers.\\n */\\ninterface IAddressGroupRegistry {\\n    /**\\n     * @notice Creates a new group curated by the caller; its id is derived from the curator and global counter.\\n     */\\n    function createGroup(string calldata _name) external returns (bytes32 groupId);\\n\\n    /**\\n     * @notice Starts a two-step curator transfer; replaces any existing pending curator.\\n     */\\n    function transferGroupCurator(bytes32 _groupId, address _newCurator) external;\\n\\n    /**\\n     * @notice Cancels a pending curator transfer.\\n     */\\n    function cancelGroupCuratorTransfer(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Completes a pending curator transfer; callable only by the pending curator.\\n     */\\n    function acceptGroupCurator(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Adds members to a group (curator only; idempotent).\\n     */\\n    function addMembers(bytes32 _groupId, address[] calldata _members) external;\\n\\n    /**\\n     * @notice Removes members from a group (curator only; idempotent).\\n     */\\n    function removeMembers(bytes32 _groupId, address[] calldata _members) external;\\n\\n    /**\\n     * @notice Sets whether a group permits self-service membership (curator only).\\n     */\\n    function setGroupVisibility(bytes32 _groupId, bool _isPublic) external;\\n\\n    /**\\n     * @notice Joins a public group as the caller.\\n     */\\n    function joinGroup(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Leaves a public group's curated membership as the caller.\\n     */\\n    function leaveGroup(bytes32 _groupId) external;\\n\\n    /**\\n     * @notice Sets or clears the group's resolver (curator only; nonzero resolver must have code).\\n     */\\n    function setResolver(bytes32 _groupId, address _resolver) external;\\n\\n    /**\\n     * @notice Returns whether an account is a member (curated OR resolver; fail-closed).\\n     */\\n    function isMember(bytes32 _groupId, address _account) external view returns (bool);\\n\\n    /**\\n     * @notice Returns whether a group exists (input validation only, not a trust guarantee).\\n     */\\n    function groupExists(bytes32 _groupId) external view returns (bool);\\n\\n    /**\\n     * @notice Returns a group's governance state for atomic inspection.\\n     */\\n    function getGroup(bytes32 _groupId)\\n        external\\n        view\\n        returns (address curator, address pendingCurator, address resolver, bool isPublic, bool exists);\\n\\n    /**\\n     * @notice Returns the number of groups created (the counter used to derive group ids).\\n     */\\n    function groupCount() external view returns (uint256);\\n}\\n\",\"keccak256\":\"0x41e10d83a114968c72ceb864e9f4c43b9789fe4689c1e6734352ca33d4eb16fc\",\"license\":\"MIT\"},\"contracts/interfaces/IEscrow.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IERC20 } from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\nimport { IPostIntentHook } from \\\"./IPostIntentHook.sol\\\";\\n\\ninterface IEscrow {\\n    \\n    /* ============ Structs ============ */\\n\\n    struct Intent {\\n        bytes32 intentHash;                        // Unique identifier for the intent\\n        uint256 amount;                            // Amount locked\\n        uint256 timestamp;                         // When this intent was created\\n        uint256 expiryTime;                        // When this intent expires\\n    }\\n\\n    struct Range {\\n        uint256 min;                                // Minimum value\\n        uint256 max;                                // Maximum value\\n    }\\n\\n    struct Deposit {\\n        address depositor;                          // Address of depositor\\n        address delegate;                           // Address that can manage this deposit (address(0) if no delegate)\\n        IERC20 token;                               // Address of deposit token\\n        Range intentAmountRange;                    // Range of take amount per intent\\n        // Deposit state\\n        bool acceptingIntents;                      // State: True if the deposit is accepting intents, False otherwise\\n        uint256 remainingDeposits;                  // State: Amount of liquidity immediately available to lock\\n        uint256 outstandingIntentAmount;            // State: Amount of outstanding intents (may include expired intents)\\n        // Intent guardian\\n        address intentGuardian;                     // Address that can extend intent expiry times (address(0) if no guardian)\\n        // Retention behavior\\n        bool retainOnEmpty;                         // If true, do not auto-close/sweep when empty; keep config for reuse\\n    }\\n\\n    struct Currency {\\n        bytes32 code;                               // Currency code (keccak256 hash of the currency code)\\n        uint256 minConversionRate;                  // Minimum rate of deposit token to fiat currency (in preciseUnits)\\n    }\\n\\n    struct DepositPaymentMethodData {\\n        address intentGatingService;                // Public key of gating service that will be used to verify intents\\n        bytes32 payeeDetails;                       // Payee details, has to be hash of payee details\\n        bytes data;                                 // Verification Data: Additional data used for payment verification; Can hold attester address\\n                                                    // in case of TLS proofs, domain key hash in case of zkEmail proofs, currency code etc.\\n    }\\n\\n    struct CreateDepositParams {\\n        IERC20 token;                                // The token to be deposited\\n        uint256 amount;                              // The amount of token to deposit\\n        Range intentAmountRange;                     // The max and min take amount for each intent\\n        bytes32[] paymentMethods;                    // The payment methods that deposit supports\\n        DepositPaymentMethodData[] paymentMethodData;// The payment verification data for each payment method that deposit supports\\n        Currency[][] currencies;                     // The currencies for each payment method that deposit supports\\n        address delegate;                            // Optional delegate address that can manage this deposit (address(0) for no delegate)\\n        address intentGuardian;                      // Optional intent guardian address that can extend intent expiry times (address(0) for no guardian)\\n        bool retainOnEmpty;                          // Opt-in: keep deposit and config when empty\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event DepositReceived(uint256 indexed depositId, address indexed depositor, IERC20 indexed token, uint256 amount, Range intentAmountRange, address delegate, address intentGuardian);\\n\\n    event DepositPaymentMethodAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed payeeDetails, address intentGatingService);\\n    event DepositPaymentMethodActiveUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bool active);\\n\\n    event DepositCurrencyAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 minConversionRate);\\n    event DepositMinConversionRateUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 newMinConversionRate);\\n    \\n    event DepositFundsAdded(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositWithdrawn(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositClosed(uint256 depositId, address depositor);\\n    event DepositAcceptingIntentsUpdated(uint256 indexed depositId, bool acceptingIntents);\\n\\n    event DepositIntentAmountRangeUpdated(uint256 indexed depositId, Range intentAmountRange);\\n    event DepositRetainOnEmptyUpdated(uint256 indexed depositId, bool retainOnEmpty);\\n\\n    event DepositDelegateSet(uint256 indexed depositId, address indexed depositor, address indexed delegate);\\n    event DepositDelegateRemoved(uint256 indexed depositId, address indexed depositor);\\n\\n    event MinDepositAmountSet(uint256 minDepositAmount);\\n\\n    event OrchestratorUpdated(address indexed orchestrator);\\n    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);\\n\\n    event FundsLocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount, uint256 expiryTime);\\n    event FundsUnlocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount);\\n    event FundsUnlockedAndTransferred(\\n        uint256 indexed depositId, \\n        bytes32 indexed intentHash, \\n        uint256 unlockedAmount, \\n        uint256 transferredAmount, \\n        address to\\n    );\\n    event IntentExpiryExtended(uint256 indexed depositId, bytes32 indexed intentHash, uint256 newExpiryTime);\\n\\n    event DustRecipientUpdated(address indexed dustRecipient);\\n    event DustCollected(uint256 indexed depositId, uint256 dustAmount, address indexed dustRecipient);\\n    event DustThresholdUpdated(uint256 dustThreshold);\\n    event MaxIntentsPerDepositUpdated(uint256 maxIntentsPerDeposit);\\n    event IntentExpirationPeriodUpdated(uint256 intentExpirationPeriod);\\n\\n    /* ============ Standardized Custom Errors ============ */\\n    \\n    // Zero value errors\\n    error ZeroAddress();\\n    error ZeroValue();\\n    error ZeroMinValue();\\n    error ZeroConversionRate();\\n\\n    // Authorization errors\\n    error UnauthorizedCaller(address caller, address authorized);\\n    error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);\\n    error CannotDelegateToSelf(address depositor);\\n\\n    // Range and amount errors\\n    error InvalidRange(uint256 min, uint256 max);\\n    error AmountBelowMin(uint256 amount, uint256 min);\\n    error AmountAboveMax(uint256 amount, uint256 max);\\n    error AmountExceedsAvailable(uint256 requested, uint256 available);\\n\\n    // Not found errors\\n    error DepositNotFound(uint256 depositId);\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodNotActive(uint256 depositId, bytes32 paymentMethod);\\n    error PaymentMethodNotListed(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyNotFound(bytes32 paymentMethod, bytes32 currency);\\n    error DelegateNotFound(uint256 depositId);\\n\\n    // Already exists errors\\n    error PaymentMethodAlreadyExists(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyAlreadyExists(bytes32 paymentMethod, bytes32 currency);\\n    error IntentAlreadyExists(uint256 depositId, bytes32 intentHash);\\n\\n    // State errors\\n    error DepositNotAcceptingIntents(uint256 depositId);\\n    error DepositAlreadyInState(uint256 depositId, bool currentState);\\n    error InsufficientDepositLiquidity(uint256 depositId, uint256 available, uint256 required);\\n    error MaxIntentsExceeded(uint256 depositId, uint256 current, uint256 max);\\n\\n    // Validation errors\\n    error EmptyPayeeDetails();\\n    error ArrayLengthMismatch(uint256 length1, uint256 length2);\\n\\n    // Payment method errors\\n    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n\\n    \\n    /* ============ External Functions for Orchestrator ============ */\\n\\n    function lockFunds(uint256 _depositId, bytes32 _intentHash, uint256 _amount) external;\\n    function unlockFunds(uint256 _depositId, bytes32 _intentHash) external;\\n    function unlockAndTransferFunds(uint256 _depositId, bytes32 _intentHash, uint256 _transferAmount, address _to) external;\\n    function extendIntentExpiry(uint256 _depositId, bytes32 _intentHash, uint256 _additionalTime) external;\\n\\n    /* ============ View Functions ============ */\\n\\n    function getDeposit(uint256 _depositId) external view returns (Deposit memory);\\n    function getDepositIntent(uint256 _depositId, bytes32 _intentHash) external view returns (Intent memory);\\n    function getDepositPaymentMethods(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getDepositCurrencies(uint256 _depositId, bytes32 _paymentMethod) external view returns (bytes32[] memory);\\n    function getDepositCurrencyMinRate(uint256 _depositId, bytes32 _paymentMethod, bytes32 _currencyCode) external view returns (uint256);\\n    function getDepositPaymentMethodData(uint256 _depositId, bytes32 _paymentMethod) external view returns (DepositPaymentMethodData memory);\\n    function getDepositPaymentMethodActive(uint256 _depositId, bytes32 _paymentMethod) external view returns (bool);\\n    function getDepositGatingService(uint256 _depositId, bytes32 _paymentMethod) external view returns (address);\\n    function getDepositIntentHashes(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getExpiredIntents(uint256 _depositId) external view returns (bytes32[] memory expiredIntents, uint256 reclaimableAmount);\\n}\\n\",\"keccak256\":\"0x02077e75865a2db8887a3d4b3f4c0c398c0d2589f05506f489fb8189b223d60c\",\"license\":\"MIT\"},\"contracts/interfaces/IEscrowRegistry.sol\":{\"content\":\"//SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\ninterface IEscrowRegistry {\\n    function isWhitelistedEscrow(address _escrow) external view returns (bool);\\n    function isAcceptingAllEscrows() external view returns (bool);\\n    function getWhitelistedEscrows() external view returns (address[] memory);\\n}\",\"keccak256\":\"0xb59386ede3712c6b3a67b6370a2caf5d46b5c882901f87b04de6e48f17baeddb\",\"license\":\"MIT\"},\"contracts/interfaces/IOrchestrator.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IERC20 } from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\nimport { IPostIntentHook } from \\\"./IPostIntentHook.sol\\\";\\n\\ninterface IOrchestrator {\\n    \\n    /* ============ Structs ============ */\\n\\n    struct Intent {\\n        address owner;                              // Address of the intent owner  \\n        address to;                                 // Address to forward funds to (can be same as owner)\\n        address escrow;                             // Address of the escrow contract holding the deposit\\n        uint256 depositId;                          // ID of the deposit the intent is associated with\\n        uint256 amount;                             // Amount of the deposit.token the owner wants to take\\n        uint256 timestamp;                          // Timestamp of the intent\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // Currency code that the owner is paying in offchain (keccak256 hash of the currency code)\\n        uint256 conversionRate;                     // Conversion rate of deposit token to fiat currency at the time of intent\\n        bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain\\n        address referrer;                           // Address of the referrer who brought this intent (if any)\\n        uint256 referrerFee;                        // Fee to be paid to the referrer in preciseUnits (1e16 = 1%)\\n        IPostIntentHook postIntentHook;             // Address of the post-intent hook that will execute any post-intent actions\\n        bytes data;                                 // Additional data to be passed to the post-intent hook contract\\n    }\\n\\n    struct SignalIntentParams {\\n        address escrow;                             // The escrow contract where the deposit is held\\n        uint256 depositId;                          // The ID of the deposit the taker intends to use\\n        uint256 amount;                             // The amount of deposit.token the user wants to take\\n        address to;                                 // Address to forward funds to\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // The currency code for offchain payment\\n        uint256 conversionRate;                     // The conversion rate agreed offchain\\n        address referrer;                           // Address of the referrer (address(0) if no referrer)\\n        uint256 referrerFee;                        // Fee to be paid to the referrer\\n        bytes gatingServiceSignature;               // Signature from the deposit's gating service\\n        uint256 signatureExpiration;                // Timestamp when the gating service signature expires\\n        IPostIntentHook postIntentHook;             // Optional post-intent hook (address(0) for no hook)\\n        bytes data;                                 // Additional data for the intent\\n    }\\n\\n    struct FulfillIntentParams {\\n        bytes paymentProof;                         // Payment proof. Can be Groth16 Proof, TLSNotary proof, TLSProxy proof, attestation etc.\\n        bytes32 intentHash;                         // Identifier of intent being fulfilled\\n        bytes verificationData;                     // Additional data for payment verifier\\n        bytes postIntentHookData;                   // Additional data for post intent hook\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event IntentSignaled(\\n        bytes32 indexed intentHash, \\n        address indexed escrow,\\n        uint256 indexed depositId, \\n        bytes32 paymentMethod, \\n        address owner, \\n        address to, \\n        uint256 amount, \\n        bytes32 fiatCurrency, \\n        uint256 conversionRate, \\n        uint256 timestamp\\n    );\\n\\n    event IntentPruned(\\n        bytes32 indexed intentHash\\n    );\\n\\n    event IntentFulfilled(\\n        bytes32 indexed intentHash,\\n        address indexed fundsTransferredTo,   // Address that funds were transferred to; can be intent.to or postIntentHook address\\n        uint256 amount,\\n        bool isManualRelease\\n    );\\n\\n    event AllowMultipleIntentsUpdated(bool allowMultiple);\\n\\n    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);\\n    event PostIntentHookRegistryUpdated(address indexed postIntentHookRegistry);\\n    event RelayerRegistryUpdated(address indexed relayerRegistry);\\n    event EscrowRegistryUpdated(address indexed escrowRegistry);\\n\\n    event ProtocolFeeUpdated(uint256 protocolFee);\\n    event ProtocolFeeRecipientUpdated(address indexed protocolFeeRecipient);\\n    event PartialManualReleaseDelayUpdated(uint256 partialManualReleaseDelay);\\n\\n    /* ============ Standardized Custom Errors ============ */\\n    \\n    // Zero value errors\\n    error ZeroAddress();\\n    error ZeroValue();\\n    \\n    // Authorization errors\\n    error UnauthorizedEscrowCaller(address caller);\\n    error UnauthorizedCaller(address caller, address authorized);\\n    \\n    // Not found errors\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodDoesNotExist(bytes32 paymentMethod);\\n    error PaymentMethodNotSupported(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n    \\n    // Whitelist errors\\n    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);\\n    error PostIntentHookNotWhitelisted(address hook);\\n    error EscrowNotWhitelisted(address escrow);\\n    \\n    // Amount and fee errors\\n    error AmountBelowMin(uint256 amount, uint256 min);\\n    error AmountAboveMax(uint256 amount, uint256 max);\\n    error AmountExceedsLimit(uint256 amount, uint256 limit);\\n    error FeeExceedsMaximum(uint256 fee, uint256 maximum);\\n    error RateBelowMinimum(uint256 rate, uint256 minRate);\\n    \\n    // Validation errors\\n    error AccountHasActiveIntent(address account, bytes32 existingIntent);\\n    error InvalidReferrerFeeConfiguration();\\n    error InvalidSignature();\\n    error SignatureExpired(uint256 expiration, uint256 currentTime);\\n    error PartialReleaseNotAllowedYet(uint256 currentTime, uint256 allowedTime);\\n\\n    // Verification errors\\n    error PaymentVerificationFailed();\\n    error HashMismatch(bytes32 expected, bytes32 actual);\\n     \\n    // Transfer errors\\n    error TransferFailed(address recipient, uint256 amount);\\n    error EscrowLockFailed();\\n\\n    /* ============ View Functions ============ */\\n\\n    function getIntent(bytes32 intentHash) external view returns (Intent memory);\\n    function getAccountIntents(address account) external view returns (bytes32[] memory);\\n    \\n    /* ============ External Functions for Users ============ */\\n\\n    function signalIntent(SignalIntentParams calldata params) external;\\n\\n    function cancelIntent(bytes32 intentHash) external;\\n\\n    function fulfillIntent(FulfillIntentParams calldata params) external;\\n\\n    function releaseFundsToPayer(bytes32 intentHash) external;\\n\\n    /* ============ External Functions for Escrow ============ */\\n\\n    function pruneIntents(bytes32[] calldata intentIds) external;\\n}\",\"keccak256\":\"0xcf8db7a4c1481049dbdc2516f47cc0a4ea3a6e71093ee7c637a51294096accbf\",\"license\":\"MIT\"},\"contracts/interfaces/IPostIntentHook.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IOrchestrator } from \\\"./IOrchestrator.sol\\\";\\n\\n/**\\n * @title IPostIntentHook\\n * @notice Interface for post-intent hooks\\n */\\ninterface IPostIntentHook {\\n\\n    /**\\n     * @notice Post-intent hook\\n     * @param _intent The intent data structure containing all intent information\\n     * @param _fulfillIntentData The data passed to fulfillIntent\\n     */\\n    function execute(\\n        IOrchestrator.Intent memory _intent,\\n        uint256 _amountNetFees,\\n        bytes calldata _fulfillIntentData\\n    ) external;\\n}\\n\",\"keccak256\":\"0x72ae0d60c98f89eb2363f455445466c1dfaddfb338a63d65d3eb8469cbd9484d\",\"license\":\"MIT\"},\"contracts/interfaces/IWhitelistPolicy.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {IAddressGroupRegistry} from \\\"./IAddressGroupRegistry.sol\\\";\\nimport {IEscrowRegistry} from \\\"./IEscrowRegistry.sol\\\";\\n\\ninterface IWhitelistPolicy {\\n    function groupRegistry() external view returns (IAddressGroupRegistry);\\n    function escrowRegistry() external view returns (IEscrowRegistry);\\n    function enabled(address escrow, uint256 depositId) external view returns (bool);\\n    function isWhitelisted(address escrow, uint256 depositId, address taker) external view returns (bool);\\n    function getAllowedGroups(address escrow, uint256 depositId) external view returns (bytes32[] memory);\\n    function isGroupAllowed(address escrow, uint256 depositId, bytes32 groupId) external view returns (bool);\\n    function isTakerAllowed(address escrow, uint256 depositId, address taker) external view returns (bool);\\n\\n    /**\\n     * @notice Bundles enabling/disabling the deposit's gate with appending groups and takers in one call.\\n     * @dev `enabled` REPLACES the deposit's current enforcement switch. `groupIds` and `takers` are APPENDED to\\n     * the deposit's existing allowed-group list and direct whitelist; this call never removes or clears either\\n     * list. Passing `enabled = false` disables enforcement on an already-gated deposit even while appending new\\n     * groups or takers in the same call. Use `setEnabled` alone to toggle the gate without touching the lists.\\n     * @param escrow Whitelisted Escrow or EscrowV2 holding the deposit.\\n     * @param depositId Deposit to configure.\\n     * @param enabled New value for the deposit's enforcement switch; replaces the prior value.\\n     * @param groupIds Curated group ids to append to the deposit's allowed groups.\\n     * @param takers Addresses to append to the deposit's direct whitelist.\\n     */\\n    function configureDeposit(\\n        address escrow,\\n        uint256 depositId,\\n        bool enabled,\\n        bytes32[] calldata groupIds,\\n        address[] calldata takers\\n    ) external;\\n\\n    /**\\n     * @notice Updates the escrow registry used to authorize deposit configuration.\\n     * @dev Governance-only (owner). The new registry must be a non-zero address with deployed code, else this call\\n     * reverts. This value MUST be kept in sync with the orchestrator's escrow registry\\n     * (`OrchestratorV3.setEscrowRegistry`), because if they diverge, deposits on an escrow admitted by only one\\n     * registry can be neither gated nor revoked here while the orchestrator keeps admitting intents for them.\\n     * @param escrowRegistry New escrow registry used to authorize deposit configuration.\\n     */\\n    function setEscrowRegistry(IEscrowRegistry escrowRegistry) external;\\n\\n    function setEnabled(address escrow, uint256 depositId, bool enabled) external;\\n    function addWhitelistedAddresses(address escrow, uint256 depositId, address[] calldata takers) external;\\n    function removeWhitelistedAddresses(address escrow, uint256 depositId, address[] calldata takers) external;\\n    function addAllowedGroups(address escrow, uint256 depositId, bytes32[] calldata groupIds) external;\\n    function removeAllowedGroups(address escrow, uint256 depositId, bytes32[] calldata groupIds) external;\\n}\\n\",\"keccak256\":\"0x92a24fd489c8ae2053f2801fccbf8537d89ecf0ac654090acf45e447caa50060\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x60a034620000ee57601f62001bfc38819003918201601f19168301916001600160401b03831184841017620000f3578084926040948552833981010312620000ee5780516001600160a01b0380821692909190838203620000ee576020015192828416809403620000ee57620000b19060005460018060a01b03199433868316176000553391167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0600080a362000109565b620000bc8362000109565b6080526001541617600155604051611aac908162000150823960805181818161112f01528181611624015261187d0152f35b600080fd5b634e487b7160e01b600052604160045260246000fd5b6001600160a01b0381169081156200013d573b15620001255750565b60249060405190631ee5274960e31b82526004820152fd5b60405163d92e233d60e01b8152600490fdfe60806040908082526004918236101561001757600080fd5b600091823560e01c9081630ae669d81461115e57508063165273ce1461111b57806325e11084146110655780632b0f779614610e145780632d0d822214610df0578063406e1d1814610dc857806349fb59e814610d84578063513877af14610a75578063715018a614610a185780637c9b70d9146107645780637eb288ac1461054f5780638da5cb5b14610528578063919253e8146104e2578063c7676338146104c7578063cbcd99a314610429578063f2fde38b14610366578063f462e86b146103135763fe415110146100eb57600080fd5b3461030f57606036600319011261030f576101046112cf565b60243593610110611362565b9260018060a01b03806001541682516363d8a2a760e11b81528286169182868301526020918281602481855afa908115610305579087918b916102c9575b50159182610256575b5050905061024057825180916313f3f72d60e31b825289868301528160246101409485935afa918215610236578892610209575b5050511680156101dc5733036101aa57846101a7858886611714565b80f35b516334633e4160e11b81526001600160a01b039092169082019081526020810185905233604082015281906060010390fd5b505163a6233a2960e01b81526001600160a01b039092169082019081526020810185905281906040010390fd5b6102289250803d1061022f575b61022081836113fd565b810190611456565b388061018b565b503d610216565b84513d8a823e3d90fd5b8360249184519163f94cca3960e01b8352820152fd5b86516375abeba960e11b815292508391839182905afa9182156102bf578992610285575b505015808538610157565b90809250813d83116102b8575b61029c81836113fd565b810103126102b4576102ad90611435565b388061027a565b8780fd5b503d610292565b85513d8b823e3d90fd5b809250848092503d83116102fe575b6102e281836113fd565b810103126102fa576102f48791611435565b3861014e565b8980fd5b503d6102d8565b86513d8c823e3d90fd5b5080fd5b5082346103625760603660031901126103625760209282916001600160a01b0361033b6112cf565b1682528452818120602435825284522061035760443582611a38565b905414159051908152f35b8280fd5b508234610362576020366003190112610362576103816112cf565b9061038a6113a5565b6001600160a01b039182169283156103d757505082546001600160a01b0319811683178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b906020608492519162461bcd60e51b8352820152602660248201527f4f776e61626c653a206e6577206f776e657220697320746865207a65726f206160448201526564647265737360d01b6064820152fd5b5082346103625760203660031901126103625780356001600160a01b03811692908390036104c3576104596113a5565b82156104b657823b156104a1575050600180546001600160a01b031916821790557f873179742d8df742298832022224502b4c9b558e12342f5a48cf56cbb68a3acf8280a280f35b916024925191631ee5274960e31b8352820152fd5b5163d92e233d60e01b8152fd5b8380fd5b503461030f578160031936011261030f5760209051600a8152f35b503461030f578060031936011261030f5760209160ff9082906001600160a01b0361050b6112cf565b168152600285528181206024358252855220541690519015158152f35b503461030f578160031936011261030f57905490516001600160a01b039091168152602090f35b503461030f5761055e3661131b565b9360018060a09593951b03806001541682516363d8a2a760e11b815282851691828b8301526020918281602481855afa90811561075a57908c918c9161071e575b501591826106ab575b5050905061069557825180916313f3f72d60e31b8252868b8301528160246101409485935afa91821561068b57899261066e575b50505116801561064157330361060d5784156105fe57506101a7949550611776565b5163521299a960e01b81528690fd5b516334633e4160e11b81526001600160a01b0390911681870190815260208101929092523360408301529081906060010390fd5b505163a6233a2960e01b81526001600160a01b039091168187019081526020810183905281906040010390fd5b6106849250803d1061022f5761022081836113fd565b38806105dc565b84513d8b823e3d90fd5b8860249184519163f94cca3960e01b8352820152fd5b86516375abeba960e11b815292508391839182905afa918215610714578a926106da575b505015808a386105a8565b90809250813d831161070d575b6106f181836113fd565b810103126107095761070290611435565b38806106cf565b8880fd5b503d6106e7565b85513d8c823e3d90fd5b809250848092503d8311610753575b61073781836113fd565b8101031261074f576107498c91611435565b3861059f565b8a80fd5b503d61072d565b86513d8d823e3d90fd5b50829034610362576107753661131b565b909491929360018060a01b03918260015416938251966363d8a2a760e11b88528481169586838a01526020988981602481855afa908c8215610a0d5785928c92906109d2575b50159283610965575b50505061094e5783516313f3f72d60e31b81528281018890526101409081816024818b5afa91821561094457908792918d92610927575b5050511680156108f85733036108c4575081156108b65750875b818110610820578880f35b806108376108326108aa93858c61155d565b611583565b868b526003808a52858c20898d528a5286868d20921691828d528a5260ff868d205416156108af57878c528952848b20888c528952848b20818c528952848b20805460ff1916905587877f7dedaec09500c1c8dad07d733e60c59cf0d620666cf113c3254310835a2c81128d80a4611538565b610815565b5050611538565b825163521299a960e01b8152fd5b83516334633e4160e11b81526001600160a01b03909116918101918252602082018790523360408301529081906060010390fd5b50835163a6233a2960e01b81526001600160a01b03909116918101918252602082018790529081906040010390fd5b61093d9250803d1061022f5761022081836113fd565b8c806107fb565b86513d8e823e3d90fd5b835163f94cca3960e01b8152808301879052602490fd5b87516375abeba960e11b815293509091839182905afa9081156109c8578b91610993575b501582898d6107c4565b90508881813d83116109c1575b6109aa81836113fd565b8101031261074f576109bb90611435565b8b610989565b503d6109a0565b85513d8d823e3d90fd5b92505081813d8311610a06575b6109e981836113fd565b81010312610a0257896109fc8592611435565b8e6107bb565b8b80fd5b503d6109df565b8751903d90823e3d90fd5b8234610a725780600319360112610a7257610a316113a5565b80546001600160a01b03198116825581906001600160a01b03167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08280a380f35b80fd5b50823461036257610a853661131b565b9094919260018060a01b039283600154168151926363d8a2a760e11b845285811695868986015260209260249584818881855afa908d8215610a0d578c92879290610d49575b50159283610cdc575b505050610cc65783516313f3f72d60e31b815289810189905261014090818188818c5afa918215610cbc578d92610c9f575b505051168015610c71573303610c3e57508315610c2e5784895286815281892090868a5252872091875b818110610b3b578880f35b610b4681838a61155d565b35610b518186611a38565b855490818114610c225760001991808301908111610c1057610b859291610b7b610ba4928a611597565b949054918a611597565b9091600395861b1c9082549060031b91821b91600019901b1916179055565b86548015610bfe579080610bf9959493920191610bc1838a611597565b81939154921b1b19169055865587877f7dd735feaafaf916d119436e7f330f2371bf748c95e59c0cb435c8f37f65e2c78d80a4611538565b610b30565b634e487b7160e01b8d5260318b52868dfd5b634e487b7160e01b8d5260118b52868dfd5b505050610bf990611538565b815163521299a960e01b81528790fd5b82516334633e4160e11b81526001600160a01b039091168189019081526020810188905233604082015281906060010390fd5b50825163a6233a2960e01b81526001600160a01b039091168189019081526020810188905281906040010390fd5b610cb59250803d1061022f5761022081836113fd565b8c80610b06565b86513d8f823e3d90fd5b835163f94cca3960e01b8152808a018890528590fd5b87516375abeba960e11b815293509091839182905afa908115610d3f578c91610d0a575b501589848e610ad4565b90508381813d8311610d38575b610d2181836113fd565b81010312610a0257610d3290611435565b8c610d00565b503d610d17565b85513d8e823e3d90fd5b92505081813d8311610d7d575b610d6081836113fd565b81010312610d795784610d738c92611435565b8f610acb565b8c80fd5b503d610d56565b503461030f5760ff81602093610d9936611371565b6001600160a01b0392831684526003885284842091845290875283832091168252855220549151911615158152f35b503461030f578160031936011261030f5760015490516001600160a01b039091168152602090f35b503461030f57602090610e0b610e0536611371565b916115af565b90519015158152f35b50913461030f5760a036600319011261030f57610e2f6112cf565b92602435610e3b611362565b9467ffffffffffffffff60643581811161106157610e5c90369087016112ea565b9790916084359081116102b457610e7690369088016112ea565b96909560018060a01b03806001541682516363d8a2a760e11b81528288169182868301526020918281602481855afa908115611055579087918f91611019575b50159182610faa575b5050905061024057825180916313f3f72d60e31b825289868301528160246101409485935afa918215610fa0578c92610f83575b505051168015610f57573303610f2557505096610f2091610f196101a798998686611714565b8484611851565b611776565b516334633e4160e11b81526001600160a01b038516918101918252602082018690523360408301529081906060010390fd5b815163a6233a2960e01b81526001600160a01b0387168185019081526020810189905281906040010390fd5b610f999250803d1061022f5761022081836113fd565b3880610ef3565b84513d8e823e3d90fd5b86516375abeba960e11b815292508391839182905afa91821561100f578d92610fd9575b505015808538610ebf565b90809250813d8311611008575b610ff081836113fd565b81010312610a025761100190611435565b3880610fce565b503d610fe6565b85513d8f823e3d90fd5b809250848092503d831161104e575b61103281836113fd565b8101031261104a576110448791611435565b38610eb6565b8d80fd5b503d611028565b8e8751903d90823e3d90fd5b8680fd5b50919034610a725782600319360112610a725782906001600160a01b0361108a6112cf565b168152602092835281812060243582528352818120908251808584549182815201908194845286842090845b81811061110757505050816110cc9103826113fd565b83519485948186019282875251809352850193925b8281106110f057505050500390f35b8351855286955093810193928101926001016110e1565b8254845292880192600192830192016110b6565b503461030f578160031936011261030f57517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b9050346103625761116e3661131b565b6001546363d8a2a760e11b86526001600160a01b038086168a880181905292979396949594909291602091908416908281602481855afa90811561075a57908c918c91611297575b50159182611232575b5050905061069557825180916313f3f72d60e31b8252868b8301528160246101409485935afa91821561068b578992611215575b50505116801561064157330361060d5784156105fe57506101a7949550611851565b61122b9250803d1061022f5761022081836113fd565b38806111f3565b86516375abeba960e11b815292508391839182905afa918215610714578a92611261575b505015808a386111bf565b90809250813d8311611290575b61127881836113fd565b810103126107095761128990611435565b3880611256565b503d61126e565b809250848092503d83116112c8575b6112b081836113fd565b8101031261074f576112c28c91611435565b386111b6565b503d6112a6565b600435906001600160a01b03821682036112e557565b600080fd5b9181601f840112156112e55782359167ffffffffffffffff83116112e5576020808501948460051b0101116112e557565b60606003198201126112e5576004356001600160a01b03811681036112e55791602435916044359067ffffffffffffffff82116112e55761135e916004016112ea565b9091565b6044359081151582036112e557565b60609060031901126112e5576001600160a01b0360043581811681036112e557916024359160443590811681036112e55790565b6000546001600160a01b031633036113b957565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b90601f8019910116810190811067ffffffffffffffff82111761141f57604052565b634e487b7160e01b600052604160045260246000fd5b519081151582036112e557565b51906001600160a01b03821682036112e557565b8091039061014082126112e55760408051926101209067ffffffffffffffff908286018281118782101761141f57845261148f85611442565b865261149d60208601611442565b602087015284840151906001600160a01b03821682036112e557849182880152605f1901126112e5578251908184019081118282101761141f576115319352606084015181526080840151602082015260608501526114fe60a08401611435565b608085015260c083015160a085015260e083015160c085015261010092611526848201611442565b60e086015201611435565b9082015290565b60001981146115475760010190565b634e487b7160e01b600052601160045260246000fd5b919081101561156d5760051b0190565b634e487b7160e01b600052603260045260246000fd5b356001600160a01b03811681036112e55790565b805482101561156d5760005260206000200190600090565b6001600160a01b039081166000818152600260209081526040808320868452825280832054929693959094919260ff161561170857858752600395868452858820828952845282868920951694858952845260ff86892054166116fb57875260048084528588209188529083528487208054967f00000000000000000000000000000000000000000000000000000000000000009093169290885b88811061165d5750505050505050505090565b6116678183611597565b905489516310ad56b360e01b815291851b1c85820152602481018890528681604481895afa9081156116f1578b916116bc575b506116ad576116a890611538565b61164a565b50505050505050505050600190565b90508681813d83116116ea575b6116d381836113fd565b8101031261074f576116e490611435565b3861169a565b503d6116c9565b89513d8d823e3d90fd5b5050505050505050600190565b50505050505050600190565b60207f1ca53d2c3dc9074240e3e9253f7cd18a7c70281119f16a40ea77ac3e0cf620539193929360018060a01b0316928360005260028252604060002085600052825260406000209015159060ff1981541660ff8316179055604051908152a3565b929060005b828110611789575050505050565b6001600160a01b0390816117a161083283878961155d565b16801561183f578361182f9388168060005260036020818152604091826000208560005282528260002086600052825260ff836000205416611834578360005281528160002084600052815281600020908560005252600020600160ff198254161790557f6727748c0d923f0b5262e27f1bd0d0a4d637466ca9e32b25ff203f23c7408b07600080a4611538565b61177b565b505050505050611538565b60405163d92e233d60e01b8152600490fd5b6001600160a01b03908116600081815260046020818152604080842087855282528084209899989397967f00000000000000000000000000000000000000000000000000000000000000009096169594939092909190885b8b81106118be57505050505050505050509050565b6118c9818d8b61155d565b35855163162da67d60e31b815281848201528085818c60249485915afa908115611a2e578d916119f9575b50156119e5576119048287611a38565b9086548092036119d957600a80831461199e57506801000000000000000082101561198d57509088887f17bbed34cd5f6989d7ecc6e2a80c1a70825519be6b17af76130c3f1b8c29199e8e61198185611968888d60016119889c9b0190558d611597565b90919082549060031b91821b91600019901b1916179055565b80a4611538565b6118a9565b634e487b7160e01b8d52604185528cfd5b8591838f9460018c91018092116119c7575163d1dcbd5f60e01b81529384015282015260449150fd5b634e487b7160e01b8652601185528286fd5b50505061198890611538565b8651636742e58360e01b8152808501839052fd5b90508581813d8311611a27575b611a1081836113fd565b81010312610d7957611a2190611435565b386118f4565b503d611a06565b88513d8f823e3d90fd5b9060005b8254811015611a705781611a508285611597565b90549060031b1c14611a6a57611a6590611538565b611a3c565b91505090565b5050549056fea2646970667358221220317eaed06b6e96054bfc131b246bc03821dfcb93e60a549b72f1a0a3d734d7b564736f6c63430008120033",
+  "deployedBytecode": "0x60806040908082526004918236101561001757600080fd5b600091823560e01c9081630ae669d81461115e57508063165273ce1461111b57806325e11084146110655780632b0f779614610e145780632d0d822214610df0578063406e1d1814610dc857806349fb59e814610d84578063513877af14610a75578063715018a614610a185780637c9b70d9146107645780637eb288ac1461054f5780638da5cb5b14610528578063919253e8146104e2578063c7676338146104c7578063cbcd99a314610429578063f2fde38b14610366578063f462e86b146103135763fe415110146100eb57600080fd5b3461030f57606036600319011261030f576101046112cf565b60243593610110611362565b9260018060a01b03806001541682516363d8a2a760e11b81528286169182868301526020918281602481855afa908115610305579087918b916102c9575b50159182610256575b5050905061024057825180916313f3f72d60e31b825289868301528160246101409485935afa918215610236578892610209575b5050511680156101dc5733036101aa57846101a7858886611714565b80f35b516334633e4160e11b81526001600160a01b039092169082019081526020810185905233604082015281906060010390fd5b505163a6233a2960e01b81526001600160a01b039092169082019081526020810185905281906040010390fd5b6102289250803d1061022f575b61022081836113fd565b810190611456565b388061018b565b503d610216565b84513d8a823e3d90fd5b8360249184519163f94cca3960e01b8352820152fd5b86516375abeba960e11b815292508391839182905afa9182156102bf578992610285575b505015808538610157565b90809250813d83116102b8575b61029c81836113fd565b810103126102b4576102ad90611435565b388061027a565b8780fd5b503d610292565b85513d8b823e3d90fd5b809250848092503d83116102fe575b6102e281836113fd565b810103126102fa576102f48791611435565b3861014e565b8980fd5b503d6102d8565b86513d8c823e3d90fd5b5080fd5b5082346103625760603660031901126103625760209282916001600160a01b0361033b6112cf565b1682528452818120602435825284522061035760443582611a38565b905414159051908152f35b8280fd5b508234610362576020366003190112610362576103816112cf565b9061038a6113a5565b6001600160a01b039182169283156103d757505082546001600160a01b0319811683178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b906020608492519162461bcd60e51b8352820152602660248201527f4f776e61626c653a206e6577206f776e657220697320746865207a65726f206160448201526564647265737360d01b6064820152fd5b5082346103625760203660031901126103625780356001600160a01b03811692908390036104c3576104596113a5565b82156104b657823b156104a1575050600180546001600160a01b031916821790557f873179742d8df742298832022224502b4c9b558e12342f5a48cf56cbb68a3acf8280a280f35b916024925191631ee5274960e31b8352820152fd5b5163d92e233d60e01b8152fd5b8380fd5b503461030f578160031936011261030f5760209051600a8152f35b503461030f578060031936011261030f5760209160ff9082906001600160a01b0361050b6112cf565b168152600285528181206024358252855220541690519015158152f35b503461030f578160031936011261030f57905490516001600160a01b039091168152602090f35b503461030f5761055e3661131b565b9360018060a09593951b03806001541682516363d8a2a760e11b815282851691828b8301526020918281602481855afa90811561075a57908c918c9161071e575b501591826106ab575b5050905061069557825180916313f3f72d60e31b8252868b8301528160246101409485935afa91821561068b57899261066e575b50505116801561064157330361060d5784156105fe57506101a7949550611776565b5163521299a960e01b81528690fd5b516334633e4160e11b81526001600160a01b0390911681870190815260208101929092523360408301529081906060010390fd5b505163a6233a2960e01b81526001600160a01b039091168187019081526020810183905281906040010390fd5b6106849250803d1061022f5761022081836113fd565b38806105dc565b84513d8b823e3d90fd5b8860249184519163f94cca3960e01b8352820152fd5b86516375abeba960e11b815292508391839182905afa918215610714578a926106da575b505015808a386105a8565b90809250813d831161070d575b6106f181836113fd565b810103126107095761070290611435565b38806106cf565b8880fd5b503d6106e7565b85513d8c823e3d90fd5b809250848092503d8311610753575b61073781836113fd565b8101031261074f576107498c91611435565b3861059f565b8a80fd5b503d61072d565b86513d8d823e3d90fd5b50829034610362576107753661131b565b909491929360018060a01b03918260015416938251966363d8a2a760e11b88528481169586838a01526020988981602481855afa908c8215610a0d5785928c92906109d2575b50159283610965575b50505061094e5783516313f3f72d60e31b81528281018890526101409081816024818b5afa91821561094457908792918d92610927575b5050511680156108f85733036108c4575081156108b65750875b818110610820578880f35b806108376108326108aa93858c61155d565b611583565b868b526003808a52858c20898d528a5286868d20921691828d528a5260ff868d205416156108af57878c528952848b20888c528952848b20818c528952848b20805460ff1916905587877f7dedaec09500c1c8dad07d733e60c59cf0d620666cf113c3254310835a2c81128d80a4611538565b610815565b5050611538565b825163521299a960e01b8152fd5b83516334633e4160e11b81526001600160a01b03909116918101918252602082018790523360408301529081906060010390fd5b50835163a6233a2960e01b81526001600160a01b03909116918101918252602082018790529081906040010390fd5b61093d9250803d1061022f5761022081836113fd565b8c806107fb565b86513d8e823e3d90fd5b835163f94cca3960e01b8152808301879052602490fd5b87516375abeba960e11b815293509091839182905afa9081156109c8578b91610993575b501582898d6107c4565b90508881813d83116109c1575b6109aa81836113fd565b8101031261074f576109bb90611435565b8b610989565b503d6109a0565b85513d8d823e3d90fd5b92505081813d8311610a06575b6109e981836113fd565b81010312610a0257896109fc8592611435565b8e6107bb565b8b80fd5b503d6109df565b8751903d90823e3d90fd5b8234610a725780600319360112610a7257610a316113a5565b80546001600160a01b03198116825581906001600160a01b03167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08280a380f35b80fd5b50823461036257610a853661131b565b9094919260018060a01b039283600154168151926363d8a2a760e11b845285811695868986015260209260249584818881855afa908d8215610a0d578c92879290610d49575b50159283610cdc575b505050610cc65783516313f3f72d60e31b815289810189905261014090818188818c5afa918215610cbc578d92610c9f575b505051168015610c71573303610c3e57508315610c2e5784895286815281892090868a5252872091875b818110610b3b578880f35b610b4681838a61155d565b35610b518186611a38565b855490818114610c225760001991808301908111610c1057610b859291610b7b610ba4928a611597565b949054918a611597565b9091600395861b1c9082549060031b91821b91600019901b1916179055565b86548015610bfe579080610bf9959493920191610bc1838a611597565b81939154921b1b19169055865587877f7dd735feaafaf916d119436e7f330f2371bf748c95e59c0cb435c8f37f65e2c78d80a4611538565b610b30565b634e487b7160e01b8d5260318b52868dfd5b634e487b7160e01b8d5260118b52868dfd5b505050610bf990611538565b815163521299a960e01b81528790fd5b82516334633e4160e11b81526001600160a01b039091168189019081526020810188905233604082015281906060010390fd5b50825163a6233a2960e01b81526001600160a01b039091168189019081526020810188905281906040010390fd5b610cb59250803d1061022f5761022081836113fd565b8c80610b06565b86513d8f823e3d90fd5b835163f94cca3960e01b8152808a018890528590fd5b87516375abeba960e11b815293509091839182905afa908115610d3f578c91610d0a575b501589848e610ad4565b90508381813d8311610d38575b610d2181836113fd565b81010312610a0257610d3290611435565b8c610d00565b503d610d17565b85513d8e823e3d90fd5b92505081813d8311610d7d575b610d6081836113fd565b81010312610d795784610d738c92611435565b8f610acb565b8c80fd5b503d610d56565b503461030f5760ff81602093610d9936611371565b6001600160a01b0392831684526003885284842091845290875283832091168252855220549151911615158152f35b503461030f578160031936011261030f5760015490516001600160a01b039091168152602090f35b503461030f57602090610e0b610e0536611371565b916115af565b90519015158152f35b50913461030f5760a036600319011261030f57610e2f6112cf565b92602435610e3b611362565b9467ffffffffffffffff60643581811161106157610e5c90369087016112ea565b9790916084359081116102b457610e7690369088016112ea565b96909560018060a01b03806001541682516363d8a2a760e11b81528288169182868301526020918281602481855afa908115611055579087918f91611019575b50159182610faa575b5050905061024057825180916313f3f72d60e31b825289868301528160246101409485935afa918215610fa0578c92610f83575b505051168015610f57573303610f2557505096610f2091610f196101a798998686611714565b8484611851565b611776565b516334633e4160e11b81526001600160a01b038516918101918252602082018690523360408301529081906060010390fd5b815163a6233a2960e01b81526001600160a01b0387168185019081526020810189905281906040010390fd5b610f999250803d1061022f5761022081836113fd565b3880610ef3565b84513d8e823e3d90fd5b86516375abeba960e11b815292508391839182905afa91821561100f578d92610fd9575b505015808538610ebf565b90809250813d8311611008575b610ff081836113fd565b81010312610a025761100190611435565b3880610fce565b503d610fe6565b85513d8f823e3d90fd5b809250848092503d831161104e575b61103281836113fd565b8101031261104a576110448791611435565b38610eb6565b8d80fd5b503d611028565b8e8751903d90823e3d90fd5b8680fd5b50919034610a725782600319360112610a725782906001600160a01b0361108a6112cf565b168152602092835281812060243582528352818120908251808584549182815201908194845286842090845b81811061110757505050816110cc9103826113fd565b83519485948186019282875251809352850193925b8281106110f057505050500390f35b8351855286955093810193928101926001016110e1565b8254845292880192600192830192016110b6565b503461030f578160031936011261030f57517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b9050346103625761116e3661131b565b6001546363d8a2a760e11b86526001600160a01b038086168a880181905292979396949594909291602091908416908281602481855afa90811561075a57908c918c91611297575b50159182611232575b5050905061069557825180916313f3f72d60e31b8252868b8301528160246101409485935afa91821561068b578992611215575b50505116801561064157330361060d5784156105fe57506101a7949550611851565b61122b9250803d1061022f5761022081836113fd565b38806111f3565b86516375abeba960e11b815292508391839182905afa918215610714578a92611261575b505015808a386111bf565b90809250813d8311611290575b61127881836113fd565b810103126107095761128990611435565b3880611256565b503d61126e565b809250848092503d83116112c8575b6112b081836113fd565b8101031261074f576112c28c91611435565b386111b6565b503d6112a6565b600435906001600160a01b03821682036112e557565b600080fd5b9181601f840112156112e55782359167ffffffffffffffff83116112e5576020808501948460051b0101116112e557565b60606003198201126112e5576004356001600160a01b03811681036112e55791602435916044359067ffffffffffffffff82116112e55761135e916004016112ea565b9091565b6044359081151582036112e557565b60609060031901126112e5576001600160a01b0360043581811681036112e557916024359160443590811681036112e55790565b6000546001600160a01b031633036113b957565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b90601f8019910116810190811067ffffffffffffffff82111761141f57604052565b634e487b7160e01b600052604160045260246000fd5b519081151582036112e557565b51906001600160a01b03821682036112e557565b8091039061014082126112e55760408051926101209067ffffffffffffffff908286018281118782101761141f57845261148f85611442565b865261149d60208601611442565b602087015284840151906001600160a01b03821682036112e557849182880152605f1901126112e5578251908184019081118282101761141f576115319352606084015181526080840151602082015260608501526114fe60a08401611435565b608085015260c083015160a085015260e083015160c085015261010092611526848201611442565b60e086015201611435565b9082015290565b60001981146115475760010190565b634e487b7160e01b600052601160045260246000fd5b919081101561156d5760051b0190565b634e487b7160e01b600052603260045260246000fd5b356001600160a01b03811681036112e55790565b805482101561156d5760005260206000200190600090565b6001600160a01b039081166000818152600260209081526040808320868452825280832054929693959094919260ff161561170857858752600395868452858820828952845282868920951694858952845260ff86892054166116fb57875260048084528588209188529083528487208054967f00000000000000000000000000000000000000000000000000000000000000009093169290885b88811061165d5750505050505050505090565b6116678183611597565b905489516310ad56b360e01b815291851b1c85820152602481018890528681604481895afa9081156116f1578b916116bc575b506116ad576116a890611538565b61164a565b50505050505050505050600190565b90508681813d83116116ea575b6116d381836113fd565b8101031261074f576116e490611435565b3861169a565b503d6116c9565b89513d8d823e3d90fd5b5050505050505050600190565b50505050505050600190565b60207f1ca53d2c3dc9074240e3e9253f7cd18a7c70281119f16a40ea77ac3e0cf620539193929360018060a01b0316928360005260028252604060002085600052825260406000209015159060ff1981541660ff8316179055604051908152a3565b929060005b828110611789575050505050565b6001600160a01b0390816117a161083283878961155d565b16801561183f578361182f9388168060005260036020818152604091826000208560005282528260002086600052825260ff836000205416611834578360005281528160002084600052815281600020908560005252600020600160ff198254161790557f6727748c0d923f0b5262e27f1bd0d0a4d637466ca9e32b25ff203f23c7408b07600080a4611538565b61177b565b505050505050611538565b60405163d92e233d60e01b8152600490fd5b6001600160a01b03908116600081815260046020818152604080842087855282528084209899989397967f00000000000000000000000000000000000000000000000000000000000000009096169594939092909190885b8b81106118be57505050505050505050509050565b6118c9818d8b61155d565b35855163162da67d60e31b815281848201528085818c60249485915afa908115611a2e578d916119f9575b50156119e5576119048287611a38565b9086548092036119d957600a80831461199e57506801000000000000000082101561198d57509088887f17bbed34cd5f6989d7ecc6e2a80c1a70825519be6b17af76130c3f1b8c29199e8e61198185611968888d60016119889c9b0190558d611597565b90919082549060031b91821b91600019901b1916179055565b80a4611538565b6118a9565b634e487b7160e01b8d52604185528cfd5b8591838f9460018c91018092116119c7575163d1dcbd5f60e01b81529384015282015260449150fd5b634e487b7160e01b8652601185528286fd5b50505061198890611538565b8651636742e58360e01b8152808501839052fd5b90508581813d8311611a27575b611a1081836113fd565b81010312610d7957611a2190611435565b386118f4565b503d611a06565b88513d8f823e3d90fd5b9060005b8254811015611a705781611a508285611597565b90549060031b1c14611a6a57611a6590611538565b611a3c565b91505090565b5050549056fea2646970667358221220317eaed06b6e96054bfc131b246bc03821dfcb93e60a549b72f1a0a3d734d7b564736f6c63430008120033",
   "devdoc": {
-    "details": "Enabling an empty policy is allowed and intentionally fails closed when evaluated.",
+    "details": "Enabling a deposit with no groups and no whitelisted addresses is allowed and intentionally fails closed when evaluated. Writes are authorized against the escrow's recorded depositor, so the deposit must already exist. While EscrowRegistry is in accept-all mode the registry check passes for any address, so passing an EOA or a contract without `getDeposit` reverts inside the escrow call with no reason data rather than a policy error. That path is a caller mistake on a governance-gated mode, and is not worth a per-write code-length check. `escrowRegistry` is governance-settable via `setEscrowRegistry` and MUST be kept in sync with the orchestrator's escrow registry (`OrchestratorV3.setEscrowRegistry`), because if the two diverge, deposits on an escrow admitted by only one of them can be neither gated nor revoked while the orchestrator keeps admitting intents for them.",
     "kind": "dev",
-    "methods": {},
+    "methods": {
+      "configureDeposit(address,uint256,bool,bytes32[],address[])": {
+        "details": "`enabled` REPLACES the deposit's current enforcement switch. `groupIds` and `takers` are APPENDED to the deposit's existing allowed-group list and direct whitelist; this call never removes or clears either list. Passing `enabled = false` disables enforcement on an already-gated deposit even while appending new groups or takers in the same call. Use `setEnabled` alone to toggle the gate without touching the lists.",
+        "params": {
+          "depositId": "Deposit to configure.",
+          "enabled": "New value for the deposit's enforcement switch; replaces the prior value.",
+          "escrow": "Whitelisted Escrow or EscrowV2 holding the deposit.",
+          "groupIds": "Curated group ids to append to the deposit's allowed groups.",
+          "takers": "Addresses to append to the deposit's direct whitelist."
+        }
+      },
+      "owner()": {
+        "details": "Returns the address of the current owner."
+      },
+      "renounceOwnership()": {
+        "details": "Leaves the contract without owner. It will not be possible to call `onlyOwner` functions. Can only be called by the current owner. NOTE: Renouncing ownership will leave the contract without an owner, thereby disabling any functionality that is only available to the owner."
+      },
+      "setEscrowRegistry(address)": {
+        "details": "Governance-only (owner). The new registry must be a non-zero address with deployed code, else this call reverts. This value MUST be kept in sync with the orchestrator's escrow registry (`OrchestratorV3.setEscrowRegistry`), because if they diverge, deposits on an escrow admitted by only one registry can be neither gated nor revoked here while the orchestrator keeps admitting intents for them.",
+        "params": {
+          "escrowRegistry": "New escrow registry used to authorize deposit configuration."
+        }
+      },
+      "transferOwnership(address)": {
+        "details": "Transfers ownership of the contract to a new account (`newOwner`). Can only be called by the current owner."
+      }
+    },
     "title": "WhitelistPolicy",
     "version": 1
   },
   "userdoc": {
     "kind": "user",
-    "methods": {},
-    "notice": "Persistent maker-owned taker admission settings, independent from any lifecycle-hook deployment. Each maker can allow direct addresses or members of a bounded list of curated groups.",
+    "methods": {
+      "configureDeposit(address,uint256,bool,bytes32[],address[])": {
+        "notice": "Bundles enabling/disabling the deposit's gate with appending groups and takers in one call."
+      },
+      "setEscrowRegistry(address)": {
+        "notice": "Updates the escrow registry used to authorize deposit configuration."
+      }
+    },
+    "notice": "Persistent deposit-scoped taker admission settings, independent from any lifecycle-hook deployment. Each deposit carries its own enforcement switch, direct address whitelist, and bounded list of curated groups, so one maker can run gated and open deposits side by side. The policy survives global hook replacement.",
     "version": 1
   },
   "storageLayout": {
     "storage": [
       {
-        "astId": 24036,
+        "astId": 7,
+        "contract": "contracts/hooks/WhitelistPolicy.sol:WhitelistPolicy",
+        "label": "_owner",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_address"
+      },
+      {
+        "astId": 433,
+        "contract": "contracts/hooks/WhitelistPolicy.sol:WhitelistPolicy",
+        "label": "escrowRegistry",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_contract(IEscrowRegistry)1981"
+      },
+      {
+        "astId": 440,
         "contract": "contracts/hooks/WhitelistPolicy.sol:WhitelistPolicy",
         "label": "enabled",
         "offset": 0,
-        "slot": "0",
-        "type": "t_mapping(t_address,t_bool)"
+        "slot": "2",
+        "type": "t_mapping(t_address,t_mapping(t_uint256,t_bool))"
       },
       {
-        "astId": 24043,
+        "astId": 449,
         "contract": "contracts/hooks/WhitelistPolicy.sol:WhitelistPolicy",
         "label": "isWhitelisted",
         "offset": 0,
-        "slot": "1",
-        "type": "t_mapping(t_address,t_mapping(t_address,t_bool))"
+        "slot": "3",
+        "type": "t_mapping(t_address,t_mapping(t_uint256,t_mapping(t_address,t_bool)))"
       },
       {
-        "astId": 24048,
+        "astId": 456,
         "contract": "contracts/hooks/WhitelistPolicy.sol:WhitelistPolicy",
         "label": "allowedGroups",
         "offset": 0,
-        "slot": "2",
-        "type": "t_mapping(t_address,t_array(t_bytes32)dyn_storage)"
+        "slot": "4",
+        "type": "t_mapping(t_address,t_mapping(t_uint256,t_array(t_bytes32)dyn_storage))"
       }
     ],
     "types": {
@@ -443,12 +790,10 @@
         "label": "bytes32",
         "numberOfBytes": "32"
       },
-      "t_mapping(t_address,t_array(t_bytes32)dyn_storage)": {
-        "encoding": "mapping",
-        "key": "t_address",
-        "label": "mapping(address => bytes32[])",
-        "numberOfBytes": "32",
-        "value": "t_array(t_bytes32)dyn_storage"
+      "t_contract(IEscrowRegistry)1981": {
+        "encoding": "inplace",
+        "label": "contract IEscrowRegistry",
+        "numberOfBytes": "20"
       },
       "t_mapping(t_address,t_bool)": {
         "encoding": "mapping",
@@ -457,12 +802,52 @@
         "numberOfBytes": "32",
         "value": "t_bool"
       },
-      "t_mapping(t_address,t_mapping(t_address,t_bool))": {
+      "t_mapping(t_address,t_mapping(t_uint256,t_array(t_bytes32)dyn_storage))": {
         "encoding": "mapping",
         "key": "t_address",
-        "label": "mapping(address => mapping(address => bool))",
+        "label": "mapping(address => mapping(uint256 => bytes32[]))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_uint256,t_array(t_bytes32)dyn_storage)"
+      },
+      "t_mapping(t_address,t_mapping(t_uint256,t_bool))": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => mapping(uint256 => bool))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_uint256,t_bool)"
+      },
+      "t_mapping(t_address,t_mapping(t_uint256,t_mapping(t_address,t_bool)))": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => mapping(uint256 => mapping(address => bool)))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_uint256,t_mapping(t_address,t_bool))"
+      },
+      "t_mapping(t_uint256,t_array(t_bytes32)dyn_storage)": {
+        "encoding": "mapping",
+        "key": "t_uint256",
+        "label": "mapping(uint256 => bytes32[])",
+        "numberOfBytes": "32",
+        "value": "t_array(t_bytes32)dyn_storage"
+      },
+      "t_mapping(t_uint256,t_bool)": {
+        "encoding": "mapping",
+        "key": "t_uint256",
+        "label": "mapping(uint256 => bool)",
+        "numberOfBytes": "32",
+        "value": "t_bool"
+      },
+      "t_mapping(t_uint256,t_mapping(t_address,t_bool))": {
+        "encoding": "mapping",
+        "key": "t_uint256",
+        "label": "mapping(uint256 => mapping(address => bool))",
         "numberOfBytes": "32",
         "value": "t_mapping(t_address,t_bool)"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
       }
     }
   }
