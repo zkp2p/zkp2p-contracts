@@ -6853,7 +6853,7 @@ export default {
       ]
     },
     "IntentLifecycleHookV1": {
-      "address": "0x8dd32A08F1c1b0Be619F758F1244982FD3253a11",
+      "address": "0xAD6c89BfC3d20a2BC4818B3a62E8Af5c25841Da7",
       "abi": [
         {
           "inputs": [
@@ -6897,8 +6897,13 @@ export default {
           "inputs": [
             {
               "internalType": "address",
-              "name": "maker",
+              "name": "escrow",
               "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
             },
             {
               "internalType": "address",
@@ -22999,7 +23004,7 @@ export default {
       ]
     },
     "WhitelistPolicy": {
-      "address": "0x7D74A69C46606bDd14e48a202DC52989Af670236",
+      "address": "0x35B8E5D701aB950061E5978286568bA248710EdA",
       "abi": [
         {
           "inputs": [
@@ -23007,14 +23012,46 @@ export default {
               "internalType": "contract IAddressGroupRegistry",
               "name": "_groupRegistry",
               "type": "address"
+            },
+            {
+              "internalType": "contract IEscrowRegistry",
+              "name": "_escrowRegistry",
+              "type": "address"
             }
           ],
           "stateMutability": "nonpayable",
           "type": "constructor"
         },
         {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "DepositNotFound",
+          "type": "error"
+        },
+        {
           "inputs": [],
           "name": "EmptyArray",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            }
+          ],
+          "name": "EscrowNotWhitelisted",
           "type": "error"
         },
         {
@@ -23032,11 +23069,32 @@ export default {
           "inputs": [
             {
               "internalType": "address",
-              "name": "registry",
+              "name": "dependency",
               "type": "address"
             }
           ],
-          "name": "InvalidGroupRegistry",
+          "name": "InvalidDependency",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            }
+          ],
+          "name": "NotDepositor",
           "type": "error"
         },
         {
@@ -23066,8 +23124,14 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
-              "name": "maker",
+              "name": "escrow",
               "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
             },
             {
               "indexed": true,
@@ -23085,8 +23149,14 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
-              "name": "maker",
+              "name": "escrow",
               "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
             },
             {
               "indexed": true,
@@ -23104,8 +23174,14 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
-              "name": "maker",
+              "name": "escrow",
               "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
             },
             {
               "indexed": true,
@@ -23123,8 +23199,14 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
-              "name": "maker",
+              "name": "escrow",
               "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
             },
             {
               "indexed": true,
@@ -23142,8 +23224,14 @@ export default {
             {
               "indexed": true,
               "internalType": "address",
-              "name": "maker",
+              "name": "escrow",
               "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
             },
             {
               "indexed": false,
@@ -23156,8 +23244,40 @@ export default {
           "type": "event"
         },
         {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrowRegistry",
+              "type": "address"
+            }
+          ],
+          "name": "EscrowRegistryUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferred",
+          "type": "event"
+        },
+        {
           "inputs": [],
-          "name": "MAX_GROUPS_PER_MAKER",
+          "name": "MAX_GROUPS_PER_DEPOSIT",
           "outputs": [
             {
               "internalType": "uint256",
@@ -23171,6 +23291,16 @@ export default {
         {
           "inputs": [
             {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
               "internalType": "bytes32[]",
               "name": "_groupIds",
               "type": "bytes32[]"
@@ -23183,6 +23313,16 @@ export default {
         },
         {
           "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
             {
               "internalType": "address[]",
               "name": "_takers",
@@ -23198,8 +23338,46 @@ export default {
           "inputs": [
             {
               "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "_enabled",
+              "type": "bool"
+            },
+            {
+              "internalType": "bytes32[]",
+              "name": "_groupIds",
+              "type": "bytes32[]"
+            },
+            {
+              "internalType": "address[]",
+              "name": "_takers",
+              "type": "address[]"
+            }
+          ],
+          "name": "configureDeposit",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
               "name": "",
               "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
             }
           ],
           "name": "enabled",
@@ -23214,11 +23392,29 @@ export default {
           "type": "function"
         },
         {
+          "inputs": [],
+          "name": "escrowRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IEscrowRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
           "inputs": [
             {
               "internalType": "address",
-              "name": "_maker",
+              "name": "_escrow",
               "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
             }
           ],
           "name": "getAllowedGroups",
@@ -23249,8 +23445,13 @@ export default {
           "inputs": [
             {
               "internalType": "address",
-              "name": "_maker",
+              "name": "_escrow",
               "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
             },
             {
               "internalType": "bytes32",
@@ -23273,8 +23474,13 @@ export default {
           "inputs": [
             {
               "internalType": "address",
-              "name": "_maker",
+              "name": "_escrow",
               "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
             },
             {
               "internalType": "address",
@@ -23301,6 +23507,11 @@ export default {
               "type": "address"
             },
             {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            },
+            {
               "internalType": "address",
               "name": "",
               "type": "address"
@@ -23318,7 +23529,30 @@ export default {
           "type": "function"
         },
         {
+          "inputs": [],
+          "name": "owner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
           "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
             {
               "internalType": "bytes32[]",
               "name": "_groupIds",
@@ -23333,6 +23567,16 @@ export default {
         {
           "inputs": [
             {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
               "internalType": "address[]",
               "name": "_takers",
               "type": "address[]"
@@ -23344,7 +23588,24 @@ export default {
           "type": "function"
         },
         {
+          "inputs": [],
+          "name": "renounceOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
           "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
             {
               "internalType": "bool",
               "name": "_enabled",
@@ -23352,6 +23613,32 @@ export default {
             }
           ],
           "name": "setEnabled",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "contract IEscrowRegistry",
+              "name": "_escrowRegistry",
+              "type": "address"
+            }
+          ],
+          "name": "setEscrowRegistry",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "transferOwnership",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
