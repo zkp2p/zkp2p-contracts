@@ -90,6 +90,10 @@ The first minimal global hook is the independent deposit whitelist stack:
 - `WhitelistPolicy`: each deposit owns an `enabled` switch, a direct address whitelist, and a bounded list of
   up to 10 allowed groups. Only the escrow's recorded depositor may configure a deposit, and
   `configureDeposit` sets all three in one transaction. The policy survives global hook replacement.
+  A governance owner may rotate the escrow registry that gates those writes via `setEscrowRegistry`, and must
+  keep it in sync with `OrchestratorV3.setEscrowRegistry` — if the two diverge, deposits on an escrow admitted
+  by only one of them can be neither gated nor revoked while the orchestrator keeps admitting intents. The
+  owner cannot admit or reject a taker: `isTakerAllowed` never reads the escrow registry.
 - `IntentLifecycleHookV1`: a stateless admission hook that delegates to `WhitelistPolicy`, allowing a taker when
   enforcement is disabled for the intent's deposit, the taker is directly whitelisted on that deposit, or the
   taker belongs to at least one group allowed by that deposit. Enabled policies with no matching address or

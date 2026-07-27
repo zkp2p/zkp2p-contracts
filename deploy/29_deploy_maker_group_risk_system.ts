@@ -184,6 +184,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await addOrchestratorToRegistry(hre, orchestratorRegistry, orchestratorV3.address);
   await addEscrowToRegistry(hre, escrowRegistry, escrowV2Address);
 
+  // Ownership handoff. Any policy configuration added below this point must go through
+  // executeOrQueueGovernanceCall -- the deployer is no longer the owner on networks with a real MULTI_SIG.
   const whitelistPolicyContract = await ethers.getContractAt("WhitelistPolicy", whitelistPolicy.address);
   await setNewOwner(hre, whitelistPolicyContract, governance);
   await setNewOwner(hre, orchestratorV3Contract, governance);
