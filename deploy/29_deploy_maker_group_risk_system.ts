@@ -18,6 +18,7 @@ import {
   waitForDeploymentDelay,
 } from "../deployments/helpers";
 import { safeBatchCollector } from "../deployments/safeBatchCollector";
+import type { WhitelistPolicy__factory } from "../typechain";
 
 async function executeOrQueueGovernanceCall(
   hre: HardhatRuntimeEnvironment,
@@ -55,7 +56,13 @@ async function systemFullyWired(network: string): Promise<boolean> {
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
   const escrowRegistry = await ethers.getContractAt("EscrowRegistry", escrowRegistryAddress);
 
+  // Capability probe for the deposit-scoped policy schema. The currently deployed policy is maker-scoped and
+  // exposes enabled(address) rather than enabled(address,uint256), so this call reverts against stale bytecode
+  // (argument-count mismatch) and forces hardhat-deploy to process the changed policy/hook wiring.
+  await policy.enabled(ethers.constants.AddressZero, 0);
+
   if ((await policy.groupRegistry()).toLowerCase() !== registryAddress.toLowerCase()) return false;
+  if ((await policy.escrowRegistry()).toLowerCase() !== escrowRegistryAddress.toLowerCase()) return false;
   if ((await hook.whitelistPolicy()).toLowerCase() !== policyAddress.toLowerCase()) return false;
   if ((await hook.orchestratorRegistry()).toLowerCase() !== orchestratorRegistryAddress.toLowerCase()) return false;
   if ((await orchestrator.lifecycleHook()).toLowerCase() !== hookAddress.toLowerCase()) return false;
@@ -77,7 +84,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
   const escrowV2Address = getDeployedContractAddress(network, "EscrowV2");
 
-  console.log("=== Deploying minimal OrchestratorV3 maker whitelist risk system ===");
+  console.log("=== Deploying minimal OrchestratorV3 deposit whitelist risk system ===");
 
   const boundedCall = await deploy("BoundedCall", {
     from: deployer,
@@ -138,9 +145,14 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     await waitForDeploymentDelay(hre);
   }
 
+  const whitelistPolicyArgs: Parameters<WhitelistPolicy__factory["deploy"]> = [
+    addressGroupRegistry.address,
+    escrowRegistryAddress,
+  ];
+
   const whitelistPolicy = await deploy("WhitelistPolicy", {
     from: deployer,
-    args: [addressGroupRegistry.address],
+    args: whitelistPolicyArgs,
   });
   if (whitelistPolicy.newlyDeployed) {
     console.log("WhitelistPolicy deployed at", whitelistPolicy.address);
@@ -172,9 +184,13 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await addOrchestratorToRegistry(hre, orchestratorRegistry, orchestratorV3.address);
   await addEscrowToRegistry(hre, escrowRegistry, escrowV2Address);
 
+  // Ownership handoff. Any policy configuration added below this point must go through
+  // executeOrQueueGovernanceCall -- the deployer is no longer the owner on networks with a real MULTI_SIG.
+  const whitelistPolicyContract = await ethers.getContractAt("WhitelistPolicy", whitelistPolicy.address);
+  await setNewOwner(hre, whitelistPolicyContract, governance);
   await setNewOwner(hre, orchestratorV3Contract, governance);
 
-  console.log("=== Minimal V3 risk system deployment prepared ===");
+  console.log("=== Minimal V3 deposit whitelist risk system deployment prepared ===");
   console.log("OrchestratorV3:", orchestratorV3.address);
   console.log("AddressGroupRegistry:", addressGroupRegistry.address);
   console.log("WhitelistPolicy:", whitelistPolicy.address);

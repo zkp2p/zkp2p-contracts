@@ -3,6 +3,7 @@
 pragma solidity ^0.8.18;
 
 import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
+import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
@@ -14,6 +15,8 @@ import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.so
 import {OrchestratorV2LegacyFixture} from "../helpers/OrchestratorV2LegacyFixture.sol";
 
 contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture {
+    bytes32 internal constant OTHER_METHOD = keccak256("zelle");
+
     bytes32 internal PEERS;
     bytes32 internal PEER_PLUSES;
     bytes32 internal PEER_MERCHANTS;
@@ -31,7 +34,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         PEER_PLUSES = groupRegistry.createGroup("Peer Pluses");
         PEER_MERCHANTS = groupRegistry.createGroup("Peer Merchants");
 
-        policy = new WhitelistPolicy(groupRegistry);
+        policy = new WhitelistPolicy(groupRegistry, escrowRegistry);
         lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, policy);
         IOrchestratorV3(address(orchestrator)).setLifecycleHook(lifecycleHook);
     }
@@ -47,14 +50,15 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
 
     function test_EnabledEmptyPolicyFailsClosedBeforeEscrowLock() public {
         vm.prank(depositor);
-        policy.setEnabled(true);
+        policy.setEnabled(address(escrow), depositId, true);
 
         uint256 counterBefore = orchestrator.intentCounter();
         bytes32 rejectedIntent = _intentHash(counterBefore);
         uint256 availableBefore = escrow.getDeposit(depositId).remainingDeposits;
 
-        bytes memory emptyPolicyRevert =
-            abi.encodeWithSelector(IntentLifecycleHookV1.TakerNotWhitelisted.selector, depositor, taker);
+        bytes memory emptyPolicyRevert = abi.encodeWithSelector(
+            IntentLifecycleHookV1.TakerNotWhitelisted.selector, address(escrow), depositId, taker
+        );
         vm.expectRevert(
             abi.encodeWithSelector(
                 BoundedCall.LifecycleHookAdmissionFailed.selector,
@@ -72,14 +76,13 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
     }
 
     function test_NonMemberRejectedAndMemberAccepted() public {
-        vm.startPrank(depositor);
-        policy.addAllowedGroups(_groupIds(PEERS));
-        policy.setEnabled(true);
-        vm.stopPrank();
+        vm.prank(depositor);
+        policy.configureDeposit(address(escrow), depositId, true, _groupIds(PEERS), new address[](0));
 
         bytes32 rejectedIntent = _intentHash(orchestrator.intentCounter());
-        bytes memory nonMemberRevert =
-            abi.encodeWithSelector(IntentLifecycleHookV1.TakerNotWhitelisted.selector, depositor, taker);
+        bytes memory nonMemberRevert = abi.encodeWithSelector(
+            IntentLifecycleHookV1.TakerNotWhitelisted.selector, address(escrow), depositId, taker
+        );
         vm.expectRevert(
             abi.encodeWithSelector(
                 BoundedCall.LifecycleHookAdmissionFailed.selector,
@@ -96,38 +99,67 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
     }
 
     function test_DirectAddressWhitelistAllowsTaker() public {
-        vm.startPrank(depositor);
-        policy.addWhitelistedAddresses(_addresses(taker));
-        policy.setEnabled(true);
-        vm.stopPrank();
+        vm.prank(depositor);
+        policy.configureDeposit(address(escrow), depositId, true, new bytes32[](0), _addresses(taker));
 
         assertNotEq(_signalDefault(), bytes32(0));
     }
 
+    function test_DelegateIsNotAuthorizedToConfigureDeposit() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(WhitelistPolicy.NotDepositor.selector, address(escrow), depositId, delegate)
+        );
+        vm.prank(delegate);
+        policy.configureDeposit(address(escrow), depositId, true, new bytes32[](0), new address[](0));
+
+        vm.prank(depositor);
+        policy.configureDeposit(address(escrow), depositId, true, new bytes32[](0), new address[](0));
+        assertTrue(policy.enabled(address(escrow), depositId));
+    }
+
+    function test_DepositPolicyAppliesAcrossAllPaymentMethodsOfTheDeposit() public {
+        _addPaymentMethod(OTHER_METHOD);
+
+        vm.prank(depositor);
+        policy.configureDeposit(address(escrow), depositId, true, _groupIds(PEERS), new address[](0));
+
+        IOrchestratorV2.SignalIntentParams memory otherMethodParams = _defaultParams();
+        otherMethodParams.paymentMethod = OTHER_METHOD;
+        vm.expectPartialRevert(BoundedCall.LifecycleHookAdmissionFailed.selector);
+        _signalCall(taker, otherMethodParams);
+
+        _addMembers(PEERS, taker);
+        assertNotEq(_signal(taker, otherMethodParams), bytes32(0));
+        assertNotEq(_signalDefault(), bytes32(0));
+    }
+
     function test_MultipleGroupsUseOrSemantics() public {
-        vm.startPrank(depositor);
-        policy.addAllowedGroups(_groupIds(PEERS, PEER_PLUSES, PEER_MERCHANTS));
-        policy.setEnabled(true);
-        vm.stopPrank();
+        vm.prank(depositor);
+        policy.configureDeposit(
+            address(escrow), depositId, true, _groupIds(PEERS, PEER_PLUSES, PEER_MERCHANTS), new address[](0)
+        );
 
         _addMembers(PEER_PLUSES, taker);
         assertNotEq(_signalDefault(), bytes32(0));
     }
 
-    function test_MakerPolicyAppliesAcrossMakerDeposits() public {
+    function test_PolicyIsScopedToDepositNotMaker() public {
         vm.startPrank(depositor);
-        policy.addAllowedGroups(_groupIds(PEERS));
-        policy.setEnabled(true);
+        policy.configureDeposit(address(escrow), depositId, true, _groupIds(PEERS), new address[](0));
         uint256 secondDepositId = _createDeposit(address(0), delegate);
         vm.stopPrank();
 
+        vm.expectPartialRevert(BoundedCall.LifecycleHookAdmissionFailed.selector);
+        _signalCall(taker, _defaultParams());
+
         IOrchestratorV2.SignalIntentParams memory secondDepositParams = _defaultParams();
         secondDepositParams.depositId = secondDepositId;
+        assertNotEq(_signal(taker, secondDepositParams), bytes32(0));
+
+        vm.prank(depositor);
+        policy.configureDeposit(address(escrow), secondDepositId, true, _groupIds(PEERS), new address[](0));
         vm.expectPartialRevert(BoundedCall.LifecycleHookAdmissionFailed.selector);
         _signalCall(taker, secondDepositParams);
-
-        _addMembers(PEERS, taker);
-        assertNotEq(_signal(taker, secondDepositParams), bytes32(0));
     }
 
     function test_MembershipRemovalOnlyAffectsFutureAdmissionAndCancellationRemainsLive() public {
@@ -183,10 +215,8 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
             groups[i] = groupRegistry.createGroup("Bounded Group");
         }
 
-        vm.startPrank(depositor);
-        policy.addAllowedGroups(groups);
-        policy.setEnabled(true);
-        vm.stopPrank();
+        vm.prank(depositor);
+        policy.configureDeposit(address(escrow), depositId, true, groups, new address[](0));
         _addMembers(groups[groups.length - 1], taker);
 
         IOrchestratorV3(address(orchestrator)).setCallbackGasLimit(750_000);
@@ -225,11 +255,28 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
     }
 
     function _enablePeerPolicyAndAddTaker() internal {
-        vm.startPrank(depositor);
-        policy.addAllowedGroups(_groupIds(PEERS));
-        policy.setEnabled(true);
-        vm.stopPrank();
+        vm.prank(depositor);
+        policy.configureDeposit(address(escrow), depositId, true, _groupIds(PEERS), new address[](0));
         _addMembers(PEERS, taker);
+    }
+
+    function _addPaymentMethod(bytes32 _paymentMethod) internal {
+        bytes32[] memory supportedCurrencies = new bytes32[](1);
+        supportedCurrencies[0] = USD;
+        paymentVerifierRegistry.addPaymentMethod(_paymentMethod, address(verifier), supportedCurrencies);
+
+        bytes32[] memory paymentMethods = new bytes32[](1);
+        paymentMethods[0] = _paymentMethod;
+        IEscrowV2.DepositPaymentMethodData[] memory paymentMethodData = new IEscrowV2.DepositPaymentMethodData[](1);
+        paymentMethodData[0] =
+            IEscrowV2.DepositPaymentMethodData({intentGatingService: address(0), payeeDetails: PAYEE, data: ""});
+        IEscrowV2.Currency[][] memory currencies = new IEscrowV2.Currency[][](1);
+        currencies[0] = new IEscrowV2.Currency[](1);
+        currencies[0][0] =
+            IEscrowV2.Currency({code: USD, minConversionRate: CONVERSION_RATE, oracleRateConfig: _emptyOracle()});
+
+        vm.prank(depositor);
+        escrow.addPaymentMethods(depositId, paymentMethods, paymentMethodData, currencies);
     }
 
     function _addMembers(bytes32 _groupId, address _member) internal {

@@ -2,130 +2,190 @@
 
 pragma solidity ^0.8.18;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
 import {IAddressGroupRegistry} from "../interfaces/IAddressGroupRegistry.sol";
+import {IEscrow} from "../interfaces/IEscrow.sol";
+import {IEscrowRegistry} from "../interfaces/IEscrowRegistry.sol";
 import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 
 /**
  * @title WhitelistPolicy
- * @notice Persistent maker-owned taker admission settings, independent from any lifecycle-hook deployment.
- * Each maker can allow direct addresses or members of a bounded list of curated groups.
- * @dev Enabling an empty policy is allowed and intentionally fails closed when evaluated.
+ * @notice Persistent deposit-scoped taker admission settings, independent from any lifecycle-hook deployment.
+ * Each deposit carries its own enforcement switch, direct address whitelist, and bounded list of curated groups,
+ * so one maker can run gated and open deposits side by side. The policy survives global hook replacement.
+ * @dev Enabling a deposit with no groups and no whitelisted addresses is allowed and intentionally fails closed
+ * when evaluated. Writes are authorized against the escrow's recorded depositor, so the deposit must already exist.
+ * While EscrowRegistry is in accept-all mode the registry check passes for any address, so passing an EOA or a
+ * contract without `getDeposit` reverts inside the escrow call with no reason data rather than a policy error.
+ * That path is a caller mistake on a governance-gated mode, and is not worth a per-write code-length check.
+ * `escrowRegistry` is governance-settable via `setEscrowRegistry` and MUST be kept in sync with the orchestrator's
+ * escrow registry (`OrchestratorV3.setEscrowRegistry`), because if the two diverge, deposits on an escrow admitted
+ * by only one of them can be neither gated nor revoked while the orchestrator keeps admitting intents for them.
  */
-contract WhitelistPolicy is IWhitelistPolicy {
+contract WhitelistPolicy is Ownable, IWhitelistPolicy {
     /* ============ Constants ============ */
 
-    uint256 public constant MAX_GROUPS_PER_MAKER = 10;
+    uint256 public constant MAX_GROUPS_PER_DEPOSIT = 10;
 
     /* ============ State Variables ============ */
 
     IAddressGroupRegistry public immutable override groupRegistry;
+    IEscrowRegistry public override escrowRegistry;
 
-    mapping(address => bool) public override enabled;
-    mapping(address => mapping(address => bool)) public override isWhitelisted;
-    mapping(address => bytes32[]) internal allowedGroups;
+    mapping(address => mapping(uint256 => bool)) public override enabled;
+    mapping(address => mapping(uint256 => mapping(address => bool))) public override isWhitelisted;
+    mapping(address => mapping(uint256 => bytes32[])) internal allowedGroups;
 
     /* ============ Events ============ */
 
-    event EnabledUpdated(address indexed maker, bool enabled);
-    event AddressWhitelisted(address indexed maker, address indexed taker);
-    event AddressRemovedFromWhitelist(address indexed maker, address indexed taker);
-    event AllowedGroupAdded(address indexed maker, bytes32 indexed groupId);
-    event AllowedGroupRemoved(address indexed maker, bytes32 indexed groupId);
+    event EnabledUpdated(address indexed escrow, uint256 indexed depositId, bool enabled);
+    event AddressWhitelisted(address indexed escrow, uint256 indexed depositId, address indexed taker);
+    event AddressRemovedFromWhitelist(address indexed escrow, uint256 indexed depositId, address indexed taker);
+    event AllowedGroupAdded(address indexed escrow, uint256 indexed depositId, bytes32 indexed groupId);
+    event AllowedGroupRemoved(address indexed escrow, uint256 indexed depositId, bytes32 indexed groupId);
+    event EscrowRegistryUpdated(address indexed escrowRegistry);
 
     /* ============ Errors ============ */
 
     error ZeroAddress();
     error EmptyArray();
-    error InvalidGroupRegistry(address registry);
+    error InvalidDependency(address dependency);
     error GroupDoesNotExist(bytes32 groupId);
     error TooManyGroups(uint256 attempted, uint256 maximum);
+    error EscrowNotWhitelisted(address escrow);
+    error DepositNotFound(address escrow, uint256 depositId);
+    error NotDepositor(address escrow, uint256 depositId, address caller);
 
     /* ============ Constructor ============ */
 
-    constructor(IAddressGroupRegistry _groupRegistry) {
-        address registryAddress = address(_groupRegistry);
-        if (registryAddress == address(0)) revert ZeroAddress();
-        if (registryAddress.code.length == 0) revert InvalidGroupRegistry(registryAddress);
+    constructor(IAddressGroupRegistry _groupRegistry, IEscrowRegistry _escrowRegistry) Ownable() {
+        _validateDependency(address(_groupRegistry));
+        _validateDependency(address(_escrowRegistry));
 
         groupRegistry = _groupRegistry;
+        escrowRegistry = _escrowRegistry;
     }
 
-    /* ============ Maker Functions ============ */
+    /* ============ Modifiers ============ */
+
+    modifier onlyDepositor(address _escrow, uint256 _depositId) {
+        if (!escrowRegistry.isWhitelistedEscrow(_escrow) && !escrowRegistry.isAcceptingAllEscrows()) {
+            revert EscrowNotWhitelisted(_escrow);
+        }
+
+        address depositor = IEscrow(_escrow).getDeposit(_depositId).depositor;
+        if (depositor == address(0)) revert DepositNotFound(_escrow, _depositId);
+        if (msg.sender != depositor) revert NotDepositor(_escrow, _depositId, msg.sender);
+        _;
+    }
+
+    /* ============ Governance Functions ============ */
 
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function setEnabled(bool _enabled) external override {
-        enabled[msg.sender] = _enabled;
-        emit EnabledUpdated(msg.sender, _enabled);
+    function setEscrowRegistry(IEscrowRegistry _escrowRegistry) external override onlyOwner {
+        _validateDependency(address(_escrowRegistry));
+
+        escrowRegistry = _escrowRegistry;
+        emit EscrowRegistryUpdated(address(_escrowRegistry));
+    }
+
+    /* ============ Depositor Functions ============ */
+
+    /**
+     * @inheritdoc IWhitelistPolicy
+     */
+    function configureDeposit(
+        address _escrow,
+        uint256 _depositId,
+        bool _enabled,
+        bytes32[] calldata _groupIds,
+        address[] calldata _takers
+    )
+        external
+        override
+        onlyDepositor(_escrow, _depositId)
+    {
+        _setEnabled(_escrow, _depositId, _enabled);
+        _addGroups(_escrow, _depositId, _groupIds);
+        _addTakers(_escrow, _depositId, _takers);
     }
 
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function addWhitelistedAddresses(address[] calldata _takers) external override {
+    function setEnabled(address _escrow, uint256 _depositId, bool _enabled)
+        external
+        override
+        onlyDepositor(_escrow, _depositId)
+    {
+        _setEnabled(_escrow, _depositId, _enabled);
+    }
+
+    /**
+     * @inheritdoc IWhitelistPolicy
+     */
+    function addWhitelistedAddresses(address _escrow, uint256 _depositId, address[] calldata _takers)
+        external
+        override
+        onlyDepositor(_escrow, _depositId)
+    {
+        if (_takers.length == 0) revert EmptyArray();
+        _addTakers(_escrow, _depositId, _takers);
+    }
+
+    /**
+     * @inheritdoc IWhitelistPolicy
+     */
+    function removeWhitelistedAddresses(address _escrow, uint256 _depositId, address[] calldata _takers)
+        external
+        override
+        onlyDepositor(_escrow, _depositId)
+    {
         if (_takers.length == 0) revert EmptyArray();
 
         for (uint256 i = 0; i < _takers.length; ++i) {
             address taker = _takers[i];
-            if (taker == address(0)) revert ZeroAddress();
-            if (isWhitelisted[msg.sender][taker]) continue;
+            if (!isWhitelisted[_escrow][_depositId][taker]) continue;
 
-            isWhitelisted[msg.sender][taker] = true;
-            emit AddressWhitelisted(msg.sender, taker);
+            isWhitelisted[_escrow][_depositId][taker] = false;
+            emit AddressRemovedFromWhitelist(_escrow, _depositId, taker);
         }
     }
 
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function removeWhitelistedAddresses(address[] calldata _takers) external override {
-        if (_takers.length == 0) revert EmptyArray();
-
-        for (uint256 i = 0; i < _takers.length; ++i) {
-            address taker = _takers[i];
-            if (!isWhitelisted[msg.sender][taker]) continue;
-
-            isWhitelisted[msg.sender][taker] = false;
-            emit AddressRemovedFromWhitelist(msg.sender, taker);
-        }
+    function addAllowedGroups(address _escrow, uint256 _depositId, bytes32[] calldata _groupIds)
+        external
+        override
+        onlyDepositor(_escrow, _depositId)
+    {
+        if (_groupIds.length == 0) revert EmptyArray();
+        _addGroups(_escrow, _depositId, _groupIds);
     }
 
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function addAllowedGroups(bytes32[] calldata _groupIds) external override {
+    function removeAllowedGroups(address _escrow, uint256 _depositId, bytes32[] calldata _groupIds)
+        external
+        override
+        onlyDepositor(_escrow, _depositId)
+    {
         if (_groupIds.length == 0) revert EmptyArray();
 
-        bytes32[] storage makerGroups = allowedGroups[msg.sender];
+        bytes32[] storage depositGroups = allowedGroups[_escrow][_depositId];
         for (uint256 i = 0; i < _groupIds.length; ++i) {
             bytes32 groupId = _groupIds[i];
-            if (!groupRegistry.groupExists(groupId)) revert GroupDoesNotExist(groupId);
-            if (_containsGroup(makerGroups, groupId)) continue;
-            if (makerGroups.length == MAX_GROUPS_PER_MAKER) {
-                revert TooManyGroups(makerGroups.length + 1, MAX_GROUPS_PER_MAKER);
-            }
+            uint256 groupIndex = _findGroupIndex(depositGroups, groupId);
+            if (groupIndex == depositGroups.length) continue;
 
-            makerGroups.push(groupId);
-            emit AllowedGroupAdded(msg.sender, groupId);
-        }
-    }
-
-    /**
-     * @inheritdoc IWhitelistPolicy
-     */
-    function removeAllowedGroups(bytes32[] calldata _groupIds) external override {
-        if (_groupIds.length == 0) revert EmptyArray();
-
-        bytes32[] storage makerGroups = allowedGroups[msg.sender];
-        for (uint256 i = 0; i < _groupIds.length; ++i) {
-            bytes32 groupId = _groupIds[i];
-            uint256 groupIndex = _findGroupIndex(makerGroups, groupId);
-            if (groupIndex == makerGroups.length) continue;
-
-            makerGroups[groupIndex] = makerGroups[makerGroups.length - 1];
-            makerGroups.pop();
-            emit AllowedGroupRemoved(msg.sender, groupId);
+            depositGroups[groupIndex] = depositGroups[depositGroups.length - 1];
+            depositGroups.pop();
+            emit AllowedGroupRemoved(_escrow, _depositId, groupId);
         }
     }
 
@@ -134,32 +194,73 @@ contract WhitelistPolicy is IWhitelistPolicy {
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function getAllowedGroups(address _maker) external view override returns (bytes32[] memory) {
-        return allowedGroups[_maker];
+    function getAllowedGroups(address _escrow, uint256 _depositId) external view override returns (bytes32[] memory) {
+        return allowedGroups[_escrow][_depositId];
     }
 
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function isGroupAllowed(address _maker, bytes32 _groupId) external view override returns (bool) {
-        return _containsGroup(allowedGroups[_maker], _groupId);
+    function isGroupAllowed(address _escrow, uint256 _depositId, bytes32 _groupId)
+        external
+        view
+        override
+        returns (bool)
+    {
+        return _containsGroup(allowedGroups[_escrow][_depositId], _groupId);
     }
 
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function isTakerAllowed(address _maker, address _taker) external view override returns (bool) {
-        if (!enabled[_maker]) return true;
-        if (isWhitelisted[_maker][_taker]) return true;
+    function isTakerAllowed(address _escrow, uint256 _depositId, address _taker)
+        external
+        view
+        override
+        returns (bool)
+    {
+        if (!enabled[_escrow][_depositId]) return true;
+        if (isWhitelisted[_escrow][_depositId][_taker]) return true;
 
-        bytes32[] storage makerGroups = allowedGroups[_maker];
-        for (uint256 i = 0; i < makerGroups.length; ++i) {
-            if (groupRegistry.isMember(makerGroups[i], _taker)) return true;
+        bytes32[] storage depositGroups = allowedGroups[_escrow][_depositId];
+        for (uint256 i = 0; i < depositGroups.length; ++i) {
+            if (groupRegistry.isMember(depositGroups[i], _taker)) return true;
         }
         return false;
     }
 
     /* ============ Internal Functions ============ */
+
+    function _setEnabled(address _escrow, uint256 _depositId, bool _enabled) internal {
+        enabled[_escrow][_depositId] = _enabled;
+        emit EnabledUpdated(_escrow, _depositId, _enabled);
+    }
+
+    function _addTakers(address _escrow, uint256 _depositId, address[] calldata _takers) internal {
+        for (uint256 i = 0; i < _takers.length; ++i) {
+            address taker = _takers[i];
+            if (taker == address(0)) revert ZeroAddress();
+            if (isWhitelisted[_escrow][_depositId][taker]) continue;
+
+            isWhitelisted[_escrow][_depositId][taker] = true;
+            emit AddressWhitelisted(_escrow, _depositId, taker);
+        }
+    }
+
+    function _addGroups(address _escrow, uint256 _depositId, bytes32[] calldata _groupIds) internal {
+        bytes32[] storage depositGroups = allowedGroups[_escrow][_depositId];
+        for (uint256 i = 0; i < _groupIds.length; ++i) {
+            bytes32 groupId = _groupIds[i];
+            if (!groupRegistry.groupExists(groupId)) revert GroupDoesNotExist(groupId);
+            if (_containsGroup(depositGroups, groupId)) continue;
+            if (depositGroups.length == MAX_GROUPS_PER_DEPOSIT) {
+                revert TooManyGroups(depositGroups.length + 1, MAX_GROUPS_PER_DEPOSIT);
+            }
+
+            depositGroups.push(groupId);
+            emit AllowedGroupAdded(_escrow, _depositId, groupId);
+        }
+    }
 
     function _containsGroup(bytes32[] storage _groups, bytes32 _groupId) internal view returns (bool) {
         return _findGroupIndex(_groups, _groupId) != _groups.length;
@@ -170,5 +271,10 @@ contract WhitelistPolicy is IWhitelistPolicy {
             if (_groups[i] == _groupId) return i;
         }
         return _groups.length;
+    }
+
+    function _validateDependency(address _dependency) internal view {
+        if (_dependency == address(0)) revert ZeroAddress();
+        if (_dependency.code.length == 0) revert InvalidDependency(_dependency);
     }
 }

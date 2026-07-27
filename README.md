@@ -83,21 +83,27 @@ owner-controlled global `lifecycleHook` for future intents:
 - The existing generic per-deposit pre-intent hook remains available. V3 has no dedicated per-deposit
   whitelist slot and no maker- or deposit-selected lifecycle hook.
 
-The first minimal global hook is the independent maker whitelist stack:
+The first minimal global hook is the independent deposit whitelist stack:
 
-- `AddressGroupRegistry`: governance registers stable public group IDs, manages metadata and active state,
-  and assigns curators. Curators add or remove members; membership is event-indexed rather than enumerable
-  onchain.
-- `WhitelistPolicy`: each maker owns a direct address whitelist and a bounded list of up to 10 allowed groups,
-  plus an explicit `enabled` switch. The policy survives global hook replacement.
+- `AddressGroupRegistry`: anyone may create a curator-managed group. Curators can add or remove members,
+  transfer control, configure an optional membership resolver, and opt into self-service membership.
+- `WhitelistPolicy`: each deposit owns an `enabled` switch, a direct address whitelist, and a bounded list of
+  up to 10 allowed groups. Only the escrow's recorded depositor may configure a deposit, and
+  `configureDeposit` sets all three in one transaction. The policy survives global hook replacement.
+  A governance owner may rotate the escrow registry that gates those writes via `setEscrowRegistry`, and must
+  keep it in sync with `OrchestratorV3.setEscrowRegistry` — if the two diverge, deposits on an escrow admitted
+  by only one of them can be neither gated nor revoked while the orchestrator keeps admitting intents. The
+  owner cannot admit or reject a taker: `isTakerAllowed` never reads the escrow registry.
 - `IntentLifecycleHookV1`: a stateless admission hook that delegates to `WhitelistPolicy`, allowing a taker when
-  the maker's policy is disabled, the taker is directly whitelisted, or the taker belongs to at least one
-  configured active group. Enabled policies with no matching address or group fail closed. Settlement and
-  cancellation are no-ops in this version.
+  enforcement is disabled for the intent's deposit, the taker is directly whitelisted on that deposit, or the
+  taker belongs to at least one group allowed by that deposit. Enabled policies with no matching address or
+  group fail closed. Settlement and cancellation are no-ops in this version.
 
-Canonical deployment IDs are `keccak256` hashes of `peers`, `peer-pluses`, and `peer-merchants`. Group
-enforcement is maker-level, not payment-method- or deposit-level. These V3 changes do not modify
-`EscrowV2`, require an Escrow redeployment, or alter the production `OrchestratorV2` whitelist path.
+Group IDs are derived from the curator and registry group counter, and offchain consumers must key them by
+chain, registry address, and group ID. All three admission settings are scoped to the `(escrow, depositId)`
+pair, so one maker can run gated and open deposits at the same time and nothing is shared across a maker's
+deposits. These V3 changes do not modify `EscrowV2`, require an Escrow redeployment, or alter the production
+`OrchestratorV2` whitelist path.
 
 ## V2 Contract Inventory
 
