@@ -184,6 +184,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await addOrchestratorToRegistry(hre, orchestratorRegistry, orchestratorV3.address);
   await addEscrowToRegistry(hre, escrowRegistry, escrowV2Address);
 
+  const whitelistPolicyContract = await ethers.getContractAt("WhitelistPolicy", whitelistPolicy.address);
+  await setNewOwner(hre, whitelistPolicyContract, governance);
   await setNewOwner(hre, orchestratorV3Contract, governance);
 
   console.log("=== Minimal V3 deposit whitelist risk system deployment prepared ===");

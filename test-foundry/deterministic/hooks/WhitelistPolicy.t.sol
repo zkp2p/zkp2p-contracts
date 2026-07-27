@@ -35,6 +35,7 @@ contract WhitelistPolicyTest is Test {
     event AddressRemovedFromWhitelist(address indexed escrow, uint256 indexed depositId, address indexed taker);
     event AllowedGroupAdded(address indexed escrow, uint256 indexed depositId, bytes32 indexed groupId);
     event AllowedGroupRemoved(address indexed escrow, uint256 indexed depositId, bytes32 indexed groupId);
+    event EscrowRegistryUpdated(address indexed escrowRegistry);
 
     function setUp() public {
         maker = makeAddr("maker");
@@ -76,6 +77,68 @@ contract WhitelistPolicyTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.InvalidDependency.selector, maker));
         new WhitelistPolicy(registry, EscrowRegistry(maker));
+    }
+
+    /* ============ Governance ============ */
+
+    function test_ConstructorSetsDeployerAsOwner() public {
+        assertEq(policy.owner(), address(this));
+    }
+
+    function test_SetEscrowRegistryUpdatesRegistryAndEmits() public {
+        EscrowRegistry newEscrowRegistry = new EscrowRegistry();
+
+        vm.expectEmit(true, false, false, true, address(policy));
+        emit EscrowRegistryUpdated(address(newEscrowRegistry));
+        policy.setEscrowRegistry(newEscrowRegistry);
+
+        assertEq(address(policy.escrowRegistry()), address(newEscrowRegistry));
+    }
+
+    function test_SetEscrowRegistryRejectsNonOwner() public {
+        vm.expectRevert(bytes("Ownable: caller is not the owner"));
+        vm.prank(maker);
+        policy.setEscrowRegistry(EscrowRegistry(address(otherEscrow)));
+
+        assertEq(address(policy.escrowRegistry()), address(escrowRegistry));
+    }
+
+    function test_SetEscrowRegistryRejectsZeroAndCodelessRegistry() public {
+        vm.expectRevert(WhitelistPolicy.ZeroAddress.selector);
+        policy.setEscrowRegistry(EscrowRegistry(address(0)));
+
+        vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.InvalidDependency.selector, maker));
+        policy.setEscrowRegistry(EscrowRegistry(maker));
+
+        assertEq(address(policy.escrowRegistry()), address(escrowRegistry));
+    }
+
+    function test_EscrowRegistryRotationRestoresRevocationAfterDivergence() public {
+        EscrowRegistry newEscrowRegistry = new EscrowRegistry();
+        newEscrowRegistry.addEscrow(address(escrow));
+
+        vm.prank(maker);
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, new bytes32[](0), _addresses(taker));
+
+        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, taker));
+
+        escrowRegistry.removeEscrow(address(escrow));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(WhitelistPolicy.EscrowNotWhitelisted.selector, address(escrow))
+        );
+        vm.prank(maker);
+        policy.removeWhitelistedAddresses(address(escrow), DEPOSIT_ONE, _addresses(taker));
+
+        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, taker));
+
+        policy.setEscrowRegistry(newEscrowRegistry);
+
+        vm.prank(maker);
+        policy.removeWhitelistedAddresses(address(escrow), DEPOSIT_ONE, _addresses(taker));
+
+        assertFalse(policy.isWhitelisted(address(escrow), DEPOSIT_ONE, taker));
+        assertFalse(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, taker));
     }
 
     /* ============ Authorization ============ */

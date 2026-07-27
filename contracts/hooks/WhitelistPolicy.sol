@@ -2,6 +2,8 @@
 
 pragma solidity ^0.8.18;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
 import {IAddressGroupRegistry} from "../interfaces/IAddressGroupRegistry.sol";
 import {IEscrow} from "../interfaces/IEscrow.sol";
 import {IEscrowRegistry} from "../interfaces/IEscrowRegistry.sol";
@@ -17,8 +19,11 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
  * While EscrowRegistry is in accept-all mode the registry check passes for any address, so passing an EOA or a
  * contract without `getDeposit` reverts inside the escrow call with no reason data rather than a policy error.
  * That path is a caller mistake on a governance-gated mode, and is not worth a per-write code-length check.
+ * `escrowRegistry` is governance-settable via `setEscrowRegistry` and MUST be kept in sync with the orchestrator's
+ * escrow registry (`OrchestratorV3.setEscrowRegistry`), because if the two diverge, deposits on an escrow admitted
+ * by only one of them can be neither gated nor revoked while the orchestrator keeps admitting intents for them.
  */
-contract WhitelistPolicy is IWhitelistPolicy {
+contract WhitelistPolicy is Ownable, IWhitelistPolicy {
     /* ============ Constants ============ */
 
     uint256 public constant MAX_GROUPS_PER_DEPOSIT = 10;
@@ -26,7 +31,7 @@ contract WhitelistPolicy is IWhitelistPolicy {
     /* ============ State Variables ============ */
 
     IAddressGroupRegistry public immutable override groupRegistry;
-    IEscrowRegistry public immutable override escrowRegistry;
+    IEscrowRegistry public override escrowRegistry;
 
     mapping(address => mapping(uint256 => bool)) public override enabled;
     mapping(address => mapping(uint256 => mapping(address => bool))) public override isWhitelisted;
@@ -39,6 +44,7 @@ contract WhitelistPolicy is IWhitelistPolicy {
     event AddressRemovedFromWhitelist(address indexed escrow, uint256 indexed depositId, address indexed taker);
     event AllowedGroupAdded(address indexed escrow, uint256 indexed depositId, bytes32 indexed groupId);
     event AllowedGroupRemoved(address indexed escrow, uint256 indexed depositId, bytes32 indexed groupId);
+    event EscrowRegistryUpdated(address indexed escrowRegistry);
 
     /* ============ Errors ============ */
 
@@ -53,7 +59,7 @@ contract WhitelistPolicy is IWhitelistPolicy {
 
     /* ============ Constructor ============ */
 
-    constructor(IAddressGroupRegistry _groupRegistry, IEscrowRegistry _escrowRegistry) {
+    constructor(IAddressGroupRegistry _groupRegistry, IEscrowRegistry _escrowRegistry) Ownable() {
         _validateDependency(address(_groupRegistry));
         _validateDependency(address(_escrowRegistry));
 
@@ -72,6 +78,18 @@ contract WhitelistPolicy is IWhitelistPolicy {
         if (depositor == address(0)) revert DepositNotFound(_escrow, _depositId);
         if (msg.sender != depositor) revert NotDepositor(_escrow, _depositId, msg.sender);
         _;
+    }
+
+    /* ============ Governance Functions ============ */
+
+    /**
+     * @inheritdoc IWhitelistPolicy
+     */
+    function setEscrowRegistry(IEscrowRegistry _escrowRegistry) external override onlyOwner {
+        _validateDependency(address(_escrowRegistry));
+
+        escrowRegistry = _escrowRegistry;
+        emit EscrowRegistryUpdated(address(_escrowRegistry));
     }
 
     /* ============ Depositor Functions ============ */

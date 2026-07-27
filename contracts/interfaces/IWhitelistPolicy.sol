@@ -33,6 +33,17 @@ interface IWhitelistPolicy {
         bytes32[] calldata groupIds,
         address[] calldata takers
     ) external;
+
+    /**
+     * @notice Updates the escrow registry used to authorize deposit configuration.
+     * @dev Governance-only (owner). The new registry must be a non-zero address with deployed code, else this call
+     * reverts. This value MUST be kept in sync with the orchestrator's escrow registry
+     * (`OrchestratorV3.setEscrowRegistry`), because if they diverge, deposits on an escrow admitted by only one
+     * registry can be neither gated nor revoked here while the orchestrator keeps admitting intents for them.
+     * @param escrowRegistry New escrow registry used to authorize deposit configuration.
+     */
+    function setEscrowRegistry(IEscrowRegistry escrowRegistry) external;
+
     function setEnabled(address escrow, uint256 depositId, bool enabled) external;
     function addWhitelistedAddresses(address escrow, uint256 depositId, address[] calldata takers) external;
     function removeWhitelistedAddresses(address escrow, uint256 depositId, address[] calldata takers) external;
