@@ -58,7 +58,7 @@ The v2 system is built around four layers:
 2. Intent coordination and settlement.
    `OrchestratorV2` validates whether a taker can lock liquidity, snapshots fee terms and min intent size, verifies payments through the registry-selected verifier, and releases funds.
 3. Verification and registries.
-   `UnifiedPaymentVerifier` validates EIP-712 attestations and nullifies payments. Active registries define which escrows, orchestrators, hooks, and payment methods are valid. `RelayerRegistry` backs the deployed legacy V1 stack and the deployed prod `OrchestratorV2`; the active `OrchestratorV3` has no relayer dependency.
+   `UnifiedPaymentVerifier` validates EIP-712 attestations and nullifies payments. Active registries define which escrows, orchestrators, hooks, and payment methods are valid. `RelayerRegistry` backs the deployed legacy V1 stack and the deployed prod `OrchestratorV2`.
 4. Read models and periphery.
    `ProtocolViewerV2`, oracle adapters, bridge hooks, and pre-intent hooks provide the ergonomic layer used by frontends, routing systems, and privileged operators.
 
@@ -70,40 +70,25 @@ The v2 system is built around four layers:
 
 ![ZKP2P V2 Contract Architecture](diagrams/architecture.png)
 
-## V3 Lifecycle Risk and Maker Groups
+## Deposit Whitelist and Maker Groups
 
-`OrchestratorV3` is a staging-only, relayer-free lifecycle coordinator. It has exactly one
-owner-controlled global `lifecycleHook` for future intents:
-
-- Admission executes with bounded gas and fails closed before Escrow locks funds.
-- The global hook is snapshotted into each intent, so later governance changes affect only new intents.
-- Settlement gives the snapshotted hook first refusal over gross funds and validates exact token consumption.
-- Cancellation invokes the snapshot with bounded gas, fails open for liquidity liveness, and persists failed
-  callback recovery data until the snapshotted hook acknowledges reconciliation.
-- The existing generic per-deposit pre-intent hook remains available. V3 has no dedicated per-deposit
-  whitelist slot and no maker- or deposit-selected lifecycle hook.
-
-The first minimal global hook is the independent deposit whitelist stack:
+The deposit whitelist stack is available through the `OrchestratorV2` per-deposit whitelist hook:
 
 - `AddressGroupRegistry`: anyone may create a curator-managed group. Curators can add or remove members,
   transfer control, configure an optional membership resolver, and opt into self-service membership.
 - `WhitelistPolicy`: each deposit owns an `enabled` switch, a direct address whitelist, and a bounded list of
   up to 10 allowed groups. Only the escrow's recorded depositor may configure a deposit, and
-  `configureDeposit` sets all three in one transaction. The policy survives global hook replacement.
-  A governance owner may rotate the escrow registry that gates those writes via `setEscrowRegistry`, and must
-  keep it in sync with `OrchestratorV3.setEscrowRegistry` — if the two diverge, deposits on an escrow admitted
-  by only one of them can be neither gated nor revoked while the orchestrator keeps admitting intents. The
-  owner cannot admit or reject a taker: `isTakerAllowed` never reads the escrow registry.
-- `IntentLifecycleHookV1`: a stateless admission hook that delegates to `WhitelistPolicy`, allowing a taker when
-  enforcement is disabled for the intent's deposit, the taker is directly whitelisted on that deposit, or the
-  taker belongs to at least one group allowed by that deposit. Enabled policies with no matching address or
-  group fail closed. Settlement and cancellation are no-ops in this version.
+  `configureDeposit` sets all three in one transaction. The policy keeps this configuration independently of
+  the `OrchestratorV2` hook assignment.
+  A governance owner may rotate the escrow registry that gates those writes via `setEscrowRegistry`. The owner
+  cannot admit or reject a taker: whitelist enforcement allows a taker when enforcement is disabled for the
+  intent's deposit, the taker is directly whitelisted on that deposit, or the taker belongs to at least one
+  group allowed by that deposit. Enabled policies with no matching address or group fail closed.
 
 Group IDs are derived from the curator and registry group counter, and offchain consumers must key them by
 chain, registry address, and group ID. All three admission settings are scoped to the `(escrow, depositId)`
 pair, so one maker can run gated and open deposits at the same time and nothing is shared across a maker's
-deposits. These V3 changes do not modify `EscrowV2`, require an Escrow redeployment, or alter the production
-`OrchestratorV2` whitelist path.
+deposits.
 
 ## V2 Contract Inventory
 
@@ -289,7 +274,7 @@ The v2 stack reuses and extends the existing registry model:
 - `OrchestratorRegistry`: whitelists both v1 and v2 orchestrators for escrow/verifier authorization
 - `PaymentVerifierRegistry`: maps payment method hash to verifier and supported currencies
 - `PostIntentHookRegistry`: whitelists post-intent hooks
-- `RelayerRegistry`: backs deployed legacy V1 orchestrators and the deployed prod `OrchestratorV2`; not used by the active `OrchestratorV3`
+- `RelayerRegistry`: backs deployed legacy V1 orchestrators and the deployed prod `OrchestratorV2`
 - `NullifierRegistry`: stores consumed payment nullifiers
 
 ## Core Lifecycle

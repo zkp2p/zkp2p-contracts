@@ -20,16 +20,11 @@ const ABIS_DIR = path.join(PKG_ROOT, 'abis');
 
 const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
   IntentGuardian: 'contracts/IntentGuardian.sol/IntentGuardian.json',
-  RiskManager: 'contracts/RiskManager.sol/RiskManager.json',
-  StakeVault: 'contracts/StakeVault.sol/StakeVault.json',
-  OrchestratorV3: 'contracts/OrchestratorV3.sol/OrchestratorV3.json',
-  IIntentLifecycleHook: 'contracts/interfaces/IIntentLifecycleHook.sol/IIntentLifecycleHook.json',
   NullifierRegistryV2: 'contracts/registries/NullifierRegistryV2.sol/NullifierRegistryV2.json',
   UnifiedPaymentVerifierV3:
     'contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol/UnifiedPaymentVerifierV3.json',
   AddressGroupRegistry: 'contracts/registries/AddressGroupRegistry.sol/AddressGroupRegistry.json',
   WhitelistPolicy: 'contracts/hooks/WhitelistPolicy.sol/WhitelistPolicy.json',
-  IntentLifecycleHookV1: 'contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json',
 };
 
 function ensureDir(dir: string) {
@@ -78,9 +73,6 @@ export async function extractABIs(): Promise<void> {
     topIndexExports.push(`export * as ${network} from './${network}';`);
   }
 
-  // Risk-system contracts are intentionally not deployed by this PR. Export their compiled source
-  // ABIs separately so downstream indexer/client work can target the stable interface commit without
-  // inventing placeholder network addresses.
   const contractsDir = path.join(ABIS_DIR, 'contracts');
   ensureDir(contractsDir);
   const sourceIndex: string[] = [];

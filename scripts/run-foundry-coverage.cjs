@@ -101,11 +101,6 @@ const deterministicCoverageRuns = [
         test: "test-foundry/deterministic/registries",
     },
     {
-        name: "deterministic-staking",
-        irMinimum: true,
-        test: "test-foundry/deterministic/staking",
-    },
-    {
         name: "deterministic-verifiers",
         irMinimum: true,
         test: "test-foundry/deterministic/verifiers",
@@ -139,11 +134,6 @@ const exactSourceCoverageRuns = [
         test: "test-foundry/deterministic/periphery/ProtocolViewer.t.sol",
     },
     {
-        name: "risk-libraries",
-        source: "contracts/lib/BoundedCall.sol",
-        test: "test-foundry/deterministic/libs",
-    },
-    {
         name: "intent-guardian",
         source: "contracts/IntentGuardian.sol",
         test: "test-foundry/deterministic/guardian",
@@ -157,7 +147,7 @@ const exactSourceCoverageRuns = [
 
 const coverageLanes = new Map([
     ["escrow", ["deterministic-escrow", "deterministic-integration"]],
-    ["staking", ["deterministic-staking", "deterministic-verifiers"]],
+    ["verifiers", ["deterministic-verifiers"]],
     ["orchestrator", ["deterministic-orchestrator", "deterministic-rate-manager", "deterministic-libs"]],
     [
         "remaining",

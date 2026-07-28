@@ -6,7 +6,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {EscrowV2} from "contracts/EscrowV2.sol";
 import {OrchestratorV2} from "contracts/OrchestratorV2.sol";
-import {OrchestratorV3} from "contracts/OrchestratorV3.sol";
 import {OrchestratorMock} from "contracts/mocks/OrchestratorMock.sol";
 import {PartialPullPostIntentHookV2Mock} from "contracts/mocks/PartialPullPostIntentHookV2Mock.sol";
 import {PaymentVerifierMock} from "contracts/mocks/PaymentVerifierMock.sol";
@@ -159,31 +158,6 @@ abstract contract OrchestratorV2LegacyFixture is Test {
         return new IReferralFee.ReferralFee[](0);
     }
 
-    function _replaceOrchestratorWithStandaloneV3() internal {
-        orchestrator = OrchestratorV2(
-            address(
-                new OrchestratorV3(
-                    address(this),
-                    CHAIN_ID,
-                    address(escrowRegistry),
-                    address(paymentVerifierRegistry),
-                    0,
-                    protocolFeeRecipient,
-                    2_000_000
-                )
-            )
-        );
-        postIntentHook = new PostIntentHookV2Mock(address(token), address(orchestrator));
-        partialPostIntentHook = new PartialPullPostIntentHookV2Mock(address(token), address(orchestrator));
-        pushPostIntentHook = new PushPostIntentHookV2Mock(address(token), address(orchestrator));
-        reentrantPostIntentHook = new ReentrantPostIntentHookV2(address(token), address(orchestrator));
-        reentrantSignalCaller = new ReentrantSignalIntentCallerV2Mock(address(orchestrator));
-        reentrantPreIntentHook = new ReentrantPreIntentHookMock(address(reentrantSignalCaller));
-        token.transfer(address(pushPostIntentHook), 10e6);
-        orchestratorRegistry.addOrchestrator(address(orchestrator));
-        verifier.setVerificationContext(address(orchestrator), address(escrow));
-    }
-
     function _twoReferralFees() internal view returns (IReferralFee.ReferralFee[] memory fees) {
         fees = new IReferralFee.ReferralFee[](2);
         fees[0] = IReferralFee.ReferralFee({recipient: referrer, fee: 3e15});
@@ -274,51 +248,25 @@ abstract contract OrchestratorV2LegacyFixture is Test {
         IOrchestratorV2.SignalIntentParams memory params,
         uint256 expiration
     ) internal view returns (bytes memory) {
-        bytes32 messageHash;
-        if (_usesStandaloneV3Format()) {
-            messageHash = keccak256(
-                abi.encodePacked(
-                    address(orchestrator),
-                    params.escrow,
-                    params.depositId,
-                    params.amount,
-                    signedCaller,
-                    params.to,
-                    params.paymentMethod,
-                    params.fiatCurrency,
-                    params.conversionRate,
-                    _referralHash(params.referralFees),
-                    address(params.postIntentHook),
-                    keccak256(params.data),
-                    expiration,
-                    CHAIN_ID
-                )
-            );
-        } else {
-            messageHash = keccak256(
-                abi.encodePacked(
-                    address(orchestrator),
-                    params.escrow,
-                    params.depositId,
-                    params.amount,
-                    signedCaller,
-                    params.to,
-                    params.paymentMethod,
-                    params.fiatCurrency,
-                    params.conversionRate,
-                    _referralHash(params.referralFees),
-                    expiration,
-                    CHAIN_ID
-                )
-            );
-        }
+        bytes32 messageHash = keccak256(
+            abi.encodePacked(
+                address(orchestrator),
+                params.escrow,
+                params.depositId,
+                params.amount,
+                signedCaller,
+                params.to,
+                params.paymentMethod,
+                params.fiatCurrency,
+                params.conversionRate,
+                _referralHash(params.referralFees),
+                expiration,
+                CHAIN_ID
+            )
+        );
         bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
         return abi.encodePacked(r, s, v);
-    }
-
-    function _usesStandaloneV3Format() internal pure virtual returns (bool) {
-        return false;
     }
 
     function _gatedParams(uint256 gatedDepositId, uint256 signerKey, address signedCaller, uint256 expiration)

@@ -124,13 +124,6 @@
       "types": "./utils/protocolUtils.d.ts",
       "default": "./utils/protocolUtils.ts"
     },
-    "./utils/riskMath": {
-      "types": "./utils/riskMath.d.ts",
-      "import": "./_esm/utils/riskMath.js",
-      "react-native": "./_esm/utils/riskMath.js",
-      "require": "./_cjs/utils/riskMath.js",
-      "default": "./_esm/utils/riskMath.js"
-    },
     "./abis/base": {
       "types": "./abis/base.d.ts",
       "import": "./abis/base.mjs",
