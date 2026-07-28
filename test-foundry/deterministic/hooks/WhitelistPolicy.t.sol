@@ -6,8 +6,11 @@ import {Test} from "forge-std/Test.sol";
 
 import {EscrowDepositorMock} from "contracts/mocks/EscrowDepositorMock.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
+import {IPreIntentHook} from "contracts/interfaces/IPreIntentHook.sol";
+import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
+import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 
 contract WhitelistPolicyTest is Test {
     uint256 internal constant DEPOSIT_ONE = 1;
@@ -25,6 +28,7 @@ contract WhitelistPolicyTest is Test {
 
     AddressGroupRegistry internal registry;
     EscrowRegistry internal escrowRegistry;
+    OrchestratorRegistry internal orchestratorRegistry;
     EscrowDepositorMock internal escrow;
     EscrowDepositorMock internal otherEscrow;
     EscrowDepositorMock internal unregisteredEscrow;
@@ -49,6 +53,7 @@ contract WhitelistPolicyTest is Test {
         PEER_MERCHANTS = registry.createGroup("Peer Merchants");
 
         escrowRegistry = new EscrowRegistry();
+        orchestratorRegistry = new OrchestratorRegistry();
         escrow = new EscrowDepositorMock();
         otherEscrow = new EscrowDepositorMock();
         unregisteredEscrow = new EscrowDepositorMock();
@@ -60,29 +65,39 @@ contract WhitelistPolicyTest is Test {
         otherEscrow.setDepositor(DEPOSIT_ONE, otherMaker);
         unregisteredEscrow.setDepositor(DEPOSIT_ONE, maker);
 
-        policy = new WhitelistPolicy(registry, escrowRegistry);
+        policy = new WhitelistPolicy(registry, escrowRegistry, orchestratorRegistry);
     }
 
     /* ============ Constructor ============ */
 
     function test_ConstructorRejectsZeroAndCodelessDependencies() public {
         vm.expectRevert(WhitelistPolicy.ZeroAddress.selector);
-        new WhitelistPolicy(AddressGroupRegistry(address(0)), escrowRegistry);
+        new WhitelistPolicy(AddressGroupRegistry(address(0)), escrowRegistry, orchestratorRegistry);
 
         vm.expectRevert(WhitelistPolicy.ZeroAddress.selector);
-        new WhitelistPolicy(registry, EscrowRegistry(address(0)));
+        new WhitelistPolicy(registry, EscrowRegistry(address(0)), orchestratorRegistry);
+
+        vm.expectRevert(WhitelistPolicy.ZeroAddress.selector);
+        new WhitelistPolicy(registry, escrowRegistry, OrchestratorRegistry(address(0)));
 
         vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.InvalidDependency.selector, maker));
-        new WhitelistPolicy(AddressGroupRegistry(maker), escrowRegistry);
+        new WhitelistPolicy(AddressGroupRegistry(maker), escrowRegistry, orchestratorRegistry);
 
         vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.InvalidDependency.selector, maker));
-        new WhitelistPolicy(registry, EscrowRegistry(maker));
+        new WhitelistPolicy(registry, EscrowRegistry(maker), orchestratorRegistry);
+
+        vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.InvalidDependency.selector, maker));
+        new WhitelistPolicy(registry, escrowRegistry, OrchestratorRegistry(maker));
     }
 
     /* ============ Governance ============ */
 
     function test_ConstructorSetsDeployerAsOwner() public {
         assertEq(policy.owner(), address(this));
+    }
+
+    function test_ConstructorStoresOrchestratorRegistry() public view {
+        assertEq(address(policy.orchestratorRegistry()), address(orchestratorRegistry));
     }
 
     function test_SetEscrowRegistryUpdatesRegistryAndEmits() public {
@@ -124,9 +139,7 @@ contract WhitelistPolicyTest is Test {
 
         escrowRegistry.removeEscrow(address(escrow));
 
-        vm.expectRevert(
-            abi.encodeWithSelector(WhitelistPolicy.EscrowNotWhitelisted.selector, address(escrow))
-        );
+        vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.EscrowNotWhitelisted.selector, address(escrow)));
         vm.prank(maker);
         policy.removeWhitelistedAddresses(address(escrow), DEPOSIT_ONE, _addresses(taker));
 
@@ -154,9 +167,8 @@ contract WhitelistPolicyTest is Test {
     }
 
     function test_AllSixGatedEntryPointsRevertForNonDepositor() public {
-        bytes memory expectedRevert = abi.encodeWithSelector(
-            WhitelistPolicy.NotDepositor.selector, address(escrow), DEPOSIT_ONE, otherMaker
-        );
+        bytes memory expectedRevert =
+            abi.encodeWithSelector(WhitelistPolicy.NotDepositor.selector, address(escrow), DEPOSIT_ONE, otherMaker);
 
         vm.expectRevert(expectedRevert);
         vm.prank(otherMaker);
@@ -380,9 +392,7 @@ contract WhitelistPolicyTest is Test {
 
     function test_ConfigureDepositSetsEnabledGroupsAndTakersInOneCall() public {
         vm.prank(maker);
-        policy.configureDeposit(
-            address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS, PEER_PLUSES), _addresses(taker)
-        );
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS, PEER_PLUSES), _addresses(taker));
 
         assertTrue(policy.enabled(address(escrow), DEPOSIT_ONE));
         assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 2);
@@ -402,9 +412,7 @@ contract WhitelistPolicyTest is Test {
     function test_ConfigureDepositIsAdditive() public {
         vm.startPrank(maker);
         policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS), _addresses(taker));
-        policy.configureDeposit(
-            address(escrow), DEPOSIT_ONE, true, _groupIds(PEER_PLUSES), _addresses(otherTaker)
-        );
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, _groupIds(PEER_PLUSES), _addresses(otherTaker));
         vm.stopPrank();
 
         assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 2);
@@ -430,9 +438,7 @@ contract WhitelistPolicyTest is Test {
         bytes32 unknownGroup = bytes32(uint256(999));
         vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.GroupDoesNotExist.selector, unknownGroup));
         vm.prank(maker);
-        policy.configureDeposit(
-            address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS, unknownGroup), _addresses(taker)
-        );
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS, unknownGroup), _addresses(taker));
 
         assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
         assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 0);
@@ -440,9 +446,7 @@ contract WhitelistPolicyTest is Test {
 
         vm.expectRevert(WhitelistPolicy.ZeroAddress.selector);
         vm.prank(maker);
-        policy.configureDeposit(
-            address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS), _addresses(taker, address(0))
-        );
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS), _addresses(taker, address(0)));
 
         assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
         assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 0);
@@ -557,6 +561,46 @@ contract WhitelistPolicyTest is Test {
         assertFalse(policy.isTakerAllowed(address(otherEscrow), DEPOSIT_ONE, taker));
     }
 
+    /* ============ Pre-intent hook ============ */
+
+    function test_ValidateSignalIntentAllowsDisabledPolicy() public {
+        orchestratorRegistry.addOrchestrator(address(this));
+        policy.validateSignalIntent(_preIntentContext(taker));
+    }
+
+    function test_ValidateSignalIntentAllowsDirectlyWhitelistedTaker() public {
+        vm.prank(maker);
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, new bytes32[](0), _addresses(taker));
+        orchestratorRegistry.addOrchestrator(address(this));
+
+        policy.validateSignalIntent(_preIntentContext(taker));
+    }
+
+    function test_ValidateSignalIntentAllowsGroupMember() public {
+        vm.prank(maker);
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS), new address[](0));
+        registry.addMembers(PEERS, _addresses(taker));
+        orchestratorRegistry.addOrchestrator(address(this));
+
+        policy.validateSignalIntent(_preIntentContext(taker));
+    }
+
+    function test_ValidateSignalIntentRejectsNonWhitelistedTaker() public {
+        vm.prank(maker);
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, true);
+        orchestratorRegistry.addOrchestrator(address(this));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(WhitelistPolicy.TakerNotWhitelisted.selector, taker, address(escrow), DEPOSIT_ONE)
+        );
+        policy.validateSignalIntent(_preIntentContext(taker));
+    }
+
+    function test_ValidateSignalIntentRejectsUnregisteredCaller() public {
+        vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.UnauthorizedOrchestratorCaller.selector, address(this)));
+        policy.validateSignalIntent(_preIntentContext(taker));
+    }
+
     /* ============ Helpers ============ */
 
     function _groupIds(bytes32 _first) internal pure returns (bytes32[] memory groupIds) {
@@ -590,5 +634,20 @@ contract WhitelistPolicyTest is Test {
         addresses = new address[](2);
         addresses[0] = _first;
         addresses[1] = _second;
+    }
+
+    function _preIntentContext(address _taker) internal view returns (IPreIntentHook.PreIntentContext memory context) {
+        context = IPreIntentHook.PreIntentContext({
+            taker: _taker,
+            escrow: address(escrow),
+            depositId: DEPOSIT_ONE,
+            amount: 1,
+            to: _taker,
+            paymentMethod: bytes32(0),
+            fiatCurrency: bytes32(0),
+            conversionRate: 0,
+            referralFees: new IReferralFee.ReferralFee[](0),
+            preIntentHookData: ""
+        });
     }
 }

@@ -34,7 +34,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV2LegacyFixture 
         PEER_PLUSES = groupRegistry.createGroup("Peer Pluses");
         PEER_MERCHANTS = groupRegistry.createGroup("Peer Merchants");
 
-        policy = new WhitelistPolicy(groupRegistry, escrowRegistry);
+        policy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
         lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, policy);
         IOrchestratorV3(address(orchestrator)).setLifecycleHook(lifecycleHook);
     }

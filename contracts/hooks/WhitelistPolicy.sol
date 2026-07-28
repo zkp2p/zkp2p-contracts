@@ -7,6 +7,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IAddressGroupRegistry} from "../interfaces/IAddressGroupRegistry.sol";
 import {IEscrow} from "../interfaces/IEscrow.sol";
 import {IEscrowRegistry} from "../interfaces/IEscrowRegistry.sol";
+import {IOrchestratorRegistry} from "../interfaces/IOrchestratorRegistry.sol";
 import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 
 /**
@@ -32,6 +33,7 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
 
     IAddressGroupRegistry public immutable override groupRegistry;
     IEscrowRegistry public override escrowRegistry;
+    IOrchestratorRegistry public immutable override orchestratorRegistry;
 
     mapping(address => mapping(uint256 => bool)) public override enabled;
     mapping(address => mapping(uint256 => mapping(address => bool))) public override isWhitelisted;
@@ -56,15 +58,23 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
     error EscrowNotWhitelisted(address escrow);
     error DepositNotFound(address escrow, uint256 depositId);
     error NotDepositor(address escrow, uint256 depositId, address caller);
+    error UnauthorizedOrchestratorCaller(address caller);
+    error TakerNotWhitelisted(address taker, address escrow, uint256 depositId);
 
     /* ============ Constructor ============ */
 
-    constructor(IAddressGroupRegistry _groupRegistry, IEscrowRegistry _escrowRegistry) Ownable() {
+    constructor(
+        IAddressGroupRegistry _groupRegistry,
+        IEscrowRegistry _escrowRegistry,
+        IOrchestratorRegistry _orchestratorRegistry
+    ) Ownable() {
         _validateDependency(address(_groupRegistry));
         _validateDependency(address(_escrowRegistry));
+        _validateDependency(address(_orchestratorRegistry));
 
         groupRegistry = _groupRegistry;
         escrowRegistry = _escrowRegistry;
+        orchestratorRegistry = _orchestratorRegistry;
     }
 
     /* ============ Modifiers ============ */
@@ -103,11 +113,7 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
         bool _enabled,
         bytes32[] calldata _groupIds,
         address[] calldata _takers
-    )
-        external
-        override
-        onlyDepositor(_escrow, _depositId)
-    {
+    ) external override onlyDepositor(_escrow, _depositId) {
         _setEnabled(_escrow, _depositId, _enabled);
         _addGroups(_escrow, _depositId, _groupIds);
         _addTakers(_escrow, _depositId, _takers);
@@ -213,12 +219,24 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function isTakerAllowed(address _escrow, uint256 _depositId, address _taker)
-        external
-        view
-        override
-        returns (bool)
-    {
+    function isTakerAllowed(address _escrow, uint256 _depositId, address _taker) external view override returns (bool) {
+        return _isTakerAllowed(_escrow, _depositId, _taker);
+    }
+
+    /**
+     * @notice Enforces this deposit's whitelist policy during intent signaling.
+     * @dev Only registered orchestrators may invoke the hook.
+     */
+    function validateSignalIntent(PreIntentContext calldata _ctx) external view override {
+        if (!orchestratorRegistry.isOrchestrator(msg.sender)) revert UnauthorizedOrchestratorCaller(msg.sender);
+        if (!_isTakerAllowed(_ctx.escrow, _ctx.depositId, _ctx.taker)) {
+            revert TakerNotWhitelisted(_ctx.taker, _ctx.escrow, _ctx.depositId);
+        }
+    }
+
+    /* ============ Internal Functions ============ */
+
+    function _isTakerAllowed(address _escrow, uint256 _depositId, address _taker) internal view returns (bool) {
         if (!enabled[_escrow][_depositId]) return true;
         if (isWhitelisted[_escrow][_depositId][_taker]) return true;
 
@@ -228,8 +246,6 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
         }
         return false;
     }
-
-    /* ============ Internal Functions ============ */
 
     function _setEnabled(address _escrow, uint256 _depositId, bool _enabled) internal {
         enabled[_escrow][_depositId] = _enabled;

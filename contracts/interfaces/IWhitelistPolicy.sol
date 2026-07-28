@@ -4,10 +4,13 @@ pragma solidity ^0.8.18;
 
 import {IAddressGroupRegistry} from "./IAddressGroupRegistry.sol";
 import {IEscrowRegistry} from "./IEscrowRegistry.sol";
+import {IOrchestratorRegistry} from "./IOrchestratorRegistry.sol";
+import {IPreIntentHook} from "./IPreIntentHook.sol";
 
-interface IWhitelistPolicy {
+interface IWhitelistPolicy is IPreIntentHook {
     function groupRegistry() external view returns (IAddressGroupRegistry);
     function escrowRegistry() external view returns (IEscrowRegistry);
+    function orchestratorRegistry() external view returns (IOrchestratorRegistry);
     function enabled(address escrow, uint256 depositId) external view returns (bool);
     function isWhitelisted(address escrow, uint256 depositId, address taker) external view returns (bool);
     function getAllowedGroups(address escrow, uint256 depositId) external view returns (bytes32[] memory);
