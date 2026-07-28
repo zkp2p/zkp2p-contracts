@@ -63,6 +63,7 @@ async function systemFullyWired(network: string): Promise<boolean> {
 
   if ((await policy.groupRegistry()).toLowerCase() !== registryAddress.toLowerCase()) return false;
   if ((await policy.escrowRegistry()).toLowerCase() !== escrowRegistryAddress.toLowerCase()) return false;
+  if ((await policy.orchestratorRegistry()).toLowerCase() !== orchestratorRegistryAddress.toLowerCase()) return false;
   if ((await hook.whitelistPolicy()).toLowerCase() !== policyAddress.toLowerCase()) return false;
   if ((await hook.orchestratorRegistry()).toLowerCase() !== orchestratorRegistryAddress.toLowerCase()) return false;
   if ((await orchestrator.lifecycleHook()).toLowerCase() !== hookAddress.toLowerCase()) return false;
@@ -148,6 +149,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const whitelistPolicyArgs: Parameters<WhitelistPolicy__factory["deploy"]> = [
     addressGroupRegistry.address,
     escrowRegistryAddress,
+    orchestratorRegistryAddress,
   ];
 
   const whitelistPolicy = await deploy("WhitelistPolicy", {

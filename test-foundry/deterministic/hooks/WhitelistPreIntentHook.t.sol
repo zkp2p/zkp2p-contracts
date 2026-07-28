@@ -6,10 +6,12 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {EscrowV2} from "contracts/EscrowV2.sol";
 import {OrchestratorV2} from "contracts/OrchestratorV2.sol";
+import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {WhitelistPreIntentHook} from "contracts/hooks/WhitelistPreIntentHook.sol";
 import {PaymentVerifierMock} from "contracts/mocks/PaymentVerifierMock.sol";
 import {PreIntentHookMock} from "contracts/mocks/PreIntentHookMock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
+import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
@@ -56,7 +58,10 @@ contract WhitelistPreIntentHookTest is Test {
     USDCMock internal token;
     EscrowV2 internal escrow;
     OrchestratorV2 internal orchestrator;
+    AddressGroupRegistry internal groupRegistry;
+    EscrowRegistry internal escrowRegistry;
     OrchestratorRegistry internal orchestratorRegistry;
+    WhitelistPolicy internal policy;
     WhitelistPreIntentHook internal whitelistHook;
     PreIntentHookMock internal genericHook;
 
@@ -69,7 +74,7 @@ contract WhitelistPreIntentHookTest is Test {
         token = new USDCMock(1_000_000_000e6, "USDC", "USDC");
         token.transfer(depositor, 10_000e6);
 
-        EscrowRegistry escrowRegistry = new EscrowRegistry();
+        escrowRegistry = new EscrowRegistry();
         PaymentVerifierRegistry paymentVerifierRegistry = new PaymentVerifierRegistry();
         orchestratorRegistry = new OrchestratorRegistry();
         PaymentVerifierMock verifier = new PaymentVerifierMock();
@@ -100,6 +105,8 @@ contract WhitelistPreIntentHookTest is Test {
         orchestrator.setAllowMultipleIntents(true);
         orchestratorRegistry.addOrchestrator(address(orchestrator));
         verifier.setVerificationContext(address(orchestrator), address(escrow));
+        groupRegistry = new AddressGroupRegistry();
+        policy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
         whitelistHook = new WhitelistPreIntentHook(address(orchestratorRegistry));
         genericHook = new PreIntentHookMock();
 
@@ -366,6 +373,24 @@ contract WhitelistPreIntentHookTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(WhitelistPreIntentHook.TakerNotWhitelisted.selector, taker, address(escrow), 0)
         );
+        _signalCall();
+        assertEq(orchestrator.getAccountIntents(taker).length, 0);
+    }
+
+    function test_WhitelistPolicyCanBeUsedAsV2WhitelistHook() public {
+        vm.prank(depositor);
+        policy.configureDeposit(address(escrow), 0, true, new bytes32[](0), _address(taker));
+        _setWhitelistHook(depositor, address(escrow), policy);
+
+        assertNotEq(_signal(), bytes32(0));
+    }
+
+    function test_WhitelistPolicyRejectsNonWhitelistedV2Taker() public {
+        vm.prank(depositor);
+        policy.setEnabled(address(escrow), 0, true);
+        _setWhitelistHook(depositor, address(escrow), policy);
+
+        vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.TakerNotWhitelisted.selector, taker, address(escrow), 0));
         _signalCall();
         assertEq(orchestrator.getAccountIntents(taker).length, 0);
     }
