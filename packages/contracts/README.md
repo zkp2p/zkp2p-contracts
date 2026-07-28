@@ -33,15 +33,11 @@ import type { Escrow, Orchestrator } from "@zkp2p/contracts-v2/types"
 // Import utility functions
 import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils/protocolUtils"
 
-// Import stable source ABIs for the V3 lifecycle boundary and deposit-scoped whitelist policy
+// Import stable source ABIs for the deposit-scoped whitelist policy
 import {
   AddressGroupRegistry,
-  IIntentLifecycleHook,
   WhitelistPolicy,
-  IntentLifecycleHookV1,
-  OrchestratorV3,
 } from "@zkp2p/contracts-v2/abis/contracts"
-import { calculateRequiredCoverage, selectRiskMode } from "@zkp2p/contracts-v2/utils/riskMath"
 
 // Example: Create contract instance with ethers
 import { ethers } from 'ethers';
@@ -175,7 +171,6 @@ All modules are directly accessible via subpath exports:
 - `@zkp2p/contracts-v2/constants/<network>` - Constants per network
 - `@zkp2p/contracts-v2/paymentMethods` - Payment method configs
 - `@zkp2p/contracts-v2/utils/protocolUtils` - Protocol utilities
-- `@zkp2p/contracts-v2/utils/riskMath` - Exact bigint capacity, reservation, and penalty formulas
 - `@zkp2p/contracts-v2/types` - TypeScript types
 
 ### Export Format Details

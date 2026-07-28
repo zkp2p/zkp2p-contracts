@@ -56,18 +56,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     PythOracleAdapter:                  ${tryGetAddress(network, "PythOracleAdapter")}
     ProtocolViewerV2:                   ${tryGetAddress(network, "ProtocolViewerV2")}
     IntentGuardian:                     ${tryGetAddress(network, "IntentGuardian")}
-    ----------------------------------------------------------------------
-    Stake Risk Contracts:
-    BoundedCall:                        ${tryGetAddress(network, "BoundedCall")}
-    PostIntentHookExecutor:             ${tryGetAddress(network, "PostIntentHookExecutor")}
-    LifecycleSettlementExecutor:             ${tryGetAddress(network, "LifecycleSettlementExecutor")}
-    FeeSettlementLib:                   ${tryGetAddress(network, "FeeSettlementLib")}
-    OrchestratorV3:                     ${tryGetAddress(network, "OrchestratorV3")}
-    StakeVault:                         ${tryGetAddress(network, "StakeVault")}
-    RiskManager:                        ${tryGetAddress(network, "RiskManager")}
     AddressGroupRegistry:               ${tryGetAddress(network, "AddressGroupRegistry")}
     WhitelistPolicy:                   ${tryGetAddress(network, "WhitelistPolicy")}
-    IntentLifecycleHookV1:             ${tryGetAddress(network, "IntentLifecycleHookV1")}
     NullifierRegistryV2:                ${tryGetAddress(network, "NullifierRegistryV2")}
     UnifiedPaymentVerifierV3:           ${tryGetAddress(network, "UnifiedPaymentVerifierV3")}
     `

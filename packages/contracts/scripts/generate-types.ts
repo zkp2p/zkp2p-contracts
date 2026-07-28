@@ -95,7 +95,7 @@ function generateDeclarations(files: string[]): void {
  * Also compile protocolUtils.ts to .d.ts
  */
 function generateUtilityTypes(): void {
-  const utilityPaths = ['protocolUtils.ts', 'riskMath.ts']
+  const utilityPaths = ['protocolUtils.ts']
     .map(fileName => path.join(PACKAGE_ROOT, 'utils', fileName))
     .filter(filePath => fs.existsSync(filePath));
   if (utilityPaths.length > 0) generateDeclarations(utilityPaths);

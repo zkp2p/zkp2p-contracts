@@ -13,7 +13,7 @@ function ensureDir(dir: string) {
 export async function extractUtils(): Promise<void> {
   ensureDir(UTILS_DIR);
   
-  for (const utility of ['protocolUtils.ts', 'riskMath.ts']) {
+  for (const utility of ['protocolUtils.ts']) {
     const sourceFile = path.join(ROOT, 'utils', utility);
     const destFile = path.join(UTILS_DIR, utility);
     fs.copyFileSync(sourceFile, destFile);
@@ -24,7 +24,6 @@ export async function extractUtils(): Promise<void> {
 // Protocol utilities export
 
 export * from './protocolUtils';
-export * from './riskMath';
 
 // Re-export commonly used items for convenience
 export { 

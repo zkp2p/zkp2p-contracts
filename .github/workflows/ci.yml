@@ -107,7 +107,7 @@ jobs:
       matrix:
         lane:
           - escrow
-          - staking
+          - verifiers
           - orchestrator
           - remaining
     steps:
