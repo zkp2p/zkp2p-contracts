@@ -4,6 +4,7 @@ pragma solidity ^0.8.18;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IPostIntentHookV2 } from "./IPostIntentHookV2.sol";
+import { IIntentLifecycleHook } from "./IIntentLifecycleHook.sol";
 import { IPreIntentHook } from "./IPreIntentHook.sol";
 import { IReferralFee } from "./IReferralFee.sol";
 
@@ -88,8 +89,8 @@ interface IOrchestratorV3 {
     );
     event IntentManagerFeeSnapshotted(bytes32 indexed intentHash, address indexed feeRecipient, uint256 fee);
     event DepositPreIntentHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
-    event DepositWhitelistHookSet(address indexed escrow, uint256 indexed depositId, address indexed hook, address setter);
-
+    event LifecycleHookUpdated(address indexed previousHook, address indexed newHook);
+    event IntentLifecycleHookSnapshotted(bytes32 indexed intentHash, address indexed lifecycleHook);
     event AllowMultipleIntentsUpdated(bool allowMultiple);
 
     event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);
@@ -132,6 +133,7 @@ interface IOrchestratorV3 {
     error AccountHasActiveIntent(address account, bytes32 existingIntent);
     error InvalidPostIntentHook(address hook);
     error InvalidPreIntentHook(address hook);
+    error InvalidLifecycleHook(address hook);
     error InvalidSignature();
     error SignatureExpired(uint256 expiration, uint256 currentTime);
 
@@ -148,14 +150,14 @@ interface IOrchestratorV3 {
     function getIntent(bytes32 intentHash) external view returns (Intent memory);
     function getAccountIntents(address account) external view returns (bytes32[] memory);
     function getDepositPreIntentHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
-    function getDepositWhitelistHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);
+    function lifecycleHook() external view returns (IIntentLifecycleHook);
+    function getIntentLifecycleHook(bytes32 intentHash) external view returns (IIntentLifecycleHook);
 
     /* ============ External Functions for Users ============ */
 
     function signalIntent(SignalIntentParams calldata params) external;
     function setDepositPreIntentHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
-    function setDepositWhitelistHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
-
+    function setLifecycleHook(IIntentLifecycleHook hook) external;
     function cancelIntent(bytes32 intentHash) external;
 
     function fulfillIntent(FulfillIntentParams calldata params) external;
