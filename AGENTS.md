@@ -11,10 +11,11 @@
 
 ## Staging Deployment Status
 
-- The retired `RiskManager`/`OrchestratorV3` lane was staging-only. Its historical addresses are not active
-  deployment targets.
+- The retired `RiskManager`/`OrchestratorV3` lane was staging-only. Its deployment records are removed from the
+  active tree.
 - `IntentGuardian` and `WhitelistPolicy` extend the existing `EscrowV2`/`OrchestratorV2` stack. Deploy them through
-  the single V2 guardian/whitelist script; do not redeploy the V2 core as part of that workflow.
+  the single V2 guardian/whitelist script as a hard cut on both Base staging and production; do not redeploy the V2
+  core as part of that workflow.
 - The payment-verifier cutover is one-way. In the same governance batch, authorize UPV3 on `NullifierRegistryV2`,
   permanently revoke the retired verifier's legacy-registry write permission, and route the shared
   `PaymentVerifierRegistry` to UPV3. Never route a payment method back to the retired verifier: the legacy registry

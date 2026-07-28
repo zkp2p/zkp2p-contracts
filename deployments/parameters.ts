@@ -126,12 +126,12 @@ export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
 export const CALLBACK_GAS_LIMIT = 2_000_000;
 
 // Initial hourly fee for the standalone IntentGuardian, denominated in basis points of the
-// locked intent amount. Governance can update this value on the deployed guardian. Production
-// is intentionally absent until governance ratifies a fee and deployment.
+// locked intent amount. Governance can update this value on the deployed guardian.
 export const INTENT_GUARDIAN_EXTENSION_FEE_BPS_PER_HOUR: Record<string, number> = {
   localhost: 2,
   hardhat: 2,
   base_staging: 2,
+  base: 2,
 };
 
 // Pyth Network contract addresses

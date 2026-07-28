@@ -20,7 +20,7 @@ import type {
   WhitelistPolicy__factory,
 } from "../typechain";
 
-const SUPPORTED_NETWORKS = new Set(["localhost", "hardhat", "base_staging"]);
+const SUPPORTED_NETWORKS = new Set(["localhost", "hardhat", "base_staging", "base"]);
 
 function sameAddress(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
