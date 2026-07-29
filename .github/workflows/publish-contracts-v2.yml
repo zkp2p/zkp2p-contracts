@@ -9,6 +9,11 @@ on:
         description: Exact 0.4.0-rc.N version committed on canonical main
         required: true
         type: string
+      recovery:
+        description: Verify an already-published immutable version after a post-publish propagation failure
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -27,10 +32,11 @@ env:
   DIST_TAG: rc
   NPM_CONFIG_PROVENANCE: "true"
   REQUIRE_PROVENANCE: "true"
+  RECOVERY_MODE: ${{ inputs.recovery }}
 
 jobs:
   validate:
-    name: Build, test, and pack
+    name: Build, validate, and pack
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
@@ -50,7 +56,7 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22.14.0
-          package-manager-cache: false
+          cache: yarn
           registry-url: https://registry.npmjs.org
 
       - name: Pin release tooling
@@ -59,15 +65,14 @@ jobs:
           corepack enable
           test "$(npm --version)" = "11.9.0"
 
-      - name: Install pinned Foundry
-        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a
-        with:
-          version: ${{ env.FOUNDRY_VERSION }}
-
       - name: Guard canonical RC source and unpublished version
         id: release-guard
         run: |
-          node scripts/npm-release.mjs guard "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
+          if [ "$RECOVERY_MODE" = "true" ]; then
+            node scripts/npm-release.mjs recover "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
+          else
+            node scripts/npm-release.mjs guard "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
+          fi
           latest=$(npm view @zkp2p/contracts-v2 dist-tags.latest)
           test -n "$latest"
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
@@ -88,16 +93,14 @@ jobs:
           set -a
           . ./.env.default
           set +a
-          yarn build
-
-      - name: Run complete Foundry suite
-        run: yarn test
+          yarn compile
 
       - name: Build and test package
         run: |
           yarn pkg:build
           yarn pkg:test
           yarn workspace @zkp2p/contracts-v2 verify:release
+          yarn test:release-policy
 
       - name: Pack exact publish candidate
         run: |
@@ -126,9 +129,69 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+  foundry-tests:
+    name: Complete Foundry suite
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout canonical release commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Install pinned Foundry
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.14.0
+          cache: yarn
+          registry-url: https://registry.npmjs.org
+
+      - name: Pin release tooling
+        run: |
+          npm install --global npm@11.9.0 corepack@0.34.0
+          corepack enable
+          test "$(npm --version)" = "11.9.0"
+
+      - name: Guard canonical release source
+        run: |
+          if [ "$RECOVERY_MODE" = "true" ]; then
+            node scripts/npm-release.mjs recover "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
+          else
+            node scripts/npm-release.mjs guard "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
+          fi
+
+      - name: Install immutable dependencies
+        run: yarn install --immutable
+
+      - name: Prepare local environment
+        run: cp .env.default .env
+
+      - name: Restore exact-source Foundry cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v5
+        with:
+          path: |
+            out
+            cache_forge
+          key: ${{ runner.os }}-foundry-${{ env.FOUNDRY_VERSION }}-${{ hashFiles('foundry.toml', 'contracts/**/*.sol', 'test-foundry/**/*.sol', 'lib/forge-std/src/**/*.sol') }}
+          restore-keys: |
+            ${{ runner.os }}-foundry-${{ env.FOUNDRY_VERSION }}-
+
+      - name: Run complete Foundry suite
+        run: yarn test
+
   publish:
     name: Publish with npm OIDC
-    needs: validate
+    needs: [validate, foundry-tests]
+    if: inputs.recovery == false
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment:
@@ -172,6 +235,73 @@ jobs:
         run: |
           tarball=$(node -e "const fs=require('fs'),p=require('path');const r=JSON.parse(fs.readFileSync(process.argv[1]))[0];process.stdout.write(p.join(process.argv[2],r.filename))" "$RUNNER_TEMP/npm-pack/pack.json" "$RUNNER_TEMP/npm-pack")
           npm publish "$tarball" --access public --tag rc --provenance
+
+      - name: Verify registry version, dist-tag, integrity, and contents
+        env:
+          EXPECTED_LATEST: ${{ needs.validate.outputs.latest-before }}
+        run: |
+          node scripts/npm-release.mjs verify "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG" "$RUNNER_TEMP/npm-pack/pack.json"
+          mkdir -p "$RUNNER_TEMP/registry-pack"
+          for attempt in {1..12}; do
+            if npm pack "@zkp2p/contracts-v2@$RELEASE_VERSION" --ignore-scripts --json --pack-destination "$RUNNER_TEMP/registry-pack" > "$RUNNER_TEMP/registry-pack.json"; then
+              break
+            fi
+            test "$attempt" -lt 12
+            sleep 5
+          done
+          node packages/contracts/scripts/verify-release.mjs --pack-json "$RUNNER_TEMP/registry-pack.json" --pack-dir "$RUNNER_TEMP/registry-pack"
+          for spec in "@zkp2p/contracts-v2@$RELEASE_VERSION" "@zkp2p/contracts-v2@rc"; do
+            smoke_dir=$(mktemp -d "$RUNNER_TEMP/npm-registry-smoke.XXXXXX")
+            cd "$smoke_dir"
+            npm init --yes
+            for attempt in {1..12}; do
+              if npm install "$spec" --ignore-scripts --no-audit --no-fund; then
+                break
+              fi
+              test "$attempt" -lt 12
+              sleep 5
+            done
+            node "$GITHUB_WORKSPACE/packages/contracts/scripts/smoke-installed.mjs" "$RELEASE_VERSION"
+          done
+
+  recover:
+    name: Verify published RC recovery
+    needs: [validate, foundry-tests]
+    if: inputs.recovery == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout release verification code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js and npm registry
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.14.0
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Pin release tooling
+        run: |
+          npm install --global npm@11.9.0
+          test "$(npm --version)" = "11.9.0"
+
+      - name: Re-check canonical recovery source
+        run: node scripts/npm-release.mjs recover "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
+
+      - name: Download validated tarball
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: ${{ env.PACK_ARTIFACT }}
+          path: ${{ runner.temp }}/npm-pack
+
+      - name: Verify downloaded tarball
+        run: node packages/contracts/scripts/verify-release.mjs --pack-json "$RUNNER_TEMP/npm-pack/pack.json" --pack-dir "$RUNNER_TEMP/npm-pack"
 
       - name: Verify registry version, dist-tag, integrity, and contents
         env:
