@@ -1,161 +1,134 @@
 ---
 name: audit
-description: Run security audits on ZKP2P V2 contracts using Trail of Bits security skills. Supports full audits, differential PR reviews, and individual security checks.
+description: >
+  Review zkp2p-contracts for branch-introduced security and correctness issues.
+  Use for full audits, current-branch differential reviews, pull-request
+  reviews, focused invariant checks, or V2-to-V3 scaffold parity checks. Resolve
+  a fresh canonical main baseline, stay read-only unless the user explicitly
+  requests an artifact, and separate blocking findings from inherited,
+  theoretical, unavailable, or baseline issues.
 ---
 
-# /audit — Security Audit Skill
+# Audit zkp2p-contracts
 
-Run structured security audits on ZKP2P V2 contracts.
+Default to a read-only review. Do not edit code, write an audit report, stage,
+commit, push, or open a PR unless the user explicitly asks for that mutation.
 
 ## Modes
 
-Parse the argument to determine mode:
+- `full`: inspect the requested contracts and their security boundaries.
+- `diff`: review the current branch against canonical `main`.
+- `pr <number>`: review the current head of the named PR.
+- `check <area>`: inspect one invariant, contract, or failure class.
+- `v3-parity`: verify that the retained OrchestratorV3 scaffold has not diverged
+  from OrchestratorV2 beyond its explicitly allowed identity changes.
 
-| Invocation | Mode | Description |
-|-----------|------|-------------|
-| `/audit` or `/audit full` | Full | 10-step comprehensive audit |
-| `/audit diff` | Differential | Review current branch vs main |
-| `/audit pr <number>` | Differential | Review a specific PR |
-| `/audit check <skill>` | Single | Run one security skill |
-| `/audit maturity` | Single | Quick code maturity assessment |
-| `/audit entries` | Single | Entry point mapping only |
+If the request is explanatory or read-only, do not compile or test unless the
+answer depends on execution.
 
-## Mode: Full Audit
+## Establish current evidence
 
-Run the 10-step workflow. This is thorough and takes time.
+The canonical repository is `zkp2p/zkp2p-contracts`. Follow a legacy remote
+redirect to that owner; never substitute a similarly named repository.
 
-### Step 1: Scope
-Confirm scope. Default is all V2 contracts:
-```
-contracts/EscrowV2.sol
-contracts/OrchestratorV2.sol
-contracts/RateManagerV1.sol
-contracts/ProtocolViewerV2.sol
-contracts/unifiedVerifier/
-contracts/registries/
-contracts/hooks/
-contracts/oracles/
-contracts/lib/
-```
-Excluded: `contracts/mocks/`, `contracts/external/`, `contracts/archive/`, V1 contracts (`Escrow.sol`, `Orchestrator.sol`, `ProtocolViewer.sol`).
+For a branch review:
 
-### Step 2: Entry Point Mapping
-```
-Run skill: entry-point-analyzer:entry-point-analyzer
-Scope: contracts/ (V2 only)
-```
-Save raw output to `audits/_scratch/entry-points.md`.
-
-### Step 3: Code Maturity Assessment
-```
-Run skill: building-secure-contracts:code-maturity-assessor
-Scope: contracts/ (V2 only)
-```
-Save raw output to `audits/_scratch/code-maturity.md`.
-
-### Step 4: Guidelines Check
-```
-Run skill: building-secure-contracts:guidelines-advisor
-Scope: contracts/ (V2 only)
-```
-Save raw output to `audits/_scratch/guidelines.md`.
-
-### Step 5: Static Analysis
-```
-Run skill: static-analysis:semgrep
-Scope: contracts/ (exclude mocks, archive, external)
-```
-Save raw output to `audits/_scratch/semgrep.md`.
-
-### Step 6: Token Integration
-```
-Run skill: building-secure-contracts:token-integration-analyzer
-Focus: USDC (ERC20) integration in EscrowV2, OrchestratorV2
-```
-Save raw output to `audits/_scratch/token-integration.md`.
-
-### Step 7: Sharp Edges
-```
-Run skill: sharp-edges:sharp-edges
-Scope: contracts/ (V2 only)
-```
-Save raw output to `audits/_scratch/sharp-edges.md`.
-
-### Step 8: Deep Context
-Based on findings from steps 2-7, identify the 3-5 highest-risk functions. Then:
-```
-Run skill: audit-context-building:audit-context-building
-Focus: identified high-risk functions
-```
-Save raw output to `audits/_scratch/deep-context.md`.
-
-### Step 9: Property Testing Recommendations
-```
-Run skill: property-based-testing:property-based-testing
-Focus: key invariants (liquidity conservation, fee bounds, nullifier uniqueness, expiry, oracle floors, access control)
-```
-Save raw output to `audits/_scratch/property-testing.md`.
-
-### Step 10: Synthesize Report
-1. Read all `audits/_scratch/*.md` outputs
-2. Read `audits/templates/full-audit-template.md`
-3. Deduplicate findings across tools
-4. Assign severity: CRITICAL / HIGH / MEDIUM / LOW / INFORMATIONAL
-5. Write final report to `audits/full/YYYY-MM-DD-full-audit.md`
-6. Get current commit SHA: `git rev-parse --short HEAD`
-7. Stage and commit:
-   ```bash
-   git add audits/full/YYYY-MM-DD-full-audit.md
-   git commit -m "audit: full security audit at <sha>"
-   ```
-
-## Mode: Differential Review
-
-### Step 1: Determine Diff Range
-- If `/audit diff`: compare current branch to `main`
-- If `/audit pr <number>`: fetch PR diff with `gh pr diff <number>`
-- List changed files, filter to `contracts/` only
-- If no contract changes, report "No contracts changed" and exit
-
-### Step 2: Run Differential Review
-```
-Run skill: differential-review:differential-review
-Input: the diff from step 1
+```bash
+git fetch origin main
+git rev-parse origin/main
+git rev-parse HEAD
+git diff --stat origin/main...HEAD
+git diff --name-status origin/main...HEAD
 ```
 
-### Step 3: Deep Dive (conditional)
-If any HIGH or CRITICAL findings from step 2:
-```
-Run skill: audit-context-building:audit-context-building
-Focus: functions containing critical findings
-```
+For a PR, resolve its current head and diff through connected GitHub or `gh`,
+then record both base and head SHAs. Review the current head again before merge.
+Do not ask the user to paste a diff when repository access is available.
 
-### Step 4: Write Report
-1. Read `audits/templates/differential-template.md`
-2. Fill in findings, blast radius, test coverage assessment
-3. Write to `audits/differential/YYYY-MM-DD-pr-<number>.md` or `audits/differential/YYYY-MM-DD-<branch>.md`
-4. Stage and commit:
-   ```bash
-   git add audits/differential/YYYY-MM-DD-*.md
-   git commit -m "audit: differential review of PR #<number> at <sha>"
-   ```
+If fresh remote evidence is unavailable, state that limitation and do not
+present a stale local ref as current.
 
-## Mode: Single Check
+## Scope
 
-Run one specific skill and print results inline. Do NOT commit unless user asks.
+Map the exact changed or requested surface:
 
-| Shortcut | Skill |
-|----------|-------|
-| `semgrep` | `static-analysis:semgrep` |
-| `codeql` | `static-analysis:codeql` |
-| `maturity` | `building-secure-contracts:code-maturity-assessor` |
-| `guidelines` | `building-secure-contracts:guidelines-advisor` |
-| `entries` | `entry-point-analyzer:entry-point-analyzer` |
-| `token` | `building-secure-contracts:token-integration-analyzer` |
-| `sharp` | `sharp-edges:sharp-edges` |
-| `context <function>` | `audit-context-building:audit-context-building` |
-| `variants <pattern>` | `variant-analysis:variant-analysis` |
-| `property` | `property-based-testing:property-based-testing` |
-| `prep` | `building-secure-contracts:audit-prep-assistant` |
-| `workflow` | `building-secure-contracts:secure-workflow-guide` |
-| `rules` | `semgrep-rule-creator:semgrep-rule-creator` |
+- production contracts, interfaces, libraries, and inherited code;
+- storage layout, authorization, accounting, settlement, replay, and
+  reentrancy boundaries;
+- deploy scripts, governance batches, registries, permissions, and skip logic;
+- deployment artifacts, package extraction, ABIs, addresses, and consumers;
+- closest deterministic, fuzz, invariant, integration, and deployment tests.
+
+Use direct searches for imports, calls, selectors, events, errors, fixtures,
+and deployment consumers. Do not expand into unrelated cleanup.
+
+## Finding standard
+
+A blocking finding must be:
+
+1. introduced by the reviewed branch or PR;
+2. material to correctness, security, deployment, or a named invariant;
+3. reproducible or supported by current code evidence;
+4. actionable within the branch's ownership boundary.
+
+Report inherited bugs, baseline failures, theoretical risks, unavailable
+checks, and pending CI separately. Do not block a branch on them unless the
+branch materially worsens the condition.
+
+For every finding include severity, tight file/line scope, concrete failure
+path, impact, and smallest corrective action. Do not inflate style preferences
+into security findings.
+
+## Review invariants
+
+Check the invariants relevant to the scope:
+
+- authorization and ownership transitions fail closed;
+- locked and unlocked value, fees, refunds, and transfers conserve value;
+- nullifiers and payment identifiers cannot be replayed;
+- signatures bind the intended chain, deployment, contract, actor, amount, and
+  expiration;
+- registry and verifier cutovers remove retired active paths;
+- deploy scripts are idempotent only for the exact intended state;
+- package ABIs and addresses match canonical source and deployment artifacts;
+- historical artifacts remain historical and cannot reactivate old semantics.
+
+## OrchestratorV3 scaffold parity
+
+`OrchestratorV3` and `IOrchestratorV3` are future scaffolds, not an active
+deployment lane. When either V2 or V3 source changes:
+
+1. Diff `OrchestratorV2.sol` against `OrchestratorV3.sol`.
+2. Diff `IOrchestratorV2.sol` against `IOrchestratorV3.sol`.
+3. Normalize only the contract/interface import, identifier, title, and
+   version-specific documentation.
+4. Require the remaining source diff to be empty unless the task explicitly
+   authorizes V3 behavior.
+5. Confirm V3 is absent from active deploy scripts, deployment outputs, package
+   addresses, and production cutover instructions.
+
+If an exact parity claim matters, run the smallest compile needed and compare
+ABI, storage layout, selectors, and normalized runtime bytecode with compiler
+metadata and version identifiers handled explicitly. Do not call the scaffold
+byte-identical based only on a visual source diff.
+
+## Validation
+
+Follow `AGENTS.md`:
+
+- markdown or explanation only: `git diff --check` when there is a diff;
+- one behavior: closest deterministic Foundry target;
+- shared accounting, authorization, settlement, storage, or reentrancy:
+  affected deterministic plus relevant fuzz/invariant, then one full suite only
+  at the finalized state when justified;
+- package or public ABI: package release checks after focused contract tests.
+
+Use the repository-pinned Foundry toolchain for executed evidence. Report CI
+and local results separately.
+
+## Output
+
+Lead with findings in severity order. If none meet the blocker standard, say so
+and list residual risks or unavailable evidence. Include base/head SHAs, scope,
+checks run, baseline failures, branch failures, pending CI, and whether V3
+parity was applicable.

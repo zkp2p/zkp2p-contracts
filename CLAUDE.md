@@ -2,290 +2,174 @@
 
 ## Project
 
-ZKP2P V2 Contracts -- Solidity 0.8.18 smart contracts for trustless P2P fiat-to-crypto exchange on Base. Off-chain fiat payments (Venmo, PayPal, Wise, Revolut, CashApp, Zelle, MercadoPago, Monzo, N26, Alipay, Chime, Luxon) are verified on-chain via EIP-712 attestations from a zkTLS attestation service, then escrowed USDC is released to the buyer.
+ZKP2P contracts is the canonical Solidity 0.8.18 repository for the protocol's
+on-chain escrow, orchestration, verifier, registry, policy, deployment, and npm
+package artifacts.
 
-## Build and Test
+Read `AGENTS.md` before acting. Treat deployment status as network-scoped:
+
+- V2 escrow and orchestrator are the active source lane.
+- `IntentGuardian` and `WhitelistPolicy` extend that V2 lane.
+- `UnifiedPaymentVerifierV3` is current source, test, staging-artifact, and
+  package-ABI material. `deployments/base_staging/` contains a V3 artifact;
+  `deployments/base/` does not. Do not call V3 active in production from source
+  or ABI presence alone.
+- The planned verifier cutover is one-way. Resolve the live
+  `PaymentVerifierRegistry`, nullifier permissions, network artifact, and
+  approved governance batch before stating which verifier is active.
+- V1 source and deployment artifacts are historical evidence, not an active
+  development or compatibility lane. Never route new work through V1.
+
+## Build and test
 
 ```bash
-yarn                              # Install dependencies
-yarn compile                      # Compile Solidity
-yarn build                        # Clean + compile + typechain + transpile
+yarn
+yarn compile
+yarn build
 
-# Hardhat tests (TypeScript, ethers v5)
-yarn test                         # Core test suite
-yarn test:fast                    # Skip compilation
-npx hardhat test test/escrowV2/*  # Specific suite
+# Foundry is the only contract test system.
+yarn test
+yarn test:deterministic
+yarn test:fuzz
+yarn test:invariant
+forge test --match-path '<test-foundry/path>'
 
-# Foundry tests (Solidity)
-yarn test:forge                   # All foundry tests
-yarn test:forge:fuzz              # Fuzz tests (100 runs)
-yarn test:forge:invariant         # Invariant tests
-yarn test:forge:fork              # Fork tests (cancun EVM)
-
-# Coverage
-yarn coverage                     # Hardhat coverage
-yarn test:forge:coverage          # Foundry coverage
-
-# Deploy
-yarn deploy:localhost             # Local hardhat node
-yarn deploy:base_staging          # Base mainnet (staging deployer)
-yarn deploy:base                  # Base mainnet (production)
-
-# Verify
-yarn etherscan:base               # Verify on Basescan
-yarn etherscan:base_staging
+yarn coverage
 ```
+
+Use the change-aware verification ladder in `AGENTS.md`. Start with the
+smallest Foundry target that can disprove the changed invariant. Do not run a
+clean build, the full suite, or coverage for documentation-only work.
 
 ## Architecture
 
-Two contract generations coexist. V1 is legacy; V2 is active development.
+The active V2 flow is:
 
-### Contract Flow (V2)
-
-```
-Maker -- createDeposit --> EscrowV2
-Taker -- signalIntent --> OrchestratorV2 -- lockFunds --> EscrowV2
-                                         -- preIntentHook (optional)
-Off-chain: taker pays fiat, gets zkTLS proof, submits to attestation-service
-Attestation service signs EIP-712 typed data with payment details
-Anyone -- fulfillIntent --> OrchestratorV2 -- verifyPayment --> UnifiedPaymentVerifier
-                                           -- nullify(paymentId) --> NullifierRegistry
-                                           -- unlockAndTransfer --> EscrowV2 --> USDC to buyer
+```text
+maker -> EscrowV2.createDeposit
+taker -> OrchestratorV2.signalIntent -> EscrowV2 locks funds
+attestation-service -> EIP-712 payment attestation
+OrchestratorV2.fulfillIntent
+  -> PaymentVerifierRegistry resolves the network's configured verifier
+  -> verifier validates the attestation and nullifies the payment
+  -> EscrowV2 releases funds and fees
 ```
 
-### Core Contracts
+Important ownership boundaries:
 
-| Contract | Purpose |
-|----------|---------|
-| `EscrowV2.sol` (1565 lines) | Deposit management, fund locking/release, oracle rate support, delegated rate managers |
-| `OrchestratorV2.sol` (788 lines) | Intent lifecycle, fee collection (protocol + referrer + manager), pre-intent hooks, whitelist hooks |
-| `RateManagerV1.sol` (366 lines) | Delegated rate management for deposits (managers can set rates on behalf of depositors) |
-| `ProtocolViewerV2.sol` | Read-only aggregated state queries |
-| `UnifiedPaymentVerifier.sol` | Single verifier for all payment methods via EIP-712 attestation signatures |
-| `SimpleAttestationVerifier.sol` | Validates zkTLS attestation signatures from authorized witnesses |
+- `EscrowV2` owns deposits, locking, and release.
+- `OrchestratorV2` owns intent lifecycle and fee routing.
+- `PaymentVerifierRegistry` owns payment-method-to-verifier routing.
+- `OrchestratorRegistry` and `EscrowRegistry` own allowed callers/systems.
+- `NullifierRegistry` and `NullifierRegistryV2` are distinct replay domains.
+  Never infer a safe rollback between them.
+- `MultiAttestationVerifier` owns the configured witness threshold used by the
+  current verifier wiring.
+- `IntentGuardian`, `AddressGroupRegistry`, and `WhitelistPolicy` are separate
+  V2 policy components. Do not redeploy the V2 core merely to change policy.
 
-### V1 Contracts (Legacy, still deployed)
+`UnifiedPaymentVerifier` is both a Solidity implementation name and, in some
+deployment lanes, the implementation behind the
+`UnifiedPaymentVerifierV2` deployment artifact. Resolve source, deployment
+name, artifact, address, registry routing, and nullifier permissions together;
+do not reason from the name alone.
 
-| Contract | Purpose |
-|----------|---------|
-| `Escrow.sol` (1113 lines) | Original escrow (V1 deposits still active) |
-| `Orchestrator.sol` (594 lines) | Original orchestrator |
-| `ProtocolViewer.sol` | V1 viewer |
+`OrchestratorV3` remains source/parity scaffold material. It has no current
+active deploy script. A separate approved design and deployment lane is
+required before activation.
 
-### Registry System
+## Code layout
 
-| Registry | Purpose |
-|----------|---------|
-| `PaymentVerifierRegistry` | Maps `paymentMethod` bytes32 -> verifier address + supported currencies |
-| `EscrowRegistry` | Whitelists escrow contracts (V1 + V2 both registered) |
-| `OrchestratorRegistry` | Whitelists orchestrator contracts (used by EscrowV2) |
-| `NullifierRegistry` | Prevents payment proof replay; write-gated to verifiers |
-| `RelayerRegistry` | Whitelists relayers for gasless tx submission |
-| `PostIntentHookRegistry` | Whitelists post-intent hooks (V1 only) |
-
-### Hooks
-
-| Hook | Purpose |
-|------|---------|
-| `SignatureGatingPreIntentHook` | Pre-intent hook requiring EIP-712 gating signature |
-| `WhitelistPreIntentHook` | Pre-intent hook restricting to whitelisted addresses |
-
-### Oracles
-
-| Oracle | Purpose |
-|--------|---------|
-| `ChainlinkOracleAdapter` | Wraps Chainlink price feeds for deposit rate floors |
-| `PythOracleAdapter` | Wraps Pyth price feeds for deposit rate floors |
-
-### Libraries
-
-| Library | Purpose |
-|---------|---------|
-| `ThresholdSigVerifierUtils` | Threshold signature verification utilities |
-| `ReferralFeeLib` | Referral fee validation and hashing (max 50% total, max 5 recipients) |
-
-## Code Layout
-
-```
-contracts/
-  Escrow.sol, EscrowV2.sol           # Escrow contracts (V1, V2)
-  Orchestrator.sol, OrchestratorV2.sol  # Orchestrators (V1, V2)
-  RateManagerV1.sol                   # Delegated rate management
-  ProtocolViewer.sol, ProtocolViewerV2.sol  # Read-only viewers
-  registries/                         # 6 registry contracts
-  unifiedVerifier/                    # EIP-712 payment verification
-  hooks/                              # Pre/post intent hooks (4 contracts)
-  oracles/                            # Chainlink + Pyth adapters
-  interfaces/                         # All interfaces (23 files)
-  lib/                                # ThresholdSigVerifierUtils, ReferralFeeLib
-  external/                           # Array utils (Address, Bytes32, String, Uint256), Across interface
-  mocks/                              # 30 mock contracts for testing
-
-test/                                 # Hardhat tests (*.spec.ts)
-  escrow/, escrowV2/                  # V1 and V2 escrow tests
-  orchestrator/, orchestratorV2/      # V1 and V2 orchestrator tests
-  registries/                         # Registry tests
-  unifiedVerifier/                    # Verifier tests
-  hooks/                              # Hook tests
-  rateManager/                        # Rate manager + oracle adapter tests
-  periphery/                          # ProtocolViewer tests
-  libs/                               # ThresholdSigVerifierUtils tests
-  deploy/                             # Deployment script validation tests
-  patchCoverage/                      # Targeted coverage gap tests
-
-test-foundry/                         # Foundry tests (*.t.sol)
-  fuzz/                               # EscrowCriticalPathFuzz, OrchestratorCriticalPathFuzz, PythOracleAdapterFuzz
-  invariant/                          # EscrowInvariant, OrchestratorInvariant, V2RateFlowInvariantSkeleton
-  unit/                               # OrchestratorPruneOnSignal, PythOracleAdapter
-
-deploy/                               # Hardhat Deploy scripts (NN_description.ts)
-  00-13: V1 system + payment methods
-  14: V2 system (EscrowV2, OrchestratorV2, OrchestratorRegistry)
-  15: V2 periphery (ProtocolViewerV2, hooks)
-  16: V2 payment method configuration
-  17: Pyth oracle deployment
-  18-22: Redeployments (EscrowV2, RateManagerV1, OrchestratorV2, ProtocolViewerV2, UPV V2)
-  deploy_summary.ts: Post-deploy address summary
-
-deployments/                          # Network artifacts
-  base/                               # Production (chain 8453, 22 contracts)
-  base_staging/                       # Staging (chain 8453, separate deployer)
-  localhost/                          # Local dev (chain 31337)
-  parameters.ts                       # Network-specific config values
-  helpers.ts                          # Deployment helper functions
-  safeBatchCollector.ts               # Safe multisig batch transaction builder
-  verifiers/                          # Payment method provider hashes (12 platforms)
-  outputs/                            # Exported contract addresses (JSON/TS)
-
-utils/                                # TypeScript utilities
-  deploys.ts                          # DeployHelper class
-  protocolUtils.ts                    # Intent hashes, currency constants, ID hashing
-  reclaimUtils.ts                     # Proof encoding/parsing
-  unifiedVerifierUtils.ts             # Unified verifier test helpers
-  constants.ts                        # ADDRESS_ZERO, time constants
-  types.ts                            # ReclaimProof, ClaimInfo types
-  common/                             # Blockchain, units (ether, usdc)
-  test/                               # Account helpers, snapshot mgmt
-
-packages/contracts/                   # @zkp2p/contracts-v2 NPM package (v0.2.0)
-archive/                              # Legacy verifier contracts (pre-unified)
-tasks/                                # Hardhat custom tasks (etherscan verify with delay)
+```text
+contracts/               Solidity source
+  unifiedVerifier/       verifier implementations and bases
+  interfaces/            interfaces
+  registries/            registry contracts
+  hooks/                 pre/post-intent hooks
+  mocks/                 test support
+test-foundry/
+  deterministic/         focused success, revert, deployment, regression tests
+  fuzz/                  input-space properties
+  invariant/             stateful handlers and invariants
+deploy/                  ordered Hardhat Deploy scripts
+deployments/             network artifacts, parameters, Safe batches, outputs
+scripts/                 deployment and release support
+packages/contracts/      @zkp2p/contracts-v2 package
 ```
 
-## Testing Patterns
+Do not embed file, contract, or artifact counts in agent guidance. Derive them
+from the current checkout when they matter.
 
-### Subject Pattern (Hardhat)
-```typescript
-describe("#methodName", () => {
-  let subjectCaller: Account;
+## Deployment source of truth
 
-  beforeEach(async () => { subjectCaller = user; });
+The active deployment runner is `scripts/deployActive.ts`, which mounts the
+current `deploy/*.ts` files. Inspect every mounted script, its `skip` behavior,
+network guard, dependencies, and matching tests before a deployment claim.
 
-  async function subject(): Promise<any> {
-    return contract.connect(subjectCaller.wallet).methodName(params);
-  }
+Current numbered lanes include:
 
-  it("should do X", async () => {
-    await subject();
-    expect(await contract.state()).to.equal(expected);
-  });
+- `00`-`13`: original system and payment-method scripts retained as deployment
+  history/current mounted files;
+- `14`-`22`: V2 system, periphery, payment methods, oracle, and redeployments;
+- `23`: whitelist pre-intent hook redeployment;
+- `24`: `MultiAttestationVerifier` deployment and V2 verifier wiring;
+- `25`: generic Zelle payment-method configuration;
+- `27`: legacy Zelle method removal;
+- `28`: `IntentGuardian`;
+- `29`: V2 whitelist policy.
 
-  describe("when caller is not authorized", () => {
-    beforeEach(async () => { subjectCaller = attacker; });
-    it("should revert", async () => {
-      await expect(subject()).to.be.revertedWith("Unauthorized");
-    });
-  });
-});
-```
+There is no `26` script. Numbered files are identities, not proof that every
+script should execute. Deployment is a separately approved mutation for the
+exact network, source SHA, and governance/deployer path.
 
-### Snapshot Isolation
-```typescript
-import { addSnapshotBeforeRestoreAfterEach } from "@utils/test";
-addSnapshotBeforeRestoreAfterEach();
-```
-
-### Key Utilities
-```typescript
-import { usdc, ether } from "@utils/common";
-import { calculateIntentHash, Currency } from "@utils/protocolUtils";
-import { Blockchain } from "@utils/common";
-import DeployHelper from "@utils/deploys";
-import { getAccounts } from "@utils/test";
-```
-
-### Path Aliases
-- `@utils/*` -> `utils/`
-- `@typechain/*` -> `typechain/`
-
-## Deployment Wiring Order (V2)
-
-1. Deploy registries (reuse V1: NullifierRegistry, PaymentVerifierRegistry, EscrowRegistry, RelayerRegistry)
-2. Deploy OrchestratorRegistry (new for V2)
-3. Deploy EscrowV2 with OrchestratorRegistry + PaymentVerifierRegistry
-4. Deploy OrchestratorV2 with EscrowRegistry + PaymentVerifierRegistry + RelayerRegistry
-5. Deploy UnifiedPaymentVerifierV2 with OrchestratorRegistry + NullifierRegistry + SimpleAttestationVerifier
-6. Register OrchestratorV2 in OrchestratorRegistry
-7. Register EscrowV2 in EscrowRegistry
-8. Add NullifierRegistry write permission for UnifiedPaymentVerifierV2
-9. Configure payment methods on UnifiedPaymentVerifierV2
-10. Transfer ownership to multisig
-
-## Networks
-
-| Network | Chain ID | USDC | Intent Expiry | Max Intents |
-|---------|----------|------|---------------|-------------|
-| Base | 8453 | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | 6 hours | 200 |
-| Base Staging | 8453 | same | 1 hour | 200 |
-| Localhost | 31337 | mock | 24 hours | 100 |
-
-## Key Addresses
-
-- **Multisig / Fee Recipient**: `0x0bC26FF515411396DD588Abd6Ef6846E04470227` (Base mainnet)
-- **Witness (prod staging)**: `0x4ab950AE1e3326578Bf7e643a2031E858aBa2927`
-- **Witness (prod)**: `0x5106A86819ED6Bb82c77CcBfC151250E1d369DbA`
-- **Pyth (Base)**: `0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a`
-
-## Configuration
-
-- `hardhat.config.ts`: Solidity 0.8.18, optimizer 200 runs, viaIR enabled, ethers v5
-- `foundry.toml`: Solidity 0.8.18, optimizer 800 runs, viaIR enabled, fuzz 256 runs, invariant depth 15
-- `.env`: `BASE_DEPLOY_PRIVATE_KEY`, `TESTNET_DEPLOY_PRIVATE_KEY`, `ALCHEMY_API_KEY`, `BASESCAN_API_KEY`
-- `tsconfig.json`: CommonJS, strict mode, path aliases
-
-## Style
-
-- **Solidity**: 4-space indent, explicit visibility, custom errors (not require strings), NatSpec on external functions
-- **Naming**: Contracts `PascalCase`, interfaces `IName`, constants `UPPER_CASE`, state vars `camelCase`
-- **TypeScript**: Strict mode, CommonJS, use `@utils` and `@typechain` aliases
-- **Tests**: `*.spec.ts`, subject pattern, AAA, snapshot isolation
-- **Deploy scripts**: `NN_description.ts` prefix ordering
-- **Commits**: Conventional format (`feat:`, `fix:`, `chore:`, `refactor:`, `test:`)
-
-## NPM Package
+Use:
 
 ```bash
-yarn pkg:extract    # Build + extract deployment artifacts
-yarn pkg:build      # Build @zkp2p/contracts-v2 package
+yarn deploy:localhost
+yarn deploy:base_staging
+yarn deploy:base
+yarn etherscan:base_staging
+yarn etherscan:base
 ```
 
-```typescript
-import OrchestratorABI from "@zkp2p/contracts-v2/abis/Orchestrator";
-import addresses from "@zkp2p/contracts-v2/addresses";
-import { Orchestrator } from "@zkp2p/contracts-v2/typechain";
+Only run a live command after the `ship-contracts` boundary for that exact
+action is approved.
+
+## Package boundary
+
+```bash
+yarn pkg:extract
+yarn pkg:build
+yarn workspace @zkp2p/contracts-v2 verify:release
 ```
 
-## Agents
+Source ABI exports and active address/runtime exports are different contracts.
+The package intentionally exports selected V3 source ABIs for consumers and
+release verification even when a network has no active V3 address. Never
+invent a zero address, publish an inactive address as active, or remove an ABI
+merely because the contract is not deployed on every network.
 
-| Agent | Description |
-|-------|-------------|
-| [contracts-developer](.claude/agents/contracts-developer.md) | ZKP2P contracts expert for EscrowV2, payment verifiers, registry system, hook system |
-| [security-auditor](.claude/agents/security-auditor.md) | Security auditor using Trail of Bits skills for structured audit workflows |
+Any publication must use
+`.agents/skills/zkp2p-contracts-publish/SKILL.md`; never publish locally or
+request an OTP/token.
 
 ## Skills
 
-| Skill | Description |
-|-------|-------------|
-| [zkp2p-contracts-publish](.agents/skills/zkp2p-contracts-publish/SKILL.md) | Bump, build, test, and publish @zkp2p/contracts-v2 to npm |
-| [ship-contracts](.claude/skills/ship-contracts/SKILL.md) | Full deployment pipeline: script + tests, local, staging, prod, publish |
-| [audit](.claude/skills/audit/SKILL.md) | Security audits: full, differential, or single checks |
+| Skill | Use |
+| --- | --- |
+| `.claude/skills/audit/SKILL.md` | Read-only full, differential, or focused security review |
+| `.claude/skills/ship-contracts/SKILL.md` | Separately approved source, staging, production, export, and release boundaries |
+| `.agents/skills/zkp2p-contracts-publish/SKILL.md` | Trusted-workflow RC/stable package release |
+
+## Style
+
+- Solidity: four-space indentation, explicit visibility, custom errors where
+  appropriate, and NatSpec on external functions.
+- TypeScript: strict mode, CommonJS, and existing `@utils`/`@typechain` aliases.
+- Tests: `*.t.sol` under the smallest applicable Foundry layer.
+- Deploy scripts: two-digit prefix and concise verb-noun name.
+- Commits: conventional prefixes where practical.
+
+Never commit secrets, edit generated artifacts by hand, infer live state from a
+stale artifact, add rollback compatibility, or combine source, staging,
+production, package, and publication approval into one implied action.
