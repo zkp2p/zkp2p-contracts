@@ -5,19 +5,18 @@ pragma solidity ^0.8.18;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 
-import {IAttestationVerifier} from "../interfaces/IAttestationVerifier.sol";
 import {IChargebackPolicy} from "../interfaces/IChargebackPolicy.sol";
+import {IChargebackVerifier} from "../interfaces/IChargebackVerifier.sol";
 import {IEscrowRegistry} from "../interfaces/IEscrowRegistry.sol";
 import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
-import {INullifierRegistryV2} from "../interfaces/INullifierRegistryV2.sol";
 import {IStakeVault} from "../interfaces/IStakeVault.sol";
 
 /**
  * @title ChargebackPolicy
  * @notice Deposit-scoped, stake-backed chargeback coverage for intent settlement.
- * @dev The policy owns no tokens. It controls StakeVault locks and converts valid chargebacks into depositor claims.
+ * @dev The policy owns no tokens. It controls StakeVault locks and delegates chargeback evidence verification before
+ * converting valid chargebacks into depositor claims.
  * `escrowRegistry` is governance-settable and MUST be kept in sync with the orchestrator's escrow registry, because
  * divergence can leave deposits admitted by one component but unavailable for depositor chargeback configuration.
  *
@@ -32,19 +31,16 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
  * orchestrator while it has unresolved intents snapshotted to a hook permanently blocks those terminal callbacks,
  * so governance must drain its intents before removing it from OrchestratorRegistry.
  */
-contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard, EIP712 {
+contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
 
     uint64 public constant MAX_RISK_WINDOW = 365 days;
     uint64 public constant PENDING_COVERAGE_MATURITY = type(uint64).max;
-    bytes32 public constant CHARGEBACK_ATTESTATION_TYPEHASH =
-        keccak256("ChargebackAttestation(bytes32 intentHash,bytes32 dataHash)");
 
     /* ============ State Variables ============ */
 
     IStakeVault public immutable override stakeVault;
-    INullifierRegistryV2 public immutable override nullifierRegistry;
-    IAttestationVerifier public override attestationVerifier;
+    IChargebackVerifier public override chargebackVerifier;
     IEscrowRegistry public override escrowRegistry;
     address public override lifecycleHook;
     bool public override admissionsPaused;
@@ -60,19 +56,16 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard, E
     constructor(
         address _owner,
         IStakeVault _stakeVault,
-        INullifierRegistryV2 _nullifierRegistry,
-        IAttestationVerifier _attestationVerifier,
+        IChargebackVerifier _chargebackVerifier,
         IEscrowRegistry _escrowRegistry
-    ) EIP712("ZKP2P ChargebackPolicy", "1") {
+    ) {
         if (_owner == address(0)) revert ZeroAddress();
         _validateDependency(address(_stakeVault));
-        _validateDependency(address(_nullifierRegistry));
-        _validateDependency(address(_attestationVerifier));
+        _validateDependency(address(_chargebackVerifier));
         _validateDependency(address(_escrowRegistry));
 
         stakeVault = _stakeVault;
-        nullifierRegistry = _nullifierRegistry;
-        attestationVerifier = _attestationVerifier;
+        chargebackVerifier = _chargebackVerifier;
         escrowRegistry = _escrowRegistry;
         _transferOwnership(_owner);
     }
@@ -218,17 +211,22 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard, E
     /**
      * @inheritdoc IChargebackPolicy
      */
-    function submitChargeback(ChargebackAttestation calldata _attestation) external override nonReentrant {
+    function submitChargeback(IChargebackVerifier.ChargebackAttestation calldata _attestation)
+        external
+        override
+        nonReentrant
+    {
         Position storage position = positions[_attestation.intentHash];
         if (position.status != PositionStatus.SETTLED) {
             revert PositionNotSettled(_attestation.intentHash, position.status);
         }
-
-        (bytes32 disputeId, bytes32 disputeNullifier) = _validateChargebackAttestation(_attestation, position);
-        bytes32 digest = _hashTypedDataV4(_chargebackAttestationStructHash(_attestation));
-        if (!attestationVerifier.verify(digest, _attestation.signatures, _attestation.data)) {
-            revert AttestationVerificationFailed();
+        if (block.timestamp >= position.coverageDeadline) {
+            revert ChargebackWindowClosed(position.coverageDeadline, _currentTimestamp());
         }
+
+        (bytes32 disputeId, bytes32 disputeNullifier) =
+            chargebackVerifier.verifyChargeback(_attestation, position.paymentMethod, position.isManualRelease);
+        if (usedChargebackNullifiers[disputeNullifier]) revert ChargebackEvidenceUsed(disputeNullifier);
 
         uint256 compensatedAmount = position.grossReleasedAmount;
         if (position.coverageAmount != compensatedAmount) {
@@ -280,11 +278,11 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard, E
     /**
      * @inheritdoc IChargebackPolicy
      */
-    function setAttestationVerifier(address _verifier) external override onlyOwner {
+    function setChargebackVerifier(address _verifier) external override onlyOwner {
         _validateDependency(_verifier);
-        address previousVerifier = address(attestationVerifier);
-        attestationVerifier = IAttestationVerifier(_verifier);
-        emit AttestationVerifierUpdated(previousVerifier, _verifier);
+        address previousVerifier = address(chargebackVerifier);
+        chargebackVerifier = IChargebackVerifier(_verifier);
+        emit ChargebackVerifierUpdated(previousVerifier, _verifier);
     }
 
     /**
@@ -352,18 +350,6 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard, E
     /**
      * @inheritdoc IChargebackPolicy
      */
-    function hashChargebackAttestation(ChargebackAttestation calldata _attestation)
-        external
-        view
-        override
-        returns (bytes32)
-    {
-        return _hashTypedDataV4(_chargebackAttestationStructHash(_attestation));
-    }
-
-    /**
-     * @inheritdoc IChargebackPolicy
-     */
     function getTakerState(address _taker)
         external
         view
@@ -395,43 +381,6 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard, E
         position.status = PositionStatus.RELEASED;
         stakeVault.unlockStake(_intentHash);
         emit PositionReleased(_intentHash, position.stakeOwner, releasedCoverage);
-    }
-
-    function _validateChargebackAttestation(
-        ChargebackAttestation calldata _attestation,
-        Position storage _position
-    ) internal view returns (bytes32 disputeId, bytes32 disputeNullifier) {
-        if (keccak256(_attestation.data) != _attestation.dataHash) {
-            revert InvalidAttestation();
-        }
-        if (block.timestamp >= _position.coverageDeadline) {
-            revert ChargebackWindowClosed(_position.coverageDeadline, _currentTimestamp());
-        }
-
-        ChargebackDetails memory details = abi.decode(_attestation.data, (ChargebackDetails));
-        if (details.paymentMethod != _position.paymentMethod) revert InvalidAttestation();
-
-        if (!_position.isManualRelease) {
-            bytes32 paymentNullifier = keccak256(abi.encodePacked(details.paymentMethod, details.originalPaymentId));
-            if (
-                nullifierRegistry.intentHashByNullifier(paymentNullifier) != _attestation.intentHash
-                    || nullifierRegistry.nullifierByIntentHash(_attestation.intentHash) != paymentNullifier
-            ) {
-                revert InvalidPaymentBinding(_attestation.intentHash, paymentNullifier);
-            }
-        }
-
-        disputeId = details.disputeId;
-        disputeNullifier = keccak256(abi.encodePacked(details.paymentMethod, details.disputeId));
-        if (usedChargebackNullifiers[disputeNullifier]) revert ChargebackEvidenceUsed(disputeNullifier);
-    }
-
-    function _chargebackAttestationStructHash(ChargebackAttestation calldata _attestation)
-        internal
-        pure
-        returns (bytes32)
-    {
-        return keccak256(abi.encode(CHARGEBACK_ATTESTATION_TYPEHASH, _attestation.intentHash, _attestation.dataHash));
     }
 
     function _calculateCoverageDeadline(uint64 _riskWindow) internal view returns (uint64) {

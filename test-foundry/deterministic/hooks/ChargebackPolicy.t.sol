@@ -7,12 +7,14 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {ChargebackPolicy} from "contracts/hooks/ChargebackPolicy.sol";
 import {IChargebackPolicy} from "contracts/interfaces/IChargebackPolicy.sol";
+import {IChargebackVerifier} from "contracts/interfaces/IChargebackVerifier.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
+import {ChargebackVerifier} from "contracts/unifiedVerifier/ChargebackVerifier.sol";
 
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 
@@ -31,6 +33,7 @@ contract ChargebackEscrowMock {
 
 contract ChargebackPolicyTest is OrchestratorV3Fixture {
     event LifecycleHookAuthorizationUpdated(address indexed hook, bool authorized);
+    event ChargebackVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
 
     uint64 internal constant RISK_WINDOW = 30 days;
     uint256 internal constant STAKE_AMOUNT = 500e6;
@@ -39,6 +42,7 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
     StakeVault internal vault;
     NullifierRegistryV2 internal nullifierRegistry;
     AttestationVerifierMock internal attestationVerifier;
+    ChargebackVerifier internal chargebackVerifier;
     ChargebackPolicy internal policy;
 
     function setUp() public override {
@@ -46,9 +50,8 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
         vault = new StakeVault(address(this), token, address(0), 1 days);
         nullifierRegistry = new NullifierRegistryV2(new NullifierRegistry());
         attestationVerifier = new AttestationVerifierMock();
-        policy = new ChargebackPolicy(
-            address(this), vault, nullifierRegistry, attestationVerifier, escrowRegistry
-        );
+        chargebackVerifier = new ChargebackVerifier(address(this), nullifierRegistry, attestationVerifier);
+        policy = new ChargebackPolicy(address(this), vault, chargebackVerifier, escrowRegistry);
         vault.initializeController(address(policy));
         policy.setLifecycleHook(address(this));
         policy.setRiskWindow(METHOD, RISK_WINDOW);
@@ -257,13 +260,13 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
     function test_SubmitChargebackProofPathRequiresBothDirectionBindingAndCreatesClaim() public {
         _admitAndSettle(INTENT, 40e6, false);
         bytes32 paymentId = keccak256("payment");
-        IChargebackPolicy.ChargebackAttestation memory attestation =
+        IChargebackVerifier.ChargebackAttestation memory attestation =
             _attestation(INTENT, METHOD, paymentId, keccak256("dispute"));
         bytes32 paymentNullifier = keccak256(abi.encodePacked(METHOD, paymentId));
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IChargebackPolicy.InvalidPaymentBinding.selector, INTENT, paymentNullifier
+                IChargebackVerifier.InvalidPaymentBinding.selector, INTENT, paymentNullifier
             )
         );
         policy.submitChargeback(attestation);
@@ -284,7 +287,7 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
     function test_SubmitChargebackManualPathSkipsPaymentBindingAndRejectsReplay() public {
         _admitAndSettle(INTENT, 40e6, true);
         bytes32 disputeId = keccak256("dispute");
-        IChargebackPolicy.ChargebackAttestation memory attestation =
+        IChargebackVerifier.ChargebackAttestation memory attestation =
             _attestation(INTENT, METHOD, keccak256("unbound-payment"), disputeId);
         policy.submitChargeback(attestation);
 
@@ -302,19 +305,19 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
 
     function test_SubmitChargebackRejectsClosedWindowTamperingVerifierFailureAndWrongMethod() public {
         _admitAndSettle(INTENT, 40e6, true);
-        IChargebackPolicy.ChargebackAttestation memory attestation =
+        IChargebackVerifier.ChargebackAttestation memory attestation =
             _attestation(INTENT, METHOD, keccak256("payment"), keccak256("dispute"));
         attestation.dataHash = keccak256("tampered");
-        vm.expectRevert(IChargebackPolicy.InvalidAttestation.selector);
+        vm.expectRevert(IChargebackVerifier.InvalidAttestation.selector);
         policy.submitChargeback(attestation);
 
         attestation = _attestation(INTENT, keccak256("wrong"), keccak256("payment"), keccak256("dispute"));
-        vm.expectRevert(IChargebackPolicy.InvalidAttestation.selector);
+        vm.expectRevert(IChargebackVerifier.InvalidAttestation.selector);
         policy.submitChargeback(attestation);
 
         attestation = _attestation(INTENT, METHOD, keccak256("payment"), keccak256("dispute"));
         attestationVerifier.setResult(false);
-        vm.expectRevert(IChargebackPolicy.AttestationVerificationFailed.selector);
+        vm.expectRevert(IChargebackVerifier.AttestationVerificationFailed.selector);
         policy.submitChargeback(attestation);
         attestationVerifier.setResult(true);
 
@@ -335,7 +338,7 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
         policy.setAdmissionsPaused(true);
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
-        policy.setAttestationVerifier(address(attestationVerifier));
+        policy.setChargebackVerifier(address(chargebackVerifier));
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
         policy.setLifecycleHook(address(this));
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
@@ -347,7 +350,7 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
         );
         policy.setRiskWindow(METHOD, uint64(365 days + 1));
         vm.expectRevert(IChargebackPolicy.ZeroAddress.selector);
-        policy.setAttestationVerifier(address(0));
+        policy.setChargebackVerifier(address(0));
         vm.expectRevert(abi.encodeWithSelector(IChargebackPolicy.InvalidContract.selector, other));
         policy.setLifecycleHook(other);
         vm.expectRevert(IChargebackPolicy.OwnershipRenunciationDisabled.selector);
@@ -366,6 +369,20 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
         policy.onIntentCancelled(keccak256("old-hook-cancel"));
         vm.prank(newHook);
         policy.onIntentSettled(keccak256("new-hook-settle"), INTENT_AMOUNT, false);
+    }
+
+    function test_SetChargebackVerifierRejectsEoaThenReplacesAndEmits() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(IChargebackPolicy.InvalidContract.selector, other)
+        );
+        policy.setChargebackVerifier(other);
+
+        ChargebackVerifier replacement =
+            new ChargebackVerifier(address(this), nullifierRegistry, attestationVerifier);
+        vm.expectEmit(true, true, false, true);
+        emit ChargebackVerifierUpdated(address(chargebackVerifier), address(replacement));
+        policy.setChargebackVerifier(address(replacement));
+        assertEq(address(policy.chargebackVerifier()), address(replacement));
     }
 
     function test_RevokeLifecycleHookRevokesNonCurrentHookAndEmitsEvent() public {
@@ -438,7 +455,7 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
     function test_AcceptVaultControllerCompletesDelayedTwoStepHandover() public {
         StakeVault secondVault = new StakeVault(address(this), token, address(0), 1 days);
         ChargebackPolicy secondPolicy = new ChargebackPolicy(
-            address(this), secondVault, nullifierRegistry, attestationVerifier, escrowRegistry
+            address(this), secondVault, chargebackVerifier, escrowRegistry
         );
         secondVault.initializeController(address(this));
         secondVault.proposeController(address(secondPolicy));
@@ -466,8 +483,8 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
         bytes32 paymentMethod,
         bytes32 paymentId,
         bytes32 disputeId
-    ) internal pure returns (IChargebackPolicy.ChargebackAttestation memory attestation) {
-        IChargebackPolicy.ChargebackDetails memory details = IChargebackPolicy.ChargebackDetails({
+    ) internal pure returns (IChargebackVerifier.ChargebackAttestation memory attestation) {
+        IChargebackVerifier.ChargebackDetails memory details = IChargebackVerifier.ChargebackDetails({
             paymentMethod: paymentMethod,
             originalPaymentId: paymentId,
             disputeId: disputeId,
@@ -475,7 +492,7 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
             paymentCurrency: USD
         });
         bytes memory data = abi.encode(details);
-        attestation = IChargebackPolicy.ChargebackAttestation({
+        attestation = IChargebackVerifier.ChargebackAttestation({
             intentHash: intentHash,
             dataHash: keccak256(data),
             signatures: new bytes[](0),

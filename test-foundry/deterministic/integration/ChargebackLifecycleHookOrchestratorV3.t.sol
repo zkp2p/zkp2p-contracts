@@ -7,12 +7,14 @@ import {ChargebackPolicy} from "contracts/hooks/ChargebackPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {IChargebackPolicy} from "contracts/interfaces/IChargebackPolicy.sol";
+import {IChargebackVerifier} from "contracts/interfaces/IChargebackVerifier.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
+import {ChargebackVerifier} from "contracts/unifiedVerifier/ChargebackVerifier.sol";
 
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 
@@ -37,8 +39,7 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         chargebackPolicy = new ChargebackPolicy(
             address(this),
             vault,
-            nullifierRegistry,
-            new AttestationVerifierMock(),
+            new ChargebackVerifier(address(this), nullifierRegistry, new AttestationVerifierMock()),
             escrowRegistry
         );
         vault.initializeController(address(chargebackPolicy));
@@ -389,9 +390,9 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     function _attestation(bytes32 intentHash, bytes32 paymentId, bytes32 disputeId)
         internal
         pure
-        returns (IChargebackPolicy.ChargebackAttestation memory attestation)
+        returns (IChargebackVerifier.ChargebackAttestation memory attestation)
     {
-        IChargebackPolicy.ChargebackDetails memory details = IChargebackPolicy.ChargebackDetails({
+        IChargebackVerifier.ChargebackDetails memory details = IChargebackVerifier.ChargebackDetails({
             paymentMethod: METHOD,
             originalPaymentId: paymentId,
             disputeId: disputeId,
@@ -399,7 +400,7 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
             paymentCurrency: USD
         });
         bytes memory data = abi.encode(details);
-        attestation = IChargebackPolicy.ChargebackAttestation({
+        attestation = IChargebackVerifier.ChargebackAttestation({
             intentHash: intentHash,
             dataHash: keccak256(data),
             signatures: new bytes[](0),

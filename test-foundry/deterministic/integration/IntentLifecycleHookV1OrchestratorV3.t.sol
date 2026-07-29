@@ -14,6 +14,7 @@ import {IntentLifecycleHookV1Mock} from "contracts/mocks/IntentLifecycleHookV1Mo
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
+import {ChargebackVerifier} from "contracts/unifiedVerifier/ChargebackVerifier.sol";
 
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 
@@ -42,8 +43,11 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
         chargebackPolicy = new ChargebackPolicy(
             address(this),
             stakeVault,
-            new NullifierRegistryV2(new NullifierRegistry()),
-            new AttestationVerifierMock(),
+            new ChargebackVerifier(
+                address(this),
+                new NullifierRegistryV2(new NullifierRegistry()),
+                new AttestationVerifierMock()
+            ),
             escrowRegistry
         );
         stakeVault.initializeController(address(chargebackPolicy));

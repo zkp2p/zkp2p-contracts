@@ -2,9 +2,8 @@
 
 pragma solidity ^0.8.18;
 
-import {IAttestationVerifier} from "./IAttestationVerifier.sol";
+import {IChargebackVerifier} from "./IChargebackVerifier.sol";
 import {IEscrowRegistry} from "./IEscrowRegistry.sol";
-import {INullifierRegistryV2} from "./INullifierRegistryV2.sol";
 import {IStakeVault} from "./IStakeVault.sol";
 
 /**
@@ -34,21 +33,6 @@ interface IChargebackPolicy {
         uint256 intentAmount;
         uint256 coverageAmount;
         uint256 grossReleasedAmount;
-    }
-
-    struct ChargebackAttestation {
-        bytes32 intentHash;
-        bytes32 dataHash;
-        bytes[] signatures;
-        bytes data;
-    }
-
-    struct ChargebackDetails {
-        bytes32 paymentMethod;
-        bytes32 originalPaymentId;
-        bytes32 disputeId;
-        uint256 paymentAmount;
-        bytes32 paymentCurrency;
     }
 
     event PositionOpened(
@@ -83,7 +67,7 @@ interface IChargebackPolicy {
     );
     event EnabledUpdated(address indexed escrow, uint256 indexed depositId, bool enabled);
     event RiskWindowUpdated(bytes32 indexed paymentMethod, uint64 riskWindow);
-    event AttestationVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
+    event ChargebackVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
     event LifecycleHookUpdated(address indexed previousHook, address indexed newHook);
     /** @notice Emitted when a lifecycle hook's callback authorization changes. */
     event LifecycleHookAuthorizationUpdated(address indexed hook, bool authorized);
@@ -105,12 +89,9 @@ interface IChargebackPolicy {
     error PositionNotSettled(bytes32 intentHash, PositionStatus status);
     error IntentTokenMismatch(address expectedToken, address actualToken);
     error PositionNotMature(uint64 coverageDeadline, uint64 currentTime);
-    error InvalidAttestation();
-    error InvalidPaymentBinding(bytes32 intentHash, bytes32 nullifier);
     error ChargebackWindowClosed(uint64 coverageDeadline, uint64 currentTime);
     error ChargebackEvidenceUsed(bytes32 nullifier);
     error IncompleteChargebackCoverage(uint256 available, uint256 required);
-    error AttestationVerificationFailed();
     error TimestampOverflow(uint256 timestamp);
     error InvalidRiskWindow(uint64 riskWindow);
     error EscrowNotWhitelisted(address escrow);
@@ -144,7 +125,7 @@ interface IChargebackPolicy {
     function releaseMaturedPositions(bytes32[] calldata _intentHashes) external;
 
     /** @notice Resolves valid chargeback evidence into an immediately claimable depositor award. */
-    function submitChargeback(ChargebackAttestation calldata _attestation) external;
+    function submitChargeback(IChargebackVerifier.ChargebackAttestation calldata _attestation) external;
 
     /** @notice Enables or disables chargeback admission for a deposit. */
     function setEnabled(address _escrow, uint256 _depositId, bool _enabled) external;
@@ -152,8 +133,8 @@ interface IChargebackPolicy {
     /** @notice Sets the coverage window snapshotted by future intents for a payment method. */
     function setRiskWindow(bytes32 _paymentMethod, uint64 _riskWindow) external;
 
-    /** @notice Replaces the verifier used for future chargeback submissions. */
-    function setAttestationVerifier(address _verifier) external;
+    /** @notice Replaces the chargeback verifier used for future chargeback submissions. */
+    function setChargebackVerifier(address _verifier) external;
 
     /** @notice Designates and authorizes the current hook without deauthorizing predecessor hooks. */
     function setLifecycleHook(address _hook) external;
@@ -176,12 +157,6 @@ interface IChargebackPolicy {
     /** @notice Returns the stored chargeback position for an intent. */
     function getPosition(bytes32 _intentHash) external view returns (Position memory);
 
-    /** @notice Returns the EIP-712 digest signed for a chargeback attestation. */
-    function hashChargebackAttestation(ChargebackAttestation calldata _attestation)
-        external
-        view
-        returns (bytes32);
-
     /** @notice Returns the live selected stake owner and that owner's vault balances. */
     function getTakerState(address _taker)
         external
@@ -191,11 +166,8 @@ interface IChargebackPolicy {
     /** @notice Returns the policy's stake custody and accounting dependency. */
     function stakeVault() external view returns (IStakeVault);
 
-    /** @notice Returns the canonical payment-nullifier binding registry. */
-    function nullifierRegistry() external view returns (INullifierRegistryV2);
-
-    /** @notice Returns the verifier used for chargeback attestations. */
-    function attestationVerifier() external view returns (IAttestationVerifier);
+    /** @notice Returns the verifier used to validate chargeback evidence. */
+    function chargebackVerifier() external view returns (IChargebackVerifier);
 
     /** @notice Returns the registry used to authorize escrow deposit configuration. */
     function escrowRegistry() external view returns (IEscrowRegistry);
