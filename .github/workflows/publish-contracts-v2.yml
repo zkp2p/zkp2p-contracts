@@ -30,6 +30,7 @@ env:
   RELEASE_LINE: 0.4.0
   RELEASE_TAG: contracts-v2-v${{ inputs.release }}
   DIST_TAG: rc
+  LATEST_BASELINE: 0.3.0
   NPM_CONFIG_PROVENANCE: "true"
   REQUIRE_PROVENANCE: "true"
   RECOVERY_MODE: ${{ inputs.recovery }}
@@ -74,7 +75,7 @@ jobs:
             node scripts/npm-release.mjs guard "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
           fi
           latest=$(npm view @zkp2p/contracts-v2 dist-tags.latest)
-          test -n "$latest"
+          test "$latest" = "$LATEST_BASELINE"
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
       - name: Require autonomous RC environment

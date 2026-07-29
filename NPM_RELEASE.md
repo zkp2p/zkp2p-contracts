@@ -35,7 +35,7 @@ The validation job reads the environment and deployment-branch policy through Gi
 5. Recheck the registry guard, tag SHA, workflow SHA, and tarball digest.
 6. Dispatch **Publish contracts-v2** from `main` with the exact version and leave `recovery` disabled.
 
-The workflow has no tag input. It accepts only `0.4.0-rc.N`, requires `workflow_dispatch`, canonical `main`, and the exact repository-controlled tag, then runs `npm publish --tag rc --provenance`. It has no PR-triggered publishing path and cannot publish a stable version or move `latest`.
+The workflow has no tag input. It accepts only `0.4.0-rc.N`, requires `workflow_dispatch`, canonical `main`, the exact repository-controlled tag, and the repository-controlled pre-release `latest` baseline (`0.3.0` for this RC line), then runs `npm publish --tag rc --provenance`. It has no PR-triggered publishing path and cannot publish a stable version or move `latest`.
 
 ## Release gates
 

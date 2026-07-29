@@ -19,7 +19,7 @@ Read `NPM_RELEASE.md` completely before preparing or initiating a release. Do no
 - Autonomous RC environment: `npm-publish-rc`
 - Registry tag: hard-coded `rc`
 
-The workflow must be dispatched from `main`. Its `release` input must exactly match the committed `0.4.0-rc.N` package version, and the repository-controlled `contracts-v2-v<version>` tag must point to that same main commit. Every version must be new on npm.
+The workflow must be dispatched from `main`. Its `release` input must exactly match the committed `0.4.0-rc.N` package version, the repository-controlled `contracts-v2-v<version>` tag must point to that same main commit, and live `latest` must match the repository-controlled `0.3.0` baseline. Every version must be new on npm.
 
 ## Prepare the version PR
 
