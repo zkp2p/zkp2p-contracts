@@ -13,8 +13,8 @@ function fail(message) {
   process.exit(1);
 }
 
-if (!['guard', 'verify'].includes(command) || !packageJsonArg || !release || !tag) {
-  fail('usage: npm-release.mjs <guard|verify> <package.json> <version> rc [pack.json]');
+if (!['guard', 'recover', 'verify'].includes(command) || !packageJsonArg || !release || !tag) {
+  fail('usage: npm-release.mjs <guard|recover|verify> <package.json> <version> rc [pack.json]');
 }
 
 const packageJsonPath = path.resolve(packageJsonArg);
@@ -49,7 +49,7 @@ async function readJson(url, allowedStatuses = [200]) {
   return response.status === 404 ? null : response.json();
 }
 
-if (command === 'guard') {
+if (command === 'guard' || command === 'recover') {
   if (process.env.GITHUB_ACTIONS === 'true') {
     if (process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch') {
       fail(`publishing requires workflow_dispatch, received ${process.env.GITHUB_EVENT_NAME}`);
@@ -73,12 +73,38 @@ if (command === 'guard') {
       fail(`canonical main is ${currentMain}, not workflow SHA ${process.env.GITHUB_SHA}`);
     }
     if (taggedCommit !== process.env.GITHUB_SHA) {
-      fail(`release tag ${expectedTag} points to ${taggedCommit}, not workflow SHA ${process.env.GITHUB_SHA}`);
+      if (command !== 'recover') {
+        fail(`release tag ${expectedTag} points to ${taggedCommit}, not workflow SHA ${process.env.GITHUB_SHA}`);
+      }
+      try {
+        execFileSync('git', ['merge-base', '--is-ancestor', taggedCommit, checkedOutCommit]);
+      } catch {
+        fail(`recovery requires release tag ${expectedTag} to be an ancestor of canonical main`);
+      }
+      const changedFiles = execFileSync(
+        'git',
+        ['diff', '--name-only', `${taggedCommit}..${checkedOutCommit}`],
+        { encoding: 'utf8' },
+      )
+        .trim()
+        .split('\n')
+        .filter(Boolean);
+      const allowedRecoveryChanges = new Set([
+        '.agents/skills/zkp2p-contracts-publish/SKILL.md',
+        '.github/workflows/publish-contracts-v2.yml',
+        'NPM_RELEASE.md',
+        'scripts/npm-release.mjs',
+      ]);
+      const unexpectedChanges = changedFiles.filter((file) => !allowedRecoveryChanges.has(file));
+      if (unexpectedChanges.length > 0) {
+        fail(`recovery main differs from the release tag outside recovery code: ${unexpectedChanges.join(', ')}`);
+      }
     }
   }
   const existing = await readJson(versionUrl, [200, 404]);
-  if (existing) fail(`${packageJson.name}@${release} is already published`);
-  console.log(`Release guard passed for ${packageJson.name}@${release} with dist-tag ${tag}.`);
+  if (command === 'guard' && existing) fail(`${packageJson.name}@${release} is already published`);
+  if (command === 'recover' && !existing) fail(`${packageJson.name}@${release} is not published`);
+  console.log(`${command === 'guard' ? 'Release' : 'Recovery'} guard passed for ${packageJson.name}@${release} with dist-tag ${tag}.`);
   process.exit(0);
 }
 
