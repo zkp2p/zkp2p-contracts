@@ -5,10 +5,15 @@ pragma solidity ^0.8.18;
 import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
+import {StakeVault} from "contracts/StakeVault.sol";
+import {ChargebackPolicy} from "contracts/hooks/ChargebackPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
+import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";
 import {IntentLifecycleHookV1Mock} from "contracts/mocks/IntentLifecycleHookV1Mock.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
+import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
+import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
 
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 
@@ -21,6 +26,8 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
 
     AddressGroupRegistry internal groupRegistry;
     WhitelistPolicy internal policy;
+    StakeVault internal stakeVault;
+    ChargebackPolicy internal chargebackPolicy;
     IntentLifecycleHookV1 internal lifecycleHook;
 
     function setUp() public override {
@@ -31,7 +38,17 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
         PEER_MERCHANTS = groupRegistry.createGroup("Peer Merchants");
 
         policy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
-        lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, policy);
+        stakeVault = new StakeVault(address(this), token, address(0), 1 days);
+        chargebackPolicy = new ChargebackPolicy(
+            address(this),
+            stakeVault,
+            new NullifierRegistryV2(new NullifierRegistry()),
+            new AttestationVerifierMock(),
+            escrowRegistry
+        );
+        stakeVault.initializeController(address(chargebackPolicy));
+        lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, policy, chargebackPolicy);
+        chargebackPolicy.setLifecycleHook(address(lifecycleHook));
         IOrchestratorV3(address(orchestrator)).setLifecycleHook(lifecycleHook);
     }
 
