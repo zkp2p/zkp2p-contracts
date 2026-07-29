@@ -3,7 +3,7 @@ export default {
   "chainId": "8453",
   "contracts": {
     "AddressGroupRegistry": {
-      "address": "0xE11044811237170c0Fa8F0bfB38f5B6F07cf5dBF",
+      "address": "0x54Ff7788Cb42B46FE2F016a65Fd0f654Bb9BcF3D",
       "abi": [
         {
           "inputs": [],
@@ -6066,7 +6066,7 @@ export default {
       ]
     },
     "IntentGuardian": {
-      "address": "0x1D03a9FFEEefD645dA8978a9Dac53eD1407ef249",
+      "address": "0x3355bb8CEFA54509d244384CFA7f2A71fdb1FDD6",
       "abi": [
         {
           "inputs": [
@@ -15367,7 +15367,7 @@ export default {
       ]
     },
     "WhitelistPolicy": {
-      "address": "0x35B8E5D701aB950061E5978286568bA248710EdA",
+      "address": "0xe3d3E798AbF1c021730d951d0589bCa63d9CB3F0",
       "abi": [
         {
           "inputs": [
@@ -15379,6 +15379,11 @@ export default {
             {
               "internalType": "contract IEscrowRegistry",
               "name": "_escrowRegistry",
+              "type": "address"
+            },
+            {
+              "internalType": "contract IOrchestratorRegistry",
+              "name": "_orchestratorRegistry",
               "type": "address"
             }
           ],
@@ -15463,6 +15468,27 @@ export default {
         {
           "inputs": [
             {
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "TakerNotWhitelisted",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
               "internalType": "uint256",
               "name": "attempted",
               "type": "uint256"
@@ -15474,6 +15500,17 @@ export default {
             }
           ],
           "name": "TooManyGroups",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedOrchestratorCaller",
           "type": "error"
         },
         {
@@ -15893,6 +15930,19 @@ export default {
         },
         {
           "inputs": [],
+          "name": "orchestratorRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IOrchestratorRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
           "name": "owner",
           "outputs": [
             {
@@ -16004,6 +16054,83 @@ export default {
           "name": "transferOwnership",
           "outputs": [],
           "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "taker",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "escrow",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "depositId",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "amount",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "address",
+                  "name": "to",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "paymentMethod",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "fiatCurrency",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "conversionRate",
+                  "type": "uint256"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "recipient",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "fee",
+                      "type": "uint256"
+                    }
+                  ],
+                  "internalType": "struct IReferralFee.ReferralFee[]",
+                  "name": "referralFees",
+                  "type": "tuple[]"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "preIntentHookData",
+                  "type": "bytes"
+                }
+              ],
+              "internalType": "struct IPreIntentHook.PreIntentContext",
+              "name": "_ctx",
+              "type": "tuple"
+            }
+          ],
+          "name": "validateSignalIntent",
+          "outputs": [],
+          "stateMutability": "view",
           "type": "function"
         }
       ]
@@ -16177,565 +16304,6 @@ export default {
           "name": "addToWhitelist",
           "outputs": [],
           "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_depositId",
-              "type": "uint256"
-            },
-            {
-              "internalType": "address",
-              "name": "_taker",
-              "type": "address"
-            }
-          ],
-          "name": "isWhitelisted",
-          "outputs": [
-            {
-              "internalType": "bool",
-              "name": "",
-              "type": "bool"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "orchestratorRegistry",
-          "outputs": [
-            {
-              "internalType": "contract IOrchestratorRegistry",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_depositId",
-              "type": "uint256"
-            },
-            {
-              "internalType": "address[]",
-              "name": "_takers",
-              "type": "address[]"
-            }
-          ],
-          "name": "removeFromWhitelist",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "components": [
-                {
-                  "internalType": "address",
-                  "name": "taker",
-                  "type": "address"
-                },
-                {
-                  "internalType": "address",
-                  "name": "escrow",
-                  "type": "address"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "depositId",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "amount",
-                  "type": "uint256"
-                },
-                {
-                  "internalType": "address",
-                  "name": "to",
-                  "type": "address"
-                },
-                {
-                  "internalType": "bytes32",
-                  "name": "paymentMethod",
-                  "type": "bytes32"
-                },
-                {
-                  "internalType": "bytes32",
-                  "name": "fiatCurrency",
-                  "type": "bytes32"
-                },
-                {
-                  "internalType": "uint256",
-                  "name": "conversionRate",
-                  "type": "uint256"
-                },
-                {
-                  "components": [
-                    {
-                      "internalType": "address",
-                      "name": "recipient",
-                      "type": "address"
-                    },
-                    {
-                      "internalType": "uint256",
-                      "name": "fee",
-                      "type": "uint256"
-                    }
-                  ],
-                  "internalType": "struct IReferralFee.ReferralFee[]",
-                  "name": "referralFees",
-                  "type": "tuple[]"
-                },
-                {
-                  "internalType": "bytes",
-                  "name": "preIntentHookData",
-                  "type": "bytes"
-                }
-              ],
-              "internalType": "struct IPreIntentHook.PreIntentContext",
-              "name": "_ctx",
-              "type": "tuple"
-            }
-          ],
-          "name": "validateSignalIntent",
-          "outputs": [],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
-            },
-            {
-              "internalType": "address",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "name": "whitelist",
-          "outputs": [
-            {
-              "internalType": "bool",
-              "name": "",
-              "type": "bool"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        }
-      ]
-    },
-    "WhitelistPreIntentHookV2": {
-      "address": "0xf121d047f8261E91fbb3E9c775046Fc926269666",
-      "abi": [
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_orchestratorRegistry",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "_groupRegistry",
-              "type": "address"
-            }
-          ],
-          "stateMutability": "nonpayable",
-          "type": "constructor"
-        },
-        {
-          "inputs": [],
-          "name": "EmptyArray",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint256",
-              "name": "groupId",
-              "type": "uint256"
-            }
-          ],
-          "name": "GroupDoesNotExist",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "uint256",
-              "name": "attempted",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "max",
-              "type": "uint256"
-            }
-          ],
-          "name": "MaxGroupsExceeded",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "depositId",
-              "type": "uint256"
-            }
-          ],
-          "name": "TakerNotWhitelisted",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "caller",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "owner",
-              "type": "address"
-            },
-            {
-              "internalType": "address",
-              "name": "delegate",
-              "type": "address"
-            }
-          ],
-          "name": "UnauthorizedCallerOrDelegate",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "caller",
-              "type": "address"
-            }
-          ],
-          "name": "UnauthorizedOrchestratorCaller",
-          "type": "error"
-        },
-        {
-          "inputs": [],
-          "name": "ZeroAddress",
-          "type": "error"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "escrow",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "uint256",
-              "name": "depositId",
-              "type": "uint256"
-            },
-            {
-              "indexed": true,
-              "internalType": "uint256",
-              "name": "groupId",
-              "type": "uint256"
-            }
-          ],
-          "name": "GroupAttached",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "escrow",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "uint256",
-              "name": "depositId",
-              "type": "uint256"
-            },
-            {
-              "indexed": true,
-              "internalType": "uint256",
-              "name": "groupId",
-              "type": "uint256"
-            }
-          ],
-          "name": "GroupDetached",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "escrow",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "uint256",
-              "name": "depositId",
-              "type": "uint256"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
-            }
-          ],
-          "name": "TakerRemovedFromWhitelist",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "escrow",
-              "type": "address"
-            },
-            {
-              "indexed": true,
-              "internalType": "uint256",
-              "name": "depositId",
-              "type": "uint256"
-            },
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "taker",
-              "type": "address"
-            }
-          ],
-          "name": "TakerWhitelisted",
-          "type": "event"
-        },
-        {
-          "inputs": [],
-          "name": "MAX_GROUPS_PER_DEPOSIT",
-          "outputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_depositId",
-              "type": "uint256"
-            },
-            {
-              "internalType": "address[]",
-              "name": "_takers",
-              "type": "address[]"
-            }
-          ],
-          "name": "addToWhitelist",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_depositId",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256[]",
-              "name": "_groupIds",
-              "type": "uint256[]"
-            }
-          ],
-          "name": "attachGroups",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_depositId",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256[]",
-              "name": "_groupIds",
-              "type": "uint256[]"
-            }
-          ],
-          "name": "detachGroups",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_depositId",
-              "type": "uint256"
-            }
-          ],
-          "name": "getAttachedGroups",
-          "outputs": [
-            {
-              "internalType": "uint256[]",
-              "name": "",
-              "type": "uint256[]"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [],
-          "name": "groupRegistry",
-          "outputs": [
-            {
-              "internalType": "contract IAddressGroupRegistry",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_depositId",
-              "type": "uint256"
-            },
-            {
-              "internalType": "address",
-              "name": "_taker",
-              "type": "address"
-            }
-          ],
-          "name": "isAllowedTaker",
-          "outputs": [
-            {
-              "internalType": "bool",
-              "name": "",
-              "type": "bool"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_depositId",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_groupId",
-              "type": "uint256"
-            }
-          ],
-          "name": "isGroupAttached",
-          "outputs": [
-            {
-              "internalType": "bool",
-              "name": "",
-              "type": "bool"
-            }
-          ],
-          "stateMutability": "view",
           "type": "function"
         },
         {

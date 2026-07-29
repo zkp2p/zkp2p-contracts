@@ -2,6 +2,566 @@ export default {
   "name": "base",
   "chainId": "8453",
   "contracts": {
+    "AddressGroupRegistry": {
+      "address": "0x39F80118f9eB619135f116171b6Cb91D372C5AF2",
+      "abi": [
+        {
+          "inputs": [],
+          "name": "EmptyArray",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "groupId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "GroupDoesNotExist",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "groupId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "GroupNotPublic",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "groupId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "NoPendingTransfer",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "resolver",
+              "type": "address"
+            }
+          ],
+          "name": "ResolverNotContract",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "curator",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedGroupCurator",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "pendingCurator",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedPendingCurator",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroAddress",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "groupId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "curator",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "string",
+              "name": "name",
+              "type": "string"
+            }
+          ],
+          "name": "GroupCreated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "groupId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "cancelledPendingCurator",
+              "type": "address"
+            }
+          ],
+          "name": "GroupCuratorTransferCancelled",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "groupId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "curator",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "pendingCurator",
+              "type": "address"
+            }
+          ],
+          "name": "GroupCuratorTransferStarted",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "groupId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousCurator",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newCurator",
+              "type": "address"
+            }
+          ],
+          "name": "GroupCuratorTransferred",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "groupId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "bool",
+              "name": "isPublic",
+              "type": "bool"
+            }
+          ],
+          "name": "GroupVisibilityChanged",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "groupId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "member",
+              "type": "address"
+            }
+          ],
+          "name": "MemberAdded",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "groupId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "member",
+              "type": "address"
+            }
+          ],
+          "name": "MemberRemoved",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "groupId",
+              "type": "bytes32"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "oldResolver",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newResolver",
+              "type": "address"
+            }
+          ],
+          "name": "ResolverSet",
+          "type": "event"
+        },
+        {
+          "inputs": [],
+          "name": "RESOLVER_GAS_LIMIT",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_groupId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "acceptGroupCurator",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_groupId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address[]",
+              "name": "_members",
+              "type": "address[]"
+            }
+          ],
+          "name": "addMembers",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_groupId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "cancelGroupCuratorTransfer",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "string",
+              "name": "_name",
+              "type": "string"
+            }
+          ],
+          "name": "createGroup",
+          "outputs": [
+            {
+              "internalType": "bytes32",
+              "name": "groupId",
+              "type": "bytes32"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_groupId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "getGroup",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "curator",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "pendingCurator",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "resolver",
+              "type": "address"
+            },
+            {
+              "internalType": "bool",
+              "name": "isPublic",
+              "type": "bool"
+            },
+            {
+              "internalType": "bool",
+              "name": "exists",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "groupCount",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_groupId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "groupExists",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_groupId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "_account",
+              "type": "address"
+            }
+          ],
+          "name": "isMember",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_groupId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "joinGroup",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_groupId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "leaveGroup",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "name": "members",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_groupId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address[]",
+              "name": "_members",
+              "type": "address[]"
+            }
+          ],
+          "name": "removeMembers",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_groupId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bool",
+              "name": "_isPublic",
+              "type": "bool"
+            }
+          ],
+          "name": "setGroupVisibility",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_groupId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "_resolver",
+              "type": "address"
+            }
+          ],
+          "name": "setResolver",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_groupId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "address",
+              "name": "_newCurator",
+              "type": "address"
+            }
+          ],
+          "name": "transferGroupCurator",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
     "ChainlinkOracleAdapter": {
       "address": "0x53881a928abD61C095e5f30b63bc554872C3b2f1",
       "abi": [
@@ -5499,6 +6059,415 @@ export default {
             }
           ],
           "name": "withdrawDeposit",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
+    "IntentGuardian": {
+      "address": "0x83671606454fA72ba1e2831E18C5090D25629414",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_owner",
+              "type": "address"
+            },
+            {
+              "internalType": "contract IEscrowRegistry",
+              "name": "_escrowRegistry",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_extensionFeeBpsPerHour",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            }
+          ],
+          "name": "EscrowNotWhitelisted",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "cost",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "maxCost",
+              "type": "uint256"
+            }
+          ],
+          "name": "ExtensionCostExceedsMax",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "extensionFeeBpsPerHour",
+              "type": "uint256"
+            }
+          ],
+          "name": "ExtensionFeeExceedsIntentAmount",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ExtensionsDisabled",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "expiryTime",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "currentTime",
+              "type": "uint256"
+            }
+          ],
+          "name": "IntentAlreadyExpired",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroAddress",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "previousFeeBpsPerHour",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "newFeeBpsPerHour",
+              "type": "uint256"
+            }
+          ],
+          "name": "ExtensionFeeBpsPerHourUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "address",
+              "name": "payer",
+              "type": "address"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "additionalTime",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint256",
+              "name": "cost",
+              "type": "uint256"
+            }
+          ],
+          "name": "IntentExtended",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferStarted",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferred",
+          "type": "event"
+        },
+        {
+          "inputs": [],
+          "name": "BPS_DENOMINATOR",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "EXTENSION_FEE_DENOMINATOR",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "MAX_EXTENSION_FEE_BPS_PER_HOUR",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "MAX_TOTAL_INTENT_LIFETIME",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "SECONDS_PER_HOUR",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "acceptOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "escrowRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IEscrowRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_intentHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_additionalTime",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_maxCost",
+              "type": "uint256"
+            }
+          ],
+          "name": "extendIntent",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "extensionFeeBpsPerHour",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "owner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "pendingOwner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_intentAmount",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_additionalTime",
+              "type": "uint256"
+            }
+          ],
+          "name": "quoteExtensionCost",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "renounceOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "_extensionFeeBpsPerHour",
+              "type": "uint256"
+            }
+          ],
+          "name": "setExtensionFeeBpsPerHour",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "transferOwnership",
           "outputs": [],
           "stateMutability": "nonpayable",
           "type": "function"
@@ -13686,6 +14655,775 @@ export default {
             }
           ],
           "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ]
+    },
+    "WhitelistPolicy": {
+      "address": "0xE96eD3dBc5869b98a555b137C2dcCDf157eD17B3",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "contract IAddressGroupRegistry",
+              "name": "_groupRegistry",
+              "type": "address"
+            },
+            {
+              "internalType": "contract IEscrowRegistry",
+              "name": "_escrowRegistry",
+              "type": "address"
+            },
+            {
+              "internalType": "contract IOrchestratorRegistry",
+              "name": "_orchestratorRegistry",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "DepositNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "EmptyArray",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            }
+          ],
+          "name": "EscrowNotWhitelisted",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "groupId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "GroupDoesNotExist",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "dependency",
+              "type": "address"
+            }
+          ],
+          "name": "InvalidDependency",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            }
+          ],
+          "name": "NotDepositor",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "TakerNotWhitelisted",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "attempted",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "maximum",
+              "type": "uint256"
+            }
+          ],
+          "name": "TooManyGroups",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedOrchestratorCaller",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroAddress",
+          "type": "error"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            }
+          ],
+          "name": "AddressRemovedFromWhitelist",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            }
+          ],
+          "name": "AddressWhitelisted",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "groupId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "AllowedGroupAdded",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "groupId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "AllowedGroupRemoved",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "bool",
+              "name": "enabled",
+              "type": "bool"
+            }
+          ],
+          "name": "EnabledUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "escrowRegistry",
+              "type": "address"
+            }
+          ],
+          "name": "EscrowRegistryUpdated",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferred",
+          "type": "event"
+        },
+        {
+          "inputs": [],
+          "name": "MAX_GROUPS_PER_DEPOSIT",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32[]",
+              "name": "_groupIds",
+              "type": "bytes32[]"
+            }
+          ],
+          "name": "addAllowedGroups",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address[]",
+              "name": "_takers",
+              "type": "address[]"
+            }
+          ],
+          "name": "addWhitelistedAddresses",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "_enabled",
+              "type": "bool"
+            },
+            {
+              "internalType": "bytes32[]",
+              "name": "_groupIds",
+              "type": "bytes32[]"
+            },
+            {
+              "internalType": "address[]",
+              "name": "_takers",
+              "type": "address[]"
+            }
+          ],
+          "name": "configureDeposit",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "name": "enabled",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "escrowRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IEscrowRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "getAllowedGroups",
+          "outputs": [
+            {
+              "internalType": "bytes32[]",
+              "name": "",
+              "type": "bytes32[]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "groupRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IAddressGroupRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_groupId",
+              "type": "bytes32"
+            }
+          ],
+          "name": "isGroupAllowed",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "_taker",
+              "type": "address"
+            }
+          ],
+          "name": "isTakerAllowed",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "name": "isWhitelisted",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "orchestratorRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IOrchestratorRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "owner",
+          "outputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32[]",
+              "name": "_groupIds",
+              "type": "bytes32[]"
+            }
+          ],
+          "name": "removeAllowedGroups",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address[]",
+              "name": "_takers",
+              "type": "address[]"
+            }
+          ],
+          "name": "removeWhitelistedAddresses",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "renounceOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "_depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "_enabled",
+              "type": "bool"
+            }
+          ],
+          "name": "setEnabled",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "contract IEscrowRegistry",
+              "name": "_escrowRegistry",
+              "type": "address"
+            }
+          ],
+          "name": "setEscrowRegistry",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "transferOwnership",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "components": [
+                {
+                  "internalType": "address",
+                  "name": "taker",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "escrow",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "depositId",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "amount",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "address",
+                  "name": "to",
+                  "type": "address"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "paymentMethod",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "bytes32",
+                  "name": "fiatCurrency",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "conversionRate",
+                  "type": "uint256"
+                },
+                {
+                  "components": [
+                    {
+                      "internalType": "address",
+                      "name": "recipient",
+                      "type": "address"
+                    },
+                    {
+                      "internalType": "uint256",
+                      "name": "fee",
+                      "type": "uint256"
+                    }
+                  ],
+                  "internalType": "struct IReferralFee.ReferralFee[]",
+                  "name": "referralFees",
+                  "type": "tuple[]"
+                },
+                {
+                  "internalType": "bytes",
+                  "name": "preIntentHookData",
+                  "type": "bytes"
+                }
+              ],
+              "internalType": "struct IPreIntentHook.PreIntentContext",
+              "name": "_ctx",
+              "type": "tuple"
+            }
+          ],
+          "name": "validateSignalIntent",
+          "outputs": [],
+          "stateMutability": "view",
           "type": "function"
         }
       ]

@@ -11,10 +11,12 @@
 
 ## Staging Deployment Status
 
-- `RiskManager` and `OrchestratorV3` have only been deployed to staging. That staging lane is disposable and may be
-  removed, abandoned, or redeployed non-incrementally.
-- Write final deployment scripts fresh after the payment-binding and chargeback design stabilizes. Do not treat the
-  current staging deployment as immutable production history.
+- `OrchestratorV3` and `IOrchestratorV3` are retained as future implementations. They are not part of the current
+  V2 guardian/whitelist rollout and will receive fresh deployment scripts when that lane is ready.
+- The prior staging-only `RiskManager`/`OrchestratorV3` deployment lane is not active deployment history.
+- `IntentGuardian` and `WhitelistPolicy` extend the existing `EscrowV2`/`OrchestratorV2` stack. Deploy them through
+  their separate V2 intent-guardian and whitelist-policy scripts as a hard cut on both Base staging and production;
+  do not redeploy the V2 core as part of that workflow.
 - The payment-verifier cutover is one-way. In the same governance batch, authorize UPV3 on `NullifierRegistryV2`,
   permanently revoke the retired verifier's legacy-registry write permission, and route the shared
   `PaymentVerifierRegistry` to UPV3. Never route a payment method back to the retired verifier: the legacy registry
@@ -24,7 +26,7 @@
 - Core: `Escrow` holds maker deposits and per-deposit config (methods, currencies, min rates, intent limits/expiry); `Orchestrator` manages intents, routes to verifiers, collects protocol/referrer fees; `ProtocolViewer` provides aggregated read views.
 - Registries: `PaymentVerifierRegistry` maps `paymentMethod` → verifier + currencies; `EscrowRegistry` whitelists escrows; `PostIntentHookRegistry` whitelists post‑intent hooks; `NullifierRegistry` records consumed nullifiers. `RelayerRegistry` backs the deployed legacy V1 stack and the deployed prod `OrchestratorV2` (whose in-repo source mirrors the prod deployment, including relayer-gated multi-intent admission).
 - Unified Verifier: `unifiedVerifier/UnifiedPaymentVerifier.sol` validates EIP‑712 attestations, checks provider hashes and timestamp buffers (from `BaseUnifiedPaymentVerifier`), and nullifies payments.
-- Wiring: Deploy registries → deploy `Escrow` → deploy `Orchestrator` with registry addresses → `Escrow.setOrchestrator(...)` → deploy `UnifiedPaymentVerifier` and register it per `paymentMethod` in `PaymentVerifierRegistry` (also set provider hashes/timestamp buffers) → whitelist escrows/hooks as needed. The active V3 orchestrator has no relayer registry dependency; `OrchestratorV2` keeps its relayer constructor arg because its source mirrors the deployed prod contract.
+- Wiring: Deploy registries → deploy `Escrow` → deploy `Orchestrator` with registry addresses → `Escrow.setOrchestrator(...)` → deploy `UnifiedPaymentVerifier` and register it per `paymentMethod` in `PaymentVerifierRegistry` (also set provider hashes/timestamp buffers) → whitelist escrows/hooks as needed. The future V3 orchestrator has no relayer registry dependency; `OrchestratorV2` keeps its relayer constructor arg because its source mirrors the deployed prod contract.
 - Flow: Maker `createDeposit` on `Escrow` → Taker `signalIntent` on `Orchestrator` (escrow locks funds) → `fulfillIntent` calls method verifier → on success, `Orchestrator` unlocks/transfers from `Escrow`, applies fees, runs optional post‑intent hook.
 
 ### Minimal Diagram

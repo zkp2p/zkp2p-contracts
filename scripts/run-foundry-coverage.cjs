@@ -24,6 +24,11 @@ const excludedProductionDirectories = new Set([
     "contracts/interfaces",
     "contracts/mocks",
 ]);
+const excludedProductionFiles = new Set([
+    // Future implementation retained as an exact OrchestratorV2 copy until its own
+    // deployment lane and dedicated coverage suite are introduced.
+    "contracts/OrchestratorV3.sol",
+]);
 
 const legacyOrchestratorTests = [
     "OrchestratorCancel.t.sol",
@@ -285,7 +290,11 @@ function discoverProductionFiles() {
             const source = normalizeSource(absolutePath);
             if (entry.isDirectory()) {
                 if (!excludedProductionDirectories.has(source)) walk(absolutePath);
-            } else if (entry.isFile() && entry.name.endsWith(".sol")) {
+            } else if (
+                entry.isFile()
+                && entry.name.endsWith(".sol")
+                && !excludedProductionFiles.has(source)
+            ) {
                 productionFiles.push(source);
             }
         }

@@ -21,7 +21,7 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
  * contract without `getDeposit` reverts inside the escrow call with no reason data rather than a policy error.
  * That path is a caller mistake on a governance-gated mode, and is not worth a per-write code-length check.
  * `escrowRegistry` is governance-settable via `setEscrowRegistry` and MUST be kept in sync with the orchestrator's
- * escrow registry (`OrchestratorV3.setEscrowRegistry`), because if the two diverge, deposits on an escrow admitted
+ * escrow registry (`OrchestratorV2.setEscrowRegistry`), because if the two diverge, deposits on an escrow admitted
  * by only one of them can be neither gated nor revoked while the orchestrator keeps admitting intents for them.
  */
 contract WhitelistPolicy is Ownable, IWhitelistPolicy {
