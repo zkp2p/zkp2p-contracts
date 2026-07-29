@@ -30,6 +30,8 @@ contract ChargebackEscrowMock {
 }
 
 contract ChargebackPolicyTest is OrchestratorV3Fixture {
+    event LifecycleHookAuthorizationUpdated(address indexed hook, bool authorized);
+
     uint64 internal constant RISK_WINDOW = 30 days;
     uint256 internal constant STAKE_AMOUNT = 500e6;
     bytes32 internal constant INTENT = keccak256("intent");
@@ -350,6 +352,61 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
         policy.setLifecycleHook(other);
         vm.expectRevert(IChargebackPolicy.OwnershipRenunciationDisabled.selector);
         policy.renounceOwnership();
+    }
+
+    function test_SetLifecycleHookKeepsPreviousHookAuthorizedAndBothCanInvokeLifecycleEntrypoints()
+        public
+    {
+        address newHook = address(attestationVerifier);
+
+        policy.setLifecycleHook(newHook);
+
+        assertTrue(policy.authorizedLifecycleHooks(address(this)));
+        assertTrue(policy.authorizedLifecycleHooks(newHook));
+        policy.onIntentCancelled(keccak256("old-hook-cancel"));
+        vm.prank(newHook);
+        policy.onIntentSettled(keccak256("new-hook-settle"), INTENT_AMOUNT, false);
+    }
+
+    function test_RevokeLifecycleHookRevokesNonCurrentHookAndEmitsEvent() public {
+        address newHook = address(attestationVerifier);
+        policy.setLifecycleHook(newHook);
+
+        vm.expectEmit(true, false, false, true);
+        emit LifecycleHookAuthorizationUpdated(address(this), false);
+        policy.revokeLifecycleHook(address(this));
+
+        assertFalse(policy.authorizedLifecycleHooks(address(this)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IChargebackPolicy.UnauthorizedLifecycleHook.selector, address(this)
+            )
+        );
+        policy.onIntentCancelled(INTENT);
+    }
+
+    function test_RevokeLifecycleHookRejectsCurrentHook() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IChargebackPolicy.CannotRevokeCurrentLifecycleHook.selector, address(this)
+            )
+        );
+        policy.revokeLifecycleHook(address(this));
+    }
+
+    function test_RevokeLifecycleHookRejectsNeverAuthorizedHook() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IChargebackPolicy.LifecycleHookNotAuthorized.selector, other
+            )
+        );
+        policy.revokeLifecycleHook(other);
+    }
+
+    function test_RevokeLifecycleHookEnforcesOwnership() public {
+        vm.expectRevert(bytes("Ownable: caller is not the owner"));
+        vm.prank(other);
+        policy.revokeLifecycleHook(address(this));
     }
 
     function test_SetEnabledEnforcesRegistryDepositAndDepositor() public {

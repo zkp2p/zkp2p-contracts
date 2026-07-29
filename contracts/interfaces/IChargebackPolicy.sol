@@ -85,12 +85,18 @@ interface IChargebackPolicy {
     event RiskWindowUpdated(bytes32 indexed paymentMethod, uint64 riskWindow);
     event AttestationVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
     event LifecycleHookUpdated(address indexed previousHook, address indexed newHook);
+    /** @notice Emitted when a lifecycle hook's callback authorization changes. */
+    event LifecycleHookAuthorizationUpdated(address indexed hook, bool authorized);
     event EscrowRegistryUpdated(address indexed escrowRegistry);
     event AdmissionsPausedUpdated(bool paused);
 
     error ZeroAddress();
     error InvalidContract(address dependency);
     error UnauthorizedLifecycleHook(address caller);
+    /** @notice Reverts when attempting to revoke the currently designated lifecycle hook. */
+    error CannotRevokeCurrentLifecycleHook(address hook);
+    /** @notice Reverts when attempting to revoke a lifecycle hook that is not authorized. */
+    error LifecycleHookNotAuthorized(address hook);
     error AdmissionsPaused();
     error ChargebackNotEnabled(address escrow, uint256 depositId);
     error InsufficientCollateral(address stakeOwner, uint256 available, uint256 required);
@@ -149,8 +155,11 @@ interface IChargebackPolicy {
     /** @notice Replaces the verifier used for future chargeback submissions. */
     function setAttestationVerifier(address _verifier) external;
 
-    /** @notice Sets the contract authorized to forward intent lifecycle callbacks. */
+    /** @notice Designates and authorizes the current hook without deauthorizing predecessor hooks. */
     function setLifecycleHook(address _hook) external;
+
+    /** @notice Revokes a predecessor hook after all intents snapshotted to it have been drained. */
+    function revokeLifecycleHook(address _hook) external;
 
     /** @notice Replaces the registry used to authorize deposit configuration. */
     function setEscrowRegistry(IEscrowRegistry _escrowRegistry) external;
@@ -191,8 +200,11 @@ interface IChargebackPolicy {
     /** @notice Returns the registry used to authorize escrow deposit configuration. */
     function escrowRegistry() external view returns (IEscrowRegistry);
 
-    /** @notice Returns the lifecycle hook authorized to mutate positions. */
+    /** @notice Returns the currently designated lifecycle hook for new intent routing. */
     function lifecycleHook() external view returns (address);
+
+    /** @notice Returns whether a lifecycle hook is authorized to mutate positions. */
+    function authorizedLifecycleHooks(address _hook) external view returns (bool);
 
     /** @notice Returns whether new chargeback admissions are paused. */
     function admissionsPaused() external view returns (bool);

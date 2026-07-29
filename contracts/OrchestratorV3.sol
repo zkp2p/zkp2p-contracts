@@ -45,7 +45,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     uint256 constant MAX_PROTOCOL_FEE = 5e16;      // 5% max protocol fee
     uint256 constant MAX_MANAGER_FEE = 5e16;       // 5% max manager fee
 
-/* ============ State Variables ============ */
+    /* ============ State Variables ============ */
 
     uint256 immutable public chainId;              // chainId of the chain the orchestrator is deployed on
 
@@ -377,8 +377,8 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
             if (escrowIntent.intentHash == bytes32(0)) {
                 _pruneIntentAndNotify(intentHash);
             }
-            }
         }
+    }
 
     /* ============ Governance Functions ============ */
 
@@ -582,7 +582,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
 
     /**
      * @notice Validates hook address and authorizes the caller as depositor or delegate.
-     * @dev Shared validation for setDepositPreIntentHook and setDepositWhitelistHook.
+     * @dev Validation used by setDepositPreIntentHook.
      */
     function _validateAndAuthorizeHookSetter(address _escrow, uint256 _depositId, IPreIntentHook _hook) internal view {
         if (_escrow == address(0)) revert ZeroAddress();

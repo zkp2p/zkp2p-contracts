@@ -286,6 +286,47 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         );
     }
 
+    function test_LifecycleHookRotationPreservesOldIntentsAndRoutesNewIntentsToNewHook()
+        public
+    {
+        _setChargeback(true);
+        bytes32 oldCancelledIntent = _signalDefault();
+        bytes32 oldSettledIntent = _signalDefault();
+        IntentLifecycleHookV1 newLifecycleHook =
+            new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, chargebackPolicy);
+
+        chargebackPolicy.setLifecycleHook(address(newLifecycleHook));
+        orchestrator.setLifecycleHook(newLifecycleHook);
+
+        vm.prank(taker);
+        orchestrator.cancelIntent(oldCancelledIntent);
+        assertEq(
+            uint256(chargebackPolicy.getPosition(oldCancelledIntent).status),
+            uint256(IChargebackPolicy.PositionStatus.CANCELLED)
+        );
+
+        uint256 releaseAmount = 40e6;
+        verifier.setShouldVerifyPayment(true);
+        _fulfill(oldSettledIntent, releaseAmount, CONVERSION_RATE);
+        IChargebackPolicy.Position memory oldSettledPosition =
+            chargebackPolicy.getPosition(oldSettledIntent);
+        assertEq(
+            uint256(oldSettledPosition.status),
+            uint256(IChargebackPolicy.PositionStatus.SETTLED)
+        );
+        assertEq(oldSettledPosition.coverageAmount, releaseAmount);
+
+        bytes32 newIntent = _signalDefault();
+        assertEq(address(orchestrator.getIntentLifecycleHook(newIntent)), address(newLifecycleHook));
+        vm.prank(taker);
+        orchestrator.cancelIntent(newIntent);
+        assertEq(
+            uint256(chargebackPolicy.getPosition(newIntent).status),
+            uint256(IChargebackPolicy.PositionStatus.CANCELLED)
+        );
+        assertEq(vault.lockedStake(taker), releaseAmount);
+    }
+
     function _setWhitelist(bool enabled, bool includeTaker) internal {
         address[] memory takers = new address[](includeTaker ? 1 : 0);
         if (includeTaker) takers[0] = taker;

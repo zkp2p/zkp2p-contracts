@@ -26,7 +26,11 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
  * orchestrator-bound: lifecycle entrypoints trust that every orchestrator admitted to OrchestratorRegistry (and
  * therefore able to reach this policy through the lifecycle hook) invokes callbacks only for intents it created. A
  * registered orchestrator that reported foreign intent hashes could cancel or settle another orchestrator's
- * coverage. Registering an orchestrator is a governance action that vouches for exactly this behavior.
+ * coverage. Registering an orchestrator is a governance action that vouches for exactly this behavior. Rotating the
+ * lifecycle hook keeps predecessors authorized so intents snapshotted to them can still cancel or settle; revoke a
+ * predecessor only after its intents are drained, or their terminal callbacks revert fail-closed. Deregistering an
+ * orchestrator while it has unresolved intents snapshotted to a hook permanently blocks those terminal callbacks,
+ * so governance must drain its intents before removing it from OrchestratorRegistry.
  */
 contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard, EIP712 {
     /* ============ Constants ============ */
@@ -45,6 +49,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard, E
     address public override lifecycleHook;
     bool public override admissionsPaused;
 
+    mapping(address => bool) public override authorizedLifecycleHooks;
     mapping(address => mapping(uint256 => bool)) public override enabled;
     mapping(bytes32 => uint64) public override riskWindows;
     mapping(bytes32 => Position) internal positions;
@@ -75,7 +80,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard, E
     /* ============ Modifiers ============ */
 
     modifier onlyLifecycleHook() {
-        if (msg.sender != lifecycleHook) revert UnauthorizedLifecycleHook(msg.sender);
+        if (!authorizedLifecycleHooks[msg.sender]) revert UnauthorizedLifecycleHook(msg.sender);
         _;
     }
 
@@ -289,7 +294,19 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard, E
         _validateDependency(_hook);
         address previousHook = lifecycleHook;
         lifecycleHook = _hook;
+        authorizedLifecycleHooks[_hook] = true;
         emit LifecycleHookUpdated(previousHook, _hook);
+        emit LifecycleHookAuthorizationUpdated(_hook, true);
+    }
+
+    /**
+     * @inheritdoc IChargebackPolicy
+     */
+    function revokeLifecycleHook(address _hook) external override onlyOwner {
+        if (_hook == lifecycleHook) revert CannotRevokeCurrentLifecycleHook(_hook);
+        if (!authorizedLifecycleHooks[_hook]) revert LifecycleHookNotAuthorized(_hook);
+        authorizedLifecycleHooks[_hook] = false;
+        emit LifecycleHookAuthorizationUpdated(_hook, false);
     }
 
     /**

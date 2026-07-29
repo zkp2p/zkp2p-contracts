@@ -17,6 +17,8 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
  * @dev Reads canonical intent data from the calling orchestrator and forwards cancellation and settlement accounting
  * to ChargebackPolicy. All callbacks remain fail-closed. This hook serves every registered orchestrator and forwards
  * lifecycle callbacks without provenance checks; the trust argument lives in ChargebackPolicy's header.
+ * Deregistering an orchestrator with unresolved intents snapshotted to this hook permanently blocks their terminal
+ * callbacks, so governance must drain its intents before removing it from OrchestratorRegistry.
  */
 contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     /* ============ State Variables ============ */
