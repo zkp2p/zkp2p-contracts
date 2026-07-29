@@ -185,7 +185,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         intentLifecycleHooks[intentHash] = snapshottedLifecycleHook;
 
         if (address(snapshottedLifecycleHook) != address(0)) {
-            snapshottedLifecycleHook.onIntentCreated(intentHash);
+            snapshottedLifecycleHook.onIntentSignaled(intentHash);
         }
         emit IntentLifecycleHookSnapshotted(intentHash, address(snapshottedLifecycleHook));
 

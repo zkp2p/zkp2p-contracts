@@ -26,7 +26,7 @@ contract OrchestratorV3LifecycleTest is OrchestratorV3Fixture {
 
         bytes32 intentHash = _signalDefault();
 
-        assertEq(lifecycleHookMock.createdCalls(), 1);
+        assertEq(lifecycleHookMock.signaledCalls(), 1);
         assertEq(address(orchestrator.getIntentLifecycleHook(intentHash)), address(lifecycleHookMock));
     }
 

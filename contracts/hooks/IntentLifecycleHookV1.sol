@@ -56,7 +56,7 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     /**
      * @inheritdoc IIntentLifecycleHook
      */
-    function onIntentCreated(bytes32 _intentHash) external override onlyOrchestrator {
+    function onIntentSignaled(bytes32 _intentHash) external override onlyOrchestrator {
         IOrchestratorV3.Intent memory intent = IOrchestratorV3(msg.sender).getIntent(_intentHash);
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
@@ -68,7 +68,7 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
             return;
         }
         if (chargebackPolicy.enabled(intent.escrow, intent.depositId)) {
-            chargebackPolicy.admitIntent(
+            chargebackPolicy.onIntentSignaled(
                 _intentHash,
                 intent.escrow,
                 intent.depositId,

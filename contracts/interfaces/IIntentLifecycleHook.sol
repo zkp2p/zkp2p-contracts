@@ -20,10 +20,10 @@ interface IIntentLifecycleHook {
     }
 
     /**
-     * @notice Validates and records a newly created intent.
+     * @notice Validates and records a newly signaled intent.
      * @param _intentHash Identifier of the readable intent in the calling orchestrator.
      */
-    function onIntentCreated(bytes32 _intentHash) external;
+    function onIntentSignaled(bytes32 _intentHash) external;
 
     /**
      * @notice Resolves risk accounting for a cancelled or expired intent.

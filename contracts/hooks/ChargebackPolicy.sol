@@ -102,7 +102,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard, E
      * @dev A zero risk window passes through before paused, enabled, or duplicate checks because a
      * non-chargebackable method uses direct access and pass-through is not an admission.
      */
-    function admitIntent(
+    function onIntentSignaled(
         bytes32 _intentHash,
         address _escrow,
         uint256 _depositId,

@@ -204,7 +204,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
 
         bytes32 fresh = _signalDefault();
         assertEq(address(riskOrchestrator.getIntentLifecycleHook(fresh)), address(replacementHook));
-        assertEq(replacementHook.createdCalls(), 1);
+        assertEq(replacementHook.signaledCalls(), 1);
     }
 
     function test_MaximumPolicySizeAdmitsMemberOfLastGroup() public {
@@ -225,7 +225,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
         bytes32 intentHash = keccak256("intent");
         vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.UnauthorizedOrchestrator.selector, other));
         vm.prank(other);
-        lifecycleHook.onIntentCreated(intentHash);
+        lifecycleHook.onIntentSignaled(intentHash);
 
         vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.UnauthorizedOrchestrator.selector, other));
         vm.prank(other);
@@ -248,7 +248,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
         bytes32 unknownIntent = keccak256("unknown-intent");
         vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.IntentNotFound.selector, unknownIntent));
         vm.prank(address(orchestrator));
-        lifecycleHook.onIntentCreated(unknownIntent);
+        lifecycleHook.onIntentSignaled(unknownIntent);
     }
 
     function _enablePeerPolicyAndAddTaker() internal {
