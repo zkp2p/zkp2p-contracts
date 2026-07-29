@@ -5,41 +5,51 @@ import { assertReleaseEnvironment } from './lib/release-environment-policy.mjs';
 
 function validEnvironment() {
   return {
-    can_admins_bypass: false,
-    protection_rules: [
-      {
-        type: 'required_reviewers',
-        reviewers: [{ type: 'User', reviewer: { login: 'release-maintainer' } }],
-        prevent_self_review: true,
-      },
-    ],
+    protection_rules: [],
     deployment_branch_policy: {
-      protected_branches: true,
-      custom_branch_policies: false,
+      protected_branches: false,
+      custom_branch_policies: true,
     },
   };
 }
 
-test('accepts an independently reviewed environment with admin bypass disabled', () => {
-  assert.doesNotThrow(() => assertReleaseEnvironment(validEnvironment(), 'npm-publish'));
-});
+function mainOnlyPolicy() {
+  return [{ name: 'main', type: 'branch' }];
+}
 
-test('rejects an environment with admin bypass enabled', () => {
-  const environment = validEnvironment();
-  environment.can_admins_bypass = true;
-
-  assert.throws(
-    () => assertReleaseEnvironment(environment, 'npm-publish'),
-    /must disable administrator bypass/,
+test('accepts an autonomous environment restricted to main', () => {
+  assert.doesNotThrow(() =>
+    assertReleaseEnvironment(validEnvironment(), 'npm-publish-rc', mainOnlyPolicy()),
   );
 });
 
-test('fails closed when the admin bypass setting is absent', () => {
+test('rejects required reviewers', () => {
   const environment = validEnvironment();
-  delete environment.can_admins_bypass;
-
+  environment.protection_rules = [{ type: 'required_reviewers' }];
   assert.throws(
-    () => assertReleaseEnvironment(environment, 'npm-publish'),
-    /must disable administrator bypass/,
+    () => assertReleaseEnvironment(environment, 'npm-publish-rc', mainOnlyPolicy()),
+    /must not gate autonomous RC publishing/,
+  );
+});
+
+test('rejects protected-branch mode', () => {
+  const environment = validEnvironment();
+  environment.deployment_branch_policy = {
+    protected_branches: true,
+    custom_branch_policies: false,
+  };
+  assert.throws(
+    () => assertReleaseEnvironment(environment, 'npm-publish-rc', mainOnlyPolicy()),
+    /custom deployment branch policies/,
+  );
+});
+
+test('rejects any branch policy other than exactly main', () => {
+  assert.throws(
+    () =>
+      assertReleaseEnvironment(validEnvironment(), 'npm-publish-rc', [
+        { name: 'releases/*', type: 'branch' },
+      ]),
+    /exactly the main branch/,
   );
 });

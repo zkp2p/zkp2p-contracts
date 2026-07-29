@@ -4,7 +4,7 @@ description: >
   Prepare and publish @zkp2p/contracts-v2 through the protected GitHub Actions
   trusted-publishing workflow, including build, tests, ABI/address integrity,
   npm pack, provenance, dist-tag, and post-publish verification.
-compatibility: Requires Node.js 22.14+, Yarn 4.9.1, and maintainer access to dispatch and approve GitHub environments.
+compatibility: Requires Node.js 22.14+, Yarn 4.9.1, and maintainer access to dispatch the autonomous RC workflow.
 ---
 
 # `@zkp2p/contracts-v2` trusted release
@@ -16,14 +16,14 @@ Read `NPM_RELEASE.md` completely before preparing or initiating a release. Do no
 - Package: `packages/contracts/`
 - Version source: `packages/contracts/package.json`
 - Workflow: `.github/workflows/publish-contracts-v2.yml`
-- Protected environment: `npm-publish`
-- Registry tags: `dev` or `rc` for prerelease SemVer; `latest` for stable SemVer
+- Autonomous RC environment: `npm-publish-rc`
+- Registry tag: hard-coded `rc`
 
-The workflow must be dispatched from `main`. Its `release` input must exactly match the committed package version. Every version must be new on npm.
+The workflow must be dispatched from `main`. Its `release` input must exactly match the committed `0.4.0-rc.N` package version, and the repository-controlled `contracts-v2-v<version>` tag must point to that same main commit. Every version must be new on npm.
 
 ## Prepare the version PR
 
-For a prerelease, set an explicit prerelease version. For stable, remove the prerelease suffix in a separate reviewed PR. Do not reuse or overwrite an npm version.
+Set the first unused `0.4.0-rc.N` version. Stable or `latest` publishing is a separate future workflow and is not implemented here. Do not reuse or overwrite an npm version.
 
 Update the package README or changelog for consumer-visible changes. Confirm `repository.url` remains exactly `https://github.com/zkp2p/zkp2p-contracts.git` for npm OIDC provenance.
 
@@ -43,10 +43,10 @@ npm pack --dry-run
 
 The verification derives required ABIs and addresses from the current hard-cut package and must match exact Base/Base Staging deployment artifacts.
 
-## Initiate, approve, and verify
+## Initiate and verify
 
-After the version PR and normal CI merge to `main`, dispatch **Publish contracts-v2** with the exact version and intended tag. The validation job performs the authoritative immutable install/build/test/pack checks and preserves the exact tarball. Review those results before a different human approves the `npm-publish` environment.
+After the version PR and normal CI merge to `main`, create `contracts-v2-v<version>` at the exact merge commit and dispatch **Publish contracts-v2** from `main` with the exact version. The `npm-publish-rc` environment has no reviewer or secret and permits only `main`, so RC publication is autonomous.
 
-The publish job uses OIDC with `id-token: write`, publishes that exact tarball with provenance, and checks the registry version, selected dist-tag, integrity, and required files. Do not publish if any gate fails.
+The publish job uses OIDC with `id-token: write`, publishes the validated tarball using `npm publish --tag rc --provenance`, and checks registry integrity, provenance, unchanged `latest`, exact-version and `@rc` clean installs, required exports, ABIs, and addresses.
 
 If npm accepted the version but post-publish verification failed, do not rerun the publish. Inspect the immutable version and repair only a wrong dist-tag through an interactive maintainer action protected by 2FA.

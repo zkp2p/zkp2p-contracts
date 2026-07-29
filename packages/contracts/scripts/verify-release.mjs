@@ -17,14 +17,27 @@ const networkConfigs = [
     addressFile: 'addresses/base.json',
     abiDirectory: 'abis/base',
     deploymentDirectory: 'deployments/base',
+    outputFile: 'deployments/outputs/baseContracts.ts',
   },
   {
     name: 'baseStaging',
     addressFile: 'addresses/baseStaging.json',
     abiDirectory: 'abis/baseStaging',
     deploymentDirectory: 'deployments/base_staging',
+    outputFile: 'deployments/outputs/baseStagingContracts.ts',
   },
 ];
+const sourceAbiArtifacts = {
+  IntentGuardian: 'artifacts/contracts/IntentGuardian.sol/IntentGuardian.json',
+  OrchestratorV3: 'artifacts/contracts/OrchestratorV3.sol/OrchestratorV3.json',
+  NullifierRegistryV2:
+    'artifacts/contracts/registries/NullifierRegistryV2.sol/NullifierRegistryV2.json',
+  UnifiedPaymentVerifierV3:
+    'artifacts/contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol/UnifiedPaymentVerifierV3.json',
+  AddressGroupRegistry:
+    'artifacts/contracts/registries/AddressGroupRegistry.sol/AddressGroupRegistry.json',
+  WhitelistPolicy: 'artifacts/contracts/hooks/WhitelistPolicy.sol/WhitelistPolicy.json',
+};
 
 function fail(message) {
   console.error(`Contracts package verification failed: ${message}`);
@@ -35,6 +48,18 @@ function requireFile(relativePath) {
   const absolutePath = path.join(packageRoot, relativePath);
   if (!fs.existsSync(absolutePath)) fail(`missing generated file ${relativePath}`);
   return absolutePath;
+}
+
+function sameJson(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function readDeploymentOutput(relativePath) {
+  const source = fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+  const json = source
+    .replace(/^\s*export\s+default\s+/, '')
+    .replace(/\s+as\s+const\s*;?\s*$/, '');
+  return JSON.parse(json);
 }
 
 const requiredPackFiles = [
@@ -82,9 +107,19 @@ if (packageJson.publishConfig?.provenance !== true) fail('publishConfig.provenan
 
 const zeroAddress = '0x0000000000000000000000000000000000000000';
 let verifiedDeployments = 0;
-for (const { name, addressFile, abiDirectory, deploymentDirectory } of networkConfigs) {
+for (const {
+  name,
+  addressFile,
+  abiDirectory,
+  deploymentDirectory,
+  outputFile,
+} of networkConfigs) {
   const addresses = JSON.parse(fs.readFileSync(requireFile(addressFile), 'utf8'));
   if (addresses.chainId !== 8453) fail(`${name} package chainId is ${addresses.chainId}, expected 8453`);
+  const output = readDeploymentOutput(outputFile);
+  if (Number(output.chainId) !== addresses.chainId) {
+    fail(`${name} deployment output chainId does not match the package`);
+  }
 
   const esmWrapper = fs.readFileSync(requireFile(`abis/${name}.mjs`), 'utf8');
   const cjsWrapper = fs.readFileSync(requireFile(`abis/${name}.cjs`), 'utf8');
@@ -94,26 +129,82 @@ for (const { name, addressFile, abiDirectory, deploymentDirectory } of networkCo
   if (contracts.length === 0) fail(`${name} package has no contract addresses`);
 
   for (const [contractName, packageAddress] of contracts) {
-    const artifactPath = path.join(repoRoot, deploymentDirectory, `${contractName}.json`);
-    if (!fs.existsSync(artifactPath)) {
+    const outputEntry = output.contracts?.[contractName];
+    if (!outputEntry) {
       if (packageAddress.toLowerCase() !== zeroAddress) {
-        fail(`${name}.${contractName} has a nonzero package address without a deployment artifact`);
+        fail(`${name}.${contractName} has a nonzero address without a canonical deployment output`);
       }
       continue;
     }
+    if (packageAddress.toLowerCase() !== outputEntry.address.toLowerCase()) {
+      fail(`${name}.${contractName} does not match the canonical deployment output`);
+    }
+    if (packageAddress.toLowerCase() === zeroAddress) {
+      fail(`${name}.${contractName} is canonical for this network but has a zero package address`);
+    }
 
-    const artifactAddress = JSON.parse(fs.readFileSync(artifactPath, 'utf8')).address;
+    const artifactPath = path.join(repoRoot, deploymentDirectory, `${contractName}.json`);
+    if (!fs.existsSync(artifactPath)) fail(`${name}.${contractName} has no deployment artifact`);
+
+    const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+    const artifactAddress = artifact.address;
     if (packageAddress.toLowerCase() !== artifactAddress.toLowerCase()) {
       fail(`${name}.${contractName} does not match its deployment artifact`);
     }
 
-    requireFile(`${abiDirectory}/${contractName}.json`);
+    const packageAbi = JSON.parse(
+      fs.readFileSync(requireFile(`${abiDirectory}/${contractName}.json`), 'utf8'),
+    );
+    if (!sameJson(packageAbi, outputEntry.abi)) {
+      fail(`${name}.${contractName} ABI does not match the canonical deployment output`);
+    }
+    if (!sameJson(packageAbi, artifact.abi)) {
+      fail(`${name}.${contractName} ABI does not match its deployment artifact`);
+    }
     if (!esmWrapper.includes(`as ${contractName}`) || !cjsWrapper.includes(`${contractName}:`)) {
       fail(`${name} ABI wrappers do not export ${contractName}`);
     }
     verifiedDeployments += 1;
   }
+
+  for (const contractName of Object.keys(output.contracts || {})) {
+    if (!(contractName in addresses.contracts)) {
+      fail(`${name} package addresses omit canonical deployment ${contractName}`);
+    }
+  }
 }
 
 if (verifiedDeployments === 0) fail('no deployment-backed package entries were verified');
-console.log(`Verified ${verifiedDeployments} deployment-backed ABI/address entries across Base networks.`);
+
+const sourceEsmWrapper = fs.readFileSync(requireFile('abis/contracts.mjs'), 'utf8');
+const sourceCjsWrapper = fs.readFileSync(requireFile('abis/contracts.cjs'), 'utf8');
+requireFile('abis/contracts.d.ts');
+for (const [contractName, artifactPath] of Object.entries(sourceAbiArtifacts)) {
+  const artifact = JSON.parse(fs.readFileSync(path.join(repoRoot, artifactPath), 'utf8'));
+  const packageAbi = JSON.parse(
+    fs.readFileSync(requireFile(`abis/contracts/${contractName}.json`), 'utf8'),
+  );
+  if (!sameJson(packageAbi, artifact.abi)) {
+    fail(`source ABI ${contractName} does not match its compiled artifact`);
+  }
+  if (
+    !sourceEsmWrapper.includes(`as ${contractName}`) ||
+    !sourceCjsWrapper.includes(`${contractName}:`)
+  ) {
+    fail(`source ABI wrappers do not export ${contractName}`);
+  }
+}
+
+for (const removedExport of [
+  'utils/riskMath.js',
+  'types/contracts/RiskManager.js',
+  'abis/contracts/RiskManager.json',
+]) {
+  if (fs.existsSync(path.join(packageRoot, removedExport))) {
+    fail(`stale noncanonical affine-risk export remains: ${removedExport}`);
+  }
+}
+
+console.log(
+  `Verified ${verifiedDeployments} deployment-backed ABI/address entries and ${Object.keys(sourceAbiArtifacts).length} canonical source ABI exports.`,
+);

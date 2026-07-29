@@ -1,53 +1,46 @@
-# Trusted publishing for `@zkp2p/contracts-v2`
+# Autonomous trusted RC publishing for `@zkp2p/contracts-v2`
 
-The only supported release path is `.github/workflows/publish-contracts-v2.yml`. It publishes with GitHub Actions OIDC, npm provenance, and no `NPM_TOKEN`.
+The only supported RC path is `.github/workflows/publish-contracts-v2.yml`. It publishes through GitHub Actions OIDC with npm provenance and no reusable npm credential.
 
 ## One-time npm configuration
 
-On the npm settings page for `@zkp2p/contracts-v2`, add a GitHub Actions trusted publisher with these exact values:
+Add this GitHub Actions trusted publisher to `@zkp2p/contracts-v2`:
 
 | Field | Value |
 | --- | --- |
 | Organization | `zkp2p` |
 | Repository | `zkp2p-contracts` |
 | Workflow filename | `publish-contracts-v2.yml` |
-| Environment | `npm-publish` |
+| Environment | `npm-publish-rc` |
 | Allowed action | `npm publish` only |
 
-The repository and workflow values are case-sensitive. Keep the environment value: the publish job always uses it, and npm includes it in the OIDC identity.
-
-After one successful trusted publish, change npm **Publishing access** to **Require two-factor authentication and disallow tokens**, then revoke obsolete automation tokens. Configure trusted publishing first so a typo cannot lock out releases.
+After one successful trusted publish, set publishing access to require 2FA and disallow traditional tokens where npm keeps trusted publishing available. Do not revoke any existing credential without separately confirming its ownership and consumers.
 
 ## One-time GitHub configuration
 
-Create the `npm-publish` environment in `zkp2p/zkp2p-contracts` with:
+Create `npm-publish-rc` in `zkp2p/zkp2p-contracts` with:
 
-- Sachin or the release-maintainer team as required reviewer.
-- **Prevent self-review** enabled.
-- Deployment branches restricted to protected `main` only.
-- Administrator bypass disabled.
-- No environment secrets; in particular, no `NPM_TOKEN`.
+- no required reviewer and no wait timer;
+- custom deployment branch policy allowing exactly `main`;
+- no environment secrets or variables, especially no `NPM_TOKEN`.
 
-Protect `main` so releases can only use reviewed commits. The workflow itself has `contents: read`; only its approved publish job receives `id-token: write`.
+The validation job reads the environment and deployment-branch policy through GitHub's API and fails closed unless the environment is autonomous and main-only. The publish job alone receives `id-token: write`.
 
-The validation job checks these environment settings through the read-only GitHub API and fails before building if required reviewers, self-review prevention, disabled administrator bypass, or the `main` deployment restriction are missing.
+## Preparing an RC
 
-At the time this workflow was added, the environment and `main` branch protection were not configured. The workflow intentionally remains fail-closed until both settings exist.
+1. Query the live registry and select the first unused `0.4.0-rc.N`.
+2. Commit that exact version with the workflow and package changes in a focused PR.
+3. Merge only after all required checks pass.
+4. Create `contracts-v2-v<version>` at the exact canonical-main merge commit.
+5. Recheck the registry guard, tag SHA, workflow SHA, and tarball digest.
+6. Dispatch **Publish contracts-v2** from `main` with only the exact version input.
 
-## Preparing a release
-
-1. Change `packages/contracts/package.json` in a reviewed PR. Use a prerelease version for `dev` or `rc`, or a stable version for `latest`.
-2. Update the package README/changelog for consumer-visible changes.
-3. Merge the PR to `main` and wait for normal CI.
-4. Dispatch **Publish contracts-v2** from `main`. Enter the exact committed version as `release` and choose `dev`, `rc`, or `latest` as `tag`.
-5. Review the completed build/test/pack job, then approve the `npm-publish` environment. The initiator cannot approve their own run.
-
-The workflow refuses non-`main` refs, mismatched versions, duplicate registry versions, prerelease versions tagged `latest`, and stable versions tagged `dev`/`rc`. Stable promotion therefore requires a version PR; do not move `latest` to an RC with `npm dist-tag`.
+The workflow has no tag input. It accepts only `0.4.0-rc.N`, requires `workflow_dispatch`, canonical `main`, and the exact repository-controlled tag, then runs `npm publish --tag rc --provenance`. It has no PR-triggered publishing path and cannot publish a stable version or move `latest`.
 
 ## Release gates
 
-The workflow performs an immutable Yarn install, clean contract compilation, package build/tests, Base/Base Staging ABI and address-to-deployment integrity checks, and an exact `npm pack` manifest/integrity check. It uploads that checked tarball for the protected publish job, publishes the same bytes with provenance, and then verifies registry version, dist-tag, integrity, and package contents.
+The workflow performs an immutable Yarn install, clean compilation, repository and package tests, exact Base/Base Staging deployment-output/address/ABI agreement, canonical source ABI verification, `npm pack` digest inspection, and clean installation/import from the exact tarball. It preserves those exact bytes for the OIDC publish job.
 
-The release gate derives ABI/address requirements from the current generated package and deployment artifacts. It does not retain compatibility checks for contracts removed by a hard cut.
+After publication it verifies the immutable registry integrity and provenance, confirms `rc` points to the new version and `latest` is unchanged, downloads and inspects the registry tarball, and clean-installs both the exact version and `@rc`.
 
-If publishing succeeds but post-publish verification times out, do not rerun blindly: npm versions are immutable and the duplicate-version guard will stop the rerun. Inspect the registry version and dist-tag, then repair only the tag with an interactive, 2FA-authenticated maintainer action if necessary.
+If npm accepts the version but a later verification fails, do not rerun publication. npm versions are immutable; repair through a new RC forward-fix unless evidence proves only the `rc` tag needs an interactive, 2FA-protected correction.

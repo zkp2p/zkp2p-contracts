@@ -1,17 +1,19 @@
-export function assertReleaseEnvironment(environment, environmentName) {
-  const reviewerRule = environment.protection_rules?.find((rule) => rule.type === 'required_reviewers');
-  if (!reviewerRule || !Array.isArray(reviewerRule.reviewers) || reviewerRule.reviewers.length === 0) {
-    throw new Error(`${environmentName} must have at least one required reviewer`);
+export function assertReleaseEnvironment(environment, environmentName, branchPolicies) {
+  const blockingRules = (environment.protection_rules || []).filter((rule) =>
+    ['required_reviewers', 'wait_timer'].includes(rule.type),
+  );
+  if (blockingRules.length > 0) {
+    throw new Error(`${environmentName} must not gate autonomous RC publishing`);
   }
-  if (reviewerRule.prevent_self_review !== true) {
-    throw new Error(`${environmentName} must prevent self-review`);
-  }
-  if (environment.can_admins_bypass !== false) {
-    throw new Error(`${environmentName} must disable administrator bypass`);
-  }
-
   const policy = environment.deployment_branch_policy;
-  if (policy?.protected_branches !== true || policy?.custom_branch_policies === true) {
-    throw new Error(`${environmentName} must restrict deployments to protected branches`);
+  if (policy?.protected_branches !== false || policy?.custom_branch_policies !== true) {
+    throw new Error(`${environmentName} must use custom deployment branch policies`);
+  }
+  if (
+    !Array.isArray(branchPolicies) ||
+    branchPolicies.length !== 1 ||
+    branchPolicies[0]?.name !== 'main'
+  ) {
+    throw new Error(`${environmentName} must allow exactly the main branch`);
   }
 }

@@ -3,9 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { execFileSync } from 'node:child_process';
 
 const [, , command, packageJsonArg, release, tag, extraArg] = process.argv;
-const allowedTags = new Set(['dev', 'rc', 'latest']);
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 function fail(message) {
@@ -14,7 +14,7 @@ function fail(message) {
 }
 
 if (!['guard', 'verify'].includes(command) || !packageJsonArg || !release || !tag) {
-  fail('usage: npm-release.mjs <guard|verify> <package.json> <version> <dev|rc|latest> [pack.json]');
+  fail('usage: npm-release.mjs <guard|verify> <package.json> <version> rc [pack.json]');
 }
 
 const packageJsonPath = path.resolve(packageJsonArg);
@@ -22,14 +22,17 @@ const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 const match = release.match(semverPattern);
 
 if (!match) fail(`release input is not valid SemVer: ${release}`);
-if (!allowedTags.has(tag)) fail(`unsupported npm dist-tag: ${tag}`);
+if (tag !== 'rc') fail(`RC workflow requires the hard-coded rc dist-tag, received ${tag}`);
 if (packageJson.version !== release) {
   fail(`release input ${release} does not match ${packageJson.name} package version ${packageJson.version}`);
 }
 
-const isPrerelease = Boolean(match[4]);
-if (tag === 'latest' && isPrerelease) fail('latest requires a stable SemVer without a prerelease suffix');
-if (tag !== 'latest' && !isPrerelease) fail(`${tag} requires a prerelease SemVer`);
+const releaseLine = process.env.RELEASE_LINE;
+if (!releaseLine) fail('RELEASE_LINE must be set by the repository-controlled RC workflow');
+const escapedReleaseLine = releaseLine.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+if (!new RegExp(`^${escapedReleaseLine}-rc\\.(0|[1-9]\\d*)$`).test(release)) {
+  fail(`release must match ${releaseLine}-rc.N exactly`);
+}
 
 const registryBase = (packageJson.publishConfig?.registry || 'https://registry.npmjs.org').replace(/\/$/, '');
 const encodedName = encodeURIComponent(packageJson.name);
@@ -47,8 +50,31 @@ async function readJson(url, allowedStatuses = [200]) {
 }
 
 if (command === 'guard') {
-  if (process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_REF !== 'refs/heads/main') {
-    fail(`publishing is restricted to refs/heads/main, received ${process.env.GITHUB_REF}`);
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    if (process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch') {
+      fail(`publishing requires workflow_dispatch, received ${process.env.GITHUB_EVENT_NAME}`);
+    }
+    if (process.env.GITHUB_REF !== 'refs/heads/main') {
+      fail(`publishing is restricted to refs/heads/main, received ${process.env.GITHUB_REF}`);
+    }
+    const expectedTag = process.env.RELEASE_TAG;
+    if (!expectedTag) fail('RELEASE_TAG must be set by the repository-controlled RC workflow');
+    const taggedCommit = execFileSync('git', ['rev-parse', `${expectedTag}^{commit}`], {
+      encoding: 'utf8',
+    }).trim();
+    const checkedOutCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    const currentMain = execFileSync('git', ['rev-parse', 'refs/remotes/origin/main'], {
+      encoding: 'utf8',
+    }).trim();
+    if (checkedOutCommit !== process.env.GITHUB_SHA) {
+      fail(`checked-out commit ${checkedOutCommit} does not match workflow SHA ${process.env.GITHUB_SHA}`);
+    }
+    if (currentMain !== process.env.GITHUB_SHA) {
+      fail(`canonical main is ${currentMain}, not workflow SHA ${process.env.GITHUB_SHA}`);
+    }
+    if (taggedCommit !== process.env.GITHUB_SHA) {
+      fail(`release tag ${expectedTag} points to ${taggedCommit}, not workflow SHA ${process.env.GITHUB_SHA}`);
+    }
   }
   const existing = await readJson(versionUrl, [200, 404]);
   if (existing) fail(`${packageJson.name}@${release} is already published`);
@@ -70,8 +96,18 @@ for (let attempt = 1; attempt <= 12; attempt += 1) {
       lastReason = `version ${release} is not visible`;
     } else if (metadata['dist-tags']?.[tag] !== release) {
       lastReason = `dist-tag ${tag} points to ${metadata['dist-tags']?.[tag] || '<missing>'}`;
+    } else if (
+      process.env.EXPECTED_LATEST &&
+      metadata['dist-tags']?.latest !== process.env.EXPECTED_LATEST
+    ) {
+      lastReason = `latest moved from ${process.env.EXPECTED_LATEST} to ${metadata['dist-tags']?.latest || '<missing>'}`;
     } else if (published.dist?.integrity !== packResult.integrity) {
       lastReason = 'registry integrity does not match the validated tarball';
+    } else if (
+      process.env.REQUIRE_PROVENANCE === 'true' &&
+      !published.dist?.attestations?.url
+    ) {
+      lastReason = 'npm provenance attestation is missing';
     } else {
       console.log(`Registry verification passed for ${packageJson.name}@${release} (${tag}).`);
       process.exit(0);

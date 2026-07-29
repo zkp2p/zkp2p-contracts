@@ -36,6 +36,7 @@ import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils
 // Import stable source ABIs for the deposit-scoped whitelist policy
 import {
   AddressGroupRegistry,
+  OrchestratorV3,
   WhitelistPolicy,
 } from "@zkp2p/contracts-v2/abis/contracts"
 

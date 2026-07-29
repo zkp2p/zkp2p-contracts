@@ -20,6 +20,7 @@ const ABIS_DIR = path.join(PKG_ROOT, 'abis');
 
 const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
   IntentGuardian: 'contracts/IntentGuardian.sol/IntentGuardian.json',
+  OrchestratorV3: 'contracts/OrchestratorV3.sol/OrchestratorV3.json',
   NullifierRegistryV2: 'contracts/registries/NullifierRegistryV2.sol/NullifierRegistryV2.json',
   UnifiedPaymentVerifierV3:
     'contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol/UnifiedPaymentVerifierV3.json',

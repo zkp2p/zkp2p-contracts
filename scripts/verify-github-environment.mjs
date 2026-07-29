@@ -34,10 +34,13 @@ async function github(pathname) {
 }
 
 const environment = await github(`/environments/${encodeURIComponent(environmentName)}`);
+const policies = await github(
+  `/environments/${encodeURIComponent(environmentName)}/deployment-branch-policies`,
+);
 try {
-  assertReleaseEnvironment(environment, environmentName);
+  assertReleaseEnvironment(environment, environmentName, policies.branch_policies);
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));
 }
 
-console.log(`GitHub environment ${environmentName} requires independent review, disables admin bypass, and restricts releases to protected main.`);
+console.log(`GitHub environment ${environmentName} is autonomous and restricted to the main branch.`);
