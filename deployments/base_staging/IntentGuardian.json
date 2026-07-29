@@ -1,0 +1,582 @@
+{
+  "address": "0x3355bb8CEFA54509d244384CFA7f2A71fdb1FDD6",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_owner",
+          "type": "address"
+        },
+        {
+          "internalType": "contract IEscrowRegistry",
+          "name": "_escrowRegistry",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_extensionFeeBpsPerHour",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        }
+      ],
+      "name": "EscrowNotWhitelisted",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "cost",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "maxCost",
+          "type": "uint256"
+        }
+      ],
+      "name": "ExtensionCostExceedsMax",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "extensionFeeBpsPerHour",
+          "type": "uint256"
+        }
+      ],
+      "name": "ExtensionFeeExceedsIntentAmount",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ExtensionsDisabled",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint256",
+          "name": "expiryTime",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "currentTime",
+          "type": "uint256"
+        }
+      ],
+      "name": "IntentAlreadyExpired",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroAddress",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "previousFeeBpsPerHour",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "newFeeBpsPerHour",
+          "type": "uint256"
+        }
+      ],
+      "name": "ExtensionFeeBpsPerHourUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "payer",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "additionalTime",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "cost",
+          "type": "uint256"
+        }
+      ],
+      "name": "IntentExtended",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferStarted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "BPS_DENOMINATOR",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "EXTENSION_FEE_DENOMINATOR",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "MAX_EXTENSION_FEE_BPS_PER_HOUR",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "MAX_TOTAL_INTENT_LIFETIME",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "SECONDS_PER_HOUR",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "acceptOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "escrowRegistry",
+      "outputs": [
+        {
+          "internalType": "contract IEscrowRegistry",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_intentHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_additionalTime",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_maxCost",
+          "type": "uint256"
+        }
+      ],
+      "name": "extendIntent",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "extensionFeeBpsPerHour",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "pendingOwner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_intentAmount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_additionalTime",
+          "type": "uint256"
+        }
+      ],
+      "name": "quoteExtensionCost",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_extensionFeeBpsPerHour",
+          "type": "uint256"
+        }
+      ],
+      "name": "setExtensionFeeBpsPerHour",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0x9b3cbde81995ecaf616abf219083b4277c34ff9bd4745a2b787eaeee0274abd1",
+  "receipt": {
+    "to": null,
+    "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "contractAddress": "0x3355bb8CEFA54509d244384CFA7f2A71fdb1FDD6",
+    "transactionIndex": 108,
+    "gasUsed": "889290",
+    "logsBloom": "0x00000080000000000000000000000200000000000000004000800000000000000000000000000000000000000000000400000000010000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000020000000000000000000800000000000000000000000000000000404000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001800000000000000000000000000000000000000100020000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "transactionHash": "0x9b3cbde81995ecaf616abf219083b4277c34ff9bd4745a2b787eaeee0274abd1",
+    "logs": [
+      {
+        "transactionIndex": 108,
+        "blockNumber": 49258336,
+        "transactionHash": "0x9b3cbde81995ecaf616abf219083b4277c34ff9bd4745a2b787eaeee0274abd1",
+        "address": "0x3355bb8CEFA54509d244384CFA7f2A71fdb1FDD6",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x00000000000000000000000084e113087c97cd80ea9d78983d4b8ff61eca1929"
+        ],
+        "data": "0x",
+        "logIndex": 345,
+        "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      {
+        "transactionIndex": 108,
+        "blockNumber": 49258336,
+        "transactionHash": "0x9b3cbde81995ecaf616abf219083b4277c34ff9bd4745a2b787eaeee0274abd1",
+        "address": "0x3355bb8CEFA54509d244384CFA7f2A71fdb1FDD6",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x00000000000000000000000084e113087c97cd80ea9d78983d4b8ff61eca1929",
+          "0x00000000000000000000000084e113087c97cd80ea9d78983d4b8ff61eca1929"
+        ],
+        "data": "0x",
+        "logIndex": 346,
+        "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      {
+        "transactionIndex": 108,
+        "blockNumber": 49258336,
+        "transactionHash": "0x9b3cbde81995ecaf616abf219083b4277c34ff9bd4745a2b787eaeee0274abd1",
+        "address": "0x3355bb8CEFA54509d244384CFA7f2A71fdb1FDD6",
+        "topics": [
+          "0xdfa5d07c1f60169f4a18c1c336c3474bd6252ba5c6be72749156d9e4d20c1591"
+        ],
+        "data": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002",
+        "logIndex": 347,
+        "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "blockNumber": 49258336,
+    "cumulativeGasUsed": "18049138",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [
+    "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "0xc545f336eC77E69bf115729acCbf2e557A00ac91",
+    2
+  ],
+  "numDeployments": 1,
+  "solcInputHash": "ba1595d1d087e4d55dc0bedc245b4731",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_owner\",\"type\":\"address\"},{\"internalType\":\"contract IEscrowRegistry\",\"name\":\"_escrowRegistry\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_extensionFeeBpsPerHour\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"}],\"name\":\"EscrowNotWhitelisted\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"cost\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"maxCost\",\"type\":\"uint256\"}],\"name\":\"ExtensionCostExceedsMax\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"extensionFeeBpsPerHour\",\"type\":\"uint256\"}],\"name\":\"ExtensionFeeExceedsIntentAmount\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ExtensionsDisabled\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"expiryTime\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"currentTime\",\"type\":\"uint256\"}],\"name\":\"IntentAlreadyExpired\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAddress\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"previousFeeBpsPerHour\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newFeeBpsPerHour\",\"type\":\"uint256\"}],\"name\":\"ExtensionFeeBpsPerHourUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"payer\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"additionalTime\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"cost\",\"type\":\"uint256\"}],\"name\":\"IntentExtended\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferStarted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"BPS_DENOMINATOR\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"EXTENSION_FEE_DENOMINATOR\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"MAX_EXTENSION_FEE_BPS_PER_HOUR\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"MAX_TOTAL_INTENT_LIFETIME\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"SECONDS_PER_HOUR\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"acceptOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"escrowRegistry\",\"outputs\":[{\"internalType\":\"contract IEscrowRegistry\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"_intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"_additionalTime\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"_maxCost\",\"type\":\"uint256\"}],\"name\":\"extendIntent\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"extensionFeeBpsPerHour\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"pendingOwner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_intentAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"_additionalTime\",\"type\":\"uint256\"}],\"name\":\"quoteExtensionCost\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_extensionFeeBpsPerHour\",\"type\":\"uint256\"}],\"name\":\"setExtensionFeeBpsPerHour\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"details\":\"Escrow and EscrowV2 expose the same Deposit and Intent ABI used here. Governance can update      the extension fee for every deposit using this guardian address.\",\"kind\":\"dev\",\"methods\":{\"acceptOwnership()\":{\"details\":\"The new owner accepts the ownership transfer.\"},\"extendIntent(address,uint256,bytes32,uint256,uint256)\":{\"details\":\"The compatible Escrow enforces guardian authorization, non-zero time, and the cumulative      five-day lifetime cap. All state and token movements revert atomically on payment failure.\",\"params\":{\"_additionalTime\":\"Seconds to add to the current expiry.\",\"_depositId\":\"Deposit containing the intent.\",\"_escrow\":\"Whitelisted Escrow or EscrowV2 holding the deposit and intent.\",\"_intentHash\":\"Intent to extend.\",\"_maxCost\":\"Maximum fee the payer authorizes.\"}},\"owner()\":{\"details\":\"Returns the address of the current owner.\"},\"pendingOwner()\":{\"details\":\"Returns the address of the pending owner.\"},\"renounceOwnership()\":{\"details\":\"Leaves the contract without owner. It will not be possible to call `onlyOwner` functions. Can only be called by the current owner. NOTE: Renouncing ownership will leave the contract without an owner, thereby disabling any functionality that is only available to the owner.\"},\"setExtensionFeeBpsPerHour(uint256)\":{\"details\":\"A zero fee disables extensions until governance configures a non-zero fee.\"},\"transferOwnership(address)\":{\"details\":\"Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one. Can only be called by the current owner.\"}},\"title\":\"IntentGuardian\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"escrowRegistry()\":{\"notice\":\"Escrow registry used to authorize compatible escrows.\"},\"extendIntent(address,uint256,bytes32,uint256,uint256)\":{\"notice\":\"Prepays a deposit's maker and extends a live intent.\"},\"extensionFeeBpsPerHour()\":{\"notice\":\"Governance-configured hourly extension fee in basis points of the locked intent amount.\"},\"quoteExtensionCost(uint256,uint256)\":{\"notice\":\"Quotes the exact upward-rounded prepaid extension cost.\"},\"setExtensionFeeBpsPerHour(uint256)\":{\"notice\":\"Updates the hourly extension fee for all deposits using this guardian.\"}},\"notice\":\"Extends live Escrow intents in exchange for a prepaid, non-refundable fee.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/IntentGuardian.sol\":\"IntentGuardian\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"@openzeppelin/contracts/access/Ownable.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (access/Ownable.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"../utils/Context.sol\\\";\\n\\n/**\\n * @dev Contract module which provides a basic access control mechanism, where\\n * there is an account (an owner) that can be granted exclusive access to\\n * specific functions.\\n *\\n * By default, the owner account will be the one that deploys the contract. This\\n * can later be changed with {transferOwnership}.\\n *\\n * This module is used through inheritance. It will make available the modifier\\n * `onlyOwner`, which can be applied to your functions to restrict their use to\\n * the owner.\\n */\\nabstract contract Ownable is Context {\\n    address private _owner;\\n\\n    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);\\n\\n    /**\\n     * @dev Initializes the contract setting the deployer as the initial owner.\\n     */\\n    constructor() {\\n        _transferOwnership(_msgSender());\\n    }\\n\\n    /**\\n     * @dev Throws if called by any account other than the owner.\\n     */\\n    modifier onlyOwner() {\\n        _checkOwner();\\n        _;\\n    }\\n\\n    /**\\n     * @dev Returns the address of the current owner.\\n     */\\n    function owner() public view virtual returns (address) {\\n        return _owner;\\n    }\\n\\n    /**\\n     * @dev Throws if the sender is not the owner.\\n     */\\n    function _checkOwner() internal view virtual {\\n        require(owner() == _msgSender(), \\\"Ownable: caller is not the owner\\\");\\n    }\\n\\n    /**\\n     * @dev Leaves the contract without owner. It will not be possible to call\\n     * `onlyOwner` functions. Can only be called by the current owner.\\n     *\\n     * NOTE: Renouncing ownership will leave the contract without an owner,\\n     * thereby disabling any functionality that is only available to the owner.\\n     */\\n    function renounceOwnership() public virtual onlyOwner {\\n        _transferOwnership(address(0));\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Can only be called by the current owner.\\n     */\\n    function transferOwnership(address newOwner) public virtual onlyOwner {\\n        require(newOwner != address(0), \\\"Ownable: new owner is the zero address\\\");\\n        _transferOwnership(newOwner);\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Internal function without access restriction.\\n     */\\n    function _transferOwnership(address newOwner) internal virtual {\\n        address oldOwner = _owner;\\n        _owner = newOwner;\\n        emit OwnershipTransferred(oldOwner, newOwner);\\n    }\\n}\\n\",\"keccak256\":\"0xba43b97fba0d32eb4254f6a5a297b39a19a247082a02d6e69349e071e2946218\",\"license\":\"MIT\"},\"@openzeppelin/contracts/access/Ownable2Step.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (access/Ownable2Step.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"./Ownable.sol\\\";\\n\\n/**\\n * @dev Contract module which provides access control mechanism, where\\n * there is an account (an owner) that can be granted exclusive access to\\n * specific functions.\\n *\\n * By default, the owner account will be the one that deploys the contract. This\\n * can later be changed with {transferOwnership} and {acceptOwnership}.\\n *\\n * This module is used through inheritance. It will make available all functions\\n * from parent (Ownable).\\n */\\nabstract contract Ownable2Step is Ownable {\\n    address private _pendingOwner;\\n\\n    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);\\n\\n    /**\\n     * @dev Returns the address of the pending owner.\\n     */\\n    function pendingOwner() public view virtual returns (address) {\\n        return _pendingOwner;\\n    }\\n\\n    /**\\n     * @dev Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one.\\n     * Can only be called by the current owner.\\n     */\\n    function transferOwnership(address newOwner) public virtual override onlyOwner {\\n        _pendingOwner = newOwner;\\n        emit OwnershipTransferStarted(owner(), newOwner);\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`) and deletes any pending owner.\\n     * Internal function without access restriction.\\n     */\\n    function _transferOwnership(address newOwner) internal virtual override {\\n        delete _pendingOwner;\\n        super._transferOwnership(newOwner);\\n    }\\n\\n    /**\\n     * @dev The new owner accepts the ownership transfer.\\n     */\\n    function acceptOwnership() public virtual {\\n        address sender = _msgSender();\\n        require(pendingOwner() == sender, \\\"Ownable2Step: caller is not the new owner\\\");\\n        _transferOwnership(sender);\\n    }\\n}\\n\",\"keccak256\":\"0xde231558366826d7cb61725af8147965a61c53b77a352cc8c9af38fc5a92ac3c\",\"license\":\"MIT\"},\"@openzeppelin/contracts/security/ReentrancyGuard.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (security/ReentrancyGuard.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Contract module that helps prevent reentrant calls to a function.\\n *\\n * Inheriting from `ReentrancyGuard` will make the {nonReentrant} modifier\\n * available, which can be applied to functions to make sure there are no nested\\n * (reentrant) calls to them.\\n *\\n * Note that because there is a single `nonReentrant` guard, functions marked as\\n * `nonReentrant` may not call one another. This can be worked around by making\\n * those functions `private`, and then adding `external` `nonReentrant` entry\\n * points to them.\\n *\\n * TIP: If you would like to learn more about reentrancy and alternative ways\\n * to protect against it, check out our blog post\\n * https://blog.openzeppelin.com/reentrancy-after-istanbul/[Reentrancy After Istanbul].\\n */\\nabstract contract ReentrancyGuard {\\n    // Booleans are more expensive than uint256 or any type that takes up a full\\n    // word because each write operation emits an extra SLOAD to first read the\\n    // slot's contents, replace the bits taken up by the boolean, and then write\\n    // back. This is the compiler's defense against contract upgrades and\\n    // pointer aliasing, and it cannot be disabled.\\n\\n    // The values being non-zero value makes deployment a bit more expensive,\\n    // but in exchange the refund on every call to nonReentrant will be lower in\\n    // amount. Since refunds are capped to a percentage of the total\\n    // transaction's gas, it is best to keep them low in cases like this one, to\\n    // increase the likelihood of the full refund coming into effect.\\n    uint256 private constant _NOT_ENTERED = 1;\\n    uint256 private constant _ENTERED = 2;\\n\\n    uint256 private _status;\\n\\n    constructor() {\\n        _status = _NOT_ENTERED;\\n    }\\n\\n    /**\\n     * @dev Prevents a contract from calling itself, directly or indirectly.\\n     * Calling a `nonReentrant` function from another `nonReentrant`\\n     * function is not supported. It is possible to prevent this from happening\\n     * by making the `nonReentrant` function external, and making it call a\\n     * `private` function that does the actual work.\\n     */\\n    modifier nonReentrant() {\\n        _nonReentrantBefore();\\n        _;\\n        _nonReentrantAfter();\\n    }\\n\\n    function _nonReentrantBefore() private {\\n        // On the first call to nonReentrant, _status will be _NOT_ENTERED\\n        require(_status != _ENTERED, \\\"ReentrancyGuard: reentrant call\\\");\\n\\n        // Any calls to nonReentrant after this point will fail\\n        _status = _ENTERED;\\n    }\\n\\n    function _nonReentrantAfter() private {\\n        // By storing the original value once again, a refund is triggered (see\\n        // https://eips.ethereum.org/EIPS/eip-2200)\\n        _status = _NOT_ENTERED;\\n    }\\n\\n    /**\\n     * @dev Returns true if the reentrancy guard is currently set to \\\"entered\\\", which indicates there is a\\n     * `nonReentrant` function in the call stack.\\n     */\\n    function _reentrancyGuardEntered() internal view returns (bool) {\\n        return _status == _ENTERED;\\n    }\\n}\\n\",\"keccak256\":\"0xa535a5df777d44e945dd24aa43a11e44b024140fc340ad0dfe42acf4002aade1\",\"license\":\"MIT\"},\"@openzeppelin/contracts/token/ERC20/IERC20.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (token/ERC20/IERC20.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Interface of the ERC20 standard as defined in the EIP.\\n */\\ninterface IERC20 {\\n    /**\\n     * @dev Emitted when `value` tokens are moved from one account (`from`) to\\n     * another (`to`).\\n     *\\n     * Note that `value` may be zero.\\n     */\\n    event Transfer(address indexed from, address indexed to, uint256 value);\\n\\n    /**\\n     * @dev Emitted when the allowance of a `spender` for an `owner` is set by\\n     * a call to {approve}. `value` is the new allowance.\\n     */\\n    event Approval(address indexed owner, address indexed spender, uint256 value);\\n\\n    /**\\n     * @dev Returns the amount of tokens in existence.\\n     */\\n    function totalSupply() external view returns (uint256);\\n\\n    /**\\n     * @dev Returns the amount of tokens owned by `account`.\\n     */\\n    function balanceOf(address account) external view returns (uint256);\\n\\n    /**\\n     * @dev Moves `amount` tokens from the caller's account to `to`.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transfer(address to, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Returns the remaining number of tokens that `spender` will be\\n     * allowed to spend on behalf of `owner` through {transferFrom}. This is\\n     * zero by default.\\n     *\\n     * This value changes when {approve} or {transferFrom} are called.\\n     */\\n    function allowance(address owner, address spender) external view returns (uint256);\\n\\n    /**\\n     * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * IMPORTANT: Beware that changing an allowance with this method brings the risk\\n     * that someone may use both the old and the new allowance by unfortunate\\n     * transaction ordering. One possible solution to mitigate this race\\n     * condition is to first reduce the spender's allowance to 0 and set the\\n     * desired value afterwards:\\n     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729\\n     *\\n     * Emits an {Approval} event.\\n     */\\n    function approve(address spender, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Moves `amount` tokens from `from` to `to` using the\\n     * allowance mechanism. `amount` is then deducted from the caller's\\n     * allowance.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transferFrom(address from, address to, uint256 amount) external returns (bool);\\n}\\n\",\"keccak256\":\"0x287b55befed2961a7eabd7d7b1b2839cbca8a5b80ef8dcbb25ed3d4c2002c305\",\"license\":\"MIT\"},\"@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (token/ERC20/extensions/IERC20Permit.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Interface of the ERC20 Permit extension allowing approvals to be made via signatures, as defined in\\n * https://eips.ethereum.org/EIPS/eip-2612[EIP-2612].\\n *\\n * Adds the {permit} method, which can be used to change an account's ERC20 allowance (see {IERC20-allowance}) by\\n * presenting a message signed by the account. By not relying on {IERC20-approve}, the token holder account doesn't\\n * need to send a transaction, and thus is not required to hold Ether at all.\\n */\\ninterface IERC20Permit {\\n    /**\\n     * @dev Sets `value` as the allowance of `spender` over ``owner``'s tokens,\\n     * given ``owner``'s signed approval.\\n     *\\n     * IMPORTANT: The same issues {IERC20-approve} has related to transaction\\n     * ordering also apply here.\\n     *\\n     * Emits an {Approval} event.\\n     *\\n     * Requirements:\\n     *\\n     * - `spender` cannot be the zero address.\\n     * - `deadline` must be a timestamp in the future.\\n     * - `v`, `r` and `s` must be a valid `secp256k1` signature from `owner`\\n     * over the EIP712-formatted function arguments.\\n     * - the signature must use ``owner``'s current nonce (see {nonces}).\\n     *\\n     * For more information on the signature format, see the\\n     * https://eips.ethereum.org/EIPS/eip-2612#specification[relevant EIP\\n     * section].\\n     */\\n    function permit(\\n        address owner,\\n        address spender,\\n        uint256 value,\\n        uint256 deadline,\\n        uint8 v,\\n        bytes32 r,\\n        bytes32 s\\n    ) external;\\n\\n    /**\\n     * @dev Returns the current nonce for `owner`. This value must be\\n     * included whenever a signature is generated for {permit}.\\n     *\\n     * Every successful call to {permit} increases ``owner``'s nonce by one. This\\n     * prevents a signature from being used multiple times.\\n     */\\n    function nonces(address owner) external view returns (uint256);\\n\\n    /**\\n     * @dev Returns the domain separator used in the encoding of the signature for {permit}, as defined by {EIP712}.\\n     */\\n    // solhint-disable-next-line func-name-mixedcase\\n    function DOMAIN_SEPARATOR() external view returns (bytes32);\\n}\\n\",\"keccak256\":\"0xec63854014a5b4f2b3290ab9103a21bdf902a508d0f41a8573fea49e98bf571a\",\"license\":\"MIT\"},\"@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.3) (token/ERC20/utils/SafeERC20.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"../IERC20.sol\\\";\\nimport \\\"../extensions/IERC20Permit.sol\\\";\\nimport \\\"../../../utils/Address.sol\\\";\\n\\n/**\\n * @title SafeERC20\\n * @dev Wrappers around ERC20 operations that throw on failure (when the token\\n * contract returns false). Tokens that return no value (and instead revert or\\n * throw on failure) are also supported, non-reverting calls are assumed to be\\n * successful.\\n * To use this library you can add a `using SafeERC20 for IERC20;` statement to your contract,\\n * which allows you to call the safe operations as `token.safeTransfer(...)`, etc.\\n */\\nlibrary SafeERC20 {\\n    using Address for address;\\n\\n    /**\\n     * @dev Transfer `value` amount of `token` from the calling contract to `to`. If `token` returns no value,\\n     * non-reverting calls are assumed to be successful.\\n     */\\n    function safeTransfer(IERC20 token, address to, uint256 value) internal {\\n        _callOptionalReturn(token, abi.encodeWithSelector(token.transfer.selector, to, value));\\n    }\\n\\n    /**\\n     * @dev Transfer `value` amount of `token` from `from` to `to`, spending the approval given by `from` to the\\n     * calling contract. If `token` returns no value, non-reverting calls are assumed to be successful.\\n     */\\n    function safeTransferFrom(IERC20 token, address from, address to, uint256 value) internal {\\n        _callOptionalReturn(token, abi.encodeWithSelector(token.transferFrom.selector, from, to, value));\\n    }\\n\\n    /**\\n     * @dev Deprecated. This function has issues similar to the ones found in\\n     * {IERC20-approve}, and its usage is discouraged.\\n     *\\n     * Whenever possible, use {safeIncreaseAllowance} and\\n     * {safeDecreaseAllowance} instead.\\n     */\\n    function safeApprove(IERC20 token, address spender, uint256 value) internal {\\n        // safeApprove should only be called when setting an initial allowance,\\n        // or when resetting it to zero. To increase and decrease it, use\\n        // 'safeIncreaseAllowance' and 'safeDecreaseAllowance'\\n        require(\\n            (value == 0) || (token.allowance(address(this), spender) == 0),\\n            \\\"SafeERC20: approve from non-zero to non-zero allowance\\\"\\n        );\\n        _callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, value));\\n    }\\n\\n    /**\\n     * @dev Increase the calling contract's allowance toward `spender` by `value`. If `token` returns no value,\\n     * non-reverting calls are assumed to be successful.\\n     */\\n    function safeIncreaseAllowance(IERC20 token, address spender, uint256 value) internal {\\n        uint256 oldAllowance = token.allowance(address(this), spender);\\n        _callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, oldAllowance + value));\\n    }\\n\\n    /**\\n     * @dev Decrease the calling contract's allowance toward `spender` by `value`. If `token` returns no value,\\n     * non-reverting calls are assumed to be successful.\\n     */\\n    function safeDecreaseAllowance(IERC20 token, address spender, uint256 value) internal {\\n        unchecked {\\n            uint256 oldAllowance = token.allowance(address(this), spender);\\n            require(oldAllowance >= value, \\\"SafeERC20: decreased allowance below zero\\\");\\n            _callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, oldAllowance - value));\\n        }\\n    }\\n\\n    /**\\n     * @dev Set the calling contract's allowance toward `spender` to `value`. If `token` returns no value,\\n     * non-reverting calls are assumed to be successful. Meant to be used with tokens that require the approval\\n     * to be set to zero before setting it to a non-zero value, such as USDT.\\n     */\\n    function forceApprove(IERC20 token, address spender, uint256 value) internal {\\n        bytes memory approvalCall = abi.encodeWithSelector(token.approve.selector, spender, value);\\n\\n        if (!_callOptionalReturnBool(token, approvalCall)) {\\n            _callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, 0));\\n            _callOptionalReturn(token, approvalCall);\\n        }\\n    }\\n\\n    /**\\n     * @dev Use a ERC-2612 signature to set the `owner` approval toward `spender` on `token`.\\n     * Revert on invalid signature.\\n     */\\n    function safePermit(\\n        IERC20Permit token,\\n        address owner,\\n        address spender,\\n        uint256 value,\\n        uint256 deadline,\\n        uint8 v,\\n        bytes32 r,\\n        bytes32 s\\n    ) internal {\\n        uint256 nonceBefore = token.nonces(owner);\\n        token.permit(owner, spender, value, deadline, v, r, s);\\n        uint256 nonceAfter = token.nonces(owner);\\n        require(nonceAfter == nonceBefore + 1, \\\"SafeERC20: permit did not succeed\\\");\\n    }\\n\\n    /**\\n     * @dev Imitates a Solidity high-level call (i.e. a regular function call to a contract), relaxing the requirement\\n     * on the return value: the return value is optional (but if data is returned, it must not be false).\\n     * @param token The token targeted by the call.\\n     * @param data The call data (encoded using abi.encode or one of its variants).\\n     */\\n    function _callOptionalReturn(IERC20 token, bytes memory data) private {\\n        // We need to perform a low level call here, to bypass Solidity's return data size checking mechanism, since\\n        // we're implementing it ourselves. We use {Address-functionCall} to perform this call, which verifies that\\n        // the target address contains contract code and also asserts for success in the low-level call.\\n\\n        bytes memory returndata = address(token).functionCall(data, \\\"SafeERC20: low-level call failed\\\");\\n        require(returndata.length == 0 || abi.decode(returndata, (bool)), \\\"SafeERC20: ERC20 operation did not succeed\\\");\\n    }\\n\\n    /**\\n     * @dev Imitates a Solidity high-level call (i.e. a regular function call to a contract), relaxing the requirement\\n     * on the return value: the return value is optional (but if data is returned, it must not be false).\\n     * @param token The token targeted by the call.\\n     * @param data The call data (encoded using abi.encode or one of its variants).\\n     *\\n     * This is a variant of {_callOptionalReturn} that silents catches all reverts and returns a bool instead.\\n     */\\n    function _callOptionalReturnBool(IERC20 token, bytes memory data) private returns (bool) {\\n        // We need to perform a low level call here, to bypass Solidity's return data size checking mechanism, since\\n        // we're implementing it ourselves. We cannot use {Address-functionCall} here since this should return false\\n        // and not revert is the subcall reverts.\\n\\n        (bool success, bytes memory returndata) = address(token).call(data);\\n        return\\n            success && (returndata.length == 0 || abi.decode(returndata, (bool))) && Address.isContract(address(token));\\n    }\\n}\\n\",\"keccak256\":\"0xabefac93435967b4d36a4fabcbdbb918d1f0b7ae3c3d85bc30923b326c927ed1\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/Address.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (utils/Address.sol)\\n\\npragma solidity ^0.8.1;\\n\\n/**\\n * @dev Collection of functions related to the address type\\n */\\nlibrary Address {\\n    /**\\n     * @dev Returns true if `account` is a contract.\\n     *\\n     * [IMPORTANT]\\n     * ====\\n     * It is unsafe to assume that an address for which this function returns\\n     * false is an externally-owned account (EOA) and not a contract.\\n     *\\n     * Among others, `isContract` will return false for the following\\n     * types of addresses:\\n     *\\n     *  - an externally-owned account\\n     *  - a contract in construction\\n     *  - an address where a contract will be created\\n     *  - an address where a contract lived, but was destroyed\\n     *\\n     * Furthermore, `isContract` will also return true if the target contract within\\n     * the same transaction is already scheduled for destruction by `SELFDESTRUCT`,\\n     * which only has an effect at the end of a transaction.\\n     * ====\\n     *\\n     * [IMPORTANT]\\n     * ====\\n     * You shouldn't rely on `isContract` to protect against flash loan attacks!\\n     *\\n     * Preventing calls from contracts is highly discouraged. It breaks composability, breaks support for smart wallets\\n     * like Gnosis Safe, and does not provide security since it can be circumvented by calling from a contract\\n     * constructor.\\n     * ====\\n     */\\n    function isContract(address account) internal view returns (bool) {\\n        // This method relies on extcodesize/address.code.length, which returns 0\\n        // for contracts in construction, since the code is only stored at the end\\n        // of the constructor execution.\\n\\n        return account.code.length > 0;\\n    }\\n\\n    /**\\n     * @dev Replacement for Solidity's `transfer`: sends `amount` wei to\\n     * `recipient`, forwarding all available gas and reverting on errors.\\n     *\\n     * https://eips.ethereum.org/EIPS/eip-1884[EIP1884] increases the gas cost\\n     * of certain opcodes, possibly making contracts go over the 2300 gas limit\\n     * imposed by `transfer`, making them unable to receive funds via\\n     * `transfer`. {sendValue} removes this limitation.\\n     *\\n     * https://consensys.net/diligence/blog/2019/09/stop-using-soliditys-transfer-now/[Learn more].\\n     *\\n     * IMPORTANT: because control is transferred to `recipient`, care must be\\n     * taken to not create reentrancy vulnerabilities. Consider using\\n     * {ReentrancyGuard} or the\\n     * https://solidity.readthedocs.io/en/v0.8.0/security-considerations.html#use-the-checks-effects-interactions-pattern[checks-effects-interactions pattern].\\n     */\\n    function sendValue(address payable recipient, uint256 amount) internal {\\n        require(address(this).balance >= amount, \\\"Address: insufficient balance\\\");\\n\\n        (bool success, ) = recipient.call{value: amount}(\\\"\\\");\\n        require(success, \\\"Address: unable to send value, recipient may have reverted\\\");\\n    }\\n\\n    /**\\n     * @dev Performs a Solidity function call using a low level `call`. A\\n     * plain `call` is an unsafe replacement for a function call: use this\\n     * function instead.\\n     *\\n     * If `target` reverts with a revert reason, it is bubbled up by this\\n     * function (like regular Solidity function calls).\\n     *\\n     * Returns the raw returned data. To convert to the expected return value,\\n     * use https://solidity.readthedocs.io/en/latest/units-and-global-variables.html?highlight=abi.decode#abi-encoding-and-decoding-functions[`abi.decode`].\\n     *\\n     * Requirements:\\n     *\\n     * - `target` must be a contract.\\n     * - calling `target` with `data` must not revert.\\n     *\\n     * _Available since v3.1._\\n     */\\n    function functionCall(address target, bytes memory data) internal returns (bytes memory) {\\n        return functionCallWithValue(target, data, 0, \\\"Address: low-level call failed\\\");\\n    }\\n\\n    /**\\n     * @dev Same as {xref-Address-functionCall-address-bytes-}[`functionCall`], but with\\n     * `errorMessage` as a fallback revert reason when `target` reverts.\\n     *\\n     * _Available since v3.1._\\n     */\\n    function functionCall(\\n        address target,\\n        bytes memory data,\\n        string memory errorMessage\\n    ) internal returns (bytes memory) {\\n        return functionCallWithValue(target, data, 0, errorMessage);\\n    }\\n\\n    /**\\n     * @dev Same as {xref-Address-functionCall-address-bytes-}[`functionCall`],\\n     * but also transferring `value` wei to `target`.\\n     *\\n     * Requirements:\\n     *\\n     * - the calling contract must have an ETH balance of at least `value`.\\n     * - the called Solidity function must be `payable`.\\n     *\\n     * _Available since v3.1._\\n     */\\n    function functionCallWithValue(address target, bytes memory data, uint256 value) internal returns (bytes memory) {\\n        return functionCallWithValue(target, data, value, \\\"Address: low-level call with value failed\\\");\\n    }\\n\\n    /**\\n     * @dev Same as {xref-Address-functionCallWithValue-address-bytes-uint256-}[`functionCallWithValue`], but\\n     * with `errorMessage` as a fallback revert reason when `target` reverts.\\n     *\\n     * _Available since v3.1._\\n     */\\n    function functionCallWithValue(\\n        address target,\\n        bytes memory data,\\n        uint256 value,\\n        string memory errorMessage\\n    ) internal returns (bytes memory) {\\n        require(address(this).balance >= value, \\\"Address: insufficient balance for call\\\");\\n        (bool success, bytes memory returndata) = target.call{value: value}(data);\\n        return verifyCallResultFromTarget(target, success, returndata, errorMessage);\\n    }\\n\\n    /**\\n     * @dev Same as {xref-Address-functionCall-address-bytes-}[`functionCall`],\\n     * but performing a static call.\\n     *\\n     * _Available since v3.3._\\n     */\\n    function functionStaticCall(address target, bytes memory data) internal view returns (bytes memory) {\\n        return functionStaticCall(target, data, \\\"Address: low-level static call failed\\\");\\n    }\\n\\n    /**\\n     * @dev Same as {xref-Address-functionCall-address-bytes-string-}[`functionCall`],\\n     * but performing a static call.\\n     *\\n     * _Available since v3.3._\\n     */\\n    function functionStaticCall(\\n        address target,\\n        bytes memory data,\\n        string memory errorMessage\\n    ) internal view returns (bytes memory) {\\n        (bool success, bytes memory returndata) = target.staticcall(data);\\n        return verifyCallResultFromTarget(target, success, returndata, errorMessage);\\n    }\\n\\n    /**\\n     * @dev Same as {xref-Address-functionCall-address-bytes-}[`functionCall`],\\n     * but performing a delegate call.\\n     *\\n     * _Available since v3.4._\\n     */\\n    function functionDelegateCall(address target, bytes memory data) internal returns (bytes memory) {\\n        return functionDelegateCall(target, data, \\\"Address: low-level delegate call failed\\\");\\n    }\\n\\n    /**\\n     * @dev Same as {xref-Address-functionCall-address-bytes-string-}[`functionCall`],\\n     * but performing a delegate call.\\n     *\\n     * _Available since v3.4._\\n     */\\n    function functionDelegateCall(\\n        address target,\\n        bytes memory data,\\n        string memory errorMessage\\n    ) internal returns (bytes memory) {\\n        (bool success, bytes memory returndata) = target.delegatecall(data);\\n        return verifyCallResultFromTarget(target, success, returndata, errorMessage);\\n    }\\n\\n    /**\\n     * @dev Tool to verify that a low level call to smart-contract was successful, and revert (either by bubbling\\n     * the revert reason or using the provided one) in case of unsuccessful call or if target was not a contract.\\n     *\\n     * _Available since v4.8._\\n     */\\n    function verifyCallResultFromTarget(\\n        address target,\\n        bool success,\\n        bytes memory returndata,\\n        string memory errorMessage\\n    ) internal view returns (bytes memory) {\\n        if (success) {\\n            if (returndata.length == 0) {\\n                // only check isContract if the call was successful and the return data is empty\\n                // otherwise we already know that it was a contract\\n                require(isContract(target), \\\"Address: call to non-contract\\\");\\n            }\\n            return returndata;\\n        } else {\\n            _revert(returndata, errorMessage);\\n        }\\n    }\\n\\n    /**\\n     * @dev Tool to verify that a low level call was successful, and revert if it wasn't, either by bubbling the\\n     * revert reason or using the provided one.\\n     *\\n     * _Available since v4.3._\\n     */\\n    function verifyCallResult(\\n        bool success,\\n        bytes memory returndata,\\n        string memory errorMessage\\n    ) internal pure returns (bytes memory) {\\n        if (success) {\\n            return returndata;\\n        } else {\\n            _revert(returndata, errorMessage);\\n        }\\n    }\\n\\n    function _revert(bytes memory returndata, string memory errorMessage) private pure {\\n        // Look for revert reason and bubble it up if present\\n        if (returndata.length > 0) {\\n            // The easiest way to bubble the revert reason is using memory via assembly\\n            /// @solidity memory-safe-assembly\\n            assembly {\\n                let returndata_size := mload(returndata)\\n                revert(add(32, returndata), returndata_size)\\n            }\\n        } else {\\n            revert(errorMessage);\\n        }\\n    }\\n}\\n\",\"keccak256\":\"0x006dd67219697fe68d7fbfdea512e7c4cb64a43565ed86171d67e844982da6fa\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/Context.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts v4.4.1 (utils/Context.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Provides information about the current execution context, including the\\n * sender of the transaction and its data. While these are generally available\\n * via msg.sender and msg.data, they should not be accessed in such a direct\\n * manner, since when dealing with meta-transactions the account sending and\\n * paying for execution may not be the actual sender (as far as an application\\n * is concerned).\\n *\\n * This contract is only required for intermediate, library-like contracts.\\n */\\nabstract contract Context {\\n    function _msgSender() internal view virtual returns (address) {\\n        return msg.sender;\\n    }\\n\\n    function _msgData() internal view virtual returns (bytes calldata) {\\n        return msg.data;\\n    }\\n}\\n\",\"keccak256\":\"0xe2e337e6dde9ef6b680e07338c493ebea1b5fd09b43424112868e9cc1706bca7\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/math/Math.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (utils/math/Math.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Standard math utilities missing in the Solidity language.\\n */\\nlibrary Math {\\n    enum Rounding {\\n        Down, // Toward negative infinity\\n        Up, // Toward infinity\\n        Zero // Toward zero\\n    }\\n\\n    /**\\n     * @dev Returns the largest of two numbers.\\n     */\\n    function max(uint256 a, uint256 b) internal pure returns (uint256) {\\n        return a > b ? a : b;\\n    }\\n\\n    /**\\n     * @dev Returns the smallest of two numbers.\\n     */\\n    function min(uint256 a, uint256 b) internal pure returns (uint256) {\\n        return a < b ? a : b;\\n    }\\n\\n    /**\\n     * @dev Returns the average of two numbers. The result is rounded towards\\n     * zero.\\n     */\\n    function average(uint256 a, uint256 b) internal pure returns (uint256) {\\n        // (a + b) / 2 can overflow.\\n        return (a & b) + (a ^ b) / 2;\\n    }\\n\\n    /**\\n     * @dev Returns the ceiling of the division of two numbers.\\n     *\\n     * This differs from standard division with `/` in that it rounds up instead\\n     * of rounding down.\\n     */\\n    function ceilDiv(uint256 a, uint256 b) internal pure returns (uint256) {\\n        // (a + b - 1) / b can overflow on addition, so we distribute.\\n        return a == 0 ? 0 : (a - 1) / b + 1;\\n    }\\n\\n    /**\\n     * @notice Calculates floor(x * y / denominator) with full precision. Throws if result overflows a uint256 or denominator == 0\\n     * @dev Original credit to Remco Bloemen under MIT license (https://xn--2-umb.com/21/muldiv)\\n     * with further edits by Uniswap Labs also under MIT license.\\n     */\\n    function mulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result) {\\n        unchecked {\\n            // 512-bit multiply [prod1 prod0] = x * y. Compute the product mod 2^256 and mod 2^256 - 1, then use\\n            // use the Chinese Remainder Theorem to reconstruct the 512 bit result. The result is stored in two 256\\n            // variables such that product = prod1 * 2^256 + prod0.\\n            uint256 prod0; // Least significant 256 bits of the product\\n            uint256 prod1; // Most significant 256 bits of the product\\n            assembly {\\n                let mm := mulmod(x, y, not(0))\\n                prod0 := mul(x, y)\\n                prod1 := sub(sub(mm, prod0), lt(mm, prod0))\\n            }\\n\\n            // Handle non-overflow cases, 256 by 256 division.\\n            if (prod1 == 0) {\\n                // Solidity will revert if denominator == 0, unlike the div opcode on its own.\\n                // The surrounding unchecked block does not change this fact.\\n                // See https://docs.soliditylang.org/en/latest/control-structures.html#checked-or-unchecked-arithmetic.\\n                return prod0 / denominator;\\n            }\\n\\n            // Make sure the result is less than 2^256. Also prevents denominator == 0.\\n            require(denominator > prod1, \\\"Math: mulDiv overflow\\\");\\n\\n            ///////////////////////////////////////////////\\n            // 512 by 256 division.\\n            ///////////////////////////////////////////////\\n\\n            // Make division exact by subtracting the remainder from [prod1 prod0].\\n            uint256 remainder;\\n            assembly {\\n                // Compute remainder using mulmod.\\n                remainder := mulmod(x, y, denominator)\\n\\n                // Subtract 256 bit number from 512 bit number.\\n                prod1 := sub(prod1, gt(remainder, prod0))\\n                prod0 := sub(prod0, remainder)\\n            }\\n\\n            // Factor powers of two out of denominator and compute largest power of two divisor of denominator. Always >= 1.\\n            // See https://cs.stackexchange.com/q/138556/92363.\\n\\n            // Does not overflow because the denominator cannot be zero at this stage in the function.\\n            uint256 twos = denominator & (~denominator + 1);\\n            assembly {\\n                // Divide denominator by twos.\\n                denominator := div(denominator, twos)\\n\\n                // Divide [prod1 prod0] by twos.\\n                prod0 := div(prod0, twos)\\n\\n                // Flip twos such that it is 2^256 / twos. If twos is zero, then it becomes one.\\n                twos := add(div(sub(0, twos), twos), 1)\\n            }\\n\\n            // Shift in bits from prod1 into prod0.\\n            prod0 |= prod1 * twos;\\n\\n            // Invert denominator mod 2^256. Now that denominator is an odd number, it has an inverse modulo 2^256 such\\n            // that denominator * inv = 1 mod 2^256. Compute the inverse by starting with a seed that is correct for\\n            // four bits. That is, denominator * inv = 1 mod 2^4.\\n            uint256 inverse = (3 * denominator) ^ 2;\\n\\n            // Use the Newton-Raphson iteration to improve the precision. Thanks to Hensel's lifting lemma, this also works\\n            // in modular arithmetic, doubling the correct bits in each step.\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^8\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^16\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^32\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^64\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^128\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^256\\n\\n            // Because the division is now exact we can divide by multiplying with the modular inverse of denominator.\\n            // This will give us the correct result modulo 2^256. Since the preconditions guarantee that the outcome is\\n            // less than 2^256, this is the final result. We don't need to compute the high bits of the result and prod1\\n            // is no longer required.\\n            result = prod0 * inverse;\\n            return result;\\n        }\\n    }\\n\\n    /**\\n     * @notice Calculates x * y / denominator with full precision, following the selected rounding direction.\\n     */\\n    function mulDiv(uint256 x, uint256 y, uint256 denominator, Rounding rounding) internal pure returns (uint256) {\\n        uint256 result = mulDiv(x, y, denominator);\\n        if (rounding == Rounding.Up && mulmod(x, y, denominator) > 0) {\\n            result += 1;\\n        }\\n        return result;\\n    }\\n\\n    /**\\n     * @dev Returns the square root of a number. If the number is not a perfect square, the value is rounded down.\\n     *\\n     * Inspired by Henry S. Warren, Jr.'s \\\"Hacker's Delight\\\" (Chapter 11).\\n     */\\n    function sqrt(uint256 a) internal pure returns (uint256) {\\n        if (a == 0) {\\n            return 0;\\n        }\\n\\n        // For our first guess, we get the biggest power of 2 which is smaller than the square root of the target.\\n        //\\n        // We know that the \\\"msb\\\" (most significant bit) of our target number `a` is a power of 2 such that we have\\n        // `msb(a) <= a < 2*msb(a)`. This value can be written `msb(a)=2**k` with `k=log2(a)`.\\n        //\\n        // This can be rewritten `2**log2(a) <= a < 2**(log2(a) + 1)`\\n        // \\u2192 `sqrt(2**k) <= sqrt(a) < sqrt(2**(k+1))`\\n        // \\u2192 `2**(k/2) <= sqrt(a) < 2**((k+1)/2) <= 2**(k/2 + 1)`\\n        //\\n        // Consequently, `2**(log2(a) / 2)` is a good first approximation of `sqrt(a)` with at least 1 correct bit.\\n        uint256 result = 1 << (log2(a) >> 1);\\n\\n        // At this point `result` is an estimation with one bit of precision. We know the true value is a uint128,\\n        // since it is the square root of a uint256. Newton's method converges quadratically (precision doubles at\\n        // every iteration). We thus need at most 7 iteration to turn our partial result with one bit of precision\\n        // into the expected uint128 result.\\n        unchecked {\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            return min(result, a / result);\\n        }\\n    }\\n\\n    /**\\n     * @notice Calculates sqrt(a), following the selected rounding direction.\\n     */\\n    function sqrt(uint256 a, Rounding rounding) internal pure returns (uint256) {\\n        unchecked {\\n            uint256 result = sqrt(a);\\n            return result + (rounding == Rounding.Up && result * result < a ? 1 : 0);\\n        }\\n    }\\n\\n    /**\\n     * @dev Return the log in base 2, rounded down, of a positive value.\\n     * Returns 0 if given 0.\\n     */\\n    function log2(uint256 value) internal pure returns (uint256) {\\n        uint256 result = 0;\\n        unchecked {\\n            if (value >> 128 > 0) {\\n                value >>= 128;\\n                result += 128;\\n            }\\n            if (value >> 64 > 0) {\\n                value >>= 64;\\n                result += 64;\\n            }\\n            if (value >> 32 > 0) {\\n                value >>= 32;\\n                result += 32;\\n            }\\n            if (value >> 16 > 0) {\\n                value >>= 16;\\n                result += 16;\\n            }\\n            if (value >> 8 > 0) {\\n                value >>= 8;\\n                result += 8;\\n            }\\n            if (value >> 4 > 0) {\\n                value >>= 4;\\n                result += 4;\\n            }\\n            if (value >> 2 > 0) {\\n                value >>= 2;\\n                result += 2;\\n            }\\n            if (value >> 1 > 0) {\\n                result += 1;\\n            }\\n        }\\n        return result;\\n    }\\n\\n    /**\\n     * @dev Return the log in base 2, following the selected rounding direction, of a positive value.\\n     * Returns 0 if given 0.\\n     */\\n    function log2(uint256 value, Rounding rounding) internal pure returns (uint256) {\\n        unchecked {\\n            uint256 result = log2(value);\\n            return result + (rounding == Rounding.Up && 1 << result < value ? 1 : 0);\\n        }\\n    }\\n\\n    /**\\n     * @dev Return the log in base 10, rounded down, of a positive value.\\n     * Returns 0 if given 0.\\n     */\\n    function log10(uint256 value) internal pure returns (uint256) {\\n        uint256 result = 0;\\n        unchecked {\\n            if (value >= 10 ** 64) {\\n                value /= 10 ** 64;\\n                result += 64;\\n            }\\n            if (value >= 10 ** 32) {\\n                value /= 10 ** 32;\\n                result += 32;\\n            }\\n            if (value >= 10 ** 16) {\\n                value /= 10 ** 16;\\n                result += 16;\\n            }\\n            if (value >= 10 ** 8) {\\n                value /= 10 ** 8;\\n                result += 8;\\n            }\\n            if (value >= 10 ** 4) {\\n                value /= 10 ** 4;\\n                result += 4;\\n            }\\n            if (value >= 10 ** 2) {\\n                value /= 10 ** 2;\\n                result += 2;\\n            }\\n            if (value >= 10 ** 1) {\\n                result += 1;\\n            }\\n        }\\n        return result;\\n    }\\n\\n    /**\\n     * @dev Return the log in base 10, following the selected rounding direction, of a positive value.\\n     * Returns 0 if given 0.\\n     */\\n    function log10(uint256 value, Rounding rounding) internal pure returns (uint256) {\\n        unchecked {\\n            uint256 result = log10(value);\\n            return result + (rounding == Rounding.Up && 10 ** result < value ? 1 : 0);\\n        }\\n    }\\n\\n    /**\\n     * @dev Return the log in base 256, rounded down, of a positive value.\\n     * Returns 0 if given 0.\\n     *\\n     * Adding one to the result gives the number of pairs of hex symbols needed to represent `value` as a hex string.\\n     */\\n    function log256(uint256 value) internal pure returns (uint256) {\\n        uint256 result = 0;\\n        unchecked {\\n            if (value >> 128 > 0) {\\n                value >>= 128;\\n                result += 16;\\n            }\\n            if (value >> 64 > 0) {\\n                value >>= 64;\\n                result += 8;\\n            }\\n            if (value >> 32 > 0) {\\n                value >>= 32;\\n                result += 4;\\n            }\\n            if (value >> 16 > 0) {\\n                value >>= 16;\\n                result += 2;\\n            }\\n            if (value >> 8 > 0) {\\n                result += 1;\\n            }\\n        }\\n        return result;\\n    }\\n\\n    /**\\n     * @dev Return the log in base 256, following the selected rounding direction, of a positive value.\\n     * Returns 0 if given 0.\\n     */\\n    function log256(uint256 value, Rounding rounding) internal pure returns (uint256) {\\n        unchecked {\\n            uint256 result = log256(value);\\n            return result + (rounding == Rounding.Up && 1 << (result << 3) < value ? 1 : 0);\\n        }\\n    }\\n}\\n\",\"keccak256\":\"0xe4455ac1eb7fc497bb7402579e7b4d64d928b846fce7d2b6fde06d366f21c2b3\",\"license\":\"MIT\"},\"contracts/IntentGuardian.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {Ownable2Step} from \\\"@openzeppelin/contracts/access/Ownable2Step.sol\\\";\\nimport {ReentrancyGuard} from \\\"@openzeppelin/contracts/security/ReentrancyGuard.sol\\\";\\nimport {IERC20} from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\nimport {SafeERC20} from \\\"@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol\\\";\\nimport {Math} from \\\"@openzeppelin/contracts/utils/math/Math.sol\\\";\\n\\nimport {IEscrow} from \\\"./interfaces/IEscrow.sol\\\";\\nimport {IEscrowRegistry} from \\\"./interfaces/IEscrowRegistry.sol\\\";\\nimport {IIntentGuardian} from \\\"./interfaces/IIntentGuardian.sol\\\";\\n\\n/**\\n * @title IntentGuardian\\n * @notice Extends live Escrow intents in exchange for a prepaid, non-refundable fee.\\n * @dev Escrow and EscrowV2 expose the same Deposit and Intent ABI used here. Governance can update\\n *      the extension fee for every deposit using this guardian address.\\n */\\ncontract IntentGuardian is IIntentGuardian, Ownable2Step, ReentrancyGuard {\\n    using SafeERC20 for IERC20;\\n\\n    uint256 public constant BPS_DENOMINATOR = 10_000;\\n    uint256 public constant SECONDS_PER_HOUR = 1 hours;\\n    uint256 public constant EXTENSION_FEE_DENOMINATOR = BPS_DENOMINATOR * SECONDS_PER_HOUR;\\n    uint256 public constant MAX_TOTAL_INTENT_LIFETIME = 5 days;\\n    uint256 public constant MAX_EXTENSION_FEE_BPS_PER_HOUR = EXTENSION_FEE_DENOMINATOR / MAX_TOTAL_INTENT_LIFETIME;\\n\\n    IEscrowRegistry public immutable override escrowRegistry;\\n    uint256 public override extensionFeeBpsPerHour;\\n\\n    constructor(address _owner, IEscrowRegistry _escrowRegistry, uint256 _extensionFeeBpsPerHour) {\\n        if (_owner == address(0)) revert ZeroAddress();\\n        if (address(_escrowRegistry) == address(0)) revert ZeroAddress();\\n\\n        escrowRegistry = _escrowRegistry;\\n        _transferOwnership(_owner);\\n        _setExtensionFeeBpsPerHour(_extensionFeeBpsPerHour);\\n    }\\n\\n    /// @inheritdoc IIntentGuardian\\n    function setExtensionFeeBpsPerHour(uint256 _extensionFeeBpsPerHour) external override onlyOwner {\\n        _setExtensionFeeBpsPerHour(_extensionFeeBpsPerHour);\\n    }\\n\\n    /**\\n     * @inheritdoc IIntentGuardian\\n     * @dev The compatible Escrow enforces guardian authorization, non-zero time, and the cumulative\\n     *      five-day lifetime cap. All state and token movements revert atomically on payment failure.\\n     */\\n    function extendIntent(\\n        address _escrow,\\n        uint256 _depositId,\\n        bytes32 _intentHash,\\n        uint256 _additionalTime,\\n        uint256 _maxCost\\n    ) external override nonReentrant {\\n        uint256 feeBpsPerHour = extensionFeeBpsPerHour;\\n        if (feeBpsPerHour == 0) revert ExtensionsDisabled();\\n\\n        if (!escrowRegistry.isAcceptingAllEscrows() && !escrowRegistry.isWhitelistedEscrow(_escrow)) {\\n            revert EscrowNotWhitelisted(_escrow);\\n        }\\n\\n        IEscrow escrow = IEscrow(_escrow);\\n        IEscrow.Deposit memory deposit = escrow.getDeposit(_depositId);\\n        IEscrow.Intent memory intent = escrow.getDepositIntent(_depositId, _intentHash);\\n\\n        if (block.timestamp >= intent.expiryTime) {\\n            revert IntentAlreadyExpired(_intentHash, intent.expiryTime, block.timestamp);\\n        }\\n\\n        escrow.extendIntentExpiry(_depositId, _intentHash, _additionalTime);\\n\\n        uint256 cost = _quoteExtensionCost(intent.amount, _additionalTime, feeBpsPerHour);\\n        if (cost > _maxCost) revert ExtensionCostExceedsMax(cost, _maxCost);\\n\\n        deposit.token.safeTransferFrom(msg.sender, deposit.depositor, cost);\\n\\n        emit IntentExtended(_escrow, _depositId, _intentHash, msg.sender, _additionalTime, cost);\\n    }\\n\\n    /// @inheritdoc IIntentGuardian\\n    function quoteExtensionCost(uint256 _intentAmount, uint256 _additionalTime)\\n        external\\n        view\\n        override\\n        returns (uint256)\\n    {\\n        return _quoteExtensionCost(_intentAmount, _additionalTime, extensionFeeBpsPerHour);\\n    }\\n\\n    function _quoteExtensionCost(uint256 _intentAmount, uint256 _additionalTime, uint256 _feeBpsPerHour)\\n        internal\\n        pure\\n        returns (uint256)\\n    {\\n        return Math.mulDiv(_intentAmount, _feeBpsPerHour * _additionalTime, EXTENSION_FEE_DENOMINATOR, Math.Rounding.Up);\\n    }\\n\\n    function _setExtensionFeeBpsPerHour(uint256 _extensionFeeBpsPerHour) internal {\\n        if (_extensionFeeBpsPerHour > MAX_EXTENSION_FEE_BPS_PER_HOUR) {\\n            revert ExtensionFeeExceedsIntentAmount(_extensionFeeBpsPerHour);\\n        }\\n\\n        uint256 previousFeeBpsPerHour = extensionFeeBpsPerHour;\\n        extensionFeeBpsPerHour = _extensionFeeBpsPerHour;\\n        emit ExtensionFeeBpsPerHourUpdated(previousFeeBpsPerHour, _extensionFeeBpsPerHour);\\n    }\\n}\\n\",\"keccak256\":\"0x4744cd4c97487654b38bc2fb27c48aad9657b6f1862076c07ef996392373ea9b\",\"license\":\"MIT\"},\"contracts/interfaces/IEscrow.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IERC20 } from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\nimport { IPostIntentHook } from \\\"./IPostIntentHook.sol\\\";\\n\\ninterface IEscrow {\\n    \\n    /* ============ Structs ============ */\\n\\n    struct Intent {\\n        bytes32 intentHash;                        // Unique identifier for the intent\\n        uint256 amount;                            // Amount locked\\n        uint256 timestamp;                         // When this intent was created\\n        uint256 expiryTime;                        // When this intent expires\\n    }\\n\\n    struct Range {\\n        uint256 min;                                // Minimum value\\n        uint256 max;                                // Maximum value\\n    }\\n\\n    struct Deposit {\\n        address depositor;                          // Address of depositor\\n        address delegate;                           // Address that can manage this deposit (address(0) if no delegate)\\n        IERC20 token;                               // Address of deposit token\\n        Range intentAmountRange;                    // Range of take amount per intent\\n        // Deposit state\\n        bool acceptingIntents;                      // State: True if the deposit is accepting intents, False otherwise\\n        uint256 remainingDeposits;                  // State: Amount of liquidity immediately available to lock\\n        uint256 outstandingIntentAmount;            // State: Amount of outstanding intents (may include expired intents)\\n        // Intent guardian\\n        address intentGuardian;                     // Address that can extend intent expiry times (address(0) if no guardian)\\n        // Retention behavior\\n        bool retainOnEmpty;                         // If true, do not auto-close/sweep when empty; keep config for reuse\\n    }\\n\\n    struct Currency {\\n        bytes32 code;                               // Currency code (keccak256 hash of the currency code)\\n        uint256 minConversionRate;                  // Minimum rate of deposit token to fiat currency (in preciseUnits)\\n    }\\n\\n    struct DepositPaymentMethodData {\\n        address intentGatingService;                // Public key of gating service that will be used to verify intents\\n        bytes32 payeeDetails;                       // Payee details, has to be hash of payee details\\n        bytes data;                                 // Verification Data: Additional data used for payment verification; Can hold attester address\\n                                                    // in case of TLS proofs, domain key hash in case of zkEmail proofs, currency code etc.\\n    }\\n\\n    struct CreateDepositParams {\\n        IERC20 token;                                // The token to be deposited\\n        uint256 amount;                              // The amount of token to deposit\\n        Range intentAmountRange;                     // The max and min take amount for each intent\\n        bytes32[] paymentMethods;                    // The payment methods that deposit supports\\n        DepositPaymentMethodData[] paymentMethodData;// The payment verification data for each payment method that deposit supports\\n        Currency[][] currencies;                     // The currencies for each payment method that deposit supports\\n        address delegate;                            // Optional delegate address that can manage this deposit (address(0) for no delegate)\\n        address intentGuardian;                      // Optional intent guardian address that can extend intent expiry times (address(0) for no guardian)\\n        bool retainOnEmpty;                          // Opt-in: keep deposit and config when empty\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event DepositReceived(uint256 indexed depositId, address indexed depositor, IERC20 indexed token, uint256 amount, Range intentAmountRange, address delegate, address intentGuardian);\\n\\n    event DepositPaymentMethodAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed payeeDetails, address intentGatingService);\\n    event DepositPaymentMethodActiveUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bool active);\\n\\n    event DepositCurrencyAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 minConversionRate);\\n    event DepositMinConversionRateUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 newMinConversionRate);\\n    \\n    event DepositFundsAdded(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositWithdrawn(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositClosed(uint256 depositId, address depositor);\\n    event DepositAcceptingIntentsUpdated(uint256 indexed depositId, bool acceptingIntents);\\n\\n    event DepositIntentAmountRangeUpdated(uint256 indexed depositId, Range intentAmountRange);\\n    event DepositRetainOnEmptyUpdated(uint256 indexed depositId, bool retainOnEmpty);\\n\\n    event DepositDelegateSet(uint256 indexed depositId, address indexed depositor, address indexed delegate);\\n    event DepositDelegateRemoved(uint256 indexed depositId, address indexed depositor);\\n\\n    event MinDepositAmountSet(uint256 minDepositAmount);\\n\\n    event OrchestratorUpdated(address indexed orchestrator);\\n    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);\\n\\n    event FundsLocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount, uint256 expiryTime);\\n    event FundsUnlocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount);\\n    event FundsUnlockedAndTransferred(\\n        uint256 indexed depositId, \\n        bytes32 indexed intentHash, \\n        uint256 unlockedAmount, \\n        uint256 transferredAmount, \\n        address to\\n    );\\n    event IntentExpiryExtended(uint256 indexed depositId, bytes32 indexed intentHash, uint256 newExpiryTime);\\n\\n    event DustRecipientUpdated(address indexed dustRecipient);\\n    event DustCollected(uint256 indexed depositId, uint256 dustAmount, address indexed dustRecipient);\\n    event DustThresholdUpdated(uint256 dustThreshold);\\n    event MaxIntentsPerDepositUpdated(uint256 maxIntentsPerDeposit);\\n    event IntentExpirationPeriodUpdated(uint256 intentExpirationPeriod);\\n\\n    /* ============ Standardized Custom Errors ============ */\\n    \\n    // Zero value errors\\n    error ZeroAddress();\\n    error ZeroValue();\\n    error ZeroMinValue();\\n    error ZeroConversionRate();\\n\\n    // Authorization errors\\n    error UnauthorizedCaller(address caller, address authorized);\\n    error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);\\n    error CannotDelegateToSelf(address depositor);\\n\\n    // Range and amount errors\\n    error InvalidRange(uint256 min, uint256 max);\\n    error AmountBelowMin(uint256 amount, uint256 min);\\n    error AmountAboveMax(uint256 amount, uint256 max);\\n    error AmountExceedsAvailable(uint256 requested, uint256 available);\\n\\n    // Not found errors\\n    error DepositNotFound(uint256 depositId);\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodNotActive(uint256 depositId, bytes32 paymentMethod);\\n    error PaymentMethodNotListed(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyNotFound(bytes32 paymentMethod, bytes32 currency);\\n    error DelegateNotFound(uint256 depositId);\\n\\n    // Already exists errors\\n    error PaymentMethodAlreadyExists(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyAlreadyExists(bytes32 paymentMethod, bytes32 currency);\\n    error IntentAlreadyExists(uint256 depositId, bytes32 intentHash);\\n\\n    // State errors\\n    error DepositNotAcceptingIntents(uint256 depositId);\\n    error DepositAlreadyInState(uint256 depositId, bool currentState);\\n    error InsufficientDepositLiquidity(uint256 depositId, uint256 available, uint256 required);\\n    error MaxIntentsExceeded(uint256 depositId, uint256 current, uint256 max);\\n\\n    // Validation errors\\n    error EmptyPayeeDetails();\\n    error ArrayLengthMismatch(uint256 length1, uint256 length2);\\n\\n    // Payment method errors\\n    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n\\n    \\n    /* ============ External Functions for Orchestrator ============ */\\n\\n    function lockFunds(uint256 _depositId, bytes32 _intentHash, uint256 _amount) external;\\n    function unlockFunds(uint256 _depositId, bytes32 _intentHash) external;\\n    function unlockAndTransferFunds(uint256 _depositId, bytes32 _intentHash, uint256 _transferAmount, address _to) external;\\n    function extendIntentExpiry(uint256 _depositId, bytes32 _intentHash, uint256 _additionalTime) external;\\n\\n    /* ============ View Functions ============ */\\n\\n    function getDeposit(uint256 _depositId) external view returns (Deposit memory);\\n    function getDepositIntent(uint256 _depositId, bytes32 _intentHash) external view returns (Intent memory);\\n    function getDepositPaymentMethods(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getDepositCurrencies(uint256 _depositId, bytes32 _paymentMethod) external view returns (bytes32[] memory);\\n    function getDepositCurrencyMinRate(uint256 _depositId, bytes32 _paymentMethod, bytes32 _currencyCode) external view returns (uint256);\\n    function getDepositPaymentMethodData(uint256 _depositId, bytes32 _paymentMethod) external view returns (DepositPaymentMethodData memory);\\n    function getDepositPaymentMethodActive(uint256 _depositId, bytes32 _paymentMethod) external view returns (bool);\\n    function getDepositGatingService(uint256 _depositId, bytes32 _paymentMethod) external view returns (address);\\n    function getDepositIntentHashes(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getExpiredIntents(uint256 _depositId) external view returns (bytes32[] memory expiredIntents, uint256 reclaimableAmount);\\n}\\n\",\"keccak256\":\"0x02077e75865a2db8887a3d4b3f4c0c398c0d2589f05506f489fb8189b223d60c\",\"license\":\"MIT\"},\"contracts/interfaces/IEscrowRegistry.sol\":{\"content\":\"//SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\ninterface IEscrowRegistry {\\n    function isWhitelistedEscrow(address _escrow) external view returns (bool);\\n    function isAcceptingAllEscrows() external view returns (bool);\\n    function getWhitelistedEscrows() external view returns (address[] memory);\\n}\",\"keccak256\":\"0xb59386ede3712c6b3a67b6370a2caf5d46b5c882901f87b04de6e48f17baeddb\",\"license\":\"MIT\"},\"contracts/interfaces/IIntentGuardian.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {IEscrowRegistry} from \\\"./IEscrowRegistry.sol\\\";\\n\\n/**\\n * @title IIntentGuardian\\n * @notice Permissionless prepaid intent extensions for compatible Escrow deposits.\\n */\\ninterface IIntentGuardian {\\n    event ExtensionFeeBpsPerHourUpdated(uint256 previousFeeBpsPerHour, uint256 newFeeBpsPerHour);\\n\\n    event IntentExtended(\\n        address indexed escrow,\\n        uint256 indexed depositId,\\n        bytes32 indexed intentHash,\\n        address payer,\\n        uint256 additionalTime,\\n        uint256 cost\\n    );\\n\\n    error ZeroAddress();\\n    error ExtensionsDisabled();\\n    error IntentAlreadyExpired(bytes32 intentHash, uint256 expiryTime, uint256 currentTime);\\n    error ExtensionCostExceedsMax(uint256 cost, uint256 maxCost);\\n    error ExtensionFeeExceedsIntentAmount(uint256 extensionFeeBpsPerHour);\\n    error EscrowNotWhitelisted(address escrow);\\n\\n    /**\\n     * @notice Prepays a deposit's maker and extends a live intent.\\n     * @param _escrow Whitelisted Escrow or EscrowV2 holding the deposit and intent.\\n     * @param _depositId Deposit containing the intent.\\n     * @param _intentHash Intent to extend.\\n     * @param _additionalTime Seconds to add to the current expiry.\\n     * @param _maxCost Maximum fee the payer authorizes.\\n     */\\n    function extendIntent(\\n        address _escrow,\\n        uint256 _depositId,\\n        bytes32 _intentHash,\\n        uint256 _additionalTime,\\n        uint256 _maxCost\\n    ) external;\\n\\n    /**\\n     * @notice Updates the hourly extension fee for all deposits using this guardian.\\n     * @dev A zero fee disables extensions until governance configures a non-zero fee.\\n     */\\n    function setExtensionFeeBpsPerHour(uint256 _extensionFeeBpsPerHour) external;\\n\\n    /// @notice Quotes the exact upward-rounded prepaid extension cost.\\n    function quoteExtensionCost(uint256 _intentAmount, uint256 _additionalTime) external view returns (uint256);\\n\\n    /// @notice Escrow registry used to authorize compatible escrows.\\n    function escrowRegistry() external view returns (IEscrowRegistry);\\n\\n    /// @notice Governance-configured hourly extension fee in basis points of the locked intent amount.\\n    function extensionFeeBpsPerHour() external view returns (uint256);\\n}\\n\",\"keccak256\":\"0x5077b87575319d596a3c5561652959ff27de47f337c6420e6b8b4ca880659ccb\",\"license\":\"MIT\"},\"contracts/interfaces/IOrchestrator.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IERC20 } from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\nimport { IPostIntentHook } from \\\"./IPostIntentHook.sol\\\";\\n\\ninterface IOrchestrator {\\n    \\n    /* ============ Structs ============ */\\n\\n    struct Intent {\\n        address owner;                              // Address of the intent owner  \\n        address to;                                 // Address to forward funds to (can be same as owner)\\n        address escrow;                             // Address of the escrow contract holding the deposit\\n        uint256 depositId;                          // ID of the deposit the intent is associated with\\n        uint256 amount;                             // Amount of the deposit.token the owner wants to take\\n        uint256 timestamp;                          // Timestamp of the intent\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // Currency code that the owner is paying in offchain (keccak256 hash of the currency code)\\n        uint256 conversionRate;                     // Conversion rate of deposit token to fiat currency at the time of intent\\n        bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain\\n        address referrer;                           // Address of the referrer who brought this intent (if any)\\n        uint256 referrerFee;                        // Fee to be paid to the referrer in preciseUnits (1e16 = 1%)\\n        IPostIntentHook postIntentHook;             // Address of the post-intent hook that will execute any post-intent actions\\n        bytes data;                                 // Additional data to be passed to the post-intent hook contract\\n    }\\n\\n    struct SignalIntentParams {\\n        address escrow;                             // The escrow contract where the deposit is held\\n        uint256 depositId;                          // The ID of the deposit the taker intends to use\\n        uint256 amount;                             // The amount of deposit.token the user wants to take\\n        address to;                                 // Address to forward funds to\\n        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment\\n        bytes32 fiatCurrency;                       // The currency code for offchain payment\\n        uint256 conversionRate;                     // The conversion rate agreed offchain\\n        address referrer;                           // Address of the referrer (address(0) if no referrer)\\n        uint256 referrerFee;                        // Fee to be paid to the referrer\\n        bytes gatingServiceSignature;               // Signature from the deposit's gating service\\n        uint256 signatureExpiration;                // Timestamp when the gating service signature expires\\n        IPostIntentHook postIntentHook;             // Optional post-intent hook (address(0) for no hook)\\n        bytes data;                                 // Additional data for the intent\\n    }\\n\\n    struct FulfillIntentParams {\\n        bytes paymentProof;                         // Payment proof. Can be Groth16 Proof, TLSNotary proof, TLSProxy proof, attestation etc.\\n        bytes32 intentHash;                         // Identifier of intent being fulfilled\\n        bytes verificationData;                     // Additional data for payment verifier\\n        bytes postIntentHookData;                   // Additional data for post intent hook\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event IntentSignaled(\\n        bytes32 indexed intentHash, \\n        address indexed escrow,\\n        uint256 indexed depositId, \\n        bytes32 paymentMethod, \\n        address owner, \\n        address to, \\n        uint256 amount, \\n        bytes32 fiatCurrency, \\n        uint256 conversionRate, \\n        uint256 timestamp\\n    );\\n\\n    event IntentPruned(\\n        bytes32 indexed intentHash\\n    );\\n\\n    event IntentFulfilled(\\n        bytes32 indexed intentHash,\\n        address indexed fundsTransferredTo,   // Address that funds were transferred to; can be intent.to or postIntentHook address\\n        uint256 amount,\\n        bool isManualRelease\\n    );\\n\\n    event AllowMultipleIntentsUpdated(bool allowMultiple);\\n\\n    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);\\n    event PostIntentHookRegistryUpdated(address indexed postIntentHookRegistry);\\n    event RelayerRegistryUpdated(address indexed relayerRegistry);\\n    event EscrowRegistryUpdated(address indexed escrowRegistry);\\n\\n    event ProtocolFeeUpdated(uint256 protocolFee);\\n    event ProtocolFeeRecipientUpdated(address indexed protocolFeeRecipient);\\n    event PartialManualReleaseDelayUpdated(uint256 partialManualReleaseDelay);\\n\\n    /* ============ Standardized Custom Errors ============ */\\n    \\n    // Zero value errors\\n    error ZeroAddress();\\n    error ZeroValue();\\n    \\n    // Authorization errors\\n    error UnauthorizedEscrowCaller(address caller);\\n    error UnauthorizedCaller(address caller, address authorized);\\n    \\n    // Not found errors\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodDoesNotExist(bytes32 paymentMethod);\\n    error PaymentMethodNotSupported(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n    \\n    // Whitelist errors\\n    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);\\n    error PostIntentHookNotWhitelisted(address hook);\\n    error EscrowNotWhitelisted(address escrow);\\n    \\n    // Amount and fee errors\\n    error AmountBelowMin(uint256 amount, uint256 min);\\n    error AmountAboveMax(uint256 amount, uint256 max);\\n    error AmountExceedsLimit(uint256 amount, uint256 limit);\\n    error FeeExceedsMaximum(uint256 fee, uint256 maximum);\\n    error RateBelowMinimum(uint256 rate, uint256 minRate);\\n    \\n    // Validation errors\\n    error AccountHasActiveIntent(address account, bytes32 existingIntent);\\n    error InvalidReferrerFeeConfiguration();\\n    error InvalidSignature();\\n    error SignatureExpired(uint256 expiration, uint256 currentTime);\\n    error PartialReleaseNotAllowedYet(uint256 currentTime, uint256 allowedTime);\\n\\n    // Verification errors\\n    error PaymentVerificationFailed();\\n    error HashMismatch(bytes32 expected, bytes32 actual);\\n     \\n    // Transfer errors\\n    error TransferFailed(address recipient, uint256 amount);\\n    error EscrowLockFailed();\\n\\n    /* ============ View Functions ============ */\\n\\n    function getIntent(bytes32 intentHash) external view returns (Intent memory);\\n    function getAccountIntents(address account) external view returns (bytes32[] memory);\\n    \\n    /* ============ External Functions for Users ============ */\\n\\n    function signalIntent(SignalIntentParams calldata params) external;\\n\\n    function cancelIntent(bytes32 intentHash) external;\\n\\n    function fulfillIntent(FulfillIntentParams calldata params) external;\\n\\n    function releaseFundsToPayer(bytes32 intentHash) external;\\n\\n    /* ============ External Functions for Escrow ============ */\\n\\n    function pruneIntents(bytes32[] calldata intentIds) external;\\n}\",\"keccak256\":\"0xcf8db7a4c1481049dbdc2516f47cc0a4ea3a6e71093ee7c637a51294096accbf\",\"license\":\"MIT\"},\"contracts/interfaces/IPostIntentHook.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IOrchestrator } from \\\"./IOrchestrator.sol\\\";\\n\\n/**\\n * @title IPostIntentHook\\n * @notice Interface for post-intent hooks\\n */\\ninterface IPostIntentHook {\\n\\n    /**\\n     * @notice Post-intent hook\\n     * @param _intent The intent data structure containing all intent information\\n     * @param _fulfillIntentData The data passed to fulfillIntent\\n     */\\n    function execute(\\n        IOrchestrator.Intent memory _intent,\\n        uint256 _amountNetFees,\\n        bytes calldata _fulfillIntentData\\n    ) external;\\n}\\n\",\"keccak256\":\"0x72ae0d60c98f89eb2363f455445466c1dfaddfb338a63d65d3eb8469cbd9484d\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x60a03461012257601f610f3638819003918201601f191683019291906001600160401b038411838510176101275781606092849260409687528339810103126101225780516001600160a01b03808216928383036101225760208101519182169081830361012257850151936100743361013d565b60016002551561011157156101005760805261008f9061013d565b605381116100ea57817fdfa5d07c1f60169f4a18c1c336c3474bd6252ba5c6be72749156d9e4d20c159191600354908060035582519182526020820152a151610daa908161018c82396080518181816101110152610a640152f35b602491519063fbd08cb560e01b82526004820152fd5b835163d92e233d60e01b8152600490fd5b845163d92e233d60e01b8152600490fd5b600080fd5b634e487b7160e01b600052604160045260246000fd5b60018060a01b031990816001541660015560005460018060a01b038092168093821617600055167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0600080a356fe6040608081526004908136101561001557600080fd5b600091823560e01c80633a0c413f14610aaf5780633b672fe314610a93578063406e1d1814610a4f5780634df8612614610a325780635a2784f714610a14578063715018a6146109af57806379ba5097146108ef57806385bdb6071461087b57806389e829ab1461085c5780638da5cb5b14610834578063b06dc90314610815578063e1a45218146107f8578063e30c3978146107cb578063f2fde38b1461075b5763ff54e052146100c657600080fd5b346107575760a0366003190112610757576100df610add565b90600280541461071457600280556003549283156107075780516375abeba960e11b81526020916001600160a01b03917f000000000000000000000000000000000000000000000000000000000000000083169084818781855afa9081156106fd579085918a916106c3575b5015918261064b575b50506106315780516313f3f72d60e31b8152602480358683018190529684169590610140808483818b5afa938415610627578b94610504575b50508351926308d08e5560e41b84528883850152604435998a838601526080856044818c5afa9485156104fa578c9561047b575b5060608501518042101561045a5750883b15610456578894865163c84b5cf960e01b81528b868201528c858201528d816064818382359b8c60448401525af1801561044a5761041d575b5090858961021a930151610c7d565b95608435808811610402575080868301511691511690855190888201926323b872dd60e01b8452338584015260448301528760648301526064825260a082019267ffffffffffffffff92808510848611176103ee5760e08101858110858211176103da5789528a85527f5361666545524332303a206c6f772d6c6576656c2063616c6c206661696c656460c0820152518e9182919082855af1913d156103cc573d9081116103b857918d916102ee94938951906102e08d601f19601f8401160183610b50565b815280938c3d92013e610ba9565b8051878115918215610395575b50509050156103405750508151338152938401528201527fad69c1250d8f9ea8bb3b2f49199bad11aa2d644d0071672bf68e24397d59782590606090a4600160025580f35b835162461bcd60e51b8152918201869052602a908201527f5361666545524332303a204552433230206f7065726174696f6e20646964206e6044820152691bdd081cdd58d8d9595960b21b6064820152608490fd5b83809293500103126103b457866103ac9101610b88565b8087386102fb565b8a80fd5b84604187634e487b7160e01b600052526000fd5b506102ee9291606091610ba9565b86604189634e487b7160e01b600052526000fd5b85604188634e487b7160e01b600052526000fd5b84604491858a8a519363db88eb5960e01b8552840152820152fd5b67ffffffffffffffff819e929e116104385787529b8561020b565b634e487b7160e01b8252604186528482fd5b8e8951903d90823e3d90fd5b8b80fd5b84606491858e8a5193633d6ae43f60e11b8552840152820152426044820152fd5b9094506080813d82116104f2575b8161049660809383610b50565b81010312610456578551906080820182811067ffffffffffffffff8211176104e05790606091885280518352898101518a84015287810151888401520151606082015293386101c1565b634e487b7160e01b8e5260418652848efd5b3d9150610489565b86513d8e823e3d90fd5b8181929395503d8411610620575b61051c8183610b50565b8101039182126103b4578451916101209067ffffffffffffffff908285018281118682101761060e57885261055084610b95565b855261055d8a8501610b95565b8a8601528784015190898216820361060a57889182870152605f19011261060657865190818801908111828210176105f4578752606083810151825260808401518a8301528401526105e8906105b560a08401610b88565b608085015260c083015160a085015260e083015160c0850152610100926105dd848201610b95565b60e086015201610b88565b9082015291388061018d565b634e487b7160e01b8e5260418652868efd5b8c80fd5b8e80fd5b634e487b7160e01b8f5260418752878ffd5b503d610512565b85513d8d823e3d90fd5b5163f94cca3960e01b815293169183019190915250602490fd5b83516363d8a2a760e11b8152888616888201529250829060249082905afa9081156106b9578891610680575b50158338610154565b90508381813d83116106b2575b6106978183610b50565b810103126106ae576106a890610b88565b38610677565b8780fd5b503d61068d565b82513d8a823e3d90fd5b82819392503d83116106f6575b6106da8183610b50565b810103126106f2576106ec8591610b88565b3861014b565b8880fd5b503d6106d0565b83513d8b823e3d90fd5b5163518472db60e11b8152fd5b606490602084519162461bcd60e51b8352820152601f60248201527f5265656e7472616e637947756172643a207265656e7472616e742063616c6c006044820152fd5b8280fd5b83346107c85760203660031901126107c857610775610add565b61077d610af8565b600180546001600160a01b0319166001600160a01b0392831690811790915582549091167f38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e227008380a380f35b80fd5b5050346107f457816003193601126107f45760015490516001600160a01b039091168152602090f35b5080fd5b5050346107f457816003193601126107f457602090516127108152f35b5050346107f457816003193601126107f4576020906003549051908152f35b5050346107f457816003193601126107f457905490516001600160a01b039091168152602090f35b5050346107f457816003193601126107f4576020905163022551008152f35b503461075757602036600319011261075757803590610898610af8565b605382116108da5750907fdfa5d07c1f60169f4a18c1c336c3474bd6252ba5c6be72749156d9e4d20c159191600354908060035582519182526020820152a180f35b915163fbd08cb560e01b815291820152602490fd5b509034610757578260031936011261075757600154916001600160a01b0391338385160361095a5750506001600160a01b031991821660015582543392811683178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b906020608492519162461bcd60e51b8352820152602960248201527f4f776e61626c6532537465703a2063616c6c6572206973206e6f7420746865206044820152683732bb9037bbb732b960b91b6064820152fd5b83346107c857806003193601126107c8576109c8610af8565b600180546001600160a01b03199081169091558154908116825581906001600160a01b03167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08280a380f35b5050346107f457816003193601126107f45760209051620697808152f35b5050346107f457816003193601126107f45760209051610e108152f35b5050346107f457816003193601126107f457517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b5050346107f457816003193601126107f4576020905160538152f35b5091346107c857816003193601126107c85750610ad6602092600354906024359035610c7d565b9051908152f35b600435906001600160a01b0382168203610af357565b600080fd5b6000546001600160a01b03163303610b0c57565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b90601f8019910116810190811067ffffffffffffffff821117610b7257604052565b634e487b7160e01b600052604160045260246000fd5b51908115158203610af357565b51906001600160a01b0382168203610af357565b91929015610c0b5750815115610bbd575090565b3b15610bc65790565b60405162461bcd60e51b815260206004820152601d60248201527f416464726573733a2063616c6c20746f206e6f6e2d636f6e74726163740000006044820152606490fd5b825190915015610c1e5750805190602001fd5b6040519062461bcd60e51b82528160208060048301528251908160248401526000935b828510610c64575050604492506000838284010152601f80199101168101030190fd5b8481018201518686016044015293810193859350610c41565b91818102918183041490151715610cb55780610c9e63022551009284610ccb565b9209610ca75790565b60018101809111610cb55790565b634e487b7160e01b600052601160045260246000fd5b9060001981830981830291828083109203918083039214610d675763022551009082821115610d2a577f519e288c6fb5b25d8604f0d0cff03e02f97fcb1aec2c6d169bac6997d2c043b1940990828211900360f81b910360081c170290565b60405162461bcd60e51b81526020600482015260156024820152744d6174683a206d756c446976206f766572666c6f7760581b6044820152606490fd5b505063022551009150049056fea26469706673582212207a9353f991cb624884bc9d050a4b1a5da20c3463d36c1d4552911e32f17763ad64736f6c63430008120033",
+  "deployedBytecode": "0x6040608081526004908136101561001557600080fd5b600091823560e01c80633a0c413f14610aaf5780633b672fe314610a93578063406e1d1814610a4f5780634df8612614610a325780635a2784f714610a14578063715018a6146109af57806379ba5097146108ef57806385bdb6071461087b57806389e829ab1461085c5780638da5cb5b14610834578063b06dc90314610815578063e1a45218146107f8578063e30c3978146107cb578063f2fde38b1461075b5763ff54e052146100c657600080fd5b346107575760a0366003190112610757576100df610add565b90600280541461071457600280556003549283156107075780516375abeba960e11b81526020916001600160a01b03917f000000000000000000000000000000000000000000000000000000000000000083169084818781855afa9081156106fd579085918a916106c3575b5015918261064b575b50506106315780516313f3f72d60e31b8152602480358683018190529684169590610140808483818b5afa938415610627578b94610504575b50508351926308d08e5560e41b84528883850152604435998a838601526080856044818c5afa9485156104fa578c9561047b575b5060608501518042101561045a5750883b15610456578894865163c84b5cf960e01b81528b868201528c858201528d816064818382359b8c60448401525af1801561044a5761041d575b5090858961021a930151610c7d565b95608435808811610402575080868301511691511690855190888201926323b872dd60e01b8452338584015260448301528760648301526064825260a082019267ffffffffffffffff92808510848611176103ee5760e08101858110858211176103da5789528a85527f5361666545524332303a206c6f772d6c6576656c2063616c6c206661696c656460c0820152518e9182919082855af1913d156103cc573d9081116103b857918d916102ee94938951906102e08d601f19601f8401160183610b50565b815280938c3d92013e610ba9565b8051878115918215610395575b50509050156103405750508151338152938401528201527fad69c1250d8f9ea8bb3b2f49199bad11aa2d644d0071672bf68e24397d59782590606090a4600160025580f35b835162461bcd60e51b8152918201869052602a908201527f5361666545524332303a204552433230206f7065726174696f6e20646964206e6044820152691bdd081cdd58d8d9595960b21b6064820152608490fd5b83809293500103126103b457866103ac9101610b88565b8087386102fb565b8a80fd5b84604187634e487b7160e01b600052526000fd5b506102ee9291606091610ba9565b86604189634e487b7160e01b600052526000fd5b85604188634e487b7160e01b600052526000fd5b84604491858a8a519363db88eb5960e01b8552840152820152fd5b67ffffffffffffffff819e929e116104385787529b8561020b565b634e487b7160e01b8252604186528482fd5b8e8951903d90823e3d90fd5b8b80fd5b84606491858e8a5193633d6ae43f60e11b8552840152820152426044820152fd5b9094506080813d82116104f2575b8161049660809383610b50565b81010312610456578551906080820182811067ffffffffffffffff8211176104e05790606091885280518352898101518a84015287810151888401520151606082015293386101c1565b634e487b7160e01b8e5260418652848efd5b3d9150610489565b86513d8e823e3d90fd5b8181929395503d8411610620575b61051c8183610b50565b8101039182126103b4578451916101209067ffffffffffffffff908285018281118682101761060e57885261055084610b95565b855261055d8a8501610b95565b8a8601528784015190898216820361060a57889182870152605f19011261060657865190818801908111828210176105f4578752606083810151825260808401518a8301528401526105e8906105b560a08401610b88565b608085015260c083015160a085015260e083015160c0850152610100926105dd848201610b95565b60e086015201610b88565b9082015291388061018d565b634e487b7160e01b8e5260418652868efd5b8c80fd5b8e80fd5b634e487b7160e01b8f5260418752878ffd5b503d610512565b85513d8d823e3d90fd5b5163f94cca3960e01b815293169183019190915250602490fd5b83516363d8a2a760e11b8152888616888201529250829060249082905afa9081156106b9578891610680575b50158338610154565b90508381813d83116106b2575b6106978183610b50565b810103126106ae576106a890610b88565b38610677565b8780fd5b503d61068d565b82513d8a823e3d90fd5b82819392503d83116106f6575b6106da8183610b50565b810103126106f2576106ec8591610b88565b3861014b565b8880fd5b503d6106d0565b83513d8b823e3d90fd5b5163518472db60e11b8152fd5b606490602084519162461bcd60e51b8352820152601f60248201527f5265656e7472616e637947756172643a207265656e7472616e742063616c6c006044820152fd5b8280fd5b83346107c85760203660031901126107c857610775610add565b61077d610af8565b600180546001600160a01b0319166001600160a01b0392831690811790915582549091167f38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e227008380a380f35b80fd5b5050346107f457816003193601126107f45760015490516001600160a01b039091168152602090f35b5080fd5b5050346107f457816003193601126107f457602090516127108152f35b5050346107f457816003193601126107f4576020906003549051908152f35b5050346107f457816003193601126107f457905490516001600160a01b039091168152602090f35b5050346107f457816003193601126107f4576020905163022551008152f35b503461075757602036600319011261075757803590610898610af8565b605382116108da5750907fdfa5d07c1f60169f4a18c1c336c3474bd6252ba5c6be72749156d9e4d20c159191600354908060035582519182526020820152a180f35b915163fbd08cb560e01b815291820152602490fd5b509034610757578260031936011261075757600154916001600160a01b0391338385160361095a5750506001600160a01b031991821660015582543392811683178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b906020608492519162461bcd60e51b8352820152602960248201527f4f776e61626c6532537465703a2063616c6c6572206973206e6f7420746865206044820152683732bb9037bbb732b960b91b6064820152fd5b83346107c857806003193601126107c8576109c8610af8565b600180546001600160a01b03199081169091558154908116825581906001600160a01b03167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08280a380f35b5050346107f457816003193601126107f45760209051620697808152f35b5050346107f457816003193601126107f45760209051610e108152f35b5050346107f457816003193601126107f457517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b5050346107f457816003193601126107f4576020905160538152f35b5091346107c857816003193601126107c85750610ad6602092600354906024359035610c7d565b9051908152f35b600435906001600160a01b0382168203610af357565b600080fd5b6000546001600160a01b03163303610b0c57565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b90601f8019910116810190811067ffffffffffffffff821117610b7257604052565b634e487b7160e01b600052604160045260246000fd5b51908115158203610af357565b51906001600160a01b0382168203610af357565b91929015610c0b5750815115610bbd575090565b3b15610bc65790565b60405162461bcd60e51b815260206004820152601d60248201527f416464726573733a2063616c6c20746f206e6f6e2d636f6e74726163740000006044820152606490fd5b825190915015610c1e5750805190602001fd5b6040519062461bcd60e51b82528160208060048301528251908160248401526000935b828510610c64575050604492506000838284010152601f80199101168101030190fd5b8481018201518686016044015293810193859350610c41565b91818102918183041490151715610cb55780610c9e63022551009284610ccb565b9209610ca75790565b60018101809111610cb55790565b634e487b7160e01b600052601160045260246000fd5b9060001981830981830291828083109203918083039214610d675763022551009082821115610d2a577f519e288c6fb5b25d8604f0d0cff03e02f97fcb1aec2c6d169bac6997d2c043b1940990828211900360f81b910360081c170290565b60405162461bcd60e51b81526020600482015260156024820152744d6174683a206d756c446976206f766572666c6f7760581b6044820152606490fd5b505063022551009150049056fea26469706673582212207a9353f991cb624884bc9d050a4b1a5da20c3463d36c1d4552911e32f17763ad64736f6c63430008120033",
+  "devdoc": {
+    "details": "Escrow and EscrowV2 expose the same Deposit and Intent ABI used here. Governance can update      the extension fee for every deposit using this guardian address.",
+    "kind": "dev",
+    "methods": {
+      "acceptOwnership()": {
+        "details": "The new owner accepts the ownership transfer."
+      },
+      "extendIntent(address,uint256,bytes32,uint256,uint256)": {
+        "details": "The compatible Escrow enforces guardian authorization, non-zero time, and the cumulative      five-day lifetime cap. All state and token movements revert atomically on payment failure.",
+        "params": {
+          "_additionalTime": "Seconds to add to the current expiry.",
+          "_depositId": "Deposit containing the intent.",
+          "_escrow": "Whitelisted Escrow or EscrowV2 holding the deposit and intent.",
+          "_intentHash": "Intent to extend.",
+          "_maxCost": "Maximum fee the payer authorizes."
+        }
+      },
+      "owner()": {
+        "details": "Returns the address of the current owner."
+      },
+      "pendingOwner()": {
+        "details": "Returns the address of the pending owner."
+      },
+      "renounceOwnership()": {
+        "details": "Leaves the contract without owner. It will not be possible to call `onlyOwner` functions. Can only be called by the current owner. NOTE: Renouncing ownership will leave the contract without an owner, thereby disabling any functionality that is only available to the owner."
+      },
+      "setExtensionFeeBpsPerHour(uint256)": {
+        "details": "A zero fee disables extensions until governance configures a non-zero fee."
+      },
+      "transferOwnership(address)": {
+        "details": "Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one. Can only be called by the current owner."
+      }
+    },
+    "title": "IntentGuardian",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "escrowRegistry()": {
+        "notice": "Escrow registry used to authorize compatible escrows."
+      },
+      "extendIntent(address,uint256,bytes32,uint256,uint256)": {
+        "notice": "Prepays a deposit's maker and extends a live intent."
+      },
+      "extensionFeeBpsPerHour()": {
+        "notice": "Governance-configured hourly extension fee in basis points of the locked intent amount."
+      },
+      "quoteExtensionCost(uint256,uint256)": {
+        "notice": "Quotes the exact upward-rounded prepaid extension cost."
+      },
+      "setExtensionFeeBpsPerHour(uint256)": {
+        "notice": "Updates the hourly extension fee for all deposits using this guardian."
+      }
+    },
+    "notice": "Extends live Escrow intents in exchange for a prepaid, non-refundable fee.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 7,
+        "contract": "contracts/IntentGuardian.sol:IntentGuardian",
+        "label": "_owner",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_address"
+      },
+      {
+        "astId": 120,
+        "contract": "contracts/IntentGuardian.sol:IntentGuardian",
+        "label": "_pendingOwner",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_address"
+      },
+      {
+        "astId": 328,
+        "contract": "contracts/IntentGuardian.sol:IntentGuardian",
+        "label": "_status",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_uint256"
+      },
+      {
+        "astId": 11313,
+        "contract": "contracts/IntentGuardian.sol:IntentGuardian",
+        "label": "extensionFeeBpsPerHour",
+        "offset": 0,
+        "slot": "3",
+        "type": "t_uint256"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      }
+    }
+  }
+}
