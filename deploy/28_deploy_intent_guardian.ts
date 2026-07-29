@@ -91,7 +91,7 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   }
 };
 
-func.tags = ["31_deploy_intent_guardian", "V2IntentGuardian", "IntentGuardian"];
+func.tags = ["28_deploy_intent_guardian", "V2IntentGuardian", "IntentGuardian"];
 func.dependencies = ["16_configure_v2_payment_methods"];
 
 export default func;
