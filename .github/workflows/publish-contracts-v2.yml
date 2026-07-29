@@ -18,6 +18,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  FOUNDRY_VERSION: v1.7.1
   PACKAGE_JSON: packages/contracts/package.json
   PACK_ARTIFACT: contracts-v2-release-candidate
   RELEASE_VERSION: ${{ inputs.release }}
@@ -58,6 +59,11 @@ jobs:
           corepack enable
           test "$(npm --version)" = "11.9.0"
 
+      - name: Install pinned Foundry
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+
       - name: Guard canonical RC source and unpublished version
         id: release-guard
         run: |
@@ -73,6 +79,9 @@ jobs:
 
       - name: Install immutable dependencies
         run: yarn install --immutable
+
+      - name: Prepare local environment
+        run: cp .env.default .env
 
       - name: Compile contracts
         run: |
