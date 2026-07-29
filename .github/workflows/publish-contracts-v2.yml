@@ -1,0 +1,181 @@
+name: Publish contracts-v2
+
+run-name: Publish @zkp2p/contracts-v2@${{ inputs.release }} as rc
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Exact 0.4.0-rc.N version committed on canonical main
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish-contracts-v2
+  cancel-in-progress: false
+
+env:
+  PACKAGE_JSON: packages/contracts/package.json
+  PACK_ARTIFACT: contracts-v2-release-candidate
+  RELEASE_VERSION: ${{ inputs.release }}
+  RELEASE_LINE: 0.4.0
+  RELEASE_TAG: contracts-v2-v${{ inputs.release }}
+  DIST_TAG: rc
+  NPM_CONFIG_PROVENANCE: "true"
+  REQUIRE_PROVENANCE: "true"
+
+jobs:
+  validate:
+    name: Build, test, and pack
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      latest-before: ${{ steps.release-guard.outputs.latest }}
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout canonical release commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.14.0
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Pin release tooling
+        run: |
+          npm install --global npm@11.9.0 corepack@0.34.0
+          corepack enable
+          test "$(npm --version)" = "11.9.0"
+
+      - name: Guard canonical RC source and unpublished version
+        id: release-guard
+        run: |
+          node scripts/npm-release.mjs guard "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
+          latest=$(npm view @zkp2p/contracts-v2 dist-tags.latest)
+          test -n "$latest"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+
+      - name: Require autonomous RC environment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-environment.mjs npm-publish-rc
+
+      - name: Install immutable dependencies
+        run: yarn install --immutable
+
+      - name: Compile contracts
+        run: |
+          set -a
+          . ./.env.default
+          set +a
+          yarn build
+
+      - name: Run complete Foundry suite
+        run: yarn test
+
+      - name: Build and test package
+        run: |
+          yarn pkg:build
+          yarn pkg:test
+          yarn workspace @zkp2p/contracts-v2 verify:release
+
+      - name: Pack exact publish candidate
+        run: |
+          mkdir -p "$RUNNER_TEMP/npm-pack"
+          cd packages/contracts
+          npm pack --ignore-scripts --json --pack-destination "$RUNNER_TEMP/npm-pack" > "$RUNNER_TEMP/npm-pack.json"
+          cp "$RUNNER_TEMP/npm-pack.json" "$RUNNER_TEMP/npm-pack/pack.json"
+          cd ../..
+          node packages/contracts/scripts/verify-release.mjs --pack-json "$RUNNER_TEMP/npm-pack.json" --pack-dir "$RUNNER_TEMP/npm-pack"
+
+      - name: Clean-install and import exact tarball
+        run: |
+          tarball=$(node -e "const fs=require('fs'),p=require('path');const r=JSON.parse(fs.readFileSync(process.argv[1]))[0];process.stdout.write(p.join(process.argv[2],r.filename))" "$RUNNER_TEMP/npm-pack/pack.json" "$RUNNER_TEMP/npm-pack")
+          mkdir -p "$RUNNER_TEMP/npm-smoke"
+          cd "$RUNNER_TEMP/npm-smoke"
+          npm init --yes
+          npm install "$tarball" --ignore-scripts --no-audit --no-fund
+          node "$GITHUB_WORKSPACE/packages/contracts/scripts/smoke-installed.mjs" "$RELEASE_VERSION"
+
+      - name: Preserve validated tarball for publish
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ env.PACK_ARTIFACT }}
+          path: ${{ runner.temp }}/npm-pack
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  publish:
+    name: Publish with npm OIDC
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: npm-publish-rc
+      url: https://www.npmjs.com/package/@zkp2p/contracts-v2/v/${{ inputs.release }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout release verification code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js and npm registry
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.14.0
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Pin OIDC-capable npm
+        run: |
+          npm install --global npm@11.9.0
+          test "$(npm --version)" = "11.9.0"
+
+      - name: Re-check canonical source and unpublished version
+        run: node scripts/npm-release.mjs guard "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
+
+      - name: Download validated tarball
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: ${{ env.PACK_ARTIFACT }}
+          path: ${{ runner.temp }}/npm-pack
+
+      - name: Verify downloaded tarball
+        run: node packages/contracts/scripts/verify-release.mjs --pack-json "$RUNNER_TEMP/npm-pack/pack.json" --pack-dir "$RUNNER_TEMP/npm-pack"
+
+      - name: Publish exact tarball with provenance
+        run: |
+          tarball=$(node -e "const fs=require('fs'),p=require('path');const r=JSON.parse(fs.readFileSync(process.argv[1]))[0];process.stdout.write(p.join(process.argv[2],r.filename))" "$RUNNER_TEMP/npm-pack/pack.json" "$RUNNER_TEMP/npm-pack")
+          npm publish "$tarball" --access public --tag rc --provenance
+
+      - name: Verify registry version, dist-tag, integrity, and contents
+        env:
+          EXPECTED_LATEST: ${{ needs.validate.outputs.latest-before }}
+        run: |
+          node scripts/npm-release.mjs verify "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG" "$RUNNER_TEMP/npm-pack/pack.json"
+          mkdir -p "$RUNNER_TEMP/registry-pack"
+          npm pack "@zkp2p/contracts-v2@$RELEASE_VERSION" --ignore-scripts --json --pack-destination "$RUNNER_TEMP/registry-pack" > "$RUNNER_TEMP/registry-pack.json"
+          node packages/contracts/scripts/verify-release.mjs --pack-json "$RUNNER_TEMP/registry-pack.json" --pack-dir "$RUNNER_TEMP/registry-pack"
+          for spec in "@zkp2p/contracts-v2@$RELEASE_VERSION" "@zkp2p/contracts-v2@rc"; do
+            smoke_dir=$(mktemp -d "$RUNNER_TEMP/npm-registry-smoke.XXXXXX")
+            cd "$smoke_dir"
+            npm init --yes
+            npm install "$spec" --ignore-scripts --no-audit --no-fund
+            node "$GITHUB_WORKSPACE/packages/contracts/scripts/smoke-installed.mjs" "$RELEASE_VERSION"
+          done

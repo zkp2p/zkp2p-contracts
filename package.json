@@ -30,6 +30,7 @@
     "test:deterministic": "forge test --match-path 'test-foundry/deterministic/**/*.t.sol'",
     "test:fuzz": "forge test --match-path 'test-foundry/fuzz/**/*.t.sol'",
     "test:invariant": "forge test --match-path 'test-foundry/invariant/**/*.t.sol'",
+    "test:release-policy": "node --test scripts/verify-github-environment.spec.mjs",
     "typechain": "hardhat typechain",
     "transpile": "tsc"
   },

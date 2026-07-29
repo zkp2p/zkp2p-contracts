@@ -36,6 +36,7 @@ import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils
 // Import stable source ABIs for the deposit-scoped whitelist policy
 import {
   AddressGroupRegistry,
+  OrchestratorV3,
   WhitelistPolicy,
 } from "@zkp2p/contracts-v2/abis/contracts"
 
@@ -194,20 +195,19 @@ Each network export provides:
 - TypeScript definitions (`.d.ts`)
 - Direct JSON file access
 
-## Version
-
-Current version: `0.0.1-rc5`
-
 ## Development
 
-### Build & Publish
+### Build and release
 
 From `packages/contracts`:
 - `yarn build` – Clean, extract, and bundle package
-- `npm pack` – Preview tarball contents
-- `npm publish --access public` – Publish (runs prepublishOnly)
+- `yarn test` – Run package tests
+- `yarn verify:release` – Verify current ABIs and deployment-address integrity
+- `npm pack --dry-run` – Preview tarball contents
 
-Note: The package uses modern module patterns with _esm/, _cjs/, and _types/ folders for optimal compatibility.
+Publishing is performed only by the protected GitHub Actions trusted-publishing workflow. It uses npm OIDC and provenance without a long-lived npm token. See [the release runbook](../../NPM_RELEASE.md).
+
+The package uses modern module patterns with `_esm/`, `_cjs/`, and `_types/` folders for compatibility.
 
 ## License
 
@@ -215,6 +215,6 @@ MIT
 
 ## Links
 
-- [GitHub Repository](https://github.com/zkp2p/zkp2p-v2-contracts)
+- [GitHub Repository](https://github.com/zkp2p/zkp2p-contracts)
 - [Documentation](https://docs.zkp2p.xyz)
 - [Website](https://zkp2p.xyz)

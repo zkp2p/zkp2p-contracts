@@ -80,6 +80,8 @@ jobs:
           corepack yarn install --immutable
       - name: Prepare local environment
         run: cp .env.default .env
+      - name: Test release environment policy
+        run: corepack yarn test:release-policy
       - name: Compile deployment contracts and package
         run: |
           corepack yarn compile
