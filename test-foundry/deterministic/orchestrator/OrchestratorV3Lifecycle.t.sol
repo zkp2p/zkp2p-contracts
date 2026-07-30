@@ -129,19 +129,26 @@ contract OrchestratorV3LifecycleTest is OrchestratorV3Fixture {
         _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
     }
 
-    function test_ManualReleaseNotifiesLifecycleAndBypassesPostIntentHook() public {
+    function test_ManualReleaseRoutesThroughLifecycleAndPostIntentHook() public {
         orchestrator.setLifecycleHook(lifecycleHookMock);
         IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        params.referralFees = _twoReferralFees();
         params.postIntentHook = postIntentHook;
+        params.data = abi.encode(delegate);
         bytes32 intentHash = _signal(taker, params);
         uint256 recipientBefore = token.balanceOf(taker);
+        uint256 hookRecipientBefore = token.balanceOf(delegate);
+        uint256 netAmount = INTENT_AMOUNT - 250_000;
+        vm.expectEmit(true, true, true, true);
+        emit IntentFulfilled(intentHash, address(postIntentHook), netAmount, true);
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash);
         assertEq(lifecycleHookMock.settlementCalls(), 1);
         (,,,,, bool isManualRelease) = lifecycleHookMock.lastSettlementContext();
         assertTrue(isManualRelease);
-        assertEq(token.balanceOf(taker) - recipientBefore, INTENT_AMOUNT);
-        assertEq(token.balanceOf(other), 0);
+        assertEq(token.balanceOf(taker), recipientBefore);
+        assertEq(token.balanceOf(delegate) - hookRecipientBefore, netAmount);
+        assertEq(postIntentHook.lastPostIntentHookData(), "");
     }
 
     function test_GovernanceLifecycleHookSetterValidatesOwnerAndCode() public {
