@@ -616,7 +616,7 @@ export default {
       ]
     },
     "ChargebackNullifierRegistry": {
-      "address": "0xB010Dc8E628AA1e5B2bE027DaE1A79293E727A84",
+      "address": "0xaDa339E7d3542ee636FA2cda6BFbFE5720F0EEF5",
       "abi": [
         {
           "inputs": [],
@@ -832,7 +832,7 @@ export default {
       ]
     },
     "ChargebackPolicy": {
-      "address": "0x672215e9D390C01C96dC1eB439438001efEfe967",
+      "address": "0xa5fdc112BB69ee2141b99Fdcb94364256Dc34377",
       "abi": [
         {
           "inputs": [
@@ -1832,7 +1832,7 @@ export default {
       ]
     },
     "ChargebackVerifier": {
-      "address": "0x6b7b729826363716F5FCC570709342043932eEfb",
+      "address": "0xd297CD116D7F6EFb807f855237A2EF72C0854579",
       "abi": [
         {
           "inputs": [
@@ -8088,7 +8088,7 @@ export default {
       ]
     },
     "IntentLifecycleHookV1": {
-      "address": "0x186388bBC1A694E4d1e6A65f8866a24DA45E6D09",
+      "address": "0x4874063A76C3549641883ad0BB169D6b41a0E2c3",
       "abi": [
         {
           "inputs": [
@@ -11787,7 +11787,7 @@ export default {
       ]
     },
     "OrchestratorV3": {
-      "address": "0x6Db9dDb38a19Be0c614C0Ad9e78Baf73f93c35dF",
+      "address": "0xF9CEE6365fB4F6354a19e95d35aaeF877CF1179d",
       "abi": [
         {
           "inputs": [
@@ -12479,38 +12479,12 @@ export default {
           "inputs": [
             {
               "indexed": false,
-              "internalType": "uint256",
-              "name": "partialManualReleaseDelay",
-              "type": "uint256"
-            }
-          ],
-          "name": "PartialManualReleaseDelayUpdated",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": false,
               "internalType": "address",
               "name": "account",
               "type": "address"
             }
           ],
           "name": "Paused",
-          "type": "event"
-        },
-        {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "paymentVerifierRegistry",
-              "type": "address"
-            }
-          ],
-          "name": "PaymentVerifierRegistryUpdated",
           "type": "event"
         },
         {
@@ -17491,7 +17465,7 @@ export default {
       ]
     },
     "StakeVault": {
-      "address": "0xE86126a9ce0E85C2d32e4DF028c390588763F43B",
+      "address": "0xaA82e422B3755eA6a1352eB6B2828324740ee5af",
       "abi": [
         {
           "inputs": [
