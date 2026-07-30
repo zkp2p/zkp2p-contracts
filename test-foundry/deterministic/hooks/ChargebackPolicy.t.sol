@@ -63,6 +63,11 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
         _stake(taker, STAKE_AMOUNT);
     }
 
+    function test_ConstructorRejectsZeroOwner() public {
+        vm.expectRevert(IChargebackPolicy.ZeroAddress.selector);
+        new ChargebackPolicy(address(0), vault, chargebackVerifier, chargebackNullifierRegistry);
+    }
+
     function test_onIntentSignaledLocksStakeAndSnapshotsConfiguration() public {
         policy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
         policy.setRiskWindow(METHOD, 7 days);
@@ -270,6 +275,30 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
         );
     }
 
+    function test_SubmitChargebackRequiresSettledIntent() public {
+        IChargebackVerifier.ChargebackAttestation memory attestation =
+            _attestation(INTENT, METHOD, keccak256("payment"), keccak256("dispute"));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IChargebackPolicy.ChargebackIntentNotSettled.selector,
+                INTENT,
+                IChargebackPolicy.ChargebackIntentStatus.NONE
+            )
+        );
+        policy.submitChargeback(attestation);
+
+        policy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IChargebackPolicy.ChargebackIntentNotSettled.selector,
+                INTENT,
+                IChargebackPolicy.ChargebackIntentStatus.PENDING
+            )
+        );
+        policy.submitChargeback(attestation);
+    }
+
     function test_SubmitChargebackManualPathSkipsPaymentBindingAndRejectsReplay() public {
         _admitAndSettle(INTENT, 40e6, true);
         bytes32 disputeId = keccak256("dispute");
@@ -366,6 +395,26 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
         emit ChargebackVerifierUpdated(address(chargebackVerifier), address(replacement));
         policy.setChargebackVerifier(address(replacement));
         assertEq(address(policy.chargebackVerifier()), address(replacement));
+    }
+
+    function test_SettlementRejectsReleaseEligibilityTimestampOverflow() public {
+        policy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        uint256 overflowingTimestamp = uint256(type(uint64).max) - RISK_WINDOW + 1;
+        vm.warp(overflowingTimestamp);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IChargebackPolicy.TimestampOverflow.selector, overflowingTimestamp + RISK_WINDOW)
+        );
+        policy.onIntentSettled(INTENT, INTENT_AMOUNT, false);
+    }
+
+    function test_MaturedReleaseRejectsCurrentTimestampOverflow() public {
+        _admitAndSettle(INTENT, INTENT_AMOUNT, false);
+        uint256 overflowingTimestamp = uint256(type(uint64).max) + 1;
+        vm.warp(overflowingTimestamp);
+
+        vm.expectRevert(abi.encodeWithSelector(IChargebackPolicy.TimestampOverflow.selector, overflowingTimestamp));
+        policy.releaseMaturedChargebackIntent(INTENT);
     }
 
     function test_SetChargebackEnabledEnforcesDepositorAndHandlesMissingDeposit() public {

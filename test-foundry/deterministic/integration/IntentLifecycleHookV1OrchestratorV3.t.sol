@@ -4,6 +4,7 @@ pragma solidity ^0.8.18;
 
 import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
+import {IOrchestratorRegistry} from "contracts/interfaces/IOrchestratorRegistry.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {ChargebackPolicy} from "contracts/hooks/ChargebackPolicy.sol";
@@ -54,6 +55,14 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
         lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, policy, chargebackPolicy);
         chargebackPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
         IOrchestratorV3(address(orchestrator)).setLifecycleHook(lifecycleHook);
+    }
+
+    function test_ConstructorRejectsZeroAndNonContractDependencies() public {
+        vm.expectRevert(IntentLifecycleHookV1.ZeroAddress.selector);
+        new IntentLifecycleHookV1(IOrchestratorRegistry(address(0)), policy, chargebackPolicy);
+
+        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.InvalidDependency.selector, other));
+        new IntentLifecycleHookV1(IOrchestratorRegistry(other), policy, chargebackPolicy);
     }
 
     function test_DisabledPolicyPassesThroughAndSnapshotsGlobalHook() public {
