@@ -16,6 +16,7 @@ import { IReferralFee } from "./interfaces/IReferralFee.sol";
 import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
 import { IEscrowRegistry } from "./interfaces/IEscrowRegistry.sol";
+import { IIntentLifecycleHook } from "./interfaces/IIntentLifecycleHook.sol";
 import { IPostIntentHookV2 } from "./interfaces/IPostIntentHookV2.sol";
 import { IPreIntentHook } from "./interfaces/IPreIntentHook.sol";
 import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
@@ -25,8 +26,9 @@ import { ReferralFeeLib } from "./lib/ReferralFeeLib.sol";
 
 /**
  * @title OrchestratorV3
- * @notice Orchestrator contract for the ZKP2P protocol. This contract is responsible for managing the intent (order) 
- * lifecycle and orchestrating the P2P trading of fiat currency and onchain assets.
+ * @notice Standalone V3 orchestrator for the ZKP2P protocol. Owns the complete intent (order)
+ * lifecycle — signal, cancel, fulfill, manual release, prune, orphan cleanup — and extends it
+ * with snapshotted governance-selected fail-closed lifecycle callbacks.
  */
 contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
 
@@ -61,8 +63,9 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     // Optional pre-intent hooks configured per escrow + depositId.
     mapping(address => mapping(uint256 => IPreIntentHook)) internal depositPreIntentHooks;
 
-    // Dedicated whitelist hooks configured per escrow + depositId.
-    mapping(address => mapping(uint256 => IPreIntentHook)) internal depositWhitelistHooks;
+    // Governance-selected lifecycle hook; snapshotted per intent at signal.
+    IIntentLifecycleHook public lifecycleHook;
+    mapping(bytes32 => IIntentLifecycleHook) internal intentLifecycleHooks;
 
     // Contract references
     IEscrowRegistry public escrowRegistry;                              // Registry of escrow contracts
@@ -105,7 +108,8 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
      * @notice Signals intent to pay the depositor defined in the _depositId the _amount * deposit conversionRate off-chain at 
      * their given _payeeId in order to unlock _amount of funds on-chain. Caller must provide a signature from the deposit's gating
      * service to prove their eligibility to take liquidity. This function captures and stores all values required for fullfilling
-     * the intent to give strong guarantees to the buyer. Locks liquidity for the corresponding deposit on the escrow contract.
+     * the intent to give strong guarantees to the buyer. Snapshots the global lifecycle hook and executes fail-closed risk
+     * admission before locking liquidity for the corresponding deposit on the escrow contract.
      *
      * @param _params                   Struct containing all the intent parameters
      */
@@ -117,7 +121,6 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         // Checks
         _validateSignalIntent(_params);
         _executeHookIfSet(depositPreIntentHooks[_params.escrow][_params.depositId], _params);
-        _executeHookIfSet(depositWhitelistHooks[_params.escrow][_params.depositId], _params);
 
         // Effects
         bytes32 intentHash = _calculateIntentHash();
@@ -132,7 +135,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         if (managerFee > MAX_MANAGER_FEE) revert FeeExceedsMaximum(managerFee, MAX_MANAGER_FEE);  // policy cap (e.g., 5%)
         intentManagerFeeRecipient[intentHash] = managerFeeRecipient;
         intentManagerFee[intentHash] = managerFee;
-        
+
         intentMinAtSignal[intentHash] = dep.intentAmountRange.min;
         Intent storage storedIntent = intents[intentHash];
         storedIntent.owner = msg.sender;
@@ -177,6 +180,15 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         // Emit manager fee snapshot last for easier indexing
         emit IntentManagerFeeSnapshotted(intentHash, managerFeeRecipient, managerFee);
 
+        // Snapshot and execute fail-closed admission for the governance-selected global hook.
+        IIntentLifecycleHook snapshottedLifecycleHook = lifecycleHook;
+        intentLifecycleHooks[intentHash] = snapshottedLifecycleHook;
+
+        if (address(snapshottedLifecycleHook) != address(0)) {
+            snapshottedLifecycleHook.onIntentSignaled(intentHash);
+        }
+        emit IntentLifecycleHookSnapshotted(intentHash, address(snapshottedLifecycleHook));
+
         // Interactions
         IEscrow(_params.escrow).lockFunds(_params.depositId, intentHash, _params.amount);
     }
@@ -184,10 +196,11 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     /**
      * @notice Only callable by the originator of the intent. Cancels an outstanding intent. Unlocks liquidity
      * for the corresponding deposit on the escrow contract.
+     * @dev Guarded because cancellation invokes an external lifecycle callback during resolution.
      *
      * @param _intentHash    Hash of intent being cancelled
      */
-    function cancelIntent(bytes32 _intentHash) external {
+    function cancelIntent(bytes32 _intentHash) external nonReentrant {
         // Checks
         Intent memory intent = intents[_intentHash];
         
@@ -195,7 +208,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         if (intent.owner != msg.sender) revert UnauthorizedCaller(msg.sender, intent.owner);
 
         // Effects
-        _pruneIntent(_intentHash);
+        _pruneIntentAndNotify(_intentHash);
 
         // Interactions
         IEscrow(intent.escrow).unlockFunds(intent.depositId, _intentHash);
@@ -218,27 +231,10 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     }
 
     /**
-     * @notice Sets or removes the whitelist hook for a specific deposit.
-     * @dev Callable only by the deposit's depositor or delegate. The whitelist hook is a
-     * dedicated slot separate from the generic pre-intent hook, enabling private orderbook
-     * functionality without occupying the generic hook slot.
-     *
-     * @param _escrow       Escrow address.
-     * @param _depositId    Deposit id.
-     * @param _hook         Hook address (address(0) to remove).
-     */
-    function setDepositWhitelistHook(address _escrow, uint256 _depositId, IPreIntentHook _hook) external nonReentrant {
-        _validateAndAuthorizeHookSetter(_escrow, _depositId, _hook);
-
-        depositWhitelistHooks[_escrow][_depositId] = _hook;
-
-        emit DepositWhitelistHookSet(_escrow, _depositId, address(_hook), msg.sender);
-    }
-
-    /**
      * @notice Anyone can submit a fulfill intent transaction, even if caller isn't the intent owner. Upon submission the
      * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated.
-     * Deposit token is transferred to the intent.to address.
+     * Settlement notifies the snapshotted lifecycle hook (fail-closed), then executes the exact fee plan and
+     * transfers the deposit token to the intent.to address (or post-intent hook).
      * @dev This function adds a reentrancy guard as it's calling the post intent hook contract which itself might call 
      * malicious contracts.
      *
@@ -287,14 +283,17 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
             verificationResult.releaseAmount,
             _params.postIntentHookData,
             managerFeeRecipient,
-            managerFee
+            managerFee,
+            false
         );
     }
 
     /**
      * @notice Allows depositor to release funds to the payer in case of a failed fulfill intent or because of some other arrangement
      * between the two parties. Upon submission we check to make sure the msg.sender is the depositor, the intent is removed, and 
-     * escrow state is updated. Deposit token is transferred to the payer.
+     * escrow state is updated. Manual release routes through the shared post-funds lifecycle-settlement gate, then executes the
+     * configured post-intent hook with empty fulfillment-time data or transfers the deposit token directly to the payer when
+     * no hook is configured.
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
      */
@@ -316,7 +315,16 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         // Interactions
         IEscrow(intent.escrow).unlockAndTransferFunds(intent.depositId, _intentHash, intent.amount, address(this));
 
-        _collectFeesAndTransferFunds(deposit.token, _intentHash, intent, intent.amount, managerFeeRecipient, managerFee);
+        _collectFeesTransferFundsAndExecuteAction(
+            deposit.token,
+            _intentHash,
+            intent,
+            intent.amount,
+            "",
+            managerFeeRecipient,
+            managerFee,
+            true
+        );
     }
 
     /* ============ Escrow Functions ============ */
@@ -336,7 +344,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
                     intent.timestamp != 0 && // Only prune if intent exists on this contract; otherwise skip
                     intent.escrow == msg.sender // Ensure only the escrow that owns the intent can prune it; otherwise skip
                 ) {
-                    _pruneIntent(intentHash);
+                    _pruneIntentAndNotify(intentHash);
                 }
             }
         }
@@ -348,10 +356,11 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
      * @notice ANYONE: Cleans up orphaned intents that were pruned from the Escrow but not from the Orchestrator.
      * An intent is considered orphaned if it exists on the Orchestrator but no longer exists on the Escrow.
      * This can happen when Escrow._tryOrchestratorPruneIntents runs out of gas and the revert is silently caught.
+     * @dev Guarded because cleanup invokes an external lifecycle callback during resolution.
      *
      * @param _intentHashes    Array of intent hashes to check and clean up
      */
-    function cleanupOrphanedIntents(bytes32[] calldata _intentHashes) external {
+    function cleanupOrphanedIntents(bytes32[] calldata _intentHashes) external nonReentrant {
         for (uint256 i = 0; i < _intentHashes.length; i++) {
             bytes32 intentHash = _intentHashes[i];
             Intent memory intent = intents[intentHash];
@@ -367,12 +376,30 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
 
             // If intent doesn't exist on escrow, it's orphaned — prune it
             if (escrowIntent.intentHash == bytes32(0)) {
-                _pruneIntent(intentHash);
+                _pruneIntentAndNotify(intentHash);
             }
         }
     }
 
     /* ============ Governance Functions ============ */
+
+    /**
+     * @notice GOVERNANCE ONLY: Updates the global lifecycle hook used by future intents.
+     * @dev Existing intents retain their snapshotted hook. The zero address disables callbacks
+     * for future intents.
+     *
+     * @param _hook   New global lifecycle hook
+     */
+    function setLifecycleHook(IIntentLifecycleHook _hook) external onlyOwner {
+        address hookAddress = address(_hook);
+        if (hookAddress != address(0) && hookAddress.code.length == 0) {
+            revert InvalidLifecycleHook(hookAddress);
+        }
+
+        address previousHook = address(lifecycleHook);
+        lifecycleHook = _hook;
+        emit LifecycleHookUpdated(previousHook, hookAddress);
+    }
 
     /**
      * @notice GOVERNANCE ONLY: Updates the escrow registry address.
@@ -473,15 +500,33 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         return depositPreIntentHooks[_escrow][_depositId];
     }
 
-    function getDepositWhitelistHook(address _escrow, uint256 _depositId) external view returns (IPreIntentHook) {
-        return depositWhitelistHooks[_escrow][_depositId];
-    }
-
     function getIntentMinAtSignal(bytes32 _intentHash) external view returns (uint256) {
         return intentMinAtSignal[_intentHash];
     }
 
+    /**
+     * @notice Returns the immutable hook snapshot for an active intent.
+     */
+    function getIntentLifecycleHook(bytes32 _intentHash) external view returns (IIntentLifecycleHook) {
+        return intentLifecycleHooks[_intentHash];
+    }
+
     /* ============ Internal Functions ============ */
+
+    /**
+     * @notice Prunes a cancelled (cancel / escrow prune / orphan cleanup) intent, then executes the fail-closed
+     * cancellation callback on the snapshotted lifecycle hook. A reverting hook aborts the entire cancellation,
+     * including escrow prune and withdrawal flows that prune expired intents.
+     */
+    function _pruneIntentAndNotify(bytes32 _intentHash) internal {
+        IIntentLifecycleHook snapshottedLifecycleHook = intentLifecycleHooks[_intentHash];
+        _pruneIntent(_intentHash);
+        delete intentLifecycleHooks[_intentHash];
+
+        if (address(snapshottedLifecycleHook) != address(0)) {
+            snapshottedLifecycleHook.onIntentCancelled(_intentHash);
+        }
+    }
 
     /**
      * @notice Validates an intent before it is signaled.
@@ -538,7 +583,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
 
     /**
      * @notice Validates hook address and authorizes the caller as depositor or delegate.
-     * @dev Shared validation for setDepositPreIntentHook and setDepositWhitelistHook.
+     * @dev Validation used by setDepositPreIntentHook.
      */
     function _validateAndAuthorizeHookSetter(address _escrow, uint256 _depositId, IPreIntentHook _hook) internal view {
         if (_escrow == address(0)) revert ZeroAddress();
@@ -618,7 +663,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     function _calculateAndTransferFees(
         IERC20 _token,
         bytes32 _intentHash,
-        Intent memory _intent, 
+        Intent memory _intent,
         uint256 _releaseAmount,
         address _managerFeeRecipient,
         uint256 _managerFee
@@ -632,7 +677,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
             protocolFeeAmount = (_releaseAmount * protocolFee) / PRECISE_UNIT;
             _token.safeTransfer(protocolFeeRecipient, protocolFeeAmount);
         }
-        
+
         // Calculate referral fees (taken from taker) - based on release amount
         for (uint256 i = 0; i < _intent.referralFees.length; ++i) {
             IReferralFee.ReferralFee memory referralFee = _intent.referralFees[i];
@@ -652,57 +697,40 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     }
 
     /**
-     * @notice Transfers funds to the intent recipient. Called by manual release.
-     */
-    function _collectFeesAndTransferFunds(
-        IERC20 _token, 
-        bytes32 _intentHash, 
-        Intent memory _intent,
-        uint256 _releaseAmount,
-        address _managerFeeRecipient,
-        uint256 _managerFee
-    ) internal {
-        uint256 netFees = _calculateAndTransferFees(
-            _token,
-            _intentHash,
-            _intent,
-            _releaseAmount,
-            _managerFeeRecipient,
-            _managerFee
-        );
-        uint256 netAmount = _releaseAmount - netFees;
-
-        _token.safeTransfer(_intent.to, netAmount);
-
-        emit IntentFulfilled(
-            _intentHash, 
-            _intent.to, 
-            netAmount, 
-            true
-        );
-    }
-
-    /**
-     * @notice Handles fee calculations and transfers, then executes any post-intent hooks if present. Called by fulfillIntent.
+     * @notice Transfers fees, notifies the snapshotted lifecycle hook of settlement (fail-closed), then routes the
+     * executable remainder through the post-intent hook or directly to the recipient.
+     * @dev A reverting lifecycle hook aborts the entire settlement, including the preceding fee transfers.
+     * The lifecycle hook receives no token allowance and cannot move settlement funds. Manual release executes the configured
+     * post-intent hook with empty fulfillment-time data or transfers directly to the recipient when no hook is configured.
      */
     function _collectFeesTransferFundsAndExecuteAction(
-        IERC20 _token, 
-        bytes32 _intentHash, 
-        Intent memory _intent, 
+        IERC20 _token,
+        bytes32 _intentHash,
+        Intent memory _intent,
         uint256 _releaseAmount,
         bytes memory _postIntentHookData,
         address _managerFeeRecipient,
-        uint256 _managerFee
+        uint256 _managerFee,
+        bool _isManualRelease
     ) internal {
-        uint256 netFees = _calculateAndTransferFees(
-            _token,
-            _intentHash,
-            _intent,
-            _releaseAmount,
-            _managerFeeRecipient,
-            _managerFee
-        );
+        IIntentLifecycleHook snapshottedLifecycleHook = intentLifecycleHooks[_intentHash];
+        delete intentLifecycleHooks[_intentHash];
+
+        uint256 netFees = _calculateAndTransferFees(_token, _intentHash, _intent, _releaseAmount, _managerFeeRecipient, _managerFee);
         uint256 netAmount = _releaseAmount - netFees;
+
+        if (address(snapshottedLifecycleHook) != address(0)) {
+            snapshottedLifecycleHook.settleIntent(
+                IIntentLifecycleHook.SettlementContext({
+                    intentHash: _intentHash,
+                    token: address(_token),
+                    recipient: _intent.to,
+                    releaseAmount: _releaseAmount,
+                    netAmount: netAmount,
+                    isManualRelease: _isManualRelease
+                })
+            );
+        }
 
         address fundsTransferredTo = _intent.to;
         if (address(_intent.postIntentHook) != address(0)) {
@@ -751,7 +779,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
             _intentHash, 
             fundsTransferredTo, 
             netAmount, 
-            false
+            _isManualRelease
         );
     }
 
