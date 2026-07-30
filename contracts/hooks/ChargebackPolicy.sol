@@ -53,11 +53,11 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
     /// @dev Lifecycle-hook authorization keyed by lifecycle hook address.
     mapping(address => bool) internal isLifecycleHookAuthorizedByHook;
 
-    /// @dev Deposit opt-in keyed first by escrow address and then by deposit id.
-    mapping(address => mapping(uint256 => bool)) internal isChargebackEnabledByEscrowAndDepositId;
+    /// @dev Whether chargebacks are enabled for each escrow deposit.
+    mapping(address => mapping(uint256 => bool)) internal isDepositChargebackEnabled;
 
-    /// @dev Minimum collateral lock window keyed by payment method.
-    mapping(bytes32 => uint64) internal riskWindowByPaymentMethod;
+    /// @dev Minimum collateral lock window for each payment method.
+    mapping(bytes32 => uint64) internal paymentMethodRiskWindow;
 
     /// @dev Chargeback lifecycle state keyed by globally unique intent hash.
     mapping(bytes32 => ChargebackIntent) internal chargebackIntentByIntentHash;
@@ -118,7 +118,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
         bytes32 _paymentMethod,
         uint256 _amount
     ) external override onlyLifecycleHook nonReentrant {
-        uint64 riskWindow = riskWindowByPaymentMethod[_paymentMethod];
+        uint64 riskWindow = paymentMethodRiskWindow[_paymentMethod];
         if (riskWindow == 0) return;
 
         (address stakeOwner, address depositor) = _validateIntentAdmission(_intentHash, _escrow, _depositId, _taker);
@@ -256,7 +256,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
         external
         onlyDepositor(_escrow, _depositId)
     {
-        isChargebackEnabledByEscrowAndDepositId[_escrow][_depositId] = _isEnabled;
+        isDepositChargebackEnabled[_escrow][_depositId] = _isEnabled;
         emit ChargebackEnabledUpdated(_escrow, _depositId, _isEnabled);
     }
 
@@ -271,7 +271,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
      */
     function setRiskWindow(bytes32 _paymentMethod, uint64 _riskWindow) external onlyOwner {
         if (_riskWindow > MAX_RISK_WINDOW) revert InvalidRiskWindow(_riskWindow);
-        riskWindowByPaymentMethod[_paymentMethod] = _riskWindow;
+        paymentMethodRiskWindow[_paymentMethod] = _riskWindow;
         emit RiskWindowUpdated(_paymentMethod, _riskWindow);
     }
 
@@ -339,7 +339,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
      * @inheritdoc IChargebackPolicy
      */
     function isChargebackEnabled(address _escrow, uint256 _depositId) external view override returns (bool) {
-        return isChargebackEnabledByEscrowAndDepositId[_escrow][_depositId];
+        return isDepositChargebackEnabled[_escrow][_depositId];
     }
 
     /**
@@ -355,7 +355,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
      * @param _paymentMethod Payment method whose configured risk window is queried.
      */
     function getRiskWindow(bytes32 _paymentMethod) external view returns (uint64) {
-        return riskWindowByPaymentMethod[_paymentMethod];
+        return paymentMethodRiskWindow[_paymentMethod];
     }
 
     /* ============ Internal Functions ============ */
@@ -374,7 +374,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
         if (chargebackIntentByIntentHash[_intentHash].status != ChargebackIntentStatus.NONE) {
             revert ChargebackIntentAlreadyExists(_intentHash);
         }
-        if (!isChargebackEnabledByEscrowAndDepositId[_escrow][_depositId]) {
+        if (!isDepositChargebackEnabled[_escrow][_depositId]) {
             revert ChargebackNotEnabled(_escrow, _depositId);
         }
 
