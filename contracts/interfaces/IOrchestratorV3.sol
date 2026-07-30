@@ -93,13 +93,11 @@ interface IOrchestratorV3 {
     event IntentLifecycleHookSnapshotted(bytes32 indexed intentHash, address indexed lifecycleHook);
     event AllowMultipleIntentsUpdated(bool allowMultiple);
 
-    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);
     event RelayerRegistryUpdated(address indexed relayerRegistry);
     event EscrowRegistryUpdated(address indexed escrowRegistry);
 
     event ProtocolFeeUpdated(uint256 protocolFee);
     event ProtocolFeeRecipientUpdated(address indexed protocolFeeRecipient);
-    event PartialManualReleaseDelayUpdated(uint256 partialManualReleaseDelay);
 
     /* ============ Standardized Custom Errors ============ */
 
