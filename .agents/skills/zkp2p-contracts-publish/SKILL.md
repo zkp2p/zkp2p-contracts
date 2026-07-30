@@ -58,4 +58,4 @@ The publish job uses OIDC with `id-token: write`, publishes the validated tarbal
 
 If npm accepted the version but post-publish verification failed, do not rerun the publish. Inspect the immutable version and repair only a wrong dist-tag through an interactive maintainer action protected by 2FA.
 
-For registry propagation failures only, follow the recovery procedure in `NPM_RELEASE.md`. Recovery must run from canonical `main`, accept only the original release tag as an ancestor plus the allowlisted release-only files, rebuild the exact package, rerun all release gates, and verify the registry without OIDC or publication.
+For registry propagation failures only, follow the recovery procedure in `NPM_RELEASE.md`. Recovery must run from canonical `main` with `release_run_id` set to the original non-recovery publish run whose validated tarball npm accepted, accept only the original release tag as an ancestor plus the allowlisted release-only files, rebuild the package, rerun all release gates, compare registry integrity to that original validated tarball, and verify the registry without OIDC or publication.
