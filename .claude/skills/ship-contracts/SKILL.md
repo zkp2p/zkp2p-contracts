@@ -13,7 +13,7 @@ description: >
 Shipping is not one automatic pipeline. Treat each boundary as an independent
 deliverable with its own evidence and explicit authorization:
 
-1. source and deployment scaffold;
+1. source and network-scoped deployment lane;
 2. staging activation;
 3. production activation;
 4. package export;
@@ -25,9 +25,19 @@ RC, or stable approval from "deploy staging" or "ship the code."
 
 ## Establish current state
 
-Use canonical `zkp2p/zkp2p-contracts`, fetch `origin/main`, and record the source
-SHA, deployment artifacts, active runner, package version, and live target
-network before preparing a plan.
+Resolve canonical main explicitly; do not trust a checkout's `origin`, a
+contributor fork, or a legacy redirect:
+
+```bash
+canonical_main_ref=refs/remotes/zkp2p-canonical/main
+git fetch --no-tags https://github.com/zkp2p/zkp2p-contracts.git \
+  "+main:${canonical_main_ref}"
+git rev-parse "$canonical_main_ref"
+git rev-parse HEAD
+```
+
+Record the source SHA, deployment artifacts, active runner, package version,
+and live target network before preparing a plan.
 
 Read:
 
@@ -40,15 +50,20 @@ Read:
 
 Do not route through the legacy repository name or an archived deployment lane.
 
-## Boundary 1: source and deployment scaffold
+## Boundary 1: source and network-scoped deployment lane
 
 Create the smallest source, interface, deployment, and test changes that encode
 the approved target state.
 
-- Keep source scaffolding distinct from deployment activation.
+- Keep source, a mounted deploy lane, checked-in artifacts, and verified live
+  activation as distinct states.
 - Do not add a deploy script merely because source exists.
-- Do not activate future `OrchestratorV3` scaffolding without a separately
-  approved V3 deployment design.
+- Treat `OrchestratorV3` as a dedicated implementation. Its current lifecycle
+  design intentionally differs from V2 and its mounted lane `30` supports only
+  `localhost`, `hardhat`, and Base staging.
+- Do not add Base production to lane `30`, relax its network guard, or infer a
+  production path from Base-staging artifacts without a separately reviewed and
+  approved production design.
 - Remove retired active routes, permissions, exports, and aliases in the same
   hard cutover.
 - Do not add rollback compatibility to a one-way verifier or nullifier
@@ -72,6 +87,10 @@ Before activation:
 
 - verify deployer, chain ID, RPC, parameters, expected old state, and expected
   new state;
+- for lane `30`, resolve the expected `OrchestratorV3`,
+  `UnifiedPaymentVerifierV3`, lifecycle hook, stake vault, chargeback policy,
+  verifier/nullifier, registries, ownership, and prior-orchestrator state from
+  current source and artifacts;
 - simulate or run the closest local deployment test;
 - show every deploy, registry, permission, ownership, and governance action;
 - define post-deploy reads that prove the hard cut.
@@ -85,6 +104,10 @@ Require a separate explicit approval naming Base production, exact source SHA,
 and governance/deployer path. Re-run state and simulation checks against
 production immediately before submission.
 
+The current V3 lifecycle lane skips Base production. Production activation
+requires a focused network-scoped implementation and review; do not remove the
+guard or reuse staging artifacts as a shortcut.
+
 Fail closed on chain, address, signer, ownership, permission, or expected-state
 mismatch. Do not reuse staging approval. Do not publish a package automatically.
 
@@ -93,10 +116,11 @@ mismatch. Do not reuse staging approval. Do not publish a package automatically.
 Package extraction is a source artifact boundary, not publication. Confirm:
 
 - exported ABIs match canonical source;
-- Base and Base Staging addresses match deployment artifacts;
-- inactive/future contracts are absent from active address and runtime exports;
-- source ABI exports required by current package/release policy may include an
-  undeployed contract, but must never imply an active address or deployment;
+- each network's addresses match that network's deployment artifacts;
+- Base-staging V3 lifecycle addresses remain distinct from Base production
+  exports and claims;
+- source ABI exports required by current package/release policy may exist
+  without an address on another network, but must never imply activation there;
 - consumer-visible changes are documented and tested.
 
 Run package build, tests, release verification, and dry-run packing without

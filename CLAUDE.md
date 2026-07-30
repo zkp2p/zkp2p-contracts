@@ -8,15 +8,19 @@ package artifacts.
 
 Read `AGENTS.md` before acting. Treat deployment status as network-scoped:
 
-- V2 escrow and orchestrator are the active source lane.
-- `IntentGuardian` and `WhitelistPolicy` extend that V2 lane.
-- `UnifiedPaymentVerifierV3` is current source, test, staging-artifact, and
-  package-ABI material. `deployments/base_staging/` contains a V3 artifact;
-  `deployments/base/` does not. Do not call V3 active in production from source
-  or ABI presence alone.
-- The planned verifier cutover is one-way. Resolve the live
-  `PaymentVerifierRegistry`, nullifier permissions, network artifact, and
-  approved governance batch before stating which verifier is active.
+- `EscrowV2` remains the shared escrow in the mounted V3 lifecycle lane.
+  `OrchestratorV2` and `OrchestratorV3` are distinct current implementations;
+  never infer which one is active from the version number alone.
+- `deploy/30_deploy_v3_lifecycle_stack.ts` is mounted by
+  `scripts/deployActive.ts` for `localhost`, `hardhat`, and Base staging. Current
+  Base-staging artifacts include the V3 orchestrator, verifier/nullifier,
+  lifecycle hook, stake vault, and chargeback components.
+- Lane `30` skips Base production. Source, tests, package ABIs, a mounted script,
+  and checked-in artifacts are not proof of live state. Resolve registries,
+  permissions, ownership, deployed bytecode, and on-chain wiring before stating
+  what is active on either network.
+- Verifier and nullifier cutovers are one-way. Never route a payment method back
+  to a verifier whose replay domain cannot observe the current nullifier writes.
 - V1 source and deployment artifacts are historical evidence, not an active
   development or compatibility lane. Never route new work through V1.
 
@@ -43,7 +47,8 @@ clean build, the full suite, or coverage for documentation-only work.
 
 ## Architecture
 
-The active V2 flow is:
+The V2 flow remains relevant wherever current network state routes through
+`OrchestratorV2`:
 
 ```text
 maker -> EscrowV2.createDeposit
@@ -59,14 +64,22 @@ Important ownership boundaries:
 
 - `EscrowV2` owns deposits, locking, and release.
 - `OrchestratorV2` owns intent lifecycle and fee routing.
+- `OrchestratorV3` owns the V3 intent lifecycle and snapshots the
+  governance-selected `IIntentLifecycleHook` for each intent.
+- `IntentLifecycleHookV1` composes whitelist admission with fail-closed
+  lifecycle callbacks into `ChargebackPolicy`; `StakeVault`, the chargeback
+  verifier, and its dedicated nullifier registry retain their separate
+  accounting, proof, and replay boundaries.
 - `PaymentVerifierRegistry` owns payment-method-to-verifier routing.
 - `OrchestratorRegistry` and `EscrowRegistry` own allowed callers/systems.
 - `NullifierRegistry` and `NullifierRegistryV2` are distinct replay domains.
   Never infer a safe rollback between them.
 - `MultiAttestationVerifier` owns the configured witness threshold used by the
   current verifier wiring.
-- `IntentGuardian`, `AddressGroupRegistry`, and `WhitelistPolicy` are separate
-  V2 policy components. Do not redeploy the V2 core merely to change policy.
+- `IntentGuardian`, `AddressGroupRegistry`, and `WhitelistPolicy` remain
+  separately owned policy components. The V3 lifecycle lane reuses
+  `WhitelistPolicy` through its lifecycle hook; do not collapse those ownership
+  boundaries or redeploy a core stack merely to change policy.
 
 `UnifiedPaymentVerifier` is both a Solidity implementation name and, in some
 deployment lanes, the implementation behind the
@@ -74,9 +87,11 @@ deployment lanes, the implementation behind the
 name, artifact, address, registry routing, and nullifier permissions together;
 do not reason from the name alone.
 
-`OrchestratorV3` remains source/parity scaffold material. It has no current
-active deploy script. A separate approved design and deployment lane is
-required before activation.
+`OrchestratorV3` is not a textual V2 parity scaffold. It deliberately retains
+the relayer-gated admission, escrow, fee, registry, and payment boundaries while
+replacing the V2 deposit-whitelist-hook path with a snapshotted lifecycle hook
+and fail-closed callbacks for signal, cancel/prune, fulfill, and manual release.
+Review shared invariants and those explicit deltas separately.
 
 ## Code layout
 
@@ -117,6 +132,7 @@ Current numbered lanes include:
 - `27`: legacy Zelle method removal;
 - `28`: `IntentGuardian`;
 - `29`: V2 whitelist policy.
+- `30`: V3 lifecycle stack for local, Hardhat, and Base staging only.
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. Deployment is a separately approved mutation for the
@@ -143,11 +159,12 @@ yarn pkg:build
 yarn workspace @zkp2p/contracts-v2 verify:release
 ```
 
-Source ABI exports and active address/runtime exports are different contracts.
-The package intentionally exports selected V3 source ABIs for consumers and
-release verification even when a network has no active V3 address. Never
-invent a zero address, publish an inactive address as active, or remove an ABI
-merely because the contract is not deployed on every network.
+Source ABI exports and network address/runtime exports are different contracts.
+The package intentionally exports V3 source ABIs and current Base-staging
+lifecycle addresses while Base production may have no corresponding active V3
+address. Never invent a zero address, copy a staging address into Base, publish
+an inactive address as active, or remove an ABI merely because the contract is
+not deployed on every network.
 
 Any publication must use
 `.agents/skills/zkp2p-contracts-publish/SKILL.md`; never publish locally or

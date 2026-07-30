@@ -1,12 +1,11 @@
 ---
 name: audit
 description: >
-  Review zkp2p-contracts for branch-introduced security and correctness issues.
-  Use for full audits, current-branch differential reviews, pull-request
-  reviews, focused invariant checks, or V2-to-V3 scaffold parity checks. Resolve
-  a fresh canonical main baseline, stay read-only unless the user explicitly
-  requests an artifact, and separate blocking findings from inherited,
-  theoretical, unavailable, or baseline issues.
+  Review zkp2p-contracts for security and correctness issues. Use for full
+  audits, current-branch differential reviews, pull-request reviews, focused
+  invariant checks, or V2-to-V3 invariant parity checks. Resolve a fresh
+  canonical main baseline, stay read-only unless the user explicitly requests
+  an artifact, and apply branch-introduction gates only to differential work.
 ---
 
 # Audit zkp2p-contracts
@@ -20,25 +19,28 @@ commit, push, or open a PR unless the user explicitly asks for that mutation.
 - `diff`: review the current branch against canonical `main`.
 - `pr <number>`: review the current head of the named PR.
 - `check <area>`: inspect one invariant, contract, or failure class.
-- `v3-parity`: verify that the retained OrchestratorV3 scaffold has not diverged
-  from OrchestratorV2 beyond its explicitly allowed identity changes.
+- `v3-parity`: verify shared V2/V3 invariants while preserving the current
+  intentional V3 lifecycle, hook, settlement, and deployment differences.
 
 If the request is explanatory or read-only, do not compile or test unless the
 answer depends on execution.
 
 ## Establish current evidence
 
-The canonical repository is `zkp2p/zkp2p-contracts`. Follow a legacy remote
-redirect to that owner; never substitute a similarly named repository.
+The canonical repository is `zkp2p/zkp2p-contracts`. Do not trust a checkout's
+remote name, contributor fork, or legacy redirect as proof of that baseline.
 
 For a branch review:
 
 ```bash
-git fetch origin main
-git rev-parse origin/main
+git remote get-url origin
+canonical_main_ref=refs/remotes/zkp2p-canonical/main
+git fetch --no-tags https://github.com/zkp2p/zkp2p-contracts.git \
+  "+main:${canonical_main_ref}"
+git rev-parse "$canonical_main_ref"
 git rev-parse HEAD
-git diff --stat origin/main...HEAD
-git diff --name-status origin/main...HEAD
+git diff --stat "$canonical_main_ref...HEAD"
+git diff --name-status "$canonical_main_ref...HEAD"
 ```
 
 For a PR, resolve its current head and diff through connected GitHub or `gh`,
@@ -64,16 +66,21 @@ and deployment consumers. Do not expand into unrelated cleanup.
 
 ## Finding standard
 
-A blocking finding must be:
+For `diff` and `pr` modes, a blocking finding must be:
 
-1. introduced by the reviewed branch or PR;
+1. introduced or materially worsened by the reviewed branch or PR;
 2. material to correctness, security, deployment, or a named invariant;
 3. reproducible or supported by current code evidence;
 4. actionable within the branch's ownership boundary.
 
-Report inherited bugs, baseline failures, theoretical risks, unavailable
-checks, and pending CI separately. Do not block a branch on them unless the
-branch materially worsens the condition.
+For `full`, `check`, and `v3-parity`, classify every material finding supported
+by the selected revision, regardless of when it entered the repository. Label
+inherited or baseline findings accurately; branch ownership limits the proposed
+remediation, not whether the audit may report the issue.
+
+In differential work, report inherited bugs, baseline failures, theoretical
+risks, unavailable checks, and pending CI separately. Do not block that branch
+on them unless it materially worsens the condition.
 
 For every finding include severity, tight file/line scope, concrete failure
 path, impact, and smallest corrective action. Do not inflate style preferences
@@ -93,24 +100,37 @@ Check the invariants relevant to the scope:
 - package ABIs and addresses match canonical source and deployment artifacts;
 - historical artifacts remain historical and cannot reactivate old semantics.
 
-## OrchestratorV3 scaffold parity
+## OrchestratorV3 invariant parity
 
-`OrchestratorV3` and `IOrchestratorV3` are future scaffolds, not an active
-deployment lane. When either V2 or V3 source changes:
+`OrchestratorV3` is a dedicated current implementation with a mounted
+Base-staging lifecycle lane, not a textual V2 scaffold. Current source retains
+the relayer-gated multi-intent admission and core escrow, fee, registry, and
+payment-verification boundaries. It intentionally replaces the V2
+deposit-whitelist-hook path with a governance-selected lifecycle hook
+snapshotted per intent and fail-closed callbacks across signal, cancellation,
+fulfillment, and manual release.
 
-1. Diff `OrchestratorV2.sol` against `OrchestratorV3.sol`.
-2. Diff `IOrchestratorV2.sol` against `IOrchestratorV3.sol`.
-3. Normalize only the contract/interface import, identifier, title, and
-   version-specific documentation.
-4. Require the remaining source diff to be empty unless the task explicitly
-   authorizes V3 behavior.
-5. Confirm V3 is absent from active deploy scripts, deployment outputs, package
-   addresses, and production cutover instructions.
+When either V2 or V3 source changes:
 
-If an exact parity claim matters, run the smallest compile needed and compare
-ABI, storage layout, selectors, and normalized runtime bytecode with compiler
-metadata and version identifiers handled explicitly. Do not call the scaffold
-byte-identical based only on a visual source diff.
+1. Diff both implementations and interfaces against canonical current main.
+2. Derive the intended V3 deltas from current interfaces, lifecycle tests,
+   deployment tests, and `deploy/30_deploy_v3_lifecycle_stack.ts`; do not copy an
+   allowlist from an older review.
+3. Verify shared admission, fee, escrow, registry, payment-verifier, nullifier,
+   replay, authorization, and settlement invariants semantically.
+4. Verify the V3 lifecycle-hook snapshot, callback ordering, fail-closed
+   behavior, reentrancy protection, cancellation/pruning, and chargeback/stake
+   ownership boundaries with the closest deterministic, fuzz, invariant, and
+   integration tests.
+5. Inspect `scripts/deployActive.ts`, lane `30` network guards and `skip`
+   behavior, Base-staging artifacts, package addresses, and live state
+   separately. A mounted script or checked-in artifact is not production or
+   live-state evidence.
+
+Do not require the remaining V2/V3 source diff to be empty and do not normalize
+away a lifecycle, storage, governance, or settlement delta. If bytecode,
+storage, ABI, or selector parity is claimed for a shared component, prove that
+specific claim with the pinned compiler and explicit metadata handling.
 
 ## Validation
 
@@ -128,7 +148,7 @@ and local results separately.
 
 ## Output
 
-Lead with findings in severity order. If none meet the blocker standard, say so
-and list residual risks or unavailable evidence. Include base/head SHAs, scope,
-checks run, baseline failures, branch failures, pending CI, and whether V3
-parity was applicable.
+Lead with findings in severity order. If none meet the applicable mode's
+finding standard, say so and list residual risks or unavailable evidence.
+Include base/head SHAs, scope, checks run, baseline failures, branch failures,
+pending CI, and whether V3 invariant parity was applicable.

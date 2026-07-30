@@ -34,6 +34,22 @@ Do not carry a version from an older release or this skill.
 Query the live npm registry and select the first unused candidate permitted by
 the current policy. Every npm version is immutable.
 
+## Canonical release source
+
+Do not trust a checkout's `origin`, a contributor fork, or a legacy redirect.
+Resolve the release source through the canonical repository explicitly:
+
+```bash
+canonical_main_ref=refs/remotes/zkp2p-canonical/main
+git fetch --no-tags https://github.com/zkp2p/zkp2p-contracts.git \
+  "+main:${canonical_main_ref}"
+git rev-parse "$canonical_main_ref"
+git rev-parse HEAD
+```
+
+Tags, workflow dispatch, package version, and CI evidence must all resolve to
+the same canonical-main commit.
+
 ## Modes and approvals
 
 - Audit: read registry, workflow, package, tags, and CI only.
