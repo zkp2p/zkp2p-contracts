@@ -123,7 +123,36 @@ export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
   "base_staging": "",
 };
 
-export const CALLBACK_GAS_LIMIT = 2_000_000;
+// V3 lifecycle stack parameters. Production policy is not yet ratified.
+export const STAKE_VAULT_CONTROLLER_CHANGE_DELAY = ONE_DAY_IN_SECONDS.mul(2);
+
+export const CHARGEBACK_RISK_WINDOW: any = {
+  "localhost": ONE_DAY_IN_SECONDS.mul(14),
+  "hardhat": ONE_DAY_IN_SECONDS.mul(14),
+  "base_staging": ONE_DAY_IN_SECONDS.mul(14),
+};
+
+// Staging-test config: Zelle and Chime being chargebackable is deliberate for testing.
+// Real-world Zelle is irreversible; revisit this list before production ratification.
+export const CHARGEBACKABLE_PAYMENT_METHODS: string[] = [
+  "paypal",
+  "venmo",
+  "cashapp",
+  "zelle",
+  "chime",
+];
+
+export const ORCHESTRATOR_V3_PROTOCOL_FEE: any = {
+  "localhost": ether(.001),
+  "hardhat": ether(.001),
+  "base_staging": ZERO,
+};
+
+export const ORCHESTRATOR_V3_PROTOCOL_FEE_RECIPIENT: any = {
+  "localhost": "",
+  "hardhat": "",
+  "base_staging": "",
+};
 
 // Initial hourly fee for the standalone IntentGuardian, denominated in basis points of the
 // locked intent amount. Governance can update this value on the deployed guardian.
