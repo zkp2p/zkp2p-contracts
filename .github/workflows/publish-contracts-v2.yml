@@ -14,6 +14,10 @@ on:
         required: true
         default: false
         type: boolean
+      release_run_id:
+        description: Original non-recovery publish run ID whose validated tarball was accepted by npm
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -68,10 +72,19 @@ jobs:
 
       - name: Guard canonical RC source and unpublished version
         id: release-guard
+        env:
+          RELEASE_RUN_ID: ${{ inputs.release_run_id }}
         run: |
           if [ "$RECOVERY_MODE" = "true" ]; then
+            case "$RELEASE_RUN_ID" in
+              ''|*[!0-9]*)
+                echo "Recovery requires the numeric original publish run ID" >&2
+                exit 1
+                ;;
+            esac
             node scripts/npm-release.mjs recover "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
           else
+            test -z "$RELEASE_RUN_ID"
             node scripts/npm-release.mjs guard "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
           fi
           latest=$(npm view @zkp2p/contracts-v2 dist-tags.latest)
@@ -272,6 +285,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
+      actions: read
       contents: read
     steps:
       - name: Checkout release verification code
@@ -295,11 +309,14 @@ jobs:
       - name: Re-check canonical recovery source
         run: node scripts/npm-release.mjs recover "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
 
-      - name: Download validated tarball
+      - name: Download original validated publish tarball
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: ${{ env.PACK_ARTIFACT }}
           path: ${{ runner.temp }}/npm-pack
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.release_run_id }}
 
       - name: Verify downloaded tarball
         run: node packages/contracts/scripts/verify-release.mjs --pack-json "$RUNNER_TEMP/npm-pack/pack.json" --pack-dir "$RUNNER_TEMP/npm-pack"

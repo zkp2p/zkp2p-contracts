@@ -94,6 +94,7 @@ if (command === 'guard' || command === 'recover') {
         '.github/workflows/publish-contracts-v2.yml',
         'NPM_RELEASE.md',
         'scripts/npm-release.mjs',
+        'scripts/verify-github-environment.spec.mjs',
       ]);
       const unexpectedChanges = changedFiles.filter((file) => !allowedRecoveryChanges.has(file));
       if (unexpectedChanges.length > 0) {
