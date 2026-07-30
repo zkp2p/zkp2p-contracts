@@ -11,8 +11,8 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 /**
  * @title IntentLifecycleHookV1
  * @notice Lifecycle hook combining deposit-scoped whitelist admission with optional stake-backed chargeback coverage.
- * Whitelisted takers bypass staking; non-whitelisted takers may be admitted through an enabled chargeback policy.
- * Non-chargebackable payment methods give every taker direct access without a position or stake lock, regardless of
+ * Whitelisted takers bypass staking; non-whitelisted takers may be admitted through a chargeback-enabled deposit.
+ * Non-chargebackable payment methods give every taker direct access without a chargeback intent or stake lock, regardless of
  * whitelist state. Open deposits remain unrestricted when neither policy is enabled.
  * @dev Reads canonical intent data from the calling orchestrator and forwards cancellation and settlement accounting
  * to ChargebackPolicy. All callbacks remain fail-closed. This hook serves every registered orchestrator and forwards
@@ -60,23 +60,17 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
         IOrchestratorV3.Intent memory intent = IOrchestratorV3(msg.sender).getIntent(_intentHash);
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
-        bool whitelistEnabled = whitelistPolicy.enabled(intent.escrow, intent.depositId);
-        if (
-            whitelistEnabled
-                && whitelistPolicy.isTakerAllowed(intent.escrow, intent.depositId, intent.owner)
-        ) {
+        bool isWhitelistEnabled = whitelistPolicy.enabled(intent.escrow, intent.depositId);
+        if (isWhitelistEnabled && whitelistPolicy.isTakerAllowed(intent.escrow, intent.depositId, intent.owner)) {
             return;
         }
-        if (chargebackPolicy.enabled(intent.escrow, intent.depositId)) {
+        // Chargeback admission is stateful, so the configuration query only selects the route.
+        // onIntentSignaled remains authoritative for token compatibility, collateral, and pause checks.
+        if (chargebackPolicy.isChargebackEnabled(intent.escrow, intent.depositId)) {
             chargebackPolicy.onIntentSignaled(
-                _intentHash,
-                intent.escrow,
-                intent.depositId,
-                intent.owner,
-                intent.paymentMethod,
-                intent.amount
+                _intentHash, intent.escrow, intent.depositId, intent.owner, intent.paymentMethod, intent.amount
             );
-        } else if (whitelistEnabled) {
+        } else if (isWhitelistEnabled) {
             revert TakerNotWhitelisted(intent.escrow, intent.depositId, intent.owner);
         }
     }
@@ -92,9 +86,7 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
      * @inheritdoc IIntentLifecycleHook
      */
     function settleIntent(SettlementContext calldata _context) external override onlyOrchestrator {
-        chargebackPolicy.onIntentSettled(
-            _context.intentHash, _context.grossAmount, _context.isManualRelease
-        );
+        chargebackPolicy.onIntentSettled(_context.intentHash, _context.releaseAmount, _context.isManualRelease);
     }
 
     /* ============ Modifiers ============ */

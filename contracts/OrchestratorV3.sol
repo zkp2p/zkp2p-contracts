@@ -291,8 +291,9 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     /**
      * @notice Allows depositor to release funds to the payer in case of a failed fulfill intent or because of some other arrangement
      * between the two parties. Upon submission we check to make sure the msg.sender is the depositor, the intent is removed, and 
-     * escrow state is updated. Manual release routes through the shared post-funds lifecycle-settlement gate, then executes the
-     * configured post-intent hook or transfers the deposit token directly to the payer when no hook is configured.
+     * escrow state is updated. Manual release routes through the shared post-funds lifecycle-settlement gate, then transfers
+     * the deposit token directly to the payer. It does not execute the taker's post-intent hook because fulfillment-time
+     * hook data is unavailable on this depositor-controlled recovery path.
      *
      * @param _intentHash        Hash of intent to resolve by releasing the funds
      */
@@ -657,10 +658,50 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
     }
 
     /**
+     * @notice Calculates and transfers fees to the protocol fee recipient and referrer.
+     */
+    function _calculateAndTransferFees(
+        IERC20 _token,
+        bytes32 _intentHash,
+        Intent memory _intent,
+        uint256 _releaseAmount,
+        address _managerFeeRecipient,
+        uint256 _managerFee
+    ) internal returns (uint256 netFees) {
+        uint256 protocolFeeAmount;
+        uint256 referralFeeAmount;
+        uint256 managerFeeAmount;
+
+        // Calculate protocol fee (taken from taker) - based on release amount
+        if (protocolFeeRecipient != address(0) && protocolFee > 0) {
+            protocolFeeAmount = (_releaseAmount * protocolFee) / PRECISE_UNIT;
+            _token.safeTransfer(protocolFeeRecipient, protocolFeeAmount);
+        }
+
+        // Calculate referral fees (taken from taker) - based on release amount
+        for (uint256 i = 0; i < _intent.referralFees.length; ++i) {
+            IReferralFee.ReferralFee memory referralFee = _intent.referralFees[i];
+            uint256 feeAmount = (_releaseAmount * referralFee.fee) / PRECISE_UNIT;
+            referralFeeAmount += feeAmount;
+            _token.safeTransfer(referralFee.recipient, feeAmount);
+            emit IntentReferralFeeDistributed(_intentHash, referralFee.recipient, feeAmount);
+        }
+
+        // Calculate manager fee (taken from taker) - based on release amount
+        if (_managerFeeRecipient != address(0) && _managerFee > 0) {
+            managerFeeAmount = (_releaseAmount * _managerFee) / PRECISE_UNIT;
+            _token.safeTransfer(_managerFeeRecipient, managerFeeAmount);
+        }
+
+        netFees = protocolFeeAmount + referralFeeAmount + managerFeeAmount;
+    }
+
+    /**
      * @notice Transfers fees, notifies the snapshotted lifecycle hook of settlement (fail-closed), then routes the
      * executable remainder through the post-intent hook or directly to the recipient.
      * @dev A reverting lifecycle hook aborts the entire settlement, including the preceding fee transfers.
-     * The lifecycle hook receives no token allowance and cannot move settlement funds.
+     * The lifecycle hook receives no token allowance and cannot move settlement funds. Manual release bypasses the
+     * post-intent hook because that recovery path has no fulfillment-time hook data.
      */
     function _collectFeesTransferFundsAndExecuteAction(
         IERC20 _token,
@@ -684,15 +725,15 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
                     intentHash: _intentHash,
                     token: address(_token),
                     recipient: _intent.to,
-                    grossAmount: _releaseAmount,
-                    executableAmount: netAmount,
+                    releaseAmount: _releaseAmount,
+                    netAmount: netAmount,
                     isManualRelease: _isManualRelease
                 })
             );
         }
 
         address fundsTransferredTo = _intent.to;
-        if (address(_intent.postIntentHook) != address(0)) {
+        if (!_isManualRelease && address(_intent.postIntentHook) != address(0)) {
             // Snapshot balance to enforce exact consumption by the hook
             uint256 preBalance = _token.balanceOf(address(this));
 
@@ -740,42 +781,6 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
             netAmount, 
             _isManualRelease
         );
-    }
-
-    function _calculateAndTransferFees(
-        IERC20 _token,
-        bytes32 _intentHash,
-        Intent memory _intent, 
-        uint256 _releaseAmount,
-        address _managerFeeRecipient,
-        uint256 _managerFee
-    ) internal returns (uint256 netFees) {
-        uint256 protocolFeeAmount;
-        uint256 referralFeeAmount;
-        uint256 managerFeeAmount;
-
-        // Calculate protocol fee (taken from taker) - based on release amount
-        if (protocolFeeRecipient != address(0) && protocolFee > 0) {
-            protocolFeeAmount = (_releaseAmount * protocolFee) / PRECISE_UNIT;
-            _token.safeTransfer(protocolFeeRecipient, protocolFeeAmount);
-        }
-        
-        // Calculate referral fees (taken from taker) - based on release amount
-        for (uint256 i = 0; i < _intent.referralFees.length; ++i) {
-            IReferralFee.ReferralFee memory referralFee = _intent.referralFees[i];
-            uint256 feeAmount = (_releaseAmount * referralFee.fee) / PRECISE_UNIT;
-            referralFeeAmount += feeAmount;
-            _token.safeTransfer(referralFee.recipient, feeAmount);
-            emit IntentReferralFeeDistributed(_intentHash, referralFee.recipient, feeAmount);
-        }
-
-        // Calculate manager fee (taken from taker) - based on release amount
-        if (_managerFeeRecipient != address(0) && _managerFee > 0) {
-            managerFeeAmount = (_releaseAmount * _managerFee) / PRECISE_UNIT;
-            _token.safeTransfer(_managerFeeRecipient, managerFeeAmount);
-        }
-
-        netFees = protocolFeeAmount + referralFeeAmount + managerFeeAmount;
     }
 
     /**

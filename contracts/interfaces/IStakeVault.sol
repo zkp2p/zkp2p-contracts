@@ -8,6 +8,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  * @title IStakeVault
  * @notice Custody, delegation, locking, and immediately claimable token accounting.
  * @dev The controller supplies all risk policy. Lock identifiers and claim allocations are opaque to the vault.
+ * ZKP2P deployments support canonical USDC only; fee-on-transfer and rebasing tokens are unsupported.
  */
 interface IStakeVault {
     struct StakeLock {
@@ -122,6 +123,15 @@ interface IStakeVault {
     function selectedStakeOwner(address _taker) external view returns (address);
     function authorizedTakers(address _stakeOwner, address _taker) external view returns (bool);
     function stakeOwnerOf(address _taker) external view returns (address);
+
+    /**
+     * @notice Returns a taker's live selected stake owner and that owner's aggregate balances.
+     * @param _taker Taker whose effective stake owner and balances are queried.
+     */
+    function getTakerState(address _taker)
+        external
+        view
+        returns (address stakeOwner, uint256 totalStake, uint256 lockedStakeAmount, uint256 freeStakeAmount);
     function freeStake(address _stakeOwner) external view returns (uint256);
     function isLockMature(bytes32 _lockId) external view returns (bool);
     function totalAccounted() external view returns (uint256);

@@ -106,15 +106,15 @@ contract OrchestratorV3LifecycleTest is OrchestratorV3Fixture {
             bytes32 settledIntentHash,
             address settlementToken,
             address recipient,
-            uint256 grossAmount,
-            uint256 executableAmount,
+            uint256 releaseAmount,
+            uint256 netAmount,
             bool isManualRelease
         ) = lifecycleHookMock.lastSettlementContext();
         assertEq(settledIntentHash, intentHash);
         assertEq(settlementToken, address(token));
         assertEq(recipient, taker);
-        assertEq(grossAmount, INTENT_AMOUNT);
-        assertEq(executableAmount, INTENT_AMOUNT - 250_000);
+        assertEq(releaseAmount, INTENT_AMOUNT);
+        assertEq(netAmount, INTENT_AMOUNT - 250_000);
         assertFalse(isManualRelease);
         assertEq(token.balanceOf(referrer) - referrerBefore, 150_000);
         assertEq(token.balanceOf(other) - otherBefore, 100_000);
@@ -129,18 +129,19 @@ contract OrchestratorV3LifecycleTest is OrchestratorV3Fixture {
         _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
     }
 
-    function test_ManualReleaseRoutesThroughLifecycleAndPostIntentHook() public {
+    function test_ManualReleaseNotifiesLifecycleAndBypassesPostIntentHook() public {
         orchestrator.setLifecycleHook(lifecycleHookMock);
         IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
         params.postIntentHook = postIntentHook;
-        params.data = abi.encode(other);
         bytes32 intentHash = _signal(taker, params);
+        uint256 recipientBefore = token.balanceOf(taker);
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash);
         assertEq(lifecycleHookMock.settlementCalls(), 1);
         (,,,,, bool isManualRelease) = lifecycleHookMock.lastSettlementContext();
         assertTrue(isManualRelease);
-        assertEq(token.balanceOf(other), INTENT_AMOUNT);
+        assertEq(token.balanceOf(taker) - recipientBefore, INTENT_AMOUNT);
+        assertEq(token.balanceOf(other), 0);
     }
 
     function test_GovernanceLifecycleHookSetterValidatesOwnerAndCode() public {

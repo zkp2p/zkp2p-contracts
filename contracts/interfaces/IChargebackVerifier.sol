@@ -2,17 +2,19 @@
 
 pragma solidity ^0.8.18;
 
-import {IAttestationVerifier} from "./IAttestationVerifier.sol";
-import {INullifierRegistryV2} from "./INullifierRegistryV2.sol";
-
 /**
  * @title IChargebackVerifier
- * @notice Stateless verifier for chargeback attestations. Owns the EIP-712 domain for chargeback
- * evidence, delegates signature verification to a configurable attestation verifier, and checks
- * payment binding against the nullifier registry. Mirrors the UnifiedPaymentVerifier layering:
- * policy -> chargeback verifier -> attestation verifier.
+ * @notice Minimal verification surface consumed by ChargebackPolicy.
+ * @dev The concrete verifier exposes its governance and digest helper functions directly.
  */
 interface IChargebackVerifier {
+    /**
+     * @notice Signed evidence tying a chargeback payload to one intent.
+     * @param intentHash Intent whose off-chain payment was disputed.
+     * @param dataHash Hash of the ABI-encoded `ChargebackDetails`.
+     * @param signatures Witness signatures over the verifier's EIP-712 digest.
+     * @param data ABI-encoded `ChargebackDetails`.
+     */
     struct ChargebackAttestation {
         bytes32 intentHash;
         bytes32 dataHash;
@@ -20,6 +22,14 @@ interface IChargebackVerifier {
         bytes data;
     }
 
+    /**
+     * @notice Payment and dispute identifiers attested by the chargeback witnesses.
+     * @param paymentMethod Payment rail used by the original payment.
+     * @param originalPaymentId Provider identifier for the original payment.
+     * @param disputeId Provider identifier for the chargeback or reversal.
+     * @param paymentAmount Attested off-chain payment amount.
+     * @param paymentCurrency Attested off-chain payment currency.
+     */
     struct ChargebackDetails {
         bytes32 paymentMethod;
         bytes32 originalPaymentId;
@@ -38,13 +48,13 @@ interface IChargebackVerifier {
     error OwnershipRenunciationDisabled();
 
     /**
-     * @notice Validates chargeback evidence against the position context supplied by the caller.
-     * @dev View-only and stateless: the caller owns all replay bookkeeping and state transitions.
-     * Reverts when the evidence is malformed, mismatched, unsigned, or unbound to the settled payment.
+     * @notice Validates chargeback evidence against the intent context supplied by the policy.
+     * @dev View-only and stateless. Reverts when the payload is malformed, mismatched, unsigned, or—on the
+     * proof-based path—not bound to the intent's original payment nullifier.
      * @param _attestation Signed chargeback evidence for an intent.
-     * @param _paymentMethod Payment method snapshotted on the caller's position.
-     * @param _isManualRelease True when the position settled without an on-chain payment proof,
-     * which skips the payment-binding check.
+     * @param _paymentMethod Payment method snapshotted by the policy when the intent was admitted.
+     * @param _isManualRelease Whether settlement occurred without an on-chain payment proof. Manual releases skip
+     * original-payment binding because no payment nullifier was recorded during settlement.
      * @return disputeId Payment-platform dispute identifier decoded from the evidence.
      * @return disputeNullifier Payment-method-scoped replay key for the dispute.
      */
@@ -53,22 +63,4 @@ interface IChargebackVerifier {
         bytes32 _paymentMethod,
         bool _isManualRelease
     ) external view returns (bytes32 disputeId, bytes32 disputeNullifier);
-
-    /** @notice Returns the EIP-712 digest signed for a chargeback attestation. */
-    function hashChargebackAttestation(ChargebackAttestation calldata _attestation)
-        external
-        view
-        returns (bytes32);
-
-    /** @notice Replaces the verifier used for future chargeback signature checks. */
-    function setAttestationVerifier(address _verifier) external;
-
-    /** @notice Always reverts so the signature-verification dependency cannot become unmanaged. */
-    function renounceOwnership() external;
-
-    /** @notice Returns the verifier used to validate witness signatures. */
-    function attestationVerifier() external view returns (IAttestationVerifier);
-
-    /** @notice Returns the canonical payment-nullifier binding registry. */
-    function nullifierRegistry() external view returns (INullifierRegistryV2);
 }

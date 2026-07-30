@@ -2,40 +2,54 @@
 
 pragma solidity ^0.8.18;
 
-import {IChargebackVerifier} from "./IChargebackVerifier.sol";
-import {IEscrowRegistry} from "./IEscrowRegistry.sol";
-import {IStakeVault} from "./IStakeVault.sol";
-
 /**
  * @title IChargebackPolicy
- * @notice Deposit-scoped, stake-backed chargeback policy used by an intent lifecycle hook.
- * Payment methods without a risk window pass through with direct access and no chargeback position.
+ * @notice Lifecycle-hook integration surface for stake-backed chargeback coverage.
+ * @dev The concrete policy exposes depositor, governance, chargeback, and release functions directly.
+ *      This interface intentionally contains only the functions consumed by IntentLifecycleHookV1.
  */
 interface IChargebackPolicy {
-    enum PositionStatus {
+    /**
+     * @notice Lifecycle state of a chargeback-enabled intent.
+     * @dev `NONE` is the required zero-value sentinel for an uninitialized mapping entry; it is not a live state.
+     *      `SETTLED` means the underlying intent completed and its collateral remains chargebackable.
+     *      `RELEASED` means the collateral was returned and the intent is no longer chargebackable.
+     */
+    enum ChargebackIntentStatus {
         NONE,
         PENDING,
         CANCELLED,
         SETTLED,
         RELEASED,
-        SLASHED
+        CHARGED_BACK
     }
 
-    struct Position {
+    /**
+     * @notice Chargeback state retained after an intent is admitted by the lifecycle hook.
+     * @param taker Account that signaled the intent.
+     * @param stakeOwner Account whose StakeVault balance collateralizes the intent.
+     * @param depositor Escrow depositor compensated by a successful chargeback.
+     * @param paymentMethod Payment method used to namespace risk configuration and dispute nullifiers.
+     * @param status Current chargeback lifecycle state.
+     * @param isManualRelease Whether settlement occurred through depositor-authorized manual release.
+     * @param riskWindow Minimum time collateral must remain locked after intent settlement.
+     * @param releaseEligibleAt Earliest timestamp at which collateral may be released. Chargeback evidence remains
+     * valid after this time until release actually executes.
+     * @param releaseAmount Amount released from Escrow before fees and therefore collateralized after settlement.
+     */
+    struct ChargebackIntent {
         address taker;
         address stakeOwner;
         address depositor;
         bytes32 paymentMethod;
-        PositionStatus status;
+        ChargebackIntentStatus status;
         bool isManualRelease;
         uint64 riskWindow;
-        uint64 coverageDeadline;
-        uint256 intentAmount;
-        uint256 coverageAmount;
-        uint256 grossReleasedAmount;
+        uint64 releaseEligibleAt;
+        uint256 releaseAmount;
     }
 
-    event PositionOpened(
+    event ChargebackIntentOpened(
         bytes32 indexed intentHash,
         address indexed stakeOwner,
         address indexed depositor,
@@ -44,20 +58,16 @@ interface IChargebackPolicy {
         uint256 amount,
         uint64 riskWindow
     );
-    event PositionCancelled(
-        bytes32 indexed intentHash, address indexed stakeOwner, uint256 releasedCoverage
-    );
-    event PositionSettled(
+    event ChargebackIntentCancelled(bytes32 indexed intentHash, address indexed stakeOwner, uint256 releasedAmount);
+    event ChargebackIntentSettled(
         bytes32 indexed intentHash,
         address indexed stakeOwner,
         address indexed depositor,
-        uint256 grossAmount,
-        uint64 coverageDeadline,
+        uint256 releaseAmount,
+        uint64 releaseEligibleAt,
         bool isManualRelease
     );
-    event PositionReleased(
-        bytes32 indexed intentHash, address indexed stakeOwner, uint256 releasedCoverage
-    );
+    event ChargebackIntentReleased(bytes32 indexed intentHash, address indexed stakeOwner, uint256 releasedAmount);
     event ChargebackSettled(
         bytes32 indexed intentHash,
         address indexed stakeOwner,
@@ -65,44 +75,38 @@ interface IChargebackPolicy {
         uint256 compensatedAmount,
         bytes32 disputeId
     );
-    event EnabledUpdated(address indexed escrow, uint256 indexed depositId, bool enabled);
+    event ChargebackEnabledUpdated(address indexed escrow, uint256 indexed depositId, bool isChargebackEnabled);
     event RiskWindowUpdated(bytes32 indexed paymentMethod, uint64 riskWindow);
     event ChargebackVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
-    event LifecycleHookUpdated(address indexed previousHook, address indexed newHook);
-    /** @notice Emitted when a lifecycle hook's callback authorization changes. */
-    event LifecycleHookAuthorizationUpdated(address indexed hook, bool authorized);
-    event EscrowRegistryUpdated(address indexed escrowRegistry);
-    event AdmissionsPausedUpdated(bool paused);
+    event LifecycleHookAuthorizationUpdated(address indexed hook, bool isAuthorized);
+    event AdmissionsPausedUpdated(bool isPaused);
 
     error ZeroAddress();
     error InvalidContract(address dependency);
     error UnauthorizedLifecycleHook(address caller);
-    /** @notice Reverts when attempting to revoke the currently designated lifecycle hook. */
-    error CannotRevokeCurrentLifecycleHook(address hook);
-    /** @notice Reverts when attempting to revoke a lifecycle hook that is not authorized. */
-    error LifecycleHookNotAuthorized(address hook);
     error AdmissionsPaused();
     error ChargebackNotEnabled(address escrow, uint256 depositId);
-    error InsufficientCollateral(address stakeOwner, uint256 available, uint256 required);
-    error PositionAlreadyExists(bytes32 intentHash);
-    error PositionNotPending(bytes32 intentHash, PositionStatus status);
-    error PositionNotSettled(bytes32 intentHash, PositionStatus status);
+    error ChargebackIntentAlreadyExists(bytes32 intentHash);
+    error ChargebackIntentNotPending(bytes32 intentHash, ChargebackIntentStatus status);
+    error ChargebackIntentNotSettled(bytes32 intentHash, ChargebackIntentStatus status);
     error IntentTokenMismatch(address expectedToken, address actualToken);
-    error PositionNotMature(uint64 coverageDeadline, uint64 currentTime);
-    error ChargebackWindowClosed(uint64 coverageDeadline, uint64 currentTime);
-    error ChargebackEvidenceUsed(bytes32 nullifier);
-    error IncompleteChargebackCoverage(uint256 available, uint256 required);
+    error ChargebackIntentNotReleaseEligible(uint64 releaseEligibleAt, uint64 currentTime);
     error TimestampOverflow(uint256 timestamp);
     error InvalidRiskWindow(uint64 riskWindow);
-    error EscrowNotWhitelisted(address escrow);
-    error DepositNotFound(address escrow, uint256 depositId);
     error NotDepositor(address escrow, uint256 depositId, address caller);
     error OwnershipRenunciationDisabled();
 
     /**
-     * @notice Opens stake-backed coverage for a chargeback-enabled intent.
-     * @dev A zero risk window passes through before paused, enabled, or duplicate checks because a
-     * non-chargebackable method uses direct access and pass-through is not an admission.
+     * @notice Admits a newly signaled intent into chargeback coverage when its payment method has a risk window.
+     * @dev Called only by an authorized lifecycle hook. A zero configured risk window is an unrestricted pass-through
+     * and creates no chargeback intent. Otherwise the call validates deposit configuration and token compatibility,
+     * snapshots the risk configuration, and locks the taker's selected stake.
+     * @param _intentHash Unique intent identifier assigned by the calling orchestrator.
+     * @param _escrow Escrow that owns the intent and deposit.
+     * @param _depositId Deposit supplying the intent liquidity.
+     * @param _taker Account that signaled the intent.
+     * @param _paymentMethod Payment method selected for the off-chain payment.
+     * @param _amount Full on-chain intent amount initially locked as collateral.
      */
     function onIntentSignaled(
         bytes32 _intentHash,
@@ -112,81 +116,28 @@ interface IChargebackPolicy {
         bytes32 _paymentMethod,
         uint256 _amount
     ) external;
-    /** @notice Cancels pending coverage, or silently ignores an intent with no position. */
+
+    /**
+     * @notice Cancels a pending chargeback intent and unlocks its collateral.
+     * @dev Missing chargeback intents are ignored because payment methods with no risk window create no policy state.
+     * @param _intentHash Intent being cancelled or pruned by the orchestrator.
+     */
     function onIntentCancelled(bytes32 _intentHash) external;
 
-    /** @notice Transitions pending coverage into its post-settlement risk window. */
-    function onIntentSettled(bytes32 _intentHash, uint256 _grossAmount, bool _isManualRelease) external;
+    /**
+     * @notice Marks a pending chargeback intent as settled and resizes its collateral to the actual release amount.
+     * @dev Missing chargeback intents are ignored. The snapshotted risk window determines when collateral becomes
+     * release-eligible; it does not invalidate chargeback evidence until release actually executes.
+     * @param _intentHash Intent completed by proof-based fulfillment or manual release.
+     * @param _releaseAmount Amount released from Escrow before protocol, referral, and manager fees.
+     * @param _isManualRelease Whether the depositor used the manual-release path without an on-chain payment proof.
+     */
+    function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease) external;
 
-    /** @notice Releases one settled position at or after its coverage deadline. */
-    function releaseMaturedPosition(bytes32 _intentHash) external;
-
-    /** @notice Releases a batch of settled positions at or after their coverage deadlines. */
-    function releaseMaturedPositions(bytes32[] calldata _intentHashes) external;
-
-    /** @notice Resolves valid chargeback evidence into an immediately claimable depositor award. */
-    function submitChargeback(IChargebackVerifier.ChargebackAttestation calldata _attestation) external;
-
-    /** @notice Enables or disables chargeback admission for a deposit. */
-    function setEnabled(address _escrow, uint256 _depositId, bool _enabled) external;
-
-    /** @notice Sets the coverage window snapshotted by future intents for a payment method. */
-    function setRiskWindow(bytes32 _paymentMethod, uint64 _riskWindow) external;
-
-    /** @notice Replaces the chargeback verifier used for future chargeback submissions. */
-    function setChargebackVerifier(address _verifier) external;
-
-    /** @notice Designates and authorizes the current hook without deauthorizing predecessor hooks. */
-    function setLifecycleHook(address _hook) external;
-
-    /** @notice Revokes a predecessor hook after all intents snapshotted to it have been drained. */
-    function revokeLifecycleHook(address _hook) external;
-
-    /** @notice Replaces the registry used to authorize deposit configuration. */
-    function setEscrowRegistry(IEscrowRegistry _escrowRegistry) external;
-
-    /** @notice Pauses or resumes new admissions without blocking terminal transitions. */
-    function setAdmissionsPaused(bool _paused) external;
-
-    /** @notice Accepts this policy as the StakeVault controller after a delayed handover. */
-    function acceptVaultController() external;
-
-    /** @notice Always reverts so governed safety controls cannot become unreachable. */
-    function renounceOwnership() external;
-
-    /** @notice Returns the stored chargeback position for an intent. */
-    function getPosition(bytes32 _intentHash) external view returns (Position memory);
-
-    /** @notice Returns the live selected stake owner and that owner's vault balances. */
-    function getTakerState(address _taker)
-        external
-        view
-        returns (address stakeOwner, uint256 totalStake, uint256 lockedStake, uint256 freeStake);
-
-    /** @notice Returns the policy's stake custody and accounting dependency. */
-    function stakeVault() external view returns (IStakeVault);
-
-    /** @notice Returns the verifier used to validate chargeback evidence. */
-    function chargebackVerifier() external view returns (IChargebackVerifier);
-
-    /** @notice Returns the registry used to authorize escrow deposit configuration. */
-    function escrowRegistry() external view returns (IEscrowRegistry);
-
-    /** @notice Returns the currently designated lifecycle hook for new intent routing. */
-    function lifecycleHook() external view returns (address);
-
-    /** @notice Returns whether a lifecycle hook is authorized to mutate positions. */
-    function authorizedLifecycleHooks(address _hook) external view returns (bool);
-
-    /** @notice Returns whether new chargeback admissions are paused. */
-    function admissionsPaused() external view returns (bool);
-
-    /** @notice Returns whether chargeback admission is enabled for a deposit. */
-    function enabled(address _escrow, uint256 _depositId) external view returns (bool);
-
-    /** @notice Returns the future-admission risk window for a payment method. */
-    function riskWindows(bytes32 _paymentMethod) external view returns (uint64);
-
-    /** @notice Returns whether a payment-method-scoped dispute identifier has been consumed. */
-    function usedChargebackNullifiers(bytes32 _nullifier) external view returns (bool);
+    /**
+     * @notice Returns whether a deposit opted into stake-backed chargeback admission.
+     * @param _escrow Escrow containing the deposit.
+     * @param _depositId Deposit whose chargeback configuration is queried.
+     */
+    function isChargebackEnabled(address _escrow, uint256 _depositId) external view returns (bool);
 }

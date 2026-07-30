@@ -2,7 +2,6 @@
 
 pragma solidity ^0.8.18;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 
@@ -27,16 +26,14 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
 
     /* ============ State Variables ============ */
 
-    INullifierRegistryV2 public immutable override nullifierRegistry;
-    IAttestationVerifier public override attestationVerifier;
+    INullifierRegistryV2 public immutable nullifierRegistry;
+    IAttestationVerifier public attestationVerifier;
 
     /* ============ Constructor ============ */
 
-    constructor(
-        address _owner,
-        INullifierRegistryV2 _nullifierRegistry,
-        IAttestationVerifier _attestationVerifier
-    ) EIP712("ZKP2P ChargebackVerifier", "1") {
+    constructor(address _owner, INullifierRegistryV2 _nullifierRegistry, IAttestationVerifier _attestationVerifier)
+        EIP712("ZKP2P ChargebackVerifier", "1")
+    {
         if (_owner == address(0)) revert ZeroAddress();
         _validateDependency(address(_nullifierRegistry));
         _validateDependency(address(_attestationVerifier));
@@ -67,8 +64,7 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
         }
 
         if (!_isManualRelease) {
-            bytes32 paymentNullifier =
-                keccak256(abi.encodePacked(details.paymentMethod, details.originalPaymentId));
+            bytes32 paymentNullifier = keccak256(abi.encodePacked(details.paymentMethod, details.originalPaymentId));
             if (
                 nullifierRegistry.intentHashByNullifier(paymentNullifier) != _attestation.intentHash
                     || nullifierRegistry.nullifierByIntentHash(_attestation.intentHash) != paymentNullifier
@@ -84,9 +80,10 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
     /* ============ Governance Functions ============ */
 
     /**
-     * @inheritdoc IChargebackVerifier
+     * @notice GOVERNANCE ONLY: Replaces the verifier used for future witness-signature checks.
+     * @param _verifier New non-zero deployed attestation-verifier contract.
      */
-    function setAttestationVerifier(address _verifier) external override onlyOwner {
+    function setAttestationVerifier(address _verifier) external onlyOwner {
         _validateDependency(_verifier);
         address previousVerifier = address(attestationVerifier);
         attestationVerifier = IAttestationVerifier(_verifier);
@@ -96,21 +93,18 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
     /**
      * @notice Disables ownership renunciation so the signature-verification dependency stays managed.
      */
-    function renounceOwnership() public view override(IChargebackVerifier, Ownable) onlyOwner {
+    function renounceOwnership() public view override onlyOwner {
         revert OwnershipRenunciationDisabled();
     }
 
     /* ============ View Functions ============ */
 
     /**
-     * @inheritdoc IChargebackVerifier
+     * @notice Returns the EIP-712 digest that witnesses sign for a chargeback attestation.
+     * @param _attestation Chargeback evidence whose intent hash and data hash are included in the digest.
+     * @return EIP-712 digest bound to this verifier's address and the current chain.
      */
-    function hashChargebackAttestation(ChargebackAttestation calldata _attestation)
-        external
-        view
-        override
-        returns (bytes32)
-    {
+    function hashChargebackAttestation(ChargebackAttestation calldata _attestation) external view returns (bytes32) {
         return _hashTypedDataV4(_chargebackAttestationStructHash(_attestation));
     }
 
@@ -121,9 +115,7 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
         pure
         returns (bytes32)
     {
-        return keccak256(
-            abi.encode(CHARGEBACK_ATTESTATION_TYPEHASH, _attestation.intentHash, _attestation.dataHash)
-        );
+        return keccak256(abi.encode(CHARGEBACK_ATTESTATION_TYPEHASH, _attestation.intentHash, _attestation.dataHash));
     }
 
     function _validateDependency(address _dependency) internal view {

@@ -246,6 +246,31 @@ contract StakeVaultTest is Test {
         assertTrue(vault.authorizedTakers(safeB, taker));
     }
 
+    function test_GetTakerStateReturnsSelectedOwnerBalancesAndFallsBackAfterRevocation() public {
+        _deposit(safeA, 500e6);
+        vm.prank(safeA);
+        vault.setTakerAuthorization(taker, true);
+        vm.prank(taker);
+        vault.selectStakeOwner(safeA);
+        vm.prank(controller);
+        vault.lockStake(safeA, keccak256("selected-owner-lock"), 125e6, NEVER_MATURES);
+
+        (address stakeOwner, uint256 totalStake, uint256 lockedStakeAmount, uint256 freeStakeAmount) =
+            vault.getTakerState(taker);
+        assertEq(stakeOwner, safeA);
+        assertEq(totalStake, 500e6);
+        assertEq(lockedStakeAmount, 125e6);
+        assertEq(freeStakeAmount, 375e6);
+
+        vm.prank(safeA);
+        vault.setTakerAuthorization(taker, false);
+        (stakeOwner, totalStake, lockedStakeAmount, freeStakeAmount) = vault.getTakerState(taker);
+        assertEq(stakeOwner, taker);
+        assertEq(totalStake, 0);
+        assertEq(lockedStakeAmount, 0);
+        assertEq(freeStakeAmount, 0);
+    }
+
     function test_AttackerAuthorizationCannotSquatOrReplaceSelection() public {
         vm.prank(safeA);
         vault.setTakerAuthorization(taker, true);

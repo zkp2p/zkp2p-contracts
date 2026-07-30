@@ -40,19 +40,19 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
 
         policy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
         stakeVault = new StakeVault(address(this), token, address(0), 1 days);
+        NullifierRegistry chargebackNullifierRegistry = new NullifierRegistry();
         chargebackPolicy = new ChargebackPolicy(
             address(this),
             stakeVault,
             new ChargebackVerifier(
-                address(this),
-                new NullifierRegistryV2(new NullifierRegistry()),
-                new AttestationVerifierMock()
+                address(this), new NullifierRegistryV2(new NullifierRegistry()), new AttestationVerifierMock()
             ),
-            escrowRegistry
+            chargebackNullifierRegistry
         );
         stakeVault.initializeController(address(chargebackPolicy));
+        chargebackNullifierRegistry.addWritePermission(address(chargebackPolicy));
         lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, policy, chargebackPolicy);
-        chargebackPolicy.setLifecycleHook(address(lifecycleHook));
+        chargebackPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
         IOrchestratorV3(address(orchestrator)).setLifecycleHook(lifecycleHook);
     }
 
@@ -239,8 +239,8 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
             intentHash: intentHash,
             token: address(token),
             recipient: taker,
-            grossAmount: 0,
-            executableAmount: 0,
+            releaseAmount: 0,
+            netAmount: 0,
             isManualRelease: false
         });
         vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.UnauthorizedOrchestrator.selector, other));

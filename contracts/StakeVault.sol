@@ -39,7 +39,15 @@ import {IStakeVault} from "./interfaces/IStakeVault.sol";
  *
  *      Controller replacement is delayed, but accepted authority is global: the new controller immediately gains the
  *      same power over existing and future locks. The owner can cancel a pending handover during the delay and cannot
- *      renounce ownership, preserving a governance recovery path.
+ *      renounce ownership, preserving a governance recovery path. Governance must drain all active locks before replacing
+ *      a policy controller unless the replacement explicitly adopts the predecessor's lock state; the delay alone does
+ *      not give a new policy contract the state needed to resolve predecessor locks.
+ *
+ * @dev TOKEN ASSUMPTION
+ *      ZKP2P deployments configure the vault only with canonical USDC. USDC administration, upgrades, pauses, and
+ *      blocklisting remain accepted external operational risks. Tokens with transfer fees, rebasing, or other balance
+ *      transformations are unsupported; the exact inbound balance-delta check is defense in depth, not generic-token
+ *      compatibility.
  *
  * @dev SECURITY INVARIANTS AND RATIONALE
  *      1. Only free stake may be withdrawn or newly locked. Existing locks remain fully backed in aggregate accounting.
@@ -131,7 +139,7 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
      *      before any liabilities exist. The owner and token must be non-zero, and the handover delay must be at least
      *      one day. Future ownership transfers use Ownable2Step.
      * @param _owner Governance owner responsible for controller selection and recovery.
-     * @param _stakeToken Token held and accounted by the vault.
+     * @param _stakeToken Canonical USDC token held and accounted by the vault.
      * @param _controller Initial global lock-policy controller, or zero for later liability-free initialization.
      * @param _controllerChangeDelay Delay required before a proposed replacement controller may accept authority.
      */
@@ -452,7 +460,8 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
     /**
      * @notice GOVERNANCE ONLY: Proposes a replacement global controller subject to the immutable handover delay.
      * @dev A new proposal overwrites any existing proposal and restarts the full delay. The current controller remains
-     *      authoritative until the proposed controller accepts after `pendingControllerValidAt`.
+     *      authoritative until the proposed controller accepts after `pendingControllerValidAt`. Governance must drain
+     *      active locks first unless the replacement controller can adopt and resolve the predecessor's lock state.
      * @param _controller Non-zero address proposed to receive global lock authority.
      */
     function proposeController(address _controller) external override onlyOwner {
@@ -480,7 +489,8 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
      * @notice PENDING CONTROLLER ONLY: Accepts global lock authority after the handover delay.
      * @dev The caller must equal the pending controller and the current timestamp must be at least the proposal's valid
      *      timestamp. Acceptance immediately grants authority over all existing and future locks, then clears proposal
-     *      state. Governance cannot accept on the proposed controller's behalf.
+     *      state. Governance cannot accept on the proposed controller's behalf. A policy controller must not accept while
+     *      predecessor locks remain unless it has an explicit migration/adoption path for those locks.
      */
     function acceptController() external override {
         address proposedController = pendingController;
@@ -509,10 +519,32 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
      * @param _taker Taker whose effective stake owner should be resolved.
      * @return Effective stake owner for future policy decisions.
      */
-    function stakeOwnerOf(address _taker) external view override returns (address) {
+    function stakeOwnerOf(address _taker) public view override returns (address) {
         address selectedOwner = selectedStakeOwner[_taker];
         if (selectedOwner != address(0) && authorizedTakers[selectedOwner][_taker]) return selectedOwner;
         return _taker;
+    }
+
+    /**
+     * @notice Returns a taker's currently selected stake owner and that owner's aggregate stake balances.
+     * @dev Delegation is resolved live. If a previous authorization was revoked, the taker falls back to its own
+     *      stake and the returned balances describe the taker's account.
+     * @param _taker Taker whose effective stake owner and balances are queried.
+     * @return stakeOwner Effective owner supplying stake for the taker.
+     * @return totalStake Total principal owned by `stakeOwner`, including free and locked stake.
+     * @return lockedStakeAmount Principal currently committed to active locks.
+     * @return freeStakeAmount Principal currently available for withdrawal or new locks.
+     */
+    function getTakerState(address _taker)
+        external
+        view
+        override
+        returns (address stakeOwner, uint256 totalStake, uint256 lockedStakeAmount, uint256 freeStakeAmount)
+    {
+        stakeOwner = stakeOwnerOf(_taker);
+        totalStake = stakeBalance[stakeOwner];
+        lockedStakeAmount = lockedStake[stakeOwner];
+        freeStakeAmount = totalStake - lockedStakeAmount;
     }
 
     /**
