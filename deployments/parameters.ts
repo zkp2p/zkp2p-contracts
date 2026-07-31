@@ -123,17 +123,17 @@ export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
   "base_staging": "",
 };
 
-// V3 lifecycle stack parameters. Production policy is not yet ratified.
+// V3 lifecycle stack parameters. Base staging and production use the ratified 14-day chargeback policy.
 export const STAKE_VAULT_CONTROLLER_CHANGE_DELAY = ONE_DAY_IN_SECONDS.mul(2);
 
 export const CHARGEBACK_RISK_WINDOW: any = {
   "localhost": ONE_DAY_IN_SECONDS.mul(14),
   "hardhat": ONE_DAY_IN_SECONDS.mul(14),
+  "base": ONE_DAY_IN_SECONDS.mul(14),
   "base_staging": ONE_DAY_IN_SECONDS.mul(14),
 };
 
-// Staging-test config: Zelle and Chime being chargebackable is deliberate for testing.
-// Real-world Zelle is irreversible; revisit this list before production ratification.
+// Ratified policy: all five methods are chargebackable on Base staging and production.
 export const CHARGEBACKABLE_PAYMENT_METHODS: string[] = [
   "paypal",
   "venmo",
@@ -145,12 +145,14 @@ export const CHARGEBACKABLE_PAYMENT_METHODS: string[] = [
 export const ORCHESTRATOR_V3_PROTOCOL_FEE: any = {
   "localhost": ether(.001),
   "hardhat": ether(.001),
+  "base": ZERO,
   "base_staging": ZERO,
 };
 
 export const ORCHESTRATOR_V3_PROTOCOL_FEE_RECIPIENT: any = {
   "localhost": "",
   "hardhat": "",
+  "base": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
   "base_staging": "",
 };
 
