@@ -25,7 +25,7 @@ import {
   waitForDeploymentDelay,
 } from "../deployments/helpers";
 
-const SUPPORTED_NETWORKS = new Set(["localhost", "hardhat", "base_staging"]);
+const SUPPORTED_NETWORKS = new Set(["localhost", "hardhat", "base", "base_staging"]);
 const OLD_ORCHESTRATOR_V3: Record<string, string> = {
   base_staging: "0x6Db9dDb38a19Be0c614C0Ad9e78Baf73f93c35dF",
 };
