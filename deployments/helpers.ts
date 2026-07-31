@@ -62,14 +62,38 @@ export async function setNewOwner(
 ): Promise<void> {
   const currentOwner = await contract.owner();
 
-  if (currentOwner != newOwner) {
-    const data = contract.interface.encodeFunctionData("transferOwnership", [newOwner]);
-    await sendDeploymentTransaction(hre, {
-      from: currentOwner,
-      to: contract.address,
-      data,
-    });
+  if (currentOwner == newOwner) {
+    return;
   }
+
+  let pendingOwner: Address | undefined;
+  try {
+    pendingOwner = await contract.pendingOwner();
+  } catch {
+    // Plain Ownable contracts do not expose pendingOwner().
+  }
+
+  if (pendingOwner == newOwner) {
+    let data = "0x79ba5097";
+    try {
+      data = contract.interface.encodeFunctionData("acceptOwnership");
+    } catch {
+      // Some deployment artifacts omit acceptOwnership() from their ABI.
+    }
+    safeBatchCollector.add(
+      contract.address,
+      data,
+      `${contract.address}.acceptOwnership() as new owner ${newOwner}`
+    );
+    return;
+  }
+
+  const data = contract.interface.encodeFunctionData("transferOwnership", [newOwner]);
+  await sendDeploymentTransaction(hre, {
+    from: currentOwner,
+    to: contract.address,
+    data,
+  });
 }
 
 export async function setAttestationVerifier(
@@ -273,7 +297,26 @@ export async function addPaymentMethodToRegistry(
       );
     }
   } else {
-    console.log(`Payment method ${paymentMethodHash} already exists in registry`);
+    const removeData = paymentVerifierRegistryContract.interface.encodeFunctionData("removePaymentMethod", [
+      paymentMethodHash
+    ]);
+    if (safeBatchCollector.hasQueued(paymentVerifierRegistryContract.address, removeData)) {
+      console.log(
+        `[Safe Batch] Queuing addPaymentMethod after queued removePaymentMethod for ${paymentMethodHash}`
+      );
+      const data = paymentVerifierRegistryContract.interface.encodeFunctionData("addPaymentMethod", [
+        paymentMethodHash,
+        verifierAddress,
+        currencies
+      ]);
+      safeBatchCollector.add(
+        paymentVerifierRegistryContract.address,
+        data,
+        `PaymentVerifierRegistry.addPaymentMethod(${paymentMethodHash.slice(0, 10)}..., ${verifierAddress})`
+      );
+    } else {
+      console.log(`Payment method ${paymentMethodHash} already exists in registry`);
+    }
   }
 }
 
