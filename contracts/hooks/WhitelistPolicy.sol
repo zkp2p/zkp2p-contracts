@@ -36,6 +36,7 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
     IOrchestratorRegistry public immutable override orchestratorRegistry;
 
     mapping(address => mapping(uint256 => bool)) public override enabled;
+    mapping(address => mapping(uint256 => bool)) public override bootstrapped;
     mapping(address => mapping(uint256 => mapping(address => bool))) public override isWhitelisted;
     mapping(address => mapping(uint256 => bytes32[])) internal allowedGroups;
 
@@ -57,6 +58,8 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
     error TooManyGroups(uint256 attempted, uint256 maximum);
     error EscrowNotWhitelisted(address escrow);
     error DepositNotFound(address escrow, uint256 depositId);
+    error DepositAlreadyBootstrapped(address escrow, uint256 depositId);
+    error DepositAlreadyEnabled(address escrow, uint256 depositId);
     error NotDepositor(address escrow, uint256 depositId, address caller);
     error UnauthorizedOrchestratorCaller(address caller);
     error TakerNotWhitelisted(address taker, address escrow, uint256 depositId);
@@ -80,12 +83,7 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
     /* ============ Modifiers ============ */
 
     modifier onlyDepositor(address _escrow, uint256 _depositId) {
-        if (!escrowRegistry.isWhitelistedEscrow(_escrow) && !escrowRegistry.isAcceptingAllEscrows()) {
-            revert EscrowNotWhitelisted(_escrow);
-        }
-
-        address depositor = IEscrow(_escrow).getDeposit(_depositId).depositor;
-        if (depositor == address(0)) revert DepositNotFound(_escrow, _depositId);
+        address depositor = _validateDeposit(_escrow, _depositId);
         if (msg.sender != depositor) revert NotDepositor(_escrow, _depositId, msg.sender);
         _;
     }
@@ -100,6 +98,28 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
 
         escrowRegistry = _escrowRegistry;
         emit EscrowRegistryUpdated(address(_escrowRegistry));
+    }
+
+    /**
+     * @inheritdoc IWhitelistPolicy
+     */
+    function bootstrapDeposits(address _escrow, uint256[] calldata _depositIds, bytes32[] calldata _groupIds)
+        external
+        override
+        onlyOwner
+    {
+        if (_depositIds.length == 0 || _groupIds.length == 0) revert EmptyArray();
+
+        for (uint256 i = 0; i < _depositIds.length; ++i) {
+            uint256 depositId = _depositIds[i];
+            _validateDeposit(_escrow, depositId);
+            if (bootstrapped[_escrow][depositId]) revert DepositAlreadyBootstrapped(_escrow, depositId);
+            if (enabled[_escrow][depositId]) revert DepositAlreadyEnabled(_escrow, depositId);
+
+            bootstrapped[_escrow][depositId] = true;
+            _setEnabled(_escrow, depositId, true);
+            _addGroups(_escrow, depositId, _groupIds);
+        }
     }
 
     /* ============ Depositor Functions ============ */
@@ -287,6 +307,15 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
             if (_groups[i] == _groupId) return i;
         }
         return _groups.length;
+    }
+
+    function _validateDeposit(address _escrow, uint256 _depositId) internal view returns (address depositor) {
+        if (!escrowRegistry.isWhitelistedEscrow(_escrow) && !escrowRegistry.isAcceptingAllEscrows()) {
+            revert EscrowNotWhitelisted(_escrow);
+        }
+
+        depositor = IEscrow(_escrow).getDeposit(_depositId).depositor;
+        if (depositor == address(0)) revert DepositNotFound(_escrow, _depositId);
     }
 
     function _validateDependency(address _dependency) internal view {
