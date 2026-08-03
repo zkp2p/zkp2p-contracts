@@ -633,14 +633,14 @@ the hook after O3 construction, registers the new O3, and removes the two draine
 predecessors. It reuses the existing registries, UPV3, NullifierRegistryV2, chargeback stack, and
 payment routing without mutating them.
 
-Before a separately authorized live cutover, delete both of these artifacts for the selected
+Before a separately authorized live cutover, move these three artifacts aside for the selected
 environment in the deployment worktree:
 
 - `deployments/<environment>/WhitelistPolicy.json`
 - `deployments/<environment>/WhitelistLifecycleHook.json` when present
 - `deployments/<environment>/OrchestratorV3.json`
 
-Do not commit the deletions: the authorized deployment must replace both artifacts with the fresh
+Do not commit the temporary removals: the authorized deployment must replace all three artifacts with fresh
 creation records. Keep `AddressGroupRegistry` and every other deployment artifact intact. After an
 external read-only check proves both registered predecessor O3s have no unresolved intents, run
 `--tags V3LifecycleStack` with `ENABLE_STAGING_V3_GROUPS_CUTOVER=true` and

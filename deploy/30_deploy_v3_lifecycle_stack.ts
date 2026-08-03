@@ -46,10 +46,17 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
     const hook = await ethers.getContractAt("WhitelistLifecycleHook", hookDeployment.address);
     const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorDeployment.address);
     const registry = await ethers.getContractAt("OrchestratorRegistry", registryAddress);
+    const currentLifecycleHook = await orchestrator.lifecycleHook();
 
     if (!sameAddress(await hook.orchestratorRegistry(), registryAddress)) return false;
     if (!sameAddress(await hook.whitelistPolicy(), policy.address)) return false;
-    if (!sameAddress(await orchestrator.lifecycleHook(), hook.address)) return false;
+    if (!sameAddress(currentLifecycleHook, hook.address)) {
+      const combinedHookDeployment = await hre.deployments.get("IntentLifecycleHookV1");
+      if (!sameAddress(currentLifecycleHook, combinedHookDeployment.address)) return false;
+      const combinedHook = await ethers.getContractAt("IntentLifecycleHookV1", combinedHookDeployment.address);
+      if (!sameAddress(await combinedHook.orchestratorRegistry(), registryAddress)) return false;
+      if (!sameAddress(await combinedHook.whitelistPolicy(), policy.address)) return false;
+    }
     if (!sameAddress(await orchestrator.owner(), governance)) return false;
     if (!sameAddress(await policy.owner(), governance)) return false;
     if (!(await registry.isOrchestrator(orchestrator.address))) return false;
