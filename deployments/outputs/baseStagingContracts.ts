@@ -832,7 +832,7 @@ export default {
       ]
     },
     "ChargebackPolicy": {
-      "address": "0xa5fdc112BB69ee2141b99Fdcb94364256Dc34377",
+      "address": "0xC1E16Bf824fA7cee8770Fb72F49349091D4e583B",
       "abi": [
         {
           "inputs": [
@@ -8088,7 +8088,7 @@ export default {
       ]
     },
     "IntentLifecycleHookV1": {
-      "address": "0x4874063A76C3549641883ad0BB169D6b41a0E2c3",
+      "address": "0xE8Fe714f848fAf7ecff7960AfD0C395771C22AA1",
       "abi": [
         {
           "inputs": [
@@ -11787,7 +11787,7 @@ export default {
       ]
     },
     "OrchestratorV3": {
-      "address": "0x1734f5C9956D0DA1f48E27cd1C6167aA81F27869",
+      "address": "0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f",
       "abi": [
         {
           "inputs": [
@@ -17446,7 +17446,7 @@ export default {
       ]
     },
     "StakeVault": {
-      "address": "0xaA82e422B3755eA6a1352eB6B2828324740ee5af",
+      "address": "0x224a45C65eB9A4D1dB00eD6Bfe21aD7Ec0a9b0E4",
       "abi": [
         {
           "inputs": [
@@ -20034,8 +20034,185 @@ export default {
         }
       ]
     },
+    "WhitelistLifecycleHook": {
+      "address": "0x9026b5B56962d9d7681Cc33F6B15C3BB72aB8f36",
+      "abi": [
+        {
+          "inputs": [
+            {
+              "internalType": "contract IOrchestratorRegistry",
+              "name": "_orchestratorRegistry",
+              "type": "address"
+            },
+            {
+              "internalType": "contract IWhitelistPolicy",
+              "name": "_whitelistPolicy",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "constructor"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "IntentNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "dependency",
+              "type": "address"
+            }
+          ],
+          "name": "InvalidDependency",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            }
+          ],
+          "name": "TakerNotWhitelisted",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "caller",
+              "type": "address"
+            }
+          ],
+          "name": "UnauthorizedOrchestrator",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "ZeroAddress",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "",
+              "type": "bytes32"
+            }
+          ],
+          "name": "onIntentCancelled",
+          "outputs": [],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "bytes32",
+              "name": "_intentHash",
+              "type": "bytes32"
+            }
+          ],
+          "name": "onIntentSignaled",
+          "outputs": [],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "orchestratorRegistry",
+          "outputs": [
+            {
+              "internalType": "contract IOrchestratorRegistry",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "components": [
+                {
+                  "internalType": "bytes32",
+                  "name": "intentHash",
+                  "type": "bytes32"
+                },
+                {
+                  "internalType": "address",
+                  "name": "token",
+                  "type": "address"
+                },
+                {
+                  "internalType": "address",
+                  "name": "recipient",
+                  "type": "address"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "releaseAmount",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "uint256",
+                  "name": "netAmount",
+                  "type": "uint256"
+                },
+                {
+                  "internalType": "bool",
+                  "name": "isManualRelease",
+                  "type": "bool"
+                }
+              ],
+              "internalType": "struct IIntentLifecycleHook.SettlementContext",
+              "name": "",
+              "type": "tuple"
+            }
+          ],
+          "name": "settleIntent",
+          "outputs": [],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "whitelistPolicy",
+          "outputs": [
+            {
+              "internalType": "contract IWhitelistPolicy",
+              "name": "",
+              "type": "address"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        }
+      ]
+    },
     "WhitelistPolicy": {
-      "address": "0xe3d3E798AbF1c021730d951d0589bCa63d9CB3F0",
+      "address": "0x7d9277cb8bb78a51eeaafB7CFF306E7DA4C972fD",
       "abi": [
         {
           "inputs": [
@@ -20057,6 +20234,38 @@ export default {
           ],
           "stateMutability": "nonpayable",
           "type": "constructor"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "DepositAlreadyBootstrapped",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            }
+          ],
+          "name": "DepositAlreadyEnabled",
+          "type": "error"
         },
         {
           "inputs": [
@@ -20400,6 +20609,53 @@ export default {
           "name": "addWhitelistedAddresses",
           "outputs": [],
           "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "_escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256[]",
+              "name": "_depositIds",
+              "type": "uint256[]"
+            },
+            {
+              "internalType": "bytes32[]",
+              "name": "_groupIds",
+              "type": "bytes32[]"
+            }
+          ],
+          "name": "bootstrapDeposits",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "name": "bootstrapped",
+          "outputs": [
+            {
+              "internalType": "bool",
+              "name": "",
+              "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
           "type": "function"
         },
         {
