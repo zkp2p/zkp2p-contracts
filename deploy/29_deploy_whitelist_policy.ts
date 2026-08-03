@@ -110,4 +110,6 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
 };
 
 func.tags = ["29_deploy_whitelist_policy", "V2WhitelistPolicy", "WhitelistPolicy"];
+func.dependencies = ["28_deploy_intent_guardian"];
+
 export default func;
