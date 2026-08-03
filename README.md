@@ -623,6 +623,21 @@ This script currently covers:
 - `yarn deploy:base`
 - `yarn deploy:base_staging`
 
+### Whitelist Bootstrap
+
+`yarn whitelist:bootstrap` discovers active deposits from a configurable raw GraphQL endpoint and
+simulates canonical `WhitelistPolicy.bootstrapDeposits` batches for the explicitly supplied PRO and
+PLUS group IDs. It imports no indexer schema package, so the contracts and indexer packages remain
+acyclic. Discovery is a dry-run by default; mutation and Safe output require an exact expected
+deposit count and all discovery modes enforce a configurable maximum.
+
+- Staging execution requires `BOOTSTRAP_EXECUTE=true` and the current policy owner's private key.
+- Production Safe preparation requires `BOOTSTRAP_SAFE_OUTPUT_FILE`; it emits unsigned Transaction
+  Builder JSON owned by the policy's onchain owner, and never signs or submits it.
+- Direct execution and Safe output are mutually exclusive. Every batch is simulated and its calldata
+  decoded and checked before either execution or file output.
+- Run `yarn whitelist:bootstrap --help` for the complete environment-variable reference.
+
 ### Verification Commands
 
 - `yarn etherscan:base`

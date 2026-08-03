@@ -346,6 +346,13 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.deployments.getNetworkName();
   if (!SUPPORTED_NETWORKS.has(network)) return true;
+  // The whitelist-only cutover in lane 31 intentionally supersedes this chargeback lifecycle
+  // composition without replacing its verifier, nullifier, staking, or chargeback deployments.
+  // Once its canonical hook artifact exists, only lane 31 may resume or repair the active wiring.
+  if (
+    (network === "base_staging" || process.env.ENABLE_STAGING_GROUPS_CUTOVER_TEST === "true")
+    && await hre.deployments.getOrNull("WhitelistLifecycleHook")
+  ) return true;
   if (process.env.FORCE_RERUN_V3_LIFECYCLE_STACK === "true") return false;
 
   try {

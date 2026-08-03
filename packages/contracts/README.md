@@ -44,6 +44,7 @@ import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils
 import {
   AddressGroupRegistry,
   OrchestratorV3,
+  WhitelistLifecycleHook,
   WhitelistPolicy,
 } from "@zkp2p/contracts-v2/abis/contracts"
 

@@ -20,6 +20,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deploy } = await hre.deployments
   const network = hre.deployments.getNetworkName();
   const chainId = (await ethers.provider.getNetwork()).chainId;
+  const liveAddress = async (contractName: string): Promise<string> =>
+    (await hre.deployments.getOrNull(contractName))?.address || "NOT DEPLOYED";
 
   const [deployer] = await hre.getUnnamedAccounts();
   const multiSig = MULTI_SIG[network] ? MULTI_SIG[network] : deployer;
@@ -57,9 +59,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     ProtocolViewerV2:                   ${tryGetAddress(network, "ProtocolViewerV2")}
     IntentGuardian:                     ${tryGetAddress(network, "IntentGuardian")}
     AddressGroupRegistry:               ${tryGetAddress(network, "AddressGroupRegistry")}
-    WhitelistPolicy:                    ${tryGetAddress(network, "WhitelistPolicy")}
+    WhitelistPolicy:                    ${await liveAddress("WhitelistPolicy")}
     NullifierRegistryV2:                ${tryGetAddress(network, "NullifierRegistryV2")}
     UnifiedPaymentVerifierV3:           ${tryGetAddress(network, "UnifiedPaymentVerifierV3")}
+    OrchestratorV3:                     ${await liveAddress("OrchestratorV3")}
+    WhitelistLifecycleHook:             ${await liveAddress("WhitelistLifecycleHook")}
     `
   );
 
