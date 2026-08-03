@@ -34,6 +34,37 @@ async function assertCode(address: string, label: string): Promise<void> {
   }
 }
 
+async function assertOrchestratorConfiguration(
+  orchestrator: any,
+  expected: {
+    chainId: number;
+    escrowRegistry: string;
+    paymentVerifierRegistry: string;
+    relayerRegistry: string;
+    protocolFee: any;
+    protocolFeeRecipient: string;
+  },
+): Promise<void> {
+  if (!(await orchestrator.chainId()).eq(expected.chainId)) {
+    throw new Error("OrchestratorV3 chain ID mismatch");
+  }
+  if (!sameAddress(await orchestrator.escrowRegistry(), expected.escrowRegistry)) {
+    throw new Error("OrchestratorV3 escrow registry mismatch");
+  }
+  if (!sameAddress(await orchestrator.paymentVerifierRegistry(), expected.paymentVerifierRegistry)) {
+    throw new Error("OrchestratorV3 payment verifier registry mismatch");
+  }
+  if (!sameAddress(await orchestrator.relayerRegistry(), expected.relayerRegistry)) {
+    throw new Error("OrchestratorV3 relayer registry mismatch");
+  }
+  if (!(await orchestrator.protocolFee()).eq(expected.protocolFee)) {
+    throw new Error("OrchestratorV3 protocol fee mismatch");
+  }
+  if (!sameAddress(await orchestrator.protocolFeeRecipient(), expected.protocolFeeRecipient)) {
+    throw new Error("OrchestratorV3 protocol fee recipient mismatch");
+  }
+}
+
 async function systemReady(
   hre: HardhatRuntimeEnvironment,
   allowQueuedRegistryAdd: boolean,
@@ -175,6 +206,20 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const hook = await ethers.getContractAt("WhitelistLifecycleHook", hookDeployment.address);
   const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorDeployment.address);
+  if (!sameAddress(await hook.orchestratorRegistry(), orchestratorRegistryAddress)) {
+    throw new Error("WhitelistLifecycleHook registry mismatch");
+  }
+  if (!sameAddress(await hook.whitelistPolicy(), policyDeployment.address)) {
+    throw new Error("WhitelistLifecycleHook policy mismatch");
+  }
+  await assertOrchestratorConfiguration(orchestrator, {
+    chainId,
+    escrowRegistry: escrowRegistryAddress,
+    paymentVerifierRegistry: paymentVerifierRegistryAddress,
+    relayerRegistry: relayerRegistryAddress,
+    protocolFee: ORCHESTRATOR_V3_PROTOCOL_FEE[network],
+    protocolFeeRecipient: ORCHESTRATOR_V3_PROTOCOL_FEE_RECIPIENT[network] || deployer,
+  });
   if (!sameAddress(await orchestrator.lifecycleHook(), hook.address)) {
     if (!sameAddress(await orchestrator.owner(), deployer)) {
       throw new Error("OrchestratorV3 lifecycle hook is incorrect and the deployer is no longer the owner");
@@ -189,12 +234,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   }
   await setNewOwner(hre, orchestrator, governance);
 
-  if (!sameAddress(await hook.orchestratorRegistry(), registry.address)) {
-    throw new Error("WhitelistLifecycleHook registry mismatch");
-  }
-  if (!sameAddress(await hook.whitelistPolicy(), policyDeployment.address)) {
-    throw new Error("WhitelistLifecycleHook policy mismatch");
-  }
   if (!sameAddress(await orchestrator.lifecycleHook(), hook.address)) {
     throw new Error("OrchestratorV3 whitelist lifecycle hook mismatch");
   }
