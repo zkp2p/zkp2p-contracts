@@ -623,6 +623,34 @@ This script currently covers:
 - `yarn deploy:base`
 - `yarn deploy:base_staging`
 
+### V3 Groups Cutover
+
+`deploy/30_deploy_v3_lifecycle_stack.ts` is the single groups-cutover lane. It deploys only a new
+`WhitelistLifecycleHook` and `OrchestratorV3`, while lane 29 supplies the new `WhitelistPolicy`.
+It reuses and verifies the existing UPV3, NullifierRegistryV2, chargeback, staking, registry, and
+payment-routing state without reconfiguring any of them.
+
+Before a separately authorized live cutover, delete both of these artifacts for the selected
+environment in the deployment worktree:
+
+- `deployments/<environment>/WhitelistPolicy.json`
+- `deployments/<environment>/OrchestratorV3.json`
+
+Do not commit the deletions: the authorized deployment must replace both artifacts with the fresh
+creation records. Removing only `WhitelistPolicy.json` is insufficient because O3 constructor
+arguments are unchanged, so hardhat-deploy would otherwise reuse the existing O3. There is no
+pre-existing `WhitelistLifecycleHook` artifact to delete. Keep `AddressGroupRegistry` and every
+other deployment artifact intact.
+
+Run both deployment tags together: `--tags V2WhitelistPolicy,V3LifecycleStack`. Artifact state is
+the live cutover gate: untouched legacy artifacts safely skip, removing only one target artifact
+fails, and the fully wired fresh stack verifies then skips. The lane requires
+`V3_GROUPS_CUTOVER_INDEXER_GRAPHQL_URL` to prove all
+registered retired O3 deployments have no `SIGNALED` intents before their registry removal. Base
+Safe actions are prepared unsigned and require separate execution before a rerun can verify the
+fully live state. Local rehearsal requires `ENABLE_V3_GROUPS_CUTOVER_TEST=true` and explicit local
+retired policy/O3 addresses.
+
 ### Whitelist Bootstrap
 
 `yarn whitelist:bootstrap` discovers active deposits from a configurable raw GraphQL endpoint and
@@ -636,7 +664,8 @@ deposit count and all discovery modes enforce a configurable maximum.
   Builder JSON owned by the policy's onchain owner, and never signs or submits it.
 - Direct execution and Safe output are mutually exclusive. Every batch is simulated and its calldata
   decoded and checked before either execution or file output.
-- Run `yarn whitelist:bootstrap --help` for the complete environment-variable reference.
+- Run `yarn whitelist:bootstrap --self-test` for the embedded calldata/Safe validation and
+  `yarn whitelist:bootstrap --help` for the complete environment-variable reference.
 
 ### Verification Commands
 

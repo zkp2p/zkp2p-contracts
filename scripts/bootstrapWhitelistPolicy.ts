@@ -5,8 +5,6 @@ import path from "path";
 
 import { BigNumber, Contract, Wallet, ethers } from "ethers";
 
-import { postGraphql } from "./rawGraphql";
-
 type ActiveDeposit = {
   escrowAddress: string;
   depositId: BigNumber;
@@ -38,6 +36,11 @@ export type SafeTransaction = {
   data: string;
   contractMethod: null;
   contractInputsValues: null;
+};
+
+type GraphqlResponse<T> = {
+  data?: T;
+  errors?: unknown[];
 };
 
 export const POLICY_ABI = [
@@ -78,6 +81,36 @@ const ACTIVE_DEPOSITS_QUERY = `
   }
 `;
 
+async function postGraphql<T>(
+  endpoint: string,
+  query: string,
+  variables: Record<string, unknown>,
+  apiKey?: string,
+): Promise<T> {
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), 30_000);
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(apiKey ? { "x-api-key": apiKey } : {}),
+      },
+      body: JSON.stringify({ query, variables }),
+      signal: abortController.signal,
+    });
+    if (!response.ok) throw new Error(`GraphQL request failed with HTTP ${response.status}`);
+
+    const payload = (await response.json()) as GraphqlResponse<T>;
+    if (payload.errors?.length || !payload.data) {
+      throw new Error(`GraphQL response contained ${payload.errors?.length ?? 0} errors or no data`);
+    }
+    return payload.data;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function printUsage(): void {
   console.log(`Usage: yarn whitelist:bootstrap
 
@@ -102,6 +135,9 @@ Optional environment:
   BOOTSTRAP_EXECUTE=true                    (default: false/dry-run)
   BOOTSTRAP_OWNER_PRIVATE_KEY               (required only with BOOTSTRAP_EXECUTE=true)
   BOOTSTRAP_SAFE_OUTPUT_FILE                (unsigned Safe JSON; mutually exclusive with execute)
+
+Validation-only:
+  yarn whitelist:bootstrap --self-test
 `);
 }
 
@@ -335,11 +371,16 @@ export function buildSafeBatch(
   }
   const normalizedPolicy = normalizeAddress(policyAddress, "WhitelistPolicy");
   const normalizedSafe = normalizeAddress(safeAddress, "WhitelistPolicy owner Safe");
+  const policyInterface = new ethers.utils.Interface(POLICY_ABI);
   for (const transaction of transactions) {
     if (normalizeAddress(transaction.to, "Safe transaction target") !== normalizedPolicy) {
       throw new Error("Safe batch contains a transaction for a non-policy target");
     }
     if (transaction.value !== "0") throw new Error("Whitelist bootstrap Safe transaction has value");
+    const parsed = policyInterface.parseTransaction({ data: transaction.data });
+    if (parsed.name !== "bootstrapDeposits") {
+      throw new Error("Safe batch contains non-bootstrap policy calldata");
+    }
   }
 
   return {
@@ -360,6 +401,38 @@ export function buildSafeBatch(
   };
 }
 
+function runSelfTest(): void {
+  const policyAddress = "0x1000000000000000000000000000000000000001";
+  const escrowAddress = "0x2000000000000000000000000000000000000002";
+  const safeAddress = "0x3000000000000000000000000000000000000003";
+  const depositIds = [BigNumber.from(7), BigNumber.from(42)];
+  const groupIds = [`0x${"11".repeat(32)}`, `0x${"22".repeat(32)}`];
+  const transaction = buildSafeTransaction(policyAddress, escrowAddress, depositIds, groupIds);
+  const decoded = new ethers.utils.Interface(POLICY_ABI)
+    .decodeFunctionData("bootstrapDeposits", transaction.data);
+  if (!sameAddressForSelfTest(decoded[0], escrowAddress)) {
+    throw new Error("Self-test decoded the wrong escrow address");
+  }
+  if ((decoded[1] as BigNumber[]).map((value) => value.toString()).join(",") !== "7,42") {
+    throw new Error("Self-test decoded the wrong deposit ids");
+  }
+  if ((decoded[2] as string[]).map((value) => value.toLowerCase()).join(",") !== groupIds.join(",")) {
+    throw new Error("Self-test decoded the wrong group ids");
+  }
+  const safeBatch = buildSafeBatch("base", 8453, policyAddress, safeAddress, 2, [transaction]);
+  if (safeBatch.chainId !== "8453" || !sameAddressForSelfTest(
+    safeBatch.meta.createdFromSafeAddress,
+    safeAddress,
+  )) {
+    throw new Error("Self-test produced invalid Safe metadata");
+  }
+  console.log("Whitelist bootstrap raw calldata and Safe metadata self-test passed");
+}
+
+function sameAddressForSelfTest(left: string, right: string): boolean {
+  return left.toLowerCase() === right.toLowerCase();
+}
+
 async function assertDepositStillExists(escrow: Contract, depositId: BigNumber): Promise<void> {
   const deposit = await escrow.getDeposit(depositId);
   if (deposit.depositor === ethers.constants.AddressZero) {
@@ -368,6 +441,10 @@ async function assertDepositStillExists(escrow: Contract, depositId: BigNumber):
 }
 
 async function main(): Promise<void> {
+  if (process.argv.includes("--self-test")) {
+    runSelfTest();
+    return;
+  }
   if (process.argv.includes("--help")) {
     printUsage();
     return;

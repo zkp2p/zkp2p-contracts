@@ -25,8 +25,6 @@
     "deploy:base": "ts-node --transpile-only scripts/deployActive.ts base && hardhat export --network base --export ./deployments/outputs/baseContracts.ts && yarn workspace @zkp2p/contracts-v2 extract",
     "deploy:base_staging": "ts-node --transpile-only scripts/deployActive.ts base_staging && hardhat export --network base_staging --export ./deployments/outputs/baseStagingContracts.ts && yarn workspace @zkp2p/contracts-v2 extract",
     "safe:legacy-nullifier-cleanup": "ts-node --transpile-only scripts/generateLegacyNullifierWriterCleanupSafe.ts",
-    "test:whitelist-bootstrap-safe": "ts-node --transpile-only scripts/testWhitelistBootstrapSafe.ts",
-    "verify:groups-cutover": "hardhat run scripts/verifyGroupsCutover.ts",
     "whitelist:bootstrap": "ts-node --transpile-only scripts/bootstrapWhitelistPolicy.ts",
     "etherscan:base": "yarn hardhat --network base etherscan-verify-with-delay --delay 600",
     "etherscan:base_staging": "yarn hardhat --network base_staging etherscan-verify-with-delay --delay 600",
