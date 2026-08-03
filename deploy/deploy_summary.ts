@@ -64,6 +64,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     UnifiedPaymentVerifierV3:           ${tryGetAddress(network, "UnifiedPaymentVerifierV3")}
     OrchestratorV3:                     ${await liveAddress("OrchestratorV3")}
     WhitelistLifecycleHook:             ${await liveAddress("WhitelistLifecycleHook")}
+    StakeVault:                         ${await liveAddress("StakeVault")}
+    ChargebackNullifierRegistry:        ${await liveAddress("ChargebackNullifierRegistry")}
+    ChargebackVerifier:                 ${await liveAddress("ChargebackVerifier")}
+    ChargebackPolicy:                   ${await liveAddress("ChargebackPolicy")}
+    IntentLifecycleHookV1:              ${await liveAddress("IntentLifecycleHookV1")}
     `
   );
 

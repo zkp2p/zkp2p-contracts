@@ -625,31 +625,44 @@ This script currently covers:
 
 ### V3 Groups Cutover
 
-`deploy/30_deploy_v3_lifecycle_stack.ts` is the single groups-cutover lane. It deploys only a new
-`WhitelistLifecycleHook` and `OrchestratorV3`, while lane 29 supplies the new `WhitelistPolicy`.
-It reuses and verifies the existing UPV3, NullifierRegistryV2, chargeback, staking, registry, and
-payment-routing state without reconfiguring any of them.
+The staging cutover is split into two explicit lanes. Base production is not enabled by either lane.
+
+`deploy/30_deploy_v3_lifecycle_stack.ts` is the groups-only lane. Its lane-29 dependency supplies a
+fresh `WhitelistPolicy`; lane 30 deploys a fresh `WhitelistLifecycleHook` and `OrchestratorV3`, sets
+the hook after O3 construction, registers the new O3, and removes the two drained staging
+predecessors. It reuses the existing registries, UPV3, NullifierRegistryV2, chargeback stack, and
+payment routing without mutating them.
 
 Before a separately authorized live cutover, delete both of these artifacts for the selected
 environment in the deployment worktree:
 
 - `deployments/<environment>/WhitelistPolicy.json`
+- `deployments/<environment>/WhitelistLifecycleHook.json` when present
 - `deployments/<environment>/OrchestratorV3.json`
 
 Do not commit the deletions: the authorized deployment must replace both artifacts with the fresh
-creation records. Removing only `WhitelistPolicy.json` is insufficient because O3 constructor
-arguments are unchanged, so hardhat-deploy would otherwise reuse the existing O3. There is no
-pre-existing `WhitelistLifecycleHook` artifact to delete. Keep `AddressGroupRegistry` and every
-other deployment artifact intact.
+creation records. Keep `AddressGroupRegistry` and every other deployment artifact intact. After an
+external read-only check proves both registered predecessor O3s have no unresolved intents, run
+`--tags V3LifecycleStack` with `ENABLE_STAGING_V3_GROUPS_CUTOVER=true` and
+`CONFIRM_STAGING_V3_PREDECESSORS_DRAINED=true`. The confirmation is an operator acknowledgement;
+the deploy script intentionally contains no indexer client or drain-query implementation.
 
-Run both deployment tags together: `--tags V2WhitelistPolicy,V3LifecycleStack`. Artifact state is
-the live cutover gate: untouched legacy artifacts safely skip, removing only one target artifact
-fails, and the fully wired fresh stack verifies then skips. The lane requires
-`V3_GROUPS_CUTOVER_INDEXER_GRAPHQL_URL` to prove all
-registered retired O3 deployments have no `SIGNALED` intents before their registry removal. Base
-Safe actions are prepared unsigned and require separate execution before a rerun can verify the
-fully live state. Local rehearsal requires `ENABLE_V3_GROUPS_CUTOVER_TEST=true` and explicit local
-retired policy/O3 addresses.
+`deploy/31_deploy_chargeback_lifecycle_stack.ts` is the later chargeback/staking lane. Before it
+runs, move only these canonical artifacts aside:
+
+- `deployments/base_staging/StakeVault.json`
+- `deployments/base_staging/ChargebackPolicy.json`
+- `deployments/base_staging/IntentLifecycleHookV1.json`
+
+Run `--tags V3ChargebackLifecycleStack` with `ENABLE_STAGING_V3_CHARGEBACK_CUTOVER=true`. The lane
+requires the retired vault's aggregate stake and claim liabilities to be zero before any write. It
+then deploys a fresh vault, policy, and combined hook; reuses the existing chargeback verifier and
+nullifier registry; initializes the controller; applies the canonical risk windows; authorizes the
+combined hook on the new policy; rotates the already-deployed O3; and revokes the retired policy's
+nullifier-writer permission. Existing intents retain their snapshotted whitelist-only hook.
+
+Commit the newly generated canonical artifacts after each authorized deployment. Do not commit the
+temporary artifact removals.
 
 ### Whitelist Bootstrap
 
