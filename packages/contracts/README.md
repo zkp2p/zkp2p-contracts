@@ -2,12 +2,14 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
-## Release candidate 0.4.0-rc.3
+## Release candidate 0.4.0-rc.5
 
-- Refreshes the Base Staging deployment addresses for the redeployed `OrchestratorV3`, `StakeVault`,
-  `ChargebackNullifierRegistry`, `ChargebackVerifier`, `ChargebackPolicy`, and `IntentLifecycleHookV1`
-  after removing the unused `IOrchestratorV3` event declarations.
-- Keeps the Base production deployment addresses and ABIs unchanged.
+- Refreshes the Base deployment exports for the whitelist-only V3 lane: `WhitelistPolicy`,
+  `WhitelistLifecycleHook`, and `OrchestratorV3`.
+- Refreshes the Base Staging lifecycle and chargeback deployment addresses and ABIs introduced since
+  `0.4.0-rc.4`, including the new `WhitelistLifecycleHook` export.
+- Publishing these deployed addresses does not activate the fresh Base `OrchestratorV3`; its
+  governance registration remains a separate operation.
 
 ## Installation
 
