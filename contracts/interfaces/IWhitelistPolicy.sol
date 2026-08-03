@@ -12,6 +12,7 @@ interface IWhitelistPolicy is IPreIntentHook {
     function escrowRegistry() external view returns (IEscrowRegistry);
     function orchestratorRegistry() external view returns (IOrchestratorRegistry);
     function enabled(address escrow, uint256 depositId) external view returns (bool);
+    function bootstrapped(address escrow, uint256 depositId) external view returns (bool);
     function isWhitelisted(address escrow, uint256 depositId, address taker) external view returns (bool);
     function getAllowedGroups(address escrow, uint256 depositId) external view returns (bytes32[] memory);
     function isGroupAllowed(address escrow, uint256 depositId, bytes32 groupId) external view returns (bool);
@@ -46,6 +47,17 @@ interface IWhitelistPolicy is IPreIntentHook {
      * @param escrowRegistry New escrow registry used to authorize deposit configuration.
      */
     function setEscrowRegistry(IEscrowRegistry escrowRegistry) external;
+
+    /**
+     * @notice One-time governance bootstrap that enables existing deposits for the supplied curated groups.
+     * @dev Reverts atomically unless every deposit exists on the whitelisted escrow, is disabled, and has never
+     * been bootstrapped. Both arrays must be non-empty. Depositors retain normal control over the resulting policy,
+     * but disabling or removing groups does not clear the permanent bootstrap marker.
+     * @param escrow Whitelisted Escrow or EscrowV2 holding the deposits.
+     * @param depositIds Existing deposits to bootstrap.
+     * @param groupIds Existing curated group ids to append to every deposit.
+     */
+    function bootstrapDeposits(address escrow, uint256[] calldata depositIds, bytes32[] calldata groupIds) external;
 
     function setEnabled(address escrow, uint256 depositId, bool enabled) external;
     function addWhitelistedAddresses(address escrow, uint256 depositId, address[] calldata takers) external;

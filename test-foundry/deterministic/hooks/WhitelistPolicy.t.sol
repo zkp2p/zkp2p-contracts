@@ -154,6 +154,119 @@ contract WhitelistPolicyTest is Test {
         assertFalse(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, taker));
     }
 
+    /* ============ bootstrapDeposits ============ */
+
+    function test_BootstrapDepositsEnablesBatchAndAddsGroups() public {
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE, DEPOSIT_TWO), _groupIds(PEERS, PEER_PLUSES));
+
+        assertTrue(policy.bootstrapped(address(escrow), DEPOSIT_ONE));
+        assertTrue(policy.bootstrapped(address(escrow), DEPOSIT_TWO));
+        assertTrue(policy.enabled(address(escrow), DEPOSIT_ONE));
+        assertTrue(policy.enabled(address(escrow), DEPOSIT_TWO));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE), _groupIds(PEERS, PEER_PLUSES));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_TWO), _groupIds(PEERS, PEER_PLUSES));
+    }
+
+    function test_BootstrapDepositsIsOwnerOnly() public {
+        vm.expectRevert(bytes("Ownable: caller is not the owner"));
+        vm.prank(maker);
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEERS));
+
+        assertFalse(policy.bootstrapped(address(escrow), DEPOSIT_ONE));
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
+    }
+
+    function test_BootstrapDepositsRejectsAlreadyBootstrappedDeposit() public {
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEERS));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(WhitelistPolicy.DepositAlreadyBootstrapped.selector, address(escrow), DEPOSIT_ONE)
+        );
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEER_PLUSES));
+
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE), _groupIds(PEERS));
+    }
+
+    function test_BootstrapDepositsRejectsAlreadyEnabledDeposit() public {
+        vm.prank(maker);
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, true);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(WhitelistPolicy.DepositAlreadyEnabled.selector, address(escrow), DEPOSIT_ONE)
+        );
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEERS));
+
+        assertFalse(policy.bootstrapped(address(escrow), DEPOSIT_ONE));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 0);
+    }
+
+    function test_BootstrapDepositsRollsBackEntireBatchWhenLaterDepositFails() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(WhitelistPolicy.DepositNotFound.selector, address(escrow), UNKNOWN_DEPOSIT)
+        );
+        policy.bootstrapDeposits(
+            address(escrow), _depositIds(DEPOSIT_ONE, UNKNOWN_DEPOSIT), _groupIds(PEERS, PEER_PLUSES)
+        );
+
+        assertFalse(policy.bootstrapped(address(escrow), DEPOSIT_ONE));
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 0);
+    }
+
+    function test_BootstrapDepositsRejectsEmptyArrays() public {
+        vm.expectRevert(WhitelistPolicy.EmptyArray.selector);
+        policy.bootstrapDeposits(address(escrow), new uint256[](0), _groupIds(PEERS));
+
+        vm.expectRevert(WhitelistPolicy.EmptyArray.selector);
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), new bytes32[](0));
+    }
+
+    function test_BootstrapDepositsRejectsUnregisteredEscrow() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(WhitelistPolicy.EscrowNotWhitelisted.selector, address(unregisteredEscrow))
+        );
+        policy.bootstrapDeposits(address(unregisteredEscrow), _depositIds(DEPOSIT_ONE), _groupIds(PEERS));
+    }
+
+    function test_BootstrapDepositsRejectsUnknownGroupAndRollsBack() public {
+        bytes32 unknownGroup = bytes32(uint256(999));
+        vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.GroupDoesNotExist.selector, unknownGroup));
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEERS, unknownGroup));
+
+        assertFalse(policy.bootstrapped(address(escrow), DEPOSIT_ONE));
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 0);
+    }
+
+    function test_BootstrapDepositsEmitsCanonicalEvents() public {
+        vm.expectEmit(true, true, false, true, address(policy));
+        emit EnabledUpdated(address(escrow), DEPOSIT_ONE, true);
+        vm.expectEmit(true, true, true, true, address(policy));
+        emit AllowedGroupAdded(address(escrow), DEPOSIT_ONE, PEERS);
+        vm.expectEmit(true, true, true, true, address(policy));
+        emit AllowedGroupAdded(address(escrow), DEPOSIT_ONE, PEER_PLUSES);
+
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEERS, PEER_PLUSES));
+    }
+
+    function test_DepositorCanDisableAndRemoveAllGroupsAfterBootstrap() public {
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEERS, PEER_PLUSES));
+
+        vm.startPrank(maker);
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, false);
+        policy.removeAllowedGroups(address(escrow), DEPOSIT_ONE, _groupIds(PEERS, PEER_PLUSES));
+        vm.stopPrank();
+
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 0);
+        assertTrue(policy.bootstrapped(address(escrow), DEPOSIT_ONE));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(WhitelistPolicy.DepositAlreadyBootstrapped.selector, address(escrow), DEPOSIT_ONE)
+        );
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEER_MERCHANTS));
+    }
+
     /* ============ Authorization ============ */
 
     function test_OnlyDepositorMayConfigureDeposit() public {
@@ -623,6 +736,17 @@ contract WhitelistPolicyTest is Test {
         groupIds[0] = _first;
         groupIds[1] = _second;
         groupIds[2] = _third;
+    }
+
+    function _depositIds(uint256 _first) internal pure returns (uint256[] memory depositIds) {
+        depositIds = new uint256[](1);
+        depositIds[0] = _first;
+    }
+
+    function _depositIds(uint256 _first, uint256 _second) internal pure returns (uint256[] memory depositIds) {
+        depositIds = new uint256[](2);
+        depositIds[0] = _first;
+        depositIds[1] = _second;
     }
 
     function _addresses(address _first) internal pure returns (address[] memory addresses) {
