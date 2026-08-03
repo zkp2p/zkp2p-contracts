@@ -15,6 +15,10 @@ import {
 import type { WhitelistPolicy__factory } from "../typechain";
 
 const SUPPORTED_NETWORKS = new Set(["localhost", "hardhat", "base_staging", "base"]);
+const RETIRED_WHITELIST_POLICIES: Record<string, string> = {
+  base: "0xE96eD3dBc5869b98a555b137C2dcCDf157eD17B3",
+  base_staging: "0xe3d3E798AbF1c021730d951d0589bCa63d9CB3F0",
+};
 
 function sameAddress(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
@@ -36,6 +40,8 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
   const escrowRegistry = await ethers.getContractAt("EscrowRegistry", escrowRegistryAddress);
 
+  const retiredPolicy = RETIRED_WHITELIST_POLICIES[network];
+  if (retiredPolicy && sameAddress(whitelistPolicyAddress, retiredPolicy)) return false;
   if (!sameAddress(await policy.groupRegistry(), addressGroupRegistryAddress)) return false;
   if (!sameAddress(await policy.escrowRegistry(), escrowRegistryAddress)) return false;
   if (!sameAddress(await policy.orchestratorRegistry(), orchestratorRegistryAddress)) return false;
@@ -51,6 +57,12 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const network = hre.deployments.getNetworkName();
   const [deployer] = await hre.getUnnamedAccounts();
   const governance = MULTI_SIG[network] || deployer;
+
+  const existingWhitelistPolicy = await hre.deployments.getOrNull("WhitelistPolicy");
+  const retiredPolicy = RETIRED_WHITELIST_POLICIES[network];
+  if (existingWhitelistPolicy && retiredPolicy && sameAddress(existingWhitelistPolicy.address, retiredPolicy)) {
+    throw new Error("Move the retired WhitelistPolicy artifact aside so lane 29 deploys a fresh policy");
+  }
 
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
   const escrowRegistryAddress = getDeployedContractAddress(network, "EscrowRegistry");
@@ -86,8 +98,17 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
   const escrowRegistry = await ethers.getContractAt("EscrowRegistry", escrowRegistryAddress);
-  await addOrchestratorToRegistry(hre, orchestratorRegistry, orchestratorV2Address);
-  await addEscrowToRegistry(hre, escrowRegistry, escrowV2Address);
+  if (network === "base") {
+    if (!(await orchestratorRegistry.isOrchestrator(orchestratorV2Address))) {
+      throw new Error("Base OrchestratorV2 must already be registered before the groups deployment");
+    }
+    if (!(await escrowRegistry.isWhitelistedEscrow(escrowV2Address))) {
+      throw new Error("Base EscrowV2 must already be whitelisted before the groups deployment");
+    }
+  } else {
+    await addOrchestratorToRegistry(hre, orchestratorRegistry, orchestratorV2Address);
+    await addEscrowToRegistry(hre, escrowRegistry, escrowV2Address);
+  }
 
   const whitelistPolicyContract = await ethers.getContractAt("WhitelistPolicy", whitelistPolicy.address);
   await setNewOwner(hre, whitelistPolicyContract, governance);

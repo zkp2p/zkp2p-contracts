@@ -87,6 +87,8 @@ jobs:
           corepack yarn compile
           corepack yarn pkg:build
           corepack yarn pkg:test
+      - name: Test Base V3 groups deployment lane
+        run: corepack yarn test:v3-groups-deployment
       - name: Start local chain
         run: |
           corepack yarn chain > /tmp/zkp2p-hardhat-node.log 2>&1 &

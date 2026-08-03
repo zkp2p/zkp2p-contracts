@@ -9,15 +9,16 @@
 - `tasks/`: Custom Hardhat tasks (e.g., Etherscan verification with delay).
 - `typechain/`, `artifacts/`, `out/`, `dist/`: Generated output; do not edit by hand.
 
-## Staging Deployment Status
+## V3 Lifecycle Deployment Status
 
-- `deploy/30_deploy_v3_lifecycle_stack.ts` is the mounted V3 lifecycle lane for `localhost`, `hardhat`, and Base
-  staging. It reuses `EscrowV2` and `WhitelistPolicy` and wires `OrchestratorV3`, `UnifiedPaymentVerifierV3`,
-  `NullifierRegistryV2`, `IntentLifecycleHookV1`, `StakeVault`, `ChargebackPolicy`, and their verifier/nullifier
-  dependencies. The checked-in Base-staging artifacts record this lane, but live reads remain required before
-  claiming the currently active addresses or wiring.
-- Lane `30` skips Base production. Production remains a separately approved network cutover; never infer production
-  activation from source, tests, package ABIs, the mounted staging script, or Base-staging artifacts.
+- `deploy/30_deploy_v3_lifecycle_stack.ts` is the mounted whitelist-only V3 lifecycle lane for `localhost`, `hardhat`,
+  Base staging, and Base. Its lane-29 dependency supplies `WhitelistPolicy`; lane 30 deploys
+  `WhitelistLifecycleHook` and `OrchestratorV3` without activating the staking/chargeback lane.
+- Base staging removes only the explicitly drained staging predecessors. Base keeps the existing orchestrators
+  registered and queues exactly one Safe call to register the fresh O3. Base execution requires
+  `ENABLE_BASE_V3_GROUPS_CUTOVER=true`, a separately approved exact source SHA, and the production governance path.
+- Lane `31` remains staging-only and must not run during the Base whitelist-only deployment. Never infer live
+  activation from source, tests, package ABIs, a mounted script, or checked-in artifacts.
 - `IntentGuardian` and `WhitelistPolicy` remain part of the V2 policy history and are reused where the mounted V3
   lifecycle lane specifies. Do not redeploy a core stack merely to change an independently owned policy component.
 - The payment-verifier cutover is one-way. In the same governance batch, authorize UPV3 on `NullifierRegistryV2`,

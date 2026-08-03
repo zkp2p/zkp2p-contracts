@@ -12,13 +12,13 @@ Read `AGENTS.md` before acting. Treat deployment status as network-scoped:
   `OrchestratorV2` and `OrchestratorV3` are distinct current implementations;
   never infer which one is active from the version number alone.
 - `deploy/30_deploy_v3_lifecycle_stack.ts` is mounted by
-  `scripts/deployActive.ts` for `localhost`, `hardhat`, and Base staging. Current
-  Base-staging artifacts include the V3 orchestrator, verifier/nullifier,
-  lifecycle hook, stake vault, and chargeback components.
-- Lane `30` skips Base production. Source, tests, package ABIs, a mounted script,
-  and checked-in artifacts are not proof of live state. Resolve registries,
-  permissions, ownership, deployed bytecode, and on-chain wiring before stating
-  what is active on either network.
+  `scripts/deployActive.ts` for `localhost`, `hardhat`, Base staging, and Base.
+  Base execution is a separately approved whitelist-only deployment that queues
+  one Safe registration for the fresh O3 and leaves existing orchestrators in
+  place. Lane `31` remains staging-only.
+- Source, tests, package ABIs, a mounted script, and checked-in artifacts are not
+  proof of live state. Resolve registries, permissions, ownership, deployed
+  bytecode, and on-chain wiring before stating what is active on either network.
 - Verifier and nullifier cutovers are one-way. Never route a payment method back
   to a verifier whose replay domain cannot observe the current nullifier writes.
 - V1 source and deployment artifacts are historical evidence, not an active
