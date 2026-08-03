@@ -15,8 +15,9 @@ import {
   setNewOwner,
   waitForDeploymentDelay,
 } from "../deployments/helpers";
+import { safeBatchCollector } from "../deployments/safeBatchCollector";
 
-const SUPPORTED_NETWORKS = new Set(["localhost", "hardhat", "base_staging"]);
+const SUPPORTED_NETWORKS = new Set(["localhost", "hardhat", "base_staging", "base"]);
 const RETIRED_STAGING_WHITELIST_POLICY = "0xe3d3E798AbF1c021730d951d0589bCa63d9CB3F0";
 const RETIRED_STAGING_ORCHESTRATORS = [
   "0xF9CEE6365fB4F6354a19e95d35aaeF877CF1179d",
@@ -33,7 +34,10 @@ async function assertCode(address: string, label: string): Promise<void> {
   }
 }
 
-async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean> {
+async function systemReady(
+  hre: HardhatRuntimeEnvironment,
+  allowQueuedRegistryAdd: boolean,
+): Promise<boolean> {
   try {
     const network = hre.deployments.getNetworkName();
     const [deployer] = await hre.getUnnamedAccounts();
@@ -59,7 +63,13 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
     }
     if (!sameAddress(await orchestrator.owner(), governance)) return false;
     if (!sameAddress(await policy.owner(), governance)) return false;
-    if (!(await registry.isOrchestrator(orchestrator.address))) return false;
+    if (!(await registry.isOrchestrator(orchestrator.address))) {
+      const addOrchestratorData = registry.interface.encodeFunctionData("addOrchestrator", [orchestrator.address]);
+      if (
+        !allowQueuedRegistryAdd
+        || !safeBatchCollector.hasQueued(registry.address, addOrchestratorData)
+      ) return false;
+    }
 
     if (network === "base_staging") {
       if (sameAddress(policy.address, RETIRED_STAGING_WHITELIST_POLICY)) return false;
@@ -71,6 +81,10 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
   } catch {
     return false;
   }
+}
+
+async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean> {
+  return systemReady(hre, false);
 }
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
@@ -85,9 +99,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   if (network === "base_staging" && sameAddress(policyDeployment.address, RETIRED_STAGING_WHITELIST_POLICY)) {
     throw new Error("Move the retired WhitelistPolicy artifact aside so lane 29 deploys a fresh policy");
   }
-  if (existingHook || existingOrchestrator) {
+  if (!!existingHook !== !!existingOrchestrator) {
     throw new Error(
-      "Move the WhitelistLifecycleHook and OrchestratorV3 artifacts aside before the fresh lane-30 cutover",
+      "WhitelistLifecycleHook and OrchestratorV3 artifacts must either both be present or both be moved aside",
     );
   }
 
@@ -129,34 +143,45 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Reusing UnifiedPaymentVerifierV3:", unifiedPaymentVerifierV3Address);
   console.log("Reusing NullifierRegistryV2:", nullifierRegistryV2Address);
 
-  const hookDeployment = await hre.deployments.deploy("WhitelistLifecycleHook", {
-    from: deployer,
-    args: [orchestratorRegistryAddress, policyDeployment.address],
-    log: true,
-  });
-  if (!hookDeployment.newlyDeployed) throw new Error("WhitelistLifecycleHook was not freshly deployed");
-  await waitForDeploymentDelay(hre);
+  let hookDeployment = existingHook;
+  let orchestratorDeployment = existingOrchestrator;
+  if (!hookDeployment || !orchestratorDeployment) {
+    hookDeployment = await hre.deployments.deploy("WhitelistLifecycleHook", {
+      from: deployer,
+      args: [orchestratorRegistryAddress, policyDeployment.address],
+      log: true,
+    });
+    if (!hookDeployment.newlyDeployed) throw new Error("WhitelistLifecycleHook was not freshly deployed");
+    await waitForDeploymentDelay(hre);
 
-  const orchestratorDeployment = await hre.deployments.deploy("OrchestratorV3", {
-    from: deployer,
-    args: [
-      deployer,
-      chainId,
-      escrowRegistryAddress,
-      paymentVerifierRegistryAddress,
-      relayerRegistryAddress,
-      ORCHESTRATOR_V3_PROTOCOL_FEE[network],
-      ORCHESTRATOR_V3_PROTOCOL_FEE_RECIPIENT[network] || deployer,
-    ],
-    log: true,
-  });
-  if (!orchestratorDeployment.newlyDeployed) throw new Error("OrchestratorV3 was not freshly deployed");
-  await waitForDeploymentDelay(hre);
+    orchestratorDeployment = await hre.deployments.deploy("OrchestratorV3", {
+      from: deployer,
+      args: [
+        deployer,
+        chainId,
+        escrowRegistryAddress,
+        paymentVerifierRegistryAddress,
+        relayerRegistryAddress,
+        ORCHESTRATOR_V3_PROTOCOL_FEE[network],
+        ORCHESTRATOR_V3_PROTOCOL_FEE_RECIPIENT[network] || deployer,
+      ],
+      log: true,
+    });
+    if (!orchestratorDeployment.newlyDeployed) throw new Error("OrchestratorV3 was not freshly deployed");
+    await waitForDeploymentDelay(hre);
+  } else {
+    console.log("Resuming the prepared whitelist-only V3 groups deployment");
+  }
 
   const hook = await ethers.getContractAt("WhitelistLifecycleHook", hookDeployment.address);
   const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorDeployment.address);
-  await (await orchestrator.setLifecycleHook(hook.address)).wait();
-  await waitForDeploymentDelay(hre);
+  if (!sameAddress(await orchestrator.lifecycleHook(), hook.address)) {
+    if (!sameAddress(await orchestrator.owner(), deployer)) {
+      throw new Error("OrchestratorV3 lifecycle hook is incorrect and the deployer is no longer the owner");
+    }
+    await (await orchestrator.setLifecycleHook(hook.address)).wait();
+    await waitForDeploymentDelay(hre);
+  }
 
   await addOrchestratorToRegistry(hre, registry, orchestrator.address);
   for (const predecessor of registeredPredecessors) {
@@ -173,17 +198,35 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   if (!sameAddress(await orchestrator.lifecycleHook(), hook.address)) {
     throw new Error("OrchestratorV3 whitelist lifecycle hook mismatch");
   }
-  if (!(await registry.isOrchestrator(orchestrator.address))) {
-    throw new Error("Fresh OrchestratorV3 is not registered");
+  const orchestratorRegistered = await registry.isOrchestrator(orchestrator.address);
+  const addOrchestratorData = registry.interface.encodeFunctionData("addOrchestrator", [orchestrator.address]);
+  const orchestratorRegistrationQueued = safeBatchCollector.hasQueued(registry.address, addOrchestratorData);
+  if (!orchestratorRegistered && !orchestratorRegistrationQueued) {
+    throw new Error("Fresh OrchestratorV3 is neither registered nor queued for Safe registration");
   }
   for (const predecessor of registeredPredecessors) {
     if (await registry.isOrchestrator(predecessor)) {
       throw new Error(`Retired OrchestratorV3 remains registered: ${predecessor}`);
     }
   }
-  if (!await systemFullyWired(hre)) throw new Error("Whitelist-only V3 groups stack verification failed");
+  if (!await systemReady(hre, network === "base")) {
+    throw new Error("Whitelist-only V3 groups stack verification failed");
+  }
 
-  console.log("=== Whitelist-only V3 groups stack verified ===");
+  if (network === "base") {
+    const expectedSafeTransactions = orchestratorRegistered ? 0 : 1;
+    if (safeBatchCollector.count() !== expectedSafeTransactions) {
+      throw new Error(
+        `Expected ${expectedSafeTransactions} Base Safe transaction(s), found ${safeBatchCollector.count()}`,
+      );
+    }
+  }
+
+  console.log(
+    orchestratorRegistered
+      ? "=== Whitelist-only V3 groups stack verified ==="
+      : "=== Whitelist-only V3 groups stack prepared; Safe registration pending ===",
+  );
   console.log("WhitelistPolicy:", policyDeployment.address);
   console.log("WhitelistLifecycleHook:", hook.address);
   console.log("OrchestratorV3:", orchestrator.address);
@@ -194,6 +237,7 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   if (!SUPPORTED_NETWORKS.has(network)) return true;
   if (await systemFullyWired(hre)) return true;
   if (network === "base_staging" && process.env.ENABLE_STAGING_V3_GROUPS_CUTOVER !== "true") return true;
+  if (network === "base" && process.env.ENABLE_BASE_V3_GROUPS_CUTOVER !== "true") return true;
   return false;
 };
 

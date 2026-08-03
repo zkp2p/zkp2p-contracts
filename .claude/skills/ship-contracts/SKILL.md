@@ -59,11 +59,13 @@ the approved target state.
   activation as distinct states.
 - Do not add a deploy script merely because source exists.
 - Treat `OrchestratorV3` as a dedicated implementation. Its current lifecycle
-  design intentionally differs from V2 and its mounted lane `30` supports only
-  `localhost`, `hardhat`, and Base staging.
-- Do not add Base production to lane `30`, relax its network guard, or infer a
-  production path from Base-staging artifacts without a separately reviewed and
-  approved production design.
+  design intentionally differs from V2. Its mounted lane `30` supports
+  `localhost`, `hardhat`, Base staging, and an explicitly gated Base
+  whitelist-only deployment.
+- Base lane `30` requires `ENABLE_BASE_V3_GROUPS_CUTOVER=true`, a separately
+  reviewed exact source SHA, and the production governance/deployer path. It
+  must leave existing orchestrators registered and produce only the fresh O3
+  registry-add Safe call. Lane `31` remains outside that deployment.
 - Remove retired active routes, permissions, exports, and aliases in the same
   hard cutover.
 - Do not add rollback compatibility to a one-way verifier or nullifier
@@ -104,9 +106,10 @@ Require a separate explicit approval naming Base production, exact source SHA,
 and governance/deployer path. Re-run state and simulation checks against
 production immediately before submission.
 
-The current V3 lifecycle lane skips Base production. Production activation
-requires a focused network-scoped implementation and review; do not remove the
-guard or reuse staging artifacts as a shortcut.
+The Base whitelist-only lane must be reviewed at an exact source SHA. Require
+the explicit Base cutover flag, retain existing orchestrators, and verify that
+the generated Safe batch contains only `addOrchestrator(freshO3)`. Do not reuse
+staging artifacts or include lane `31` as a shortcut.
 
 Fail closed on chain, address, signer, ownership, permission, or expected-state
 mismatch. Do not reuse staging approval. Do not publish a package automatically.

@@ -625,13 +625,16 @@ This script currently covers:
 
 ### V3 Groups Cutover
 
-The staging cutover is split into two explicit lanes. Base production is not enabled by either lane.
+The lifecycle cutover is split into two explicit lanes. Lane 30 supports the whitelist-only groups
+deployment on Base staging and Base; lane 31 remains staging-only until the chargeback/staking cutover
+is separately approved.
 
 `deploy/30_deploy_v3_lifecycle_stack.ts` is the groups-only lane. Its lane-29 dependency supplies a
 fresh `WhitelistPolicy`; lane 30 deploys a fresh `WhitelistLifecycleHook` and `OrchestratorV3`, sets
 the hook after O3 construction, registers the new O3, and removes the two drained staging
 predecessors. It reuses the existing registries, UPV3, NullifierRegistryV2, chargeback stack, and
-payment routing without mutating them.
+payment routing without mutating them. On Base it leaves existing orchestrators registered and queues
+exactly one Safe transaction to add the fresh O3 to `OrchestratorRegistry`.
 
 Before a separately authorized live cutover, move these three artifacts aside for the selected
 environment in the deployment worktree:
@@ -643,9 +646,11 @@ environment in the deployment worktree:
 Do not commit the temporary removals: the authorized deployment must replace all three artifacts with fresh
 creation records. Keep `AddressGroupRegistry` and every other deployment artifact intact. After an
 external read-only check proves both registered predecessor O3s have no unresolved intents, run
-`--tags V3LifecycleStack` with `ENABLE_STAGING_V3_GROUPS_CUTOVER=true` and
-`CONFIRM_STAGING_V3_PREDECESSORS_DRAINED=true`. The confirmation is an operator acknowledgement;
-the deploy script intentionally contains no indexer client or drain-query implementation.
+`--tags V3LifecycleStack`. Base staging requires `ENABLE_STAGING_V3_GROUPS_CUTOVER=true` and
+`CONFIRM_STAGING_V3_PREDECESSORS_DRAINED=true`; Base requires `ENABLE_BASE_V3_GROUPS_CUTOVER=true`.
+The staging confirmation is an operator acknowledgement; the deploy script intentionally contains no
+indexer client or drain-query implementation. Base fails unless O2 and EscrowV2 are already registered,
+the existing stack remains intact, and the generated Safe batch contains only the fresh O3 registration.
 
 `deploy/31_deploy_chargeback_lifecycle_stack.ts` is the later chargeback/staking lane. Before it
 runs, move only these canonical artifacts aside:
