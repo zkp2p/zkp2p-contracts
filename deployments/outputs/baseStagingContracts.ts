@@ -11787,7 +11787,7 @@ export default {
       ]
     },
     "OrchestratorV3": {
-      "address": "0xF9CEE6365fB4F6354a19e95d35aaeF877CF1179d",
+      "address": "0x1734f5C9956D0DA1f48E27cd1C6167aA81F27869",
       "abi": [
         {
           "inputs": [
@@ -12794,25 +12794,6 @@ export default {
               "internalType": "contract IIntentLifecycleHook",
               "name": "",
               "type": "address"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bytes32",
-              "name": "_intentHash",
-              "type": "bytes32"
-            }
-          ],
-          "name": "getIntentMinAtSignal",
-          "outputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
             }
           ],
           "stateMutability": "view",
