@@ -68,8 +68,9 @@ iteration loop.
 
 - Inspect the requested change and `git diff` first. List the production files, interfaces, deploy/package consumers,
   and test files that can actually be affected.
-- Use direct searches (`rg` for imports, calls, fixtures, and selectors) to map impact. Do not invoke, recreate, or use
-  `zkp2p-stack-impact` or another generic "stack impact" skill in this repository.
+- Use direct searches (`rg` for imports, calls, fixtures, and selectors) during implementation. Do not run a generic
+  impact workflow at task start. After a stabilized PR diff changes a public cross-repository boundary, use the
+  workspace-level `$zkp2p-merge-impact-check` as the final read-only gate before marking ready or merging.
 - For architecture, explanation, documentation, or read-only review tasks, do not compile or test unless the answer
   depends on executing code.
 - Do not expand a focused request into repository cleanup, unrelated test repair, coverage work, or extra review
