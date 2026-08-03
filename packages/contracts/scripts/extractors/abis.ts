@@ -26,6 +26,8 @@ const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
     'contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol/UnifiedPaymentVerifierV3.json',
   AddressGroupRegistry: 'contracts/registries/AddressGroupRegistry.sol/AddressGroupRegistry.json',
   WhitelistPolicy: 'contracts/hooks/WhitelistPolicy.sol/WhitelistPolicy.json',
+  WhitelistLifecycleHook:
+    'contracts/hooks/WhitelistLifecycleHook.sol/WhitelistLifecycleHook.json',
 };
 
 function ensureDir(dir: string) {

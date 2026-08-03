@@ -623,6 +623,63 @@ This script currently covers:
 - `yarn deploy:base`
 - `yarn deploy:base_staging`
 
+### V3 Groups Cutover
+
+The staging cutover is split into two explicit lanes. Base production is not enabled by either lane.
+
+`deploy/30_deploy_v3_lifecycle_stack.ts` is the groups-only lane. Its lane-29 dependency supplies a
+fresh `WhitelistPolicy`; lane 30 deploys a fresh `WhitelistLifecycleHook` and `OrchestratorV3`, sets
+the hook after O3 construction, registers the new O3, and removes the two drained staging
+predecessors. It reuses the existing registries, UPV3, NullifierRegistryV2, chargeback stack, and
+payment routing without mutating them.
+
+Before a separately authorized live cutover, move these three artifacts aside for the selected
+environment in the deployment worktree:
+
+- `deployments/<environment>/WhitelistPolicy.json`
+- `deployments/<environment>/WhitelistLifecycleHook.json` when present
+- `deployments/<environment>/OrchestratorV3.json`
+
+Do not commit the temporary removals: the authorized deployment must replace all three artifacts with fresh
+creation records. Keep `AddressGroupRegistry` and every other deployment artifact intact. After an
+external read-only check proves both registered predecessor O3s have no unresolved intents, run
+`--tags V3LifecycleStack` with `ENABLE_STAGING_V3_GROUPS_CUTOVER=true` and
+`CONFIRM_STAGING_V3_PREDECESSORS_DRAINED=true`. The confirmation is an operator acknowledgement;
+the deploy script intentionally contains no indexer client or drain-query implementation.
+
+`deploy/31_deploy_chargeback_lifecycle_stack.ts` is the later chargeback/staking lane. Before it
+runs, move only these canonical artifacts aside:
+
+- `deployments/base_staging/StakeVault.json`
+- `deployments/base_staging/ChargebackPolicy.json`
+- `deployments/base_staging/IntentLifecycleHookV1.json`
+
+Run `--tags V3ChargebackLifecycleStack` with `ENABLE_STAGING_V3_CHARGEBACK_CUTOVER=true`. The lane
+requires the retired vault's aggregate stake and claim liabilities to be zero before any write. It
+then deploys a fresh vault, policy, and combined hook; reuses the existing chargeback verifier and
+nullifier registry; initializes the controller; applies the canonical risk windows; authorizes the
+combined hook on the new policy; rotates the already-deployed O3; and revokes the retired policy's
+nullifier-writer permission. Existing intents retain their snapshotted whitelist-only hook.
+
+Commit the newly generated canonical artifacts after each authorized deployment. Do not commit the
+temporary artifact removals.
+
+### Whitelist Bootstrap
+
+`yarn whitelist:bootstrap` discovers active deposits from a configurable raw GraphQL endpoint and
+simulates canonical `WhitelistPolicy.bootstrapDeposits` batches for the explicitly supplied PRO and
+PLUS group IDs. It imports no indexer schema package, so the contracts and indexer packages remain
+acyclic. Discovery is a dry-run by default; mutation and Safe output require an exact expected
+deposit count and all discovery modes enforce a configurable maximum.
+
+- Staging execution requires `BOOTSTRAP_EXECUTE=true` and the current policy owner's private key.
+- Production Safe preparation requires `BOOTSTRAP_SAFE_OUTPUT_FILE`; it emits unsigned Transaction
+  Builder JSON owned by the policy's onchain owner, and never signs or submits it.
+- Direct execution and Safe output are mutually exclusive. Every batch is simulated and its calldata
+  decoded and checked before either execution or file output.
+- Run `yarn whitelist:bootstrap --self-test` for the embedded calldata/Safe validation and
+  `yarn whitelist:bootstrap --help` for the complete environment-variable reference.
+
 ### Verification Commands
 
 - `yarn etherscan:base`

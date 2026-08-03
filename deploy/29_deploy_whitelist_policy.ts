@@ -57,7 +57,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const orchestratorV2Address = getDeployedContractAddress(network, "OrchestratorV2");
   const escrowV2Address = getDeployedContractAddress(network, "EscrowV2");
 
-  console.log("=== Deploying V2 whitelist policy ===");
+  console.log("=== Deploying whitelist policy ===");
   console.log("Reusing OrchestratorV2:", orchestratorV2Address);
   console.log("Reusing EscrowV2:", escrowV2Address);
 
@@ -92,7 +92,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const whitelistPolicyContract = await ethers.getContractAt("WhitelistPolicy", whitelistPolicy.address);
   await setNewOwner(hre, whitelistPolicyContract, governance);
 
-  console.log("=== V2 whitelist policy deployment prepared ===");
+  console.log("=== Whitelist policy deployment prepared ===");
   console.log("AddressGroupRegistry:", addressGroupRegistry.address);
   console.log("WhitelistPolicy:", whitelistPolicy.address);
 };

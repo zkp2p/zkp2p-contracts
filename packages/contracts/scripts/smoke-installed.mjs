@@ -35,8 +35,10 @@ for (const subpath of [
   if (!requireFromInstall(subpath)) fail(`consumer import ${subpath} is missing`);
 }
 const sourceAbis = requireFromInstall('@zkp2p/contracts-v2/abis/contracts');
-if (!Array.isArray(sourceAbis.OrchestratorV3) || sourceAbis.OrchestratorV3.length === 0) {
-  fail('OrchestratorV3 source ABI export is missing');
+for (const contractName of ['OrchestratorV3', 'WhitelistLifecycleHook']) {
+  if (!Array.isArray(sourceAbis[contractName]) || sourceAbis[contractName].length === 0) {
+    fail(`${contractName} source ABI export is missing`);
+  }
 }
 
 for (const network of ['base', 'baseStaging']) {

@@ -37,6 +37,8 @@ const sourceAbiArtifacts = {
   AddressGroupRegistry:
     'artifacts/contracts/registries/AddressGroupRegistry.sol/AddressGroupRegistry.json',
   WhitelistPolicy: 'artifacts/contracts/hooks/WhitelistPolicy.sol/WhitelistPolicy.json',
+  WhitelistLifecycleHook:
+    'artifacts/contracts/hooks/WhitelistLifecycleHook.sol/WhitelistLifecycleHook.json',
 };
 
 function fail(message) {

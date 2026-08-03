@@ -5,189 +5,139 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 
 import {
-  CHARGEBACK_RISK_WINDOW,
-  CHARGEBACKABLE_PAYMENT_METHODS,
   MULTI_SIG,
   ORCHESTRATOR_V3_PROTOCOL_FEE,
   ORCHESTRATOR_V3_PROTOCOL_FEE_RECIPIENT,
-  STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
-  USDC,
 } from "../deployments/parameters";
 import {
   addOrchestratorToRegistry,
-  addPaymentMethodToRegistry,
-  addPaymentMethodToUnifiedVerifier,
-  addWritePermission,
-  getDeployedContractAddress,
   removeOrchestratorFromRegistry,
-  removePaymentMethodFromRegistry,
   setNewOwner,
   waitForDeploymentDelay,
 } from "../deployments/helpers";
 
-const SUPPORTED_NETWORKS = new Set(["localhost", "hardhat", "base", "base_staging"]);
-const OLD_ORCHESTRATOR_V3: Record<string, string> = {
-  base_staging: "0x6Db9dDb38a19Be0c614C0Ad9e78Baf73f93c35dF",
-};
+const SUPPORTED_NETWORKS = new Set(["localhost", "hardhat", "base_staging"]);
+const RETIRED_STAGING_WHITELIST_POLICY = "0xe3d3E798AbF1c021730d951d0589bCa63d9CB3F0";
+const RETIRED_STAGING_ORCHESTRATORS = [
+  "0xF9CEE6365fB4F6354a19e95d35aaeF877CF1179d",
+  "0x1734f5C9956D0DA1f48E27cd1C6167aA81F27869",
+];
 
 function sameAddress(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
 }
 
-function paymentMethodHash(name: string): string {
-  return ethers.utils.keccak256(ethers.utils.toUtf8Bytes(name));
+async function assertCode(address: string, label: string): Promise<void> {
+  if ((await ethers.provider.getCode(address)) === "0x") {
+    throw new Error(`${label} has no bytecode: ${address}`);
+  }
 }
 
 async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean> {
-  const network = hre.deployments.getNetworkName();
-  const orchestratorV3 = await hre.deployments.getOrNull("OrchestratorV3");
-  const lifecycleHook = await hre.deployments.getOrNull("IntentLifecycleHookV1");
-  const chargebackPolicy = await hre.deployments.getOrNull("ChargebackPolicy");
-  const stakeVault = await hre.deployments.getOrNull("StakeVault");
-  if (!orchestratorV3 || !lifecycleHook || !chargebackPolicy || !stakeVault) return false;
+  try {
+    const network = hre.deployments.getNetworkName();
+    const [deployer] = await hre.getUnnamedAccounts();
+    const governance = MULTI_SIG[network] || deployer;
+    const policyDeployment = await hre.deployments.get("WhitelistPolicy");
+    const hookDeployment = await hre.deployments.get("WhitelistLifecycleHook");
+    const orchestratorDeployment = await hre.deployments.get("OrchestratorV3");
+    const registryAddress = (await hre.deployments.get("OrchestratorRegistry")).address;
+    const policy = await ethers.getContractAt("WhitelistPolicy", policyDeployment.address);
+    const hook = await ethers.getContractAt("WhitelistLifecycleHook", hookDeployment.address);
+    const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorDeployment.address);
+    const registry = await ethers.getContractAt("OrchestratorRegistry", registryAddress);
+    const currentLifecycleHook = await orchestrator.lifecycleHook();
 
-  const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
-  const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
-  const unifiedPaymentVerifierV3Address = getDeployedContractAddress(network, "UnifiedPaymentVerifierV3");
-
-  const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
-  const paymentVerifierRegistry = await ethers.getContractAt(
-    "PaymentVerifierRegistry",
-    paymentVerifierRegistryAddress,
-  );
-  const orchestratorV3Contract = await ethers.getContractAt("OrchestratorV3", orchestratorV3.address);
-  const stakeVaultContract = await ethers.getContractAt("StakeVault", stakeVault.address);
-  const chargebackPolicyContract = await ethers.getContractAt("ChargebackPolicy", chargebackPolicy.address);
-
-  if (!(await orchestratorRegistry.isOrchestrator(orchestratorV3.address))) return false;
-
-  const oldOrchestratorV3 = OLD_ORCHESTRATOR_V3[network];
-  if (oldOrchestratorV3 && (await orchestratorRegistry.isOrchestrator(oldOrchestratorV3))) return false;
-
-  if (!sameAddress(await orchestratorV3Contract.lifecycleHook(), lifecycleHook.address)) return false;
-  if (!sameAddress(await stakeVaultContract.controller(), chargebackPolicy.address)) return false;
-  if (!(await chargebackPolicyContract.isLifecycleHookAuthorized(lifecycleHook.address))) return false;
-
-  const activePaymentMethods: string[] = await paymentVerifierRegistry.getPaymentMethods();
-  const activePaymentMethodSet = new Set(activePaymentMethods);
-  for (const methodName of CHARGEBACKABLE_PAYMENT_METHODS) {
-    const method = paymentMethodHash(methodName);
-    if (
-      activePaymentMethodSet.has(method)
-      && !(await chargebackPolicyContract.getRiskWindow(method)).eq(CHARGEBACK_RISK_WINDOW[network])
-    ) {
-      return false;
+    if (!sameAddress(await hook.orchestratorRegistry(), registryAddress)) return false;
+    if (!sameAddress(await hook.whitelistPolicy(), policy.address)) return false;
+    if (!sameAddress(currentLifecycleHook, hook.address)) {
+      const combinedHookDeployment = await hre.deployments.get("IntentLifecycleHookV1");
+      if (!sameAddress(currentLifecycleHook, combinedHookDeployment.address)) return false;
+      const combinedHook = await ethers.getContractAt("IntentLifecycleHookV1", combinedHookDeployment.address);
+      if (!sameAddress(await combinedHook.orchestratorRegistry(), registryAddress)) return false;
+      if (!sameAddress(await combinedHook.whitelistPolicy(), policy.address)) return false;
     }
-  }
+    if (!sameAddress(await orchestrator.owner(), governance)) return false;
+    if (!sameAddress(await policy.owner(), governance)) return false;
+    if (!(await registry.isOrchestrator(orchestrator.address))) return false;
 
-  for (const method of activePaymentMethods) {
-    if (!sameAddress(await paymentVerifierRegistry.getVerifier(method), unifiedPaymentVerifierV3Address)) {
-      return false;
+    if (network === "base_staging") {
+      if (sameAddress(policy.address, RETIRED_STAGING_WHITELIST_POLICY)) return false;
+      for (const retired of RETIRED_STAGING_ORCHESTRATORS) {
+        if (await registry.isOrchestrator(retired)) return false;
+      }
     }
+    return true;
+  } catch {
+    return false;
   }
-
-  return true;
 }
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
-  const { deploy } = hre.deployments;
   const network = hre.deployments.getNetworkName();
   const chainId = (await ethers.provider.getNetwork()).chainId;
   const [deployer] = await hre.getUnnamedAccounts();
   const governance = MULTI_SIG[network] || deployer;
 
-  const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
-  const escrowRegistryAddress = getDeployedContractAddress(network, "EscrowRegistry");
-  const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
-  const relayerRegistryAddress = getDeployedContractAddress(network, "RelayerRegistry");
-  const legacyNullifierRegistryAddress = getDeployedContractAddress(network, "NullifierRegistry");
-  const multiAttestationVerifierAddress = getDeployedContractAddress(network, "MultiAttestationVerifier");
-  const whitelistPolicyAddress = getDeployedContractAddress(network, "WhitelistPolicy");
-  const escrowV2Address = getDeployedContractAddress(network, "EscrowV2");
-  if (network === "base_staging" && !USDC[network]) {
-    throw new Error(`No stake token configured for network ${network}`);
+  const policyDeployment = await hre.deployments.get("WhitelistPolicy");
+  const existingHook = await hre.deployments.getOrNull("WhitelistLifecycleHook");
+  const existingOrchestrator = await hre.deployments.getOrNull("OrchestratorV3");
+  if (network === "base_staging" && sameAddress(policyDeployment.address, RETIRED_STAGING_WHITELIST_POLICY)) {
+    throw new Error("Move the retired WhitelistPolicy artifact aside so lane 29 deploys a fresh policy");
   }
-  const stakeTokenAddress = USDC[network] || getDeployedContractAddress(network, "USDCMock");
-
-  console.log("=== Deploying V3 lifecycle stack ===");
-  console.log("Reusing EscrowV2:", escrowV2Address);
-  console.log("Reusing WhitelistPolicy:", whitelistPolicyAddress);
-  console.log("Stake token:", stakeTokenAddress);
-
-  const paymentVerifierRegistry = await ethers.getContractAt(
-    "PaymentVerifierRegistry",
-    paymentVerifierRegistryAddress,
-  );
-  const activePaymentMethods: Array<{ method: string; currencies: string[]; verifier: string }> = [];
-  for (const method of await paymentVerifierRegistry.getPaymentMethods()) {
-    activePaymentMethods.push({
-      method,
-      currencies: await paymentVerifierRegistry.getCurrencies(method),
-      verifier: await paymentVerifierRegistry.getVerifier(method),
-    });
-  }
-
-  let nullifierRegistryV2 = await hre.deployments.getOrNull("NullifierRegistryV2");
-  let nullifierRegistryV2NewlyDeployed = false;
-  if (!nullifierRegistryV2) {
-    const deployment = await deploy("NullifierRegistryV2", {
-      from: deployer,
-      args: [legacyNullifierRegistryAddress],
-      log: true,
-    });
-    nullifierRegistryV2 = deployment;
-    nullifierRegistryV2NewlyDeployed = deployment.newlyDeployed;
-    if (nullifierRegistryV2NewlyDeployed) {
-      await waitForDeploymentDelay(hre);
-    }
-  }
-
-  let unifiedPaymentVerifierV3 = await hre.deployments.getOrNull("UnifiedPaymentVerifierV3");
-  let unifiedPaymentVerifierV3NewlyDeployed = false;
-  if (!unifiedPaymentVerifierV3) {
-    const deployment = await deploy("UnifiedPaymentVerifierV3", {
-      from: deployer,
-      args: [
-        orchestratorRegistryAddress,
-        nullifierRegistryV2.address,
-        multiAttestationVerifierAddress,
-      ],
-      log: true,
-    });
-    unifiedPaymentVerifierV3 = deployment;
-    unifiedPaymentVerifierV3NewlyDeployed = deployment.newlyDeployed;
-    if (unifiedPaymentVerifierV3NewlyDeployed) {
-      await waitForDeploymentDelay(hre);
-    }
-  }
-
-  const nullifierRegistryV2Contract = await ethers.getContractAt(
-    "NullifierRegistryV2",
-    nullifierRegistryV2.address,
-  );
-  const unifiedPaymentVerifierV3Contract = await ethers.getContractAt(
-    "UnifiedPaymentVerifierV3",
-    unifiedPaymentVerifierV3.address,
-  );
-  for (const { method } of activePaymentMethods) {
-    await addPaymentMethodToUnifiedVerifier(hre, unifiedPaymentVerifierV3Contract, method);
-  }
-  await addWritePermission(hre, nullifierRegistryV2Contract, unifiedPaymentVerifierV3.address);
-
-  for (const { method, currencies, verifier } of activePaymentMethods) {
-    if (sameAddress(verifier, unifiedPaymentVerifierV3.address)) continue;
-
-    await removePaymentMethodFromRegistry(hre, paymentVerifierRegistry, method);
-    await addPaymentMethodToRegistry(
-      hre,
-      paymentVerifierRegistry,
-      method,
-      unifiedPaymentVerifierV3.address,
-      currencies,
+  if (existingHook || existingOrchestrator) {
+    throw new Error(
+      "Move the WhitelistLifecycleHook and OrchestratorV3 artifacts aside before the fresh lane-30 cutover",
     );
   }
 
-  const orchestratorV3 = await deploy("OrchestratorV3", {
+  const orchestratorRegistryAddress = (await hre.deployments.get("OrchestratorRegistry")).address;
+  const escrowRegistryAddress = (await hre.deployments.get("EscrowRegistry")).address;
+  const paymentVerifierRegistryAddress = (await hre.deployments.get("PaymentVerifierRegistry")).address;
+  const relayerRegistryAddress = (await hre.deployments.get("RelayerRegistry")).address;
+  const addressGroupRegistryAddress = (await hre.deployments.get("AddressGroupRegistry")).address;
+
+  await assertCode(addressGroupRegistryAddress, "AddressGroupRegistry");
+  let unifiedPaymentVerifierV3Address = "not deployed on local rehearsal";
+  let nullifierRegistryV2Address = "not deployed on local rehearsal";
+  if (network === "base_staging") {
+    unifiedPaymentVerifierV3Address = (await hre.deployments.get("UnifiedPaymentVerifierV3")).address;
+    nullifierRegistryV2Address = (await hre.deployments.get("NullifierRegistryV2")).address;
+    await assertCode(unifiedPaymentVerifierV3Address, "UnifiedPaymentVerifierV3");
+    await assertCode(nullifierRegistryV2Address, "NullifierRegistryV2");
+  }
+
+  const registry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
+  const registeredPredecessors: string[] = [];
+  if (network === "base_staging") {
+    for (const retired of RETIRED_STAGING_ORCHESTRATORS) {
+      await assertCode(retired, "Retired OrchestratorV3");
+      if (await registry.isOrchestrator(retired)) registeredPredecessors.push(retired);
+    }
+    if (
+      registeredPredecessors.length > 0
+      && process.env.CONFIRM_STAGING_V3_PREDECESSORS_DRAINED !== "true"
+    ) {
+      throw new Error(
+        "Set CONFIRM_STAGING_V3_PREDECESSORS_DRAINED=true only after the external read-only drain check",
+      );
+    }
+  }
+
+  console.log("=== Deploying whitelist-only V3 groups stack ===");
+  console.log("Reusing WhitelistPolicy:", policyDeployment.address);
+  console.log("Reusing UnifiedPaymentVerifierV3:", unifiedPaymentVerifierV3Address);
+  console.log("Reusing NullifierRegistryV2:", nullifierRegistryV2Address);
+
+  const hookDeployment = await hre.deployments.deploy("WhitelistLifecycleHook", {
+    from: deployer,
+    args: [orchestratorRegistryAddress, policyDeployment.address],
+    log: true,
+  });
+  if (!hookDeployment.newlyDeployed) throw new Error("WhitelistLifecycleHook was not freshly deployed");
+  await waitForDeploymentDelay(hre);
+
+  const orchestratorDeployment = await hre.deployments.deploy("OrchestratorV3", {
     from: deployer,
     args: [
       deployer,
@@ -196,163 +146,55 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       paymentVerifierRegistryAddress,
       relayerRegistryAddress,
       ORCHESTRATOR_V3_PROTOCOL_FEE[network],
-      ORCHESTRATOR_V3_PROTOCOL_FEE_RECIPIENT[network] != ""
-        ? ORCHESTRATOR_V3_PROTOCOL_FEE_RECIPIENT[network]
-        : deployer,
+      ORCHESTRATOR_V3_PROTOCOL_FEE_RECIPIENT[network] || deployer,
     ],
     log: true,
   });
-  if (orchestratorV3.newlyDeployed) {
-    await waitForDeploymentDelay(hre);
+  if (!orchestratorDeployment.newlyDeployed) throw new Error("OrchestratorV3 was not freshly deployed");
+  await waitForDeploymentDelay(hre);
+
+  const hook = await ethers.getContractAt("WhitelistLifecycleHook", hookDeployment.address);
+  const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorDeployment.address);
+  await (await orchestrator.setLifecycleHook(hook.address)).wait();
+  await waitForDeploymentDelay(hre);
+
+  await addOrchestratorToRegistry(hre, registry, orchestrator.address);
+  for (const predecessor of registeredPredecessors) {
+    await removeOrchestratorFromRegistry(hre, registry, predecessor);
   }
+  await setNewOwner(hre, orchestrator, governance);
 
-  const stakeVault = await deploy("StakeVault", {
-    from: deployer,
-    args: [
-      deployer,
-      stakeTokenAddress,
-      ethers.constants.AddressZero,
-      STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
-    ],
-    log: true,
-  });
-  if (stakeVault.newlyDeployed) {
-    await waitForDeploymentDelay(hre);
+  if (!sameAddress(await hook.orchestratorRegistry(), registry.address)) {
+    throw new Error("WhitelistLifecycleHook registry mismatch");
   }
-
-  const chargebackNullifierRegistry = await deploy("ChargebackNullifierRegistry", {
-    contract: "NullifierRegistry",
-    from: deployer,
-    args: [],
-    log: true,
-  });
-  if (chargebackNullifierRegistry.newlyDeployed) {
-    await waitForDeploymentDelay(hre);
+  if (!sameAddress(await hook.whitelistPolicy(), policyDeployment.address)) {
+    throw new Error("WhitelistLifecycleHook policy mismatch");
   }
-
-  const chargebackVerifier = await deploy("ChargebackVerifier", {
-    from: deployer,
-    args: [
-      deployer,
-      nullifierRegistryV2.address,
-      multiAttestationVerifierAddress,
-    ],
-    log: true,
-  });
-  if (chargebackVerifier.newlyDeployed) {
-    await waitForDeploymentDelay(hre);
+  if (!sameAddress(await orchestrator.lifecycleHook(), hook.address)) {
+    throw new Error("OrchestratorV3 whitelist lifecycle hook mismatch");
   }
-
-  const chargebackPolicy = await deploy("ChargebackPolicy", {
-    from: deployer,
-    args: [
-      deployer,
-      stakeVault.address,
-      chargebackVerifier.address,
-      chargebackNullifierRegistry.address,
-    ],
-    log: true,
-  });
-  if (chargebackPolicy.newlyDeployed) {
-    await waitForDeploymentDelay(hre);
+  if (!(await registry.isOrchestrator(orchestrator.address))) {
+    throw new Error("Fresh OrchestratorV3 is not registered");
   }
-
-  const lifecycleHook = await deploy("IntentLifecycleHookV1", {
-    from: deployer,
-    args: [
-      orchestratorRegistryAddress,
-      whitelistPolicyAddress,
-      chargebackPolicy.address,
-    ],
-    log: true,
-  });
-  if (lifecycleHook.newlyDeployed) {
-    await waitForDeploymentDelay(hre);
-  }
-
-  const stakeVaultContract = await ethers.getContractAt("StakeVault", stakeVault.address);
-  const chargebackNullifierRegistryContract = await ethers.getContractAt(
-    "NullifierRegistry",
-    chargebackNullifierRegistry.address,
-  );
-  const chargebackVerifierContract = await ethers.getContractAt("ChargebackVerifier", chargebackVerifier.address);
-  const chargebackPolicyContract = await ethers.getContractAt("ChargebackPolicy", chargebackPolicy.address);
-  const orchestratorV3Contract = await ethers.getContractAt("OrchestratorV3", orchestratorV3.address);
-  const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
-
-  const currentController = await stakeVaultContract.controller();
-  if (sameAddress(currentController, ethers.constants.AddressZero)) {
-    await (await stakeVaultContract.initializeController(chargebackPolicy.address)).wait();
-    await waitForDeploymentDelay(hre);
-  } else if (!sameAddress(currentController, chargebackPolicy.address)) {
-    throw new Error(
-      `StakeVault controller mismatch: expected ${chargebackPolicy.address}, found ${currentController}`,
-    );
-  }
-
-  await addWritePermission(hre, chargebackNullifierRegistryContract, chargebackPolicy.address);
-
-  if (!(await chargebackPolicyContract.isLifecycleHookAuthorized(lifecycleHook.address))) {
-    await (await chargebackPolicyContract.setLifecycleHookAuthorization(lifecycleHook.address, true)).wait();
-    await waitForDeploymentDelay(hre);
-  }
-
-  const activePaymentMethodSet = new Set(activePaymentMethods.map(({ method }) => method));
-  for (const methodName of CHARGEBACKABLE_PAYMENT_METHODS) {
-    const method = paymentMethodHash(methodName);
-    if (
-      activePaymentMethodSet.has(method)
-      && !(await chargebackPolicyContract.getRiskWindow(method)).eq(CHARGEBACK_RISK_WINDOW[network])
-    ) {
-      await (await chargebackPolicyContract.setRiskWindow(method, CHARGEBACK_RISK_WINDOW[network])).wait();
-      await waitForDeploymentDelay(hre);
+  for (const predecessor of registeredPredecessors) {
+    if (await registry.isOrchestrator(predecessor)) {
+      throw new Error(`Retired OrchestratorV3 remains registered: ${predecessor}`);
     }
   }
+  if (!await systemFullyWired(hre)) throw new Error("Whitelist-only V3 groups stack verification failed");
 
-  if (!sameAddress(await orchestratorV3Contract.lifecycleHook(), lifecycleHook.address)) {
-    await (await orchestratorV3Contract.setLifecycleHook(lifecycleHook.address)).wait();
-    await waitForDeploymentDelay(hre);
-  }
-
-  await addOrchestratorToRegistry(hre, orchestratorRegistry, orchestratorV3.address);
-  const oldOrchestratorV3 = OLD_ORCHESTRATOR_V3[network];
-  if (oldOrchestratorV3 && (await orchestratorRegistry.isOrchestrator(oldOrchestratorV3))) {
-    await removeOrchestratorFromRegistry(hre, orchestratorRegistry, oldOrchestratorV3);
-  }
-
-  await setNewOwner(hre, orchestratorV3Contract, governance);
-  await setNewOwner(hre, stakeVaultContract, governance);
-  await setNewOwner(hre, chargebackPolicyContract, governance);
-  await setNewOwner(hre, chargebackVerifierContract, governance);
-  await setNewOwner(hre, chargebackNullifierRegistryContract, governance);
-  if (nullifierRegistryV2NewlyDeployed) {
-    await setNewOwner(hre, nullifierRegistryV2Contract, governance);
-  }
-  if (unifiedPaymentVerifierV3NewlyDeployed) {
-    await setNewOwner(hre, unifiedPaymentVerifierV3Contract, governance);
-  }
-
-  console.log("=== V3 lifecycle stack deployment prepared ===");
-  console.log("NullifierRegistryV2:", nullifierRegistryV2.address);
-  console.log("UnifiedPaymentVerifierV3:", unifiedPaymentVerifierV3.address);
-  console.log("OrchestratorV3:", orchestratorV3.address);
-  console.log("StakeVault:", stakeVault.address);
-  console.log("ChargebackNullifierRegistry:", chargebackNullifierRegistry.address);
-  console.log("ChargebackVerifier:", chargebackVerifier.address);
-  console.log("ChargebackPolicy:", chargebackPolicy.address);
-  console.log("IntentLifecycleHookV1:", lifecycleHook.address);
+  console.log("=== Whitelist-only V3 groups stack verified ===");
+  console.log("WhitelistPolicy:", policyDeployment.address);
+  console.log("WhitelistLifecycleHook:", hook.address);
+  console.log("OrchestratorV3:", orchestrator.address);
 };
 
 func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.deployments.getNetworkName();
   if (!SUPPORTED_NETWORKS.has(network)) return true;
-  if (process.env.FORCE_RERUN_V3_LIFECYCLE_STACK === "true") return false;
-
-  try {
-    return await systemFullyWired(hre);
-  } catch {
-    return false;
-  }
+  if (await systemFullyWired(hre)) return true;
+  if (network === "base_staging" && process.env.ENABLE_STAGING_V3_GROUPS_CUTOVER !== "true") return true;
+  return false;
 };
 
 func.tags = ["30_deploy_v3_lifecycle_stack", "V3LifecycleStack", "OrchestratorV3"];
