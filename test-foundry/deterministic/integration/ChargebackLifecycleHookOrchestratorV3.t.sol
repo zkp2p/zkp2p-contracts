@@ -184,10 +184,10 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         );
     }
 
-    function test_FulfillResizesCoverageThenMaturityReleasesStake() public {
+    function test_SubMinimumFulfillResizesCoverageThenMaturityReleasesStake() public {
         _setChargeback(true);
         bytes32 intentHash = _signalDefault();
-        uint256 releaseAmount = 40e6;
+        uint256 releaseAmount = 5e6;
         uint256 releaseEligibleAt = vm.getBlockTimestamp() + RISK_WINDOW;
         verifier.setShouldVerifyPayment(true);
         _fulfill(intentHash, releaseAmount, CONVERSION_RATE);

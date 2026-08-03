@@ -121,6 +121,19 @@ contract OrchestratorV3LifecycleTest is OrchestratorV3Fixture {
         assertEq(token.balanceOf(taker) - recipientBefore, INTENT_AMOUNT - 250_000);
     }
 
+    function test_FulfillBelowDepositMinimumSettlesVerifiedAmountAndReturnsRemainder() public {
+        uint256 releaseAmount = 5e6;
+        bytes32 intentHash = _signalDefault();
+        uint256 recipientBefore = token.balanceOf(taker);
+        uint256 remainingBefore = escrow.getDeposit(depositId).remainingDeposits;
+
+        _fulfill(intentHash, releaseAmount, CONVERSION_RATE);
+
+        assertEq(token.balanceOf(taker) - recipientBefore, releaseAmount);
+        assertEq(escrow.getDeposit(depositId).remainingDeposits, remainingBefore + INTENT_AMOUNT - releaseAmount);
+        assertEq(orchestrator.getIntent(intentHash).owner, address(0));
+    }
+
     function test_SettlementRevertFailsClosed() public {
         orchestrator.setLifecycleHook(lifecycleHookMock);
         lifecycleHookMock.setRevertOnCallback(true);
@@ -170,5 +183,11 @@ contract OrchestratorV3LifecycleTest is OrchestratorV3Fixture {
             .staticcall(abi.encodeWithSignature("getDepositWhitelistHook(address,uint256)", address(escrow), depositId));
         assertFalse(setter);
         assertFalse(getter);
+    }
+
+    function test_IntentMinAtSignalGetterNoLongerExists() public view {
+        (bool success,) =
+            address(orchestrator).staticcall(abi.encodeWithSignature("getIntentMinAtSignal(bytes32)", bytes32(0)));
+        assertFalse(success);
     }
 }
