@@ -10,8 +10,6 @@ process.env.TESTNET_DEPLOY_PRIVATE_KEY ||=
 require("ts-node/register/transpile-only");
 require("module-alias/register");
 
-const fs = require("node:fs");
-const path = require("node:path");
 const moduleAlias = require("module-alias");
 moduleAlias.reset();
 moduleAlias.addAlias("@utils", process.cwd() + "/utils");
@@ -27,17 +25,9 @@ const { MULTI_SIG, ORCHESTRATOR_V3_PROTOCOL_FEE, ORCHESTRATOR_V3_PROTOCOL_FEE_RE
 const { safeBatchCollector } = require("../deployments/safeBatchCollector.ts");
 
 const scenario = process.argv[2];
-let deploymentSigner;
-
-function foundryArtifact(name) {
-  const artifactPath = path.join(process.cwd(), "out", `${name}.sol`, `${name}.json`);
-  return JSON.parse(fs.readFileSync(artifactPath, "utf8"));
-}
 
 async function deployContract(name, args = []) {
-  const artifact = foundryArtifact(name);
-  const signer = deploymentSigner || (await ethers.getSigners())[0];
-  const factory = new ethers.ContractFactory(artifact.abi, artifact.bytecode.object, signer);
+  const factory = await ethers.getContractFactory(name);
   const contract = await factory.deploy(...args);
   await contract.deployed();
   return contract;
@@ -45,11 +35,6 @@ async function deployContract(name, args = []) {
 
 async function fixture() {
   const [deployerSigner] = await ethers.getSigners();
-  deploymentSigner = deployerSigner;
-  ethers.getContractAt = async (name, address) => {
-    const artifact = foundryArtifact(name);
-    return new ethers.Contract(address, artifact.abi, deployerSigner);
-  };
   const deployer = deployerSigner.address;
   const safe = MULTI_SIG.base;
   const network = await ethers.provider.getNetwork();
