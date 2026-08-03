@@ -1,0 +1,28 @@
+{
+  "version": "1.0",
+  "chainId": "8453",
+  "createdAt": 1785739293568,
+  "meta": {
+    "name": "ZKP2P Legacy Nullifier Writer Cleanup - base",
+    "description": "Post-UPV3-cutover cleanup: revoke legacy NullifierRegistry write permission from retired UnifiedPaymentVerifier and UnifiedPaymentVerifierV2. Execute only after all payment methods route to UPV3 and every production attestation signer targets UPV3.",
+    "txBuilderVersion": "1.16.5",
+    "createdFromSafeAddress": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+    "createdFromOwnerAddress": ""
+  },
+  "transactions": [
+    {
+      "to": "0x8d8e1A0e5345a5cc9AA206c3ca76D6d28c514608",
+      "value": "0",
+      "data": "0x286f920100000000000000000000000016b3e4a3ca36d3a4bca281767f15c7adef4ab163",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0x8d8e1A0e5345a5cc9AA206c3ca76D6d28c514608",
+      "value": "0",
+      "data": "0x286f920100000000000000000000000046a58dc65587d4d7b8198c6a25eedf5b2535da94",
+      "contractMethod": null,
+      "contractInputsValues": null
+    }
+  ]
+}
