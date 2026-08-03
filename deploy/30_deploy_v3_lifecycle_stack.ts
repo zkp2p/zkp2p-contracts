@@ -40,6 +40,8 @@ function paymentMethodHash(name: string): string {
 
 async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean> {
   const network = hre.deployments.getNetworkName();
+  const [deployer] = await hre.getUnnamedAccounts();
+  const governance = MULTI_SIG[network] || deployer;
   const orchestratorV3 = await hre.deployments.getOrNull("OrchestratorV3");
   const lifecycleHook = await hre.deployments.getOrNull("IntentLifecycleHookV1");
   const chargebackPolicy = await hre.deployments.getOrNull("ChargebackPolicy");
@@ -49,6 +51,7 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
   const orchestratorRegistryAddress = getDeployedContractAddress(network, "OrchestratorRegistry");
   const paymentVerifierRegistryAddress = getDeployedContractAddress(network, "PaymentVerifierRegistry");
   const unifiedPaymentVerifierV3Address = getDeployedContractAddress(network, "UnifiedPaymentVerifierV3");
+  const whitelistPolicyAddress = getDeployedContractAddress(network, "WhitelistPolicy");
 
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
   const paymentVerifierRegistry = await ethers.getContractAt(
@@ -56,6 +59,7 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
     paymentVerifierRegistryAddress,
   );
   const orchestratorV3Contract = await ethers.getContractAt("OrchestratorV3", orchestratorV3.address);
+  const lifecycleHookContract = await ethers.getContractAt("IntentLifecycleHookV1", lifecycleHook.address);
   const stakeVaultContract = await ethers.getContractAt("StakeVault", stakeVault.address);
   const chargebackPolicyContract = await ethers.getContractAt("ChargebackPolicy", chargebackPolicy.address);
 
@@ -65,6 +69,9 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
   if (oldOrchestratorV3 && (await orchestratorRegistry.isOrchestrator(oldOrchestratorV3))) return false;
 
   if (!sameAddress(await orchestratorV3Contract.lifecycleHook(), lifecycleHook.address)) return false;
+  if (!sameAddress(await lifecycleHookContract.owner(), governance)) return false;
+  if (!sameAddress(await lifecycleHookContract.whitelistPolicy(), whitelistPolicyAddress)) return false;
+  if (!sameAddress(await lifecycleHookContract.chargebackPolicy(), chargebackPolicy.address)) return false;
   if (!sameAddress(await stakeVaultContract.controller(), chargebackPolicy.address)) return false;
   if (!(await chargebackPolicyContract.isLifecycleHookAuthorized(lifecycleHook.address))) return false;
 
@@ -259,11 +266,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const lifecycleHook = await deploy("IntentLifecycleHookV1", {
     from: deployer,
-    args: [
-      orchestratorRegistryAddress,
-      whitelistPolicyAddress,
-      chargebackPolicy.address,
-    ],
+    args: [orchestratorRegistryAddress],
     log: true,
   });
   if (lifecycleHook.newlyDeployed) {
@@ -277,8 +280,19 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   );
   const chargebackVerifierContract = await ethers.getContractAt("ChargebackVerifier", chargebackVerifier.address);
   const chargebackPolicyContract = await ethers.getContractAt("ChargebackPolicy", chargebackPolicy.address);
+  const lifecycleHookContract = await ethers.getContractAt("IntentLifecycleHookV1", lifecycleHook.address);
   const orchestratorV3Contract = await ethers.getContractAt("OrchestratorV3", orchestratorV3.address);
   const orchestratorRegistry = await ethers.getContractAt("OrchestratorRegistry", orchestratorRegistryAddress);
+
+  const configuredWhitelistPolicy = await lifecycleHookContract.whitelistPolicy();
+  if (sameAddress(configuredWhitelistPolicy, ethers.constants.AddressZero)) {
+    await (await lifecycleHookContract.initializeWhitelistPolicy(whitelistPolicyAddress)).wait();
+    await waitForDeploymentDelay(hre);
+  } else if (!sameAddress(configuredWhitelistPolicy, whitelistPolicyAddress)) {
+    throw new Error(
+      `IntentLifecycleHookV1 whitelist policy mismatch: expected ${whitelistPolicyAddress}, found ${configuredWhitelistPolicy}`,
+    );
+  }
 
   const currentController = await stakeVaultContract.controller();
   if (sameAddress(currentController, ethers.constants.AddressZero)) {
@@ -309,6 +323,16 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     }
   }
 
+  const configuredChargebackPolicy = await lifecycleHookContract.chargebackPolicy();
+  if (sameAddress(configuredChargebackPolicy, ethers.constants.AddressZero)) {
+    await (await lifecycleHookContract.initializeChargebackPolicy(chargebackPolicy.address)).wait();
+    await waitForDeploymentDelay(hre);
+  } else if (!sameAddress(configuredChargebackPolicy, chargebackPolicy.address)) {
+    throw new Error(
+      `IntentLifecycleHookV1 chargeback policy mismatch: expected ${chargebackPolicy.address}, found ${configuredChargebackPolicy}`,
+    );
+  }
+
   if (!sameAddress(await orchestratorV3Contract.lifecycleHook(), lifecycleHook.address)) {
     await (await orchestratorV3Contract.setLifecycleHook(lifecycleHook.address)).wait();
     await waitForDeploymentDelay(hre);
@@ -323,6 +347,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await setNewOwner(hre, orchestratorV3Contract, governance);
   await setNewOwner(hre, stakeVaultContract, governance);
   await setNewOwner(hre, chargebackPolicyContract, governance);
+  await setNewOwner(hre, lifecycleHookContract, governance);
   await setNewOwner(hre, chargebackVerifierContract, governance);
   await setNewOwner(hre, chargebackNullifierRegistryContract, governance);
   if (nullifierRegistryV2NewlyDeployed) {

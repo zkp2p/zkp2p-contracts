@@ -3,9 +3,11 @@
 pragma solidity ^0.8.18;
 
 import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
+import {IChargebackPolicy} from "contracts/interfaces/IChargebackPolicy.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorRegistry} from "contracts/interfaces/IOrchestratorRegistry.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
+import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {ChargebackPolicy} from "contracts/hooks/ChargebackPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
@@ -52,17 +54,100 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
         );
         stakeVault.initializeController(address(chargebackPolicy));
         chargebackNullifierRegistry.addWritePermission(address(chargebackPolicy));
-        lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, policy, chargebackPolicy);
+        lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry);
+        lifecycleHook.initializeWhitelistPolicy(policy);
+        lifecycleHook.initializeChargebackPolicy(chargebackPolicy);
         chargebackPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
         IOrchestratorV3(address(orchestrator)).setLifecycleHook(lifecycleHook);
     }
 
-    function test_ConstructorRejectsZeroAndNonContractDependencies() public {
+    function test_ConstructorRejectsZeroAndNonContractRegistry() public {
         vm.expectRevert(IntentLifecycleHookV1.ZeroAddress.selector);
-        new IntentLifecycleHookV1(IOrchestratorRegistry(address(0)), policy, chargebackPolicy);
+        new IntentLifecycleHookV1(IOrchestratorRegistry(address(0)));
 
         vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.InvalidDependency.selector, other));
-        new IntentLifecycleHookV1(IOrchestratorRegistry(other), policy, chargebackPolicy);
+        new IntentLifecycleHookV1(IOrchestratorRegistry(other));
+    }
+
+    function test_PolicyInitializersAreOwnerOnly() public {
+        IntentLifecycleHookV1 uninitializedHook = new IntentLifecycleHookV1(orchestratorRegistry);
+
+        vm.startPrank(other);
+        vm.expectRevert(bytes("Ownable: caller is not the owner"));
+        uninitializedHook.initializeWhitelistPolicy(policy);
+        vm.expectRevert(bytes("Ownable: caller is not the owner"));
+        uninitializedHook.initializeChargebackPolicy(chargebackPolicy);
+        vm.stopPrank();
+    }
+
+    function test_PolicyInitializersRejectZeroAndNonContractDependencies() public {
+        IntentLifecycleHookV1 uninitializedHook = new IntentLifecycleHookV1(orchestratorRegistry);
+
+        vm.expectRevert(IntentLifecycleHookV1.ZeroAddress.selector);
+        uninitializedHook.initializeWhitelistPolicy(IWhitelistPolicy(address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.InvalidDependency.selector, other));
+        uninitializedHook.initializeWhitelistPolicy(IWhitelistPolicy(other));
+
+        vm.expectRevert(IntentLifecycleHookV1.ZeroAddress.selector);
+        uninitializedHook.initializeChargebackPolicy(IChargebackPolicy(address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.InvalidDependency.selector, other));
+        uninitializedHook.initializeChargebackPolicy(IChargebackPolicy(other));
+    }
+
+    function test_PoliciesCanOnlyBeInitializedOnce() public {
+        IntentLifecycleHookV1 initializedHook = new IntentLifecycleHookV1(orchestratorRegistry);
+        initializedHook.initializeWhitelistPolicy(policy);
+        initializedHook.initializeChargebackPolicy(chargebackPolicy);
+
+        assertEq(address(initializedHook.whitelistPolicy()), address(policy));
+        assertEq(address(initializedHook.chargebackPolicy()), address(chargebackPolicy));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IntentLifecycleHookV1.WhitelistPolicyAlreadyInitialized.selector, address(policy))
+        );
+        initializedHook.initializeWhitelistPolicy(policy);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IntentLifecycleHookV1.ChargebackPolicyAlreadyInitialized.selector, address(chargebackPolicy)
+            )
+        );
+        initializedHook.initializeChargebackPolicy(chargebackPolicy);
+    }
+
+    function test_UninitializedWhitelistFailsClosedBeforeEscrowLock() public {
+        IntentLifecycleHookV1 uninitializedHook = new IntentLifecycleHookV1(orchestratorRegistry);
+        orchestrator.setLifecycleHook(uninitializedHook);
+
+        uint256 counterBefore = orchestrator.intentCounter();
+        bytes32 rejectedIntent = _intentHash(counterBefore);
+        uint256 availableBefore = escrow.getDeposit(depositId).remainingDeposits;
+
+        vm.expectRevert(IntentLifecycleHookV1.WhitelistPolicyNotInitialized.selector);
+        _signalCall(taker, _defaultParams());
+
+        assertEq(orchestrator.intentCounter(), counterBefore);
+        assertEq(orchestrator.getIntent(rejectedIntent).owner, address(0));
+        assertEq(escrow.getDepositIntent(depositId, rejectedIntent).intentHash, bytes32(0));
+        assertEq(escrow.getDeposit(depositId).remainingDeposits, availableBefore);
+    }
+
+    function test_UninitializedChargebackPolicyEnforcesWhitelistOnly() public {
+        IntentLifecycleHookV1 whitelistOnlyHook = new IntentLifecycleHookV1(orchestratorRegistry);
+        whitelistOnlyHook.initializeWhitelistPolicy(policy);
+        orchestrator.setLifecycleHook(whitelistOnlyHook);
+
+        vm.prank(depositor);
+        policy.configureDeposit(address(escrow), depositId, true, new bytes32[](0), _addresses(taker));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IntentLifecycleHookV1.TakerNotWhitelisted.selector, address(escrow), depositId, other
+            )
+        );
+        _signalCall(other, _defaultParams());
+
+        bytes32 admittedIntent = _signalDefault();
+        assertFalse(whitelistOnlyHook.isChargebackIntent(admittedIntent));
     }
 
     function test_DisabledPolicyPassesThroughAndSnapshotsGlobalHook() public {
@@ -192,6 +277,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
     function test_SettlementIsNoOpAndDoesNotRecheckPointInTimeMembership() public {
         _enablePeerPolicyAndAddTaker();
         bytes32 intentHash = _signalDefault();
+        assertFalse(lifecycleHook.isChargebackIntent(intentHash));
         groupRegistry.removeMembers(PEERS, _addresses(taker));
 
         uint256 takerBalanceBefore = token.balanceOf(taker);
@@ -200,6 +286,24 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
 
         assertEq(token.balanceOf(taker) - takerBalanceBefore, INTENT_AMOUNT);
         assertEq(address(IOrchestratorV3(address(orchestrator)).getIntentLifecycleHook(intentHash)), address(0));
+    }
+
+    function test_UntrackedIntentsSkipChargebackTerminalCallbacks() public {
+        _enablePeerPolicyAndAddTaker();
+        bytes32 cancelledIntent = _signalDefault();
+        bytes32 settledIntent = _signalDefault();
+        assertFalse(lifecycleHook.isChargebackIntent(cancelledIntent));
+        assertFalse(lifecycleHook.isChargebackIntent(settledIntent));
+
+        chargebackPolicy.setLifecycleHookAuthorization(address(lifecycleHook), false);
+
+        vm.prank(taker);
+        orchestrator.cancelIntent(cancelledIntent);
+        vm.prank(depositor);
+        orchestrator.releaseFundsToPayer(settledIntent);
+
+        assertEq(escrow.getDepositIntent(depositId, cancelledIntent).intentHash, bytes32(0));
+        assertEq(escrow.getDepositIntent(depositId, settledIntent).intentHash, bytes32(0));
     }
 
     function test_GlobalHookReplacementDoesNotMutateActiveIntentSnapshot() public {

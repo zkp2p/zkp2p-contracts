@@ -47,7 +47,9 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         );
         vault.initializeController(address(chargebackPolicy));
         chargebackNullifierRegistry.addWritePermission(address(chargebackPolicy));
-        lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, chargebackPolicy);
+        lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry);
+        lifecycleHook.initializeWhitelistPolicy(whitelistPolicy);
+        lifecycleHook.initializeChargebackPolicy(chargebackPolicy);
         chargebackPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
         chargebackPolicy.setRiskWindow(METHOD, RISK_WINDOW);
         orchestrator.setLifecycleHook(lifecycleHook);
@@ -64,6 +66,7 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
             uint256(chargebackPolicy.getChargebackIntent(intentHash).status),
             uint256(IChargebackPolicy.ChargebackIntentStatus.NONE)
         );
+        assertFalse(lifecycleHook.isChargebackIntent(intentHash));
         assertEq(vault.lockedStake(taker), 0);
         assertEq(escrow.getDepositIntent(depositId, intentHash).intentHash, intentHash);
     }
@@ -77,6 +80,7 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
             uint256(chargebackPolicy.getChargebackIntent(intentHash).status),
             uint256(IChargebackPolicy.ChargebackIntentStatus.PENDING)
         );
+        assertTrue(lifecycleHook.isChargebackIntent(intentHash));
 
         uint256 counterBefore = orchestrator.intentCounter();
         bytes32 rejectedIntent = _intentHash(counterBefore);
@@ -103,6 +107,7 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
             uint256(chargebackPolicy.getChargebackIntent(intentHash).status),
             uint256(IChargebackPolicy.ChargebackIntentStatus.NONE)
         );
+        assertTrue(lifecycleHook.isChargebackIntent(intentHash));
         assertEq(vault.lockedStake(other), 0);
         assertEq(escrow.getDepositIntent(depositId, intentHash).intentHash, intentHash);
 
@@ -112,6 +117,7 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
             uint256(chargebackPolicy.getChargebackIntent(intentHash).status),
             uint256(IChargebackPolicy.ChargebackIntentStatus.NONE)
         );
+        assertFalse(lifecycleHook.isChargebackIntent(intentHash));
     }
 
     function test_WhitelistOnNonMemberWithChargebackOffRejects() public {
@@ -165,8 +171,10 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     function test_CancelIntentAndExpiryPruneUnlockStake() public {
         _setChargeback(true);
         bytes32 cancelledIntent = _signalDefault();
+        assertTrue(lifecycleHook.isChargebackIntent(cancelledIntent));
         vm.prank(taker);
         orchestrator.cancelIntent(cancelledIntent);
+        assertFalse(lifecycleHook.isChargebackIntent(cancelledIntent));
         assertEq(vault.lockedStake(taker), 0);
         assertEq(
             uint256(chargebackPolicy.getChargebackIntent(cancelledIntent).status),
@@ -174,9 +182,11 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         );
 
         bytes32 expiredIntent = _signalDefault();
+        assertTrue(lifecycleHook.isChargebackIntent(expiredIntent));
         IEscrowV2.Intent memory intent = escrow.getDepositIntent(depositId, expiredIntent);
         vm.warp(intent.expiryTime + 1);
         escrow.pruneExpiredIntents(depositId);
+        assertFalse(lifecycleHook.isChargebackIntent(expiredIntent));
         assertEq(vault.lockedStake(taker), 0);
         assertEq(
             uint256(chargebackPolicy.getChargebackIntent(expiredIntent).status),
@@ -190,7 +200,9 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         uint256 releaseAmount = 5e6;
         uint256 releaseEligibleAt = vm.getBlockTimestamp() + RISK_WINDOW;
         verifier.setShouldVerifyPayment(true);
+        assertTrue(lifecycleHook.isChargebackIntent(intentHash));
         _fulfill(intentHash, releaseAmount, CONVERSION_RATE);
+        assertFalse(lifecycleHook.isChargebackIntent(intentHash));
 
         IChargebackPolicy.ChargebackIntent memory chargebackIntent = chargebackPolicy.getChargebackIntent(intentHash);
         assertEq(chargebackIntent.releaseAmount, releaseAmount);
@@ -210,8 +222,10 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         _setChargeback(true);
         bytes32 intentHash = _signalDefault();
         uint256 releaseEligibleAt = vm.getBlockTimestamp() + RISK_WINDOW;
+        assertTrue(lifecycleHook.isChargebackIntent(intentHash));
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash);
+        assertFalse(lifecycleHook.isChargebackIntent(intentHash));
 
         IChargebackPolicy.ChargebackIntent memory chargebackIntent = chargebackPolicy.getChargebackIntent(intentHash);
         assertTrue(chargebackIntent.isManualRelease);
@@ -250,6 +264,7 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         vm.expectRevert(IChargebackPolicy.AdmissionsPaused.selector);
         _signalCall(taker, _defaultParams());
 
+        assertFalse(lifecycleHook.isChargebackIntent(rejectedIntent));
         assertEq(orchestrator.intentCounter(), counterBefore);
         assertEq(orchestrator.getIntent(rejectedIntent).owner, address(0));
         assertEq(escrow.getDepositIntent(depositId, rejectedIntent).intentHash, bytes32(0));
@@ -258,6 +273,7 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
 
     function test_CancellationWithoutChargebackIntentLeavesVaultUntouched() public {
         bytes32 intentHash = _signalDefault();
+        assertFalse(lifecycleHook.isChargebackIntent(intentHash));
         uint256 totalBefore = vault.totalStaked();
         vm.prank(taker);
         orchestrator.cancelIntent(intentHash);
@@ -273,8 +289,9 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         _setChargeback(true);
         bytes32 oldCancelledIntent = _signalDefault();
         bytes32 oldSettledIntent = _signalDefault();
-        IntentLifecycleHookV1 newLifecycleHook =
-            new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, chargebackPolicy);
+        IntentLifecycleHookV1 newLifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry);
+        newLifecycleHook.initializeWhitelistPolicy(whitelistPolicy);
+        newLifecycleHook.initializeChargebackPolicy(chargebackPolicy);
 
         chargebackPolicy.setLifecycleHookAuthorization(address(newLifecycleHook), true);
         orchestrator.setLifecycleHook(newLifecycleHook);
@@ -285,6 +302,7 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         );
         vm.prank(taker);
         orchestrator.cancelIntent(oldCancelledIntent);
+        assertTrue(lifecycleHook.isChargebackIntent(oldCancelledIntent));
         assertEq(
             uint256(chargebackPolicy.getChargebackIntent(oldCancelledIntent).status),
             uint256(IChargebackPolicy.ChargebackIntentStatus.PENDING)
@@ -293,6 +311,7 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         chargebackPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
         vm.prank(taker);
         orchestrator.cancelIntent(oldCancelledIntent);
+        assertFalse(lifecycleHook.isChargebackIntent(oldCancelledIntent));
         assertEq(
             uint256(chargebackPolicy.getChargebackIntent(oldCancelledIntent).status),
             uint256(IChargebackPolicy.ChargebackIntentStatus.CANCELLED)
@@ -301,15 +320,18 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         uint256 releaseAmount = 40e6;
         verifier.setShouldVerifyPayment(true);
         _fulfill(oldSettledIntent, releaseAmount, CONVERSION_RATE);
+        assertFalse(lifecycleHook.isChargebackIntent(oldSettledIntent));
         IChargebackPolicy.ChargebackIntent memory oldSettledIntentState =
             chargebackPolicy.getChargebackIntent(oldSettledIntent);
         assertEq(uint256(oldSettledIntentState.status), uint256(IChargebackPolicy.ChargebackIntentStatus.SETTLED));
         assertEq(oldSettledIntentState.releaseAmount, releaseAmount);
 
         bytes32 newIntent = _signalDefault();
+        assertTrue(newLifecycleHook.isChargebackIntent(newIntent));
         assertEq(address(orchestrator.getIntentLifecycleHook(newIntent)), address(newLifecycleHook));
         vm.prank(taker);
         orchestrator.cancelIntent(newIntent);
+        assertFalse(newLifecycleHook.isChargebackIntent(newIntent));
         assertEq(
             uint256(chargebackPolicy.getChargebackIntent(newIntent).status),
             uint256(IChargebackPolicy.ChargebackIntentStatus.CANCELLED)
