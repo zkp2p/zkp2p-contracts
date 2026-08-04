@@ -716,6 +716,35 @@ async function buildExecutionFeeOverrides(
   return { maxFeePerGas, maxPriorityFeePerGas: config.maxPriorityFeePerGas };
 }
 
+function sanitizeError(error: unknown): string {
+  let message = error instanceof Error ? error.message : String(error);
+  for (const name of [
+    "BOOTSTRAP_OWNER_PRIVATE_KEY",
+    "BOOTSTRAP_INDEXER_API_KEY",
+    "ALCHEMY_API_KEY",
+    "INFURA_TOKEN",
+  ]) {
+    const secret = process.env[name];
+    if (secret) message = message.split(secret).join("[REDACTED]");
+  }
+  return message;
+}
+
+async function retryConfirmedRead<T>(label: string, operation: () => Promise<T>): Promise<T> {
+  const attempts = 10;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt === attempts) {
+        throw new Error(`${label} failed after ${attempts} attempts: ${sanitizeError(error)}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+    }
+  }
+  throw new Error(`${label} failed unexpectedly`);
+}
+
 async function main(): Promise<void> {
   if (process.argv.includes("--self-test")) {
     runSelfTest();
@@ -964,11 +993,14 @@ async function main(): Promise<void> {
 
       await mapWithConcurrency(depositIds, 2, async (depositId) => {
         const blockTag = { blockTag: receipt.blockNumber };
-        const [isBootstrapped, isEnabled, allowedGroupsResult] = await Promise.all([
-          confirmedStatePolicy.bootstrapped(escrowAddress, depositId, blockTag),
-          confirmedStatePolicy.enabled(escrowAddress, depositId, blockTag),
-          confirmedStatePolicy.getAllowedGroups(escrowAddress, depositId, blockTag),
-        ]);
+        const [isBootstrapped, isEnabled, allowedGroupsResult] = await retryConfirmedRead(
+          `Confirmed state for deposit ${depositId.toString()}`,
+          () => Promise.all([
+            confirmedStatePolicy.bootstrapped(escrowAddress, depositId, blockTag),
+            confirmedStatePolicy.enabled(escrowAddress, depositId, blockTag),
+            confirmedStatePolicy.getAllowedGroups(escrowAddress, depositId, blockTag),
+          ]),
+        );
         if (!isBootstrapped) {
           throw new Error(`Deposit ${depositId.toString()} was not marked bootstrapped`);
         }
@@ -1020,7 +1052,7 @@ async function main(): Promise<void> {
 
 if (require.main === module) {
   main().catch((error) => {
-    console.error(error instanceof Error ? error.message : error);
+    console.error(sanitizeError(error));
     process.exitCode = 1;
   });
 }
