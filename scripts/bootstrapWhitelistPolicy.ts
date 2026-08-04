@@ -33,6 +33,8 @@ type BootstrapConfig = {
   readConcurrency: number;
   confirmations: number;
   receiptTimeoutMs: number;
+  maxPriorityFeePerGas: BigNumber;
+  maxFeePerGasCap: BigNumber;
   expectedDepositCount?: number;
   expectedSelectionDigest?: string;
   allowCompleted: boolean;
@@ -200,6 +202,8 @@ Optional environment:
   BOOTSTRAP_CONFIRMATIONS                   (default: 1)
   BOOTSTRAP_RECEIPT_RPC_URL                 (optional confirmation-only RPC)
   BOOTSTRAP_RECEIPT_TIMEOUT_MS              (default: 180000)
+  BOOTSTRAP_MAX_PRIORITY_FEE_GWEI           (default: 0.001)
+  BOOTSTRAP_MAX_FEE_PER_GAS_GWEI            (default: 0.02; hard execution ceiling)
   BOOTSTRAP_INDEXER_API_KEY                 (sent as x-api-key; never logged)
   BOOTSTRAP_ALLOW_COMPLETED=true            (resume only verified prior bootstrap batches)
   BOOTSTRAP_EXECUTE=true                    (default: false/dry-run)
@@ -230,6 +234,17 @@ function parseOptionalNonnegativeInteger(name: string): number | undefined {
     throw new Error(`${name} must be a nonnegative integer`);
   }
   return value;
+}
+
+function parsePositiveGwei(name: string, fallback: string): BigNumber {
+  const raw = process.env[name]?.trim() || fallback;
+  try {
+    const value = ethers.utils.parseUnits(raw, "gwei");
+    if (value.lte(0)) throw new Error("nonpositive");
+    return value;
+  } catch {
+    throw new Error(`${name} must be a positive decimal gwei value`);
+  }
 }
 
 function requireEnvironment(name: string): string {
@@ -345,6 +360,8 @@ function loadConfig(): BootstrapConfig {
     readConcurrency: parsePositiveInteger("BOOTSTRAP_READ_CONCURRENCY", 10, 50),
     confirmations: parsePositiveInteger("BOOTSTRAP_CONFIRMATIONS", 1, 100),
     receiptTimeoutMs: parsePositiveInteger("BOOTSTRAP_RECEIPT_TIMEOUT_MS", 180_000, 600_000),
+    maxPriorityFeePerGas: parsePositiveGwei("BOOTSTRAP_MAX_PRIORITY_FEE_GWEI", "0.001"),
+    maxFeePerGasCap: parsePositiveGwei("BOOTSTRAP_MAX_FEE_PER_GAS_GWEI", "0.02"),
     expectedDepositCount,
     expectedSelectionDigest,
     allowCompleted: process.env.BOOTSTRAP_ALLOW_COMPLETED === "true",
@@ -354,6 +371,9 @@ function loadConfig(): BootstrapConfig {
       : undefined,
     safeOutputFile: safeOutputFile ? path.resolve(process.cwd(), safeOutputFile) : undefined,
   };
+  if (config.maxPriorityFeePerGas.gte(config.maxFeePerGasCap)) {
+    throw new Error("BOOTSTRAP_MAX_PRIORITY_FEE_GWEI must be below BOOTSTRAP_MAX_FEE_PER_GAS_GWEI");
+  }
 
   if (network === "base") {
     const expectedPolicyAddress = deploymentAddress("base", "WhitelistPolicy");
@@ -678,6 +698,24 @@ async function assertPolicyOwner(policy: Contract, expectedOwner: string): Promi
   }
 }
 
+async function buildExecutionFeeOverrides(
+  provider: ethers.providers.Provider,
+  config: BootstrapConfig,
+): Promise<{ maxFeePerGas: BigNumber; maxPriorityFeePerGas: BigNumber }> {
+  const latestBlock = await provider.getBlock("latest");
+  if (!latestBlock.baseFeePerGas) {
+    throw new Error("Execution RPC did not return an EIP-1559 base fee");
+  }
+  const maxFeePerGas = latestBlock.baseFeePerGas.mul(2).add(config.maxPriorityFeePerGas);
+  if (maxFeePerGas.gt(config.maxFeePerGasCap)) {
+    throw new Error(
+      `Required max fee ${ethers.utils.formatUnits(maxFeePerGas, "gwei")} gwei exceeds configured `
+      + `${ethers.utils.formatUnits(config.maxFeePerGasCap, "gwei")} gwei ceiling`,
+    );
+  }
+  return { maxFeePerGas, maxPriorityFeePerGas: config.maxPriorityFeePerGas };
+}
+
 async function main(): Promise<void> {
   if (process.argv.includes("--self-test")) {
     runSelfTest();
@@ -708,8 +746,10 @@ async function main(): Promise<void> {
       );
     }
   }
+  const stateProvider = config.mode === "execute" ? receiptProvider : provider;
 
   const policy = new Contract(config.policyAddress, POLICY_ABI, provider);
+  const statePolicy = new Contract(config.policyAddress, POLICY_ABI, stateProvider);
   const owner = normalizeAddress(await policy.owner(), "WhitelistPolicy owner");
   const groupRegistryAddress = normalizeAddress(await policy.groupRegistry(), "AddressGroupRegistry");
   const groupRegistry = new Contract(groupRegistryAddress, GROUP_REGISTRY_ABI, provider);
@@ -720,11 +760,16 @@ async function main(): Promise<void> {
   }
 
   const escrows = new Map<string, Contract>();
+  const stateEscrows = new Map<string, Contract>();
   for (const escrowAddress of config.escrowAddresses) {
     if ((await provider.getCode(escrowAddress)) === "0x") {
       throw new Error(`Configured escrow has no bytecode at ${escrowAddress}`);
     }
     escrows.set(escrowAddress.toLowerCase(), new Contract(escrowAddress, ESCROW_ABI, provider));
+    stateEscrows.set(
+      escrowAddress.toLowerCase(),
+      new Contract(escrowAddress, ESCROW_ABI, stateProvider),
+    );
   }
 
   const activeDeposits = await loadEligibleDeposits(config);
@@ -818,12 +863,13 @@ async function main(): Promise<void> {
   let writablePolicy = policy;
   let executionSignerAddress: string | undefined;
   if (config.mode === "execute") {
-    const signer = new Wallet(config.privateKey!, provider);
+    const signer = new Wallet(config.privateKey!, stateProvider);
     if (signer.address.toLowerCase() !== owner.toLowerCase()) {
       throw new Error(`Configured signer is not the WhitelistPolicy owner ${owner}`);
     }
     executionSignerAddress = signer.address;
-    writablePolicy = policy.connect(signer);
+    await assertPolicyOwner(statePolicy, signer.address);
+    writablePolicy = statePolicy.connect(signer);
   }
   if (config.mode === "safe") {
     if ((await provider.getCode(owner)) === "0x") {
@@ -845,7 +891,7 @@ async function main(): Promise<void> {
   let processedBatchCount = 0;
 
   for (const [escrowAddress, deposits] of grouped) {
-    const escrow = escrows.get(escrowAddress.toLowerCase())!;
+    const escrow = stateEscrows.get(escrowAddress.toLowerCase())!;
     for (const depositBatch of batch(deposits, config.batchSize)) {
       const depositIds = depositBatch.map(({ depositId }) => depositId);
 
@@ -854,15 +900,15 @@ async function main(): Promise<void> {
       await Promise.all(depositIds.map(async (depositId) => {
         await assertDepositStillExists(escrow, depositId);
         const [isBootstrapped, isEnabled] = await Promise.all([
-          policy.bootstrapped(escrowAddress, depositId),
-          policy.enabled(escrowAddress, depositId),
+          statePolicy.bootstrapped(escrowAddress, depositId),
+          statePolicy.enabled(escrowAddress, depositId),
         ]);
         if (isBootstrapped || isEnabled) {
           throw new Error(`Deposit ${depositId.toString()} changed policy state after discovery`);
         }
       }));
-      await assertPolicyOwner(policy, config.mode === "execute" ? executionSignerAddress! : owner);
-      await policy.callStatic.bootstrapDeposits(
+      await assertPolicyOwner(statePolicy, config.mode === "execute" ? executionSignerAddress! : owner);
+      await statePolicy.callStatic.bootstrapDeposits(
         escrowAddress,
         depositIds,
         config.groupIds,
@@ -889,6 +935,7 @@ async function main(): Promise<void> {
         escrowAddress,
         depositIds,
         config.groupIds,
+        await buildExecutionFeeOverrides(stateProvider, config),
       );
       console.log(
         `Submitted bootstrap batch ${processedBatchCount}/${totalBatchCount} `
@@ -908,9 +955,9 @@ async function main(): Promise<void> {
 
       await Promise.all(depositIds.map(async (depositId) => {
         const [isBootstrapped, isEnabled, allowedGroupsResult] = await Promise.all([
-          policy.bootstrapped(escrowAddress, depositId),
-          policy.enabled(escrowAddress, depositId),
-          policy.getAllowedGroups(escrowAddress, depositId),
+          statePolicy.bootstrapped(escrowAddress, depositId),
+          statePolicy.enabled(escrowAddress, depositId),
+          statePolicy.getAllowedGroups(escrowAddress, depositId),
         ]);
         if (!isBootstrapped) {
           throw new Error(`Deposit ${depositId.toString()} was not marked bootstrapped`);
@@ -930,7 +977,7 @@ async function main(): Promise<void> {
   }
 
   if (config.mode === "execute") {
-    await assertPolicyOwner(policy, executionSignerAddress!);
+    await assertPolicyOwner(statePolicy, executionSignerAddress!);
   }
 
   if (config.mode === "safe") {

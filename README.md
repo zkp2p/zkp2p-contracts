@@ -688,6 +688,9 @@ selection digest, and all discovery modes enforce a configurable maximum.
   production group IDs. It also requires `BOOTSTRAP_CONFIRM_PRODUCTION=true`.
 - `BOOTSTRAP_ALLOW_COMPLETED=true` resumes only batches whose deposits are still enabled and contain
   every requested group. The script rechecks policy ownership before each submitted batch.
+- Direct execution uses the receipt RPC for submission and execution-time state reads. It computes
+  EIP-1559 fees from the latest base fee with a `0.001` gwei priority fee and refuses to submit above
+  the `0.02` gwei default max-fee ceiling; both values are configurable through the documented env.
 - Run `yarn whitelist:bootstrap --self-test` for the embedded calldata/Safe validation and
   `yarn whitelist:bootstrap --help` for the complete environment-variable reference.
 
