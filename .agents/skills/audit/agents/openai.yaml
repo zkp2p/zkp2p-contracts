@@ -1,0 +1,4 @@
+interface:
+  display_name: "Contracts Audit"
+  short_description: "Audit contracts with on-demand security guidance"
+  default_prompt: "Use $audit to review this contracts change for security and correctness issues."
