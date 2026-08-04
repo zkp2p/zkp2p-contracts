@@ -11,11 +11,11 @@ Read `AGENTS.md` before acting. Treat deployment status as network-scoped:
 - `EscrowV2` remains the shared escrow in the mounted V3 lifecycle lane.
   `OrchestratorV2` and `OrchestratorV3` are distinct current implementations;
   never infer which one is active from the version number alone.
-- `deploy/30_deploy_v3_lifecycle_stack.ts` is mounted by
+- `deploy/31_deploy_v3_lifecycle_stack.ts` is mounted by
   `scripts/deployActive.ts` for `localhost`, `hardhat`, Base staging, and Base.
   Base execution is a separately approved whitelist-only deployment that queues
   one Safe registration for the fresh O3 and leaves existing orchestrators in
-  place. Lane `31` remains staging-only.
+  place. Lane `32` remains staging-only.
 - Source, tests, package ABIs, a mounted script, and checked-in artifacts are not
   proof of live state. Resolve registries, permissions, ownership, deployed
   bytecode, and on-chain wiring before stating what is active on either network.

@@ -111,19 +111,19 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const existingHook = await hre.deployments.getOrNull("IntentLifecycleHookV1");
   if (network === "base_staging") {
     if (existingVault && sameAddress(existingVault.address, RETIRED_STAGING_STAKE_VAULT)) {
-      throw new Error("Move the retired StakeVault artifact aside before lane 31");
+      throw new Error("Move the retired StakeVault artifact aside before lane 32");
     }
     if (existingPolicy && sameAddress(existingPolicy.address, RETIRED_STAGING_CHARGEBACK_POLICY)) {
-      throw new Error("Move the retired ChargebackPolicy artifact aside before lane 31");
+      throw new Error("Move the retired ChargebackPolicy artifact aside before lane 32");
     }
     if (existingHook && sameAddress(existingHook.address, RETIRED_STAGING_LIFECYCLE_HOOK)) {
-      throw new Error("Move the retired IntentLifecycleHookV1 artifact aside before lane 31");
+      throw new Error("Move the retired IntentLifecycleHookV1 artifact aside before lane 32");
     }
     await assertRetiredLiabilitiesZero();
   }
   if (existingVault || existingPolicy || existingHook) {
     throw new Error(
-      "Move the StakeVault, ChargebackPolicy, and IntentLifecycleHookV1 artifacts aside before lane 31",
+      "Move the StakeVault, ChargebackPolicy, and IntentLifecycleHookV1 artifacts aside before lane 32",
     );
   }
 
@@ -176,7 +176,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorAddress);
   if (!sameAddress(await orchestrator.lifecycleHook(), whitelistHookAddress)) {
-    throw new Error("Lane 31 requires the lane-30 OrchestratorV3 to still use WhitelistLifecycleHook");
+    throw new Error("Lane 32 requires the lane-31 OrchestratorV3 to still use WhitelistLifecycleHook");
   }
 
   console.log("=== Deploying chargeback lifecycle stack ===");
@@ -257,7 +257,7 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   return false;
 };
 
-func.tags = ["31_deploy_chargeback_lifecycle_stack", "V3ChargebackLifecycleStack"];
-func.dependencies = ["30_deploy_v3_lifecycle_stack"];
+func.tags = ["32_deploy_chargeback_lifecycle_stack", "V3ChargebackLifecycleStack"];
+func.dependencies = ["31_deploy_v3_lifecycle_stack"];
 
 export default func;

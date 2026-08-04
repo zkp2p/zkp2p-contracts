@@ -59,13 +59,13 @@ the approved target state.
   activation as distinct states.
 - Do not add a deploy script merely because source exists.
 - Treat `OrchestratorV3` as a dedicated implementation. Its current lifecycle
-  design intentionally differs from V2. Its mounted lane `30` supports
+  design intentionally differs from V2. Its mounted lane `31` supports
   `localhost`, `hardhat`, Base staging, and an explicitly gated Base
   whitelist-only deployment.
-- Base lane `30` requires `ENABLE_BASE_V3_GROUPS_CUTOVER=true`, a separately
+- Base lane `31` requires `ENABLE_BASE_V3_GROUPS_CUTOVER=true`, a separately
   reviewed exact source SHA, and the production governance/deployer path. It
   must leave existing orchestrators registered and produce only the fresh O3
-  registry-add Safe call. Lane `31` remains outside that deployment.
+  registry-add Safe call. Lane `32` remains outside that deployment.
 - Remove retired active routes, permissions, exports, and aliases in the same
   hard cutover.
 - Do not add rollback compatibility to a one-way verifier or nullifier
@@ -89,7 +89,7 @@ Before activation:
 
 - verify deployer, chain ID, RPC, parameters, expected old state, and expected
   new state;
-- for lane `30`, resolve the expected `OrchestratorV3`,
+- for lane `31`, resolve the expected `OrchestratorV3`,
   `UnifiedPaymentVerifierV3`, lifecycle hook, stake vault, chargeback policy,
   verifier/nullifier, registries, ownership, and prior-orchestrator state from
   current source and artifacts;
@@ -109,7 +109,7 @@ production immediately before submission.
 The Base whitelist-only lane must be reviewed at an exact source SHA. Require
 the explicit Base cutover flag, retain existing orchestrators, and verify that
 the generated Safe batch contains only `addOrchestrator(freshO3)`. Do not reuse
-staging artifacts or include lane `31` as a shortcut.
+staging artifacts or include lane `32` as a shortcut.
 
 Fail closed on chain, address, signer, ownership, permission, or expected-state
 mismatch. Do not reuse staging approval. Do not publish a package automatically.

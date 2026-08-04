@@ -18,7 +18,8 @@ console.log = () => {};
 
 const hre = require("hardhat");
 const { ethers } = hre;
-const deployGroupsStack = require("../deploy/30_deploy_v3_lifecycle_stack.ts").default;
+const deployGroupsStack = require("../deploy/31_deploy_v3_lifecycle_stack.ts").default;
+const deployChargebackStack = require("../deploy/32_deploy_chargeback_lifecycle_stack.ts").default;
 const { MULTI_SIG, ORCHESTRATOR_V3_PROTOCOL_FEE, ORCHESTRATOR_V3_PROTOCOL_FEE_RECIPIENT } = require(
   "../deployments/parameters.ts",
 );
@@ -146,6 +147,16 @@ async function run() {
       rejected = error instanceof Error && error.message.includes("protocol fee mismatch");
     }
     process.stdout.write(rejected && safeBatchCollector.count() === 0 ? "0x01" : "0x00");
+    return;
+  }
+
+  if (scenario === "lane-separation") {
+    const passed = deployGroupsStack.tags.includes("31_deploy_v3_lifecycle_stack")
+      && deployGroupsStack.dependencies.includes("29_deploy_whitelist_policy")
+      && deployChargebackStack.tags.includes("32_deploy_chargeback_lifecycle_stack")
+      && deployChargebackStack.dependencies.includes("31_deploy_v3_lifecycle_stack")
+      && await deployChargebackStack.skip(state.fakeHre);
+    process.stdout.write(passed ? "0x01" : "0x00");
     return;
   }
 

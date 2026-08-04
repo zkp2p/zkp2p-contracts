@@ -625,12 +625,12 @@ This script currently covers:
 
 ### V3 Groups Cutover
 
-The lifecycle cutover is split into two explicit lanes. Lane 30 supports the whitelist-only groups
-deployment on Base staging and Base; lane 31 remains staging-only until the chargeback/staking cutover
+The lifecycle cutover is split into two explicit lanes. Lane 31 supports the whitelist-only groups
+deployment on Base staging and Base; lane 32 remains staging-only until the chargeback/staking cutover
 is separately approved.
 
-`deploy/30_deploy_v3_lifecycle_stack.ts` is the groups-only lane. Its lane-29 dependency supplies a
-fresh `WhitelistPolicy`; lane 30 deploys a fresh `WhitelistLifecycleHook` and `OrchestratorV3`, sets
+`deploy/31_deploy_v3_lifecycle_stack.ts` is the groups-only lane. Its lane-29 dependency supplies a
+fresh `WhitelistPolicy`; lane 31 deploys a fresh `WhitelistLifecycleHook` and `OrchestratorV3`, sets
 the hook after O3 construction, registers the new O3, and removes the two drained staging
 predecessors. It reuses the existing registries, UPV3, NullifierRegistryV2, chargeback stack, and
 payment routing without mutating them. On Base it leaves existing orchestrators registered and queues
@@ -652,7 +652,7 @@ The staging confirmation is an operator acknowledgement; the deploy script inten
 indexer client or drain-query implementation. Base fails unless O2 and EscrowV2 are already registered,
 the existing stack remains intact, and the generated Safe batch contains only the fresh O3 registration.
 
-`deploy/31_deploy_chargeback_lifecycle_stack.ts` is the later chargeback/staking lane. Before it
+`deploy/32_deploy_chargeback_lifecycle_stack.ts` is the later chargeback/staking lane. Before it
 runs, move only these canonical artifacts aside:
 
 - `deployments/base_staging/StakeVault.json`

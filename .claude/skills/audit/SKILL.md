@@ -114,7 +114,7 @@ When either V2 or V3 source changes:
 
 1. Diff both implementations and interfaces against canonical current main.
 2. Derive the intended V3 deltas from current interfaces, lifecycle tests,
-   deployment tests, and `deploy/30_deploy_v3_lifecycle_stack.ts`; do not copy an
+   deployment tests, and `deploy/31_deploy_v3_lifecycle_stack.ts`; do not copy an
    allowlist from an older review.
 3. Verify shared admission, fee, escrow, registry, payment-verifier, nullifier,
    replay, authorization, and settlement invariants semantically.

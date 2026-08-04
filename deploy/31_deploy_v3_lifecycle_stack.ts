@@ -280,7 +280,7 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   return false;
 };
 
-func.tags = ["30_deploy_v3_lifecycle_stack", "V3LifecycleStack", "OrchestratorV3"];
+func.tags = ["31_deploy_v3_lifecycle_stack", "V3LifecycleStack", "OrchestratorV3"];
 func.dependencies = ["29_deploy_whitelist_policy"];
 
 export default func;
