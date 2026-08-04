@@ -177,6 +177,7 @@ iteration loop.
 
 | Skill | Location | Description |
 |-------|----------|-------------|
+| `audit` | `.agents/skills/audit/SKILL.md` | Review contracts and load selected Trail of Bits guidance on demand without a global install |
 | `zkp2p-contracts-publish` | `.agents/skills/zkp2p-contracts-publish/SKILL.md` | Bump, build, test, verify addresses, and publish `@zkp2p/contracts-v2` to npm |
 
 ## Security & Configuration Tips
