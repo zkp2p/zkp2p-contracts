@@ -963,10 +963,11 @@ async function main(): Promise<void> {
       }
 
       await mapWithConcurrency(depositIds, 2, async (depositId) => {
+        const blockTag = { blockTag: receipt.blockNumber };
         const [isBootstrapped, isEnabled, allowedGroupsResult] = await Promise.all([
-          confirmedStatePolicy.bootstrapped(escrowAddress, depositId),
-          confirmedStatePolicy.enabled(escrowAddress, depositId),
-          confirmedStatePolicy.getAllowedGroups(escrowAddress, depositId),
+          confirmedStatePolicy.bootstrapped(escrowAddress, depositId, blockTag),
+          confirmedStatePolicy.enabled(escrowAddress, depositId, blockTag),
+          confirmedStatePolicy.getAllowedGroups(escrowAddress, depositId, blockTag),
         ]);
         if (!isBootstrapped) {
           throw new Error(`Deposit ${depositId.toString()} was not marked bootstrapped`);
