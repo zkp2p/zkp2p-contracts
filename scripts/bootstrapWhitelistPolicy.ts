@@ -746,10 +746,16 @@ async function main(): Promise<void> {
       );
     }
   }
-  const stateProvider = config.mode === "execute" ? receiptProvider : provider;
+  const stateProvider = provider;
+  const confirmedStateProvider = config.mode === "execute" ? receiptProvider : provider;
 
   const policy = new Contract(config.policyAddress, POLICY_ABI, provider);
   const statePolicy = new Contract(config.policyAddress, POLICY_ABI, stateProvider);
+  const confirmedStatePolicy = new Contract(
+    config.policyAddress,
+    POLICY_ABI,
+    confirmedStateProvider,
+  );
   const owner = normalizeAddress(await policy.owner(), "WhitelistPolicy owner");
   const groupRegistryAddress = normalizeAddress(await policy.groupRegistry(), "AddressGroupRegistry");
   const groupRegistry = new Contract(groupRegistryAddress, GROUP_REGISTRY_ABI, provider);
@@ -868,7 +874,7 @@ async function main(): Promise<void> {
       throw new Error(`Configured signer is not the WhitelistPolicy owner ${owner}`);
     }
     executionSignerAddress = signer.address;
-    await assertPolicyOwner(statePolicy, signer.address);
+    await assertPolicyOwner(confirmedStatePolicy, signer.address);
     writablePolicy = statePolicy.connect(signer);
   }
   if (config.mode === "safe") {
@@ -907,7 +913,10 @@ async function main(): Promise<void> {
           throw new Error(`Deposit ${depositId.toString()} changed policy state after discovery`);
         }
       }));
-      await assertPolicyOwner(statePolicy, config.mode === "execute" ? executionSignerAddress! : owner);
+      await assertPolicyOwner(
+        config.mode === "execute" ? confirmedStatePolicy : statePolicy,
+        config.mode === "execute" ? executionSignerAddress! : owner,
+      );
       await statePolicy.callStatic.bootstrapDeposits(
         escrowAddress,
         depositIds,
@@ -953,11 +962,11 @@ async function main(): Promise<void> {
         throw new Error(`Bootstrap transaction reverted: ${transaction.hash}`);
       }
 
-      await Promise.all(depositIds.map(async (depositId) => {
+      await mapWithConcurrency(depositIds, 2, async (depositId) => {
         const [isBootstrapped, isEnabled, allowedGroupsResult] = await Promise.all([
-          statePolicy.bootstrapped(escrowAddress, depositId),
-          statePolicy.enabled(escrowAddress, depositId),
-          statePolicy.getAllowedGroups(escrowAddress, depositId),
+          confirmedStatePolicy.bootstrapped(escrowAddress, depositId),
+          confirmedStatePolicy.enabled(escrowAddress, depositId),
+          confirmedStatePolicy.getAllowedGroups(escrowAddress, depositId),
         ]);
         if (!isBootstrapped) {
           throw new Error(`Deposit ${depositId.toString()} was not marked bootstrapped`);
@@ -972,12 +981,12 @@ async function main(): Promise<void> {
             throw new Error(`Deposit ${depositId.toString()} is missing a configured group`);
           }
         }
-      }));
+      });
     }
   }
 
   if (config.mode === "execute") {
-    await assertPolicyOwner(statePolicy, executionSignerAddress!);
+    await assertPolicyOwner(confirmedStatePolicy, executionSignerAddress!);
   }
 
   if (config.mode === "safe") {
