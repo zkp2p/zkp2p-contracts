@@ -672,16 +672,25 @@ temporary artifact removals.
 ### Whitelist Bootstrap
 
 `yarn whitelist:bootstrap` discovers active deposits from a configurable raw GraphQL endpoint and
-simulates canonical `WhitelistPolicy.bootstrapDeposits` batches for the explicitly supplied PRO and
-PLUS group IDs. It imports no indexer schema package, so the contracts and indexer packages remain
-acyclic. Discovery is a dry-run by default; mutation and Safe output require an exact expected
-deposit count and all discovery modes enforce a configurable maximum.
+selects only deposits with an active Venmo, Cash App, or PayPal payment method. It deduplicates the
+matching method rows by deposit and simulates canonical `WhitelistPolicy.bootstrapDeposits` batches
+for the explicitly supplied PRO, PLUS, Peer Pay, and Peer Makers group IDs. It imports no indexer
+schema package, so the contracts and indexer packages remain acyclic. Discovery is a dry-run by
+default; mutation and Safe output require both the exact expected deposit count and the printed
+selection digest, and all discovery modes enforce a configurable maximum.
 
 - Staging execution requires `BOOTSTRAP_EXECUTE=true` and the current policy owner's private key.
 - Production Safe preparation requires `BOOTSTRAP_SAFE_OUTPUT_FILE`; it emits unsigned Transaction
   Builder JSON owned by the policy's onchain owner, and never signs or submits it.
 - Direct execution and Safe output are mutually exclusive. Every batch is simulated and its calldata
   decoded and checked before either execution or file output.
+- Base execution is pinned to the canonical production indexer, deployment artifacts, and exact four
+  production group IDs. It also requires `BOOTSTRAP_CONFIRM_PRODUCTION=true`.
+- `BOOTSTRAP_ALLOW_COMPLETED=true` resumes only batches whose deposits are still enabled and contain
+  every requested group. The script rechecks policy ownership before each submitted batch.
+- Direct execution uses the receipt RPC for confirmation and bounded post-receipt state reads. It computes
+  EIP-1559 fees from the latest base fee with a `0.001` gwei priority fee and refuses to submit above
+  the `0.02` gwei default max-fee ceiling; both values are configurable through the documented env.
 - Run `yarn whitelist:bootstrap --self-test` for the embedded calldata/Safe validation and
   `yarn whitelist:bootstrap --help` for the complete environment-variable reference.
 
