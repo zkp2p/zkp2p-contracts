@@ -14,15 +14,16 @@ if [[ ! "$git_ref" =~ ^[A-Za-z0-9._/-]+$ ]]; then
   exit 2
 fi
 
-command -v gh >/dev/null 2>&1 || {
-  echo "gh is required to fetch trailofbits/skills" >&2
+command -v git >/dev/null 2>&1 || {
+  echo "git is required to fetch trailofbits/skills" >&2
   exit 1
 }
 
 checkout_root="$(mktemp -d "${TMPDIR:-/tmp}/trailofbits-skills.XXXXXX")"
 checkout_path="$checkout_root/repository"
 
-gh repo clone trailofbits/skills "$checkout_path" -- --depth 1 --no-checkout >/dev/null
+git clone --quiet --depth 1 --no-checkout \
+  https://github.com/trailofbits/skills.git "$checkout_path"
 git -C "$checkout_path" fetch --quiet --depth 1 origin "$git_ref"
 git -C "$checkout_path" checkout --quiet --detach FETCH_HEAD
 
