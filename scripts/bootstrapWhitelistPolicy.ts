@@ -21,6 +21,7 @@ type BootstrapConfig = {
   network: "base" | "base_staging";
   expectedChainId: number;
   rpcUrl: string;
+  receiptRpcUrl?: string;
   indexerUrl: string;
   indexerApiKey?: string;
   policyAddress: string;
@@ -31,6 +32,7 @@ type BootstrapConfig = {
   batchSize: number;
   readConcurrency: number;
   confirmations: number;
+  receiptTimeoutMs: number;
   expectedDepositCount?: number;
   expectedSelectionDigest?: string;
   allowCompleted: boolean;
@@ -196,6 +198,8 @@ Optional environment:
   BOOTSTRAP_BATCH_SIZE                      (default: 20)
   BOOTSTRAP_READ_CONCURRENCY                (default: 10; read-only RPC preflight)
   BOOTSTRAP_CONFIRMATIONS                   (default: 1)
+  BOOTSTRAP_RECEIPT_RPC_URL                 (optional confirmation-only RPC)
+  BOOTSTRAP_RECEIPT_TIMEOUT_MS              (default: 180000)
   BOOTSTRAP_INDEXER_API_KEY                 (sent as x-api-key; never logged)
   BOOTSTRAP_ALLOW_COMPLETED=true            (resume only verified prior bootstrap batches)
   BOOTSTRAP_EXECUTE=true                    (default: false/dry-run)
@@ -329,6 +333,7 @@ function loadConfig(): BootstrapConfig {
     network,
     expectedChainId: parsePositiveInteger("BOOTSTRAP_EXPECTED_CHAIN_ID", 8453),
     rpcUrl: requireEnvironment("BOOTSTRAP_RPC_URL"),
+    receiptRpcUrl: process.env.BOOTSTRAP_RECEIPT_RPC_URL?.trim() || undefined,
     indexerUrl: requireEnvironment("BOOTSTRAP_INDEXER_GRAPHQL_URL"),
     indexerApiKey: process.env.BOOTSTRAP_INDEXER_API_KEY?.trim() || undefined,
     policyAddress,
@@ -339,6 +344,7 @@ function loadConfig(): BootstrapConfig {
     batchSize: parsePositiveInteger("BOOTSTRAP_BATCH_SIZE", 20, 100),
     readConcurrency: parsePositiveInteger("BOOTSTRAP_READ_CONCURRENCY", 10, 50),
     confirmations: parsePositiveInteger("BOOTSTRAP_CONFIRMATIONS", 1, 100),
+    receiptTimeoutMs: parsePositiveInteger("BOOTSTRAP_RECEIPT_TIMEOUT_MS", 180_000, 600_000),
     expectedDepositCount,
     expectedSelectionDigest,
     allowCompleted: process.env.BOOTSTRAP_ALLOW_COMPLETED === "true",
@@ -691,6 +697,17 @@ async function main(): Promise<void> {
   if ((await provider.getCode(config.policyAddress)) === "0x") {
     throw new Error(`WhitelistPolicy has no bytecode at ${config.policyAddress}`);
   }
+  const receiptProvider = config.receiptRpcUrl
+    ? new ethers.providers.JsonRpcProvider(config.receiptRpcUrl)
+    : provider;
+  if (config.receiptRpcUrl) {
+    const receiptChain = await receiptProvider.getNetwork();
+    if (receiptChain.chainId !== config.expectedChainId) {
+      throw new Error(
+        `Receipt RPC chain id ${receiptChain.chainId} does not match expected ${config.expectedChainId}`,
+      );
+    }
+  }
 
   const policy = new Contract(config.policyAddress, POLICY_ABI, provider);
   const owner = normalizeAddress(await policy.owner(), "WhitelistPolicy owner");
@@ -877,7 +894,17 @@ async function main(): Promise<void> {
         `Submitted bootstrap batch ${processedBatchCount}/${totalBatchCount} `
         + `(${depositIds.length} deposits): ${transaction.hash}`,
       );
-      await transaction.wait(config.confirmations);
+      const receipt = await receiptProvider.waitForTransaction(
+        transaction.hash,
+        config.confirmations,
+        config.receiptTimeoutMs,
+      );
+      if (!receipt) {
+        throw new Error(`Timed out waiting for bootstrap transaction ${transaction.hash}`);
+      }
+      if (receipt.status !== 1) {
+        throw new Error(`Bootstrap transaction reverted: ${transaction.hash}`);
+      }
 
       await Promise.all(depositIds.map(async (depositId) => {
         const [isBootstrapped, isEnabled, allowedGroupsResult] = await Promise.all([
