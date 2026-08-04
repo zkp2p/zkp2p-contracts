@@ -8,6 +8,13 @@ import { BigNumber, Contract, Wallet, ethers } from "ethers";
 type ActiveDeposit = {
   escrowAddress: string;
   depositId: BigNumber;
+  paymentMethodHashes: string[];
+};
+
+type TargetPaymentMethodRow = {
+  depositId: string;
+  depositIdOnContract: string | number;
+  paymentMethodHash: string;
 };
 
 type BootstrapConfig = {
@@ -22,8 +29,10 @@ type BootstrapConfig = {
   pageSize: number;
   maxDeposits: number;
   batchSize: number;
+  readConcurrency: number;
   confirmations: number;
   expectedDepositCount?: number;
+  expectedSelectionDigest?: string;
   allowCompleted: boolean;
   mode: "dry-run" | "execute" | "safe";
   privateKey?: string;
@@ -64,18 +73,71 @@ const ESCROW_ABI = [
   "function getDeposit(uint256) view returns (tuple(address depositor,address delegate,address token,tuple(uint256 min,uint256 max) intentAmountRange,bool acceptingIntents,uint256 remainingDeposits,uint256 outstandingIntentAmount,address intentGuardian,bool retainOnEmpty))",
 ];
 
+const TARGET_PAYMENT_METHODS = [
+  {
+    name: "venmo",
+    hash: "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
+  },
+  {
+    name: "cashapp",
+    hash: "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d",
+  },
+  {
+    name: "paypal",
+    hash: "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f",
+  },
+] as const;
+
+const TARGET_PAYMENT_METHOD_HASHES = TARGET_PAYMENT_METHODS.map(({ hash }) => hash);
+const TARGET_PAYMENT_METHOD_HASH_SET = new Set<string>(TARGET_PAYMENT_METHOD_HASHES);
+
+const PRODUCTION_INDEXER_URL = "https://indexer.zkp2p.xyz/v1/graphql";
+const PRODUCTION_GROUP_IDS = {
+  pro: "0xf030f72e772f954059ca28f94974088aaf6ba37bb1f264df48843a3d0c221dc3",
+  plus: "0xb8747401b308d4891385620071b5916e9c61284f25c4611541c529703de5babf",
+  peerPay: "0x174b8a29536721a3eae290bfd55651b85a53fc334b971d993fa93ed8dde15e48",
+  peerMakers: "0xdf1c64c54745aa1ce00642a5874f97e3183bf5e993c1f559d0a37a4df0b803c7",
+} as const;
+
+const TARGET_PAYMENT_METHODS_QUERY = `
+  query TargetPaymentMethods(
+    $chainId: Int!
+    $depositIdPattern: String!
+    $paymentMethodHashes: [String!]!
+    $limit: Int!
+    $offset: Int!
+  ) {
+    DepositPaymentMethod(
+      where: {
+        chainId: { _eq: $chainId }
+        depositId: { _ilike: $depositIdPattern }
+        paymentMethodHash: { _in: $paymentMethodHashes }
+        active: { _eq: true }
+      }
+      order_by: { id: asc }
+      limit: $limit
+      offset: $offset
+    ) {
+      depositId
+      depositIdOnContract
+      paymentMethodHash
+    }
+  }
+`;
+
 const ACTIVE_DEPOSITS_QUERY = `
   query ActiveDeposits($chainId: Int!, $escrow: String!, $limit: Int!, $offset: Int!) {
     Deposit(
       where: {
         chainId: { _eq: $chainId }
-        escrowAddress: { _eq: $escrow }
+        escrowAddress: { _ilike: $escrow }
         status: { _eq: ACTIVE }
       }
       order_by: { depositId: asc }
       limit: $limit
       offset: $offset
     ) {
+      id
       depositId
     }
   }
@@ -119,6 +181,8 @@ Required environment:
   BOOTSTRAP_INDEXER_GRAPHQL_URL
   WHITELIST_PRO_GROUP_ID
   WHITELIST_PLUS_GROUP_ID
+  WHITELIST_PEER_PAY_GROUP_ID
+  WHITELIST_PEER_MAKERS_GROUP_ID
 
 Optional environment:
   BOOTSTRAP_NETWORK=base_staging|base       (default: base_staging)
@@ -126,13 +190,16 @@ Optional environment:
   BOOTSTRAP_ESCROW_ADDRESSES                (comma-separated; default: EscrowV2 artifact)
   BOOTSTRAP_EXPECTED_CHAIN_ID               (default: 8453)
   BOOTSTRAP_EXPECTED_DEPOSIT_COUNT          (required for execute and Safe modes)
+  BOOTSTRAP_EXPECTED_SELECTION_DIGEST       (required for execute and Safe modes)
   BOOTSTRAP_INDEXER_PAGE_SIZE               (default: 100)
   BOOTSTRAP_MAX_DEPOSITS                    (default: 10000)
   BOOTSTRAP_BATCH_SIZE                      (default: 20)
+  BOOTSTRAP_READ_CONCURRENCY                (default: 10; read-only RPC preflight)
   BOOTSTRAP_CONFIRMATIONS                   (default: 1)
   BOOTSTRAP_INDEXER_API_KEY                 (sent as x-api-key; never logged)
   BOOTSTRAP_ALLOW_COMPLETED=true            (resume only verified prior bootstrap batches)
   BOOTSTRAP_EXECUTE=true                    (default: false/dry-run)
+  BOOTSTRAP_CONFIRM_PRODUCTION=true         (required for direct execution on Base)
   BOOTSTRAP_OWNER_PRIVATE_KEY               (required only with BOOTSTRAP_EXECUTE=true)
   BOOTSTRAP_SAFE_OUTPUT_FILE                (unsigned Safe JSON; mutually exclusive with execute)
 
@@ -178,6 +245,13 @@ function normalizeAddress(value: string, label: string): string {
 function normalizeGroupId(value: string, label: string): string {
   if (!/^0x[0-9a-fA-F]{64}$/.test(value) || /^0x0{64}$/i.test(value)) {
     throw new Error(`${label} must be a nonzero bytes32 value`);
+  }
+  return value.toLowerCase();
+}
+
+function normalizeSelectionDigest(value: string, label: string): string {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(value)) {
+    throw new Error(`${label} must be a bytes32 value`);
   }
   return value.toLowerCase();
 }
@@ -228,9 +302,11 @@ function loadConfig(): BootstrapConfig {
   const groupIds = [
     normalizeGroupId(requireEnvironment("WHITELIST_PRO_GROUP_ID"), "WHITELIST_PRO_GROUP_ID"),
     normalizeGroupId(requireEnvironment("WHITELIST_PLUS_GROUP_ID"), "WHITELIST_PLUS_GROUP_ID"),
+    normalizeGroupId(requireEnvironment("WHITELIST_PEER_PAY_GROUP_ID"), "WHITELIST_PEER_PAY_GROUP_ID"),
+    normalizeGroupId(requireEnvironment("WHITELIST_PEER_MAKERS_GROUP_ID"), "WHITELIST_PEER_MAKERS_GROUP_ID"),
   ];
   if (new Set(groupIds).size !== groupIds.length) {
-    throw new Error("PRO and PLUS group ids must be distinct");
+    throw new Error("PRO, PLUS, Peer Pay, and Peer Makers group ids must be distinct");
   }
 
   const execute = process.env.BOOTSTRAP_EXECUTE === "true";
@@ -240,10 +316,16 @@ function loadConfig(): BootstrapConfig {
   }
   const mode = execute ? "execute" : safeOutputFile ? "safe" : "dry-run";
   const expectedDepositCount = parseOptionalNonnegativeInteger("BOOTSTRAP_EXPECTED_DEPOSIT_COUNT");
-  if (mode !== "dry-run" && expectedDepositCount === undefined) {
-    throw new Error("BOOTSTRAP_EXPECTED_DEPOSIT_COUNT is required for execute and Safe modes");
+  const expectedSelectionDigestValue = process.env.BOOTSTRAP_EXPECTED_SELECTION_DIGEST?.trim();
+  const expectedSelectionDigest = expectedSelectionDigestValue
+    ? normalizeSelectionDigest(expectedSelectionDigestValue, "BOOTSTRAP_EXPECTED_SELECTION_DIGEST")
+    : undefined;
+  if (mode !== "dry-run" && (expectedDepositCount === undefined || !expectedSelectionDigest)) {
+    throw new Error(
+      "BOOTSTRAP_EXPECTED_DEPOSIT_COUNT and BOOTSTRAP_EXPECTED_SELECTION_DIGEST are required for execute and Safe modes",
+    );
   }
-  return {
+  const config: BootstrapConfig = {
     network,
     expectedChainId: parsePositiveInteger("BOOTSTRAP_EXPECTED_CHAIN_ID", 8453),
     rpcUrl: requireEnvironment("BOOTSTRAP_RPC_URL"),
@@ -255,8 +337,10 @@ function loadConfig(): BootstrapConfig {
     pageSize: parsePositiveInteger("BOOTSTRAP_INDEXER_PAGE_SIZE", 100, 1_000),
     maxDeposits: parsePositiveInteger("BOOTSTRAP_MAX_DEPOSITS", 10_000, 100_000),
     batchSize: parsePositiveInteger("BOOTSTRAP_BATCH_SIZE", 20, 100),
+    readConcurrency: parsePositiveInteger("BOOTSTRAP_READ_CONCURRENCY", 10, 50),
     confirmations: parsePositiveInteger("BOOTSTRAP_CONFIRMATIONS", 1, 100),
     expectedDepositCount,
+    expectedSelectionDigest,
     allowCompleted: process.env.BOOTSTRAP_ALLOW_COMPLETED === "true",
     mode,
     privateKey: execute
@@ -264,16 +348,93 @@ function loadConfig(): BootstrapConfig {
       : undefined,
     safeOutputFile: safeOutputFile ? path.resolve(process.cwd(), safeOutputFile) : undefined,
   };
+
+  if (network === "base") {
+    const expectedPolicyAddress = deploymentAddress("base", "WhitelistPolicy");
+    const expectedEscrowAddress = deploymentAddress("base", "EscrowV2");
+    if (policyAddress.toLowerCase() !== expectedPolicyAddress.toLowerCase()) {
+      throw new Error(`Base bootstrap must use deployed WhitelistPolicy ${expectedPolicyAddress}`);
+    }
+    if (
+      escrowAddresses.length !== 1
+      || escrowAddresses[0].toLowerCase() !== expectedEscrowAddress.toLowerCase()
+    ) {
+      throw new Error(`Base bootstrap must use only deployed EscrowV2 ${expectedEscrowAddress}`);
+    }
+    if (config.indexerUrl.replace(/\/$/, "") !== PRODUCTION_INDEXER_URL) {
+      throw new Error(`Base bootstrap must use production indexer ${PRODUCTION_INDEXER_URL}`);
+    }
+    const expectedGroupIds = [
+      PRODUCTION_GROUP_IDS.pro,
+      PRODUCTION_GROUP_IDS.plus,
+      PRODUCTION_GROUP_IDS.peerPay,
+      PRODUCTION_GROUP_IDS.peerMakers,
+    ];
+    if (!groupIds.every((groupId, index) => groupId === expectedGroupIds[index])) {
+      throw new Error("Base bootstrap group ids do not match the exact PRO, PLUS, Peer Pay, and Peer Makers groups");
+    }
+    if (mode === "execute" && process.env.BOOTSTRAP_CONFIRM_PRODUCTION !== "true") {
+      throw new Error("BOOTSTRAP_CONFIRM_PRODUCTION=true is required for direct execution on Base");
+    }
+  }
+
+  return config;
 }
 
-async function loadActiveDeposits(config: BootstrapConfig): Promise<ActiveDeposit[]> {
+async function loadEligibleDeposits(config: BootstrapConfig): Promise<ActiveDeposit[]> {
   const deposits: ActiveDeposit[] = [];
   const seen = new Set<string>();
 
   for (const escrowAddress of config.escrowAddresses) {
+    const targetMethodsByDeposit = new Map<string, Set<string>>();
+    let paymentMethodOffset = 0;
+    while (true) {
+      const data = await postGraphql<{ DepositPaymentMethod: TargetPaymentMethodRow[] }>(
+        config.indexerUrl,
+        TARGET_PAYMENT_METHODS_QUERY,
+        {
+          chainId: config.expectedChainId,
+          depositIdPattern: `${escrowAddress.toLowerCase()}_%`,
+          paymentMethodHashes: TARGET_PAYMENT_METHOD_HASHES,
+          limit: config.pageSize,
+          offset: paymentMethodOffset,
+        },
+        config.indexerApiKey,
+      );
+      if (!Array.isArray(data.DepositPaymentMethod)) {
+        throw new Error("Indexer returned an invalid DepositPaymentMethod result");
+      }
+
+      for (const row of data.DepositPaymentMethod) {
+        if (
+          typeof row.depositId !== "string"
+          || (typeof row.depositIdOnContract !== "string" && typeof row.depositIdOnContract !== "number")
+          || typeof row.paymentMethodHash !== "string"
+        ) {
+          throw new Error("Indexer returned an invalid target payment-method row");
+        }
+        const depositId = BigNumber.from(row.depositIdOnContract);
+        if (depositId.isNegative()) throw new Error("Indexer returned a negative depositIdOnContract");
+        const expectedEntityId = `${escrowAddress.toLowerCase()}_${depositId.toString()}`;
+        if (row.depositId.toLowerCase() !== expectedEntityId) {
+          throw new Error(`Indexer returned mismatched deposit entity ${row.depositId}`);
+        }
+        const paymentMethodHash = row.paymentMethodHash.toLowerCase();
+        if (!TARGET_PAYMENT_METHOD_HASH_SET.has(paymentMethodHash)) {
+          throw new Error(`Indexer returned unexpected payment method ${paymentMethodHash}`);
+        }
+        const methods = targetMethodsByDeposit.get(expectedEntityId) || new Set<string>();
+        methods.add(paymentMethodHash);
+        targetMethodsByDeposit.set(expectedEntityId, methods);
+      }
+
+      if (data.DepositPaymentMethod.length < config.pageSize) break;
+      paymentMethodOffset += data.DepositPaymentMethod.length;
+    }
+
     let offset = 0;
     while (true) {
-      const data = await postGraphql<{ Deposit: Array<{ depositId: unknown }> }>(
+      const data = await postGraphql<{ Deposit: Array<{ id: unknown; depositId: unknown }> }>(
         config.indexerUrl,
         ACTIVE_DEPOSITS_QUERY,
         {
@@ -289,15 +450,27 @@ async function loadActiveDeposits(config: BootstrapConfig): Promise<ActiveDeposi
       }
 
       for (const row of data.Deposit) {
-        if (typeof row.depositId !== "string" && typeof row.depositId !== "number") {
+        if (
+          typeof row.id !== "string"
+          || (typeof row.depositId !== "string" && typeof row.depositId !== "number")
+        ) {
           throw new Error("Indexer returned an invalid depositId");
         }
         const depositId = BigNumber.from(row.depositId);
         if (depositId.isNegative()) throw new Error("Indexer returned a negative depositId");
         const key = `${escrowAddress.toLowerCase()}_${depositId.toString()}`;
+        if (row.id.toLowerCase() !== key) {
+          throw new Error(`Indexer returned mismatched active deposit entity ${row.id}`);
+        }
+        const paymentMethodHashes = targetMethodsByDeposit.get(key);
+        if (!paymentMethodHashes) continue;
         if (seen.has(key)) throw new Error(`Indexer returned duplicate active deposit ${key}`);
         seen.add(key);
-        deposits.push({ escrowAddress, depositId });
+        deposits.push({
+          escrowAddress,
+          depositId,
+          paymentMethodHashes: [...paymentMethodHashes].sort(),
+        });
         if (deposits.length > config.maxDeposits) {
           throw new Error(`Indexer returned more than BOOTSTRAP_MAX_DEPOSITS=${config.maxDeposits}`);
         }
@@ -316,12 +489,44 @@ async function loadActiveDeposits(config: BootstrapConfig): Promise<ActiveDeposi
   return deposits;
 }
 
+function buildSelectionDigest(deposits: ActiveDeposit[]): string {
+  const sortedDeposits = [...deposits].sort((left, right) => {
+    const byEscrow = left.escrowAddress.toLowerCase().localeCompare(right.escrowAddress.toLowerCase());
+    if (byEscrow !== 0) return byEscrow;
+    return left.depositId.lt(right.depositId) ? -1 : left.depositId.eq(right.depositId) ? 0 : 1;
+  });
+  const payload = sortedDeposits.map((deposit) => [
+    deposit.escrowAddress.toLowerCase(),
+    deposit.depositId.toString(),
+    [...deposit.paymentMethodHashes].sort().join(","),
+  ].join(":"));
+  return ethers.utils.keccak256(ethers.utils.toUtf8Bytes(payload.join("\n")));
+}
+
 function batch<T>(values: T[], size: number): T[][] {
   const batches: T[][] = [];
   for (let index = 0; index < values.length; index += size) {
     batches.push(values.slice(index, index + size));
   }
   return batches;
+}
+
+async function mapWithConcurrency<T, U>(
+  values: T[],
+  concurrency: number,
+  callback: (value: T, index: number) => Promise<U>,
+): Promise<U[]> {
+  const results = new Array<U>(values.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await callback(values[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 export function buildSafeTransaction(
@@ -390,7 +595,7 @@ export function buildSafeBatch(
     meta: {
       name: `ZKP2P whitelist bootstrap - ${network}`,
       description:
-        `Bootstrap PRO and PLUS groups for ${pendingActiveDepositCount} active deposits on chain ${chainId}. `
+        `Bootstrap configured whitelist groups for ${pendingActiveDepositCount} eligible deposits on chain ${chainId}. `
         + `WhitelistPolicy ${normalizedPolicy}; policy owner Safe ${normalizedSafe}. `
         + "Generated unsigned; review, sign, and submit separately.",
       txBuilderVersion: "1.16.5",
@@ -406,7 +611,12 @@ function runSelfTest(): void {
   const escrowAddress = "0x2000000000000000000000000000000000000002";
   const safeAddress = "0x3000000000000000000000000000000000000003";
   const depositIds = [BigNumber.from(7), BigNumber.from(42)];
-  const groupIds = [`0x${"11".repeat(32)}`, `0x${"22".repeat(32)}`];
+  const groupIds = [
+    `0x${"11".repeat(32)}`,
+    `0x${"22".repeat(32)}`,
+    `0x${"33".repeat(32)}`,
+    `0x${"44".repeat(32)}`,
+  ];
   const transaction = buildSafeTransaction(policyAddress, escrowAddress, depositIds, groupIds);
   const decoded = new ethers.utils.Interface(POLICY_ABI)
     .decodeFunctionData("bootstrapDeposits", transaction.data);
@@ -418,6 +628,21 @@ function runSelfTest(): void {
   }
   if ((decoded[2] as string[]).map((value) => value.toLowerCase()).join(",") !== groupIds.join(",")) {
     throw new Error("Self-test decoded the wrong group ids");
+  }
+  const selectionDigest = buildSelectionDigest([
+    {
+      escrowAddress,
+      depositId: BigNumber.from(7),
+      paymentMethodHashes: [TARGET_PAYMENT_METHODS[0].hash],
+    },
+    {
+      escrowAddress,
+      depositId: BigNumber.from(42),
+      paymentMethodHashes: [TARGET_PAYMENT_METHODS[1].hash, TARGET_PAYMENT_METHODS[2].hash],
+    },
+  ]);
+  if (!/^0x[0-9a-f]{64}$/.test(selectionDigest)) {
+    throw new Error("Self-test produced an invalid selection digest");
   }
   const safeBatch = buildSafeBatch("base", 8453, policyAddress, safeAddress, 2, [transaction]);
   if (safeBatch.chainId !== "8453" || !sameAddressForSelfTest(
@@ -437,6 +662,13 @@ async function assertDepositStillExists(escrow: Contract, depositId: BigNumber):
   const deposit = await escrow.getDeposit(depositId);
   if (deposit.depositor === ethers.constants.AddressZero) {
     throw new Error(`Deposit ${depositId.toString()} no longer exists; indexer discovery is stale`);
+  }
+}
+
+async function assertPolicyOwner(policy: Contract, expectedOwner: string): Promise<void> {
+  const currentOwner = normalizeAddress(await policy.owner(), "WhitelistPolicy owner");
+  if (currentOwner.toLowerCase() !== expectedOwner.toLowerCase()) {
+    throw new Error(`WhitelistPolicy owner changed to ${currentOwner}; expected ${expectedOwner}`);
   }
 }
 
@@ -478,50 +710,71 @@ async function main(): Promise<void> {
     escrows.set(escrowAddress.toLowerCase(), new Contract(escrowAddress, ESCROW_ABI, provider));
   }
 
-  const activeDeposits = await loadActiveDeposits(config);
+  const activeDeposits = await loadEligibleDeposits(config);
+  const selectionDigest = buildSelectionDigest(activeDeposits);
   if (
     config.expectedDepositCount !== undefined
     && activeDeposits.length !== config.expectedDepositCount
   ) {
     throw new Error(
-      `Discovered ${activeDeposits.length} active deposits; expected ${config.expectedDepositCount}`,
+      `Discovered ${activeDeposits.length} eligible active deposits; expected ${config.expectedDepositCount}`,
+    );
+  }
+  if (
+    config.expectedSelectionDigest !== undefined
+    && selectionDigest !== config.expectedSelectionDigest
+  ) {
+    throw new Error(
+      `Selection digest ${selectionDigest} does not match expected ${config.expectedSelectionDigest}`,
     );
   }
 
-  const eligible: ActiveDeposit[] = [];
-  let completedBeforeRun = 0;
-  for (const deposit of activeDeposits) {
-    const escrow = escrows.get(deposit.escrowAddress.toLowerCase())!;
-    await assertDepositStillExists(escrow, deposit.depositId);
-    if (await policy.bootstrapped(deposit.escrowAddress, deposit.depositId)) {
-      if (!config.allowCompleted) {
+  let evaluatedDepositCount = 0;
+  const evaluatedDeposits = await mapWithConcurrency(
+    activeDeposits,
+    config.readConcurrency,
+    async (deposit): Promise<{ deposit: ActiveDeposit; completed: boolean }> => {
+      const escrow = escrows.get(deposit.escrowAddress.toLowerCase())!;
+      await assertDepositStillExists(escrow, deposit.depositId);
+      const [isBootstrapped, isEnabled] = await Promise.all([
+        policy.bootstrapped(deposit.escrowAddress, deposit.depositId),
+        policy.enabled(deposit.escrowAddress, deposit.depositId),
+      ]);
+      let completed = false;
+      if (isBootstrapped) {
+        if (!config.allowCompleted) {
+          throw new Error(
+            `Active deposit ${deposit.depositId.toString()} is already bootstrapped; `
+            + "set BOOTSTRAP_ALLOW_COMPLETED=true only to resume a verified partial run",
+          );
+        }
+        if (!isEnabled) {
+          throw new Error(`Previously bootstrapped deposit ${deposit.depositId.toString()} is no longer enabled`);
+        }
+        const existingGroups = (await policy.getAllowedGroups(
+          deposit.escrowAddress,
+          deposit.depositId,
+        )).map((groupId: string) => groupId.toLowerCase());
+        if (!config.groupIds.every((groupId) => existingGroups.includes(groupId))) {
+          throw new Error(
+            `Previously bootstrapped deposit ${deposit.depositId.toString()} lacks a requested group`,
+          );
+        }
+        completed = true;
+      } else if (isEnabled) {
         throw new Error(
-          `Active deposit ${deposit.depositId.toString()} is already bootstrapped; `
-          + "set BOOTSTRAP_ALLOW_COMPLETED=true only to resume a verified partial run",
+          `Active deposit ${deposit.depositId.toString()} was enabled outside the one-time bootstrap`,
         );
       }
-      if (!(await policy.enabled(deposit.escrowAddress, deposit.depositId))) {
-        throw new Error(`Previously bootstrapped deposit ${deposit.depositId.toString()} is no longer enabled`);
+      evaluatedDepositCount += 1;
+      if (evaluatedDepositCount % 100 === 0 || evaluatedDepositCount === activeDeposits.length) {
+        console.log(`Policy preflight: ${evaluatedDepositCount}/${activeDeposits.length} eligible deposits checked`);
       }
-      const existingGroups = (await policy.getAllowedGroups(
-        deposit.escrowAddress,
-        deposit.depositId,
-      )).map((groupId: string) => groupId.toLowerCase());
-      if (!config.groupIds.every((groupId) => existingGroups.includes(groupId))) {
-        throw new Error(
-          `Previously bootstrapped deposit ${deposit.depositId.toString()} lacks a requested group`,
-        );
-      }
-      completedBeforeRun += 1;
-      continue;
-    }
-    if (await policy.enabled(deposit.escrowAddress, deposit.depositId)) {
-      throw new Error(
-        `Active deposit ${deposit.depositId.toString()} was enabled outside the one-time bootstrap`,
-      );
-    }
-    eligible.push(deposit);
-  }
+      return { deposit, completed };
+    },
+  );
+  const eligible = evaluatedDeposits.filter(({ completed }) => !completed).map(({ deposit }) => deposit);
+  const completedBeforeRun = evaluatedDeposits.length - eligible.length;
 
   const grouped = new Map<string, ActiveDeposit[]>();
   for (const deposit of eligible) {
@@ -534,16 +787,25 @@ async function main(): Promise<void> {
   console.log(`Network: ${config.network} (chain ${config.expectedChainId})`);
   console.log(`WhitelistPolicy: ${config.policyAddress}`);
   console.log(`AddressGroupRegistry: ${groupRegistryAddress}`);
-  console.log(`Active deposits discovered: ${activeDeposits.length}`);
+  console.log(`Eligible active deposits discovered: ${activeDeposits.length}`);
+  console.log(`Selection digest: ${selectionDigest}`);
+  for (const targetMethod of TARGET_PAYMENT_METHODS) {
+    const count = activeDeposits.filter(({ paymentMethodHashes }) => (
+      paymentMethodHashes.includes(targetMethod.hash)
+    )).length;
+    console.log(`Eligible with ${targetMethod.name}: ${count}`);
+  }
   console.log(`Pending bootstrap: ${eligible.length}`);
   console.log(`Verified completed before this run: ${completedBeforeRun}`);
 
   let writablePolicy = policy;
+  let executionSignerAddress: string | undefined;
   if (config.mode === "execute") {
     const signer = new Wallet(config.privateKey!, provider);
     if (signer.address.toLowerCase() !== owner.toLowerCase()) {
       throw new Error(`Configured signer is not the WhitelistPolicy owner ${owner}`);
     }
+    executionSignerAddress = signer.address;
     writablePolicy = policy.connect(signer);
   }
   if (config.mode === "safe") {
@@ -561,6 +823,9 @@ async function main(): Promise<void> {
   }
 
   const safeTransactions: SafeTransaction[] = [];
+  const totalBatchCount = [...grouped.values()]
+    .reduce((total, deposits) => total + Math.ceil(deposits.length / config.batchSize), 0);
+  let processedBatchCount = 0;
 
   for (const [escrowAddress, deposits] of grouped) {
     const escrow = escrows.get(escrowAddress.toLowerCase())!;
@@ -569,21 +834,24 @@ async function main(): Promise<void> {
 
       // Re-read both escrow and policy state immediately before simulation/submission. This fails
       // closed if the indexer page became stale or a depositor configured policy after discovery.
-      for (const depositId of depositIds) {
+      await Promise.all(depositIds.map(async (depositId) => {
         await assertDepositStillExists(escrow, depositId);
-        if (
-          await policy.bootstrapped(escrowAddress, depositId)
-          || await policy.enabled(escrowAddress, depositId)
-        ) {
+        const [isBootstrapped, isEnabled] = await Promise.all([
+          policy.bootstrapped(escrowAddress, depositId),
+          policy.enabled(escrowAddress, depositId),
+        ]);
+        if (isBootstrapped || isEnabled) {
           throw new Error(`Deposit ${depositId.toString()} changed policy state after discovery`);
         }
-      }
+      }));
+      await assertPolicyOwner(policy, config.mode === "execute" ? executionSignerAddress! : owner);
       await policy.callStatic.bootstrapDeposits(
         escrowAddress,
         depositIds,
         config.groupIds,
         { from: owner },
       );
+      processedBatchCount += 1;
 
       if (config.mode === "safe") {
         safeTransactions.push(buildSafeTransaction(
@@ -594,31 +862,48 @@ async function main(): Promise<void> {
         ));
         continue;
       }
-      if (config.mode === "dry-run") continue;
+      if (config.mode === "dry-run") {
+        if (processedBatchCount % 5 === 0 || processedBatchCount === totalBatchCount) {
+          console.log(`Batch simulation: ${processedBatchCount}/${totalBatchCount} passed`);
+        }
+        continue;
+      }
       const transaction = await writablePolicy.bootstrapDeposits(
         escrowAddress,
         depositIds,
         config.groupIds,
       );
-      console.log(`Submitted bootstrap batch (${depositIds.length} deposits): ${transaction.hash}`);
+      console.log(
+        `Submitted bootstrap batch ${processedBatchCount}/${totalBatchCount} `
+        + `(${depositIds.length} deposits): ${transaction.hash}`,
+      );
       await transaction.wait(config.confirmations);
 
-      for (const depositId of depositIds) {
-        if (!(await policy.bootstrapped(escrowAddress, depositId))) {
+      await Promise.all(depositIds.map(async (depositId) => {
+        const [isBootstrapped, isEnabled, allowedGroupsResult] = await Promise.all([
+          policy.bootstrapped(escrowAddress, depositId),
+          policy.enabled(escrowAddress, depositId),
+          policy.getAllowedGroups(escrowAddress, depositId),
+        ]);
+        if (!isBootstrapped) {
           throw new Error(`Deposit ${depositId.toString()} was not marked bootstrapped`);
         }
-        if (!(await policy.enabled(escrowAddress, depositId))) {
+        if (!isEnabled) {
           throw new Error(`Deposit ${depositId.toString()} was not enabled`);
         }
-        const allowedGroups = (await policy.getAllowedGroups(escrowAddress, depositId))
+        const allowedGroups = allowedGroupsResult
           .map((groupId: string) => groupId.toLowerCase());
         for (const groupId of config.groupIds) {
           if (!allowedGroups.includes(groupId)) {
             throw new Error(`Deposit ${depositId.toString()} is missing a configured group`);
           }
         }
-      }
+      }));
     }
+  }
+
+  if (config.mode === "execute") {
+    await assertPolicyOwner(policy, executionSignerAddress!);
   }
 
   if (config.mode === "safe") {
@@ -642,10 +927,10 @@ async function main(): Promise<void> {
 
   console.log(
     config.mode === "execute"
-      ? `Bootstrap complete: ${activeDeposits.length}/${activeDeposits.length} active deposits verified`
+      ? `Bootstrap complete: ${activeDeposits.length}/${activeDeposits.length} eligible deposits verified`
       : config.mode === "safe"
         ? `Safe batch validation passed: ${eligible.length} pending deposits in ${safeTransactions.length} transactions`
-        : `Dry-run simulation passed: ${eligible.length} pending, ${completedBeforeRun} already complete, ${activeDeposits.length} discovered`,
+        : `Dry-run simulation passed: ${eligible.length} pending, ${completedBeforeRun} already complete, ${activeDeposits.length} eligible discovered`,
   );
 }
 
