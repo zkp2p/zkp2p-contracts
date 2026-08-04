@@ -69,8 +69,9 @@ iteration loop.
 
 - Inspect the requested change and `git diff` first. List the production files, interfaces, deploy/package consumers,
   and test files that can actually be affected.
-- Use direct searches (`rg` for imports, calls, fixtures, and selectors) to map impact. Do not invoke, recreate, or use
-  `zkp2p-stack-impact` or another generic "stack impact" skill in this repository.
+- Use direct searches (`rg` for imports, calls, fixtures, and selectors) to map contract-specific consumers. Impact
+  analysis belongs to the contract owner and its concrete tests and review checks; do not invoke or recreate a
+  generic fleet-wide impact skill.
 - For architecture, explanation, documentation, or read-only review tasks, do not compile or test unless the answer
   depends on executing code.
 - Do not expand a focused request into repository cleanup, unrelated test repair, coverage work, or extra review
