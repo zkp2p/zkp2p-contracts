@@ -216,9 +216,10 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
      * @param _attestation Signed chargeback evidence for a settled intent.
      */
     function submitChargeback(IChargebackVerifier.ChargebackAttestation calldata _attestation) external nonReentrant {
-        ChargebackIntent storage chargebackIntent = chargebackIntentByIntentHash[_attestation.intentHash];
+        bytes32 intentHash = abi.decode(_attestation.input, (bytes32));
+        ChargebackIntent storage chargebackIntent = chargebackIntentByIntentHash[intentHash];
         if (chargebackIntent.status != ChargebackIntentStatus.SETTLED) {
-            revert ChargebackIntentNotSettled(_attestation.intentHash, chargebackIntent.status);
+            revert ChargebackIntentNotSettled(intentHash, chargebackIntent.status);
         }
 
         (bytes32 disputeId, bytes32 disputeNullifier) = chargebackVerifier.verifyChargeback(
@@ -231,14 +232,10 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
 
         IStakeVault.Claim[] memory claims = new IStakeVault.Claim[](1);
         claims[0] = IStakeVault.Claim({beneficiary: chargebackIntent.depositor, amount: compensatedAmount});
-        stakeVault.resolveLock(_attestation.intentHash, claims);
+        stakeVault.resolveLock(intentHash, claims);
 
         emit ChargebackSettled(
-            _attestation.intentHash,
-            chargebackIntent.stakeOwner,
-            chargebackIntent.depositor,
-            compensatedAmount,
-            disputeId
+            intentHash, chargebackIntent.stakeOwner, chargebackIntent.depositor, compensatedAmount, disputeId
         );
     }
 

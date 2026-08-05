@@ -21,8 +21,8 @@ import {INullifierRegistryV2} from "../interfaces/INullifierRegistryV2.sol";
 contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
     /* ============ Constants ============ */
 
-    bytes32 public constant CHARGEBACK_ATTESTATION_TYPEHASH =
-        keccak256("ChargebackAttestation(bytes32 intentHash,bytes32 dataHash)");
+    bytes32 public constant ATTESTATION_TYPEHASH =
+        keccak256("Attestation(bytes32 transformerId,bytes input,bytes output)");
 
     /* ============ State Variables ============ */
 
@@ -32,7 +32,7 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
     /* ============ Constructor ============ */
 
     constructor(address _owner, INullifierRegistryV2 _nullifierRegistry, IAttestationVerifier _attestationVerifier)
-        EIP712("ZKP2P ChargebackVerifier", "1")
+        EIP712("ZKP2P Attestation", "1")
     {
         if (_owner == address(0)) revert ZeroAddress();
         _validateDependency(address(_nullifierRegistry));
@@ -53,28 +53,32 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
         bytes32 _paymentMethod,
         bool _isManualRelease
     ) external view override returns (bytes32 disputeId, bytes32 disputeNullifier) {
-        if (keccak256(_attestation.data) != _attestation.dataHash) revert InvalidAttestation();
+        if (_isManualRelease) revert ManualReleaseNotChargebackable();
+        if (_attestation.transformerId == bytes32(0)) revert InvalidAttestation();
+        if (_attestation.input.length != 32 || _attestation.output.length != 64) revert InvalidAttestation();
+        if (_attestation.signatures.length == 0) revert InvalidAttestation();
 
-        ChargebackDetails memory details = abi.decode(_attestation.data, (ChargebackDetails));
-        if (details.paymentMethod != _paymentMethod) revert InvalidAttestation();
+        bytes32 intentHash = abi.decode(_attestation.input, (bytes32));
+        (bytes32 originalPaymentId, bytes32 decodedDisputeId) = abi.decode(_attestation.output, (bytes32, bytes32));
+        if (intentHash == bytes32(0) || originalPaymentId == bytes32(0) || decodedDisputeId == bytes32(0)) {
+            revert InvalidAttestation();
+        }
 
-        bytes32 digest = _hashTypedDataV4(_chargebackAttestationStructHash(_attestation));
-        if (!attestationVerifier.verify(digest, _attestation.signatures, _attestation.data)) {
+        bytes32 digest = _hashTypedDataV4(_attestationStructHash(_attestation));
+        if (!attestationVerifier.verify(digest, _attestation.signatures, _attestation.output)) {
             revert AttestationVerificationFailed();
         }
 
-        if (!_isManualRelease) {
-            bytes32 paymentNullifier = keccak256(abi.encodePacked(details.paymentMethod, details.originalPaymentId));
-            if (
-                nullifierRegistry.intentHashByNullifier(paymentNullifier) != _attestation.intentHash
-                    || nullifierRegistry.nullifierByIntentHash(_attestation.intentHash) != paymentNullifier
-            ) {
-                revert InvalidPaymentBinding(_attestation.intentHash, paymentNullifier);
-            }
+        bytes32 paymentNullifier = keccak256(abi.encodePacked(_paymentMethod, originalPaymentId));
+        if (
+            nullifierRegistry.intentHashByNullifier(paymentNullifier) != intentHash
+                || nullifierRegistry.nullifierByIntentHash(intentHash) != paymentNullifier
+        ) {
+            revert InvalidPaymentBinding(intentHash, paymentNullifier);
         }
 
-        disputeId = details.disputeId;
-        disputeNullifier = keccak256(abi.encodePacked(details.paymentMethod, details.disputeId));
+        disputeId = decodedDisputeId;
+        disputeNullifier = keccak256(abi.encodePacked(_paymentMethod, decodedDisputeId));
     }
 
     /* ============ Governance Functions ============ */
@@ -101,21 +105,24 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
 
     /**
      * @notice Returns the EIP-712 digest that witnesses sign for a chargeback attestation.
-     * @param _attestation Chargeback evidence whose intent hash and data hash are included in the digest.
+     * @param _attestation Generic chargeback attestation included in the digest.
      * @return EIP-712 digest bound to this verifier's address and the current chain.
      */
     function hashChargebackAttestation(ChargebackAttestation calldata _attestation) external view returns (bytes32) {
-        return _hashTypedDataV4(_chargebackAttestationStructHash(_attestation));
+        return _hashTypedDataV4(_attestationStructHash(_attestation));
     }
 
     /* ============ Internal Functions ============ */
 
-    function _chargebackAttestationStructHash(ChargebackAttestation calldata _attestation)
-        internal
-        pure
-        returns (bytes32)
-    {
-        return keccak256(abi.encode(CHARGEBACK_ATTESTATION_TYPEHASH, _attestation.intentHash, _attestation.dataHash));
+    function _attestationStructHash(ChargebackAttestation calldata _attestation) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                ATTESTATION_TYPEHASH,
+                _attestation.transformerId,
+                keccak256(_attestation.input),
+                keccak256(_attestation.output)
+            )
+        );
     }
 
     function _validateDependency(address _dependency) internal view {

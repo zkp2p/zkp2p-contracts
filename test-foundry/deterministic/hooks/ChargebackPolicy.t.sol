@@ -254,7 +254,7 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
         _admitAndSettle(INTENT, 40e6, false);
         bytes32 paymentId = keccak256("payment");
         IChargebackVerifier.ChargebackAttestation memory attestation =
-            _attestation(INTENT, METHOD, paymentId, keccak256("dispute"));
+            _attestation(INTENT, paymentId, keccak256("dispute"));
         bytes32 paymentNullifier = keccak256(abi.encodePacked(METHOD, paymentId));
 
         vm.expectRevert(
@@ -277,7 +277,7 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
 
     function test_SubmitChargebackRequiresSettledIntent() public {
         IChargebackVerifier.ChargebackAttestation memory attestation =
-            _attestation(INTENT, METHOD, keccak256("payment"), keccak256("dispute"));
+            _attestation(INTENT, keccak256("payment"), keccak256("dispute"));
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -299,36 +299,38 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
         policy.submitChargeback(attestation);
     }
 
-    function test_SubmitChargebackManualPathSkipsPaymentBindingAndRejectsReplay() public {
+    function test_SubmitChargebackRejectsManualRelease() public {
         _admitAndSettle(INTENT, 40e6, true);
-        bytes32 disputeId = keccak256("dispute");
         IChargebackVerifier.ChargebackAttestation memory attestation =
-            _attestation(INTENT, METHOD, keccak256("unbound-payment"), disputeId);
-        policy.submitChargeback(attestation);
+            _attestation(INTENT, keccak256("unbound-payment"), keccak256("dispute"));
 
-        bytes32 disputeNullifier = keccak256(abi.encodePacked(METHOD, disputeId));
-        assertTrue(chargebackNullifierRegistry.isNullified(disputeNullifier));
-
-        bytes32 secondIntent = keccak256("second");
-        _admitAndSettle(secondIntent, 40e6, true);
-        attestation = _attestation(secondIntent, METHOD, keccak256("other-payment"), disputeId);
-        vm.expectRevert(bytes("Nullifier already exists"));
+        vm.expectRevert(IChargebackVerifier.ManualReleaseNotChargebackable.selector);
         policy.submitChargeback(attestation);
     }
 
     function test_SubmitChargebackRejectsInvalidEvidenceButRemainsValidUntilCollateralRelease() public {
-        _admitAndSettle(INTENT, 40e6, true);
+        _admitAndSettle(INTENT, 40e6, false);
+        bytes32 paymentId = keccak256("payment");
         IChargebackVerifier.ChargebackAttestation memory attestation =
-            _attestation(INTENT, METHOD, keccak256("payment"), keccak256("dispute"));
-        attestation.dataHash = keccak256("tampered");
+            _attestation(INTENT, paymentId, keccak256("dispute"));
+        attestation.transformerId = bytes32(0);
         vm.expectRevert(IChargebackVerifier.InvalidAttestation.selector);
         policy.submitChargeback(attestation);
 
-        attestation = _attestation(INTENT, keccak256("wrong"), keccak256("payment"), keccak256("dispute"));
-        vm.expectRevert(IChargebackVerifier.InvalidAttestation.selector);
+        attestation = _attestation(keccak256("wrong-intent"), paymentId, keccak256("dispute"));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IChargebackPolicy.ChargebackIntentNotSettled.selector,
+                keccak256("wrong-intent"),
+                IChargebackPolicy.ChargebackIntentStatus.NONE
+            )
+        );
         policy.submitChargeback(attestation);
 
-        attestation = _attestation(INTENT, METHOD, keccak256("payment"), keccak256("dispute"));
+        bytes32 paymentNullifier = keccak256(abi.encodePacked(METHOD, paymentId));
+        nullifierRegistry.addWritePermission(address(this));
+        nullifierRegistry.addNullifier(paymentNullifier, INTENT);
+        attestation = _attestation(INTENT, paymentId, keccak256("dispute"));
         attestationVerifier.setResult(false);
         vm.expectRevert(IChargebackVerifier.AttestationVerificationFailed.selector);
         policy.submitChargeback(attestation);
@@ -462,21 +464,18 @@ contract ChargebackPolicyTest is OrchestratorV3Fixture {
         policy.onIntentSettled(intentHash, releaseAmount, manualRelease);
     }
 
-    function _attestation(bytes32 intentHash, bytes32 paymentMethod, bytes32 paymentId, bytes32 disputeId)
+    function _attestation(bytes32 intentHash, bytes32 paymentId, bytes32 disputeId)
         internal
         pure
         returns (IChargebackVerifier.ChargebackAttestation memory attestation)
     {
-        IChargebackVerifier.ChargebackDetails memory details = IChargebackVerifier.ChargebackDetails({
-            paymentMethod: paymentMethod,
-            originalPaymentId: paymentId,
-            disputeId: disputeId,
-            paymentAmount: 100,
-            paymentCurrency: USD
-        });
-        bytes memory data = abi.encode(details);
+        bytes[] memory signatures = new bytes[](1);
+        signatures[0] = hex"01";
         attestation = IChargebackVerifier.ChargebackAttestation({
-            intentHash: intentHash, dataHash: keccak256(data), signatures: new bytes[](0), data: data
+            transformerId: keccak256("transformer"),
+            input: abi.encode(intentHash),
+            output: abi.encode(paymentId, disputeId),
+            signatures: signatures
         });
     }
 }

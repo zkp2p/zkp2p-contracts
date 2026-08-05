@@ -366,16 +366,13 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         pure
         returns (IChargebackVerifier.ChargebackAttestation memory attestation)
     {
-        IChargebackVerifier.ChargebackDetails memory details = IChargebackVerifier.ChargebackDetails({
-            paymentMethod: METHOD,
-            originalPaymentId: paymentId,
-            disputeId: disputeId,
-            paymentAmount: 100,
-            paymentCurrency: USD
-        });
-        bytes memory data = abi.encode(details);
+        bytes[] memory signatures = new bytes[](1);
+        signatures[0] = hex"01";
         attestation = IChargebackVerifier.ChargebackAttestation({
-            intentHash: intentHash, dataHash: keccak256(data), signatures: new bytes[](0), data: data
+            transformerId: keccak256("transformer"),
+            input: abi.encode(intentHash),
+            output: abi.encode(paymentId, disputeId),
+            signatures: signatures
         });
     }
 }

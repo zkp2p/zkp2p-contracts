@@ -17,7 +17,7 @@ contract ChargebackVerifierTest is Test {
 
     bytes32 internal constant METHOD = keccak256("method");
     bytes32 internal constant INTENT = keccak256("intent");
-    bytes32 internal constant USD = keccak256("USD");
+    bytes32 internal constant TRANSFORMER = keccak256("transformer");
 
     NullifierRegistryV2 internal nullifierRegistry;
     AttestationVerifierMock internal attestationVerifier;
@@ -30,56 +30,99 @@ contract ChargebackVerifierTest is Test {
         verifier = new ChargebackVerifier(address(this), nullifierRegistry, attestationVerifier);
     }
 
-    function test_VerifyChargebackManualPathReturnsDisputeData() public {
-        IChargebackVerifier.ChargebackAttestation memory attestation =
-            _attestation(INTENT, METHOD, keccak256("payment"), keccak256("dispute"));
+    function test_VerifyChargebackValidatesSignatureAndPaymentBinding() public {
+        bytes32 paymentId = keccak256("payment");
+        bytes32 disputeId = keccak256("dispute");
+        IChargebackVerifier.ChargebackAttestation memory attestation = _attestation(INTENT, paymentId, disputeId);
+        bytes32 paymentNullifier = keccak256(abi.encodePacked(METHOD, paymentId));
+        nullifierRegistry.addWritePermission(address(this));
+        nullifierRegistry.addNullifier(paymentNullifier, INTENT);
 
-        (bytes32 disputeId, bytes32 disputeNullifier) =
-            verifier.verifyChargeback(attestation, METHOD, true);
+        (bytes32 actualDisputeId, bytes32 disputeNullifier) = verifier.verifyChargeback(attestation, METHOD, false);
 
-        assertEq(disputeId, keccak256("dispute"));
-        assertEq(disputeNullifier, keccak256(abi.encodePacked(METHOD, keccak256("dispute"))));
+        assertEq(actualDisputeId, disputeId);
+        assertEq(disputeNullifier, keccak256(abi.encodePacked(METHOD, disputeId)));
     }
 
-    function test_VerifyChargebackRejectsTamperedDataHash() public {
+    function test_VerifyChargebackDoesNotMaintainTransformerAllowlist() public {
+        bytes32 paymentId = keccak256("payment");
         IChargebackVerifier.ChargebackAttestation memory attestation =
-            _attestation(INTENT, METHOD, keccak256("payment"), keccak256("dispute"));
-        attestation.dataHash = keccak256("tampered");
+            _attestation(INTENT, paymentId, keccak256("dispute"));
+        attestation.transformerId = keccak256("another-trusted-service-transformer");
+        bytes32 paymentNullifier = keccak256(abi.encodePacked(METHOD, paymentId));
+        nullifierRegistry.addWritePermission(address(this));
+        nullifierRegistry.addNullifier(paymentNullifier, INTENT);
 
-        vm.expectRevert(IChargebackVerifier.InvalidAttestation.selector);
+        verifier.verifyChargeback(attestation, METHOD, false);
+    }
+
+    function test_VerifyChargebackRejectsManualRelease() public {
+        IChargebackVerifier.ChargebackAttestation memory attestation =
+            _attestation(INTENT, keccak256("payment"), keccak256("dispute"));
+
+        vm.expectRevert(IChargebackVerifier.ManualReleaseNotChargebackable.selector);
         verifier.verifyChargeback(attestation, METHOD, true);
     }
 
-    function test_VerifyChargebackRejectsMethodMismatch() public {
+    function test_VerifyChargebackRejectsMalformedEnvelope() public {
         IChargebackVerifier.ChargebackAttestation memory attestation =
-            _attestation(INTENT, keccak256("wrong"), keccak256("payment"), keccak256("dispute"));
+            _attestation(INTENT, keccak256("payment"), keccak256("dispute"));
 
+        attestation.transformerId = bytes32(0);
         vm.expectRevert(IChargebackVerifier.InvalidAttestation.selector);
-        verifier.verifyChargeback(attestation, METHOD, true);
+        verifier.verifyChargeback(attestation, METHOD, false);
+
+        attestation = _attestation(INTENT, keccak256("payment"), keccak256("dispute"));
+        attestation.input = hex"01";
+        vm.expectRevert(IChargebackVerifier.InvalidAttestation.selector);
+        verifier.verifyChargeback(attestation, METHOD, false);
+
+        attestation = _attestation(INTENT, keccak256("payment"), keccak256("dispute"));
+        attestation.output = hex"01";
+        vm.expectRevert(IChargebackVerifier.InvalidAttestation.selector);
+        verifier.verifyChargeback(attestation, METHOD, false);
+
+        attestation = _attestation(INTENT, keccak256("payment"), keccak256("dispute"));
+        attestation.signatures = new bytes[](0);
+        vm.expectRevert(IChargebackVerifier.InvalidAttestation.selector);
+        verifier.verifyChargeback(attestation, METHOD, false);
+    }
+
+    function test_VerifyChargebackRejectsZeroDecodedValues() public {
+        IChargebackVerifier.ChargebackAttestation memory attestation =
+            _attestation(bytes32(0), keccak256("payment"), keccak256("dispute"));
+        vm.expectRevert(IChargebackVerifier.InvalidAttestation.selector);
+        verifier.verifyChargeback(attestation, METHOD, false);
+
+        attestation = _attestation(INTENT, bytes32(0), keccak256("dispute"));
+        vm.expectRevert(IChargebackVerifier.InvalidAttestation.selector);
+        verifier.verifyChargeback(attestation, METHOD, false);
+
+        attestation = _attestation(INTENT, keccak256("payment"), bytes32(0));
+        vm.expectRevert(IChargebackVerifier.InvalidAttestation.selector);
+        verifier.verifyChargeback(attestation, METHOD, false);
     }
 
     function test_VerifyChargebackRejectsSignatureFailure() public {
         IChargebackVerifier.ChargebackAttestation memory attestation =
-            _attestation(INTENT, METHOD, keccak256("payment"), keccak256("dispute"));
+            _attestation(INTENT, keccak256("payment"), keccak256("dispute"));
         attestationVerifier.setResult(false);
 
         vm.expectRevert(IChargebackVerifier.AttestationVerificationFailed.selector);
-        verifier.verifyChargeback(attestation, METHOD, true);
+        verifier.verifyChargeback(attestation, METHOD, false);
     }
 
-    function test_VerifyChargebackProofPathRequiresBothDirectionBinding() public {
+    function test_VerifyChargebackRequiresBothDirectionsOfPaymentBinding() public {
         bytes32 paymentId = keccak256("payment");
         IChargebackVerifier.ChargebackAttestation memory attestation =
-            _attestation(INTENT, METHOD, paymentId, keccak256("dispute"));
+            _attestation(INTENT, paymentId, keccak256("dispute"));
         bytes32 paymentNullifier = keccak256(abi.encodePacked(METHOD, paymentId));
-        bytes memory bindingRevert = abi.encodeWithSelector(
-            IChargebackVerifier.InvalidPaymentBinding.selector, INTENT, paymentNullifier
-        );
+        bytes memory bindingRevert =
+            abi.encodeWithSelector(IChargebackVerifier.InvalidPaymentBinding.selector, INTENT, paymentNullifier);
 
         vm.expectRevert(bindingRevert);
         verifier.verifyChargeback(attestation, METHOD, false);
 
-        // Forward direction only: nullifier -> intent resolves, intent -> nullifier does not.
         vm.mockCall(
             address(nullifierRegistry),
             abi.encodeCall(INullifierRegistryV2.intentHashByNullifier, (paymentNullifier)),
@@ -89,7 +132,6 @@ contract ChargebackVerifierTest is Test {
         verifier.verifyChargeback(attestation, METHOD, false);
         vm.clearMockedCalls();
 
-        // Reverse direction only: intent -> nullifier resolves, nullifier -> intent does not.
         vm.mockCall(
             address(nullifierRegistry),
             abi.encodeCall(INullifierRegistryV2.nullifierByIntentHash, (INTENT)),
@@ -97,40 +139,31 @@ contract ChargebackVerifierTest is Test {
         );
         vm.expectRevert(bindingRevert);
         verifier.verifyChargeback(attestation, METHOD, false);
-        vm.clearMockedCalls();
-
-        nullifierRegistry.addWritePermission(address(this));
-        nullifierRegistry.addNullifier(paymentNullifier, INTENT);
-
-        (bytes32 disputeId,) = verifier.verifyChargeback(attestation, METHOD, false);
-        assertEq(disputeId, keccak256("dispute"));
     }
 
-    function test_VerifyChargebackForwardsDigestSignaturesAndDataToAttestationVerifier() public {
+    function test_VerifyChargebackForwardsDigestSignaturesAndOutput() public {
+        bytes32 paymentId = keccak256("payment");
         IChargebackVerifier.ChargebackAttestation memory attestation =
-            _attestation(INTENT, METHOD, keccak256("payment"), keccak256("dispute"));
+            _attestation(INTENT, paymentId, keccak256("dispute"));
+        bytes32 paymentNullifier = keccak256(abi.encodePacked(METHOD, paymentId));
+        nullifierRegistry.addWritePermission(address(this));
+        nullifierRegistry.addNullifier(paymentNullifier, INTENT);
         bytes32 expectedDigest = verifier.hashChargebackAttestation(attestation);
 
         vm.expectCall(
             address(attestationVerifier),
-            abi.encodeCall(
-                IAttestationVerifier.verify,
-                (expectedDigest, attestation.signatures, attestation.data)
-            )
+            abi.encodeCall(IAttestationVerifier.verify, (expectedDigest, attestation.signatures, attestation.output))
         );
-        verifier.verifyChargeback(attestation, METHOD, true);
+        verifier.verifyChargeback(attestation, METHOD, false);
     }
 
-    function test_HashChargebackAttestationMatchesEip712Digest() public {
+    function test_HashChargebackAttestationMatchesGenericEip712Digest() public view {
         IChargebackVerifier.ChargebackAttestation memory attestation =
-            _attestation(INTENT, METHOD, keccak256("payment"), keccak256("dispute"));
-
+            _attestation(INTENT, keccak256("payment"), keccak256("dispute"));
         bytes32 domainSeparator = keccak256(
             abi.encode(
-                keccak256(
-                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
-                ),
-                keccak256(bytes("ZKP2P ChargebackVerifier")),
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256(bytes("ZKP2P Attestation")),
                 keccak256(bytes("1")),
                 block.chainid,
                 address(verifier)
@@ -138,9 +171,10 @@ contract ChargebackVerifierTest is Test {
         );
         bytes32 structHash = keccak256(
             abi.encode(
-                keccak256("ChargebackAttestation(bytes32 intentHash,bytes32 dataHash)"),
-                attestation.intentHash,
-                attestation.dataHash
+                keccak256("Attestation(bytes32 transformerId,bytes input,bytes output)"),
+                attestation.transformerId,
+                keccak256(attestation.input),
+                keccak256(attestation.output)
             )
         );
         bytes32 expected = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
@@ -156,9 +190,7 @@ contract ChargebackVerifierTest is Test {
         vm.expectRevert(IChargebackVerifier.ZeroAddress.selector);
         verifier.setAttestationVerifier(address(0));
 
-        vm.expectRevert(
-            abi.encodeWithSelector(IChargebackVerifier.InvalidContract.selector, other)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IChargebackVerifier.InvalidContract.selector, other));
         verifier.setAttestationVerifier(other);
 
         AttestationVerifierMock replacement = new AttestationVerifierMock();
@@ -173,21 +205,15 @@ contract ChargebackVerifierTest is Test {
         new ChargebackVerifier(address(0), nullifierRegistry, attestationVerifier);
 
         vm.expectRevert(IChargebackVerifier.ZeroAddress.selector);
-        new ChargebackVerifier(
-            address(this), NullifierRegistryV2(address(0)), attestationVerifier
-        );
+        new ChargebackVerifier(address(this), NullifierRegistryV2(address(0)), attestationVerifier);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(IChargebackVerifier.InvalidContract.selector, other)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IChargebackVerifier.InvalidContract.selector, other));
         new ChargebackVerifier(address(this), NullifierRegistryV2(other), attestationVerifier);
 
         vm.expectRevert(IChargebackVerifier.ZeroAddress.selector);
         new ChargebackVerifier(address(this), nullifierRegistry, IAttestationVerifier(address(0)));
 
-        vm.expectRevert(
-            abi.encodeWithSelector(IChargebackVerifier.InvalidContract.selector, other)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IChargebackVerifier.InvalidContract.selector, other));
         new ChargebackVerifier(address(this), nullifierRegistry, AttestationVerifierMock(other));
     }
 
@@ -196,25 +222,18 @@ contract ChargebackVerifierTest is Test {
         verifier.renounceOwnership();
     }
 
-    function _attestation(
-        bytes32 intentHash,
-        bytes32 paymentMethod,
-        bytes32 paymentId,
-        bytes32 disputeId
-    ) internal pure returns (IChargebackVerifier.ChargebackAttestation memory attestation) {
-        IChargebackVerifier.ChargebackDetails memory details = IChargebackVerifier.ChargebackDetails({
-            paymentMethod: paymentMethod,
-            originalPaymentId: paymentId,
-            disputeId: disputeId,
-            paymentAmount: 100,
-            paymentCurrency: USD
-        });
-        bytes memory data = abi.encode(details);
+    function _attestation(bytes32 intentHash, bytes32 paymentId, bytes32 disputeId)
+        internal
+        pure
+        returns (IChargebackVerifier.ChargebackAttestation memory attestation)
+    {
+        bytes[] memory signatures = new bytes[](1);
+        signatures[0] = hex"01";
         attestation = IChargebackVerifier.ChargebackAttestation({
-            intentHash: intentHash,
-            dataHash: keccak256(data),
-            signatures: new bytes[](0),
-            data: data
+            transformerId: TRANSFORMER,
+            input: abi.encode(intentHash),
+            output: abi.encode(paymentId, disputeId),
+            signatures: signatures
         });
     }
 }
