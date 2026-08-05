@@ -206,18 +206,23 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         assertEq(vault.freeStake(taker), STAKE_AMOUNT);
     }
 
-    function test_ManualReleaseSettlesCoverageAndMarksManual() public {
+    function test_ManualReleaseEndsCoverageUnlocksStakeAndRejectsChargeback() public {
         _setChargeback(true);
         bytes32 intentHash = _signalDefault();
-        uint256 releaseEligibleAt = vm.getBlockTimestamp() + RISK_WINDOW;
+        uint256 releasedAt = vm.getBlockTimestamp();
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash);
 
         IChargebackPolicy.ChargebackIntent memory chargebackIntent = chargebackPolicy.getChargebackIntent(intentHash);
         assertTrue(chargebackIntent.isManualRelease);
         assertEq(chargebackIntent.releaseAmount, INTENT_AMOUNT);
-        assertEq(chargebackIntent.releaseEligibleAt, releaseEligibleAt);
-        assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
+        assertEq(chargebackIntent.releaseEligibleAt, releasedAt);
+        assertEq(uint256(chargebackIntent.status), uint256(IChargebackPolicy.ChargebackIntentStatus.RELEASED));
+        assertEq(vault.lockedStake(taker), 0);
+        assertEq(vault.freeStake(taker), STAKE_AMOUNT);
+
+        vm.expectRevert(abi.encodeWithSelector(IChargebackPolicy.ManualReleaseNotChargebackable.selector, intentHash));
+        chargebackPolicy.submitChargeback(_attestation(intentHash, keccak256("unbound-payment"), keccak256("dispute")));
     }
 
     function test_ChargebackAfterFulfillPaysDepositorClaim() public {

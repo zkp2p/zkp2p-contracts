@@ -53,6 +53,7 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
         bytes32 _paymentMethod,
         bool _isManualRelease
     ) external view override returns (bytes32 disputeId, bytes32 disputeNullifier) {
+        if (_isManualRelease) revert ManualReleaseNotChargebackable();
         if (keccak256(_attestation.data) != _attestation.dataHash) revert InvalidAttestation();
 
         ChargebackDetails memory details = abi.decode(_attestation.data, (ChargebackDetails));
@@ -63,14 +64,12 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
             revert AttestationVerificationFailed();
         }
 
-        if (!_isManualRelease) {
-            bytes32 paymentNullifier = keccak256(abi.encodePacked(details.paymentMethod, details.originalPaymentId));
-            if (
-                nullifierRegistry.intentHashByNullifier(paymentNullifier) != _attestation.intentHash
-                    || nullifierRegistry.nullifierByIntentHash(_attestation.intentHash) != paymentNullifier
-            ) {
-                revert InvalidPaymentBinding(_attestation.intentHash, paymentNullifier);
-            }
+        bytes32 paymentNullifier = keccak256(abi.encodePacked(details.paymentMethod, details.originalPaymentId));
+        if (
+            nullifierRegistry.intentHashByNullifier(paymentNullifier) != _attestation.intentHash
+                || nullifierRegistry.nullifierByIntentHash(_attestation.intentHash) != paymentNullifier
+        ) {
+            revert InvalidPaymentBinding(_attestation.intentHash, paymentNullifier);
         }
 
         disputeId = details.disputeId;

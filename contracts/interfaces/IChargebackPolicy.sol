@@ -13,7 +13,8 @@ interface IChargebackPolicy {
      * @notice Lifecycle state of a chargeback-enabled intent.
      * @dev `NONE` is the required zero-value sentinel for an uninitialized mapping entry; it is not a live state.
      *      `SETTLED` means the underlying intent completed and its collateral remains chargebackable.
-     *      `RELEASED` means the collateral was returned and the intent is no longer chargebackable.
+     *      `RELEASED` means the collateral was returned and the intent is no longer chargebackable, including when a
+     *      depositor completes the intent through manual release.
      */
     enum ChargebackIntentStatus {
         NONE,
@@ -89,6 +90,7 @@ interface IChargebackPolicy {
     error ChargebackIntentAlreadyExists(bytes32 intentHash);
     error ChargebackIntentNotPending(bytes32 intentHash, ChargebackIntentStatus status);
     error ChargebackIntentNotSettled(bytes32 intentHash, ChargebackIntentStatus status);
+    error ManualReleaseNotChargebackable(bytes32 intentHash);
     error IntentTokenMismatch(address expectedToken, address actualToken);
     error ChargebackIntentNotReleaseEligible(uint64 releaseEligibleAt, uint64 currentTime);
     error TimestampOverflow(uint256 timestamp);
@@ -125,9 +127,10 @@ interface IChargebackPolicy {
     function onIntentCancelled(bytes32 _intentHash) external;
 
     /**
-     * @notice Marks a pending chargeback intent as settled and resizes its collateral to the actual release amount.
-     * @dev Missing chargeback intents are ignored. The snapshotted risk window determines when collateral becomes
-     * release-eligible; it does not invalidate chargeback evidence until release actually executes.
+     * @notice Marks a pending chargeback intent as settled and resolves its collateral according to the settlement path.
+     * @dev Missing chargeback intents are ignored. Proof-based fulfillment resizes collateral to the actual release
+     * amount and retains it for the snapshotted risk window. Manual release immediately returns all collateral and makes
+     * the intent non-chargebackable because no payment proof established an on-chain payment-to-intent binding.
      * @param _intentHash Intent completed by proof-based fulfillment or manual release.
      * @param _releaseAmount Amount released from Escrow before protocol, referral, and manager fees.
      * @param _isManualRelease Whether the depositor used the manual-release path without an on-chain payment proof.

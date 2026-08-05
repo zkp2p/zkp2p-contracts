@@ -170,9 +170,25 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
             revert ChargebackIntentNotPending(_intentHash, chargebackIntent.status);
         }
 
+        if (_isManualRelease) {
+            uint64 releasedAt = _currentTimestamp();
+            (, uint256 releasedAmount,) = stakeVault.locks(_intentHash);
+
+            chargebackIntent.releaseAmount = _releaseAmount;
+            chargebackIntent.isManualRelease = true;
+            chargebackIntent.releaseEligibleAt = releasedAt;
+            chargebackIntent.status = ChargebackIntentStatus.RELEASED;
+
+            stakeVault.unlockStake(_intentHash);
+            emit ChargebackIntentSettled(
+                _intentHash, chargebackIntent.stakeOwner, chargebackIntent.depositor, _releaseAmount, releasedAt, true
+            );
+            emit ChargebackIntentReleased(_intentHash, chargebackIntent.stakeOwner, releasedAmount);
+            return;
+        }
+
         uint64 releaseEligibleAt = _calculateReleaseEligibleAt(chargebackIntent.riskWindow);
         chargebackIntent.releaseAmount = _releaseAmount;
-        chargebackIntent.isManualRelease = _isManualRelease;
         chargebackIntent.releaseEligibleAt = releaseEligibleAt;
         chargebackIntent.status = ChargebackIntentStatus.SETTLED;
 
@@ -183,7 +199,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
             chargebackIntent.depositor,
             _releaseAmount,
             releaseEligibleAt,
-            _isManualRelease
+            false
         );
     }
 
@@ -217,6 +233,9 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
      */
     function submitChargeback(IChargebackVerifier.ChargebackAttestation calldata _attestation) external nonReentrant {
         ChargebackIntent storage chargebackIntent = chargebackIntentByIntentHash[_attestation.intentHash];
+        if (chargebackIntent.isManualRelease) {
+            revert ManualReleaseNotChargebackable(_attestation.intentHash);
+        }
         if (chargebackIntent.status != ChargebackIntentStatus.SETTLED) {
             revert ChargebackIntentNotSettled(_attestation.intentHash, chargebackIntent.status);
         }
