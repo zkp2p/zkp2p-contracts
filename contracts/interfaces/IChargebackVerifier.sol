@@ -10,12 +10,14 @@ pragma solidity ^0.8.18;
 interface IChargebackVerifier {
     /**
      * @notice Generic attestation produced by the attestation service.
+     * @param schemaId Versioned identifier for the ABI schema consumed by this verifier.
      * @param transformerId Identifier committed to by the attestation service.
      * @param input ABI-encoded `(bytes32 intentHash)` supplied by the caller.
      * @param output ABI-encoded `(bytes32 originalPaymentId, bytes32 disputeId)` verified from evidence.
      * @param signatures Witness signatures over the EIP-712 attestation.
      */
     struct ChargebackAttestation {
+        bytes32 schemaId;
         bytes32 transformerId;
         bytes input;
         bytes output;
@@ -27,6 +29,7 @@ interface IChargebackVerifier {
     error ZeroAddress();
     error InvalidContract(address dependency);
     error InvalidAttestation();
+    error InvalidAttestationSchema(bytes32 schemaId);
     error ManualReleaseNotChargebackable();
     error InvalidPaymentBinding(bytes32 intentHash, bytes32 nullifier);
     error AttestationVerificationFailed();

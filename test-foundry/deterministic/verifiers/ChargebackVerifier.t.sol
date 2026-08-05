@@ -18,6 +18,7 @@ contract ChargebackVerifierTest is Test {
     bytes32 internal constant METHOD = keccak256("method");
     bytes32 internal constant INTENT = keccak256("intent");
     bytes32 internal constant TRANSFORMER = keccak256("transformer");
+    bytes32 internal constant DISPUTE_SCHEMA_ID = keccak256("zkp2p.attestation.dispute.v1");
 
     NullifierRegistryV2 internal nullifierRegistry;
     AttestationVerifierMock internal attestationVerifier;
@@ -53,6 +54,17 @@ contract ChargebackVerifierTest is Test {
         nullifierRegistry.addWritePermission(address(this));
         nullifierRegistry.addNullifier(paymentNullifier, INTENT);
 
+        verifier.verifyChargeback(attestation, METHOD, false);
+    }
+
+    function test_VerifyChargebackRejectsNonDisputeSchema() public {
+        IChargebackVerifier.ChargebackAttestation memory attestation =
+            _attestation(INTENT, keccak256("payment"), keccak256("dispute"));
+        attestation.schemaId = keccak256("zkp2p.attestation.identity.v1");
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IChargebackVerifier.InvalidAttestationSchema.selector, attestation.schemaId)
+        );
         verifier.verifyChargeback(attestation, METHOD, false);
     }
 
@@ -158,6 +170,7 @@ contract ChargebackVerifierTest is Test {
     }
 
     function test_HashChargebackAttestationMatchesGenericEip712Digest() public view {
+        assertEq(verifier.DISPUTE_SCHEMA_ID(), DISPUTE_SCHEMA_ID);
         IChargebackVerifier.ChargebackAttestation memory attestation =
             _attestation(INTENT, keccak256("payment"), keccak256("dispute"));
         bytes32 domainSeparator = keccak256(
@@ -171,7 +184,8 @@ contract ChargebackVerifierTest is Test {
         );
         bytes32 structHash = keccak256(
             abi.encode(
-                keccak256("Attestation(bytes32 transformerId,bytes input,bytes output)"),
+                keccak256("Attestation(bytes32 schemaId,bytes32 transformerId,bytes input,bytes output)"),
+                attestation.schemaId,
                 attestation.transformerId,
                 keccak256(attestation.input),
                 keccak256(attestation.output)
@@ -230,6 +244,7 @@ contract ChargebackVerifierTest is Test {
         bytes[] memory signatures = new bytes[](1);
         signatures[0] = hex"01";
         attestation = IChargebackVerifier.ChargebackAttestation({
+            schemaId: DISPUTE_SCHEMA_ID,
             transformerId: TRANSFORMER,
             input: abi.encode(intentHash),
             output: abi.encode(paymentId, disputeId),

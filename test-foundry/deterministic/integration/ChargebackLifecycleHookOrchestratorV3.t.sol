@@ -369,6 +369,7 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         bytes[] memory signatures = new bytes[](1);
         signatures[0] = hex"01";
         attestation = IChargebackVerifier.ChargebackAttestation({
+            schemaId: keccak256("zkp2p.attestation.dispute.v1"),
             transformerId: keccak256("transformer"),
             input: abi.encode(intentHash),
             output: abi.encode(paymentId, disputeId),

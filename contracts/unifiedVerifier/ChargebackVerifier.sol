@@ -21,8 +21,9 @@ import {INullifierRegistryV2} from "../interfaces/INullifierRegistryV2.sol";
 contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
     /* ============ Constants ============ */
 
+    bytes32 public constant DISPUTE_SCHEMA_ID = keccak256("zkp2p.attestation.dispute.v1");
     bytes32 public constant ATTESTATION_TYPEHASH =
-        keccak256("Attestation(bytes32 transformerId,bytes input,bytes output)");
+        keccak256("Attestation(bytes32 schemaId,bytes32 transformerId,bytes input,bytes output)");
 
     /* ============ State Variables ============ */
 
@@ -54,6 +55,9 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
         bool _isManualRelease
     ) external view override returns (bytes32 disputeId, bytes32 disputeNullifier) {
         if (_isManualRelease) revert ManualReleaseNotChargebackable();
+        if (_attestation.schemaId != DISPUTE_SCHEMA_ID) {
+            revert InvalidAttestationSchema(_attestation.schemaId);
+        }
         if (_attestation.transformerId == bytes32(0)) revert InvalidAttestation();
         if (_attestation.input.length != 32 || _attestation.output.length != 64) revert InvalidAttestation();
         if (_attestation.signatures.length == 0) revert InvalidAttestation();
@@ -118,6 +122,7 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
         return keccak256(
             abi.encode(
                 ATTESTATION_TYPEHASH,
+                _attestation.schemaId,
                 _attestation.transformerId,
                 keccak256(_attestation.input),
                 keccak256(_attestation.output)
