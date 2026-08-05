@@ -31,7 +31,7 @@ import {IStakeVault} from "./interfaces/IStakeVault.sol";
  *      clears an active selection for future policy reads but cannot alter locks already created for that owner.
  *
  * @dev LOCK AND CONTROLLER MODEL
- *      The vault deliberately knows nothing about intents, fees, chargebacks, or lock purpose. Lock IDs and beneficiary
+ *      The vault deliberately knows nothing about intents, fees, disputes, or lock purpose. Lock IDs and beneficiary
  *      allocations are opaque controller inputs. A lock maturity prevents further increase or resize once reached, but
  *      does not automatically resolve the lock; the controller remains responsible for choosing whether and how every
  *      lock is unlocked or converted into claims. `NEVER_MATURES` represents exposure requiring an explicit controller

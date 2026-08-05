@@ -117,10 +117,10 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_RotationTerminatesSnapshottedWhitelistIntentsAndRoutesFreshIntentToCombinedHook() public {
-        (StakeVault vault, DisputePolicy disputePolicy, IntentLifecycleHookV1 combinedHook) = _deployChargebackStack();
+        (StakeVault vault, DisputePolicy disputePolicy, IntentLifecycleHookV1 combinedHook) = _deployDisputeStack();
 
         vm.prank(depositor);
-        disputePolicy.setChargebackEnabled(address(escrow), depositId, true);
+        disputePolicy.setDisputeEnabled(address(escrow), depositId, true);
 
         bytes32 oldCancelledIntent = _signalDefault();
         bytes32 oldSettledIntent = _signalDefault();
@@ -131,8 +131,8 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         bytes32 freshIntent = _signalDefault();
         assertEq(address(orchestrator.getIntentLifecycleHook(freshIntent)), address(combinedHook));
         assertEq(
-            uint256(disputePolicy.getChargebackIntent(freshIntent).status),
-            uint256(IDisputePolicy.ChargebackIntentStatus.PENDING)
+            uint256(disputePolicy.getDisputeIntent(freshIntent).status),
+            uint256(IDisputePolicy.DisputeIntentStatus.PENDING)
         );
 
         vm.prank(taker);
@@ -140,39 +140,39 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         verifier.setShouldVerifyPayment(true);
         _fulfill(oldSettledIntent, 40e6, CONVERSION_RATE);
         assertEq(
-            uint256(disputePolicy.getChargebackIntent(oldCancelledIntent).status),
-            uint256(IDisputePolicy.ChargebackIntentStatus.NONE)
+            uint256(disputePolicy.getDisputeIntent(oldCancelledIntent).status),
+            uint256(IDisputePolicy.DisputeIntentStatus.NONE)
         );
         assertEq(
-            uint256(disputePolicy.getChargebackIntent(oldSettledIntent).status),
-            uint256(IDisputePolicy.ChargebackIntentStatus.NONE)
+            uint256(disputePolicy.getDisputeIntent(oldSettledIntent).status),
+            uint256(IDisputePolicy.DisputeIntentStatus.NONE)
         );
 
         vm.prank(taker);
         orchestrator.cancelIntent(freshIntent);
         assertEq(
-            uint256(disputePolicy.getChargebackIntent(freshIntent).status),
-            uint256(IDisputePolicy.ChargebackIntentStatus.CANCELLED)
+            uint256(disputePolicy.getDisputeIntent(freshIntent).status),
+            uint256(IDisputePolicy.DisputeIntentStatus.CANCELLED)
         );
         assertEq(vault.lockedStake(taker), 0);
     }
 
-    function _deployChargebackStack()
+    function _deployDisputeStack()
         internal
         returns (StakeVault vault, DisputePolicy disputePolicy, IntentLifecycleHookV1 combinedHook)
     {
         vault = new StakeVault(address(this), token, address(0), 1 days);
-        NullifierRegistry chargebackNullifierRegistry = new NullifierRegistry();
+        NullifierRegistry disputeNullifierRegistry = new NullifierRegistry();
         disputePolicy = new DisputePolicy(
             address(this),
             vault,
             new DisputeVerifier(
                 address(this), new NullifierRegistryV2(new NullifierRegistry()), new AttestationVerifierMock()
             ),
-            chargebackNullifierRegistry
+            disputeNullifierRegistry
         );
         vault.initializeController(address(disputePolicy));
-        chargebackNullifierRegistry.addWritePermission(address(disputePolicy));
+        disputeNullifierRegistry.addWritePermission(address(disputePolicy));
         combinedHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, disputePolicy);
         disputePolicy.setLifecycleHookAuthorization(address(combinedHook), true);
         disputePolicy.setRiskWindow(METHOD, RISK_WINDOW);

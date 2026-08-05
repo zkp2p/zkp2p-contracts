@@ -10,9 +10,9 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 
 /**
  * @title IntentLifecycleHookV1
- * @notice Lifecycle hook combining deposit-scoped whitelist admission with optional stake-backed chargeback coverage.
- * Whitelisted takers bypass staking; non-whitelisted takers may be admitted through a chargeback-enabled deposit.
- * Non-chargebackable payment methods give every taker direct access without a chargeback intent or stake lock, regardless of
+ * @notice Lifecycle hook combining deposit-scoped whitelist admission with optional stake-backed dispute coverage.
+ * Whitelisted takers bypass staking; non-whitelisted takers may be admitted through a dispute-enabled deposit.
+ * Non-disputable payment methods give every taker direct access without a dispute intent or stake lock, regardless of
  * whitelist state. Open deposits remain unrestricted when neither policy is enabled.
  * @dev Reads canonical intent data from the calling orchestrator and forwards cancellation and settlement accounting
  * to DisputePolicy. All callbacks remain fail-closed. This hook serves every registered orchestrator and forwards
@@ -64,9 +64,9 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
         if (isWhitelistEnabled && whitelistPolicy.isTakerAllowed(intent.escrow, intent.depositId, intent.owner)) {
             return;
         }
-        // Chargeback admission is stateful, so the configuration query only selects the route.
+        // Dispute admission is stateful, so the configuration query only selects the route.
         // onIntentSignaled remains authoritative for token compatibility, collateral, and pause checks.
-        if (disputePolicy.isChargebackEnabled(intent.escrow, intent.depositId)) {
+        if (disputePolicy.isDisputeEnabled(intent.escrow, intent.depositId)) {
             disputePolicy.onIntentSignaled(
                 _intentHash, intent.escrow, intent.depositId, intent.owner, intent.paymentMethod, intent.amount
             );

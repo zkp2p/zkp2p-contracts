@@ -13,7 +13,7 @@
 
 - `deploy/30_deploy_v3_lifecycle_stack.ts` is the mounted whitelist-only V3 lifecycle lane for `localhost`, `hardhat`,
   Base staging, and Base. Its lane-29 dependency supplies `WhitelistPolicy`; lane 30 deploys
-  `WhitelistLifecycleHook` and `OrchestratorV3` without activating the staking/chargeback lane.
+  `WhitelistLifecycleHook` and `OrchestratorV3` without activating the staking/dispute lane.
 - Base staging removes only the explicitly drained staging predecessors. Base keeps the existing orchestrators
   registered and queues exactly one Safe call to register the fresh O3. Base execution requires
   `ENABLE_BASE_V3_GROUPS_CUTOVER=true`, a separately approved exact source SHA, and the production governance path.

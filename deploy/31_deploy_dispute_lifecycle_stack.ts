@@ -5,8 +5,8 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 
 import {
-  CHARGEBACK_RISK_WINDOW,
-  CHARGEBACKABLE_PAYMENT_METHODS,
+  DISPUTE_RISK_WINDOW,
+  DISPUTABLE_PAYMENT_METHODS,
   MULTI_SIG,
   STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
   USDC,
@@ -20,7 +20,7 @@ import {
 
 const SUPPORTED_NETWORKS = new Set(["localhost", "hardhat", "base_staging"]);
 const RETIRED_STAGING_STAKE_VAULT = "0xaA82e422B3755eA6a1352eB6B2828324740ee5af";
-const RETIRED_STAGING_CHARGEBACK_POLICY = "0xa5fdc112BB69ee2141b99Fdcb94364256Dc34377";
+const RETIRED_STAGING_DISPUTE_POLICY = "0xa5fdc112BB69ee2141b99Fdcb94364256Dc34377";
 const RETIRED_STAGING_LIFECYCLE_HOOK = "0x4874063A76C3549641883ad0BB169D6b41a0E2c3";
 
 function sameAddress(left: string, right: string): boolean {
@@ -63,6 +63,7 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
     const whitelistPolicyDeployment = await hre.deployments.get("WhitelistPolicy");
     const registryAddress = (await hre.deployments.get("OrchestratorRegistry")).address;
     const verifierAddress = (await hre.deployments.get("DisputeVerifier")).address;
+    // The generic registry predates this naming cutover; preserve its deployment alias and on-chain address.
     const nullifierRegistryAddress = (await hre.deployments.get("ChargebackNullifierRegistry")).address;
 
     const vault = await ethers.getContractAt("StakeVault", vaultDeployment.address);
@@ -77,7 +78,7 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
     if (!(await vault.controllerChangeDelay()).eq(STAKE_VAULT_CONTROLLER_CHANGE_DELAY)) return false;
     if (!sameAddress(await policy.stakeVault(), vault.address)) return false;
     if (!sameAddress(await policy.disputeVerifier(), verifierAddress)) return false;
-    if (!sameAddress(await policy.chargebackNullifierRegistry(), nullifierRegistryAddress)) return false;
+    if (!sameAddress(await policy.disputeNullifierRegistry(), nullifierRegistryAddress)) return false;
     if (!sameAddress(await hook.orchestratorRegistry(), registryAddress)) return false;
     if (!sameAddress(await hook.whitelistPolicy(), whitelistPolicyDeployment.address)) return false;
     if (!sameAddress(await hook.disputePolicy(), policy.address)) return false;
@@ -88,13 +89,13 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
     if (!sameAddress(await policy.owner(), governance)) return false;
     if (!sameAddress(await verifier.owner(), governance)) return false;
 
-    for (const methodName of CHARGEBACKABLE_PAYMENT_METHODS) {
+    for (const methodName of DISPUTABLE_PAYMENT_METHODS) {
       const riskWindow = await policy.getRiskWindow(paymentMethodHash(methodName));
-      if (!riskWindow.eq(CHARGEBACK_RISK_WINDOW[network])) return false;
+      if (!riskWindow.eq(DISPUTE_RISK_WINDOW[network])) return false;
     }
     if (
       network === "base_staging"
-      && await nullifierRegistry.isWriter(RETIRED_STAGING_CHARGEBACK_POLICY)
+      && await nullifierRegistry.isWriter(RETIRED_STAGING_DISPUTE_POLICY)
     ) return false;
     return true;
   } catch {
@@ -115,7 +116,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     if (existingVault && sameAddress(existingVault.address, RETIRED_STAGING_STAKE_VAULT)) {
       throw new Error("Move the retired StakeVault artifact aside before lane 31");
     }
-    if (existingPolicy && sameAddress(existingPolicy.address, RETIRED_STAGING_CHARGEBACK_POLICY)) {
+    if (existingPolicy && sameAddress(existingPolicy.address, RETIRED_STAGING_DISPUTE_POLICY)) {
       throw new Error("Move the retired DisputePolicy artifact aside before lane 31");
     }
     if (existingHook && sameAddress(existingHook.address, RETIRED_STAGING_LIFECYCLE_HOOK)) {
@@ -134,12 +135,13 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const whitelistHookAddress = (await hre.deployments.get("WhitelistLifecycleHook")).address;
   const orchestratorAddress = (await hre.deployments.get("OrchestratorV3")).address;
 
-  let chargebackNullifierRegistryDeployment = await hre.deployments.getOrNull(
+  // Keep the historical deployment alias so the cutover reuses the already-deployed generic registry.
+  let disputeNullifierRegistryDeployment = await hre.deployments.getOrNull(
     "ChargebackNullifierRegistry",
   );
   let disputeVerifierDeployment = await hre.deployments.getOrNull("DisputeVerifier");
-  if (network !== "base_staging" && !chargebackNullifierRegistryDeployment) {
-    chargebackNullifierRegistryDeployment = await hre.deployments.deploy("ChargebackNullifierRegistry", {
+  if (network !== "base_staging" && !disputeNullifierRegistryDeployment) {
+    disputeNullifierRegistryDeployment = await hre.deployments.deploy("ChargebackNullifierRegistry", {
       contract: "NullifierRegistry",
       from: deployer,
       args: [],
@@ -167,17 +169,17 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       log: true,
     });
   }
-  if (!disputeVerifierDeployment || !chargebackNullifierRegistryDeployment) {
+  if (!disputeVerifierDeployment || !disputeNullifierRegistryDeployment) {
     throw new Error("Dispute lifecycle dependencies are unavailable");
   }
   const disputeVerifierAddress = disputeVerifierDeployment.address;
-  const chargebackNullifierRegistryAddress = chargebackNullifierRegistryDeployment.address;
+  const disputeNullifierRegistryAddress = disputeNullifierRegistryDeployment.address;
 
   await assertCode(whitelistPolicyAddress, "WhitelistPolicy");
   await assertCode(whitelistHookAddress, "WhitelistLifecycleHook");
   await assertCode(orchestratorAddress, "OrchestratorV3");
   await assertCode(disputeVerifierAddress, "DisputeVerifier");
-  await assertCode(chargebackNullifierRegistryAddress, "ChargebackNullifierRegistry");
+  await assertCode(disputeNullifierRegistryAddress, "ChargebackNullifierRegistry");
 
   const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorAddress);
   if (!sameAddress(await orchestrator.lifecycleHook(), whitelistHookAddress)) {
@@ -188,7 +190,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Reusing OrchestratorV3:", orchestratorAddress);
   console.log("Reusing WhitelistPolicy:", whitelistPolicyAddress);
   console.log("DisputeVerifier:", disputeVerifierAddress);
-  console.log("Reusing ChargebackNullifierRegistry:", chargebackNullifierRegistryAddress);
+  console.log("Reusing dispute nullifier registry:", disputeNullifierRegistryAddress);
 
   const vaultDeployment = await hre.deployments.deploy("StakeVault", {
     from: deployer,
@@ -204,7 +206,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       deployer,
       vaultDeployment.address,
       disputeVerifierAddress,
-      chargebackNullifierRegistryAddress,
+      disputeNullifierRegistryAddress,
     ],
     log: true,
   });
@@ -223,7 +225,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const policy = await ethers.getContractAt("DisputePolicy", policyDeployment.address);
   const disputeVerifier = await ethers.getContractAt("DisputeVerifier", disputeVerifierAddress);
   const hook = await ethers.getContractAt("IntentLifecycleHookV1", hookDeployment.address);
-  const nullifierRegistry = await ethers.getContractAt("NullifierRegistry", chargebackNullifierRegistryAddress);
+  const nullifierRegistry = await ethers.getContractAt("NullifierRegistry", disputeNullifierRegistryAddress);
 
   await (await vault.initializeController(policy.address)).wait();
   await waitForDeploymentDelay(hre);
@@ -231,9 +233,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   await (await policy.setLifecycleHookAuthorization(hook.address, true)).wait();
   await waitForDeploymentDelay(hre);
-  for (const methodName of CHARGEBACKABLE_PAYMENT_METHODS) {
+  for (const methodName of DISPUTABLE_PAYMENT_METHODS) {
     await (
-      await policy.setRiskWindow(paymentMethodHash(methodName), CHARGEBACK_RISK_WINDOW[network])
+      await policy.setRiskWindow(paymentMethodHash(methodName), DISPUTE_RISK_WINDOW[network])
     ).wait();
     await waitForDeploymentDelay(hre);
   }
@@ -241,7 +243,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await (await orchestrator.setLifecycleHook(hook.address)).wait();
   await waitForDeploymentDelay(hre);
   if (network === "base_staging") {
-    await removeWritePermission(hre, nullifierRegistry, RETIRED_STAGING_CHARGEBACK_POLICY);
+    await removeWritePermission(hre, nullifierRegistry, RETIRED_STAGING_DISPUTE_POLICY);
   }
 
   await setNewOwner(hre, vault, governance);

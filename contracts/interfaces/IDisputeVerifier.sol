@@ -26,7 +26,7 @@ interface IDisputeVerifier {
      * @notice Payment and dispute identifiers attested by the dispute witnesses.
      * @param paymentMethod Payment rail used by the original payment.
      * @param originalPaymentId Provider identifier for the original payment.
-     * @param disputeId Provider identifier for the chargeback or reversal.
+     * @param disputeId Provider identifier for the dispute or reversal.
      * @param paymentAmount Attested off-chain payment amount.
      * @param paymentCurrency Attested off-chain payment currency.
      */

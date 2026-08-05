@@ -41,17 +41,17 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
 
         policy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
         stakeVault = new StakeVault(address(this), token, address(0), 1 days);
-        NullifierRegistry chargebackNullifierRegistry = new NullifierRegistry();
+        NullifierRegistry disputeNullifierRegistry = new NullifierRegistry();
         disputePolicy = new DisputePolicy(
             address(this),
             stakeVault,
             new DisputeVerifier(
                 address(this), new NullifierRegistryV2(new NullifierRegistry()), new AttestationVerifierMock()
             ),
-            chargebackNullifierRegistry
+            disputeNullifierRegistry
         );
         stakeVault.initializeController(address(disputePolicy));
-        chargebackNullifierRegistry.addWritePermission(address(disputePolicy));
+        disputeNullifierRegistry.addWritePermission(address(disputePolicy));
         lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, policy, disputePolicy);
         disputePolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
         IOrchestratorV3(address(orchestrator)).setLifecycleHook(lifecycleHook);
