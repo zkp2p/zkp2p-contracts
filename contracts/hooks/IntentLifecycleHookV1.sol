@@ -86,7 +86,9 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
      * @inheritdoc IIntentLifecycleHook
      */
     function settleIntent(SettlementContext calldata _context) external override onlyOrchestrator {
-        chargebackPolicy.onIntentSettled(_context.intentHash, _context.releaseAmount, _context.isManualRelease);
+        chargebackPolicy.onIntentSettled(
+            _context.intentHash, _context.releaseAmount, _context.isManualRelease, _context.paymentId
+        );
     }
 
     /* ============ Modifiers ============ */

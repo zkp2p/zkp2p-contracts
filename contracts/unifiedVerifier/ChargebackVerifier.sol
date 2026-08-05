@@ -26,7 +26,7 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
 
     /* ============ State Variables ============ */
 
-    INullifierRegistryV2 public immutable nullifierRegistry;
+    INullifierRegistryV2 public immutable override nullifierRegistry;
     IAttestationVerifier public attestationVerifier;
 
     /* ============ Constructor ============ */
@@ -51,7 +51,7 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
     function verifyChargeback(
         ChargebackAttestation calldata _attestation,
         bytes32 _paymentMethod,
-        bool _isManualRelease
+        bool _skipPaymentBinding
     ) external view override returns (bytes32 disputeId, bytes32 disputeNullifier) {
         if (keccak256(_attestation.data) != _attestation.dataHash) revert InvalidAttestation();
 
@@ -63,7 +63,7 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
             revert AttestationVerificationFailed();
         }
 
-        if (!_isManualRelease) {
+        if (!_skipPaymentBinding) {
             bytes32 paymentNullifier = keccak256(abi.encodePacked(details.paymentMethod, details.originalPaymentId));
             if (
                 nullifierRegistry.intentHashByNullifier(paymentNullifier) != _attestation.intentHash

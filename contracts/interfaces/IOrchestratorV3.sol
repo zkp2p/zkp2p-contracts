@@ -132,6 +132,7 @@ interface IOrchestratorV3 {
     error InvalidPostIntentHook(address hook);
     error InvalidPreIntentHook(address hook);
     error InvalidLifecycleHook(address hook);
+    error ZeroPaymentId();
     error InvalidSignature();
     error SignatureExpired(uint256 expiration, uint256 currentTime);
 
@@ -160,7 +161,7 @@ interface IOrchestratorV3 {
 
     function fulfillIntent(FulfillIntentParams calldata params) external;
 
-    function releaseFundsToPayer(bytes32 intentHash) external;
+    function releaseFundsToPayer(bytes32 intentHash, bytes32 paymentId) external;
 
     /* ============ External Functions for Escrow ============ */
 

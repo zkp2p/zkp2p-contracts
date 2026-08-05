@@ -96,6 +96,7 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
             recipient: taker,
             releaseAmount: 0,
             netAmount: 0,
+            paymentId: bytes32(0),
             isManualRelease: false
         });
         vm.expectRevert(abi.encodeWithSelector(WhitelistLifecycleHook.UnauthorizedOrchestrator.selector, other));
@@ -110,7 +111,7 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         vm.prank(taker);
         orchestrator.cancelIntent(cancelledIntent);
         vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(settledIntent);
+        orchestrator.releaseFundsToPayer(settledIntent, keccak256("manual-payment"));
 
         assertEq(escrow.getDepositIntent(depositId, cancelledIntent).intentHash, bytes32(0));
         assertEq(escrow.getDepositIntent(depositId, settledIntent).intentHash, bytes32(0));
@@ -163,16 +164,17 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         returns (StakeVault vault, ChargebackPolicy chargebackPolicy, IntentLifecycleHookV1 combinedHook)
     {
         vault = new StakeVault(address(this), token, address(0), 1 days);
+        NullifierRegistryV2 paymentNullifierRegistry = new NullifierRegistryV2(new NullifierRegistry());
         NullifierRegistry chargebackNullifierRegistry = new NullifierRegistry();
         chargebackPolicy = new ChargebackPolicy(
             address(this),
             vault,
-            new ChargebackVerifier(
-                address(this), new NullifierRegistryV2(new NullifierRegistry()), new AttestationVerifierMock()
-            ),
+            paymentNullifierRegistry,
+            new ChargebackVerifier(address(this), paymentNullifierRegistry, new AttestationVerifierMock()),
             chargebackNullifierRegistry
         );
         vault.initializeController(address(chargebackPolicy));
+        paymentNullifierRegistry.addWritePermission(address(chargebackPolicy));
         chargebackNullifierRegistry.addWritePermission(address(chargebackPolicy));
         combinedHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, chargebackPolicy);
         chargebackPolicy.setLifecycleHookAuthorization(address(combinedHook), true);

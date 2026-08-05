@@ -108,6 +108,7 @@ contract OrchestratorV3LifecycleTest is OrchestratorV3Fixture {
             address recipient,
             uint256 releaseAmount,
             uint256 netAmount,
+            bytes32 paymentId,
             bool isManualRelease
         ) = lifecycleHookMock.lastSettlementContext();
         assertEq(settledIntentHash, intentHash);
@@ -115,6 +116,7 @@ contract OrchestratorV3LifecycleTest is OrchestratorV3Fixture {
         assertEq(recipient, taker);
         assertEq(releaseAmount, INTENT_AMOUNT);
         assertEq(netAmount, INTENT_AMOUNT - 250_000);
+        assertEq(paymentId, bytes32(0));
         assertFalse(isManualRelease);
         assertEq(token.balanceOf(referrer) - referrerBefore, 150_000);
         assertEq(token.balanceOf(other) - otherBefore, 100_000);
@@ -154,14 +156,27 @@ contract OrchestratorV3LifecycleTest is OrchestratorV3Fixture {
         uint256 netAmount = INTENT_AMOUNT - 250_000;
         vm.expectEmit(true, true, true, true);
         emit IntentFulfilled(intentHash, address(postIntentHook), netAmount, true);
+        bytes32 paymentId = keccak256("manual-payment");
         vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(intentHash);
+        orchestrator.releaseFundsToPayer(intentHash, paymentId);
         assertEq(lifecycleHookMock.settlementCalls(), 1);
-        (,,,,, bool isManualRelease) = lifecycleHookMock.lastSettlementContext();
+        (,,,,, bytes32 settledPaymentId, bool isManualRelease) = lifecycleHookMock.lastSettlementContext();
+        assertEq(settledPaymentId, paymentId);
         assertTrue(isManualRelease);
         assertEq(token.balanceOf(taker), recipientBefore);
         assertEq(token.balanceOf(delegate) - hookRecipientBefore, netAmount);
         assertEq(postIntentHook.lastPostIntentHookData(), "");
+    }
+
+    function test_ManualReleaseRejectsZeroPaymentIdBeforePruning() public {
+        bytes32 intentHash = _signalDefault();
+
+        vm.expectRevert(IOrchestratorV3.ZeroPaymentId.selector);
+        vm.prank(depositor);
+        orchestrator.releaseFundsToPayer(intentHash, bytes32(0));
+
+        assertEq(orchestrator.getIntent(intentHash).owner, taker);
+        assertEq(escrow.getDepositIntent(depositId, intentHash).intentHash, intentHash);
     }
 
     function test_GovernanceLifecycleHookSetterValidatesOwnerAndCode() public {

@@ -41,16 +41,17 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
 
         policy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
         stakeVault = new StakeVault(address(this), token, address(0), 1 days);
+        NullifierRegistryV2 paymentNullifierRegistry = new NullifierRegistryV2(new NullifierRegistry());
         NullifierRegistry chargebackNullifierRegistry = new NullifierRegistry();
         chargebackPolicy = new ChargebackPolicy(
             address(this),
             stakeVault,
-            new ChargebackVerifier(
-                address(this), new NullifierRegistryV2(new NullifierRegistry()), new AttestationVerifierMock()
-            ),
+            paymentNullifierRegistry,
+            new ChargebackVerifier(address(this), paymentNullifierRegistry, new AttestationVerifierMock()),
             chargebackNullifierRegistry
         );
         stakeVault.initializeController(address(chargebackPolicy));
+        paymentNullifierRegistry.addWritePermission(address(chargebackPolicy));
         chargebackNullifierRegistry.addWritePermission(address(chargebackPolicy));
         lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, policy, chargebackPolicy);
         chargebackPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
@@ -196,7 +197,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
 
         uint256 takerBalanceBefore = token.balanceOf(taker);
         vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(intentHash);
+        orchestrator.releaseFundsToPayer(intentHash, keccak256("manual-payment"));
 
         assertEq(token.balanceOf(taker) - takerBalanceBefore, INTENT_AMOUNT);
         assertEq(address(IOrchestratorV3(address(orchestrator)).getIntentLifecycleHook(intentHash)), address(0));
@@ -250,6 +251,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
             recipient: taker,
             releaseAmount: 0,
             netAmount: 0,
+            paymentId: bytes32(0),
             isManualRelease: false
         });
         vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.UnauthorizedOrchestrator.selector, other));

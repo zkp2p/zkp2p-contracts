@@ -18,6 +18,8 @@ interface IIntentLifecycleHook {
      * @param releaseAmount Amount released from Escrow before protocol, referral, and manager fees.
      * @param netAmount Remainder after all fees; this is the amount transferred to the recipient or made executable
      * by the intent's post-intent hook.
+     * @param paymentId Provider payment identifier supplied by the depositor for manual releases. Zero for
+     * payment-proof fulfillment because the verifier has already registered that payment on-chain.
      * @param isManualRelease Whether the depositor used the manual-release path instead of payment-proof fulfillment.
      */
     struct SettlementContext {
@@ -26,6 +28,7 @@ interface IIntentLifecycleHook {
         address recipient;
         uint256 releaseAmount;
         uint256 netAmount;
+        bytes32 paymentId;
         bool isManualRelease;
     }
 
@@ -49,8 +52,8 @@ interface IIntentLifecycleHook {
      * @dev Called after fee transfers and before the net amount moves to the recipient or post-intent hook. The
      * lifecycle hook receives no token allowance and cannot consume settlement funds. A revert rolls back the entire
      * settlement, including Escrow release and fee transfers.
-     * @param _context Intent identifier, token, recipient, pre-fee release amount, post-fee net amount, and settlement
-     * route.
+     * @param _context Intent identifier, token, recipient, pre-fee release amount, post-fee net amount, payment ID,
+     * and settlement route.
      */
     function settleIntent(SettlementContext calldata _context) external;
 }

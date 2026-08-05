@@ -22,6 +22,7 @@ const RETIRED_STAGING_WHITELIST_POLICY = "0xe3d3E798AbF1c021730d951d0589bCa63d9C
 const RETIRED_STAGING_ORCHESTRATORS = [
   "0xF9CEE6365fB4F6354a19e95d35aaeF877CF1179d",
   "0x1734f5C9956D0DA1f48E27cd1C6167aA81F27869",
+  "0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f",
 ];
 
 function sameAddress(left: string, right: string): boolean {
@@ -133,6 +134,15 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   if (!!existingHook !== !!existingOrchestrator) {
     throw new Error(
       "WhitelistLifecycleHook and OrchestratorV3 artifacts must either both be present or both be moved aside",
+    );
+  }
+  if (
+    network === "base_staging"
+    && existingOrchestrator
+    && RETIRED_STAGING_ORCHESTRATORS.some((retired) => sameAddress(existingOrchestrator.address, retired))
+  ) {
+    throw new Error(
+      "Move the retired WhitelistLifecycleHook and OrchestratorV3 artifacts aside before lane 30",
     );
   }
 

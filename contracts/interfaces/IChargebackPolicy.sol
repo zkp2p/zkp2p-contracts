@@ -2,6 +2,8 @@
 
 pragma solidity ^0.8.18;
 
+import {INullifierRegistryV2} from "./INullifierRegistryV2.sol";
+
 /**
  * @title IChargebackPolicy
  * @notice Lifecycle-hook integration surface for stake-backed chargeback coverage.
@@ -83,6 +85,8 @@ interface IChargebackPolicy {
 
     error ZeroAddress();
     error InvalidContract(address dependency);
+    error InvalidSettlementPaymentId(bool isManualRelease, bytes32 paymentId);
+    error PaymentNullifierRegistryMismatch(address expected, address actual);
     error UnauthorizedLifecycleHook(address caller);
     error AdmissionsPaused();
     error ChargebackNotEnabled(address escrow, uint256 depositId);
@@ -131,8 +135,17 @@ interface IChargebackPolicy {
      * @param _intentHash Intent completed by proof-based fulfillment or manual release.
      * @param _releaseAmount Amount released from Escrow before protocol, referral, and manager fees.
      * @param _isManualRelease Whether the depositor used the manual-release path without an on-chain payment proof.
+     * @param _paymentId Provider payment identifier supplied by the depositor for manual release. Must be nonzero
+     * for manual release and zero for payment-proof fulfillment.
      */
-    function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease) external;
+    function onIntentSettled(
+        bytes32 _intentHash,
+        uint256 _releaseAmount,
+        bool _isManualRelease,
+        bytes32 _paymentId
+    ) external;
+
+    function paymentNullifierRegistry() external view returns (INullifierRegistryV2);
 
     /**
      * @notice Returns whether a deposit opted into stake-backed chargeback admission.

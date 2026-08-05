@@ -9,6 +9,7 @@ import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {IChargebackPolicy} from "contracts/interfaces/IChargebackPolicy.sol";
 import {IChargebackVerifier} from "contracts/interfaces/IChargebackVerifier.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
+import {INullifierRegistryV2} from "contracts/interfaces/INullifierRegistryV2.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IStakeVault} from "contracts/interfaces/IStakeVault.sol";
 import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";
@@ -42,10 +43,12 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         chargebackPolicy = new ChargebackPolicy(
             address(this),
             vault,
+            nullifierRegistry,
             new ChargebackVerifier(address(this), nullifierRegistry, new AttestationVerifierMock()),
             chargebackNullifierRegistry
         );
         vault.initializeController(address(chargebackPolicy));
+        nullifierRegistry.addWritePermission(address(chargebackPolicy));
         chargebackNullifierRegistry.addWritePermission(address(chargebackPolicy));
         lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, chargebackPolicy);
         chargebackPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
@@ -209,15 +212,70 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     function test_ManualReleaseSettlesCoverageAndMarksManual() public {
         _setChargeback(true);
         bytes32 intentHash = _signalDefault();
+        bytes32 paymentId = keccak256("manual-payment");
         uint256 releaseEligibleAt = vm.getBlockTimestamp() + RISK_WINDOW;
         vm.prank(depositor);
-        orchestrator.releaseFundsToPayer(intentHash);
+        orchestrator.releaseFundsToPayer(intentHash, paymentId);
 
         IChargebackPolicy.ChargebackIntent memory chargebackIntent = chargebackPolicy.getChargebackIntent(intentHash);
         assertTrue(chargebackIntent.isManualRelease);
         assertEq(chargebackIntent.releaseAmount, INTENT_AMOUNT);
         assertEq(chargebackIntent.releaseEligibleAt, releaseEligibleAt);
+        bytes32 paymentNullifier = keccak256(abi.encodePacked(METHOD, paymentId));
+        assertEq(nullifierRegistry.intentHashByNullifier(paymentNullifier), intentHash);
+        assertEq(nullifierRegistry.nullifierByIntentHash(intentHash), paymentNullifier);
         assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
+    }
+
+    function test_ManualChargebackRejectsDifferentPaymentAndAcceptsBoundPayment() public {
+        _setChargeback(true);
+        bytes32 intentHash = _signalDefault();
+        bytes32 paymentId = keccak256("manual-payment");
+        vm.prank(depositor);
+        orchestrator.releaseFundsToPayer(intentHash, paymentId);
+
+        bytes32 wrongPaymentId = keccak256("unrelated-payment");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IChargebackVerifier.InvalidPaymentBinding.selector,
+                intentHash,
+                keccak256(abi.encodePacked(METHOD, wrongPaymentId))
+            )
+        );
+        chargebackPolicy.submitChargeback(
+            _attestation(intentHash, wrongPaymentId, keccak256("wrong-dispute"))
+        );
+
+        chargebackPolicy.submitChargeback(
+            _attestation(intentHash, paymentId, keccak256("bound-dispute"))
+        );
+        assertEq(vault.claimable(depositor), INTENT_AMOUNT);
+        assertEq(
+            uint256(chargebackPolicy.getChargebackIntent(intentHash).status),
+            uint256(IChargebackPolicy.ChargebackIntentStatus.CHARGED_BACK)
+        );
+    }
+
+    function test_ManualReleaseRejectsPaymentAlreadyBoundToAnotherIntentAndRollsBack() public {
+        _setChargeback(true);
+        bytes32 paymentId = keccak256("shared-payment");
+        bytes32 firstIntent = _signalDefault();
+        bytes32 secondIntent = _signalDefault();
+        vm.prank(depositor);
+        orchestrator.releaseFundsToPayer(firstIntent, paymentId);
+
+        bytes32 paymentNullifier = keccak256(abi.encodePacked(METHOD, paymentId));
+        vm.expectRevert(
+            abi.encodeWithSelector(INullifierRegistryV2.NullifierAlreadyExists.selector, paymentNullifier)
+        );
+        vm.prank(depositor);
+        orchestrator.releaseFundsToPayer(secondIntent, paymentId);
+
+        assertEq(orchestrator.getIntent(secondIntent).owner, taker);
+        assertEq(
+            uint256(chargebackPolicy.getChargebackIntent(secondIntent).status),
+            uint256(IChargebackPolicy.ChargebackIntentStatus.PENDING)
+        );
     }
 
     function test_ChargebackAfterFulfillPaysDepositorClaim() public {

@@ -9,14 +9,16 @@ import {IChargebackPolicy} from "../interfaces/IChargebackPolicy.sol";
 import {IChargebackVerifier} from "../interfaces/IChargebackVerifier.sol";
 import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 import {INullifierRegistry} from "../interfaces/INullifierRegistry.sol";
+import {INullifierRegistryV2} from "../interfaces/INullifierRegistryV2.sol";
 import {IStakeVault} from "../interfaces/IStakeVault.sol";
 
 /**
  * @title ChargebackPolicy
  * @notice Deposit-scoped, stake-backed chargeback coverage for intent settlement.
  * @dev The policy owns no tokens. StakeVault is the source of truth for collateral locks, a dedicated
- * `chargebackNullifierRegistry` deployment is the source of truth for consumed dispute nullifiers, and the calling
- * Orchestrator is the source of truth for valid escrows and intents.
+ * `chargebackNullifierRegistry` deployment is the source of truth for consumed dispute nullifiers,
+ * `paymentNullifierRegistry` is the source of truth for payment-to-intent bindings, and the calling Orchestrator is
+ * the source of truth for valid escrows and intents.
  *
  * TRUST: Chargeback intents are keyed by intent hash, which embeds the originating orchestrator
  * (OrchestratorV3 hashes its own address into every intent hash), so identities do not collide across orchestrators.
@@ -24,7 +26,8 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
  * intents it created and already validated against its EscrowRegistry. Registering an orchestrator is therefore a
  * governance assertion about its callback behavior.
  *
- * Governance must authorize a lifecycle hook here before configuring it on an Orchestrator. Predecessor hooks must
+ * Governance must authorize a lifecycle hook here and grant this policy write access to the payment nullifier
+ * registry before configuring it on an Orchestrator. Predecessor hooks must
  * remain authorized until all intents snapshotted to them have been cancelled or settled. Likewise, an orchestrator
  * must be drained before it is removed from OrchestratorRegistry. This policy must also drain every active chargeback
  * intent before StakeVault controller authority moves to a replacement policy unless that replacement explicitly adopts
@@ -43,6 +46,9 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
 
     /// @notice Dedicated replay registry for payment-method-scoped chargeback dispute nullifiers.
     INullifierRegistry public immutable chargebackNullifierRegistry;
+
+    /// @notice Canonical bidirectional registry binding payment nullifiers to settled intents.
+    INullifierRegistryV2 public immutable override paymentNullifierRegistry;
 
     /// @notice Verifier used to validate signed chargeback evidence.
     IChargebackVerifier public chargebackVerifier;
@@ -66,25 +72,30 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Creates a chargeback policy over one StakeVault and one dedicated dispute-nullifier registry.
-     * @dev After deployment, authorize this policy as the StakeVault controller and as a writer on the dedicated
-     * chargeback nullifier registry before enabling deposits.
+     * @dev After deployment, authorize this policy as the StakeVault controller and as a writer on both nullifier
+     * registries before enabling deposits.
      * @param _owner Governance owner for policy and dependency configuration.
      * @param _stakeVault Vault holding and locking taker collateral.
+     * @param _paymentNullifierRegistry Canonical payment-to-intent binding registry.
      * @param _chargebackVerifier Verifier for signed chargeback evidence.
      * @param _chargebackNullifierRegistry Dedicated registry that rejects reused dispute nullifiers.
      */
     constructor(
         address _owner,
         IStakeVault _stakeVault,
+        INullifierRegistryV2 _paymentNullifierRegistry,
         IChargebackVerifier _chargebackVerifier,
         INullifierRegistry _chargebackNullifierRegistry
     ) {
         if (_owner == address(0)) revert ZeroAddress();
         _validateDependency(address(_stakeVault));
+        _validateDependency(address(_paymentNullifierRegistry));
         _validateDependency(address(_chargebackVerifier));
         _validateDependency(address(_chargebackNullifierRegistry));
 
         stakeVault = _stakeVault;
+        paymentNullifierRegistry = _paymentNullifierRegistry;
+        _validateChargebackVerifier(address(_chargebackVerifier));
         chargebackVerifier = _chargebackVerifier;
         chargebackNullifierRegistry = _chargebackNullifierRegistry;
         _transferOwnership(_owner);
@@ -158,7 +169,12 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
     /**
      * @inheritdoc IChargebackPolicy
      */
-    function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease)
+    function onIntentSettled(
+        bytes32 _intentHash,
+        uint256 _releaseAmount,
+        bool _isManualRelease,
+        bytes32 _paymentId
+    )
         external
         override
         onlyLifecycleHook
@@ -168,6 +184,15 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
         if (chargebackIntent.status == ChargebackIntentStatus.NONE) return;
         if (chargebackIntent.status != ChargebackIntentStatus.PENDING) {
             revert ChargebackIntentNotPending(_intentHash, chargebackIntent.status);
+        }
+        if (_isManualRelease != (_paymentId != bytes32(0))) {
+            revert InvalidSettlementPaymentId(_isManualRelease, _paymentId);
+        }
+
+        if (_isManualRelease) {
+            bytes32 paymentNullifier =
+                keccak256(abi.encodePacked(chargebackIntent.paymentMethod, _paymentId));
+            paymentNullifierRegistry.addNullifier(paymentNullifier, _intentHash);
         }
 
         uint64 releaseEligibleAt = _calculateReleaseEligibleAt(chargebackIntent.riskWindow);
@@ -222,7 +247,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
         }
 
         (bytes32 disputeId, bytes32 disputeNullifier) = chargebackVerifier.verifyChargeback(
-            _attestation, chargebackIntent.paymentMethod, chargebackIntent.isManualRelease
+            _attestation, chargebackIntent.paymentMethod, false
         );
         chargebackNullifierRegistry.addNullifier(disputeNullifier);
 
@@ -280,7 +305,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
      * @param _verifier New non-zero deployed chargeback verifier.
      */
     function setChargebackVerifier(address _verifier) external onlyOwner {
-        _validateDependency(_verifier);
+        _validateChargebackVerifier(_verifier);
         address previousVerifier = address(chargebackVerifier);
         chargebackVerifier = IChargebackVerifier(_verifier);
         emit ChargebackVerifierUpdated(previousVerifier, _verifier);
@@ -420,5 +445,14 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
     function _validateDependency(address _dependency) internal view {
         if (_dependency == address(0)) revert ZeroAddress();
         if (_dependency.code.length == 0) revert InvalidContract(_dependency);
+    }
+
+    function _validateChargebackVerifier(address _verifier) internal view {
+        _validateDependency(_verifier);
+        address expectedRegistry = address(paymentNullifierRegistry);
+        address configuredRegistry = address(IChargebackVerifier(_verifier).nullifierRegistry());
+        if (configuredRegistry != expectedRegistry) {
+            revert PaymentNullifierRegistryMismatch(expectedRegistry, configuredRegistry);
+        }
     }
 }

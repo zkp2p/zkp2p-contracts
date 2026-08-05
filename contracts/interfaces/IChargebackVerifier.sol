@@ -2,6 +2,8 @@
 
 pragma solidity ^0.8.18;
 
+import {INullifierRegistryV2} from "./INullifierRegistryV2.sol";
+
 /**
  * @title IChargebackVerifier
  * @notice Minimal verification surface consumed by ChargebackPolicy.
@@ -47,20 +49,22 @@ interface IChargebackVerifier {
     error AttestationVerificationFailed();
     error OwnershipRenunciationDisabled();
 
+    function nullifierRegistry() external view returns (INullifierRegistryV2);
+
     /**
      * @notice Validates chargeback evidence against the intent context supplied by the policy.
-     * @dev View-only and stateless. Reverts when the payload is malformed, mismatched, unsigned, or—on the
-     * proof-based path—not bound to the intent's original payment nullifier.
+     * @dev View-only and stateless. Reverts when the payload is malformed, mismatched, unsigned, or—unless the
+     * legacy bypass is explicitly selected—not bound to the intent's original payment nullifier.
      * @param _attestation Signed chargeback evidence for an intent.
      * @param _paymentMethod Payment method snapshotted by the policy when the intent was admitted.
-     * @param _isManualRelease Whether settlement occurred without an on-chain payment proof. Manual releases skip
-     * original-payment binding because no payment nullifier was recorded during settlement.
+     * @param _skipPaymentBinding Legacy compatibility switch. ChargebackPolicy always passes false because both
+     * proof and manual settlements have canonical payment-to-intent bindings.
      * @return disputeId Payment-platform dispute identifier decoded from the evidence.
      * @return disputeNullifier Payment-method-scoped replay key for the dispute.
      */
     function verifyChargeback(
         ChargebackAttestation calldata _attestation,
         bytes32 _paymentMethod,
-        bool _isManualRelease
+        bool _skipPaymentBinding
     ) external view returns (bytes32 disputeId, bytes32 disputeNullifier);
 }

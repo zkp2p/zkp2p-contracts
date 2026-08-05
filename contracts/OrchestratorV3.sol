@@ -272,6 +272,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
             _params.postIntentHookData,
             managerFeeRecipient,
             managerFee,
+            bytes32(0),
             false
         );
     }
@@ -283,12 +284,14 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
      * configured post-intent hook with empty fulfillment-time data or transfers the deposit token directly to the payer when
      * no hook is configured.
      *
-     * @param _intentHash        Hash of intent to resolve by releasing the funds
+     * @param _intentHash Hash of intent to resolve by releasing the funds.
+     * @param _paymentId Provider payment identifier that the depositor binds to this manual settlement.
      */
-    function releaseFundsToPayer(bytes32 _intentHash) external nonReentrant {
+    function releaseFundsToPayer(bytes32 _intentHash, bytes32 _paymentId) external nonReentrant {
         // Checks
         Intent memory intent = intents[_intentHash];
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
+        if (_paymentId == bytes32(0)) revert ZeroPaymentId();
 
         IEscrow.Deposit memory deposit = IEscrow(intent.escrow).getDeposit(intent.depositId);
         if (deposit.depositor != msg.sender) revert UnauthorizedCaller(msg.sender, deposit.depositor);
@@ -311,6 +314,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
             "",
             managerFeeRecipient,
             managerFee,
+            _paymentId,
             true
         );
     }
@@ -694,6 +698,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         bytes memory _postIntentHookData,
         address _managerFeeRecipient,
         uint256 _managerFee,
+        bytes32 _paymentId,
         bool _isManualRelease
     ) internal {
         IIntentLifecycleHook snapshottedLifecycleHook = intentLifecycleHooks[_intentHash];
@@ -710,6 +715,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
                     recipient: _intent.to,
                     releaseAmount: _releaseAmount,
                     netAmount: netAmount,
+                    paymentId: _paymentId,
                     isManualRelease: _isManualRelease
                 })
             );

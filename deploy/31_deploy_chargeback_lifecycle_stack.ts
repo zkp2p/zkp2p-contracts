@@ -37,6 +37,41 @@ async function assertCode(address: string, label: string): Promise<void> {
   }
 }
 
+async function assertFunctionSelector(address: string, signature: string, label: string): Promise<void> {
+  const selector = ethers.utils.id(signature).slice(2, 10).toLowerCase();
+  const bytecode = (await ethers.provider.getCode(address)).toLowerCase();
+  if (!bytecode.includes(selector)) {
+    throw new Error(`${label} does not implement ${signature}; redeploy the V3 lifecycle stack first`);
+  }
+}
+
+async function assertActivePaymentVerifiersUseRegistry(
+  hre: HardhatRuntimeEnvironment,
+  expectedRegistry: string,
+): Promise<void> {
+  if (hre.deployments.getNetworkName() !== "base_staging") return;
+
+  const paymentVerifierRegistryAddress = (await hre.deployments.get("PaymentVerifierRegistry")).address;
+  const paymentVerifierRegistry = await ethers.getContractAt(
+    "PaymentVerifierRegistry",
+    paymentVerifierRegistryAddress,
+  );
+  const nullifierRegistryAbi = ["function nullifierRegistry() view returns (address)"];
+
+  for (const methodName of CHARGEBACKABLE_PAYMENT_METHODS) {
+    const method = paymentMethodHash(methodName);
+    const verifierAddress = await paymentVerifierRegistry.getVerifier(method);
+    await assertCode(verifierAddress, `${methodName} payment verifier`);
+    const verifier = new ethers.Contract(verifierAddress, nullifierRegistryAbi, ethers.provider);
+    const configuredRegistry = await verifier.nullifierRegistry();
+    if (!sameAddress(configuredRegistry, expectedRegistry)) {
+      throw new Error(
+        `${methodName} payment verifier uses ${configuredRegistry}; expected NullifierRegistryV2 ${expectedRegistry}`,
+      );
+    }
+  }
+}
+
 async function assertRetiredLiabilitiesZero(): Promise<void> {
   await assertCode(RETIRED_STAGING_STAKE_VAULT, "Retired StakeVault");
   const retiredVault = await ethers.getContractAt("StakeVault", RETIRED_STAGING_STAKE_VAULT);
@@ -63,24 +98,40 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
     const whitelistPolicyDeployment = await hre.deployments.get("WhitelistPolicy");
     const registryAddress = (await hre.deployments.get("OrchestratorRegistry")).address;
     const verifierAddress = (await hre.deployments.get("ChargebackVerifier")).address;
+    const paymentNullifierRegistryAddress = (await hre.deployments.get("NullifierRegistryV2")).address;
     const nullifierRegistryAddress = (await hre.deployments.get("ChargebackNullifierRegistry")).address;
 
     const vault = await ethers.getContractAt("StakeVault", vaultDeployment.address);
     const policy = await ethers.getContractAt("ChargebackPolicy", policyDeployment.address);
     const hook = await ethers.getContractAt("IntentLifecycleHookV1", hookDeployment.address);
     const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorDeployment.address);
+    const paymentNullifierRegistry = await ethers.getContractAt(
+      "NullifierRegistryV2",
+      paymentNullifierRegistryAddress,
+    );
+    const chargebackVerifier = await ethers.getContractAt("ChargebackVerifier", verifierAddress);
     const nullifierRegistry = await ethers.getContractAt("NullifierRegistry", nullifierRegistryAddress);
+
+    await assertFunctionSelector(
+      orchestrator.address,
+      "releaseFundsToPayer(bytes32,bytes32)",
+      "OrchestratorV3",
+    );
+    await assertActivePaymentVerifiersUseRegistry(hre, paymentNullifierRegistryAddress);
 
     if (!sameAddress(await vault.stakeToken(), stakeTokenAddress)) return false;
     if (!sameAddress(await vault.controller(), policy.address)) return false;
     if (!(await vault.controllerChangeDelay()).eq(STAKE_VAULT_CONTROLLER_CHANGE_DELAY)) return false;
     if (!sameAddress(await policy.stakeVault(), vault.address)) return false;
+    if (!sameAddress(await policy.paymentNullifierRegistry(), paymentNullifierRegistryAddress)) return false;
     if (!sameAddress(await policy.chargebackVerifier(), verifierAddress)) return false;
+    if (!sameAddress(await chargebackVerifier.nullifierRegistry(), paymentNullifierRegistryAddress)) return false;
     if (!sameAddress(await policy.chargebackNullifierRegistry(), nullifierRegistryAddress)) return false;
     if (!sameAddress(await hook.orchestratorRegistry(), registryAddress)) return false;
     if (!sameAddress(await hook.whitelistPolicy(), whitelistPolicyDeployment.address)) return false;
     if (!sameAddress(await hook.chargebackPolicy(), policy.address)) return false;
     if (!(await policy.isLifecycleHookAuthorized(hook.address))) return false;
+    if (!(await paymentNullifierRegistry.isWriter(policy.address))) return false;
     if (!(await nullifierRegistry.isWriter(policy.address))) return false;
     if (!sameAddress(await orchestrator.lifecycleHook(), hook.address)) return false;
     if (!sameAddress(await vault.owner(), governance)) return false;
@@ -135,6 +186,14 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   let chargebackNullifierRegistryDeployment = await hre.deployments.getOrNull(
     "ChargebackNullifierRegistry",
   );
+  let paymentNullifierRegistryDeployment = await hre.deployments.getOrNull("NullifierRegistryV2");
+  if (!paymentNullifierRegistryDeployment) {
+    paymentNullifierRegistryDeployment = await hre.deployments.deploy("NullifierRegistryV2", {
+      from: deployer,
+      args: [(await hre.deployments.get("NullifierRegistry")).address],
+      log: true,
+    });
+  }
   let chargebackVerifierDeployment = await hre.deployments.getOrNull("ChargebackVerifier");
   if (network !== "base_staging" && !chargebackNullifierRegistryDeployment) {
     chargebackNullifierRegistryDeployment = await hre.deployments.deploy("ChargebackNullifierRegistry", {
@@ -145,20 +204,12 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     });
   }
   if (network !== "base_staging" && !chargebackVerifierDeployment) {
-    let nullifierRegistryV2 = await hre.deployments.getOrNull("NullifierRegistryV2");
-    if (!nullifierRegistryV2) {
-      nullifierRegistryV2 = await hre.deployments.deploy("NullifierRegistryV2", {
-        from: deployer,
-        args: [(await hre.deployments.get("NullifierRegistry")).address],
-        log: true,
-      });
-    }
     const attestationVerifier =
       await hre.deployments.getOrNull("MultiAttestationVerifier")
       || await hre.deployments.get("SimpleAttestationVerifier");
     chargebackVerifierDeployment = await hre.deployments.deploy("ChargebackVerifier", {
       from: deployer,
-      args: [deployer, nullifierRegistryV2.address, attestationVerifier.address],
+      args: [deployer, paymentNullifierRegistryDeployment.address, attestationVerifier.address],
       log: true,
     });
   }
@@ -167,12 +218,20 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   }
   const chargebackVerifierAddress = chargebackVerifierDeployment.address;
   const chargebackNullifierRegistryAddress = chargebackNullifierRegistryDeployment.address;
+  const paymentNullifierRegistryAddress = paymentNullifierRegistryDeployment.address;
 
   await assertCode(whitelistPolicyAddress, "WhitelistPolicy");
   await assertCode(whitelistHookAddress, "WhitelistLifecycleHook");
   await assertCode(orchestratorAddress, "OrchestratorV3");
   await assertCode(chargebackVerifierAddress, "ChargebackVerifier");
+  await assertCode(paymentNullifierRegistryAddress, "NullifierRegistryV2");
   await assertCode(chargebackNullifierRegistryAddress, "ChargebackNullifierRegistry");
+  await assertFunctionSelector(
+    orchestratorAddress,
+    "releaseFundsToPayer(bytes32,bytes32)",
+    "OrchestratorV3",
+  );
+  await assertActivePaymentVerifiersUseRegistry(hre, paymentNullifierRegistryAddress);
 
   const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorAddress);
   if (!sameAddress(await orchestrator.lifecycleHook(), whitelistHookAddress)) {
@@ -183,6 +242,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Reusing OrchestratorV3:", orchestratorAddress);
   console.log("Reusing WhitelistPolicy:", whitelistPolicyAddress);
   console.log("Reusing ChargebackVerifier:", chargebackVerifierAddress);
+  console.log("Reusing NullifierRegistryV2:", paymentNullifierRegistryAddress);
   console.log("Reusing ChargebackNullifierRegistry:", chargebackNullifierRegistryAddress);
 
   const vaultDeployment = await hre.deployments.deploy("StakeVault", {
@@ -198,6 +258,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     args: [
       deployer,
       vaultDeployment.address,
+      paymentNullifierRegistryAddress,
       chargebackVerifierAddress,
       chargebackNullifierRegistryAddress,
     ],
@@ -217,10 +278,15 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const vault = await ethers.getContractAt("StakeVault", vaultDeployment.address);
   const policy = await ethers.getContractAt("ChargebackPolicy", policyDeployment.address);
   const hook = await ethers.getContractAt("IntentLifecycleHookV1", hookDeployment.address);
+  const paymentNullifierRegistry = await ethers.getContractAt(
+    "NullifierRegistryV2",
+    paymentNullifierRegistryAddress,
+  );
   const nullifierRegistry = await ethers.getContractAt("NullifierRegistry", chargebackNullifierRegistryAddress);
 
   await (await vault.initializeController(policy.address)).wait();
   await waitForDeploymentDelay(hre);
+  await addWritePermission(hre, paymentNullifierRegistry, policy.address);
   await addWritePermission(hre, nullifierRegistry, policy.address);
 
   await (await policy.setLifecycleHookAuthorization(hook.address, true)).wait();
