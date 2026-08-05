@@ -30,12 +30,16 @@ contract ChargebackVerifierTest is Test {
         verifier = new ChargebackVerifier(address(this), nullifierRegistry, attestationVerifier);
     }
 
-    function test_VerifyChargebackRejectsManualRelease() public {
+    function test_VerifyChargebackRejectsMissingPaymentBinding() public {
+        bytes32 paymentId = keccak256("payment");
         IChargebackVerifier.ChargebackAttestation memory attestation =
-            _attestation(INTENT, METHOD, keccak256("payment"), keccak256("dispute"));
+            _attestation(INTENT, METHOD, paymentId, keccak256("dispute"));
 
-        vm.expectRevert(IChargebackVerifier.ManualReleaseNotChargebackable.selector);
-        verifier.verifyChargeback(attestation, METHOD, true);
+        bytes32 paymentNullifier = keccak256(abi.encodePacked(METHOD, paymentId));
+        vm.expectRevert(
+            abi.encodeWithSelector(IChargebackVerifier.InvalidPaymentBinding.selector, INTENT, paymentNullifier)
+        );
+        verifier.verifyChargeback(attestation, METHOD);
     }
 
     function test_VerifyChargebackRejectsTamperedDataHash() public {
@@ -44,7 +48,7 @@ contract ChargebackVerifierTest is Test {
         attestation.dataHash = keccak256("tampered");
 
         vm.expectRevert(IChargebackVerifier.InvalidAttestation.selector);
-        verifier.verifyChargeback(attestation, METHOD, false);
+        verifier.verifyChargeback(attestation, METHOD);
     }
 
     function test_VerifyChargebackRejectsMethodMismatch() public {
@@ -52,7 +56,7 @@ contract ChargebackVerifierTest is Test {
             _attestation(INTENT, keccak256("wrong"), keccak256("payment"), keccak256("dispute"));
 
         vm.expectRevert(IChargebackVerifier.InvalidAttestation.selector);
-        verifier.verifyChargeback(attestation, METHOD, false);
+        verifier.verifyChargeback(attestation, METHOD);
     }
 
     function test_VerifyChargebackRejectsSignatureFailure() public {
@@ -61,7 +65,7 @@ contract ChargebackVerifierTest is Test {
         attestationVerifier.setResult(false);
 
         vm.expectRevert(IChargebackVerifier.AttestationVerificationFailed.selector);
-        verifier.verifyChargeback(attestation, METHOD, false);
+        verifier.verifyChargeback(attestation, METHOD);
     }
 
     function test_VerifyChargebackProofPathRequiresBothDirectionBinding() public {
@@ -73,7 +77,7 @@ contract ChargebackVerifierTest is Test {
             abi.encodeWithSelector(IChargebackVerifier.InvalidPaymentBinding.selector, INTENT, paymentNullifier);
 
         vm.expectRevert(bindingRevert);
-        verifier.verifyChargeback(attestation, METHOD, false);
+        verifier.verifyChargeback(attestation, METHOD);
 
         // Forward direction only: nullifier -> intent resolves, intent -> nullifier does not.
         vm.mockCall(
@@ -82,7 +86,7 @@ contract ChargebackVerifierTest is Test {
             abi.encode(INTENT)
         );
         vm.expectRevert(bindingRevert);
-        verifier.verifyChargeback(attestation, METHOD, false);
+        verifier.verifyChargeback(attestation, METHOD);
         vm.clearMockedCalls();
 
         // Reverse direction only: intent -> nullifier resolves, nullifier -> intent does not.
@@ -92,13 +96,13 @@ contract ChargebackVerifierTest is Test {
             abi.encode(paymentNullifier)
         );
         vm.expectRevert(bindingRevert);
-        verifier.verifyChargeback(attestation, METHOD, false);
+        verifier.verifyChargeback(attestation, METHOD);
         vm.clearMockedCalls();
 
         nullifierRegistry.addWritePermission(address(this));
         nullifierRegistry.addNullifier(paymentNullifier, INTENT);
 
-        (bytes32 disputeId,) = verifier.verifyChargeback(attestation, METHOD, false);
+        (bytes32 disputeId,) = verifier.verifyChargeback(attestation, METHOD);
         assertEq(disputeId, keccak256("dispute"));
     }
 
@@ -113,7 +117,7 @@ contract ChargebackVerifierTest is Test {
             address(attestationVerifier),
             abi.encodeCall(IAttestationVerifier.verify, (expectedDigest, attestation.signatures, attestation.data))
         );
-        verifier.verifyChargeback(attestation, METHOD, false);
+        verifier.verifyChargeback(attestation, METHOD);
     }
 
     function test_HashChargebackAttestationMatchesEip712Digest() public {

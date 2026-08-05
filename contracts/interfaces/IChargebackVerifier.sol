@@ -44,24 +44,20 @@ interface IChargebackVerifier {
     error InvalidContract(address dependency);
     error InvalidAttestation();
     error InvalidPaymentBinding(bytes32 intentHash, bytes32 nullifier);
-    error ManualReleaseNotChargebackable();
     error AttestationVerificationFailed();
     error OwnershipRenunciationDisabled();
 
     /**
      * @notice Validates chargeback evidence against the intent context supplied by the policy.
-     * @dev View-only and stateless. Reverts when the payload is malformed, mismatched, unsigned, from a manual release,
-     * or not bound to the intent's original payment nullifier.
+     * @dev View-only and stateless. Reverts when the payload is malformed, mismatched, unsigned, or not bound to the
+     * intent's original payment nullifier.
      * @param _attestation Signed chargeback evidence for an intent.
      * @param _paymentMethod Payment method snapshotted by the policy when the intent was admitted.
-     * @param _isManualRelease Whether settlement occurred without an on-chain payment proof. Manual releases are not
-     * chargebackable because no payment-to-intent binding was recorded during settlement.
      * @return disputeId Payment-platform dispute identifier decoded from the evidence.
      * @return disputeNullifier Payment-method-scoped replay key for the dispute.
      */
-    function verifyChargeback(
-        ChargebackAttestation calldata _attestation,
-        bytes32 _paymentMethod,
-        bool _isManualRelease
-    ) external view returns (bytes32 disputeId, bytes32 disputeNullifier);
+    function verifyChargeback(ChargebackAttestation calldata _attestation, bytes32 _paymentMethod)
+        external
+        view
+        returns (bytes32 disputeId, bytes32 disputeNullifier);
 }

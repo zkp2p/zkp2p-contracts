@@ -48,12 +48,12 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
     /**
      * @inheritdoc IChargebackVerifier
      */
-    function verifyChargeback(
-        ChargebackAttestation calldata _attestation,
-        bytes32 _paymentMethod,
-        bool _isManualRelease
-    ) external view override returns (bytes32 disputeId, bytes32 disputeNullifier) {
-        if (_isManualRelease) revert ManualReleaseNotChargebackable();
+    function verifyChargeback(ChargebackAttestation calldata _attestation, bytes32 _paymentMethod)
+        external
+        view
+        override
+        returns (bytes32 disputeId, bytes32 disputeNullifier)
+    {
         if (keccak256(_attestation.data) != _attestation.dataHash) revert InvalidAttestation();
 
         ChargebackDetails memory details = abi.decode(_attestation.data, (ChargebackDetails));

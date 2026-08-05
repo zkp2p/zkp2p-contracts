@@ -206,23 +206,27 @@ contract ChargebackLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         assertEq(vault.freeStake(taker), STAKE_AMOUNT);
     }
 
-    function test_ManualReleaseEndsCoverageUnlocksStakeAndRejectsChargeback() public {
+    function test_ManualReleaseRetainsStakeButRejectsChargebackWithoutPaymentBinding() public {
         _setChargeback(true);
         bytes32 intentHash = _signalDefault();
-        uint256 releasedAt = vm.getBlockTimestamp();
+        uint256 releaseEligibleAt = vm.getBlockTimestamp() + RISK_WINDOW;
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash);
 
         IChargebackPolicy.ChargebackIntent memory chargebackIntent = chargebackPolicy.getChargebackIntent(intentHash);
         assertTrue(chargebackIntent.isManualRelease);
         assertEq(chargebackIntent.releaseAmount, INTENT_AMOUNT);
-        assertEq(chargebackIntent.releaseEligibleAt, releasedAt);
-        assertEq(uint256(chargebackIntent.status), uint256(IChargebackPolicy.ChargebackIntentStatus.RELEASED));
-        assertEq(vault.lockedStake(taker), 0);
-        assertEq(vault.freeStake(taker), STAKE_AMOUNT);
+        assertEq(chargebackIntent.releaseEligibleAt, releaseEligibleAt);
+        assertEq(uint256(chargebackIntent.status), uint256(IChargebackPolicy.ChargebackIntentStatus.SETTLED));
+        assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
+        assertEq(vault.freeStake(taker), STAKE_AMOUNT - INTENT_AMOUNT);
 
-        vm.expectRevert(abi.encodeWithSelector(IChargebackPolicy.ManualReleaseNotChargebackable.selector, intentHash));
-        chargebackPolicy.submitChargeback(_attestation(intentHash, keccak256("unbound-payment"), keccak256("dispute")));
+        bytes32 paymentId = keccak256("unbound-payment");
+        bytes32 paymentNullifier = keccak256(abi.encodePacked(METHOD, paymentId));
+        vm.expectRevert(
+            abi.encodeWithSelector(IChargebackVerifier.InvalidPaymentBinding.selector, intentHash, paymentNullifier)
+        );
+        chargebackPolicy.submitChargeback(_attestation(intentHash, paymentId, keccak256("dispute")));
     }
 
     function test_ChargebackAfterFulfillPaysDepositorClaim() public {
