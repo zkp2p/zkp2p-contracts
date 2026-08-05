@@ -158,6 +158,24 @@ iteration loop.
 - TypeScript: strict `tsconfig`, CommonJS; prefer path aliases `@utils/*`, `@typechain/*`.
 - Scripts: prefix deploy files with two-digit order `NN_` and a concise verb-noun.
 
+Protocol code is precise: validate inputs once at the boundary and trust them
+afterward; reject impossible states instead of handling them.
+
+- Reject with terse require-chains and short reason strings; no fallback
+  branches or recovery paths for states that shouldn't exist. Fail closed on
+  truncated or ambiguous data.
+- No defensive checks whose invariant another layer (escrow, registry,
+  circuit, verifier) already enforces; a guard must name the input that
+  triggers it.
+- Keep on-chain state minimal at the same security level; push complexity into
+  the layer that owns it instead of enshrining it in the protocol.
+- Delete speculative machinery: unused params, storage, modes, and flags.
+- A rename ships with a full docs-and-naming pass across the surface.
+- Tests lock exact values and cover adversarial cases (fee-on-transfer tokens,
+  replay, expiry, truncation).
+- TypeScript follows the same doctrine: boundary validation, no swallowing
+  catches, no union wire types.
+
 ## Testing Guidelines
 - Foundry is the only contract test runner. Hardhat remains for compilation, deployment, TypeChain, verification, and
   package release.

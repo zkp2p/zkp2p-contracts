@@ -190,3 +190,7 @@ request an OTP/token.
 Never commit secrets, edit generated artifacts by hand, infer live state from a
 stale artifact, add rollback compatibility, or combine source, staging,
 production, package, and publication approval into one implied action.
+
+## Code Style
+
+Follow the precision rules in [AGENTS.md](AGENTS.md#coding-style--naming-conventions).
