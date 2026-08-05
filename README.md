@@ -652,16 +652,16 @@ The staging confirmation is an operator acknowledgement; the deploy script inten
 indexer client or drain-query implementation. Base fails unless O2 and EscrowV2 are already registered,
 the existing stack remains intact, and the generated Safe batch contains only the fresh O3 registration.
 
-`deploy/31_deploy_chargeback_lifecycle_stack.ts` is the later chargeback/staking lane. Before it
+`deploy/31_deploy_dispute_lifecycle_stack.ts` is the later chargeback/staking lane. Before it
 runs, move only these canonical artifacts aside:
 
 - `deployments/base_staging/StakeVault.json`
-- `deployments/base_staging/ChargebackPolicy.json`
+- `deployments/base_staging/DisputePolicy.json` when present
 - `deployments/base_staging/IntentLifecycleHookV1.json`
 
-Run `--tags V3ChargebackLifecycleStack` with `ENABLE_STAGING_V3_CHARGEBACK_CUTOVER=true`. The lane
+Run `--tags V3DisputeLifecycleStack` with `ENABLE_STAGING_V3_DISPUTE_CUTOVER=true`. The lane
 requires the retired vault's aggregate stake and claim liabilities to be zero before any write. It
-then deploys a fresh vault, policy, and combined hook; reuses the existing chargeback verifier and
+then deploys a fresh dispute verifier, vault, policy, and combined hook; reuses the existing
 nullifier registry; initializes the controller; applies the canonical risk windows; authorizes the
 combined hook on the new policy; rotates the already-deployed O3; and revokes the retired policy's
 nullifier-writer permission. Existing intents retain their snapshotted whitelist-only hook.

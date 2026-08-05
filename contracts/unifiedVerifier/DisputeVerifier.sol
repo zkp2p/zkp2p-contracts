@@ -6,23 +6,23 @@ import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 
 import {IAttestationVerifier} from "../interfaces/IAttestationVerifier.sol";
-import {IChargebackVerifier} from "../interfaces/IChargebackVerifier.sol";
+import {IDisputeVerifier} from "../interfaces/IDisputeVerifier.sol";
 import {INullifierRegistryV2} from "../interfaces/INullifierRegistryV2.sol";
 
 /**
- * @title ChargebackVerifier
- * @notice Stateless EIP-712 verifier for chargeback evidence, mirroring the UnifiedPaymentVerifier
- * layering: the chargeback policy calls this verifier, which itself calls the attestation verifier
+ * @title DisputeVerifier
+ * @notice Stateless EIP-712 verifier for dispute evidence, mirroring the UnifiedPaymentVerifier
+ * layering: the dispute policy calls this verifier, which itself calls the attestation verifier
  * for witness-signature checks. Holds no position state and can be swapped on the policy at any time.
  * @dev Swapping this verifier rotates the EIP-712 domain (it binds this contract's address), which
  * invalidates signed-but-unsubmitted attestations. The attestation service must always sign against
  * the policy's currently configured verifier.
  */
-contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
+contract DisputeVerifier is IDisputeVerifier, Ownable2Step, EIP712 {
     /* ============ Constants ============ */
 
-    bytes32 public constant CHARGEBACK_ATTESTATION_TYPEHASH =
-        keccak256("ChargebackAttestation(bytes32 intentHash,bytes32 dataHash)");
+    bytes32 public constant DISPUTE_ATTESTATION_TYPEHASH =
+        keccak256("DisputeAttestation(bytes32 intentHash,bytes32 dataHash)");
 
     /* ============ State Variables ============ */
 
@@ -32,7 +32,7 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
     /* ============ Constructor ============ */
 
     constructor(address _owner, INullifierRegistryV2 _nullifierRegistry, IAttestationVerifier _attestationVerifier)
-        EIP712("ZKP2P ChargebackVerifier", "1")
+        EIP712("ZKP2P DisputeVerifier", "1")
     {
         if (_owner == address(0)) revert ZeroAddress();
         _validateDependency(address(_nullifierRegistry));
@@ -46,9 +46,9 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
     /* ============ External Functions ============ */
 
     /**
-     * @inheritdoc IChargebackVerifier
+     * @inheritdoc IDisputeVerifier
      */
-    function verifyChargeback(ChargebackAttestation calldata _attestation, bytes32 _paymentMethod)
+    function verifyDispute(DisputeAttestation calldata _attestation, bytes32 _paymentMethod)
         external
         view
         override
@@ -56,10 +56,10 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
     {
         if (keccak256(_attestation.data) != _attestation.dataHash) revert InvalidAttestation();
 
-        ChargebackDetails memory details = abi.decode(_attestation.data, (ChargebackDetails));
+        DisputeDetails memory details = abi.decode(_attestation.data, (DisputeDetails));
         if (details.paymentMethod != _paymentMethod) revert InvalidAttestation();
 
-        bytes32 digest = _hashTypedDataV4(_chargebackAttestationStructHash(_attestation));
+        bytes32 digest = _hashTypedDataV4(_disputeAttestationStructHash(_attestation));
         if (!attestationVerifier.verify(digest, _attestation.signatures, _attestation.data)) {
             revert AttestationVerificationFailed();
         }
@@ -99,22 +99,18 @@ contract ChargebackVerifier is IChargebackVerifier, Ownable2Step, EIP712 {
     /* ============ View Functions ============ */
 
     /**
-     * @notice Returns the EIP-712 digest that witnesses sign for a chargeback attestation.
-     * @param _attestation Chargeback evidence whose intent hash and data hash are included in the digest.
+     * @notice Returns the EIP-712 digest that witnesses sign for a dispute attestation.
+     * @param _attestation Dispute evidence whose intent hash and data hash are included in the digest.
      * @return EIP-712 digest bound to this verifier's address and the current chain.
      */
-    function hashChargebackAttestation(ChargebackAttestation calldata _attestation) external view returns (bytes32) {
-        return _hashTypedDataV4(_chargebackAttestationStructHash(_attestation));
+    function hashDisputeAttestation(DisputeAttestation calldata _attestation) external view returns (bytes32) {
+        return _hashTypedDataV4(_disputeAttestationStructHash(_attestation));
     }
 
     /* ============ Internal Functions ============ */
 
-    function _chargebackAttestationStructHash(ChargebackAttestation calldata _attestation)
-        internal
-        pure
-        returns (bytes32)
-    {
-        return keccak256(abi.encode(CHARGEBACK_ATTESTATION_TYPEHASH, _attestation.intentHash, _attestation.dataHash));
+    function _disputeAttestationStructHash(DisputeAttestation calldata _attestation) internal pure returns (bytes32) {
+        return keccak256(abi.encode(DISPUTE_ATTESTATION_TYPEHASH, _attestation.intentHash, _attestation.dataHash));
     }
 
     function _validateDependency(address _dependency) internal view {

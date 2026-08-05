@@ -3,12 +3,12 @@
 pragma solidity ^0.8.18;
 
 /**
- * @title IChargebackPolicy
+ * @title IDisputePolicy
  * @notice Lifecycle-hook integration surface for stake-backed chargeback coverage.
  * @dev The concrete policy exposes depositor, governance, chargeback, and release functions directly.
  *      This interface intentionally contains only the functions consumed by IntentLifecycleHookV1.
  */
-interface IChargebackPolicy {
+interface IDisputePolicy {
     /**
      * @notice Lifecycle state of a chargeback-enabled intent.
      * @dev `NONE` is the required zero-value sentinel for an uninitialized mapping entry; it is not a live state.
@@ -31,7 +31,6 @@ interface IChargebackPolicy {
      * @param depositor Escrow depositor compensated by a successful chargeback.
      * @param paymentMethod Payment method used to namespace risk configuration and dispute nullifiers.
      * @param status Current chargeback lifecycle state.
-     * @param isManualRelease Whether settlement occurred through depositor-authorized manual release.
      * @param riskWindow Minimum time collateral must remain locked after intent settlement.
      * @param releaseEligibleAt Earliest timestamp at which collateral may be released. Chargeback evidence remains
      * valid after this time until release actually executes.
@@ -43,7 +42,6 @@ interface IChargebackPolicy {
         address depositor;
         bytes32 paymentMethod;
         ChargebackIntentStatus status;
-        bool isManualRelease;
         uint64 riskWindow;
         uint64 releaseEligibleAt;
         uint256 releaseAmount;
@@ -77,7 +75,7 @@ interface IChargebackPolicy {
     );
     event ChargebackEnabledUpdated(address indexed escrow, uint256 indexed depositId, bool isChargebackEnabled);
     event RiskWindowUpdated(bytes32 indexed paymentMethod, uint64 riskWindow);
-    event ChargebackVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
+    event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
     event LifecycleHookAuthorizationUpdated(address indexed hook, bool isAuthorized);
     event AdmissionsPausedUpdated(bool isPaused);
 

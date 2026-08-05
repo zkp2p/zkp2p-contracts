@@ -3,7 +3,7 @@
 pragma solidity ^0.8.18;
 
 import {IIntentLifecycleHook} from "../interfaces/IIntentLifecycleHook.sol";
-import {IChargebackPolicy} from "../interfaces/IChargebackPolicy.sol";
+import {IDisputePolicy} from "../interfaces/IDisputePolicy.sol";
 import {IOrchestratorRegistry} from "../interfaces/IOrchestratorRegistry.sol";
 import {IOrchestratorV3} from "../interfaces/IOrchestratorV3.sol";
 import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
@@ -15,8 +15,8 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
  * Non-chargebackable payment methods give every taker direct access without a chargeback intent or stake lock, regardless of
  * whitelist state. Open deposits remain unrestricted when neither policy is enabled.
  * @dev Reads canonical intent data from the calling orchestrator and forwards cancellation and settlement accounting
- * to ChargebackPolicy. All callbacks remain fail-closed. This hook serves every registered orchestrator and forwards
- * lifecycle callbacks without provenance checks; the trust argument lives in ChargebackPolicy's header.
+ * to DisputePolicy. All callbacks remain fail-closed. This hook serves every registered orchestrator and forwards
+ * lifecycle callbacks without provenance checks; the trust argument lives in DisputePolicy's header.
  * Deregistering an orchestrator with unresolved intents snapshotted to this hook permanently blocks their terminal
  * callbacks, so governance must drain its intents before removing it from OrchestratorRegistry.
  */
@@ -25,7 +25,7 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
 
     IOrchestratorRegistry public immutable orchestratorRegistry;
     IWhitelistPolicy public immutable whitelistPolicy;
-    IChargebackPolicy public immutable chargebackPolicy;
+    IDisputePolicy public immutable disputePolicy;
 
     /* ============ Errors ============ */
 
@@ -40,15 +40,15 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     constructor(
         IOrchestratorRegistry _orchestratorRegistry,
         IWhitelistPolicy _whitelistPolicy,
-        IChargebackPolicy _chargebackPolicy
+        IDisputePolicy _disputePolicy
     ) {
         _validateDependency(address(_orchestratorRegistry));
         _validateDependency(address(_whitelistPolicy));
-        _validateDependency(address(_chargebackPolicy));
+        _validateDependency(address(_disputePolicy));
 
         orchestratorRegistry = _orchestratorRegistry;
         whitelistPolicy = _whitelistPolicy;
-        chargebackPolicy = _chargebackPolicy;
+        disputePolicy = _disputePolicy;
     }
 
     /* ============ Lifecycle Callbacks ============ */
@@ -66,8 +66,8 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
         }
         // Chargeback admission is stateful, so the configuration query only selects the route.
         // onIntentSignaled remains authoritative for token compatibility, collateral, and pause checks.
-        if (chargebackPolicy.isChargebackEnabled(intent.escrow, intent.depositId)) {
-            chargebackPolicy.onIntentSignaled(
+        if (disputePolicy.isChargebackEnabled(intent.escrow, intent.depositId)) {
+            disputePolicy.onIntentSignaled(
                 _intentHash, intent.escrow, intent.depositId, intent.owner, intent.paymentMethod, intent.amount
             );
         } else if (isWhitelistEnabled) {
@@ -79,14 +79,14 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
      * @inheritdoc IIntentLifecycleHook
      */
     function onIntentCancelled(bytes32 _intentHash) external override onlyOrchestrator {
-        chargebackPolicy.onIntentCancelled(_intentHash);
+        disputePolicy.onIntentCancelled(_intentHash);
     }
 
     /**
      * @inheritdoc IIntentLifecycleHook
      */
     function settleIntent(SettlementContext calldata _context) external override onlyOrchestrator {
-        chargebackPolicy.onIntentSettled(_context.intentHash, _context.releaseAmount, _context.isManualRelease);
+        disputePolicy.onIntentSettled(_context.intentHash, _context.releaseAmount, _context.isManualRelease);
     }
 
     /* ============ Modifiers ============ */

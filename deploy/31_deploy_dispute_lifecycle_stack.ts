@@ -57,16 +57,17 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
     const governance = MULTI_SIG[network] || deployer;
     const stakeTokenAddress = USDC[network] || (await hre.deployments.get("USDCMock")).address;
     const vaultDeployment = await hre.deployments.get("StakeVault");
-    const policyDeployment = await hre.deployments.get("ChargebackPolicy");
+    const policyDeployment = await hre.deployments.get("DisputePolicy");
     const hookDeployment = await hre.deployments.get("IntentLifecycleHookV1");
     const orchestratorDeployment = await hre.deployments.get("OrchestratorV3");
     const whitelistPolicyDeployment = await hre.deployments.get("WhitelistPolicy");
     const registryAddress = (await hre.deployments.get("OrchestratorRegistry")).address;
-    const verifierAddress = (await hre.deployments.get("ChargebackVerifier")).address;
+    const verifierAddress = (await hre.deployments.get("DisputeVerifier")).address;
     const nullifierRegistryAddress = (await hre.deployments.get("ChargebackNullifierRegistry")).address;
 
     const vault = await ethers.getContractAt("StakeVault", vaultDeployment.address);
-    const policy = await ethers.getContractAt("ChargebackPolicy", policyDeployment.address);
+    const policy = await ethers.getContractAt("DisputePolicy", policyDeployment.address);
+    const verifier = await ethers.getContractAt("DisputeVerifier", verifierAddress);
     const hook = await ethers.getContractAt("IntentLifecycleHookV1", hookDeployment.address);
     const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorDeployment.address);
     const nullifierRegistry = await ethers.getContractAt("NullifierRegistry", nullifierRegistryAddress);
@@ -75,16 +76,17 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
     if (!sameAddress(await vault.controller(), policy.address)) return false;
     if (!(await vault.controllerChangeDelay()).eq(STAKE_VAULT_CONTROLLER_CHANGE_DELAY)) return false;
     if (!sameAddress(await policy.stakeVault(), vault.address)) return false;
-    if (!sameAddress(await policy.chargebackVerifier(), verifierAddress)) return false;
+    if (!sameAddress(await policy.disputeVerifier(), verifierAddress)) return false;
     if (!sameAddress(await policy.chargebackNullifierRegistry(), nullifierRegistryAddress)) return false;
     if (!sameAddress(await hook.orchestratorRegistry(), registryAddress)) return false;
     if (!sameAddress(await hook.whitelistPolicy(), whitelistPolicyDeployment.address)) return false;
-    if (!sameAddress(await hook.chargebackPolicy(), policy.address)) return false;
+    if (!sameAddress(await hook.disputePolicy(), policy.address)) return false;
     if (!(await policy.isLifecycleHookAuthorized(hook.address))) return false;
     if (!(await nullifierRegistry.isWriter(policy.address))) return false;
     if (!sameAddress(await orchestrator.lifecycleHook(), hook.address)) return false;
     if (!sameAddress(await vault.owner(), governance)) return false;
     if (!sameAddress(await policy.owner(), governance)) return false;
+    if (!sameAddress(await verifier.owner(), governance)) return false;
 
     for (const methodName of CHARGEBACKABLE_PAYMENT_METHODS) {
       const riskWindow = await policy.getRiskWindow(paymentMethodHash(methodName));
@@ -107,14 +109,14 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const stakeTokenAddress = USDC[network] || (await hre.deployments.get("USDCMock")).address;
 
   const existingVault = await hre.deployments.getOrNull("StakeVault");
-  const existingPolicy = await hre.deployments.getOrNull("ChargebackPolicy");
+  const existingPolicy = await hre.deployments.getOrNull("DisputePolicy");
   const existingHook = await hre.deployments.getOrNull("IntentLifecycleHookV1");
   if (network === "base_staging") {
     if (existingVault && sameAddress(existingVault.address, RETIRED_STAGING_STAKE_VAULT)) {
       throw new Error("Move the retired StakeVault artifact aside before lane 31");
     }
     if (existingPolicy && sameAddress(existingPolicy.address, RETIRED_STAGING_CHARGEBACK_POLICY)) {
-      throw new Error("Move the retired ChargebackPolicy artifact aside before lane 31");
+      throw new Error("Move the retired DisputePolicy artifact aside before lane 31");
     }
     if (existingHook && sameAddress(existingHook.address, RETIRED_STAGING_LIFECYCLE_HOOK)) {
       throw new Error("Move the retired IntentLifecycleHookV1 artifact aside before lane 31");
@@ -123,7 +125,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   }
   if (existingVault || existingPolicy || existingHook) {
     throw new Error(
-      "Move the StakeVault, ChargebackPolicy, and IntentLifecycleHookV1 artifacts aside before lane 31",
+      "Move the StakeVault, DisputePolicy, and IntentLifecycleHookV1 artifacts aside before lane 31",
     );
   }
 
@@ -135,7 +137,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   let chargebackNullifierRegistryDeployment = await hre.deployments.getOrNull(
     "ChargebackNullifierRegistry",
   );
-  let chargebackVerifierDeployment = await hre.deployments.getOrNull("ChargebackVerifier");
+  let disputeVerifierDeployment = await hre.deployments.getOrNull("DisputeVerifier");
   if (network !== "base_staging" && !chargebackNullifierRegistryDeployment) {
     chargebackNullifierRegistryDeployment = await hre.deployments.deploy("ChargebackNullifierRegistry", {
       contract: "NullifierRegistry",
@@ -144,9 +146,12 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       log: true,
     });
   }
-  if (network !== "base_staging" && !chargebackVerifierDeployment) {
+  if (!disputeVerifierDeployment) {
     let nullifierRegistryV2 = await hre.deployments.getOrNull("NullifierRegistryV2");
     if (!nullifierRegistryV2) {
+      if (network === "base_staging") {
+        throw new Error("NullifierRegistryV2 must already exist on staging");
+      }
       nullifierRegistryV2 = await hre.deployments.deploy("NullifierRegistryV2", {
         from: deployer,
         args: [(await hre.deployments.get("NullifierRegistry")).address],
@@ -156,22 +161,22 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     const attestationVerifier =
       await hre.deployments.getOrNull("MultiAttestationVerifier")
       || await hre.deployments.get("SimpleAttestationVerifier");
-    chargebackVerifierDeployment = await hre.deployments.deploy("ChargebackVerifier", {
+    disputeVerifierDeployment = await hre.deployments.deploy("DisputeVerifier", {
       from: deployer,
       args: [deployer, nullifierRegistryV2.address, attestationVerifier.address],
       log: true,
     });
   }
-  if (!chargebackVerifierDeployment || !chargebackNullifierRegistryDeployment) {
-    throw new Error("ChargebackVerifier and ChargebackNullifierRegistry must already exist on staging");
+  if (!disputeVerifierDeployment || !chargebackNullifierRegistryDeployment) {
+    throw new Error("Dispute lifecycle dependencies are unavailable");
   }
-  const chargebackVerifierAddress = chargebackVerifierDeployment.address;
+  const disputeVerifierAddress = disputeVerifierDeployment.address;
   const chargebackNullifierRegistryAddress = chargebackNullifierRegistryDeployment.address;
 
   await assertCode(whitelistPolicyAddress, "WhitelistPolicy");
   await assertCode(whitelistHookAddress, "WhitelistLifecycleHook");
   await assertCode(orchestratorAddress, "OrchestratorV3");
-  await assertCode(chargebackVerifierAddress, "ChargebackVerifier");
+  await assertCode(disputeVerifierAddress, "DisputeVerifier");
   await assertCode(chargebackNullifierRegistryAddress, "ChargebackNullifierRegistry");
 
   const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorAddress);
@@ -179,10 +184,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     throw new Error("Lane 31 requires the lane-30 OrchestratorV3 to still use WhitelistLifecycleHook");
   }
 
-  console.log("=== Deploying chargeback lifecycle stack ===");
+  console.log("=== Deploying dispute lifecycle stack ===");
   console.log("Reusing OrchestratorV3:", orchestratorAddress);
   console.log("Reusing WhitelistPolicy:", whitelistPolicyAddress);
-  console.log("Reusing ChargebackVerifier:", chargebackVerifierAddress);
+  console.log("DisputeVerifier:", disputeVerifierAddress);
   console.log("Reusing ChargebackNullifierRegistry:", chargebackNullifierRegistryAddress);
 
   const vaultDeployment = await hre.deployments.deploy("StakeVault", {
@@ -193,17 +198,17 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   if (!vaultDeployment.newlyDeployed) throw new Error("StakeVault was not freshly deployed");
   await waitForDeploymentDelay(hre);
 
-  const policyDeployment = await hre.deployments.deploy("ChargebackPolicy", {
+  const policyDeployment = await hre.deployments.deploy("DisputePolicy", {
     from: deployer,
     args: [
       deployer,
       vaultDeployment.address,
-      chargebackVerifierAddress,
+      disputeVerifierAddress,
       chargebackNullifierRegistryAddress,
     ],
     log: true,
   });
-  if (!policyDeployment.newlyDeployed) throw new Error("ChargebackPolicy was not freshly deployed");
+  if (!policyDeployment.newlyDeployed) throw new Error("DisputePolicy was not freshly deployed");
   await waitForDeploymentDelay(hre);
 
   const hookDeployment = await hre.deployments.deploy("IntentLifecycleHookV1", {
@@ -215,7 +220,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await waitForDeploymentDelay(hre);
 
   const vault = await ethers.getContractAt("StakeVault", vaultDeployment.address);
-  const policy = await ethers.getContractAt("ChargebackPolicy", policyDeployment.address);
+  const policy = await ethers.getContractAt("DisputePolicy", policyDeployment.address);
+  const disputeVerifier = await ethers.getContractAt("DisputeVerifier", disputeVerifierAddress);
   const hook = await ethers.getContractAt("IntentLifecycleHookV1", hookDeployment.address);
   const nullifierRegistry = await ethers.getContractAt("NullifierRegistry", chargebackNullifierRegistryAddress);
 
@@ -240,12 +246,13 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   await setNewOwner(hre, vault, governance);
   await setNewOwner(hre, policy, governance);
+  await setNewOwner(hre, disputeVerifier, governance);
 
-  if (!await systemFullyWired(hre)) throw new Error("Chargeback lifecycle stack verification failed");
+  if (!await systemFullyWired(hre)) throw new Error("Dispute lifecycle stack verification failed");
 
-  console.log("=== Chargeback lifecycle stack verified ===");
+  console.log("=== Dispute lifecycle stack verified ===");
   console.log("StakeVault:", vault.address);
-  console.log("ChargebackPolicy:", policy.address);
+  console.log("DisputePolicy:", policy.address);
   console.log("IntentLifecycleHookV1:", hook.address);
 };
 
@@ -253,11 +260,11 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.deployments.getNetworkName();
   if (!SUPPORTED_NETWORKS.has(network)) return true;
   if (await systemFullyWired(hre)) return true;
-  if (network === "base_staging" && process.env.ENABLE_STAGING_V3_CHARGEBACK_CUTOVER !== "true") return true;
+  if (network === "base_staging" && process.env.ENABLE_STAGING_V3_DISPUTE_CUTOVER !== "true") return true;
   return false;
 };
 
-func.tags = ["31_deploy_chargeback_lifecycle_stack", "V3ChargebackLifecycleStack"];
+func.tags = ["31_deploy_dispute_lifecycle_stack", "V3DisputeLifecycleStack"];
 func.dependencies = ["30_deploy_v3_lifecycle_stack"];
 
 export default func;

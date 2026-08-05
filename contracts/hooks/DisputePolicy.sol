@@ -5,14 +5,14 @@ pragma solidity ^0.8.18;
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-import {IChargebackPolicy} from "../interfaces/IChargebackPolicy.sol";
-import {IChargebackVerifier} from "../interfaces/IChargebackVerifier.sol";
+import {IDisputePolicy} from "../interfaces/IDisputePolicy.sol";
+import {IDisputeVerifier} from "../interfaces/IDisputeVerifier.sol";
 import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 import {INullifierRegistry} from "../interfaces/INullifierRegistry.sol";
 import {IStakeVault} from "../interfaces/IStakeVault.sol";
 
 /**
- * @title ChargebackPolicy
+ * @title DisputePolicy
  * @notice Deposit-scoped, stake-backed chargeback coverage for intent settlement.
  * @dev The policy owns no tokens. StakeVault is the source of truth for collateral locks, a dedicated
  * `chargebackNullifierRegistry` deployment is the source of truth for consumed dispute nullifiers, and the calling
@@ -30,7 +30,7 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
  * intent before StakeVault controller authority moves to a replacement policy unless that replacement explicitly adopts
  * this policy's intent and lock state.
  */
-contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
+contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
 
     uint64 public constant MAX_RISK_WINDOW = 365 days;
@@ -44,8 +44,8 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
     /// @notice Dedicated replay registry for payment-method-scoped chargeback dispute nullifiers.
     INullifierRegistry public immutable chargebackNullifierRegistry;
 
-    /// @notice Verifier used to validate signed chargeback evidence.
-    IChargebackVerifier public chargebackVerifier;
+    /// @notice Verifier used to validate signed dispute evidence.
+    IDisputeVerifier public disputeVerifier;
 
     /// @notice Whether new chargeback-backed admissions are paused. Terminal transitions remain available.
     bool public admissionsPaused;
@@ -70,22 +70,22 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
      * chargeback nullifier registry before enabling deposits.
      * @param _owner Governance owner for policy and dependency configuration.
      * @param _stakeVault Vault holding and locking taker collateral.
-     * @param _chargebackVerifier Verifier for signed chargeback evidence.
+     * @param _disputeVerifier Verifier for signed dispute evidence.
      * @param _chargebackNullifierRegistry Dedicated registry that rejects reused dispute nullifiers.
      */
     constructor(
         address _owner,
         IStakeVault _stakeVault,
-        IChargebackVerifier _chargebackVerifier,
+        IDisputeVerifier _disputeVerifier,
         INullifierRegistry _chargebackNullifierRegistry
     ) {
         if (_owner == address(0)) revert ZeroAddress();
         _validateDependency(address(_stakeVault));
-        _validateDependency(address(_chargebackVerifier));
+        _validateDependency(address(_disputeVerifier));
         _validateDependency(address(_chargebackNullifierRegistry));
 
         stakeVault = _stakeVault;
-        chargebackVerifier = _chargebackVerifier;
+        disputeVerifier = _disputeVerifier;
         chargebackNullifierRegistry = _chargebackNullifierRegistry;
         _transferOwnership(_owner);
     }
@@ -108,7 +108,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
     /* ============ Lifecycle Functions ============ */
 
     /**
-     * @inheritdoc IChargebackPolicy
+     * @inheritdoc IDisputePolicy
      */
     function onIntentSignaled(
         bytes32 _intentHash,
@@ -129,7 +129,6 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
             depositor: depositor,
             paymentMethod: _paymentMethod,
             status: ChargebackIntentStatus.PENDING,
-            isManualRelease: false,
             riskWindow: riskWindow,
             releaseEligibleAt: 0,
             releaseAmount: 0
@@ -140,7 +139,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
     }
 
     /**
-     * @inheritdoc IChargebackPolicy
+     * @inheritdoc IDisputePolicy
      */
     function onIntentCancelled(bytes32 _intentHash) external override onlyLifecycleHook nonReentrant {
         ChargebackIntent storage chargebackIntent = chargebackIntentByIntentHash[_intentHash];
@@ -156,7 +155,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
     }
 
     /**
-     * @inheritdoc IChargebackPolicy
+     * @inheritdoc IDisputePolicy
      */
     function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease)
         external
@@ -172,7 +171,6 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
 
         uint64 releaseEligibleAt = _calculateReleaseEligibleAt(chargebackIntent.riskWindow);
         chargebackIntent.releaseAmount = _releaseAmount;
-        chargebackIntent.isManualRelease = _isManualRelease;
         chargebackIntent.releaseEligibleAt = releaseEligibleAt;
         chargebackIntent.status = ChargebackIntentStatus.SETTLED;
 
@@ -215,14 +213,14 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
      * `releaseEligibleAt`. The dedicated chargeback nullifier registry atomically rejects replayed disputes.
      * @param _attestation Signed chargeback evidence for a settled intent.
      */
-    function submitChargeback(IChargebackVerifier.ChargebackAttestation calldata _attestation) external nonReentrant {
+    function submitChargeback(IDisputeVerifier.DisputeAttestation calldata _attestation) external nonReentrant {
         ChargebackIntent storage chargebackIntent = chargebackIntentByIntentHash[_attestation.intentHash];
         if (chargebackIntent.status != ChargebackIntentStatus.SETTLED) {
             revert ChargebackIntentNotSettled(_attestation.intentHash, chargebackIntent.status);
         }
 
         (bytes32 disputeId, bytes32 disputeNullifier) =
-            chargebackVerifier.verifyChargeback(_attestation, chargebackIntent.paymentMethod);
+            disputeVerifier.verifyDispute(_attestation, chargebackIntent.paymentMethod);
         chargebackNullifierRegistry.addNullifier(disputeNullifier);
 
         uint256 compensatedAmount = chargebackIntent.releaseAmount;
@@ -275,14 +273,14 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
     }
 
     /**
-     * @notice GOVERNANCE ONLY: Replaces the verifier used for future chargeback submissions.
-     * @param _verifier New non-zero deployed chargeback verifier.
+     * @notice GOVERNANCE ONLY: Replaces the verifier used for future dispute submissions.
+     * @param _verifier New non-zero deployed dispute verifier.
      */
-    function setChargebackVerifier(address _verifier) external onlyOwner {
+    function setDisputeVerifier(address _verifier) external onlyOwner {
         _validateDependency(_verifier);
-        address previousVerifier = address(chargebackVerifier);
-        chargebackVerifier = IChargebackVerifier(_verifier);
-        emit ChargebackVerifierUpdated(previousVerifier, _verifier);
+        address previousVerifier = address(disputeVerifier);
+        disputeVerifier = IDisputeVerifier(_verifier);
+        emit DisputeVerifierUpdated(previousVerifier, _verifier);
     }
 
     /**
@@ -335,7 +333,7 @@ contract ChargebackPolicy is IChargebackPolicy, Ownable2Step, ReentrancyGuard {
     }
 
     /**
-     * @inheritdoc IChargebackPolicy
+     * @inheritdoc IDisputePolicy
      */
     function isChargebackEnabled(address _escrow, uint256 _depositId) external view override returns (bool) {
         return isDepositChargebackEnabled[_escrow][_depositId];
