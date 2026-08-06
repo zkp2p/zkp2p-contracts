@@ -3,7 +3,7 @@ export function assertReleaseEnvironment(environment, environmentName, branchPol
     ['required_reviewers', 'wait_timer'].includes(rule.type),
   );
   if (blockingRules.length > 0) {
-    throw new Error(`${environmentName} must not gate autonomous RC publishing`);
+    throw new Error(`${environmentName} must not gate autonomous publishing`);
   }
   const policy = environment.deployment_branch_policy;
   if (policy?.protected_branches !== false || policy?.custom_branch_policies !== true) {
@@ -12,7 +12,8 @@ export function assertReleaseEnvironment(environment, environmentName, branchPol
   if (
     !Array.isArray(branchPolicies) ||
     branchPolicies.length !== 1 ||
-    branchPolicies[0]?.name !== 'main'
+    branchPolicies[0]?.name !== 'main' ||
+    branchPolicies[0]?.type !== 'branch'
   ) {
     throw new Error(`${environmentName} must allow exactly the main branch`);
   }
