@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { X509Certificate } from 'node:crypto';
 
 const publishEnvironment = 'npm-publish';
+const coreSemverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 const stableChannel = Object.freeze({
   channel: 'stable',
@@ -15,6 +16,9 @@ const rcChannel = Object.freeze({
 });
 
 export function resolveReleasePolicy({ release, packageVersion, releaseLine }) {
+  if (!coreSemverPattern.test(releaseLine)) {
+    throw new Error(`release must be exactly ${releaseLine} or ${releaseLine}-rc.N`);
+  }
   if (packageVersion !== release) {
     throw new Error(`release input ${release} does not match package version ${packageVersion}`);
   }
@@ -32,6 +36,15 @@ export function assertExpectedDistTags(actual, expected) {
     if (!expected[tag]) throw new Error(`expected ${tag} baseline is missing`);
     if (actual[tag] !== expected[tag]) {
       throw new Error(`${tag} points to ${actual[tag] || '<missing>'}, expected ${expected[tag]}`);
+    }
+  }
+}
+
+export function assertSuppliedDistTags(actual, expected) {
+  for (const tag of ['latest', 'rc']) {
+    if (!expected[tag]) continue;
+    if (actual?.[tag] !== expected[tag]) {
+      throw new Error(`${tag} moved from ${expected[tag]} to ${actual?.[tag] || '<missing>'}`);
     }
   }
 }
@@ -105,7 +118,7 @@ export function assertCanonicalReleaseSource({
   } catch {
     throw new Error(`recovery requires release tag ${releaseTag} to be an ancestor of canonical main`);
   }
-  const changedFiles = git(cwd, ['diff', '--name-only', `${tagCommit}..${head}`])
+  const changedFiles = git(cwd, ['diff', '--no-renames', '--name-only', `${tagCommit}..${head}`])
     .split('\n')
     .filter(Boolean);
   const unexpected = changedFiles.filter((file) => !allowedRecoveryChanges.has(file));
@@ -325,12 +338,10 @@ export function assertOriginalPublishRun({
   expectedWorkflowPath,
   expectedHeadSha,
   expectedRunId,
-  expectedRunAttempt,
 }) {
   requireNumeric(expectedRunId, 'run ID');
-  requireNumeric(expectedRunAttempt, 'run attempt');
   requireEqual(String(run?.id), expectedRunId, 'original run ID');
-  requireEqual(String(run?.run_attempt), expectedRunAttempt, 'original run attempt');
+  requireNumeric(String(run?.run_attempt), 'run attempt');
   requireEqual(run?.repository?.full_name, expectedRepository, 'original run repository');
   requireEqual(run?.path, expectedWorkflowPath, 'original run workflow path');
   requireEqual(run?.event, 'workflow_dispatch', 'original run event');
@@ -338,11 +349,20 @@ export function assertOriginalPublishRun({
 
   const allJobs = jobs?.jobs || [];
   const publishJob = requireExactlyOne(
-    allJobs.filter((job) => job.name === 'Publish with npm OIDC'),
-    'expected exactly one Publish with npm OIDC job',
+    allJobs.filter(
+      (job) => job.name === 'Publish with npm OIDC' && job.conclusion === 'success',
+    ),
+    'expected exactly one successful Publish with npm OIDC job',
   );
-  if (publishJob.conclusion !== 'success') throw new Error('original publish job must succeed');
-  const verificationJobs = allJobs.filter((job) => job.name === 'Verify published package');
+  const publishAttempt = String(publishJob.run_attempt);
+  requireNumeric(publishAttempt, 'publish job run attempt');
+  const allVerificationJobs = allJobs.filter((job) => job.name === 'Verify published package');
+  const verificationJobs = allVerificationJobs.filter(
+    (job) => String(job.run_attempt) === publishAttempt,
+  );
+  if (allVerificationJobs.length > 0 && verificationJobs.length === 0) {
+    throw new Error(`verification job must match publish attempt ${publishAttempt}`);
+  }
   if (verificationJobs.length > 1) throw new Error('expected at most one Verify published package job');
   if (verificationJobs.length === 1) {
     const verification = verificationJobs[0];
@@ -358,8 +378,42 @@ export function assertOriginalPublishRun({
       throw new Error('verification job must start after publication completed');
     }
   }
-  const recoveryJobs = allJobs.filter((job) => /recovery/i.test(job.name));
+  const allRecoveryJobs = allJobs.filter((job) => /recovery/i.test(job.name));
+  const recoveryJobs = allRecoveryJobs.filter((job) => String(job.run_attempt) === publishAttempt);
+  if (allRecoveryJobs.length > 0 && recoveryJobs.length === 0) {
+    throw new Error(`recovery job must match publish attempt ${publishAttempt}`);
+  }
   if (recoveryJobs.some((job) => job.conclusion !== 'skipped')) {
     throw new Error('original recovery job must be skipped');
+  }
+  return publishAttempt;
+}
+
+export async function fetchAllRunJobs(apiBase, headers, fetchImpl = fetch) {
+  const allJobs = [];
+  let totalCount;
+  for (let page = 1; ; page += 1) {
+    const url = `${apiBase}/jobs?filter=all&per_page=100&page=${page}`;
+    const response = await fetchImpl(url, {
+      headers,
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) throw new Error(`GitHub Actions jobs API returned HTTP ${response.status}`);
+    const payload = await response.json();
+    if (!Number.isSafeInteger(payload?.total_count) || payload.total_count < 0) {
+      throw new Error('GitHub Actions jobs API returned an invalid total_count');
+    }
+    if (!Array.isArray(payload.jobs)) {
+      throw new Error('GitHub Actions jobs API returned an invalid jobs page');
+    }
+    if (totalCount === undefined) totalCount = payload.total_count;
+    if (payload.total_count !== totalCount) {
+      throw new Error('GitHub Actions jobs total_count changed during pagination');
+    }
+    allJobs.push(...payload.jobs);
+    if (allJobs.length === totalCount) return { total_count: totalCount, jobs: allJobs };
+    if (allJobs.length > totalCount || payload.jobs.length === 0) {
+      throw new Error(`GitHub Actions jobs pagination returned ${allJobs.length} of ${totalCount} jobs`);
+    }
   }
 }

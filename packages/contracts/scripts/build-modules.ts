@@ -118,7 +118,34 @@ function compileModule(moduleName: string, format: 'esm' | 'cjs', packageRoot: s
   function processDirectory(currentInputDir: string, currentOutputDir: string, relativePath: string = '') {
     ensureDir(currentOutputDir);
     
-    const entries = fs.readdirSync(currentInputDir, { withFileTypes: true });
+    const entries = fs.readdirSync(currentInputDir, { withFileTypes: true })
+      .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
+    const jsSources = new Map<string, string[]>();
+    for (const entry of entries) {
+      if (!entry.isFile() || entry.name.endsWith('.d.ts')) continue;
+      if (!entry.name.endsWith('.json') && !entry.name.endsWith('.ts')) continue;
+      const jsName = entry.name.replace(/\.(?:json|ts)$/, '.js');
+      const sources = jsSources.get(jsName) || [];
+      sources.push(entry.name);
+      jsSources.set(jsName, sources);
+    }
+    const shadowedJsonSources = new Set<string>();
+    for (const [jsName, sources] of jsSources) {
+      if (sources.length < 2) continue;
+      const jsonSource = sources.find((source) => source.endsWith('.json'));
+      const typescriptSource = sources.find((source) => source.endsWith('.ts'));
+      if (sources.length !== 2 || !jsonSource || !typescriptSource) {
+        throw new Error(
+          `module output collision: ${sources.join(', ')} all emit ${path.join(relativePath, jsName)}`,
+        );
+      }
+      shadowedJsonSources.add(jsonSource);
+      console.warn(
+        `Skipping JSON companion ${path.join(moduleName, relativePath, jsonSource)} because `
+        + `${path.join(moduleName, relativePath, typescriptSource)} emits the same `
+        + `${path.relative(packageRoot, path.join(currentOutputDir, jsName))}; TypeScript takes precedence.`,
+      );
+    }
     
     for (const entry of entries) {
       const inputPath = path.join(currentInputDir, entry.name);
@@ -132,10 +159,12 @@ function compileModule(moduleName: string, format: 'esm' | 'cjs', packageRoot: s
         fs.copyFileSync(inputPath, outputPath);
 
         // Also generate companion JS modules for easier imports
-        const jsonSource = fs.readFileSync(inputPath, 'utf8');
-        const moduleSource = createJsonModule(jsonSource, format);
-        const jsPath = outputPath.replace(/\.json$/, '.js');
-        fs.writeFileSync(jsPath, moduleSource);
+        if (!shadowedJsonSources.has(entry.name)) {
+          const jsonSource = fs.readFileSync(inputPath, 'utf8');
+          const moduleSource = createJsonModule(jsonSource, format);
+          const jsPath = outputPath.replace(/\.json$/, '.js');
+          fs.writeFileSync(jsPath, moduleSource);
+        }
       } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
         // Compile TypeScript files. This must be a real transpilation because utility modules contain
         // type annotations and bigint literals that cannot be copied verbatim into published .js files.

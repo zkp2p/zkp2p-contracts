@@ -8,14 +8,16 @@ import { execFileSync } from 'node:child_process';
 import { normalizeNpmPackResult } from './lib/npm-pack-result.mjs';
 import {
   assertCanonicalReleaseSource,
-  assertExpectedDistTags,
   assertOriginalPublishRun,
+  assertSuppliedDistTags,
   assertVerifiedProvenance,
+  fetchAllRunJobs,
   releaseRegistryExpectations,
   resolveReleasePolicy,
 } from './lib/npm-release-policy.mjs';
 
 const [, , command, packageJsonArg, release, tag, extraArg] = process.argv;
+const coreSemverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const releasePackage = '@zkp2p/contracts-v2';
 
@@ -61,6 +63,28 @@ if (command === 'provenance') {
   if (packageJson.name !== releasePackage || packageJson.version !== release) {
     fail(`provenance package must be ${releasePackage}@${release}`);
   }
+  const provenanceReleaseLine = process.env.RELEASE_LINE;
+  if (!provenanceReleaseLine) {
+    fail('RELEASE_LINE must be set by the repository-controlled release workflow');
+  }
+  let provenancePolicy;
+  try {
+    provenancePolicy = resolveReleasePolicy({
+      release,
+      packageVersion: packageJson.version,
+      releaseLine: provenanceReleaseLine,
+    });
+  } catch (error) {
+    fail(error.message);
+  }
+  if (
+    process.env.RELEASE_ENVIRONMENT !== undefined &&
+    process.env.RELEASE_ENVIRONMENT !== provenancePolicy.environment
+  ) {
+    fail(
+      `environment ${process.env.RELEASE_ENVIRONMENT} does not match resolved environment ${provenancePolicy.environment}`,
+    );
+  }
   let packResult;
   try {
     packResult = normalizeNpmPackResult(
@@ -94,26 +118,27 @@ if (command === 'provenance') {
       authorization: `Bearer ${githubToken}`,
       'x-github-api-version': '2022-11-28',
     };
-    const [runResponse, jobsResponse] = await Promise.all([
-      fetch(apiBase, { headers, signal: AbortSignal.timeout(30_000) }),
-      fetch(`${apiBase}/jobs?filter=all`, { headers, signal: AbortSignal.timeout(30_000) }),
-    ]);
-    if (!runResponse.ok || !jobsResponse.ok) {
-      fail(`GitHub Actions API returned run HTTP ${runResponse.status} and jobs HTTP ${jobsResponse.status}`);
-    }
-    const run = await runResponse.json();
-    const jobs = await jobsResponse.json();
-    runId = originalRunId;
-    runAttempt = String(run.run_attempt);
+    let runResponse;
+    let jobs;
     try {
-      assertOriginalPublishRun({
+      [runResponse, jobs] = await Promise.all([
+        fetch(apiBase, { headers, signal: AbortSignal.timeout(30_000) }),
+        fetchAllRunJobs(apiBase, headers),
+      ]);
+    } catch (error) {
+      fail(error.message);
+    }
+    if (!runResponse.ok) fail(`GitHub Actions run API returned HTTP ${runResponse.status}`);
+    const run = await runResponse.json();
+    runId = originalRunId;
+    try {
+      runAttempt = assertOriginalPublishRun({
         run,
         jobs,
         expectedRepository: 'zkp2p/zkp2p-contracts',
         expectedWorkflowPath: '.github/workflows/publish-contracts-v2.yml',
         expectedHeadSha: githubSha,
         expectedRunId: runId,
-        expectedRunAttempt: runAttempt,
       });
     } catch (error) {
       fail(error.message);
@@ -123,7 +148,6 @@ if (command === 'provenance') {
     [githubSha, 'GITHUB_SHA'],
     [runId, 'GITHUB_RUN_ID'],
     [runAttempt, 'GITHUB_RUN_ATTEMPT'],
-    [process.env.RELEASE_ENVIRONMENT, 'RELEASE_ENVIRONMENT'],
   ]) {
     if (!value) fail(`${label} must be set for provenance verification`);
   }
@@ -142,7 +166,7 @@ if (command === 'provenance') {
       githubSha,
       runId,
       runAttempt,
-      environment: process.env.RELEASE_ENVIRONMENT,
+      environment: provenancePolicy.environment,
     });
   } catch (error) {
     fail(error.message);
@@ -188,11 +212,10 @@ if (command === 'resolve') {
     latest: process.env.LATEST_BASELINE,
     rc: process.env.RC_BASELINE,
   };
-  try {
-    assertExpectedDistTags(baselines, baselines);
-  } catch (error) {
-    fail(error.message);
-  }
+  if (!baselines.latest) fail('expected latest baseline is missing');
+  if (!coreSemverPattern.test(baselines.latest)) fail('LATEST_BASELINE must be core SemVer');
+  if (!baselines.rc) fail('expected rc baseline is missing');
+  if (!semverPattern.test(baselines.rc)) fail('RC_BASELINE must be valid SemVer');
   const expectations = releaseRegistryExpectations({
     channel: policy.channel,
     release,
@@ -208,6 +231,9 @@ if (command === 'resolve') {
     verify_latest: expectations.verify.latest,
     verify_rc: expectations.verify.rc,
   };
+  for (const [name, value] of Object.entries(outputs)) {
+    if (/\r|\n/.test(value)) fail(`GitHub output ${name} must not contain CR or LF`);
+  }
   const outputText = `${Object.entries(outputs)
     .map(([name, value]) => `${name}=${value}`)
     .join('\n')}\n`;
@@ -305,21 +331,22 @@ for (let attempt = 1; attempt <= 12; attempt += 1) {
       lastReason = `version ${release} is not visible`;
     } else if (metadata['dist-tags']?.[tag] !== release) {
       lastReason = `dist-tag ${tag} points to ${metadata['dist-tags']?.[tag] || '<missing>'}`;
-    } else if (
-      process.env.EXPECTED_LATEST &&
-      metadata['dist-tags']?.latest !== process.env.EXPECTED_LATEST
-    ) {
-      lastReason = `latest moved from ${process.env.EXPECTED_LATEST} to ${metadata['dist-tags']?.latest || '<missing>'}`;
-    } else if (published.dist?.integrity !== packResult.integrity) {
-      lastReason = 'registry integrity does not match the validated tarball';
-    } else if (
-      process.env.REQUIRE_PROVENANCE === 'true' &&
-      !published.dist?.attestations?.url
-    ) {
-      lastReason = 'npm provenance attestation is missing';
     } else {
-      console.log(`Registry verification passed for ${packageJson.name}@${release} (${tag}).`);
-      process.exit(0);
+      assertSuppliedDistTags(metadata['dist-tags'], {
+        latest: process.env.EXPECTED_LATEST,
+        rc: process.env.EXPECTED_RC,
+      });
+      if (published.dist?.integrity !== packResult.integrity) {
+        lastReason = 'registry integrity does not match the validated tarball';
+      } else if (
+        process.env.REQUIRE_PROVENANCE === 'true' &&
+        !published.dist?.attestations?.url
+      ) {
+        lastReason = 'npm provenance attestation is missing';
+      } else {
+        console.log(`Registry verification passed for ${packageJson.name}@${release} (${tag}).`);
+        process.exit(0);
+      }
     }
   } catch (error) {
     lastReason = error.message;

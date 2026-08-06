@@ -87,6 +87,25 @@ describe("native module generation", () => {
     expect(source).not.toContain("require(");
   });
 
+  it("deterministically keeps TypeScript output when a JSON companion would collide", async () => {
+    write(packageRoot, "addresses/index.json", JSON.stringify({ networks: ["base"] }));
+    const warning = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      await buildModules(packageRoot);
+
+      const esmIndex = fs.readFileSync(path.join(packageRoot, "_esm/addresses/index.js"), "utf8");
+      const cjsIndex = fs.readFileSync(path.join(packageRoot, "_cjs/addresses/index.js"), "utf8");
+      expect(esmIndex).toMatch(/export \{ default as base \} from ["']\.\/base\.js["'];/);
+      expect(cjsIndex).toContain("exports.base");
+      expect(fs.existsSync(path.join(packageRoot, "_esm/addresses/index.json"))).toBe(true);
+      expect(warning.mock.calls.flat().join("\n")).toMatch(
+        /addresses\/index\.json.*addresses\/index\.ts.*_esm\/addresses\/index\.js/s,
+      );
+    } finally {
+      warning.mockRestore();
+    }
+  });
+
   it("builds a hermetic dual-module tree with resolvable native ESM", async () => {
     await buildModules(packageRoot);
 

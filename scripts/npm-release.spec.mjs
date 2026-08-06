@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -12,7 +13,9 @@ import {
   assertCanonicalReleaseSource,
   assertExpectedDistTags,
   assertOriginalPublishRun,
+  assertSuppliedDistTags,
   assertVerifiedProvenance,
+  fetchAllRunJobs,
   readDerExtensions,
   postPublishDistTags,
   releaseRegistryExpectations,
@@ -76,12 +79,117 @@ function assertCliFails(args, env, pattern) {
   assert.match(`${result.stdout}\n${result.stderr}`, pattern);
 }
 
+function runCli(args, env, nodeArgs = []) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [...nodeArgs, releaseScript, ...args], {
+      cwd: repoRoot,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', (status, signal) => resolve({ status, signal, stdout, stderr }));
+  });
+}
+
+async function createVerifyCliFixture(context, rcDistTag) {
+  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-release-verify-'));
+  const packageJsonPath = path.join(temporaryDirectory, 'package.json');
+  const packJsonPath = path.join(temporaryDirectory, 'pack.json');
+  const retryPreloadPath = path.join(temporaryDirectory, 'fast-retry.cjs');
+  const metadata = {
+    'dist-tags': { latest: '0.4.0', rc: rcDistTag },
+    versions: {
+      '0.4.0': {
+        dist: {
+          integrity: validPackResult.integrity,
+          attestations: { url: 'https://registry.example.test/attestation' },
+        },
+      },
+    },
+  };
+  const expectedPath = `/${encodeURIComponent(expectedPackage)}`;
+  const server = createServer((request, response) => {
+    if (request.method !== 'GET' || request.url !== expectedPath) {
+      response.writeHead(404).end();
+      return;
+    }
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(metadata));
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address();
+  assert.notEqual(address, null);
+  fs.writeFileSync(packageJsonPath, JSON.stringify({
+    name: expectedPackage,
+    version: '0.4.0',
+    publishConfig: { registry: `http://127.0.0.1:${address.port}` },
+  }));
+  fs.writeFileSync(packJsonPath, JSON.stringify([validPackResult]));
+  fs.writeFileSync(retryPreloadPath, `
+const originalSetTimeout = globalThis.setTimeout;
+globalThis.setTimeout = (callback, delay, ...args) =>
+  originalSetTimeout(callback, delay === 5_000 ? 0 : delay, ...args);
+`);
+  context.after(async () => {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+    fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+  });
+  return {
+    args: ['verify', packageJsonPath, '0.4.0', 'latest', packJsonPath],
+    nodeArgs: ['--require', retryPreloadPath],
+  };
+}
+
 function clone(value) {
   return structuredClone(value);
 }
 
 function provenanceFixture() {
   return clone(provenanceAuditFixture);
+}
+
+function writeProvenanceFixtureForEnvironment(directory, environment) {
+  const issuerDer = Buffer.from('https://token.actions.githubusercontent.com')
+    .toString('hex')
+    .match(/../g)
+    .join(':');
+  const configPath = path.join(directory, `openssl-${environment}.cnf`);
+  const keyPath = path.join(directory, `key-${environment}.pem`);
+  const certificatePath = path.join(directory, `certificate-${environment}.der`);
+  const auditPath = path.join(directory, `audit-${environment}.json`);
+  fs.writeFileSync(configPath, `[req]
+distinguished_name = subject
+x509_extensions = extensions
+prompt = no
+
+[subject]
+CN = release-test
+
+[extensions]
+subjectAltName = URI:https://github.com/zkp2p/zkp2p-contracts/.github/workflows/publish-contracts-v2.yml@refs/heads/main
+1.3.6.1.4.1.57264.1.1 = DER:${issuerDer}
+1.3.6.1.4.1.57264.1.23 = ASN1:UTF8String:${environment}
+`);
+  execFileSync('openssl', [
+    'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+    '-keyout', keyPath, '-out', certificatePath, '-outform', 'DER', '-config', configPath,
+  ], { stdio: 'ignore' });
+  const report = provenanceFixture();
+  slsaBundle(report).bundle.verificationMaterial.certificate.rawBytes =
+    fs.readFileSync(certificatePath).toString('base64');
+  fs.writeFileSync(auditPath, JSON.stringify(report));
+  return auditPath;
 }
 
 function provenanceEntry(report) {
@@ -174,17 +282,19 @@ function originalJobsFixture(overrides = {}) {
     jobs: [
       {
         name: 'Publish with npm OIDC',
+        run_attempt: 1,
         conclusion: 'success',
         started_at: '2026-08-06T10:00:00Z',
         completed_at: '2026-08-06T10:02:00Z',
       },
       {
         name: 'Verify published package',
+        run_attempt: 1,
         conclusion: 'failure',
         started_at: '2026-08-06T10:02:01Z',
         completed_at: '2026-08-06T10:03:00Z',
       },
-      { name: 'Verify published release recovery', conclusion: 'skipped' },
+      { name: 'Verify published release recovery', run_attempt: 1, conclusion: 'skipped' },
     ],
     ...overrides,
   };
@@ -209,6 +319,17 @@ test('resolves the exact release line as stable', () => {
       releaseLine: '0.4.0',
     }),
     { channel: 'stable', distTag: 'latest', environment: 'npm-publish' },
+  );
+});
+
+test('rejects a prerelease release line before classifying an exact match as stable', () => {
+  assert.throws(
+    () => resolveReleasePolicy({
+      release: '0.4.0-rc.6',
+      packageVersion: '0.4.0-rc.6',
+      releaseLine: '0.4.0-rc.6',
+    }),
+    /release must be exactly 0\.4\.0-rc\.6 or 0\.4\.0-rc\.6-rc\.N/,
   );
 });
 
@@ -251,6 +372,54 @@ test('requires both committed dist-tag baselines before publication', () => {
     ),
     /rc points to 0\.4\.0-rc\.6, expected 0\.4\.0-rc\.5/,
   );
+});
+
+test('checks every supplied post-publish dist-tag invariant independently', () => {
+  assert.throws(
+    () => assertSuppliedDistTags(
+      { latest: '0.4.0', rc: '0.4.0-rc.6' },
+      { latest: '0.4.0', rc: '0.4.0-rc.5' },
+    ),
+    /rc moved from 0\.4\.0-rc\.5 to 0\.4\.0-rc\.6/,
+  );
+  assert.doesNotThrow(() => assertSuppliedDistTags(
+    { latest: '0.4.0', rc: '0.4.0-rc.6' },
+    { latest: '0.4.0' },
+  ));
+});
+
+test('verify CLI accepts an rc dist-tag matching EXPECTED_RC', async (context) => {
+  const fixture = await createVerifyCliFixture(context, '0.4.0-rc.5');
+  const env = releaseEnvironment({ EXPECTED_RC: '0.4.0-rc.5' });
+  delete env.EXPECTED_LATEST;
+
+  const result = await runCli(fixture.args, env, fixture.nodeArgs);
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /Registry verification passed/);
+});
+
+test('verify CLI rejects an rc dist-tag that moved from EXPECTED_RC', async (context) => {
+  const fixture = await createVerifyCliFixture(context, '0.4.0-rc.6');
+  const env = releaseEnvironment({ EXPECTED_RC: '0.4.0-rc.5' });
+  delete env.EXPECTED_LATEST;
+
+  const result = await runCli(fixture.args, env, fixture.nodeArgs);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /rc moved from 0\.4\.0-rc\.5 to 0\.4\.0-rc\.6/);
+});
+
+test('verify CLI leaves the rc dist-tag unchecked when EXPECTED_RC is unset', async (context) => {
+  const fixture = await createVerifyCliFixture(context, '0.4.0-rc.99');
+  const env = releaseEnvironment();
+  delete env.EXPECTED_LATEST;
+  delete env.EXPECTED_RC;
+
+  const result = await runCli(fixture.args, env, fixture.nodeArgs);
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /Registry verification passed/);
 });
 
 test('changes only the selected tag after publication', () => {
@@ -340,6 +509,31 @@ test('resolve requires GITHUB_OUTPUT in GitHub Actions', (context) => {
     env,
     /GITHUB_OUTPUT must be set in GitHub Actions/,
   );
+});
+
+test('resolve rejects newline-bearing baselines without writing GITHUB_OUTPUT', (context) => {
+  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-release-injection-'));
+  context.after(() => fs.rmSync(temporaryDirectory, { recursive: true, force: true }));
+  const packageJsonPath = path.join(temporaryDirectory, 'package.json');
+  const outputPath = path.join(temporaryDirectory, 'github-output');
+  fs.writeFileSync(packageJsonPath, JSON.stringify({ name: expectedPackage, version: '0.4.0-rc.6' }));
+
+  const result = spawnSync(
+    process.execPath,
+    [releaseScript, 'resolve', packageJsonPath, '0.4.0-rc.6'],
+    {
+      cwd: repoRoot,
+      env: releaseEnvironment({
+        LATEST_BASELINE: '0.3.0\nenvironment=npm-publish\ndist_tag=latest',
+        GITHUB_OUTPUT: outputPath,
+      }),
+      encoding: 'utf8',
+    },
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /LATEST_BASELINE must be core SemVer/);
+  assert.equal(fs.existsSync(outputPath), false);
 });
 
 for (const recoveryMode of ['', 'yes', '1']) {
@@ -538,6 +732,27 @@ test('rejects recovery changes outside the exact allowlist', (context) => {
   );
 });
 
+test('rejects recovery that renames a contract onto an allowlisted path', (context) => {
+  const fixture = createReleaseGitFixture();
+  context.after(() => fs.rmSync(fixture.cwd, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(fixture.cwd, 'contracts'));
+  fs.writeFileSync(path.join(fixture.cwd, 'contracts/EscrowV2.sol'), 'contract EscrowV2 {}\n');
+  git(fixture.cwd, ['add', 'contracts/EscrowV2.sol']);
+  git(fixture.cwd, ['commit', '-m', 'add contract']);
+  git(fixture.cwd, ['tag', '-d', 'contracts-v2-v0.4.0']);
+  git(fixture.cwd, ['tag', '-a', 'contracts-v2-v0.4.0', '-m', 'release']);
+  fs.mkdirSync(path.join(fixture.cwd, 'scripts', 'lib'), { recursive: true });
+  git(fixture.cwd, ['mv', 'contracts/EscrowV2.sol', 'scripts/lib/npm-release-policy.mjs']);
+  git(fixture.cwd, ['commit', '-m', 'rename contract onto recovery path']);
+  const sha = git(fixture.cwd, ['rev-parse', 'HEAD']);
+  git(fixture.cwd, ['update-ref', 'refs/remotes/zkp2p-canonical/main', sha]);
+
+  assert.throws(
+    () => assertCanonicalReleaseSource(canonicalArguments({ ...fixture, sha }, { recovery: true })),
+    /outside recovery code: contracts\/EscrowV2\.sol/,
+  );
+});
+
 test('pins the public RC5 provenance fixture and its protected identity', () => {
   assert.equal(provenanceFixtureBytes.length, 68557);
   assert.equal(
@@ -572,6 +787,7 @@ test('provenance CLI runs npm cryptographic verification in the clean consumer d
     version: '0.4.0-rc.5',
     integrity: provenanceArguments.integrity,
   }]));
+  const auditPath = writeProvenanceFixtureForEnvironment(temporaryDirectory, 'npm-publish');
   const npmPath = path.join(binDirectory, 'npm');
   fs.writeFileSync(npmPath, `#!/usr/bin/env node
 const fs = require('node:fs');
@@ -592,11 +808,11 @@ process.stdout.write(fs.readFileSync(process.env.AUDIT_FIXTURE));
     env: releaseEnvironment({
       PATH: `${binDirectory}${path.delimiter}${process.env.PATH}`,
       INVOCATION_PATH: invocationPath,
-      AUDIT_FIXTURE: provenanceFixturePath,
+      AUDIT_FIXTURE: auditPath,
       GITHUB_SHA: provenanceArguments.githubSha,
       GITHUB_RUN_ID: provenanceArguments.runId,
       GITHUB_RUN_ATTEMPT: provenanceArguments.runAttempt,
-      RELEASE_ENVIRONMENT: provenanceArguments.environment,
+      RELEASE_ENVIRONMENT: 'npm-publish',
       RECOVERY_MODE: 'false',
     }),
   });
@@ -605,6 +821,117 @@ process.stdout.write(fs.readFileSync(process.env.AUDIT_FIXTURE));
     args: ['audit', 'signatures', '--json', '--include-attestations'],
     cwd: fs.realpathSync(consumerDirectory),
   });
+});
+
+test('provenance CLI derives npm-publish from policy when RELEASE_ENVIRONMENT is unset', (context) => {
+  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-release-provenance-derived-'));
+  context.after(() => fs.rmSync(temporaryDirectory, { recursive: true, force: true }));
+  const binDirectory = path.join(temporaryDirectory, 'bin');
+  const consumerDirectory = path.join(temporaryDirectory, 'consumer');
+  const packageJsonPath = path.join(temporaryDirectory, 'package.json');
+  const packJsonPath = path.join(temporaryDirectory, 'pack.json');
+  fs.mkdirSync(binDirectory);
+  fs.mkdirSync(consumerDirectory);
+  fs.writeFileSync(packageJsonPath, JSON.stringify({ name: expectedPackage, version: '0.4.0-rc.5' }));
+  fs.writeFileSync(packJsonPath, JSON.stringify([{
+    ...validPackResult,
+    version: '0.4.0-rc.5',
+    integrity: provenanceArguments.integrity,
+  }]));
+  const auditPath = writeProvenanceFixtureForEnvironment(temporaryDirectory, 'npm-publish');
+  const npmPath = path.join(binDirectory, 'npm');
+  fs.writeFileSync(npmPath, `#!/usr/bin/env node
+const fs = require('node:fs');
+process.stdout.write(fs.readFileSync(process.env.AUDIT_FIXTURE));
+`);
+  fs.chmodSync(npmPath, 0o755);
+  const env = releaseEnvironment({
+    PATH: `${binDirectory}${path.delimiter}${process.env.PATH}`,
+    AUDIT_FIXTURE: auditPath,
+    GITHUB_SHA: provenanceArguments.githubSha,
+    GITHUB_RUN_ID: provenanceArguments.runId,
+    GITHUB_RUN_ATTEMPT: provenanceArguments.runAttempt,
+    RECOVERY_MODE: 'false',
+  });
+  delete env.RELEASE_ENVIRONMENT;
+
+  const result = spawnSync(process.execPath, [
+    releaseScript,
+    'provenance',
+    packageJsonPath,
+    '0.4.0-rc.5',
+    packJsonPath,
+    consumerDirectory,
+  ], { cwd: repoRoot, env, encoding: 'utf8' });
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /Verified npm provenance/);
+});
+
+test('provenance CLI requires RELEASE_LINE', (context) => {
+  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-release-provenance-line-'));
+  context.after(() => fs.rmSync(temporaryDirectory, { recursive: true, force: true }));
+  const packageJsonPath = path.join(temporaryDirectory, 'package.json');
+  fs.writeFileSync(packageJsonPath, JSON.stringify({ name: expectedPackage, version: '0.4.0-rc.5' }));
+  const env = releaseEnvironment();
+  delete env.RELEASE_LINE;
+
+  assertCliFails(
+    ['provenance', packageJsonPath, '0.4.0-rc.5', 'unused-pack.json', 'unused-consumer'],
+    env,
+    /RELEASE_LINE must be set/,
+  );
+});
+
+test('provenance rejects a supplied environment that differs from release policy', (context) => {
+  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-release-provenance-policy-'));
+  context.after(() => fs.rmSync(temporaryDirectory, { recursive: true, force: true }));
+  const binDirectory = path.join(temporaryDirectory, 'bin');
+  const consumerDirectory = path.join(temporaryDirectory, 'consumer');
+  const packageJsonPath = path.join(temporaryDirectory, 'package.json');
+  const packJsonPath = path.join(temporaryDirectory, 'pack.json');
+  fs.mkdirSync(binDirectory);
+  fs.mkdirSync(consumerDirectory);
+  fs.writeFileSync(packageJsonPath, JSON.stringify({ name: expectedPackage, version: '0.4.0-rc.5' }));
+  fs.writeFileSync(packJsonPath, JSON.stringify([{
+    ...validPackResult,
+    version: '0.4.0-rc.5',
+    integrity: provenanceArguments.integrity,
+  }]));
+  const auditPath = writeProvenanceFixtureForEnvironment(temporaryDirectory, 'npm-publish-rc');
+  const npmPath = path.join(binDirectory, 'npm');
+  fs.writeFileSync(npmPath, `#!/usr/bin/env node
+const fs = require('node:fs');
+process.stdout.write(fs.readFileSync(process.env.AUDIT_FIXTURE));
+`);
+  fs.chmodSync(npmPath, 0o755);
+
+  const result = spawnSync(process.execPath, [
+    releaseScript,
+    'provenance',
+    packageJsonPath,
+    '0.4.0-rc.5',
+    packJsonPath,
+    consumerDirectory,
+  ], {
+    cwd: repoRoot,
+    env: releaseEnvironment({
+      PATH: `${binDirectory}${path.delimiter}${process.env.PATH}`,
+      AUDIT_FIXTURE: auditPath,
+      GITHUB_SHA: provenanceArguments.githubSha,
+      GITHUB_RUN_ID: provenanceArguments.runId,
+      GITHUB_RUN_ATTEMPT: provenanceArguments.runAttempt,
+      RELEASE_ENVIRONMENT: 'npm-publish-rc',
+      RECOVERY_MODE: 'false',
+    }),
+    encoding: 'utf8',
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    `${result.stdout}\n${result.stderr}`,
+    /environment npm-publish-rc does not match resolved environment npm-publish/,
+  );
 });
 
 const provenanceMutations = [
@@ -678,7 +1005,6 @@ test('accepts the exact original successful publish run and attempt', () => {
     expectedWorkflowPath: '.github/workflows/publish-contracts-v2.yml',
     expectedHeadSha: '0123456789abcdef0123456789abcdef01234567',
     expectedRunId: '123456789',
-    expectedRunAttempt: '1',
   }));
 });
 
@@ -690,15 +1016,71 @@ test('accepts a successful post-publish verification job', () => {
     expectedRepository: 'zkp2p/zkp2p-contracts',
     expectedWorkflowPath: '.github/workflows/publish-contracts-v2.yml',
     expectedHeadSha: '0123456789abcdef0123456789abcdef01234567',
-    expectedRunId: '123456789', expectedRunAttempt: '1',
+    expectedRunId: '123456789',
   }));
+});
+
+test('binds recovery provenance to the successful publish attempt before a failed-job rerun', () => {
+  const jobs = originalJobsFixture();
+  jobs.jobs.push({
+    ...jobs.jobs[1],
+    run_attempt: 2,
+    conclusion: 'success',
+    started_at: '2026-08-06T10:04:00Z',
+    completed_at: '2026-08-06T10:05:00Z',
+  });
+
+  const publishAttempt = assertOriginalPublishRun({
+    run: originalRunFixture({ run_attempt: 2 }), jobs,
+    expectedRepository: 'zkp2p/zkp2p-contracts',
+    expectedWorkflowPath: '.github/workflows/publish-contracts-v2.yml',
+    expectedHeadSha: '0123456789abcdef0123456789abcdef01234567',
+    expectedRunId: '123456789',
+  });
+
+  assert.equal(publishAttempt, '1');
+});
+
+test('rejects verification job data that does not include the publish attempt', () => {
+  const jobs = originalJobsFixture();
+  jobs.jobs[1].run_attempt = 2;
+
+  assert.throws(() => assertOriginalPublishRun({
+    run: originalRunFixture({ run_attempt: 2 }), jobs,
+    expectedRepository: 'zkp2p/zkp2p-contracts',
+    expectedWorkflowPath: '.github/workflows/publish-contracts-v2.yml',
+    expectedHeadSha: '0123456789abcdef0123456789abcdef01234567',
+    expectedRunId: '123456789',
+  }), /verification job must match publish attempt 1/);
+});
+
+test('loads every GitHub Actions jobs page before selecting the publish attempt', async () => {
+  const calls = [];
+  const pageOne = Array.from({ length: 100 }, (_, id) => ({ id }));
+  const pageTwo = [{ id: 100, name: 'Publish with npm OIDC', run_attempt: 1 }];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    const jobs = calls.length === 1 ? pageOne : pageTwo;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ total_count: 101, jobs }),
+    };
+  };
+
+  const jobs = await fetchAllRunJobs('https://api.example.test/actions/runs/123', {}, fetchImpl);
+
+  assert.equal(jobs.jobs.length, 101);
+  assert.deepEqual(calls, [
+    'https://api.example.test/actions/runs/123/jobs?filter=all&per_page=100&page=1',
+    'https://api.example.test/actions/runs/123/jobs?filter=all&per_page=100&page=2',
+  ]);
 });
 
 for (const [description, overrides, pattern] of [
   ['malformed run ID', { expectedRunId: '12x' }, /run ID must be numeric/],
-  ['malformed attempt', { expectedRunAttempt: '' }, /run attempt must be numeric/],
+  ['malformed attempt', { run: originalRunFixture({ run_attempt: '' }) }, /run attempt must be numeric/],
   ['wrong run ID', { expectedRunId: '123456788' }, /run ID/],
-  ['wrong attempt', { expectedRunAttempt: '2' }, /run attempt/],
   ['wrong repository', { run: originalRunFixture({ repository: { full_name: 'fork/repo' } }) }, /repository/],
   ['wrong workflow path', { run: originalRunFixture({ path: '.github/workflows/other.yml' }) }, /workflow path/],
   ['wrong event', { run: originalRunFixture({ event: 'push' }) }, /workflow_dispatch/],
@@ -710,17 +1092,18 @@ for (const [description, overrides, pattern] of [
       expectedRepository: 'zkp2p/zkp2p-contracts',
       expectedWorkflowPath: '.github/workflows/publish-contracts-v2.yml',
       expectedHeadSha: '0123456789abcdef0123456789abcdef01234567',
-      expectedRunId: '123456789', expectedRunAttempt: '1',
+      expectedRunId: '123456789',
       ...overrides,
     }), pattern);
   });
 }
 
 for (const [description, mutateJobs, pattern] of [
-  ['missing publish job', (jobs) => { jobs.jobs = jobs.jobs.filter((job) => job.name !== 'Publish with npm OIDC'); }, /exactly one Publish with npm OIDC job/],
-  ['duplicate publish job', (jobs) => { jobs.jobs.push(clone(jobs.jobs[0])); }, /exactly one Publish with npm OIDC job/],
-  ['failed publish job', (jobs) => { jobs.jobs[0].conclusion = 'failure'; }, /publish job must succeed/],
-  ['skipped publish job', (jobs) => { jobs.jobs[0].conclusion = 'skipped'; }, /publish job must succeed/],
+  ['missing publish job', (jobs) => { jobs.jobs = jobs.jobs.filter((job) => job.name !== 'Publish with npm OIDC'); }, /exactly one successful Publish with npm OIDC job/],
+  ['duplicate publish job', (jobs) => { jobs.jobs.push(clone(jobs.jobs[0])); }, /exactly one successful Publish with npm OIDC job/],
+  ['failed publish job', (jobs) => { jobs.jobs[0].conclusion = 'failure'; }, /exactly one successful Publish with npm OIDC job/],
+  ['skipped publish job', (jobs) => { jobs.jobs[0].conclusion = 'skipped'; }, /exactly one successful Publish with npm OIDC job/],
+  ['malformed publish attempt', (jobs) => { jobs.jobs[0].run_attempt = ''; }, /publish job run attempt must be numeric/],
   ['verification before publish', (jobs) => { jobs.jobs[1].started_at = '2026-08-06T10:01:00Z'; }, /verification job must start after publication/],
   ['missing publish completion timestamp', (jobs) => { delete jobs.jobs[0].completed_at; }, /timestamps must be valid/],
   ['invalid verification start timestamp', (jobs) => { jobs.jobs[1].started_at = 'invalid'; }, /timestamps must be valid/],
@@ -734,7 +1117,7 @@ for (const [description, mutateJobs, pattern] of [
       expectedRepository: 'zkp2p/zkp2p-contracts',
       expectedWorkflowPath: '.github/workflows/publish-contracts-v2.yml',
       expectedHeadSha: '0123456789abcdef0123456789abcdef01234567',
-      expectedRunId: '123456789', expectedRunAttempt: '1',
+      expectedRunId: '123456789',
     }), pattern);
   });
 }
