@@ -669,23 +669,45 @@ nullifier-writer permission. Existing intents retain their snapshotted whitelist
 Commit the newly generated canonical artifacts after each authorized deployment. Do not commit the
 temporary artifact removals.
 
+### Corrected WhitelistPolicy Deployment
+
+`deploy/32_deploy_corrected_whitelist_policy.ts` prepares a Base-only `WhitelistPolicyV2` deployment
+that reuses the canonical AddressGroup, Escrow, and Orchestrator registries. It is gated by
+`ENABLE_BASE_CORRECTED_WHITELIST_DEPLOYMENT=true`, leaves the current `WhitelistPolicy` and lifecycle
+hook untouched, and deliberately retains replacement-policy ownership on the deployer so the corrected
+deposit bootstrap can run directly. It never transfers ownership to the multisig.
+
+After an authorized deployment, run the bootstrap dry-run and pin its exact deposit count and selection
+digest before direct execution. The production bootstrap accepts only these verified group IDs:
+
+- Peer: `0xd75c75f345c8e5d4a9f48bc0cc458cf15adb0c4393469d6b10da1655c2c1c0f1`
+- Plus: `0x76d8468179105f4ec9ba8f553823f44dcde6eeb997ba5b70da09849effc0375e`
+- Pro: `0xe2ada1e143bc3a45398381b4b5bbb9e7ed6ccba40225168f32e9702e0c4e8260`
+- Peer Pay: `0x174b8a29536721a3eae290bfd55651b85a53fc334b971d993fa93ed8dde15e48`
+- Peer Makers: `0xdf1c64c54745aa1ce00642a5874f97e3183bf5e993c1f559d0a37a4df0b803c7`
+
+Ownership transfer and lifecycle-hook cutover are later production boundaries and are not part of this lane.
+
 ### Whitelist Bootstrap
 
 `yarn whitelist:bootstrap` discovers active deposits from a configurable raw GraphQL endpoint and
 selects only deposits with an active Venmo, Cash App, or PayPal payment method. It deduplicates the
 matching method rows by deposit and simulates canonical `WhitelistPolicy.bootstrapDeposits` batches
-for the explicitly supplied PRO, PLUS, Peer Pay, and Peer Makers group IDs. It imports no indexer
+for the explicitly supplied PRO, PLUS, Peer, Peer Pay, and Peer Makers group IDs. It imports no indexer
 schema package, so the contracts and indexer packages remain acyclic. Discovery is a dry-run by
 default; mutation and Safe output require both the exact expected deposit count and the printed
 selection digest, and all discovery modes enforce a configurable maximum.
 
 - Staging execution requires `BOOTSTRAP_EXECUTE=true` and the current policy owner's private key.
-- Production Safe preparation requires `BOOTSTRAP_SAFE_OUTPUT_FILE`; it emits unsigned Transaction
-  Builder JSON owned by the policy's onchain owner, and never signs or submits it.
+- Safe preparation requires `BOOTSTRAP_SAFE_OUTPUT_FILE` and an onchain policy owner that is already a
+  Safe; it emits unsigned Transaction Builder JSON and never signs or submits it. The Base replacement
+  policy deliberately remains deployer-owned during bootstrap, so its bootstrap uses direct execution.
 - Direct execution and Safe output are mutually exclusive. Every batch is simulated and its calldata
   decoded and checked before either execution or file output.
-- Base execution is pinned to the canonical production indexer, deployment artifacts, and exact four
-  production group IDs. It also requires `BOOTSTRAP_CONFIRM_PRODUCTION=true`.
+- Base execution is pinned to the canonical production indexer, the separately deployed
+  `WhitelistPolicyV2` artifact, and the exact five verified production group IDs. It also requires
+  `BOOTSTRAP_CONFIRM_PRODUCTION=true`. The replacement policy remains owned by the deployer during
+  bootstrap; ownership transfer and lifecycle-hook cutover are intentionally separate actions.
 - `BOOTSTRAP_ALLOW_COMPLETED=true` resumes only batches whose deposits are still enabled and contain
   every requested group. The script rechecks policy ownership before each submitted batch.
 - Direct execution uses the receipt RPC for confirmation and bounded post-receipt state reads. It computes

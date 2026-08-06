@@ -32,6 +32,7 @@
     "test:fuzz": "forge test --match-path 'test-foundry/fuzz/**/*.t.sol'",
     "test:invariant": "forge test --match-path 'test-foundry/invariant/**/*.t.sol'",
     "test:v3-groups-deployment": "node scripts/test-v3-groups-base-deployment.cjs prepare-resume && node scripts/test-v3-groups-base-deployment.cjs reject-mismatch",
+    "test:corrected-whitelist-deployment": "node scripts/test-corrected-whitelist-base-deployment.cjs prepare-resume && node scripts/test-corrected-whitelist-base-deployment.cjs reject-transferred && node scripts/test-corrected-whitelist-base-deployment.cjs reject-chain",
     "test:release-policy": "node --test scripts/verify-github-environment.spec.mjs",
     "typechain": "hardhat typechain",
     "transpile": "tsc"

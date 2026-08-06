@@ -96,9 +96,11 @@ const TARGET_PAYMENT_METHOD_HASHES = TARGET_PAYMENT_METHODS.map(({ hash }) => ha
 const TARGET_PAYMENT_METHOD_HASH_SET = new Set<string>(TARGET_PAYMENT_METHOD_HASHES);
 
 const PRODUCTION_INDEXER_URL = "https://indexer.zkp2p.xyz/v1/graphql";
+const PRODUCTION_POLICY_DEPLOYMENT = "WhitelistPolicyV2";
 const PRODUCTION_GROUP_IDS = {
-  pro: "0xf030f72e772f954059ca28f94974088aaf6ba37bb1f264df48843a3d0c221dc3",
-  plus: "0xb8747401b308d4891385620071b5916e9c61284f25c4611541c529703de5babf",
+  pro: "0xe2ada1e143bc3a45398381b4b5bbb9e7ed6ccba40225168f32e9702e0c4e8260",
+  plus: "0x76d8468179105f4ec9ba8f553823f44dcde6eeb997ba5b70da09849effc0375e",
+  peer: "0xd75c75f345c8e5d4a9f48bc0cc458cf15adb0c4393469d6b10da1655c2c1c0f1",
   peerPay: "0x174b8a29536721a3eae290bfd55651b85a53fc334b971d993fa93ed8dde15e48",
   peerMakers: "0xdf1c64c54745aa1ce00642a5874f97e3183bf5e993c1f559d0a37a4df0b803c7",
 } as const;
@@ -185,6 +187,7 @@ Required environment:
   BOOTSTRAP_INDEXER_GRAPHQL_URL
   WHITELIST_PRO_GROUP_ID
   WHITELIST_PLUS_GROUP_ID
+  WHITELIST_PEER_GROUP_ID
   WHITELIST_PEER_PAY_GROUP_ID
   WHITELIST_PEER_MAKERS_GROUP_ID
 
@@ -301,9 +304,10 @@ function loadConfig(): BootstrapConfig {
     throw new Error("BOOTSTRAP_NETWORK must be base_staging or base");
   }
   const network = networkValue;
+  const policyDeployment = network === "base" ? PRODUCTION_POLICY_DEPLOYMENT : "WhitelistPolicy";
   const policyAddress = normalizeAddress(
     process.env.BOOTSTRAP_WHITELIST_POLICY_ADDRESS?.trim()
-      || deploymentAddress(network, "WhitelistPolicy"),
+      || deploymentAddress(network, policyDeployment),
     "WhitelistPolicy",
   );
   const configuredEscrows = process.env.BOOTSTRAP_ESCROW_ADDRESSES
@@ -319,13 +323,14 @@ function loadConfig(): BootstrapConfig {
   ];
 
   const groupIds = [
-    normalizeGroupId(requireEnvironment("WHITELIST_PRO_GROUP_ID"), "WHITELIST_PRO_GROUP_ID"),
+    normalizeGroupId(requireEnvironment("WHITELIST_PEER_GROUP_ID"), "WHITELIST_PEER_GROUP_ID"),
     normalizeGroupId(requireEnvironment("WHITELIST_PLUS_GROUP_ID"), "WHITELIST_PLUS_GROUP_ID"),
+    normalizeGroupId(requireEnvironment("WHITELIST_PRO_GROUP_ID"), "WHITELIST_PRO_GROUP_ID"),
     normalizeGroupId(requireEnvironment("WHITELIST_PEER_PAY_GROUP_ID"), "WHITELIST_PEER_PAY_GROUP_ID"),
     normalizeGroupId(requireEnvironment("WHITELIST_PEER_MAKERS_GROUP_ID"), "WHITELIST_PEER_MAKERS_GROUP_ID"),
   ];
   if (new Set(groupIds).size !== groupIds.length) {
-    throw new Error("PRO, PLUS, Peer Pay, and Peer Makers group ids must be distinct");
+    throw new Error("PRO, PLUS, Peer, Peer Pay, and Peer Makers group ids must be distinct");
   }
 
   const execute = process.env.BOOTSTRAP_EXECUTE === "true";
@@ -376,7 +381,7 @@ function loadConfig(): BootstrapConfig {
   }
 
   if (network === "base") {
-    const expectedPolicyAddress = deploymentAddress("base", "WhitelistPolicy");
+    const expectedPolicyAddress = deploymentAddress("base", PRODUCTION_POLICY_DEPLOYMENT);
     const expectedEscrowAddress = deploymentAddress("base", "EscrowV2");
     if (policyAddress.toLowerCase() !== expectedPolicyAddress.toLowerCase()) {
       throw new Error(`Base bootstrap must use deployed WhitelistPolicy ${expectedPolicyAddress}`);
@@ -391,13 +396,16 @@ function loadConfig(): BootstrapConfig {
       throw new Error(`Base bootstrap must use production indexer ${PRODUCTION_INDEXER_URL}`);
     }
     const expectedGroupIds = [
-      PRODUCTION_GROUP_IDS.pro,
+      PRODUCTION_GROUP_IDS.peer,
       PRODUCTION_GROUP_IDS.plus,
+      PRODUCTION_GROUP_IDS.pro,
       PRODUCTION_GROUP_IDS.peerPay,
       PRODUCTION_GROUP_IDS.peerMakers,
     ];
     if (!groupIds.every((groupId, index) => groupId === expectedGroupIds[index])) {
-      throw new Error("Base bootstrap group ids do not match the exact PRO, PLUS, Peer Pay, and Peer Makers groups");
+      throw new Error(
+        "Base bootstrap group ids do not match the exact PRO, PLUS, Peer, Peer Pay, and Peer Makers groups",
+      );
     }
     if (mode === "execute" && process.env.BOOTSTRAP_CONFIRM_PRODUCTION !== "true") {
       throw new Error("BOOTSTRAP_CONFIRM_PRODUCTION=true is required for direct execution on Base");
@@ -642,6 +650,7 @@ function runSelfTest(): void {
     `0x${"22".repeat(32)}`,
     `0x${"33".repeat(32)}`,
     `0x${"44".repeat(32)}`,
+    `0x${"55".repeat(32)}`,
   ];
   const transaction = buildSafeTransaction(policyAddress, escrowAddress, depositIds, groupIds);
   const decoded = new ethers.utils.Interface(POLICY_ABI)

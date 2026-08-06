@@ -133,6 +133,8 @@ Current numbered lanes include:
 - `28`: `IntentGuardian`;
 - `29`: V2 whitelist policy.
 - `30`: V3 lifecycle stack for local, Hardhat, and Base staging only.
+- `32`: Base-only corrected whitelist policy candidate. It retains deployer ownership for bootstrap and does not
+  change the active lifecycle hook.
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. Deployment is a separately approved mutation for the
