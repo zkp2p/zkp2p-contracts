@@ -343,15 +343,15 @@ test('derives a future RC release line from the package version', () => {
   );
 });
 
-test('commits the stable release candidate while preserving version-derived RC support', () => {
+test('commits the next RC candidate while preserving stable release support', () => {
   const packageManifest = JSON.parse(fs.readFileSync(packageManifestPath, 'utf8'));
-  assert.equal(packageManifest.version, '0.4.0');
+  assert.equal(packageManifest.version, '0.4.0-rc.6');
   assert.deepEqual(
     resolveReleasePolicy({
-      release: '0.4.0-rc.6',
-      packageVersion: '0.4.0-rc.6',
+      release: '0.4.0',
+      packageVersion: '0.4.0',
     }),
-    { channel: 'rc', distTag: 'rc', environment: 'npm-publish' },
+    { channel: 'stable', distTag: 'latest', environment: 'npm-publish' },
   );
 });
 
