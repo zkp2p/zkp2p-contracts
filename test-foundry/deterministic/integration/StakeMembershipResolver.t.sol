@@ -3,9 +3,10 @@
 pragma solidity ^0.8.18;
 
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
+import {IStakeVault} from "contracts/interfaces/IStakeVault.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {ChargebackPolicy} from "contracts/hooks/ChargebackPolicy.sol";
-import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
+import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {StakeMembershipResolver} from "contracts/hooks/StakeMembershipResolver.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";
@@ -17,11 +18,13 @@ import {ChargebackVerifier} from "contracts/unifiedVerifier/ChargebackVerifier.s
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 
 /**
- * @notice POC coverage for the stake-backed group periphery: StakeMembershipResolver (live,
- * stake-derived group membership) composed with IntentLifecycleHookV2's collateralized-membership
- * routing (whitelist identity AND chargeback stake lock on the same deposit).
+ * @notice POC coverage for resolver-only stake-backed groups on the unchanged V3 lifecycle stack:
+ * StakeMembershipResolver supplies live stake-derived membership through AddressGroupRegistry, and
+ * the deployed IntentLifecycleHookV1 + ChargebackPolicy lane keeps enforcing collateral. The suite
+ * also pins the V1 routing trap as executable documentation: a stake-derived group added to a
+ * covered deposit's whitelist admits members WITHOUT a lock, so covered deposits must not do that.
  */
-contract StakeGroupCollateralizedMembershipTest is OrchestratorV3Fixture {
+contract StakeMembershipResolverIntegrationTest is OrchestratorV3Fixture {
     uint256 internal constant MIN_STAKE = 100e6; // above the fixture's 50e6 INTENT_AMOUNT
     uint64 internal constant RISK_WINDOW = 7 days;
 
@@ -32,7 +35,7 @@ contract StakeGroupCollateralizedMembershipTest is OrchestratorV3Fixture {
     StakeVault internal stakeVault;
     ChargebackPolicy internal chargebackPolicy;
     StakeMembershipResolver internal resolver;
-    IntentLifecycleHookV2 internal lifecycleHook;
+    IntentLifecycleHookV1 internal lifecycleHook;
 
     function setUp() public override {
         super.setUp();
@@ -58,16 +61,16 @@ contract StakeGroupCollateralizedMembershipTest is OrchestratorV3Fixture {
         groupRegistry.setResolver(STAKED, address(resolver));
         resolver.setGroupMinStake(STAKED, MIN_STAKE);
 
-        lifecycleHook = new IntentLifecycleHookV2(orchestratorRegistry, policy, chargebackPolicy);
+        lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, policy, chargebackPolicy);
         chargebackPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
         IOrchestratorV3(address(orchestrator)).setLifecycleHook(lifecycleHook);
         chargebackPolicy.setRiskWindow(METHOD, RISK_WINDOW);
 
         vm.prank(depositor);
         chargebackPolicy.setChargebackEnabled(address(escrow), depositId, true);
-        vm.prank(depositor);
-        policy.configureDeposit(address(escrow), depositId, true, _groups(STAKED), new address[](0));
     }
+
+    /* ============ Resolver Membership ============ */
 
     function test_ResolverMembershipTracksStakeLive() public {
         assertFalse(groupRegistry.isMember(STAKED, taker));
@@ -80,10 +83,43 @@ contract StakeGroupCollateralizedMembershipTest is OrchestratorV3Fixture {
         assertFalse(groupRegistry.isMember(STAKED, taker));
     }
 
-    function test_CollateralizedMembership_MemberIsAdmittedAndLocked() public {
+    function test_ResolverMembershipFollowsTakerDelegation() public {
+        _stake(depositor, MIN_STAKE); // depositor doubles as a stake owner backing a hot wallet
+
         vm.prank(depositor);
-        lifecycleHook.setCollateralizedMembership(address(escrow), depositId, true);
+        stakeVault.setTakerAuthorization(taker, true);
+        vm.prank(taker);
+        stakeVault.selectStakeOwner(depositor);
+
+        assertTrue(groupRegistry.isMember(STAKED, taker));
+
+        vm.prank(depositor);
+        stakeVault.setTakerAuthorization(taker, false);
+        assertFalse(groupRegistry.isMember(STAKED, taker));
+    }
+
+    function test_ResolverFailsClosedAndCuratorAuth() public {
+        bytes32 unconfigured = groupRegistry.createGroup("unconfigured");
+        groupRegistry.setResolver(unconfigured, address(resolver));
         _stake(taker, MIN_STAKE);
+        assertFalse(groupRegistry.isMember(unconfigured, taker)); // zero threshold = fail closed
+
+        vm.prank(other);
+        vm.expectRevert(
+            abi.encodeWithSelector(StakeMembershipResolver.UnauthorizedGroupCurator.selector, STAKED, other)
+        );
+        resolver.setGroupMinStake(STAKED, 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(StakeMembershipResolver.GroupNotFound.selector, bytes32(uint256(0xdead)))
+        );
+        resolver.setGroupMinStake(bytes32(uint256(0xdead)), 1);
+    }
+
+    /* ============ Enforcement Stays With The Deployed Chargeback Lane ============ */
+
+    function test_ChargebackLaneLocksStakerWithoutLifecycleChanges() public {
+        _stake(taker, INTENT_AMOUNT); // whitelist stays disabled: pure stake lane
 
         bytes32 intentHash = _signalDefault();
 
@@ -93,44 +129,34 @@ contract StakeGroupCollateralizedMembershipTest is OrchestratorV3Fixture {
         assertEq(stakeVault.lockedStake(taker), INTENT_AMOUNT);
     }
 
-    function test_CollateralizedMembership_UnderThresholdReverts() public {
-        vm.prank(depositor);
-        lifecycleHook.setCollateralizedMembership(address(escrow), depositId, true);
-        _stake(taker, INTENT_AMOUNT); // covers the intent but sits below the membership threshold
+    function test_ChargebackLaneRejectsInsufficientFreeStake() public {
+        _stake(taker, INTENT_AMOUNT - 1);
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IntentLifecycleHookV2.TakerNotWhitelisted.selector, address(escrow), depositId, taker
+                IStakeVault.InsufficientFreeStake.selector, taker, INTENT_AMOUNT - 1, INTENT_AMOUNT
             )
         );
         _signalCall(taker, _defaultParams());
-
-        assertEq(stakeVault.lockedStake(taker), 0);
     }
 
-    function test_DefaultRoutingKeepsV1MembershipBypass() public {
-        _stake(taker, MIN_STAKE); // member via resolver, but the deposit did not opt into the new mode
+    /* ============ Executable Documentation Of The V1 Routing Trap ============ */
+
+    function test_Trap_StakeGroupOnCoveredDepositWhitelistBypassesLock() public {
+        vm.prank(depositor);
+        policy.configureDeposit(address(escrow), depositId, true, _groups(STAKED), new address[](0));
+        _stake(taker, MIN_STAKE);
 
         bytes32 intentHash = _signalDefault();
 
+        // Member admitted through the whitelist branch: NO collateral locked. This is why covered
+        // deposits must not add the stake-derived group to their whitelist under V1 routing.
         (, uint256 lockAmount,) = stakeVault.locks(intentHash);
-        assertEq(lockAmount, 0); // V1 semantics preserved: whitelist admission bypasses the stake lock
+        assertEq(lockAmount, 0);
         assertEq(stakeVault.lockedStake(taker), 0);
     }
 
-    function test_SetCollateralizedMembershipAuth() public {
-        vm.prank(other);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IntentLifecycleHookV2.UnauthorizedCallerOrDelegate.selector, other, depositor, delegate
-            )
-        );
-        lifecycleHook.setCollateralizedMembership(address(escrow), depositId, true);
-
-        vm.prank(delegate);
-        lifecycleHook.setCollateralizedMembership(address(escrow), depositId, true);
-        assertTrue(lifecycleHook.isCollateralizedMembershipRequired(address(escrow), depositId));
-    }
+    /* ============ Helpers ============ */
 
     function _stake(address _staker, uint256 _amount) internal {
         token.transfer(_staker, _amount);
