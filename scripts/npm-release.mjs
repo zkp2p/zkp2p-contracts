@@ -7,7 +7,10 @@ import { execFileSync } from 'node:child_process';
 
 import { normalizeNpmPackResult } from './lib/npm-pack-result.mjs';
 import {
+  assertCanonicalReleaseSource,
   assertExpectedDistTags,
+  assertOriginalPublishRun,
+  assertVerifiedProvenance,
   releaseRegistryExpectations,
   resolveReleasePolicy,
 } from './lib/npm-release-policy.mjs';
@@ -47,6 +50,104 @@ if (command === 'pack-path') {
     fail('pack path must stay inside the supplied directory');
   }
   console.log(tarballPath);
+  process.exit(0);
+}
+
+if (command === 'provenance') {
+  if (!packageJsonArg || !release || !tag || !extraArg || process.argv.length !== 7) {
+    fail('usage: npm-release.mjs provenance <package.json> <version> <pack.json> <consumer-directory>');
+  }
+  const packageJson = JSON.parse(fs.readFileSync(path.resolve(packageJsonArg), 'utf8'));
+  if (packageJson.name !== releasePackage || packageJson.version !== release) {
+    fail(`provenance package must be ${releasePackage}@${release}`);
+  }
+  let packResult;
+  try {
+    packResult = normalizeNpmPackResult(
+      JSON.parse(fs.readFileSync(path.resolve(tag), 'utf8')),
+      releasePackage,
+    );
+  } catch (error) {
+    fail(error.message);
+  }
+  if (packResult.version !== release) fail(`npm pack version ${packResult.version} does not match ${release}`);
+
+  const recovery = process.env.RECOVERY_MODE === 'true';
+  if (process.env.RECOVERY_MODE !== 'true' && process.env.RECOVERY_MODE !== 'false') {
+    fail('RECOVERY_MODE must be exactly true or false');
+  }
+  let githubSha = process.env.GITHUB_SHA;
+  let runId = process.env.GITHUB_RUN_ID;
+  let runAttempt = process.env.GITHUB_RUN_ATTEMPT;
+  if (recovery) {
+    const releaseTag = process.env.RELEASE_TAG;
+    const originalRunId = process.env.RELEASE_RUN_ID;
+    const githubToken = process.env.GITHUB_TOKEN;
+    if (!releaseTag || !githubToken) fail('recovery provenance requires RELEASE_TAG and GITHUB_TOKEN');
+    githubSha = execFileSync('git', ['rev-parse', `${releaseTag}^{commit}`], {
+      encoding: 'utf8',
+    }).trim();
+    if (!/^[1-9]\d*$/.test(originalRunId || '')) fail('recovery provenance requires numeric RELEASE_RUN_ID');
+    const apiBase = `https://api.github.com/repos/zkp2p/zkp2p-contracts/actions/runs/${originalRunId}`;
+    const headers = {
+      accept: 'application/vnd.github+json',
+      authorization: `Bearer ${githubToken}`,
+      'x-github-api-version': '2022-11-28',
+    };
+    const [runResponse, jobsResponse] = await Promise.all([
+      fetch(apiBase, { headers, signal: AbortSignal.timeout(30_000) }),
+      fetch(`${apiBase}/jobs?filter=all`, { headers, signal: AbortSignal.timeout(30_000) }),
+    ]);
+    if (!runResponse.ok || !jobsResponse.ok) {
+      fail(`GitHub Actions API returned run HTTP ${runResponse.status} and jobs HTTP ${jobsResponse.status}`);
+    }
+    const run = await runResponse.json();
+    const jobs = await jobsResponse.json();
+    runId = originalRunId;
+    runAttempt = String(run.run_attempt);
+    try {
+      assertOriginalPublishRun({
+        run,
+        jobs,
+        expectedRepository: 'zkp2p/zkp2p-contracts',
+        expectedWorkflowPath: '.github/workflows/publish-contracts-v2.yml',
+        expectedHeadSha: githubSha,
+        expectedRunId: runId,
+        expectedRunAttempt: runAttempt,
+      });
+    } catch (error) {
+      fail(error.message);
+    }
+  }
+  for (const [value, label] of [
+    [githubSha, 'GITHUB_SHA'],
+    [runId, 'GITHUB_RUN_ID'],
+    [runAttempt, 'GITHUB_RUN_ATTEMPT'],
+    [process.env.RELEASE_ENVIRONMENT, 'RELEASE_ENVIRONMENT'],
+  ]) {
+    if (!value) fail(`${label} must be set for provenance verification`);
+  }
+  let auditReport;
+  try {
+    auditReport = JSON.parse(execFileSync(
+      'npm',
+      ['audit', 'signatures', '--json', '--include-attestations'],
+      { cwd: path.resolve(extraArg), encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 },
+    ));
+    assertVerifiedProvenance({
+      auditReport,
+      packageName: packageJson.name,
+      release,
+      integrity: packResult.integrity,
+      githubSha,
+      runId,
+      runAttempt,
+      environment: process.env.RELEASE_ENVIRONMENT,
+    });
+  } catch (error) {
+    fail(error.message);
+  }
+  console.log(`Verified npm provenance for ${packageJson.name}@${release}.`);
   process.exit(0);
 }
 
@@ -152,55 +253,28 @@ async function readJson(url, allowedStatuses = [200]) {
 
 if (command === 'guard' || command === 'recover') {
   if (process.env.GITHUB_ACTIONS === 'true') {
-    if (process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch') {
-      fail(`publishing requires workflow_dispatch, received ${process.env.GITHUB_EVENT_NAME}`);
-    }
-    if (process.env.GITHUB_REF !== 'refs/heads/main') {
-      fail(`publishing is restricted to refs/heads/main, received ${process.env.GITHUB_REF}`);
-    }
     const expectedTag = process.env.RELEASE_TAG;
     if (!expectedTag) fail('RELEASE_TAG must be set by the repository-controlled RC workflow');
-    const taggedCommit = execFileSync('git', ['rev-parse', `${expectedTag}^{commit}`], {
-      encoding: 'utf8',
-    }).trim();
-    const checkedOutCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-    const currentMain = execFileSync('git', ['rev-parse', 'refs/remotes/origin/main'], {
-      encoding: 'utf8',
-    }).trim();
-    if (checkedOutCommit !== process.env.GITHUB_SHA) {
-      fail(`checked-out commit ${checkedOutCommit} does not match workflow SHA ${process.env.GITHUB_SHA}`);
-    }
-    if (currentMain !== process.env.GITHUB_SHA) {
-      fail(`canonical main is ${currentMain}, not workflow SHA ${process.env.GITHUB_SHA}`);
-    }
-    if (taggedCommit !== process.env.GITHUB_SHA) {
-      if (command !== 'recover') {
-        fail(`release tag ${expectedTag} points to ${taggedCommit}, not workflow SHA ${process.env.GITHUB_SHA}`);
-      }
-      try {
-        execFileSync('git', ['merge-base', '--is-ancestor', taggedCommit, checkedOutCommit]);
-      } catch {
-        fail(`recovery requires release tag ${expectedTag} to be an ancestor of canonical main`);
-      }
-      const changedFiles = execFileSync(
-        'git',
-        ['diff', '--name-only', `${taggedCommit}..${checkedOutCommit}`],
-        { encoding: 'utf8' },
-      )
-        .trim()
-        .split('\n')
-        .filter(Boolean);
-      const allowedRecoveryChanges = new Set([
-        '.agents/skills/zkp2p-contracts-publish/SKILL.md',
-        '.github/workflows/publish-contracts-v2.yml',
-        'NPM_RELEASE.md',
-        'scripts/npm-release.mjs',
-        'scripts/verify-github-environment.spec.mjs',
+    try {
+      execFileSync('git', [
+        'fetch', '--no-tags', 'https://github.com/zkp2p/zkp2p-contracts.git',
+        '+main:refs/remotes/zkp2p-canonical/main',
       ]);
-      const unexpectedChanges = changedFiles.filter((file) => !allowedRecoveryChanges.has(file));
-      if (unexpectedChanges.length > 0) {
-        fail(`recovery main differs from the release tag outside recovery code: ${unexpectedChanges.join(', ')}`);
-      }
+      execFileSync('git', [
+        'fetch', '--no-tags', 'https://github.com/zkp2p/zkp2p-contracts.git',
+        `+refs/tags/${expectedTag}:refs/tags/${expectedTag}`,
+      ]);
+      assertCanonicalReleaseSource({
+        cwd: process.cwd(),
+        githubRepository: process.env.GITHUB_REPOSITORY,
+        githubEventName: process.env.GITHUB_EVENT_NAME,
+        githubRef: process.env.GITHUB_REF,
+        githubSha: process.env.GITHUB_SHA,
+        releaseTag: expectedTag,
+        recovery: command === 'recover',
+      });
+    } catch (error) {
+      fail(error.message);
     }
   }
   const existing = await readJson(versionUrl, [200, 404]);
