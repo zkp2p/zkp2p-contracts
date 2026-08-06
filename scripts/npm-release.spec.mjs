@@ -63,6 +63,7 @@ function parseGitHubOutput(output) {
 function releaseEnvironment(overrides = {}) {
   return {
     ...process.env,
+    GITHUB_ACTIONS: 'false',
     LATEST_BASELINE: '0.3.0',
     RC_BASELINE: '0.4.0-rc.5',
     RECOVERY_MODE: 'false',
