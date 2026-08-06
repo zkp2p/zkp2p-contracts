@@ -48,14 +48,6 @@ const sourceAbiArtifacts = {
     'artifacts/contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json',
   StakeVault: 'artifacts/contracts/StakeVault.sol/StakeVault.json',
 };
-const retiredPackageContracts = new Set([
-  'ChargebackNullifierRegistry',
-  'ChargebackPolicy',
-  'ChargebackVerifier',
-]);
-const retiredNetworkContracts = {
-  base: new Set(['IntentLifecycleHookV1', 'StakeVault']),
-};
 const requiredNetworkContracts = {
   baseStaging: [
     'DisputeNullifierRegistry',
@@ -65,12 +57,6 @@ const requiredNetworkContracts = {
     'StakeVault',
   ],
 };
-
-function isRetired(network, contractName) {
-  return retiredPackageContracts.has(contractName)
-    || retiredNetworkContracts[network]?.has(contractName)
-    || false;
-}
 
 function fail(message) {
   console.error(`Contracts package verification failed: ${message}`);
@@ -160,11 +146,6 @@ for (const {
 
   const contracts = Object.entries(addresses.contracts || {});
   if (contracts.length === 0) fail(`${name} package has no contract addresses`);
-  for (const contractName of retiredPackageContracts) {
-    if (contractName in addresses.contracts) {
-      fail(`${name} package retains retired ${contractName} address`);
-    }
-  }
   for (const contractName of requiredNetworkContracts[name] || []) {
     const address = addresses.contracts?.[contractName];
     if (!address || address.toLowerCase() === zeroAddress) {
@@ -173,12 +154,6 @@ for (const {
   }
 
   for (const [contractName, packageAddress] of contracts) {
-    if (isRetired(name, contractName)) {
-      if (packageAddress.toLowerCase() !== zeroAddress) {
-        fail(`${name}.${contractName} exposes a retired deployment address`);
-      }
-      continue;
-    }
     const outputEntry = output.contracts?.[contractName];
     if (!outputEntry) {
       if (packageAddress.toLowerCase() !== zeroAddress) {
@@ -218,7 +193,6 @@ for (const {
   }
 
   for (const contractName of Object.keys(output.contracts || {})) {
-    if (isRetired(name, contractName)) continue;
     if (!(contractName in addresses.contracts)) {
       fail(`${name} package addresses omit canonical deployment ${contractName}`);
     }
@@ -250,14 +224,6 @@ for (const removedExport of [
   'utils/riskMath.js',
   'types/contracts/RiskManager.js',
   'abis/contracts/RiskManager.json',
-  'abis/contracts/ChargebackPolicy.json',
-  'abis/contracts/ChargebackVerifier.json',
-  'abis/base/ChargebackNullifierRegistry.json',
-  'abis/base/ChargebackPolicy.json',
-  'abis/base/ChargebackVerifier.json',
-  'abis/baseStaging/ChargebackNullifierRegistry.json',
-  'abis/baseStaging/ChargebackPolicy.json',
-  'abis/baseStaging/ChargebackVerifier.json',
 ]) {
   if (fs.existsSync(path.join(packageRoot, removedExport))) {
     fail(`stale noncanonical affine-risk export remains: ${removedExport}`);

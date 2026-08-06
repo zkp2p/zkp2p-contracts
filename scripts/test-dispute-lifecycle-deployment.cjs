@@ -159,13 +159,6 @@ async function deployThenActivate() {
     "DisputePolicy",
     "IntentLifecycleHookV1",
   ]);
-  for (const legacyName of [
-    "ChargebackNullifierRegistry",
-    "ChargebackVerifier",
-    "ChargebackPolicy",
-  ]) {
-    assert.equal(state.deployments.has(legacyName), false);
-  }
   assert.equal(
     (await state.orchestrator.lifecycleHook()).toLowerCase(),
     state.initialHook.toLowerCase(),

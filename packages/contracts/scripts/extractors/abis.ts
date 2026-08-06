@@ -17,21 +17,6 @@ const ROOT = path.resolve(__dirname, '../../../../');
 const OUTPUTS_DIR = path.join(ROOT, 'deployments', 'outputs');
 const PKG_ROOT = path.resolve(__dirname, '../..');
 const ABIS_DIR = path.join(PKG_ROOT, 'abis');
-const RETIRED_PACKAGE_CONTRACTS = new Set([
-  'ChargebackNullifierRegistry',
-  'ChargebackPolicy',
-  'ChargebackVerifier',
-]);
-const RETIRED_NETWORK_CONTRACTS: Record<string, Set<string>> = {
-  base: new Set(['IntentLifecycleHookV1', 'StakeVault']),
-};
-
-function isRetired(network: string, contractName: string): boolean {
-  return RETIRED_PACKAGE_CONTRACTS.has(contractName)
-    || RETIRED_NETWORK_CONTRACTS[network]?.has(contractName)
-    || false;
-}
-
 const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
   IntentGuardian: 'contracts/IntentGuardian.sol/IntentGuardian.json',
   OrchestratorV3: 'contracts/OrchestratorV3.sol/OrchestratorV3.json',
@@ -87,7 +72,6 @@ export async function extractABIs(): Promise<void> {
 
     const perNetworkIndex: string[] = [];
     for (const [name, entry] of Object.entries(data.contracts)) {
-      if (isRetired(network, name)) continue;
       const abi = minimalAbi(entry.abi || []);
       const out = path.join(networkDir, `${name}.json`);
       fs.writeFileSync(out, JSON.stringify(abi, null, 2));
