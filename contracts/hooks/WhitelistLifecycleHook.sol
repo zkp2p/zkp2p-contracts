@@ -9,7 +9,7 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 
 /**
  * @title WhitelistLifecycleHook
- * @notice Lifecycle hook enforcing persistent deposit-scoped whitelist admission without chargeback coverage.
+ * @notice Lifecycle hook enforcing persistent deposit-scoped whitelist admission without dispute coverage.
  * Open deposits remain unrestricted, while enabled whitelist policies reject every taker not currently allowed.
  * @dev Reads canonical intent data from the calling orchestrator. Whitelist admission is evaluated only when an
  * intent is signaled; authorized cancellation and settlement callbacks are no-ops. All callbacks remain fail-closed.

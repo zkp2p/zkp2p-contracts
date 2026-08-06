@@ -162,7 +162,7 @@ When either V2 or V3 source changes:
 3. Verify shared admission, fee, escrow, registry, payment-verifier, nullifier,
    replay, authorization, and settlement invariants semantically.
 4. Verify the V3 lifecycle-hook snapshot, callback ordering, fail-closed
-   behavior, reentrancy protection, cancellation/pruning, and chargeback/stake
+   behavior, reentrancy protection, cancellation/pruning, and dispute/stake
    ownership boundaries with the closest deterministic, fuzz, invariant, and
    integration tests.
 5. Inspect `scripts/deployActive.ts`, lane `30` network guards and `skip`

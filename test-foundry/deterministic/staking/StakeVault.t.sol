@@ -323,7 +323,7 @@ contract StakeVaultTest is Test {
 
     function test_LockConsumesOnlyFreeStake() public {
         _deposit(safeA, 500e6);
-        bytes32 lockId = keccak256("chargeback");
+        bytes32 lockId = keccak256("dispute");
 
         vm.prank(controller);
         vault.lockStake(safeA, lockId, 300e6, NEVER_MATURES);
@@ -427,7 +427,7 @@ contract StakeVaultTest is Test {
 
     function test_ResizeLockOnlyDecreasesAndSetsFiniteMaturity() public {
         _deposit(safeA, 500e6);
-        bytes32 lockId = keccak256("chargeback-resize");
+        bytes32 lockId = keccak256("dispute-resize");
         vm.prank(controller);
         vault.lockStake(safeA, lockId, 400e6, NEVER_MATURES);
 

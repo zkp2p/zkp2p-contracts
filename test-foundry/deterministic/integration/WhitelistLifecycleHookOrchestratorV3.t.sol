@@ -3,11 +3,11 @@
 pragma solidity ^0.8.18;
 
 import {StakeVault} from "contracts/StakeVault.sol";
-import {ChargebackPolicy} from "contracts/hooks/ChargebackPolicy.sol";
+import {DisputePolicy} from "contracts/hooks/DisputePolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistLifecycleHook} from "contracts/hooks/WhitelistLifecycleHook.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
-import {IChargebackPolicy} from "contracts/interfaces/IChargebackPolicy.sol";
+import {IDisputePolicy} from "contracts/interfaces/IDisputePolicy.sol";
 import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 import {IOrchestratorRegistry} from "contracts/interfaces/IOrchestratorRegistry.sol";
 import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
@@ -15,7 +15,7 @@ import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.s
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
-import {ChargebackVerifier} from "contracts/unifiedVerifier/ChargebackVerifier.sol";
+import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 
@@ -117,11 +117,10 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_RotationTerminatesSnapshottedWhitelistIntentsAndRoutesFreshIntentToCombinedHook() public {
-        (StakeVault vault, ChargebackPolicy chargebackPolicy, IntentLifecycleHookV1 combinedHook) =
-            _deployChargebackStack();
+        (StakeVault vault, DisputePolicy disputePolicy, IntentLifecycleHookV1 combinedHook) = _deployDisputeStack();
 
         vm.prank(depositor);
-        chargebackPolicy.setChargebackEnabled(address(escrow), depositId, true);
+        disputePolicy.setDisputeEnabled(address(escrow), depositId, true);
 
         bytes32 oldCancelledIntent = _signalDefault();
         bytes32 oldSettledIntent = _signalDefault();
@@ -132,8 +131,8 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         bytes32 freshIntent = _signalDefault();
         assertEq(address(orchestrator.getIntentLifecycleHook(freshIntent)), address(combinedHook));
         assertEq(
-            uint256(chargebackPolicy.getChargebackIntent(freshIntent).status),
-            uint256(IChargebackPolicy.ChargebackIntentStatus.PENDING)
+            uint256(disputePolicy.getDisputeIntent(freshIntent).status),
+            uint256(IDisputePolicy.DisputeIntentStatus.PENDING)
         );
 
         vm.prank(taker);
@@ -141,42 +140,42 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         verifier.setShouldVerifyPayment(true);
         _fulfill(oldSettledIntent, 40e6, CONVERSION_RATE);
         assertEq(
-            uint256(chargebackPolicy.getChargebackIntent(oldCancelledIntent).status),
-            uint256(IChargebackPolicy.ChargebackIntentStatus.NONE)
+            uint256(disputePolicy.getDisputeIntent(oldCancelledIntent).status),
+            uint256(IDisputePolicy.DisputeIntentStatus.NONE)
         );
         assertEq(
-            uint256(chargebackPolicy.getChargebackIntent(oldSettledIntent).status),
-            uint256(IChargebackPolicy.ChargebackIntentStatus.NONE)
+            uint256(disputePolicy.getDisputeIntent(oldSettledIntent).status),
+            uint256(IDisputePolicy.DisputeIntentStatus.NONE)
         );
 
         vm.prank(taker);
         orchestrator.cancelIntent(freshIntent);
         assertEq(
-            uint256(chargebackPolicy.getChargebackIntent(freshIntent).status),
-            uint256(IChargebackPolicy.ChargebackIntentStatus.CANCELLED)
+            uint256(disputePolicy.getDisputeIntent(freshIntent).status),
+            uint256(IDisputePolicy.DisputeIntentStatus.CANCELLED)
         );
         assertEq(vault.lockedStake(taker), 0);
     }
 
-    function _deployChargebackStack()
+    function _deployDisputeStack()
         internal
-        returns (StakeVault vault, ChargebackPolicy chargebackPolicy, IntentLifecycleHookV1 combinedHook)
+        returns (StakeVault vault, DisputePolicy disputePolicy, IntentLifecycleHookV1 combinedHook)
     {
         vault = new StakeVault(address(this), token, address(0), 1 days);
-        NullifierRegistry chargebackNullifierRegistry = new NullifierRegistry();
-        chargebackPolicy = new ChargebackPolicy(
+        NullifierRegistry disputeNullifierRegistry = new NullifierRegistry();
+        disputePolicy = new DisputePolicy(
             address(this),
             vault,
-            new ChargebackVerifier(
+            new DisputeVerifier(
                 address(this), new NullifierRegistryV2(new NullifierRegistry()), new AttestationVerifierMock()
             ),
-            chargebackNullifierRegistry
+            disputeNullifierRegistry
         );
-        vault.initializeController(address(chargebackPolicy));
-        chargebackNullifierRegistry.addWritePermission(address(chargebackPolicy));
-        combinedHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, chargebackPolicy);
-        chargebackPolicy.setLifecycleHookAuthorization(address(combinedHook), true);
-        chargebackPolicy.setRiskWindow(METHOD, RISK_WINDOW);
+        vault.initializeController(address(disputePolicy));
+        disputeNullifierRegistry.addWritePermission(address(disputePolicy));
+        combinedHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, disputePolicy);
+        disputePolicy.setLifecycleHookAuthorization(address(combinedHook), true);
+        disputePolicy.setRiskWindow(METHOD, RISK_WINDOW);
 
         token.transfer(taker, STAKE_AMOUNT);
         vm.startPrank(taker);
