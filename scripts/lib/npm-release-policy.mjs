@@ -15,20 +15,16 @@ const rcChannel = Object.freeze({
   environment: publishEnvironment,
 });
 
-export function resolveReleasePolicy({ release, packageVersion, releaseLine }) {
-  if (!coreSemverPattern.test(releaseLine)) {
-    throw new Error(`release must be exactly ${releaseLine} or ${releaseLine}-rc.N`);
-  }
+export function resolveReleasePolicy({ release, packageVersion }) {
   if (packageVersion !== release) {
     throw new Error(`release input ${release} does not match package version ${packageVersion}`);
   }
-  if (release === releaseLine) return { ...stableChannel };
 
-  const escapedLine = releaseLine.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  if (new RegExp(`^${escapedLine}-rc\\.(0|[1-9]\\d*)$`).test(release)) {
+  if (coreSemverPattern.test(release)) return { ...stableChannel };
+  if (/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-rc\.(0|[1-9]\d*)$/.test(release)) {
     return { ...rcChannel };
   }
-  throw new Error(`release must be exactly ${releaseLine} or ${releaseLine}-rc.N`);
+  throw new Error('release must be core SemVer or core SemVer-rc.N');
 }
 
 export function assertExpectedDistTags(actual, expected) {

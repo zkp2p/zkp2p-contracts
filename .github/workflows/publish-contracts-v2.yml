@@ -1,12 +1,12 @@
 name: Publish contracts-v2
 
-run-name: Publish @zkp2p/contracts-v2@${{ inputs.release }} as rc
+run-name: Publish @zkp2p/contracts-v2@${{ inputs.release }}
 
 on:
   workflow_dispatch:
     inputs:
       release:
-        description: Exact 0.4.0-rc.N version committed on canonical main
+        description: Exact stable SemVer or matching -rc.N version committed on canonical main
         required: true
         type: string
       recovery:
@@ -31,21 +31,55 @@ env:
   PACKAGE_JSON: packages/contracts/package.json
   PACK_ARTIFACT: contracts-v2-release-candidate
   RELEASE_VERSION: ${{ inputs.release }}
-  RELEASE_LINE: 0.4.0
   RELEASE_TAG: contracts-v2-v${{ inputs.release }}
-  DIST_TAG: rc
   LATEST_BASELINE: 0.3.0
+  RC_BASELINE: 0.4.0-rc.5
   NPM_CONFIG_PROVENANCE: "true"
   REQUIRE_PROVENANCE: "true"
   RECOVERY_MODE: ${{ inputs.recovery }}
 
 jobs:
+  policy:
+    name: Resolve release policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      channel: ${{ steps.resolve.outputs.channel }}
+      dist_tag: ${{ steps.resolve.outputs.dist_tag }}
+      environment: ${{ steps.resolve.outputs.environment }}
+      guard_latest: ${{ steps.resolve.outputs.guard_latest }}
+      guard_rc: ${{ steps.resolve.outputs.guard_rc }}
+      verify_latest: ${{ steps.resolve.outputs.verify_latest }}
+      verify_rc: ${{ steps.resolve.outputs.verify_rc }}
+    steps:
+      - name: Checkout policy source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.14.0
+          package-manager-cache: false
+
+      - name: Resolve version-derived channel
+        id: resolve
+        run: node scripts/npm-release.mjs resolve "$PACKAGE_JSON" "$RELEASE_VERSION"
+
   validate:
     name: Build, validate, and pack
+    needs: policy
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    outputs:
-      latest-before: ${{ steps.release-guard.outputs.latest }}
+    env:
+      DIST_TAG: ${{ needs.policy.outputs.dist_tag }}
+      RELEASE_ENVIRONMENT: ${{ needs.policy.outputs.environment }}
+      EXPECTED_LATEST: ${{ needs.policy.outputs.guard_latest }}
+      EXPECTED_RC: ${{ needs.policy.outputs.guard_rc }}
     permissions:
       actions: read
       contents: read
@@ -70,8 +104,7 @@ jobs:
           corepack enable
           test "$(npm --version)" = "11.9.0"
 
-      - name: Guard canonical RC source and unpublished version
-        id: release-guard
+      - name: Guard canonical release source, version, and dist-tags
         env:
           RELEASE_RUN_ID: ${{ inputs.release_run_id }}
         run: |
@@ -87,14 +120,11 @@ jobs:
             test -z "$RELEASE_RUN_ID"
             node scripts/npm-release.mjs guard "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
           fi
-          latest=$(npm view @zkp2p/contracts-v2 dist-tags.latest)
-          test "$latest" = "$LATEST_BASELINE"
-          echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
       - name: Require autonomous publishing environment
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/verify-github-environment.mjs npm-publish
+        run: node scripts/verify-github-environment.mjs "$RELEASE_ENVIRONMENT"
 
       - name: Install immutable dependencies
         run: yarn install --immutable
@@ -127,7 +157,7 @@ jobs:
 
       - name: Clean-install and import exact tarball
         run: |
-          tarball=$(node -e "const fs=require('fs'),p=require('path');const r=JSON.parse(fs.readFileSync(process.argv[1]))[0];process.stdout.write(p.join(process.argv[2],r.filename))" "$RUNNER_TEMP/npm-pack/pack.json" "$RUNNER_TEMP/npm-pack")
+          tarball=$(node scripts/npm-release.mjs pack-path "$RUNNER_TEMP/npm-pack/pack.json" "$RUNNER_TEMP/npm-pack")
           mkdir -p "$RUNNER_TEMP/npm-smoke"
           cd "$RUNNER_TEMP/npm-smoke"
           npm init --yes
@@ -145,8 +175,14 @@ jobs:
 
   foundry-tests:
     name: Complete Foundry suite
+    needs: policy
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      DIST_TAG: ${{ needs.policy.outputs.dist_tag }}
+      RELEASE_ENVIRONMENT: ${{ needs.policy.outputs.environment }}
+      EXPECTED_LATEST: ${{ needs.policy.outputs.guard_latest }}
+      EXPECTED_RC: ${{ needs.policy.outputs.guard_rc }}
     permissions:
       contents: read
     steps:
@@ -204,12 +240,17 @@ jobs:
 
   publish:
     name: Publish with npm OIDC
-    needs: [validate, foundry-tests]
+    needs: [policy, validate, foundry-tests]
     if: inputs.recovery == false
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      DIST_TAG: ${{ needs.policy.outputs.dist_tag }}
+      RELEASE_ENVIRONMENT: ${{ needs.policy.outputs.environment }}
+      EXPECTED_LATEST: ${{ needs.policy.outputs.guard_latest }}
+      EXPECTED_RC: ${{ needs.policy.outputs.guard_rc }}
     environment:
-      name: npm-publish
+      name: ${{ needs.policy.outputs.environment }}
       url: https://www.npmjs.com/package/@zkp2p/contracts-v2/v/${{ inputs.release }}
     permissions:
       contents: read
@@ -233,9 +274,6 @@ jobs:
           npm install --global npm@11.9.0
           test "$(npm --version)" = "11.9.0"
 
-      - name: Re-check canonical source and unpublished version
-        run: node scripts/npm-release.mjs guard "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
-
       - name: Download validated tarball
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
@@ -245,14 +283,18 @@ jobs:
       - name: Verify downloaded tarball
         run: node packages/contracts/scripts/verify-release.mjs --pack-json "$RUNNER_TEMP/npm-pack/pack.json" --pack-dir "$RUNNER_TEMP/npm-pack"
 
+      - name: Re-check canonical source, version, and dist-tags
+        run: node scripts/npm-release.mjs guard "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
+
       - name: Publish exact tarball with provenance
         run: |
-          tarball=$(node -e "const fs=require('fs'),p=require('path');const r=JSON.parse(fs.readFileSync(process.argv[1]))[0];process.stdout.write(p.join(process.argv[2],r.filename))" "$RUNNER_TEMP/npm-pack/pack.json" "$RUNNER_TEMP/npm-pack")
-          npm publish "$tarball" --access public --tag rc --provenance
+          tarball=$(node scripts/npm-release.mjs pack-path "$RUNNER_TEMP/npm-pack/pack.json" "$RUNNER_TEMP/npm-pack")
+          npm publish "$tarball" --access public --tag "$DIST_TAG" --provenance
 
       - name: Verify registry version, dist-tag, integrity, and contents
         env:
-          EXPECTED_LATEST: ${{ needs.validate.outputs.latest-before }}
+          EXPECTED_LATEST: ${{ needs.policy.outputs.verify_latest }}
+          EXPECTED_RC: ${{ needs.policy.outputs.verify_rc }}
         run: |
           node scripts/npm-release.mjs verify "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG" "$RUNNER_TEMP/npm-pack/pack.json"
           mkdir -p "$RUNNER_TEMP/registry-pack"
@@ -264,7 +306,7 @@ jobs:
             sleep 5
           done
           node packages/contracts/scripts/verify-release.mjs --pack-json "$RUNNER_TEMP/registry-pack.json" --pack-dir "$RUNNER_TEMP/registry-pack"
-          for spec in "@zkp2p/contracts-v2@$RELEASE_VERSION" "@zkp2p/contracts-v2@rc"; do
+          for spec in "@zkp2p/contracts-v2@$RELEASE_VERSION" "@zkp2p/contracts-v2@$DIST_TAG"; do
             smoke_dir=$(mktemp -d "$RUNNER_TEMP/npm-registry-smoke.XXXXXX")
             cd "$smoke_dir"
             npm init --yes
@@ -279,11 +321,16 @@ jobs:
           done
 
   recover:
-    name: Verify published RC recovery
-    needs: [validate, foundry-tests]
+    name: Verify published release recovery
+    needs: [policy, validate, foundry-tests]
     if: inputs.recovery == true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      DIST_TAG: ${{ needs.policy.outputs.dist_tag }}
+      RELEASE_ENVIRONMENT: ${{ needs.policy.outputs.environment }}
+      EXPECTED_LATEST: ${{ needs.policy.outputs.guard_latest }}
+      EXPECTED_RC: ${{ needs.policy.outputs.guard_rc }}
     permissions:
       actions: read
       contents: read
@@ -323,13 +370,14 @@ jobs:
 
       - name: Verify registry version, dist-tag, integrity, and contents
         env:
-          EXPECTED_LATEST: ${{ needs.validate.outputs.latest-before }}
+          EXPECTED_LATEST: ${{ needs.policy.outputs.verify_latest }}
+          EXPECTED_RC: ${{ needs.policy.outputs.verify_rc }}
         run: |
           node scripts/npm-release.mjs verify "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG" "$RUNNER_TEMP/npm-pack/pack.json"
           mkdir -p "$RUNNER_TEMP/registry-pack"
           npm pack "@zkp2p/contracts-v2@$RELEASE_VERSION" --ignore-scripts --json --pack-destination "$RUNNER_TEMP/registry-pack" > "$RUNNER_TEMP/registry-pack.json"
           node packages/contracts/scripts/verify-release.mjs --pack-json "$RUNNER_TEMP/registry-pack.json" --pack-dir "$RUNNER_TEMP/registry-pack"
-          for spec in "@zkp2p/contracts-v2@$RELEASE_VERSION" "@zkp2p/contracts-v2@rc"; do
+          for spec in "@zkp2p/contracts-v2@$RELEASE_VERSION" "@zkp2p/contracts-v2@$DIST_TAG"; do
             smoke_dir=$(mktemp -d "$RUNNER_TEMP/npm-registry-smoke.XXXXXX")
             cd "$smoke_dir"
             npm init --yes

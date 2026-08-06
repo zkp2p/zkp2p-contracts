@@ -2,7 +2,7 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
-## Release candidate 0.4.0-rc.5
+## Release 0.4.0
 
 - Refreshes the Base deployment exports for the whitelist-only V3 lane: `WhitelistPolicy`,
   `WhitelistLifecycleHook`, and `OrchestratorV3`.

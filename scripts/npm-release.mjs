@@ -63,16 +63,11 @@ if (command === 'provenance') {
   if (packageJson.name !== releasePackage || packageJson.version !== release) {
     fail(`provenance package must be ${releasePackage}@${release}`);
   }
-  const provenanceReleaseLine = process.env.RELEASE_LINE;
-  if (!provenanceReleaseLine) {
-    fail('RELEASE_LINE must be set by the repository-controlled release workflow');
-  }
   let provenancePolicy;
   try {
     provenancePolicy = resolveReleasePolicy({
       release,
       packageVersion: packageJson.version,
-      releaseLine: provenanceReleaseLine,
     });
   } catch (error) {
     fail(error.message);
@@ -190,14 +185,11 @@ const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 
 if (!semverPattern.test(release)) fail(`release input is not valid SemVer: ${release}`);
 
-const releaseLine = process.env.RELEASE_LINE;
-if (!releaseLine) fail('RELEASE_LINE must be set by the repository-controlled release workflow');
 let policy;
 try {
   policy = resolveReleasePolicy({
     release,
     packageVersion: packageJson.version,
-    releaseLine,
   });
 } catch (error) {
   fail(error.message);
@@ -265,6 +257,7 @@ if (
 const registryBase = (packageJson.publishConfig?.registry || 'https://registry.npmjs.org').replace(/\/$/, '');
 const encodedName = encodeURIComponent(packageJson.name);
 const versionUrl = `${registryBase}/${encodedName}/${encodeURIComponent(release)}`;
+const packageUrl = `${registryBase}/${encodedName}`;
 
 async function readJson(url, allowedStatuses = [200]) {
   const response = await fetch(url, {
@@ -280,7 +273,7 @@ async function readJson(url, allowedStatuses = [200]) {
 if (command === 'guard' || command === 'recover') {
   if (process.env.GITHUB_ACTIONS === 'true') {
     const expectedTag = process.env.RELEASE_TAG;
-    if (!expectedTag) fail('RELEASE_TAG must be set by the repository-controlled RC workflow');
+    if (!expectedTag) fail('RELEASE_TAG must be set by the repository-controlled release workflow');
     try {
       execFileSync('git', [
         'fetch', '--no-tags', 'https://github.com/zkp2p/zkp2p-contracts.git',
@@ -306,6 +299,17 @@ if (command === 'guard' || command === 'recover') {
   const existing = await readJson(versionUrl, [200, 404]);
   if (command === 'guard' && existing) fail(`${packageJson.name}@${release} is already published`);
   if (command === 'recover' && !existing) fail(`${packageJson.name}@${release} is not published`);
+  if (process.env.EXPECTED_LATEST || process.env.EXPECTED_RC) {
+    try {
+      const metadata = await readJson(packageUrl);
+      assertSuppliedDistTags(metadata['dist-tags'], {
+        latest: process.env.EXPECTED_LATEST,
+        rc: process.env.EXPECTED_RC,
+      });
+    } catch (error) {
+      fail(error.message);
+    }
+  }
   console.log(`${command === 'guard' ? 'Release' : 'Recovery'} guard passed for ${packageJson.name}@${release} with dist-tag ${tag}.`);
   process.exit(0);
 }
@@ -321,7 +325,6 @@ try {
   fail(error.message);
 }
 
-const packageUrl = `${registryBase}/${encodedName}`;
 let lastReason = 'registry metadata was not available';
 for (let attempt = 1; attempt <= 12; attempt += 1) {
   try {

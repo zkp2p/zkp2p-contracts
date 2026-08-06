@@ -25,6 +25,8 @@ import { normalizeNpmPackResult } from './lib/npm-pack-result.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const releaseScript = path.join(repoRoot, 'scripts/npm-release.mjs');
+const releaseWorkflowPath = path.join(repoRoot, '.github/workflows/publish-contracts-v2.yml');
+const packageManifestPath = path.join(repoRoot, 'packages/contracts/package.json');
 const expectedPackage = '@zkp2p/contracts-v2';
 const provenanceFixturePath = path.join(
   repoRoot,
@@ -61,7 +63,6 @@ function parseGitHubOutput(output) {
 function releaseEnvironment(overrides = {}) {
   return {
     ...process.env,
-    RELEASE_LINE: '0.4.0',
     LATEST_BASELINE: '0.3.0',
     RC_BASELINE: '0.4.0-rc.5',
     RECOVERY_MODE: 'false',
@@ -97,13 +98,13 @@ function runCli(args, env, nodeArgs = []) {
   });
 }
 
-async function createVerifyCliFixture(context, rcDistTag) {
+async function createVerifyCliFixture(context, rcDistTag, latestDistTag = '0.4.0') {
   const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-release-verify-'));
   const packageJsonPath = path.join(temporaryDirectory, 'package.json');
   const packJsonPath = path.join(temporaryDirectory, 'pack.json');
   const retryPreloadPath = path.join(temporaryDirectory, 'fast-retry.cjs');
   const metadata = {
-    'dist-tags': { latest: '0.4.0', rc: rcDistTag },
+    'dist-tags': { latest: latestDistTag, rc: rcDistTag },
     versions: {
       '0.4.0': {
         dist: {
@@ -148,6 +149,7 @@ globalThis.setTimeout = (callback, delay, ...args) =>
   return {
     args: ['verify', packageJsonPath, '0.4.0', 'latest', packJsonPath],
     nodeArgs: ['--require', retryPreloadPath],
+    packageJsonPath,
   };
 }
 
@@ -305,7 +307,6 @@ test('resolves an RC from the committed release-line prerelease', () => {
     resolveReleasePolicy({
       release: '0.4.0-rc.6',
       packageVersion: '0.4.0-rc.6',
-      releaseLine: '0.4.0',
     }),
     { channel: 'rc', distTag: 'rc', environment: 'npm-publish' },
   );
@@ -316,28 +317,78 @@ test('resolves the exact release line as stable', () => {
     resolveReleasePolicy({
       release: '0.4.0',
       packageVersion: '0.4.0',
-      releaseLine: '0.4.0',
     }),
     { channel: 'stable', distTag: 'latest', environment: 'npm-publish' },
   );
 });
 
-test('rejects a prerelease release line before classifying an exact match as stable', () => {
-  assert.throws(
-    () => resolveReleasePolicy({
-      release: '0.4.0-rc.6',
-      packageVersion: '0.4.0-rc.6',
-      releaseLine: '0.4.0-rc.6',
+test('derives a future stable release line from the package version', () => {
+  assert.deepEqual(
+    resolveReleasePolicy({
+      release: '1.2.3',
+      packageVersion: '1.2.3',
     }),
-    /release must be exactly 0\.4\.0-rc\.6 or 0\.4\.0-rc\.6-rc\.N/,
+    { channel: 'stable', distTag: 'latest', environment: 'npm-publish' },
   );
 });
 
-for (const release of ['0.4.1', '0.4.0-beta.1', '0.4.0-rc.01', 'v0.4.0', '0.4.0+build']) {
+test('derives a future RC release line from the package version', () => {
+  assert.deepEqual(
+    resolveReleasePolicy({
+      release: '1.2.3-rc.4',
+      packageVersion: '1.2.3-rc.4',
+    }),
+    { channel: 'rc', distTag: 'rc', environment: 'npm-publish' },
+  );
+});
+
+test('commits the stable release candidate while preserving version-derived RC support', () => {
+  const packageManifest = JSON.parse(fs.readFileSync(packageManifestPath, 'utf8'));
+  assert.equal(packageManifest.version, '0.4.0');
+  assert.deepEqual(
+    resolveReleasePolicy({
+      release: '0.4.0-rc.6',
+      packageVersion: '0.4.0-rc.6',
+    }),
+    { channel: 'rc', distTag: 'rc', environment: 'npm-publish' },
+  );
+});
+
+test('publish workflow consumes the version-derived channel without RC-only paths', () => {
+  const workflow = fs.readFileSync(releaseWorkflowPath, 'utf8');
+
+  assert.match(workflow, /^\s{2}policy:\s*$/m);
+  assert.match(workflow, /node scripts\/npm-release\.mjs resolve "\$PACKAGE_JSON" "\$RELEASE_VERSION"/);
+  assert.match(workflow, /DIST_TAG:\s*\$\{\{ needs\.policy\.outputs\.dist_tag \}\}/);
+  assert.match(workflow, /name:\s*\$\{\{ needs\.policy\.outputs\.environment \}\}/);
+  assert.match(workflow, /npm publish "\$tarball" --access public --tag "\$DIST_TAG" --provenance/);
+  assert.match(workflow, /"@zkp2p\/contracts-v2@\$DIST_TAG"/);
+  assert.match(workflow, /EXPECTED_LATEST:\s*\$\{\{ needs\.policy\.outputs\.verify_latest \}\}/);
+  assert.match(workflow, /EXPECTED_RC:\s*\$\{\{ needs\.policy\.outputs\.verify_rc \}\}/);
+
+  assert.doesNotMatch(workflow, /run-name:.*\bas rc\b/);
+  assert.doesNotMatch(workflow, /DIST_TAG:\s*rc\b/);
+  assert.doesNotMatch(workflow, /--tag rc\b/);
+  assert.doesNotMatch(workflow, /@zkp2p\/contracts-v2@rc\b/);
+  assert.doesNotMatch(workflow, /Verify published RC recovery/);
+  assert.doesNotMatch(workflow, /^\s*RELEASE_LINE:/m);
+});
+
+test('rejects a nested RC prerelease', () => {
+  assert.throws(
+    () => resolveReleasePolicy({
+      release: '0.4.0-rc.6-rc.1',
+      packageVersion: '0.4.0-rc.6-rc.1',
+    }),
+    /release must be core SemVer or core SemVer-rc\.N/,
+  );
+});
+
+for (const release of ['0.4.0-beta.1', '0.4.0-rc.01', 'v0.4.0', '0.4.0+build']) {
   test(`rejects unsupported release shape ${release}`, () => {
     assert.throws(
-      () => resolveReleasePolicy({ release, packageVersion: release, releaseLine: '0.4.0' }),
-      /release must be exactly 0\.4\.0 or 0\.4\.0-rc\.N/,
+      () => resolveReleasePolicy({ release, packageVersion: release }),
+      /release must be core SemVer or core SemVer-rc\.N/,
     );
   });
 }
@@ -347,7 +398,6 @@ test('rejects a release that differs from the package manifest', () => {
     () => resolveReleasePolicy({
       release: '0.4.0',
       packageVersion: '0.4.0-rc.5',
-      releaseLine: '0.4.0',
     }),
     /does not match.*package version/,
   );
@@ -420,6 +470,22 @@ test('verify CLI leaves the rc dist-tag unchecked when EXPECTED_RC is unset', as
 
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /Registry verification passed/);
+});
+
+test('guard rejects drift in either committed dist-tag baseline before publication', async (context) => {
+  const fixture = await createVerifyCliFixture(context, '0.4.0-rc.6', '0.3.0');
+  const env = releaseEnvironment({
+    EXPECTED_LATEST: '0.3.0',
+    EXPECTED_RC: '0.4.0-rc.5',
+  });
+
+  const result = await runCli(
+    ['guard', fixture.packageJsonPath, '0.4.0', 'latest'],
+    env,
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /rc moved from 0\.4\.0-rc\.5 to 0\.4\.0-rc\.6/);
 });
 
 test('changes only the selected tag after publication', () => {
@@ -866,21 +932,6 @@ process.stdout.write(fs.readFileSync(process.env.AUDIT_FIXTURE));
 
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /Verified npm provenance/);
-});
-
-test('provenance CLI requires RELEASE_LINE', (context) => {
-  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-release-provenance-line-'));
-  context.after(() => fs.rmSync(temporaryDirectory, { recursive: true, force: true }));
-  const packageJsonPath = path.join(temporaryDirectory, 'package.json');
-  fs.writeFileSync(packageJsonPath, JSON.stringify({ name: expectedPackage, version: '0.4.0-rc.5' }));
-  const env = releaseEnvironment();
-  delete env.RELEASE_LINE;
-
-  assertCliFails(
-    ['provenance', packageJsonPath, '0.4.0-rc.5', 'unused-pack.json', 'unused-consumer'],
-    env,
-    /RELEASE_LINE must be set/,
-  );
 });
 
 test('provenance rejects a supplied environment that differs from release policy', (context) => {
