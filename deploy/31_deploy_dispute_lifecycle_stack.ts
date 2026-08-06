@@ -50,7 +50,7 @@ async function assertRetiredLiabilitiesZero(): Promise<void> {
   }
 }
 
-async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean> {
+async function systemPrepared(hre: HardhatRuntimeEnvironment): Promise<boolean> {
   try {
     const network = hre.deployments.getNetworkName();
     const [deployer] = await hre.getUnnamedAccounts();
@@ -59,7 +59,6 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
     const vaultDeployment = await hre.deployments.get("StakeVault");
     const policyDeployment = await hre.deployments.get("DisputePolicy");
     const hookDeployment = await hre.deployments.get("IntentLifecycleHookV1");
-    const orchestratorDeployment = await hre.deployments.get("OrchestratorV3");
     const whitelistPolicyDeployment = await hre.deployments.get("WhitelistPolicy");
     const registryAddress = (await hre.deployments.get("OrchestratorRegistry")).address;
     const verifierAddress = (await hre.deployments.get("DisputeVerifier")).address;
@@ -70,7 +69,6 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
     const policy = await ethers.getContractAt("DisputePolicy", policyDeployment.address);
     const verifier = await ethers.getContractAt("DisputeVerifier", verifierAddress);
     const hook = await ethers.getContractAt("IntentLifecycleHookV1", hookDeployment.address);
-    const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorDeployment.address);
     const nullifierRegistry = await ethers.getContractAt("NullifierRegistry", nullifierRegistryAddress);
 
     if (!sameAddress(await vault.stakeToken(), stakeTokenAddress)) return false;
@@ -84,7 +82,6 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
     if (!sameAddress(await hook.disputePolicy(), policy.address)) return false;
     if (!(await policy.isLifecycleHookAuthorized(hook.address))) return false;
     if (!(await nullifierRegistry.isWriter(policy.address))) return false;
-    if (!sameAddress(await orchestrator.lifecycleHook(), hook.address)) return false;
     if (!sameAddress(await vault.owner(), governance)) return false;
     if (!sameAddress(await policy.owner(), governance)) return false;
     if (!sameAddress(await verifier.owner(), governance)) return false;
@@ -93,6 +90,23 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
       const riskWindow = await policy.getRiskWindow(paymentMethodHash(methodName));
       if (!riskWindow.eq(DISPUTE_RISK_WINDOW[network])) return false;
     }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean> {
+  if (!await systemPrepared(hre)) return false;
+  try {
+    const network = hre.deployments.getNetworkName();
+    const orchestratorAddress = (await hre.deployments.get("OrchestratorV3")).address;
+    const hookAddress = (await hre.deployments.get("IntentLifecycleHookV1")).address;
+    const nullifierRegistryAddress = (await hre.deployments.get("ChargebackNullifierRegistry")).address;
+    const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorAddress);
+    const nullifierRegistry = await ethers.getContractAt("NullifierRegistry", nullifierRegistryAddress);
+
+    if (!sameAddress(await orchestrator.lifecycleHook(), hookAddress)) return false;
     if (
       network === "base_staging"
       && await nullifierRegistry.isWriter(RETIRED_STAGING_DISPUTE_POLICY)
@@ -105,6 +119,15 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const network = hre.deployments.getNetworkName();
+  const isStaging = network === "base_staging";
+  const prepareStaging = isStaging && process.env.PREPARE_STAGING_V3_DISPUTE_CUTOVER === "true";
+  const activateStaging = isStaging && process.env.ENABLE_STAGING_V3_DISPUTE_CUTOVER === "true";
+  if (prepareStaging && activateStaging) {
+    throw new Error("Staging dispute preparation and activation must run as separate phases");
+  }
+  if (isStaging && !prepareStaging && !activateStaging) {
+    throw new Error("Select the staging dispute preparation or activation phase");
+  }
   const [deployer] = await hre.getUnnamedAccounts();
   const governance = MULTI_SIG[network] || deployer;
   const stakeTokenAddress = USDC[network] || (await hre.deployments.get("USDCMock")).address;
@@ -112,7 +135,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const existingVault = await hre.deployments.getOrNull("StakeVault");
   const existingPolicy = await hre.deployments.getOrNull("DisputePolicy");
   const existingHook = await hre.deployments.getOrNull("IntentLifecycleHookV1");
-  if (network === "base_staging") {
+  if (isStaging) {
     if (existingVault && sameAddress(existingVault.address, RETIRED_STAGING_STAKE_VAULT)) {
       throw new Error("Move the retired StakeVault artifact aside before lane 31");
     }
@@ -124,7 +147,17 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     }
     await assertRetiredLiabilitiesZero();
   }
-  if (existingVault || existingPolicy || existingHook) {
+  const existingFreshStack = Boolean(existingVault && existingPolicy && existingHook);
+  const partialFreshStack = Boolean(existingVault || existingPolicy || existingHook) && !existingFreshStack;
+  if (partialFreshStack) {
+    throw new Error(
+      "StakeVault, DisputePolicy, and IntentLifecycleHookV1 artifacts must be all present or all absent",
+    );
+  }
+  if (isStaging && activateStaging && !existingFreshStack) {
+    throw new Error("Prepare the fresh staging dispute stack before activation");
+  }
+  if (!isStaging && existingFreshStack) {
     throw new Error(
       "Move the StakeVault, DisputePolicy, and IntentLifecycleHookV1 artifacts aside before lane 31",
     );
@@ -132,7 +165,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const orchestratorRegistryAddress = (await hre.deployments.get("OrchestratorRegistry")).address;
   const whitelistPolicyAddress = (await hre.deployments.get("WhitelistPolicy")).address;
-  const retiringLifecycleHookAddress = network === "base_staging"
+  const retiringLifecycleHookAddress = isStaging
     ? RETIRED_STAGING_LIFECYCLE_HOOK
     : (await hre.deployments.get("WhitelistLifecycleHook")).address;
   const orchestratorAddress = (await hre.deployments.get("OrchestratorV3")).address;
@@ -142,7 +175,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await assertCode(orchestratorAddress, "OrchestratorV3");
 
   const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorAddress);
-  if (!sameAddress(await orchestrator.lifecycleHook(), retiringLifecycleHookAddress)) {
+  const currentLifecycleHook = await orchestrator.lifecycleHook();
+  if (
+    !sameAddress(currentLifecycleHook, retiringLifecycleHookAddress)
+    && !sameAddress(currentLifecycleHook, existingHook?.address || "")
+  ) {
     throw new Error("OrchestratorV3 does not use the lifecycle hook retired by lane 31");
   }
 
@@ -195,6 +232,28 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("DisputeVerifier:", disputeVerifierAddress);
   console.log("Reusing dispute nullifier registry:", disputeNullifierRegistryAddress);
 
+  if (isStaging && activateStaging) {
+    if (!await systemPrepared(hre)) {
+      throw new Error("Fresh staging dispute stack is not prepared for activation");
+    }
+    const preparedHook = await ethers.getContractAt("IntentLifecycleHookV1", existingHook!.address);
+    const nullifierRegistry = await ethers.getContractAt("NullifierRegistry", disputeNullifierRegistryAddress);
+
+    await (await orchestrator.setLifecycleHook(preparedHook.address)).wait();
+    await waitForDeploymentDelay(hre);
+    await removeWritePermission(hre, nullifierRegistry, RETIRED_STAGING_DISPUTE_POLICY);
+
+    if (!await systemFullyWired(hre)) throw new Error("Dispute lifecycle stack activation verification failed");
+    console.log("=== Prepared dispute lifecycle stack activated ===");
+    return;
+  }
+
+  if (isStaging && prepareStaging && existingFreshStack) {
+    if (!await systemPrepared(hre)) throw new Error("Existing staging dispute stack is not fully prepared");
+    console.log("=== Dispute lifecycle stack already prepared ===");
+    return;
+  }
+
   const vaultDeployment = await hre.deployments.deploy("StakeVault", {
     from: deployer,
     args: [deployer, stakeTokenAddress, ethers.constants.AddressZero, STAKE_VAULT_CONTROLLER_CHANGE_DELAY],
@@ -243,15 +302,32 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     await waitForDeploymentDelay(hre);
   }
 
-  await (await orchestrator.setLifecycleHook(hook.address)).wait();
-  await waitForDeploymentDelay(hre);
-  if (network === "base_staging") {
-    await removeWritePermission(hre, nullifierRegistry, RETIRED_STAGING_DISPUTE_POLICY);
+  if (!(isStaging && prepareStaging)) {
+    await (await orchestrator.setLifecycleHook(hook.address)).wait();
+    await waitForDeploymentDelay(hre);
+    if (isStaging) {
+      await removeWritePermission(hre, nullifierRegistry, RETIRED_STAGING_DISPUTE_POLICY);
+    }
   }
 
   await setNewOwner(hre, vault, governance);
   await setNewOwner(hre, policy, governance);
   await setNewOwner(hre, disputeVerifier, governance);
+
+  if (isStaging && prepareStaging) {
+    if (!await systemPrepared(hre)) throw new Error("Dispute lifecycle stack preparation verification failed");
+    if (!sameAddress(await orchestrator.lifecycleHook(), retiringLifecycleHookAddress)) {
+      throw new Error("Staging preparation unexpectedly changed the OrchestratorV3 lifecycle hook");
+    }
+    if (!await nullifierRegistry.isWriter(RETIRED_STAGING_DISPUTE_POLICY)) {
+      throw new Error("Staging preparation unexpectedly revoked the retiring dispute policy");
+    }
+    console.log("=== Dispute lifecycle stack prepared but not activated ===");
+    console.log("StakeVault:", vault.address);
+    console.log("DisputePolicy:", policy.address);
+    console.log("IntentLifecycleHookV1:", hook.address);
+    return;
+  }
 
   if (!await systemFullyWired(hre)) throw new Error("Dispute lifecycle stack verification failed");
 
@@ -265,7 +341,14 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.deployments.getNetworkName();
   if (!SUPPORTED_NETWORKS.has(network)) return true;
   if (await systemFullyWired(hre)) return true;
-  if (network === "base_staging" && process.env.ENABLE_STAGING_V3_DISPUTE_CUTOVER !== "true") return true;
+  if (network === "base_staging") {
+    const prepare = process.env.PREPARE_STAGING_V3_DISPUTE_CUTOVER === "true";
+    const activate = process.env.ENABLE_STAGING_V3_DISPUTE_CUTOVER === "true";
+    if (prepare && activate) return false;
+    if (prepare) return await systemPrepared(hre);
+    if (activate) return false;
+    return true;
+  }
   return false;
 };
 

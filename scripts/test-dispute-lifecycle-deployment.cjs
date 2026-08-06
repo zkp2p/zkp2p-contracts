@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 process.env.DEPLOY_TX_DELAY_MS = "0";
-process.env.ENABLE_STAGING_V3_DISPUTE_CUTOVER = "true";
 process.env.ALCHEMY_API_KEY = "offline";
 process.env.BASE_DEPLOY_PRIVATE_KEY =
   "1111111111111111111111111111111111111111111111111111111111111111";
@@ -28,6 +27,11 @@ const deployDisputeStack = require("../deploy/31_deploy_dispute_lifecycle_stack.
 const RETIRED_STAGING_STAKE_VAULT = "0x224a45C65eB9A4D1dB00eD6Bfe21aD7Ec0a9b0E4";
 const RETIRED_STAGING_DISPUTE_POLICY = "0xC1E16Bf824fA7cee8770Fb72F49349091D4e583B";
 const RETIRED_STAGING_LIFECYCLE_HOOK = "0xE8Fe714f848fAf7ecff7960AfD0C395771C22AA1";
+
+function setStagingPhase(phase) {
+  process.env.PREPARE_STAGING_V3_DISPUTE_CUTOVER = phase === "prepare" ? "true" : "false";
+  process.env.ENABLE_STAGING_V3_DISPUTE_CUTOVER = phase === "activate" ? "true" : "false";
+}
 
 async function deployContract(name, args = []) {
   const factory = await ethers.getContractFactory(name);
@@ -168,6 +172,7 @@ async function fixture({
 }
 
 async function rejectLiabilities() {
+  setStagingPhase("prepare");
   const state = await fixture({ retiredTotalStaked: 1 });
   await assert.rejects(
     deployDisputeStack(state.fakeHre),
@@ -178,6 +183,7 @@ async function rejectLiabilities() {
 }
 
 async function rejectMissingRegistry() {
+  setStagingPhase("prepare");
   const state = await fixture({ includeDisputeRegistry: false });
   await assert.rejects(
     deployDisputeStack(state.fakeHre),
@@ -188,6 +194,7 @@ async function rejectMissingRegistry() {
 }
 
 async function rejectHookMismatch() {
+  setStagingPhase("prepare");
   const state = await fixture({ wireRetiringHook: false });
   await assert.rejects(
     deployDisputeStack(state.fakeHre),
@@ -197,7 +204,42 @@ async function rejectHookMismatch() {
   assert.deepEqual(state.deployedNames, []);
 }
 
+async function rejectMissingPhase() {
+  setStagingPhase("none");
+  const state = await fixture();
+  await assert.rejects(
+    deployDisputeStack(state.fakeHre),
+    (error) => error instanceof Error
+      && error.message === "Select the staging dispute preparation or activation phase",
+  );
+  assert.deepEqual(state.deployedNames, []);
+}
+
+async function rejectConflictingPhases() {
+  process.env.PREPARE_STAGING_V3_DISPUTE_CUTOVER = "true";
+  process.env.ENABLE_STAGING_V3_DISPUTE_CUTOVER = "true";
+  const state = await fixture();
+  await assert.rejects(
+    deployDisputeStack(state.fakeHre),
+    (error) => error instanceof Error
+      && error.message === "Staging dispute preparation and activation must run as separate phases",
+  );
+  assert.deepEqual(state.deployedNames, []);
+}
+
+async function rejectActivationBeforePreparation() {
+  setStagingPhase("activate");
+  const state = await fixture();
+  await assert.rejects(
+    deployDisputeStack(state.fakeHre),
+    (error) => error instanceof Error
+      && error.message === "Prepare the fresh staging dispute stack before activation",
+  );
+  assert.deepEqual(state.deployedNames, []);
+}
+
 async function cutover() {
+  setStagingPhase("prepare");
   const state = await fixture();
   await deployDisputeStack(state.fakeHre);
 
@@ -208,6 +250,19 @@ async function cutover() {
     "IntentLifecycleHookV1",
   ]);
   const hookDeployment = state.deployments.get("IntentLifecycleHookV1");
+  assert.equal(
+    (await state.orchestrator.lifecycleHook()).toLowerCase(),
+    RETIRED_STAGING_LIFECYCLE_HOOK.toLowerCase(),
+  );
+  assert.equal(
+    await state.disputeNullifierRegistry.isWriter(RETIRED_STAGING_DISPUTE_POLICY),
+    true,
+  );
+  assert.equal(await deployDisputeStack.skip(state.fakeHre), true);
+
+  setStagingPhase("activate");
+  assert.equal(await deployDisputeStack.skip(state.fakeHre), false);
+  await deployDisputeStack(state.fakeHre);
   assert.equal(
     (await state.orchestrator.lifecycleHook()).toLowerCase(),
     hookDeployment.address.toLowerCase(),
@@ -225,6 +280,9 @@ async function cutover() {
 }
 
 async function run() {
+  await rejectMissingPhase();
+  await rejectConflictingPhases();
+  await rejectActivationBeforePreparation();
   await rejectLiabilities();
   await rejectHookMismatch();
   await rejectMissingRegistry();

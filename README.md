@@ -659,7 +659,17 @@ runs, move only these canonical artifacts aside:
 - `deployments/base_staging/DisputePolicy.json` when present
 - `deployments/base_staging/IntentLifecycleHookV1.json`
 
-Lane 31 activation is blocked until every compatible downstream release is deployed:
+Lane 31 has separate preparation and activation phases. First run
+`--tags V3DisputeLifecycleStack` with `PREPARE_STAGING_V3_DISPUTE_CUTOVER=true`.
+Preparation requires the retired vault's aggregate stake and claim liabilities to be zero before
+any write. It deploys a fresh dispute verifier, vault, policy, and combined hook; reuses the existing
+nullifier registry; initializes the controller; applies the canonical risk windows; authorizes the
+combined hook on the new policy; and transfers ownership. It deliberately leaves the active O3 on
+the retiring hook and preserves the retiring policy's writer permission.
+
+Commit the newly generated canonical artifacts from preparation so their addresses can flow through
+the package, indexer, curator, and attestation-service releases. Activation remains blocked until
+every compatible downstream release is deployed:
 
 - [ ] `zkp2p-indexer` indexes the fresh contract addresses and the renamed `Dispute*` events.
 - [ ] `curator` recognizes `IntentLifecycleHookV1` as the enforcement hook and enables dispute enforcement.
@@ -669,12 +679,11 @@ Lane 31 activation is blocked until every compatible downstream release is deplo
 
 Consumer renames belong in their owning repositories. Do not add legacy `Chargeback*` ABI aliases to this repository.
 
-Run `--tags V3DisputeLifecycleStack` with `ENABLE_STAGING_V3_DISPUTE_CUTOVER=true`. The lane
-requires the retired vault's aggregate stake and claim liabilities to be zero before any write. It
-then deploys a fresh dispute verifier, vault, policy, and combined hook; reuses the existing
-nullifier registry; initializes the controller; applies the canonical risk windows; authorizes the
-combined hook on the new policy; rotates the already-deployed O3; and revokes the retired policy's
-nullifier-writer permission. Existing intents retain their snapshotted whitelist-only hook.
+After the checklist is complete, run the same tag with
+`ENABLE_STAGING_V3_DISPUTE_CUTOVER=true`. Activation requires the exact prepared stack and performs
+no fresh deployment: it rotates the already-deployed O3 and revokes the retiring policy's
+nullifier-writer permission. The preparation and activation flags are mutually exclusive. Existing
+intents retain their snapshotted whitelist-only hook.
 
 Commit the newly generated canonical artifacts after each authorized deployment. Do not commit the
 temporary artifact removals.
