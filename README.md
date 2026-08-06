@@ -659,6 +659,16 @@ runs, move only these canonical artifacts aside:
 - `deployments/base_staging/DisputePolicy.json` when present
 - `deployments/base_staging/IntentLifecycleHookV1.json`
 
+Lane 31 activation is blocked until every compatible downstream release is deployed:
+
+- [ ] `zkp2p-indexer` indexes the fresh contract addresses and the renamed `Dispute*` events.
+- [ ] `curator` recognizes `IntentLifecycleHookV1` as the enforcement hook and enables dispute enforcement.
+- [ ] `@zkp2p/contracts-v2` publishes the hard-cutover dispute ABI and staging addresses, and its consumers upgrade.
+- [ ] `attestation-service` targets the fresh `DisputeVerifier` and signs the `ZKP2P DisputeVerifier`
+  `DisputeAttestation` domain and type.
+
+Consumer renames belong in their owning repositories. Do not add legacy `Chargeback*` ABI aliases to this repository.
+
 Run `--tags V3DisputeLifecycleStack` with `ENABLE_STAGING_V3_DISPUTE_CUTOVER=true`. The lane
 requires the retired vault's aggregate stake and claim liabilities to be zero before any write. It
 then deploys a fresh dispute verifier, vault, policy, and combined hook; reuses the existing

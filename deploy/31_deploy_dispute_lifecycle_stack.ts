@@ -19,9 +19,9 @@ import {
 } from "../deployments/helpers";
 
 const SUPPORTED_NETWORKS = new Set(["localhost", "hardhat", "base_staging"]);
-const RETIRED_STAGING_STAKE_VAULT = "0xaA82e422B3755eA6a1352eB6B2828324740ee5af";
-const RETIRED_STAGING_DISPUTE_POLICY = "0xa5fdc112BB69ee2141b99Fdcb94364256Dc34377";
-const RETIRED_STAGING_LIFECYCLE_HOOK = "0x4874063A76C3549641883ad0BB169D6b41a0E2c3";
+const RETIRED_STAGING_STAKE_VAULT = "0x224a45C65eB9A4D1dB00eD6Bfe21aD7Ec0a9b0E4";
+const RETIRED_STAGING_DISPUTE_POLICY = "0xC1E16Bf824fA7cee8770Fb72F49349091D4e583B";
+const RETIRED_STAGING_LIFECYCLE_HOOK = "0xE8Fe714f848fAf7ecff7960AfD0C395771C22AA1";
 
 function sameAddress(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
@@ -132,8 +132,19 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const orchestratorRegistryAddress = (await hre.deployments.get("OrchestratorRegistry")).address;
   const whitelistPolicyAddress = (await hre.deployments.get("WhitelistPolicy")).address;
-  const whitelistHookAddress = (await hre.deployments.get("WhitelistLifecycleHook")).address;
+  const retiringLifecycleHookAddress = network === "base_staging"
+    ? RETIRED_STAGING_LIFECYCLE_HOOK
+    : (await hre.deployments.get("WhitelistLifecycleHook")).address;
   const orchestratorAddress = (await hre.deployments.get("OrchestratorV3")).address;
+
+  await assertCode(whitelistPolicyAddress, "WhitelistPolicy");
+  await assertCode(retiringLifecycleHookAddress, "Retiring lifecycle hook");
+  await assertCode(orchestratorAddress, "OrchestratorV3");
+
+  const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorAddress);
+  if (!sameAddress(await orchestrator.lifecycleHook(), retiringLifecycleHookAddress)) {
+    throw new Error("OrchestratorV3 does not use the lifecycle hook retired by lane 31");
+  }
 
   // Keep the historical deployment alias so the cutover reuses the already-deployed generic registry.
   let disputeNullifierRegistryDeployment = await hre.deployments.getOrNull(
@@ -147,6 +158,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       args: [],
       log: true,
     });
+  }
+  if (!disputeNullifierRegistryDeployment) {
+    throw new Error("ChargebackNullifierRegistry must already exist on staging");
   }
   if (!disputeVerifierDeployment) {
     let nullifierRegistryV2 = await hre.deployments.getOrNull("NullifierRegistryV2");
@@ -169,22 +183,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       log: true,
     });
   }
-  if (!disputeVerifierDeployment || !disputeNullifierRegistryDeployment) {
-    throw new Error("Dispute lifecycle dependencies are unavailable");
-  }
   const disputeVerifierAddress = disputeVerifierDeployment.address;
   const disputeNullifierRegistryAddress = disputeNullifierRegistryDeployment.address;
 
-  await assertCode(whitelistPolicyAddress, "WhitelistPolicy");
-  await assertCode(whitelistHookAddress, "WhitelistLifecycleHook");
-  await assertCode(orchestratorAddress, "OrchestratorV3");
   await assertCode(disputeVerifierAddress, "DisputeVerifier");
   await assertCode(disputeNullifierRegistryAddress, "ChargebackNullifierRegistry");
-
-  const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorAddress);
-  if (!sameAddress(await orchestrator.lifecycleHook(), whitelistHookAddress)) {
-    throw new Error("Lane 31 requires the lane-30 OrchestratorV3 to still use WhitelistLifecycleHook");
-  }
 
   console.log("=== Deploying dispute lifecycle stack ===");
   console.log("Reusing OrchestratorV3:", orchestratorAddress);
