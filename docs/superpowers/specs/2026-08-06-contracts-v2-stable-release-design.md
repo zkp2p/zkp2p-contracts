@@ -70,7 +70,13 @@ identity. See the [npm trusted publishing documentation](https://docs.npmjs.com/
 
 The preparation PR documents these external changes but does not perform them.
 They must be completed and verified after the release code is merged and before
-the exact stable workflow dispatch.
+the exact stable workflow dispatch. The operator performing this setup needs
+repository-administrator access for the GitHub environment and package-owner
+or maintainer access for the npm trusted-publisher edit. GitHub settings are
+read back through the environment, deployment-policy, secret-list, and
+variable-list APIs; npm's repository, workflow, action, and omitted-environment
+fields are read back in the package's Trusted Publisher settings before release
+approval. This is one-time setup, not a per-release operation.
 
 ## Version-derived Release Policy
 
@@ -109,6 +115,9 @@ workflow_dispatch on refs/heads/main
              \         /
               v       v
         publish OR recovery
+             |
+             v
+   read-only published-package verification
 ```
 
 The workflow preserves its existing global concurrency group,
@@ -127,6 +136,15 @@ for this final pre-mutation check.
 Only the normal publish job receives `id-token: write`. Validation, policy,
 Foundry, and recovery receive no npm publication authority. The publish job
 selects its GitHub environment from the resolver output.
+
+The OIDC publish job ends after the final registry guard and the single
+successful `npm publish`. Post-publish metadata, integrity, provenance, and
+installed-package checks run in a separate read-only job that needs the publish
+job. This distinction is required for recovery: npm can accept the immutable
+version while eventual registry propagation makes the later verification job
+fail. Recovery proves that the original publish job succeeded and may tolerate
+a failed read-only verification job; it never treats a failed mutation job as
+proof of publication.
 
 Both channels perform one direct tagged publication:
 
@@ -188,6 +206,13 @@ the release, then independently checks every supplied expected tag, registry
 integrity, and provenance. The publish job repeats the version-unused and
 expected-tag checks immediately before mutation, after all long-running build,
 Foundry, artifact-download, and tarball-validation work has completed.
+
+npm 12 emits `npm pack --json` as an object keyed by package name, while npm 11
+and earlier emit an array. A shared, fail-closed parser accepts exactly those
+two known shapes, selects exactly one result for `@zkp2p/contracts-v2`, and is
+used by release policy, workflow tarball selection, and pack verification. Its
+fixtures cover both shapes so the npm 12 attestation toolchain cannot silently
+break tarball verification after publication.
 
 For RC, the pre-mutation guard requires both committed tag baselines unchanged,
 and the post-publish expectations are `rc=<release>` and
@@ -293,8 +318,15 @@ statement claims:
 Normal verification expects the current publish run ID. Recovery expects the
 supplied original `release_run_id`, and uses GitHub `actions: read` data to
 prove that run was a non-recovery workflow dispatch for the same release and
-head SHA. This ties the registry artifact to the exact original run whose
-validated tarball recovery downloads.
+head SHA, and contained exactly one successful OIDC publish job. The original
+run's separate read-only verification job may have failed only after publication;
+any failed or skipped publish job is rejected. This ties the registry artifact
+to the exact original run whose validated tarball recovery downloads.
+
+Provenance claim tests use a checked-in public RC5 audit fixture captured with
+the pinned npm/Node attestation toolchain. The fixture records its exact package,
+source SHA, workflow run and attempt, environment, and a fixed file digest; unit
+tests never depend on a live network response.
 
 ## Recovery
 
@@ -310,6 +342,12 @@ Recovery remains verification-only. It must:
 - re-run release, install, ABI, address, CJS, and ESM checks;
 - omit `id-token: write` and never execute `npm publish`.
 
+The validated tarball artifact is retained for 30 days. Recovery documentation
+requires checking that the original run artifact is still available before
+starting a recovery PR. Expired artifacts cannot be reconstructed because
+generated metadata is not byte-stable; after expiry, stop rather than treating
+a fresh rebuild as the accepted tarball.
+
 The recovery allowlist may include only release-procedure and non-published
 verification code:
 
@@ -317,6 +355,9 @@ verification code:
 - `.github/workflows/publish-contracts-v2.yml`;
 - `NPM_RELEASE.md`;
 - `scripts/npm-release.mjs`;
+- `scripts/lib/npm-pack-result.mjs`;
+- `scripts/lib/npm-release-policy.mjs`;
+- `scripts/npm-release.spec.mjs`;
 - `scripts/lib/release-environment-policy.mjs`;
 - `scripts/verify-github-environment.mjs`;
 - `scripts/verify-github-environment.spec.mjs`;
@@ -328,6 +369,11 @@ addresses, deployment artifacts, and deployment outputs remain forbidden after
 the tag. Any change that can alter package contents requires a new forward-fix
 version.
 
+The release-policy module and its test are non-package verification code. They
+are allowlisted so a propagation-only recovery can correct a verifier defect
+with its regression test; neither path is included in the npm tarball or can
+alter the preserved validated artifact.
+
 ## Environment Policy
 
 The GitHub environment verifier remains fail-closed and accepts only an
@@ -336,7 +382,7 @@ autonomous environment with:
 - no reviewer rule;
 - no wait timer;
 - custom deployment-branch policies enabled;
-- exactly one allowed branch, `main`.
+- exactly one allowed policy with `type=branch` and `name=main`.
 
 RC-specific error text becomes channel-neutral, and policy tests cover both
 `npm-publish-rc` and `npm-publish-stable`.
@@ -353,7 +399,9 @@ Implementation follows test-first release-policy changes:
    pre-mutation registry guard, and exact provenance identity/digest/run claims.
 3. Add failing installed-package checks reproducing the root, raw-JSON,
    extensionless-specifier, runtime-`require`, and network ESM failures. Cover
-   every advertised runtime ESM export and assert version equality.
+   every advertised runtime ESM export and assert version equality. Generator
+   unit tests build a temporary package fixture and never inspect ignored output
+   left in the working tree.
 4. Implement only enough release and package-generation behavior to make those
    regressions pass.
 
@@ -375,6 +423,12 @@ pinned Foundry version as CI. A complete local Foundry rerun is unnecessary
 when the exact commit is green in current CI because this change does not alter
 Solidity behavior.
 
+Before merge, the normal PR CI package/deployment job runs the package portion
+under Node 22.14 and includes release verification, normalized pack inspection,
+native installed CJS/ESM smokes, and the pinned ethers 5 and 6 peer matrix. The
+publish workflow remains the final full Foundry and OIDC gate, but it is not the
+first place the release-grade package acceptance criteria execute.
+
 ## Preparation and Release Sequence
 
 ### Preparation PR
@@ -389,10 +443,13 @@ Solidity behavior.
 
 ### One-time external setup
 
-1. Create and verify `npm-publish-stable` as autonomous and main-only.
+1. With repository-admin authority, create and verify `npm-publish-stable` as
+   autonomous, main-only, and free of environment secrets or variables.
 2. Remove the environment claim from npm's existing trusted publisher while
-   preserving all other identity and action constraints.
-3. Confirm no reusable npm credential is present in either environment.
+   signed in as a package owner or maintainer, preserving all other identity and
+   action constraints, then read every field back in npm package settings.
+3. Confirm no reusable npm credential is present in either environment and
+   record the GitHub API and npm settings read-back evidence.
 
 ### Stable initiation
 
@@ -436,6 +493,8 @@ If any approved value changes before dispatch, stop and obtain new approval.
 - RC and stable runs share one serialized trusted workflow and publish directly
   under their resolved tags.
 - Only normal publication receives OIDC write permission.
+- OIDC mutation and read-only post-publish verification are separate jobs, so
+  recovery can prove npm accepted a version even when propagation checks fail.
 - Normal publishing requires workflow dispatch from the exact canonical-main
   commit, resolved through the explicit canonical URL/ref, and an annotated
   matching canonical tag.
