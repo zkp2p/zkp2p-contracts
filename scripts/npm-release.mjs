@@ -5,33 +5,134 @@ import path from 'node:path';
 import process from 'node:process';
 import { execFileSync } from 'node:child_process';
 
+import { normalizeNpmPackResult } from './lib/npm-pack-result.mjs';
+import {
+  assertExpectedDistTags,
+  releaseRegistryExpectations,
+  resolveReleasePolicy,
+} from './lib/npm-release-policy.mjs';
+
 const [, , command, packageJsonArg, release, tag, extraArg] = process.argv;
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const releasePackage = '@zkp2p/contracts-v2';
 
 function fail(message) {
   console.error(`Release validation failed: ${message}`);
   process.exit(1);
 }
 
-if (!['guard', 'recover', 'verify'].includes(command) || !packageJsonArg || !release || !tag) {
-  fail('usage: npm-release.mjs <guard|recover|verify> <package.json> <version> rc [pack.json]');
+if (command === 'pack-path') {
+  if (!packageJsonArg || !release || tag) {
+    fail('usage: npm-release.mjs pack-path <pack.json> <pack-dir>');
+  }
+  const packJsonPath = path.resolve(packageJsonArg);
+  const packDirectory = path.resolve(release);
+  let packResult;
+  try {
+    packResult = normalizeNpmPackResult(
+      JSON.parse(fs.readFileSync(packJsonPath, 'utf8')),
+      releasePackage,
+    );
+  } catch (error) {
+    fail(error.message);
+  }
+  const tarballPath = path.resolve(packDirectory, packResult.filename);
+  const relativeTarballPath = path.relative(packDirectory, tarballPath);
+  if (
+    !relativeTarballPath ||
+    relativeTarballPath === '..' ||
+    relativeTarballPath.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeTarballPath)
+  ) {
+    fail('pack path must stay inside the supplied directory');
+  }
+  console.log(tarballPath);
+  process.exit(0);
+}
+
+if (!['resolve', 'guard', 'recover', 'verify'].includes(command) || !packageJsonArg || !release) {
+  fail('usage: npm-release.mjs resolve <package.json> <version> OR npm-release.mjs <guard|recover|verify> <package.json> <version> <dist-tag> [pack.json]');
+}
+if (command === 'resolve' && tag) {
+  fail('resolve takes only <package.json> and <version>');
+}
+if (command !== 'resolve' && !tag) {
+  fail('guard, recover, and verify require the resolved dist-tag');
 }
 
 const packageJsonPath = path.resolve(packageJsonArg);
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-const match = release.match(semverPattern);
 
-if (!match) fail(`release input is not valid SemVer: ${release}`);
-if (tag !== 'rc') fail(`RC workflow requires the hard-coded rc dist-tag, received ${tag}`);
-if (packageJson.version !== release) {
-  fail(`release input ${release} does not match ${packageJson.name} package version ${packageJson.version}`);
-}
+if (!semverPattern.test(release)) fail(`release input is not valid SemVer: ${release}`);
 
 const releaseLine = process.env.RELEASE_LINE;
-if (!releaseLine) fail('RELEASE_LINE must be set by the repository-controlled RC workflow');
-const escapedReleaseLine = releaseLine.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-if (!new RegExp(`^${escapedReleaseLine}-rc\\.(0|[1-9]\\d*)$`).test(release)) {
-  fail(`release must match ${releaseLine}-rc.N exactly`);
+if (!releaseLine) fail('RELEASE_LINE must be set by the repository-controlled release workflow');
+let policy;
+try {
+  policy = resolveReleasePolicy({
+    release,
+    packageVersion: packageJson.version,
+    releaseLine,
+  });
+} catch (error) {
+  fail(error.message);
+}
+
+if (command === 'resolve') {
+  const recoveryMode = process.env.RECOVERY_MODE;
+  if (recoveryMode !== 'true' && recoveryMode !== 'false') {
+    fail('RECOVERY_MODE must be exactly true or false');
+  }
+  const baselines = {
+    latest: process.env.LATEST_BASELINE,
+    rc: process.env.RC_BASELINE,
+  };
+  try {
+    assertExpectedDistTags(baselines, baselines);
+  } catch (error) {
+    fail(error.message);
+  }
+  const expectations = releaseRegistryExpectations({
+    channel: policy.channel,
+    release,
+    recovery: recoveryMode === 'true',
+    baselines,
+  });
+  const outputs = {
+    channel: policy.channel,
+    dist_tag: policy.distTag,
+    environment: policy.environment,
+    guard_latest: expectations.guard.latest,
+    guard_rc: expectations.guard.rc,
+    verify_latest: expectations.verify.latest,
+    verify_rc: expectations.verify.rc,
+  };
+  const outputText = `${Object.entries(outputs)
+    .map(([name, value]) => `${name}=${value}`)
+    .join('\n')}\n`;
+  if (process.env.GITHUB_ACTIONS === 'true' && !process.env.GITHUB_OUTPUT) {
+    fail('GITHUB_OUTPUT must be set in GitHub Actions');
+  }
+  if (process.env.GITHUB_OUTPUT) {
+    fs.appendFileSync(path.resolve(process.env.GITHUB_OUTPUT), outputText);
+  }
+  process.stdout.write(outputText);
+  process.exit(0);
+}
+
+if (tag !== policy.distTag) {
+  fail(`dist-tag ${tag} does not match resolved dist-tag ${policy.distTag}`);
+}
+if (process.env.DIST_TAG !== undefined && process.env.DIST_TAG !== policy.distTag) {
+  fail(`DIST_TAG ${process.env.DIST_TAG} does not match resolved dist-tag ${policy.distTag}`);
+}
+if (
+  process.env.RELEASE_ENVIRONMENT !== undefined &&
+  process.env.RELEASE_ENVIRONMENT !== policy.environment
+) {
+  fail(
+    `environment ${process.env.RELEASE_ENVIRONMENT} does not match resolved environment ${policy.environment}`,
+  );
 }
 
 const registryBase = (packageJson.publishConfig?.registry || 'https://registry.npmjs.org').replace(/\/$/, '');
@@ -110,8 +211,15 @@ if (command === 'guard' || command === 'recover') {
 }
 
 if (!extraArg) fail('verify requires the pre-publish npm pack JSON path');
-const packResult = JSON.parse(fs.readFileSync(path.resolve(extraArg), 'utf8'))[0];
-if (!packResult?.integrity) fail('pack JSON does not contain an integrity value');
+let packResult;
+try {
+  packResult = normalizeNpmPackResult(
+    JSON.parse(fs.readFileSync(path.resolve(extraArg), 'utf8')),
+    packageJson.name,
+  );
+} catch (error) {
+  fail(error.message);
+}
 
 const packageUrl = `${registryBase}/${encodedName}`;
 let lastReason = 'registry metadata was not available';
