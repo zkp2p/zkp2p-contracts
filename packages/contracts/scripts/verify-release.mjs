@@ -39,6 +39,8 @@ const sourceAbiArtifacts = {
   WhitelistPolicy: 'artifacts/contracts/hooks/WhitelistPolicy.sol/WhitelistPolicy.json',
   WhitelistLifecycleHook:
     'artifacts/contracts/hooks/WhitelistLifecycleHook.sol/WhitelistLifecycleHook.json',
+  DisputeNullifierRegistry:
+    'artifacts/contracts/registries/NullifierRegistry.sol/NullifierRegistry.json',
   DisputePolicy: 'artifacts/contracts/hooks/DisputePolicy.sol/DisputePolicy.json',
   DisputeVerifier:
     'artifacts/contracts/unifiedVerifier/DisputeVerifier.sol/DisputeVerifier.json',
@@ -46,10 +48,29 @@ const sourceAbiArtifacts = {
     'artifacts/contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json',
   StakeVault: 'artifacts/contracts/StakeVault.sol/StakeVault.json',
 };
-const retiredPackageContracts = new Set(['ChargebackPolicy', 'ChargebackVerifier']);
-const requiredNetworkContracts = {
-  baseStaging: ['DisputePolicy', 'DisputeVerifier', 'IntentLifecycleHookV1', 'StakeVault'],
+const retiredPackageContracts = new Set([
+  'ChargebackNullifierRegistry',
+  'ChargebackPolicy',
+  'ChargebackVerifier',
+]);
+const retiredNetworkContracts = {
+  base: new Set(['IntentLifecycleHookV1', 'StakeVault']),
 };
+const requiredNetworkContracts = {
+  baseStaging: [
+    'DisputeNullifierRegistry',
+    'DisputePolicy',
+    'DisputeVerifier',
+    'IntentLifecycleHookV1',
+    'StakeVault',
+  ],
+};
+
+function isRetired(network, contractName) {
+  return retiredPackageContracts.has(contractName)
+    || retiredNetworkContracts[network]?.has(contractName)
+    || false;
+}
 
 function fail(message) {
   console.error(`Contracts package verification failed: ${message}`);
@@ -152,6 +173,12 @@ for (const {
   }
 
   for (const [contractName, packageAddress] of contracts) {
+    if (isRetired(name, contractName)) {
+      if (packageAddress.toLowerCase() !== zeroAddress) {
+        fail(`${name}.${contractName} exposes a retired deployment address`);
+      }
+      continue;
+    }
     const outputEntry = output.contracts?.[contractName];
     if (!outputEntry) {
       if (packageAddress.toLowerCase() !== zeroAddress) {
@@ -191,7 +218,7 @@ for (const {
   }
 
   for (const contractName of Object.keys(output.contracts || {})) {
-    if (retiredPackageContracts.has(contractName)) continue;
+    if (isRetired(name, contractName)) continue;
     if (!(contractName in addresses.contracts)) {
       fail(`${name} package addresses omit canonical deployment ${contractName}`);
     }
@@ -225,8 +252,10 @@ for (const removedExport of [
   'abis/contracts/RiskManager.json',
   'abis/contracts/ChargebackPolicy.json',
   'abis/contracts/ChargebackVerifier.json',
+  'abis/base/ChargebackNullifierRegistry.json',
   'abis/base/ChargebackPolicy.json',
   'abis/base/ChargebackVerifier.json',
+  'abis/baseStaging/ChargebackNullifierRegistry.json',
   'abis/baseStaging/ChargebackPolicy.json',
   'abis/baseStaging/ChargebackVerifier.json',
 ]) {

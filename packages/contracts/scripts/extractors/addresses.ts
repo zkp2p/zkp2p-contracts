@@ -17,7 +17,20 @@ const ROOT = path.resolve(__dirname, '../../../../');
 const OUTPUTS_DIR = path.join(ROOT, 'deployments', 'outputs');
 const PKG_ROOT = path.resolve(__dirname, '../..');
 const ADDRESSES_DIR = path.join(PKG_ROOT, 'addresses');
-const RETIRED_PACKAGE_CONTRACTS = new Set(['ChargebackPolicy', 'ChargebackVerifier']);
+const RETIRED_PACKAGE_CONTRACTS = new Set([
+  'ChargebackNullifierRegistry',
+  'ChargebackPolicy',
+  'ChargebackVerifier',
+]);
+const RETIRED_NETWORK_CONTRACTS: Record<string, Set<string>> = {
+  base: new Set(['IntentLifecycleHookV1', 'StakeVault']),
+};
+
+function isRetired(network: string, contractName: string): boolean {
+  return RETIRED_PACKAGE_CONTRACTS.has(contractName)
+    || RETIRED_NETWORK_CONTRACTS[network]?.has(contractName)
+    || false;
+}
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -50,7 +63,7 @@ export async function extractAddresses(): Promise<void> {
     networksData.push({ file, network, data });
 
     for (const name of Object.keys(data.contracts)) {
-      if (RETIRED_PACKAGE_CONTRACTS.has(name)) continue;
+      if (isRetired(network, name)) continue;
       allContractNames.add(name);
     }
   }
@@ -65,7 +78,7 @@ export async function extractAddresses(): Promise<void> {
 
     const contracts: Record<string, string> = {};
     for (const name of allContractNames) {
-      const entry = data.contracts[name];
+      const entry = isRetired(network, name) ? undefined : data.contracts[name];
       contracts[name] = entry ? entry.address : ZERO_ADDRESS;
     }
 

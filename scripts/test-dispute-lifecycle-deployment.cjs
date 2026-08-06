@@ -23,14 +23,11 @@ console.log = () => {};
 const hre = require("hardhat");
 const { ethers } = hre;
 const deployDisputeStack = require("../deploy/31_deploy_dispute_lifecycle_stack.ts").default;
+const activateDisputeStack = require("../deploy/32_activate_dispute_lifecycle_stack.ts").default;
 
-const RETIRED_STAGING_STAKE_VAULT = "0x224a45C65eB9A4D1dB00eD6Bfe21aD7Ec0a9b0E4";
-const RETIRED_STAGING_DISPUTE_POLICY = "0xC1E16Bf824fA7cee8770Fb72F49349091D4e583B";
-const RETIRED_STAGING_LIFECYCLE_HOOK = "0xE8Fe714f848fAf7ecff7960AfD0C395771C22AA1";
-
-function setStagingPhase(phase) {
-  process.env.PREPARE_STAGING_V3_DISPUTE_CUTOVER = phase === "prepare" ? "true" : "false";
-  process.env.ENABLE_STAGING_V3_DISPUTE_CUTOVER = phase === "activate" ? "true" : "false";
+function setStagingFlags({ deploy = false, activate = false } = {}) {
+  process.env.ENABLE_STAGING_V3_DISPUTE_DEPLOYMENT = deploy ? "true" : "false";
+  process.env.ENABLE_STAGING_V3_DISPUTE_ACTIVATION = activate ? "true" : "false";
 }
 
 async function deployContract(name, args = []) {
@@ -40,16 +37,7 @@ async function deployContract(name, args = []) {
   return contract;
 }
 
-async function installRuntimeCode(target, source) {
-  const runtimeCode = await ethers.provider.getCode(source.address);
-  await ethers.provider.send("hardhat_setCode", [target, runtimeCode]);
-}
-
-async function fixture({
-  includeDisputeRegistry = true,
-  retiredTotalStaked = 0,
-  wireRetiringHook = true,
-} = {}) {
+async function fixture() {
   await ethers.provider.send("hardhat_reset", []);
 
   const [deployerSigner] = await ethers.getSigners();
@@ -66,36 +54,15 @@ async function fixture({
     escrowRegistry.address,
     orchestratorRegistry.address,
   ]);
+  const whitelistHook = await deployContract("WhitelistLifecycleHook", [
+    orchestratorRegistry.address,
+    whitelistPolicy.address,
+  ]);
   const legacyNullifierRegistry = await deployContract("NullifierRegistry");
   const nullifierRegistryV2 = await deployContract("NullifierRegistryV2", [
     legacyNullifierRegistry.address,
   ]);
   const attestationVerifier = await deployContract("SimpleAttestationVerifier", [deployer]);
-  const disputeNullifierRegistry = includeDisputeRegistry
-    ? await deployContract("NullifierRegistry")
-    : null;
-
-  const retiredStakeToken = await deployContract("USDCMock", [1, "USD Coin", "USDC"]);
-  const retiredVaultTemplate = await deployContract("StakeVault", [
-    deployer,
-    retiredStakeToken.address,
-    ethers.constants.AddressZero,
-    2 * 24 * 60 * 60,
-  ]);
-  await installRuntimeCode(RETIRED_STAGING_STAKE_VAULT, retiredVaultTemplate);
-  if (retiredTotalStaked !== 0) {
-    const retiredVault = await ethers.getContractAt("StakeVault", RETIRED_STAGING_STAKE_VAULT);
-    await (await retiredStakeToken.approve(retiredVault.address, retiredTotalStaked)).wait();
-    await (await retiredVault.depositStake(retiredTotalStaked)).wait();
-  }
-
-  const retiredHookTemplate = await deployContract("IntentLifecycleHookV1", [
-    orchestratorRegistry.address,
-    whitelistPolicy.address,
-    whitelistPolicy.address,
-  ]);
-  await installRuntimeCode(RETIRED_STAGING_LIFECYCLE_HOOK, retiredHookTemplate);
-
   const orchestrator = await deployContract("OrchestratorV3", [
     deployer,
     network.chainId,
@@ -105,27 +72,16 @@ async function fixture({
     0,
     deployer,
   ]);
-  if (wireRetiringHook) {
-    await (await orchestrator.setLifecycleHook(RETIRED_STAGING_LIFECYCLE_HOOK)).wait();
-  }
-
-  if (disputeNullifierRegistry) {
-    await (
-      await disputeNullifierRegistry.addWritePermission(RETIRED_STAGING_DISPUTE_POLICY)
-    ).wait();
-  }
+  await (await orchestrator.setLifecycleHook(whitelistHook.address)).wait();
 
   const deployments = new Map([
     ["OrchestratorRegistry", { address: orchestratorRegistry.address }],
     ["WhitelistPolicy", { address: whitelistPolicy.address }],
+    ["WhitelistLifecycleHook", { address: whitelistHook.address }],
     ["OrchestratorV3", { address: orchestrator.address }],
     ["NullifierRegistryV2", { address: nullifierRegistryV2.address }],
     ["SimpleAttestationVerifier", { address: attestationVerifier.address }],
   ]);
-  if (disputeNullifierRegistry) {
-    deployments.set("ChargebackNullifierRegistry", { address: disputeNullifierRegistry.address });
-  }
-
   const deployedNames = [];
   const deploymentApi = {
     getNetworkName: () => "base_staging",
@@ -161,132 +117,91 @@ async function fixture({
   return {
     deployedNames,
     deployments,
-    disputeNullifierRegistry,
     fakeHre: {
       deployments: deploymentApi,
       ethers,
       getUnnamedAccounts: async () => [deployer],
     },
+    initialHook: whitelistHook.address,
     orchestrator,
   };
 }
 
-async function rejectLiabilities() {
-  setStagingPhase("prepare");
-  const state = await fixture({ retiredTotalStaked: 1 });
-  await assert.rejects(
-    deployDisputeStack(state.fakeHre),
-    (error) => error instanceof Error
-      && error.message === "Retired StakeVault still has liabilities: totalStaked=1, totalClaimable=0",
-  );
-  assert.deepEqual(state.deployedNames, []);
-}
-
-async function rejectMissingRegistry() {
-  setStagingPhase("prepare");
-  const state = await fixture({ includeDisputeRegistry: false });
-  await assert.rejects(
-    deployDisputeStack(state.fakeHre),
-    (error) => error instanceof Error
-      && error.message === "ChargebackNullifierRegistry must already exist on staging",
-  );
-  assert.deepEqual(state.deployedNames, []);
-}
-
-async function rejectHookMismatch() {
-  setStagingPhase("prepare");
-  const state = await fixture({ wireRetiringHook: false });
-  await assert.rejects(
-    deployDisputeStack(state.fakeHre),
-    (error) => error instanceof Error
-      && error.message === "OrchestratorV3 does not use the lifecycle hook retired by lane 31",
-  );
-  assert.deepEqual(state.deployedNames, []);
-}
-
-async function rejectMissingPhase() {
-  setStagingPhase("none");
+async function deploymentRequiresExplicitStagingFlag() {
+  setStagingFlags();
   const state = await fixture();
+  assert.equal(await deployDisputeStack.skip(state.fakeHre), true);
+  assert.deepEqual(state.deployedNames, []);
+}
+
+async function activationRejectsMissingStack() {
+  setStagingFlags({ activate: true });
+  const state = await fixture();
+  assert.equal(await activateDisputeStack.skip(state.fakeHre), false);
   await assert.rejects(
-    deployDisputeStack(state.fakeHre),
+    activateDisputeStack(state.fakeHre),
     (error) => error instanceof Error
-      && error.message === "Select the staging dispute preparation or activation phase",
+      && error.message === "Deploy and verify the fresh dispute lifecycle stack before activation",
   );
   assert.deepEqual(state.deployedNames, []);
 }
 
-async function rejectConflictingPhases() {
-  process.env.PREPARE_STAGING_V3_DISPUTE_CUTOVER = "true";
-  process.env.ENABLE_STAGING_V3_DISPUTE_CUTOVER = "true";
+async function deployThenActivate() {
+  setStagingFlags({ deploy: true });
   const state = await fixture();
-  await assert.rejects(
-    deployDisputeStack(state.fakeHre),
-    (error) => error instanceof Error
-      && error.message === "Staging dispute preparation and activation must run as separate phases",
-  );
-  assert.deepEqual(state.deployedNames, []);
-}
-
-async function rejectActivationBeforePreparation() {
-  setStagingPhase("activate");
-  const state = await fixture();
-  await assert.rejects(
-    deployDisputeStack(state.fakeHre),
-    (error) => error instanceof Error
-      && error.message === "Prepare the fresh staging dispute stack before activation",
-  );
-  assert.deepEqual(state.deployedNames, []);
-}
-
-async function cutover() {
-  setStagingPhase("prepare");
-  const state = await fixture();
+  assert.equal(await deployDisputeStack.skip(state.fakeHre), false);
   await deployDisputeStack(state.fakeHre);
 
   assert.deepEqual(state.deployedNames, [
+    "DisputeNullifierRegistry",
     "DisputeVerifier",
     "StakeVault",
     "DisputePolicy",
     "IntentLifecycleHookV1",
   ]);
-  const hookDeployment = state.deployments.get("IntentLifecycleHookV1");
+  for (const legacyName of [
+    "ChargebackNullifierRegistry",
+    "ChargebackVerifier",
+    "ChargebackPolicy",
+  ]) {
+    assert.equal(state.deployments.has(legacyName), false);
+  }
   assert.equal(
     (await state.orchestrator.lifecycleHook()).toLowerCase(),
-    RETIRED_STAGING_LIFECYCLE_HOOK.toLowerCase(),
+    state.initialHook.toLowerCase(),
   );
-  assert.equal(
-    await state.disputeNullifierRegistry.isWriter(RETIRED_STAGING_DISPUTE_POLICY),
-    true,
+
+  const policyDeployment = state.deployments.get("DisputePolicy");
+  const registryDeployment = state.deployments.get("DisputeNullifierRegistry");
+  const disputeNullifierRegistry = await ethers.getContractAt(
+    "NullifierRegistry",
+    registryDeployment.address,
   );
+  assert.equal(await disputeNullifierRegistry.isWriter(policyDeployment.address), true);
   assert.equal(await deployDisputeStack.skip(state.fakeHre), true);
 
-  setStagingPhase("activate");
-  assert.equal(await deployDisputeStack.skip(state.fakeHre), false);
-  await deployDisputeStack(state.fakeHre);
+  setStagingFlags();
+  assert.equal(await activateDisputeStack.skip(state.fakeHre), true);
+  setStagingFlags({ activate: true });
+  assert.equal(await activateDisputeStack.skip(state.fakeHre), false);
+  await activateDisputeStack(state.fakeHre);
+
+  const hookDeployment = state.deployments.get("IntentLifecycleHookV1");
   assert.equal(
     (await state.orchestrator.lifecycleHook()).toLowerCase(),
     hookDeployment.address.toLowerCase(),
   );
-  assert.equal(
-    await state.disputeNullifierRegistry.isWriter(RETIRED_STAGING_DISPUTE_POLICY),
-    false,
-  );
-  assert.equal(await deployDisputeStack.skip(state.fakeHre), true);
+  assert.equal(await activateDisputeStack.skip(state.fakeHre), true);
 
-  await (
-    await state.disputeNullifierRegistry.addWritePermission(RETIRED_STAGING_DISPUTE_POLICY)
-  ).wait();
-  assert.equal(await deployDisputeStack.skip(state.fakeHre), false);
+  const deployedCount = state.deployedNames.length;
+  await deployDisputeStack(state.fakeHre);
+  assert.equal(state.deployedNames.length, deployedCount);
 }
 
 async function run() {
-  await rejectMissingPhase();
-  await rejectConflictingPhases();
-  await rejectActivationBeforePreparation();
-  await rejectLiabilities();
-  await rejectHookMismatch();
-  await rejectMissingRegistry();
-  await cutover();
+  await deploymentRequiresExplicitStagingFlag();
+  await activationRejectsMissingStack();
+  await deployThenActivate();
 }
 
 run().catch((error) => {

@@ -38,6 +38,7 @@ const sourceAbis = requireFromInstall('@zkp2p/contracts-v2/abis/contracts');
 for (const contractName of [
   'OrchestratorV3',
   'WhitelistLifecycleHook',
+  'DisputeNullifierRegistry',
   'DisputePolicy',
   'DisputeVerifier',
   'IntentLifecycleHookV1',
@@ -51,7 +52,11 @@ for (const contractName of [
 for (const network of ['base', 'baseStaging']) {
   const bundle = requireFromInstall(`@zkp2p/contracts-v2/networks/${network}`);
   const addresses = bundle.addresses?.default || bundle.addresses;
-  for (const contractName of ['ChargebackPolicy', 'ChargebackVerifier']) {
+  for (const contractName of [
+    'ChargebackNullifierRegistry',
+    'ChargebackPolicy',
+    'ChargebackVerifier',
+  ]) {
     if (contractName in (addresses?.contracts || {})) {
       fail(`${network} retains retired ${contractName} address`);
     }
@@ -65,8 +70,25 @@ for (const network of ['base', 'baseStaging']) {
       fail(`${network}.${contractName} ABI export is missing`);
     }
   }
+  if (network === 'base') {
+    for (const contractName of ['IntentLifecycleHookV1', 'StakeVault']) {
+      const address = addresses?.contracts?.[contractName];
+      if (address && !/^0x0{40}$/.test(address)) {
+        fail(`${network}.${contractName} exposes the retired deployment address`);
+      }
+      if (bundle[contractName]) {
+        fail(`${network}.${contractName} exposes the retired deployment ABI`);
+      }
+    }
+  }
   if (network === 'baseStaging') {
-    for (const contractName of ['DisputePolicy', 'DisputeVerifier', 'IntentLifecycleHookV1', 'StakeVault']) {
+    for (const contractName of [
+      'DisputeNullifierRegistry',
+      'DisputePolicy',
+      'DisputeVerifier',
+      'IntentLifecycleHookV1',
+      'StakeVault',
+    ]) {
       const address = addresses?.contracts?.[contractName];
       if (!/^0x[0-9a-fA-F]{40}$/.test(address) || /^0x0{40}$/.test(address)) {
         fail(`${network}.${contractName} does not expose the fresh nonzero address`);
