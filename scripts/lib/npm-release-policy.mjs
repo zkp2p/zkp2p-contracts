@@ -1,15 +1,17 @@
 import { execFileSync } from 'node:child_process';
 import { X509Certificate } from 'node:crypto';
 
+const publishEnvironment = 'npm-publish';
+
 const stableChannel = Object.freeze({
   channel: 'stable',
   distTag: 'latest',
-  environment: 'npm-publish-stable',
+  environment: publishEnvironment,
 });
 const rcChannel = Object.freeze({
   channel: 'rc',
   distTag: 'rc',
-  environment: 'npm-publish-rc',
+  environment: publishEnvironment,
 });
 
 export function resolveReleasePolicy({ release, packageVersion, releaseLine }) {

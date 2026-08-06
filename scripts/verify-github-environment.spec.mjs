@@ -24,7 +24,7 @@ function mainOnlyPolicy() {
 
 test('accepts an autonomous environment restricted to main', () => {
   assert.doesNotThrow(() =>
-    assertReleaseEnvironment(validEnvironment(), 'npm-publish-rc', mainOnlyPolicy()),
+    assertReleaseEnvironment(validEnvironment(), 'npm-publish', mainOnlyPolicy()),
   );
 });
 
@@ -32,8 +32,8 @@ test('rejects required reviewers', () => {
   const environment = validEnvironment();
   environment.protection_rules = [{ type: 'required_reviewers' }];
   assert.throws(
-    () => assertReleaseEnvironment(environment, 'npm-publish-rc', mainOnlyPolicy()),
-    /must not gate autonomous RC publishing/,
+    () => assertReleaseEnvironment(environment, 'npm-publish', mainOnlyPolicy()),
+    /must not gate autonomous publishing/,
   );
 });
 
@@ -44,7 +44,7 @@ test('rejects protected-branch mode', () => {
     custom_branch_policies: false,
   };
   assert.throws(
-    () => assertReleaseEnvironment(environment, 'npm-publish-rc', mainOnlyPolicy()),
+    () => assertReleaseEnvironment(environment, 'npm-publish', mainOnlyPolicy()),
     /custom deployment branch policies/,
   );
 });
@@ -52,8 +52,18 @@ test('rejects protected-branch mode', () => {
 test('rejects any branch policy other than exactly main', () => {
   assert.throws(
     () =>
-      assertReleaseEnvironment(validEnvironment(), 'npm-publish-rc', [
+      assertReleaseEnvironment(validEnvironment(), 'npm-publish', [
         { name: 'releases/*', type: 'branch' },
+      ]),
+    /exactly the main branch/,
+  );
+});
+
+test('rejects a tag policy named main', () => {
+  assert.throws(
+    () =>
+      assertReleaseEnvironment(validEnvironment(), 'npm-publish', [
+        { name: 'main', type: 'tag' },
       ]),
     /exactly the main branch/,
   );

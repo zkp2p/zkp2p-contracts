@@ -91,10 +91,10 @@ jobs:
           test "$latest" = "$LATEST_BASELINE"
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
-      - name: Require autonomous RC environment
+      - name: Require autonomous publishing environment
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/verify-github-environment.mjs npm-publish-rc
+        run: node scripts/verify-github-environment.mjs npm-publish
 
       - name: Install immutable dependencies
         run: yarn install --immutable
@@ -209,7 +209,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment:
-      name: npm-publish-rc
+      name: npm-publish
       url: https://www.npmjs.com/package/@zkp2p/contracts-v2/v/${{ inputs.release }}
     permissions:
       contents: read

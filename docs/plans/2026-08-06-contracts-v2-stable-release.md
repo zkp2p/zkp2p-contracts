@@ -98,7 +98,7 @@ test('resolves an RC from the committed release-line prerelease', () => {
       packageVersion: '0.4.0-rc.6',
       releaseLine: '0.4.0',
     }),
-    { channel: 'rc', distTag: 'rc', environment: 'npm-publish-rc' },
+    { channel: 'rc', distTag: 'rc', environment: 'npm-publish' },
   );
 });
 
@@ -109,7 +109,7 @@ test('resolves the exact release line as stable', () => {
       packageVersion: '0.4.0',
       releaseLine: '0.4.0',
     }),
-    { channel: 'stable', distTag: 'latest', environment: 'npm-publish-stable' },
+    { channel: 'stable', distTag: 'latest', environment: 'npm-publish' },
   );
 });
 
@@ -236,15 +236,17 @@ Expected: FAIL because `scripts/lib/npm-release-policy.mjs` does not exist.
 Create `scripts/lib/npm-release-policy.mjs` with these exported contracts:
 
 ```js
+const publishEnvironment = 'npm-publish';
+
 const stableChannel = Object.freeze({
   channel: 'stable',
   distTag: 'latest',
-  environment: 'npm-publish-stable',
+  environment: publishEnvironment,
 });
 const rcChannel = Object.freeze({
   channel: 'rc',
   distTag: 'rc',
-  environment: 'npm-publish-rc',
+  environment: publishEnvironment,
 });
 
 export function resolveReleasePolicy({ release, packageVersion, releaseLine }) {
@@ -932,16 +934,14 @@ git commit -m "fix: verify every contracts package runtime export"
 
 **Step 1: Add failing environment and workflow-shape tests**
 
-Generalize the environment test to run the same acceptance case for both names:
+Generalize the environment test around the shared channel-neutral name:
 
 ```js
-for (const environmentName of ['npm-publish-rc', 'npm-publish-stable']) {
-  test(`accepts autonomous main-only ${environmentName}`, () => {
-    assert.doesNotThrow(() =>
-      assertReleaseEnvironment(validEnvironment(), environmentName, mainOnlyPolicy()),
-    );
-  });
-}
+test('accepts autonomous main-only npm-publish', () => {
+  assert.doesNotThrow(() =>
+    assertReleaseEnvironment(validEnvironment(), 'npm-publish', mainOnlyPolicy()),
+  );
+});
 ```
 
 Add a rejection case where the only policy is
@@ -1221,9 +1221,9 @@ Update `NPM_RELEASE.md` to document:
 
 ```text
 one trusted publisher: zkp2p/zkp2p-contracts + publish-contracts-v2.yml
-the npm environment field omitted once, not changed per release
-GitHub environments npm-publish-rc and npm-publish-stable
-both environments autonomous, main-only, and secret-free
+the npm environment field fixed to npm-publish, not changed per release
+one shared GitHub environment: npm-publish
+the environment is autonomous, main-only, and secret-free
 version-derived rc/latest selection
 both registry baselines and immediate pre-publish recheck
 annotated canonical tag and exact canonical-main freeze
@@ -1373,7 +1373,7 @@ Do not begin npm/GitHub one-time configuration while the preparation commit exis
 
 ---
 
-### Task 8: Perform the one-time stable environment setup after merge
+### Task 8: Verify the one-time shared publishing environment after merge
 
 **Files:**
 - Read only: `.github/workflows/publish-contracts-v2.yml`
@@ -1392,12 +1392,12 @@ git rev-parse "$canonical_main_ref"
 
 Expected: the resolved commit contains the merged stable preparation and has green current CI.
 
-**Step 2: Create `npm-publish-stable` once in GitHub**
+**Step 2: Verify `npm-publish` in GitHub**
 
 This step requires repository-administrator access (or a fine-grained token
 with repository Administration write access). In GitHub, open
-`zkp2p/zkp2p-contracts` -> Settings -> Environments -> New environment, create
-`npm-publish-stable`, and configure exactly:
+`zkp2p/zkp2p-contracts` -> Settings -> Environments and require the shared
+`npm-publish` environment to be configured exactly:
 
 ```text
 required reviewers: none
@@ -1410,13 +1410,13 @@ environment secrets/variables: none
 With the administrator-authenticated `gh` session, read every field back:
 
 ```bash
-gh api repos/zkp2p/zkp2p-contracts/environments/npm-publish-stable
-gh api repos/zkp2p/zkp2p-contracts/environments/npm-publish-stable/deployment-branch-policies
-test "$(gh api repos/zkp2p/zkp2p-contracts/environments/npm-publish-stable/secrets --jq .total_count)" = 0
-test "$(gh api repos/zkp2p/zkp2p-contracts/environments/npm-publish-stable/variables --jq .total_count)" = 0
+gh api repos/zkp2p/zkp2p-contracts/environments/npm-publish
+gh api repos/zkp2p/zkp2p-contracts/environments/npm-publish/deployment-branch-policies
+test "$(gh api repos/zkp2p/zkp2p-contracts/environments/npm-publish/secrets --jq .total_count)" = 0
+test "$(gh api repos/zkp2p/zkp2p-contracts/environments/npm-publish/variables --jq .total_count)" = 0
 GITHUB_REPOSITORY=zkp2p/zkp2p-contracts \
 GITHUB_TOKEN="$(gh auth token)" \
-  node scripts/verify-github-environment.mjs npm-publish-stable
+  node scripts/verify-github-environment.mjs npm-publish
 ```
 
 Require no protection rules, `wait_timer=0`, custom branch policies enabled,
@@ -1437,21 +1437,22 @@ workflow filename: publish-contracts-v2.yml
 allowed action: npm publish only
 ```
 
-Remove only the optional environment name. Do not add a token and do not change this setting between RC and stable releases.
+Set the environment name to exactly `npm-publish`. Do not add a token and do
+not change this setting between RC and stable releases.
 
 After saving, reopen the same Trusted Publisher entry and record read-back
 evidence showing the exact organization, repository, workflow filename,
-`npm publish` action restriction, and a blank/omitted environment. npm does not
+`npm publish` action restriction, and `npm-publish` environment. npm does not
 expose this publisher identity through `npm view`; the authoritative read-back
 is the authenticated package settings page. Do not infer success merely from a
 save confirmation.
 
 **Step 4: Verify the one-time setup before release approval**
 
-Use the same four GitHub API reads for both `npm-publish-rc` and
-`npm-publish-stable`, plus the reopened npm Trusted Publisher settings. Confirm
-both GitHub environments are autonomous/main-only/secret-free and npm still
-names the exact repository/workflow publisher with no environment claim. Stop
+Use the four GitHub API reads for `npm-publish`, plus the reopened npm Trusted
+Publisher settings. Confirm the shared GitHub environment is
+autonomous/main-only/secret-free and npm still names the exact
+repository/workflow publisher with the exact `npm-publish` environment claim. Stop
 if any field differs; do not test the setup by publishing an extra version.
 
 ---
@@ -1483,14 +1484,14 @@ release line: 0.4.0
 latest: 0.3.0
 rc: 0.4.0-rc.5
 dist-tag: latest
-environment: npm-publish-stable
+environment: npm-publish
 tag: contracts-v2-v0.4.0
 workflow: publish-contracts-v2.yml from refs/heads/main
 ```
 
 **Step 2: Present the immutable tuple for separate approval**
 
-Report the exact version, canonical SHA, annotated tag name, `latest` tag, `npm-publish-stable` environment, workflow filename, current CI URL/results, and both npm baselines. Do not create the tag or dispatch until the user explicitly approves that tuple.
+Report the exact version, canonical SHA, annotated tag name, `latest` tag, `npm-publish` environment, workflow filename, current CI URL/results, and both npm baselines. Do not create the tag or dispatch until the user explicitly approves that tuple.
 
 **Step 3: Create and push the annotated tag at the approved SHA**
 
@@ -1536,7 +1537,7 @@ Do not rerun publication if npm accepts the immutable version and a later verifi
 Wait for the current release run and require:
 
 ```text
-policy resolver: stable/latest/npm-publish-stable
+policy resolver: stable/latest/npm-publish
 package build/test/release verifier: pass
 pinned Foundry v1.7.1 complete suite: pass
 final pre-mutation unused-version and dual-baseline guard: pass

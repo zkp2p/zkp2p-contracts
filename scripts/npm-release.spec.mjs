@@ -197,7 +197,7 @@ test('resolves an RC from the committed release-line prerelease', () => {
       packageVersion: '0.4.0-rc.6',
       releaseLine: '0.4.0',
     }),
-    { channel: 'rc', distTag: 'rc', environment: 'npm-publish-rc' },
+    { channel: 'rc', distTag: 'rc', environment: 'npm-publish' },
   );
 });
 
@@ -208,7 +208,7 @@ test('resolves the exact release line as stable', () => {
       packageVersion: '0.4.0',
       releaseLine: '0.4.0',
     }),
-    { channel: 'stable', distTag: 'latest', environment: 'npm-publish-stable' },
+    { channel: 'stable', distTag: 'latest', environment: 'npm-publish' },
   );
 });
 
@@ -302,7 +302,7 @@ test('resolve writes all release policy outputs', (context) => {
   assert.deepEqual(parseGitHubOutput(outputPath), {
     channel: 'stable',
     dist_tag: 'latest',
-    environment: 'npm-publish-stable',
+    environment: 'npm-publish',
     guard_latest: '0.3.0',
     guard_rc: '0.4.0-rc.5',
     verify_latest: '0.4.0',
@@ -383,7 +383,7 @@ test('guard rejects an environment that differs from the resolved policy', (cont
       GITHUB_ACTIONS: 'false',
       RELEASE_ENVIRONMENT: 'npm-publish-rc',
     }),
-    /environment npm-publish-rc does not match resolved environment npm-publish-stable/,
+    /environment npm-publish-rc does not match resolved environment npm-publish/,
   );
 });
 

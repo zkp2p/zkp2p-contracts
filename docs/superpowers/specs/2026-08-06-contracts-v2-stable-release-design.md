@@ -24,7 +24,7 @@ the stable release does not promote the known RC5 ESM defects.
 - Do not use local `npm publish`, `npm dist-tag`, an OTP, `NPM_TOKEN`, or another
   developer credential.
 - Do not redeploy contracts or alter Base/Base Staging deployment data.
-- Do not add reviewers or wait timers to either GitHub publishing environment.
+- Do not add reviewers or wait timers to the GitHub publishing environment.
 - Do not change repository-wide `main` branch governance in this release PR.
 - Do not clean up the stale `next`, `test`, or `dev` npm dist-tags.
 
@@ -55,26 +55,24 @@ the autonomous stable environment explicitly selected for this release.
 
 npm permits one trusted publisher per package. Keep
 `publish-contracts-v2.yml` as that publisher's sole authorized workflow and
-make two one-time external configuration changes before stable dispatch:
+use one `npm-publish` GitHub environment for both channels. Configure it once
+with no reviewers, no wait timer, no secrets, and a custom deployment branch
+policy allowing exactly `main`. Bind npm's trusted publisher to that exact
+environment while retaining the organization, repository, workflow filename,
+and `npm publish` action restrictions.
 
-1. Create `npm-publish-stable` in GitHub with no reviewers, no wait timer, no
-   secrets, and a custom deployment branch policy allowing exactly `main`.
-2. Edit npm's trusted publisher entry to omit the environment name while
-   retaining the exact organization, repository, workflow filename, and
-   `npm publish` action restrictions.
+The shared environment keeps npm's optional environment claim fail-closed
+without duplicating identical GitHub controls. RC versus stable remains a
+repository-controlled version and dist-tag decision, not an npm settings
+change. See the [npm trusted publishing documentation](https://docs.npmjs.com/trusted-publishers/).
 
-The environment claim is optional in npm's trusted-publisher model. Omitting
-it allows the one workflow to use either repository-controlled GitHub
-environment while npm continues to verify the repository and workflow
-identity. See the [npm trusted publishing documentation](https://docs.npmjs.com/trusted-publishers/).
-
-The preparation PR documents these external changes but does not perform them.
-They must be completed and verified after the release code is merged and before
-the exact stable workflow dispatch. The operator performing this setup needs
+The preparation PR documents this external configuration but does not depend
+on changing it between channels. It must be verified before the exact stable
+workflow dispatch. The operator performing this setup needs
 repository-administrator access for the GitHub environment and package-owner
 or maintainer access for the npm trusted-publisher edit. GitHub settings are
 read back through the environment, deployment-policy, secret-list, and
-variable-list APIs; npm's repository, workflow, action, and omitted-environment
+variable-list APIs; npm's repository, workflow, action, and exact-environment
 fields are read back in the package's Trusted Publisher settings before release
 approval. This is one-time setup, not a per-release operation.
 
@@ -86,8 +84,8 @@ committed version and the workflow's current `RELEASE_LINE`:
 
 | Candidate | Channel | npm dist-tag | GitHub environment |
 | --- | --- | --- | --- |
-| `${RELEASE_LINE}-rc.N` | RC | `rc` | `npm-publish-rc` |
-| `${RELEASE_LINE}` | Stable | `latest` | `npm-publish-stable` |
+| `${RELEASE_LINE}-rc.N` | RC | `rc` | `npm-publish` |
+| `${RELEASE_LINE}` | Stable | `latest` | `npm-publish` |
 
 For this release, `RELEASE_LINE=0.4.0`. Any other SemVer shape fails closed.
 The resolver also requires the candidate to equal the package manifest version.
@@ -384,8 +382,8 @@ autonomous environment with:
 - custom deployment-branch policies enabled;
 - exactly one allowed policy with `type=branch` and `name=main`.
 
-RC-specific error text becomes channel-neutral, and policy tests cover both
-`npm-publish-rc` and `npm-publish-stable`.
+RC-specific error text becomes channel-neutral, and policy tests cover the
+shared `npm-publish` environment for both channels.
 
 ## Verification Strategy
 
@@ -443,13 +441,13 @@ first place the release-grade package acceptance criteria execute.
 
 ### One-time external setup
 
-1. With repository-admin authority, create and verify `npm-publish-stable` as
+1. With repository-admin authority, create or verify `npm-publish` as
    autonomous, main-only, and free of environment secrets or variables.
-2. Remove the environment claim from npm's existing trusted publisher while
-   signed in as a package owner or maintainer, preserving all other identity and
-   action constraints, then read every field back in npm package settings.
-3. Confirm no reusable npm credential is present in either environment and
-   record the GitHub API and npm settings read-back evidence.
+2. Bind npm's existing trusted publisher to `npm-publish` while signed in as a
+   package owner or maintainer, preserving all other identity and action
+   constraints, then read every field back in npm package settings.
+3. Confirm no reusable npm credential is present in the environment and record
+   the GitHub API and npm settings read-back evidence.
 
 ### Stable initiation
 

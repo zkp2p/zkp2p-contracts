@@ -11,14 +11,14 @@ Add this GitHub Actions trusted publisher to `@zkp2p/contracts-v2`:
 | Organization | `zkp2p` |
 | Repository | `zkp2p-contracts` |
 | Workflow filename | `publish-contracts-v2.yml` |
-| Environment | `npm-publish-rc` |
+| Environment | `npm-publish` |
 | Allowed action | `npm publish` only |
 
 After one successful trusted publish, set publishing access to require 2FA and disallow traditional tokens where npm keeps trusted publishing available. Do not revoke any existing credential without separately confirming its ownership and consumers.
 
 ## One-time GitHub configuration
 
-Create `npm-publish-rc` in `zkp2p/zkp2p-contracts` with:
+Create `npm-publish` in `zkp2p/zkp2p-contracts` with:
 
 - no required reviewer and no wait timer;
 - custom deployment branch policy allowing exactly `main`;
