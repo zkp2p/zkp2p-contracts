@@ -18,14 +18,13 @@ import {ChargebackVerifier} from "contracts/unifiedVerifier/ChargebackVerifier.s
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 
 /**
- * @notice POC coverage for resolver-only stake-backed groups on the unchanged V3 lifecycle stack:
- * StakeMembershipResolver supplies live stake-derived membership through AddressGroupRegistry, and
+ * @notice POC coverage for the zero-config stake-backed group on the unchanged V3 lifecycle stack:
+ * anyone who stakes is a member (StakeMembershipResolver names stakers as a registry group), and
  * the deployed IntentLifecycleHookV1 + ChargebackPolicy lane keeps enforcing collateral. The suite
- * also pins the V1 routing trap as executable documentation: a stake-derived group added to a
- * covered deposit's whitelist admits members WITHOUT a lock, so covered deposits must not do that.
+ * also pins the V1 routing trap as executable documentation: the staked group added to a covered
+ * deposit's whitelist admits members WITHOUT a lock, so covered deposits must not do that.
  */
 contract StakeMembershipResolverIntegrationTest is OrchestratorV3Fixture {
-    uint256 internal constant MIN_STAKE = 100e6; // above the fixture's 50e6 INTENT_AMOUNT
     uint64 internal constant RISK_WINDOW = 7 days;
 
     bytes32 internal STAKED;
@@ -57,9 +56,8 @@ contract StakeMembershipResolverIntegrationTest is OrchestratorV3Fixture {
         stakeVault.initializeController(address(chargebackPolicy));
         chargebackNullifierRegistry.addWritePermission(address(chargebackPolicy));
 
-        resolver = new StakeMembershipResolver(stakeVault, groupRegistry);
+        resolver = new StakeMembershipResolver(stakeVault);
         groupRegistry.setResolver(STAKED, address(resolver));
-        resolver.setGroupMinStake(STAKED, MIN_STAKE);
 
         lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, policy, chargebackPolicy);
         chargebackPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
@@ -70,21 +68,21 @@ contract StakeMembershipResolverIntegrationTest is OrchestratorV3Fixture {
         chargebackPolicy.setChargebackEnabled(address(escrow), depositId, true);
     }
 
-    /* ============ Resolver Membership ============ */
+    /* ============ Membership: Staking Is Joining ============ */
 
-    function test_ResolverMembershipTracksStakeLive() public {
+    function test_AnyStakeGrantsMembershipAndFullExitRevokesIt() public {
         assertFalse(groupRegistry.isMember(STAKED, taker));
 
-        _stake(taker, MIN_STAKE);
+        _stake(taker, 1e6); // no threshold: any stake joins
         assertTrue(groupRegistry.isMember(STAKED, taker));
 
         vm.prank(taker);
-        stakeVault.withdrawStake(1);
+        stakeVault.withdrawStake(1e6);
         assertFalse(groupRegistry.isMember(STAKED, taker));
     }
 
-    function test_ResolverMembershipFollowsTakerDelegation() public {
-        _stake(depositor, MIN_STAKE); // depositor doubles as a stake owner backing a hot wallet
+    function test_MembershipFollowsTakerDelegation() public {
+        _stake(depositor, INTENT_AMOUNT); // depositor doubles as a stake owner backing a hot wallet
 
         vm.prank(depositor);
         stakeVault.setTakerAuthorization(taker, true);
@@ -98,22 +96,12 @@ contract StakeMembershipResolverIntegrationTest is OrchestratorV3Fixture {
         assertFalse(groupRegistry.isMember(STAKED, taker));
     }
 
-    function test_ResolverFailsClosedAndCuratorAuth() public {
-        bytes32 unconfigured = groupRegistry.createGroup("unconfigured");
-        groupRegistry.setResolver(unconfigured, address(resolver));
-        _stake(taker, MIN_STAKE);
-        assertFalse(groupRegistry.isMember(unconfigured, taker)); // zero threshold = fail closed
+    function test_MembershipPersistsWhileStakeIsLocked() public {
+        _stake(taker, INTENT_AMOUNT);
+        _signalDefault(); // locks the full intent amount; free stake drops to zero
 
-        vm.prank(other);
-        vm.expectRevert(
-            abi.encodeWithSelector(StakeMembershipResolver.UnauthorizedGroupCurator.selector, STAKED, other)
-        );
-        resolver.setGroupMinStake(STAKED, 1);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(StakeMembershipResolver.GroupNotFound.selector, bytes32(uint256(0xdead)))
-        );
-        resolver.setGroupMinStake(bytes32(uint256(0xdead)), 1);
+        assertEq(stakeVault.freeStake(taker), 0);
+        assertTrue(groupRegistry.isMember(STAKED, taker)); // member even when capacity is exhausted
     }
 
     /* ============ Enforcement Stays With The Deployed Chargeback Lane ============ */
@@ -142,15 +130,15 @@ contract StakeMembershipResolverIntegrationTest is OrchestratorV3Fixture {
 
     /* ============ Executable Documentation Of The V1 Routing Trap ============ */
 
-    function test_Trap_StakeGroupOnCoveredDepositWhitelistBypassesLock() public {
+    function test_Trap_StakedGroupOnCoveredDepositWhitelistBypassesLock() public {
         vm.prank(depositor);
         policy.configureDeposit(address(escrow), depositId, true, _groups(STAKED), new address[](0));
-        _stake(taker, MIN_STAKE);
+        _stake(taker, INTENT_AMOUNT);
 
         bytes32 intentHash = _signalDefault();
 
         // Member admitted through the whitelist branch: NO collateral locked. This is why covered
-        // deposits must not add the stake-derived group to their whitelist under V1 routing.
+        // deposits must not add the staked group to their whitelist under V1 routing.
         (, uint256 lockAmount,) = stakeVault.locks(intentHash);
         assertEq(lockAmount, 0);
         assertEq(stakeVault.lockedStake(taker), 0);
