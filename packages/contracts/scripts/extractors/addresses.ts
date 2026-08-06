@@ -17,6 +17,7 @@ const ROOT = path.resolve(__dirname, '../../../../');
 const OUTPUTS_DIR = path.join(ROOT, 'deployments', 'outputs');
 const PKG_ROOT = path.resolve(__dirname, '../..');
 const ADDRESSES_DIR = path.join(PKG_ROOT, 'addresses');
+const RETIRED_PACKAGE_CONTRACTS = new Set(['ChargebackPolicy', 'ChargebackVerifier']);
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -49,6 +50,7 @@ export async function extractAddresses(): Promise<void> {
     networksData.push({ file, network, data });
 
     for (const name of Object.keys(data.contracts)) {
+      if (RETIRED_PACKAGE_CONTRACTS.has(name)) continue;
       allContractNames.add(name);
     }
   }

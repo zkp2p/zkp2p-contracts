@@ -39,6 +39,16 @@ const sourceAbiArtifacts = {
   WhitelistPolicy: 'artifacts/contracts/hooks/WhitelistPolicy.sol/WhitelistPolicy.json',
   WhitelistLifecycleHook:
     'artifacts/contracts/hooks/WhitelistLifecycleHook.sol/WhitelistLifecycleHook.json',
+  DisputePolicy: 'artifacts/contracts/hooks/DisputePolicy.sol/DisputePolicy.json',
+  DisputeVerifier:
+    'artifacts/contracts/unifiedVerifier/DisputeVerifier.sol/DisputeVerifier.json',
+  IntentLifecycleHookV1:
+    'artifacts/contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json',
+  StakeVault: 'artifacts/contracts/StakeVault.sol/StakeVault.json',
+};
+const retiredPackageContracts = new Set(['ChargebackPolicy', 'ChargebackVerifier']);
+const requiredNetworkContracts = {
+  baseStaging: ['DisputePolicy', 'DisputeVerifier', 'IntentLifecycleHookV1', 'StakeVault'],
 };
 
 function fail(message) {
@@ -129,6 +139,17 @@ for (const {
 
   const contracts = Object.entries(addresses.contracts || {});
   if (contracts.length === 0) fail(`${name} package has no contract addresses`);
+  for (const contractName of retiredPackageContracts) {
+    if (contractName in addresses.contracts) {
+      fail(`${name} package retains retired ${contractName} address`);
+    }
+  }
+  for (const contractName of requiredNetworkContracts[name] || []) {
+    const address = addresses.contracts?.[contractName];
+    if (!address || address.toLowerCase() === zeroAddress) {
+      fail(`${name}.${contractName} must expose the fresh deployment address`);
+    }
+  }
 
   for (const [contractName, packageAddress] of contracts) {
     const outputEntry = output.contracts?.[contractName];
@@ -170,6 +191,7 @@ for (const {
   }
 
   for (const contractName of Object.keys(output.contracts || {})) {
+    if (retiredPackageContracts.has(contractName)) continue;
     if (!(contractName in addresses.contracts)) {
       fail(`${name} package addresses omit canonical deployment ${contractName}`);
     }
@@ -201,6 +223,12 @@ for (const removedExport of [
   'utils/riskMath.js',
   'types/contracts/RiskManager.js',
   'abis/contracts/RiskManager.json',
+  'abis/contracts/ChargebackPolicy.json',
+  'abis/contracts/ChargebackVerifier.json',
+  'abis/base/ChargebackPolicy.json',
+  'abis/base/ChargebackVerifier.json',
+  'abis/baseStaging/ChargebackPolicy.json',
+  'abis/baseStaging/ChargebackVerifier.json',
 ]) {
   if (fs.existsSync(path.join(packageRoot, removedExport))) {
     fail(`stale noncanonical affine-risk export remains: ${removedExport}`);
