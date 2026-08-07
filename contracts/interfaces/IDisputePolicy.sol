@@ -34,6 +34,8 @@ interface IDisputePolicy {
      * @param riskWindow Minimum time collateral must remain locked after intent settlement.
      * @param releaseEligibleAt Earliest timestamp at which collateral may be released. Dispute evidence remains
      * valid after this time until release actually executes.
+     * @param intentAmount Original settlement-token-denominated intent exposure.
+     * @param collateralAmount ERC-4626 share amount currently locked for the intent.
      * @param releaseAmount Amount released from Escrow before fees and therefore collateralized after settlement.
      */
     struct DisputeIntent {
@@ -44,6 +46,8 @@ interface IDisputePolicy {
         DisputeIntentStatus status;
         uint64 riskWindow;
         uint64 releaseEligibleAt;
+        uint256 intentAmount;
+        uint256 collateralAmount;
         uint256 releaseAmount;
     }
 
@@ -53,7 +57,8 @@ interface IDisputePolicy {
         address indexed depositor,
         address taker,
         bytes32 paymentMethod,
-        uint256 amount,
+        uint256 intentAmount,
+        uint256 collateralAmount,
         uint64 riskWindow
     );
     event DisputeIntentCancelled(bytes32 indexed intentHash, address indexed stakeOwner, uint256 releasedAmount);
@@ -62,6 +67,7 @@ interface IDisputePolicy {
         address indexed stakeOwner,
         address indexed depositor,
         uint256 releaseAmount,
+        uint256 collateralAmount,
         uint64 releaseEligibleAt,
         bool isManualRelease
     );
@@ -70,7 +76,9 @@ interface IDisputePolicy {
         bytes32 indexed intentHash,
         address indexed stakeOwner,
         address indexed depositor,
-        uint256 compensatedAmount,
+        uint256 compensatedSettlementAmount,
+        uint256 compensatedCollateralAmount,
+        bool collateralCapped,
         bytes32 disputeId
     );
     event DisputeEnabledUpdated(address indexed escrow, uint256 indexed depositId, bool isDisputeEnabled);
@@ -88,6 +96,10 @@ interface IDisputePolicy {
     error DisputeIntentNotPending(bytes32 intentHash, DisputeIntentStatus status);
     error DisputeIntentNotSettled(bytes32 intentHash, DisputeIntentStatus status);
     error IntentTokenMismatch(address expectedToken, address actualToken);
+    error CollateralAssetMismatch(address expectedAsset, address actualAsset);
+    error StakeTokenMismatch(address expectedToken, address actualToken);
+    error CollateralConversionUnavailable();
+    error ReleaseAmountExceedsIntent(uint256 intentAmount, uint256 releaseAmount);
     error DisputeIntentNotReleaseEligible(uint64 releaseEligibleAt, uint64 currentTime);
     error TimestampOverflow(uint256 timestamp);
     error InvalidRiskWindow(uint64 riskWindow);
@@ -104,7 +116,7 @@ interface IDisputePolicy {
      * @param _depositId Deposit supplying the intent liquidity.
      * @param _taker Account that signaled the intent.
      * @param _paymentMethod Payment method selected for the off-chain payment.
-     * @param _amount Full on-chain intent amount initially locked as collateral.
+     * @param _amount Full settlement-token-denominated intent amount converted into collateral shares.
      */
     function onIntentSignaled(
         bytes32 _intentHash,

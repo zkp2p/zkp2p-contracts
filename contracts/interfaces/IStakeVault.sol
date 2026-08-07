@@ -8,7 +8,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  * @title IStakeVault
  * @notice Custody, delegation, locking, and immediately claimable token accounting.
  * @dev The controller supplies all risk policy. Lock identifiers and claim allocations are opaque to the vault.
- * ZKP2P deployments support canonical USDC only; fee-on-transfer and rebasing tokens are unsupported.
+ * Each deployment holds one governance-approved token; fee-on-transfer and rebasing tokens are unsupported.
  */
 interface IStakeVault {
     struct StakeLock {

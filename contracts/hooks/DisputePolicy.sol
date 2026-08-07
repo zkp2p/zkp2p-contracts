@@ -4,6 +4,9 @@ pragma solidity ^0.8.18;
 
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {IDisputePolicy} from "../interfaces/IDisputePolicy.sol";
 import {IDisputeVerifier} from "../interfaces/IDisputeVerifier.sol";
@@ -41,6 +44,12 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
     /// @notice Stake custody and lock accounting controlled by this policy.
     IStakeVault public immutable stakeVault;
 
+    /// @notice Token released from Escrow and denominating covered intent amounts.
+    IERC20 public immutable settlementToken;
+
+    /// @notice ERC-4626 share token used as collateral and priced directly in settlement-token units.
+    IERC4626 public immutable collateralVault;
+
     /// @notice Dedicated replay registry for payment-method-scoped dispute nullifiers.
     INullifierRegistry public immutable disputeNullifierRegistry;
 
@@ -69,21 +78,38 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
      * @dev After deployment, authorize this policy as the StakeVault controller and as a writer on the dedicated
      * dispute nullifier registry before enabling deposits.
      * @param _owner Governance owner for policy and dependency configuration.
-     * @param _stakeVault Vault holding and locking taker collateral.
+     * @param _settlementToken Token released by covered Escrow deposits, currently canonical Base USDC.
+     * @param _collateralVault ERC-4626 vault whose shares are staked and whose underlying asset is settlementToken.
+     * @param _stakeVault Vault holding and locking collateralVault shares.
      * @param _disputeVerifier Verifier for signed dispute evidence.
      * @param _disputeNullifierRegistry Dedicated registry that rejects reused dispute nullifiers.
      */
     constructor(
         address _owner,
+        IERC20 _settlementToken,
+        IERC4626 _collateralVault,
         IStakeVault _stakeVault,
         IDisputeVerifier _disputeVerifier,
         INullifierRegistry _disputeNullifierRegistry
     ) {
         if (_owner == address(0)) revert ZeroAddress();
+        _validateDependency(address(_settlementToken));
+        _validateDependency(address(_collateralVault));
         _validateDependency(address(_stakeVault));
         _validateDependency(address(_disputeVerifier));
         _validateDependency(address(_disputeNullifierRegistry));
 
+        address collateralAsset = _collateralVault.asset();
+        if (collateralAsset != address(_settlementToken)) {
+            revert CollateralAssetMismatch(address(_settlementToken), collateralAsset);
+        }
+        address stakeToken = address(_stakeVault.stakeToken());
+        if (stakeToken != address(_collateralVault)) {
+            revert StakeTokenMismatch(address(_collateralVault), stakeToken);
+        }
+
+        settlementToken = _settlementToken;
+        collateralVault = _collateralVault;
         stakeVault = _stakeVault;
         disputeVerifier = _disputeVerifier;
         disputeNullifierRegistry = _disputeNullifierRegistry;
@@ -122,6 +148,7 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
         if (riskWindow == 0) return;
 
         (address stakeOwner, address depositor) = _validateIntentAdmission(_intentHash, _escrow, _depositId, _taker);
+        uint256 collateralAmount = _previewWithdrawOrRevert(_amount);
 
         disputeIntentByIntentHash[_intentHash] = DisputeIntent({
             taker: _taker,
@@ -131,11 +158,15 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
             status: DisputeIntentStatus.PENDING,
             riskWindow: riskWindow,
             releaseEligibleAt: 0,
+            intentAmount: _amount,
+            collateralAmount: collateralAmount,
             releaseAmount: 0
         });
 
-        stakeVault.lockStake(stakeOwner, _intentHash, _amount, PENDING_COVERAGE_MATURITY);
-        emit DisputeIntentOpened(_intentHash, stakeOwner, depositor, _taker, _paymentMethod, _amount, riskWindow);
+        stakeVault.lockStake(stakeOwner, _intentHash, collateralAmount, PENDING_COVERAGE_MATURITY);
+        emit DisputeIntentOpened(
+            _intentHash, stakeOwner, depositor, _taker, _paymentMethod, _amount, collateralAmount, riskWindow
+        );
     }
 
     /**
@@ -169,17 +200,23 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
             revert DisputeIntentNotPending(_intentHash, disputeIntent.status);
         }
 
+        uint256 intentAmount = disputeIntent.intentAmount;
+        if (_releaseAmount > intentAmount) revert ReleaseAmountExceedsIntent(intentAmount, _releaseAmount);
+        uint256 collateralAmount =
+            Math.mulDiv(disputeIntent.collateralAmount, _releaseAmount, intentAmount, Math.Rounding.Up);
         uint64 releaseEligibleAt = _calculateReleaseEligibleAt(disputeIntent.riskWindow);
+        disputeIntent.collateralAmount = collateralAmount;
         disputeIntent.releaseAmount = _releaseAmount;
         disputeIntent.releaseEligibleAt = releaseEligibleAt;
         disputeIntent.status = DisputeIntentStatus.SETTLED;
 
-        stakeVault.resizeLock(_intentHash, _releaseAmount, releaseEligibleAt);
+        stakeVault.resizeLock(_intentHash, collateralAmount, releaseEligibleAt);
         emit DisputeIntentSettled(
             _intentHash,
             disputeIntent.stakeOwner,
             disputeIntent.depositor,
             _releaseAmount,
+            collateralAmount,
             releaseEligibleAt,
             _isManualRelease
         );
@@ -223,18 +260,23 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
             disputeVerifier.verifyDispute(_attestation, disputeIntent.paymentMethod);
         disputeNullifierRegistry.addNullifier(disputeNullifier);
 
-        uint256 compensatedAmount = disputeIntent.releaseAmount;
+        (, uint256 lockedCollateralAmount,) = stakeVault.locks(_attestation.intentHash);
+        (bool conversionAvailable, uint256 quotedCollateralAmount) = _tryPreviewWithdraw(disputeIntent.releaseAmount);
+        bool collateralCapped = !conversionAvailable || quotedCollateralAmount > lockedCollateralAmount;
+        uint256 compensatedCollateralAmount = collateralCapped ? lockedCollateralAmount : quotedCollateralAmount;
         disputeIntent.status = DisputeIntentStatus.DISPUTED;
 
         IStakeVault.Claim[] memory claims = new IStakeVault.Claim[](1);
-        claims[0] = IStakeVault.Claim({beneficiary: disputeIntent.depositor, amount: compensatedAmount});
+        claims[0] = IStakeVault.Claim({beneficiary: disputeIntent.depositor, amount: compensatedCollateralAmount});
         stakeVault.resolveLock(_attestation.intentHash, claims);
 
         emit DisputeResolved(
             _attestation.intentHash,
             disputeIntent.stakeOwner,
             disputeIntent.depositor,
-            compensatedAmount,
+            disputeIntent.releaseAmount,
+            compensatedCollateralAmount,
+            collateralCapped,
             disputeId
         );
     }
@@ -355,6 +397,15 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
         return paymentMethodRiskWindow[_paymentMethod];
     }
 
+    /**
+     * @notice Quotes the ERC-4626 shares required to collateralize a settlement-token amount at 100%.
+     * @param _settlementAmount Settlement token amount in its native decimals.
+     * @return collateralAmount Required collateralVault shares in their native decimals.
+     */
+    function quoteCollateral(uint256 _settlementAmount) external view returns (uint256 collateralAmount) {
+        return _previewWithdrawOrRevert(_settlementAmount);
+    }
+
     /* ============ Internal Functions ============ */
 
     /**
@@ -376,7 +427,7 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
         }
 
         IEscrowV2.Deposit memory deposit = IEscrowV2(_escrow).getDeposit(_depositId);
-        address expectedToken = address(stakeVault.stakeToken());
+        address expectedToken = address(settlementToken);
         if (address(deposit.token) != expectedToken) {
             revert IntentTokenMismatch(expectedToken, address(deposit.token));
         }
@@ -397,7 +448,7 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
             revert DisputeIntentNotReleaseEligible(releaseEligibleAt, currentTime);
         }
 
-        uint256 releasedAmount = disputeIntent.releaseAmount;
+        uint256 releasedAmount = disputeIntent.collateralAmount;
         disputeIntent.status = DisputeIntentStatus.RELEASED;
         stakeVault.unlockStake(_intentHash);
         emit DisputeIntentReleased(_intentHash, disputeIntent.stakeOwner, releasedAmount);
@@ -407,6 +458,25 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
         uint256 releaseEligibleAt = block.timestamp + _riskWindow;
         if (releaseEligibleAt > type(uint64).max) revert TimestampOverflow(releaseEligibleAt);
         return uint64(releaseEligibleAt);
+    }
+
+    function _previewWithdrawOrRevert(uint256 _settlementAmount) internal view returns (uint256 collateralAmount) {
+        (bool conversionAvailable, uint256 quotedCollateralAmount) = _tryPreviewWithdraw(_settlementAmount);
+        if (!conversionAvailable) revert CollateralConversionUnavailable();
+        return quotedCollateralAmount;
+    }
+
+    function _tryPreviewWithdraw(uint256 _settlementAmount)
+        internal
+        view
+        returns (bool conversionAvailable, uint256 collateralAmount)
+    {
+        try collateralVault.previewWithdraw(_settlementAmount) returns (uint256 quotedCollateralAmount) {
+            if (_settlementAmount != 0 && quotedCollateralAmount == 0) return (false, 0);
+            return (true, quotedCollateralAmount);
+        } catch {
+            return (false, 0);
+        }
     }
 
     function _currentTimestamp() internal view returns (uint64) {

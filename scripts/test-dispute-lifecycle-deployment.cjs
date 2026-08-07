@@ -22,6 +22,7 @@ console.log = () => {};
 
 const hre = require("hardhat");
 const { ethers } = hre;
+const { USDC, USDC_YIELD_VAULT } = require("../deployments/parameters.ts");
 const deployDisputeStack = require("../deploy/31_deploy_dispute_lifecycle_stack.ts").default;
 const activateDisputeStack = require("../deploy/32_activate_dispute_lifecycle_stack.ts").default;
 
@@ -44,6 +45,18 @@ async function fixture() {
   const deployer = deployerSigner.address;
   const network = await ethers.provider.getNetwork();
 
+  const usdcImplementation = await deployContract("USDCMock", [1_000_000e6, "USD Coin", "USDC"]);
+  const usdcAddress = USDC.base_staging;
+  await ethers.provider.send("hardhat_setCode", [
+    usdcAddress,
+    await ethers.provider.getCode(usdcImplementation.address),
+  ]);
+  const usdcYieldVaultImplementation = await deployContract("ERC4626Mock", [usdcAddress]);
+  const usdcYieldVaultAddress = USDC_YIELD_VAULT.base_staging;
+  await ethers.provider.send("hardhat_setCode", [
+    usdcYieldVaultAddress,
+    await ethers.provider.getCode(usdcYieldVaultImplementation.address),
+  ]);
   const addressGroupRegistry = await deployContract("AddressGroupRegistry");
   const escrowRegistry = await deployContract("EscrowRegistry");
   const orchestratorRegistry = await deployContract("OrchestratorRegistry");

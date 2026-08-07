@@ -80,6 +80,12 @@ export const USDC: any = {
   "base_staging": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 };
 
+// Governance-approved ERC-4626 vault whose underlying asset is canonical Base USDC.
+export const USDC_YIELD_VAULT: Record<string, string> = {
+  base: "0xBEEFE94c8aD530842bfE7d8B397938fFc1cb83b2",
+  base_staging: "0xBEEFE94c8aD530842bfE7d8B397938fFc1cb83b2",
+};
+
 // V2 Parameters
 export const ESCROW_V2_INTENT_EXPIRATION_PERIOD: any = {
   "localhost": ONE_DAY_IN_SECONDS,

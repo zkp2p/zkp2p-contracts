@@ -44,10 +44,10 @@ import {IStakeVault} from "./interfaces/IStakeVault.sol";
  *      not give a new policy contract the state needed to resolve predecessor locks.
  *
  * @dev TOKEN ASSUMPTION
- *      ZKP2P deployments configure the vault only with canonical USDC. USDC administration, upgrades, pauses, and
- *      blocklisting remain accepted external operational risks. Tokens with transfer fees, rebasing, or other balance
- *      transformations are unsupported; the exact inbound balance-delta check is defense in depth, not generic-token
- *      compatibility.
+ *      Each deployment is configured with one governance-approved collateral token. Tokens with transfer fees,
+ *      rebasing, or other balance transformations are unsupported; the exact inbound balance-delta check is defense
+ *      in depth, not generic-token compatibility. Policy contracts remain responsible for validating any additional
+ *      assumptions about the configured token, such as an ERC-4626 share token's underlying asset.
  *
  * @dev SECURITY INVARIANTS AND RATIONALE
  *      1. Only free stake may be withdrawn or newly locked. Existing locks remain fully backed in aggregate accounting.
@@ -139,7 +139,7 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
      *      before any liabilities exist. The owner and token must be non-zero, and the handover delay must be at least
      *      one day. Future ownership transfers use Ownable2Step.
      * @param _owner Governance owner responsible for controller selection and recovery.
-     * @param _stakeToken Canonical USDC token held and accounted by the vault.
+     * @param _stakeToken Collateral token held and accounted by the vault.
      * @param _controller Initial global lock-policy controller, or zero for later liability-free initialization.
      * @param _controllerChangeDelay Delay required before a proposed replacement controller may accept authority.
      */

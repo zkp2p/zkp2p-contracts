@@ -658,7 +658,10 @@ the existing stack remains intact, and the generated Safe batch contains only th
 `DisputeVerifier`, `StakeVault`, `DisputePolicy`, and `IntentLifecycleHookV1`; initializes the vault
 controller; applies the canonical risk windows; authorizes the combined hook; grants the policy
 nullifier-writer permission; and transfers ownership. It deliberately leaves the active O3 hook
-unchanged.
+unchanged. The StakeVault holds shares of the governance-approved Steakhouse Prime USDC ERC-4626
+vault (`0xBEEFE94c8aD530842bfE7d8B397938fFc1cb83b2`). DisputePolicy validates that the share vault's
+underlying asset is canonical Base USDC and locks the exact `previewWithdraw` share quote for the
+USDC exposure, so collateral pricing does not depend on an external oracle.
 
 Commit the five newly generated deployment artifacts so their addresses can flow through the
 package, indexer, curator, and attestation-service releases. Activation remains blocked until every

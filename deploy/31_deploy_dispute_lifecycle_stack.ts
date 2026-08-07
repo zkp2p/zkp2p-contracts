@@ -10,6 +10,7 @@ import {
   MULTI_SIG,
   STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
   USDC,
+  USDC_YIELD_VAULT,
 } from "../deployments/parameters";
 import {
   addWritePermission,
@@ -33,12 +34,29 @@ async function assertCode(address: string, label: string): Promise<void> {
   }
 }
 
+async function getSettlementTokenAddress(hre: HardhatRuntimeEnvironment): Promise<string> {
+  const network = hre.deployments.getNetworkName();
+  const configuredAddress = USDC[network];
+  if (configuredAddress) return configuredAddress;
+
+  return (await hre.deployments.get("USDCMock")).address;
+}
+
+async function getCollateralVaultAddress(hre: HardhatRuntimeEnvironment): Promise<string> {
+  const network = hre.deployments.getNetworkName();
+  const configuredAddress = USDC_YIELD_VAULT[network];
+  if (configuredAddress) return configuredAddress;
+
+  return (await hre.deployments.get("USDCYieldVault")).address;
+}
+
 export async function disputeStackReady(hre: HardhatRuntimeEnvironment): Promise<boolean> {
   try {
     const network = hre.deployments.getNetworkName();
     const [deployer] = await hre.getUnnamedAccounts();
     const governance = MULTI_SIG[network] || deployer;
-    const stakeTokenAddress = USDC[network] || (await hre.deployments.get("USDCMock")).address;
+    const settlementTokenAddress = await getSettlementTokenAddress(hre);
+    const collateralVaultAddress = await getCollateralVaultAddress(hre);
 
     const registryAddress = (await hre.deployments.get("OrchestratorRegistry")).address;
     const whitelistPolicyAddress = (await hre.deployments.get("WhitelistPolicy")).address;
@@ -66,11 +84,13 @@ export async function disputeStackReady(hre: HardhatRuntimeEnvironment): Promise
     if (!sameAddress(await verifier.nullifierRegistry(), nullifierRegistryV2Address)) return false;
     if (!sameAddress(await verifier.attestationVerifier(), attestationVerifier.address)) return false;
     if (!sameAddress(await verifier.owner(), governance)) return false;
-    if (!sameAddress(await vault.stakeToken(), stakeTokenAddress)) return false;
+    if (!sameAddress(await vault.stakeToken(), collateralVaultAddress)) return false;
     if (!sameAddress(await vault.controller(), policyAddress)) return false;
     if (!(await vault.controllerChangeDelay()).eq(STAKE_VAULT_CONTROLLER_CHANGE_DELAY)) return false;
     if (!sameAddress(await vault.owner(), governance)) return false;
     if (!sameAddress(await policy.stakeVault(), vaultAddress)) return false;
+    if (!sameAddress(await policy.settlementToken(), settlementTokenAddress)) return false;
+    if (!sameAddress(await policy.collateralVault(), collateralVaultAddress)) return false;
     if (!sameAddress(await policy.disputeVerifier(), verifierAddress)) return false;
     if (!sameAddress(await policy.disputeNullifierRegistry(), disputeNullifierRegistryAddress)) return false;
     if (!(await policy.isLifecycleHookAuthorized(hookAddress))) return false;
@@ -94,7 +114,20 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const network = hre.deployments.getNetworkName();
   const [deployer] = await hre.getUnnamedAccounts();
   const governance = MULTI_SIG[network] || deployer;
-  const stakeTokenAddress = USDC[network] || (await hre.deployments.get("USDCMock")).address;
+  const settlementTokenAddress = await getSettlementTokenAddress(hre);
+  let collateralVaultAddress: string;
+  if (USDC_YIELD_VAULT[network]) {
+    collateralVaultAddress = await getCollateralVaultAddress(hre);
+  } else {
+    const collateralVaultDeployment = await hre.deployments.deploy("USDCYieldVault", {
+      contract: "ERC4626Mock",
+      from: deployer,
+      args: [settlementTokenAddress],
+      log: true,
+    });
+    await waitForDeploymentDelay(hre);
+    collateralVaultAddress = collateralVaultDeployment.address;
+  }
 
   const orchestratorRegistryAddress = (await hre.deployments.get("OrchestratorRegistry")).address;
   const whitelistPolicyAddress = (await hre.deployments.get("WhitelistPolicy")).address;
@@ -119,6 +152,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await assertCode(whitelistPolicyAddress, "WhitelistPolicy");
   await assertCode(nullifierRegistryV2Address, "NullifierRegistryV2");
   await assertCode(attestationVerifier.address, "AttestationVerifier");
+  await assertCode(settlementTokenAddress, "SettlementToken");
+  await assertCode(collateralVaultAddress, "USDCYieldVault");
 
   const disputeNullifierRegistryDeployment = await hre.deployments.deploy(
     "DisputeNullifierRegistry",
@@ -140,7 +175,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const vaultDeployment = await hre.deployments.deploy("StakeVault", {
     from: deployer,
-    args: [deployer, stakeTokenAddress, ethers.constants.AddressZero, STAKE_VAULT_CONTROLLER_CHANGE_DELAY],
+    args: [deployer, collateralVaultAddress, ethers.constants.AddressZero, STAKE_VAULT_CONTROLLER_CHANGE_DELAY],
     log: true,
   });
   await waitForDeploymentDelay(hre);
@@ -149,6 +184,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     from: deployer,
     args: [
       deployer,
+      settlementTokenAddress,
+      collateralVaultAddress,
       vaultDeployment.address,
       disputeVerifierDeployment.address,
       disputeNullifierRegistryDeployment.address,
@@ -206,6 +243,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("=== Fresh dispute lifecycle stack deployed ===");
   console.log("DisputeNullifierRegistry:", disputeNullifierRegistry.address);
   console.log("DisputeVerifier:", disputeVerifier.address);
+  console.log("USDCYieldVault:", collateralVaultAddress);
   console.log("StakeVault:", vault.address);
   console.log("DisputePolicy:", policy.address);
   console.log("IntentLifecycleHookV1:", hookDeployment.address);

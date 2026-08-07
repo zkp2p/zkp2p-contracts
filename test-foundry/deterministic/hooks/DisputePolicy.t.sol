@@ -3,6 +3,7 @@
 pragma solidity ^0.8.18;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {StakeVault} from "contracts/StakeVault.sol";
 import {DisputePolicy} from "contracts/hooks/DisputePolicy.sol";
@@ -11,6 +12,7 @@ import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IStakeVault} from "contracts/interfaces/IStakeVault.sol";
 import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";
+import {ERC4626Mock} from "contracts/mocks/ERC4626Mock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
@@ -37,6 +39,7 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
         address indexed stakeOwner,
         address indexed depositor,
         uint256 releaseAmount,
+        uint256 collateralAmount,
         uint64 releaseEligibleAt,
         bool isManualRelease
     );
@@ -44,36 +47,56 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
     event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
 
     uint64 internal constant RISK_WINDOW = 30 days;
-    uint256 internal constant STAKE_AMOUNT = 500e6;
+    uint256 internal constant STAKE_ASSETS = 500e6;
     bytes32 internal constant INTENT = keccak256("intent");
 
     StakeVault internal vault;
+    ERC4626Mock internal collateralVault;
     NullifierRegistryV2 internal nullifierRegistry;
     NullifierRegistry internal disputeNullifierRegistry;
     AttestationVerifierMock internal attestationVerifier;
     DisputeVerifier internal disputeVerifier;
     DisputePolicy internal policy;
+    uint256 internal stakeShares;
 
     function setUp() public override {
         super.setUp();
-        vault = new StakeVault(address(this), token, address(0), 1 days);
+        collateralVault = new ERC4626Mock(token);
+        vault = new StakeVault(address(this), collateralVault, address(0), 1 days);
         nullifierRegistry = new NullifierRegistryV2(new NullifierRegistry());
         disputeNullifierRegistry = new NullifierRegistry();
         attestationVerifier = new AttestationVerifierMock();
         disputeVerifier = new DisputeVerifier(address(this), nullifierRegistry, attestationVerifier);
-        policy = new DisputePolicy(address(this), vault, disputeVerifier, disputeNullifierRegistry);
+        policy = _newPolicy(vault, collateralVault, token);
         vault.initializeController(address(policy));
         disputeNullifierRegistry.addWritePermission(address(policy));
         policy.setLifecycleHookAuthorization(address(this), true);
         policy.setRiskWindow(METHOD, RISK_WINDOW);
         vm.prank(depositor);
         policy.setDisputeEnabled(address(escrow), depositId, true);
-        _stake(taker, STAKE_AMOUNT);
+        stakeShares = _stake(taker, STAKE_ASSETS);
     }
 
     function test_ConstructorRejectsZeroOwner() public {
         vm.expectRevert(IDisputePolicy.ZeroAddress.selector);
-        new DisputePolicy(address(0), vault, disputeVerifier, disputeNullifierRegistry);
+        new DisputePolicy(address(0), token, collateralVault, vault, disputeVerifier, disputeNullifierRegistry);
+    }
+
+    function test_ConstructorRejectsCollateralWithWrongAssetOrStakeToken() public {
+        USDCMock otherToken = new USDCMock(1_000e6, "Other", "OTHER");
+        ERC4626Mock wrongAssetVault = new ERC4626Mock(otherToken);
+        vm.expectRevert(
+            abi.encodeWithSelector(IDisputePolicy.CollateralAssetMismatch.selector, address(token), address(otherToken))
+        );
+        new DisputePolicy(address(this), token, wrongAssetVault, vault, disputeVerifier, disputeNullifierRegistry);
+
+        StakeVault wrongStakeVault = new StakeVault(address(this), token, address(0), 1 days);
+        vm.expectRevert(
+            abi.encodeWithSelector(IDisputePolicy.StakeTokenMismatch.selector, address(collateralVault), address(token))
+        );
+        new DisputePolicy(
+            address(this), token, collateralVault, wrongStakeVault, disputeVerifier, disputeNullifierRegistry
+        );
     }
 
     function test_onIntentSignaledLocksStakeAndSnapshotsConfiguration() public {
@@ -86,11 +109,13 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
         assertEq(disputeIntent.stakeOwner, taker);
         assertEq(disputeIntent.depositor, depositor);
         assertEq(disputeIntent.riskWindow, RISK_WINDOW);
+        assertEq(disputeIntent.intentAmount, INTENT_AMOUNT);
+        assertEq(disputeIntent.collateralAmount, policy.quoteCollateral(INTENT_AMOUNT));
         assertEq(disputeIntent.releaseAmount, 0);
         assertEq(uint256(disputeIntent.status), uint256(IDisputePolicy.DisputeIntentStatus.PENDING));
         (address stakeOwner, uint256 amount, uint64 maturesAt) = vault.locks(INTENT);
         assertEq(stakeOwner, taker);
-        assertEq(amount, INTENT_AMOUNT);
+        assertEq(amount, policy.quoteCollateral(INTENT_AMOUNT));
         assertEq(maturesAt, type(uint64).max);
     }
 
@@ -106,9 +131,7 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
 
         vm.prank(depositor);
         policy.setDisputeEnabled(address(escrow), depositId, false);
-        vm.expectRevert(
-            abi.encodeWithSelector(IDisputePolicy.DisputeNotEnabled.selector, address(escrow), depositId)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IDisputePolicy.DisputeNotEnabled.selector, address(escrow), depositId));
         policy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
         vm.prank(depositor);
         policy.setDisputeEnabled(address(escrow), depositId, true);
@@ -126,17 +149,13 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
 
         policy.onIntentSignaled(INTENT, address(escrow), depositId, taker, windowlessMethod, INTENT_AMOUNT);
 
-        assertEq(
-            uint256(policy.getDisputeIntent(INTENT).status), uint256(IDisputePolicy.DisputeIntentStatus.NONE)
-        );
+        assertEq(uint256(policy.getDisputeIntent(INTENT).status), uint256(IDisputePolicy.DisputeIntentStatus.NONE));
         assertEq(vault.lockedStake(taker), lockedBefore);
         assertEq(vault.freeStake(taker), freeBefore);
 
         policy.onIntentSettled(INTENT, INTENT_AMOUNT, false);
         policy.onIntentCancelled(INTENT);
-        assertEq(
-            uint256(policy.getDisputeIntent(INTENT).status), uint256(IDisputePolicy.DisputeIntentStatus.NONE)
-        );
+        assertEq(uint256(policy.getDisputeIntent(INTENT).status), uint256(IDisputePolicy.DisputeIntentStatus.NONE));
         assertEq(vault.lockedStake(taker), lockedBefore);
         assertEq(vault.freeStake(taker), freeBefore);
     }
@@ -153,14 +172,16 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
 
         bytes32 secondIntent = keccak256("second-intent");
         vm.expectRevert(
-            abi.encodeWithSelector(IStakeVault.InsufficientFreeStake.selector, other, uint256(0), INTENT_AMOUNT)
+            abi.encodeWithSelector(
+                IStakeVault.InsufficientFreeStake.selector, other, uint256(0), policy.quoteCollateral(INTENT_AMOUNT)
+            )
         );
         policy.onIntentSignaled(secondIntent, address(escrow), depositId, other, METHOD, INTENT_AMOUNT);
     }
 
     function test_DelegatedStakeLocksSelectedOwnersStake() public {
         address stakeOwner = makeAddr("stakeOwner");
-        _stake(stakeOwner, STAKE_AMOUNT);
+        _stake(stakeOwner, STAKE_ASSETS);
         vm.prank(stakeOwner);
         vault.setTakerAuthorization(other, true);
         vm.prank(other);
@@ -169,7 +190,7 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
         policy.onIntentSignaled(INTENT, address(escrow), depositId, other, METHOD, INTENT_AMOUNT);
 
         assertEq(policy.getDisputeIntent(INTENT).stakeOwner, stakeOwner);
-        assertEq(vault.lockedStake(stakeOwner), INTENT_AMOUNT);
+        assertEq(vault.lockedStake(stakeOwner), policy.quoteCollateral(INTENT_AMOUNT));
         assertEq(vault.lockedStake(other), 0);
     }
 
@@ -178,9 +199,7 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
         policy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
         policy.onIntentCancelled(INTENT);
         assertEq(vault.lockedStake(taker), 0);
-        assertEq(
-            uint256(policy.getDisputeIntent(INTENT).status), uint256(IDisputePolicy.DisputeIntentStatus.CANCELLED)
-        );
+        assertEq(uint256(policy.getDisputeIntent(INTENT).status), uint256(IDisputePolicy.DisputeIntentStatus.CANCELLED));
 
         bytes32 settledIntent = keccak256("settled");
         policy.onIntentSignaled(settledIntent, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
@@ -200,7 +219,9 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
         policy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
         uint256 releaseEligibleAt = vm.getBlockTimestamp() + RISK_WINDOW;
         vm.expectEmit(true, true, true, true);
-        emit DisputeIntentSettled(INTENT, taker, depositor, 40e6, uint64(releaseEligibleAt), true);
+        uint256 expectedCollateral =
+            Math.mulDiv(policy.quoteCollateral(INTENT_AMOUNT), 40e6, INTENT_AMOUNT, Math.Rounding.Up);
+        emit DisputeIntentSettled(INTENT, taker, depositor, 40e6, expectedCollateral, uint64(releaseEligibleAt), true);
         policy.onIntentSettled(INTENT, 40e6, true);
 
         IDisputePolicy.DisputeIntent memory disputeIntent = policy.getDisputeIntent(INTENT);
@@ -208,14 +229,12 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
         assertEq(disputeIntent.releaseEligibleAt, releaseEligibleAt);
         assertEq(disputeIntent.releaseAmount, 40e6);
         (, uint256 amount, uint64 maturesAt) = vault.locks(INTENT);
-        assertEq(amount, 40e6);
+        assertEq(amount, expectedCollateral);
         assertEq(maturesAt, releaseEligibleAt);
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IDisputePolicy.DisputeIntentNotPending.selector,
-                INTENT,
-                IDisputePolicy.DisputeIntentStatus.SETTLED
+                IDisputePolicy.DisputeIntentNotPending.selector, INTENT, IDisputePolicy.DisputeIntentStatus.SETTLED
             )
         );
         policy.onIntentSettled(INTENT, 40e6, true);
@@ -224,7 +243,15 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
         policy.onIntentSignaled(fullIntent, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
         policy.onIntentSettled(fullIntent, INTENT_AMOUNT, false);
         (, amount,) = vault.locks(fullIntent);
-        assertEq(amount, INTENT_AMOUNT);
+        assertEq(amount, policy.quoteCollateral(INTENT_AMOUNT));
+    }
+
+    function test_SettlementRejectsReleaseAboveOriginalIntentAmount() public {
+        policy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        vm.expectRevert(
+            abi.encodeWithSelector(IDisputePolicy.ReleaseAmountExceedsIntent.selector, INTENT_AMOUNT, INTENT_AMOUNT + 1)
+        );
+        policy.onIntentSettled(INTENT, INTENT_AMOUNT + 1, false);
     }
 
     function test_ReleaseMaturedDisputeIntentAndBatchFreeStakeAtBoundary() public {
@@ -248,12 +275,10 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
         intents[1] = secondIntent;
         policy.releaseMaturedDisputeIntents(intents);
         assertEq(vault.lockedStake(taker), 0);
-        assertEq(vault.freeStake(taker), STAKE_AMOUNT);
+        assertEq(vault.freeStake(taker), stakeShares);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IDisputePolicy.DisputeIntentNotSettled.selector,
-                INTENT,
-                IDisputePolicy.DisputeIntentStatus.RELEASED
+                IDisputePolicy.DisputeIntentNotSettled.selector, INTENT, IDisputePolicy.DisputeIntentStatus.RELEASED
             )
         );
         policy.releaseMaturedDisputeIntent(INTENT);
@@ -275,13 +300,11 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
         nullifierRegistry.addNullifier(paymentNullifier, INTENT);
         policy.submitDispute(attestation);
 
-        assertEq(vault.claimable(depositor), 40e6);
+        uint256 compensatedShares = collateralVault.previewWithdraw(40e6);
+        assertEq(vault.claimable(depositor), compensatedShares);
         assertEq(vault.lockedStake(taker), 0);
-        assertEq(vault.stakeBalance(taker), STAKE_AMOUNT - 40e6);
-        assertEq(
-            uint256(policy.getDisputeIntent(INTENT).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.DISPUTED)
-        );
+        assertEq(vault.stakeBalance(taker), stakeShares - compensatedShares);
+        assertEq(uint256(policy.getDisputeIntent(INTENT).status), uint256(IDisputePolicy.DisputeIntentStatus.DISPUTED));
     }
 
     function test_SubmitDisputeRequiresSettledIntent() public {
@@ -298,9 +321,7 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
         policy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IDisputePolicy.DisputeIntentNotSettled.selector,
-                INTENT,
-                IDisputePolicy.DisputeIntentStatus.PENDING
+                IDisputePolicy.DisputeIntentNotSettled.selector, INTENT, IDisputePolicy.DisputeIntentStatus.PENDING
             )
         );
         policy.submitDispute(attestation);
@@ -320,7 +341,7 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
         bytes32 disputeNullifier = keccak256(abi.encodePacked(METHOD, disputeId));
         assertFalse(disputeNullifierRegistry.isNullified(disputeNullifier));
         assertEq(vault.claimable(depositor), 0);
-        assertEq(vault.lockedStake(taker), 40e6);
+        assertEq(vault.lockedStake(taker), _settledCollateral(INTENT));
     }
 
     function test_SubmitDisputeRejectsInvalidEvidenceButRemainsValidUntilCollateralRelease() public {
@@ -348,11 +369,8 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
         uint64 releaseEligibleAt = policy.getDisputeIntent(INTENT).releaseEligibleAt;
         vm.warp(releaseEligibleAt);
         policy.submitDispute(attestation);
-        assertEq(vault.claimable(depositor), 40e6);
-        assertEq(
-            uint256(policy.getDisputeIntent(INTENT).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.DISPUTED)
-        );
+        assertEq(vault.claimable(depositor), collateralVault.previewWithdraw(40e6));
+        assertEq(uint256(policy.getDisputeIntent(INTENT).status), uint256(IDisputePolicy.DisputeIntentStatus.DISPUTED));
     }
 
     function test_GovernanceSettersEnforceOwnershipAndValidation() public {
@@ -445,9 +463,8 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
     }
 
     function test_AcceptVaultControllerCompletesDelayedTwoStepHandover() public {
-        StakeVault secondVault = new StakeVault(address(this), token, address(0), 1 days);
-        DisputePolicy secondPolicy =
-            new DisputePolicy(address(this), secondVault, disputeVerifier, disputeNullifierRegistry);
+        StakeVault secondVault = new StakeVault(address(this), collateralVault, address(0), 1 days);
+        DisputePolicy secondPolicy = _newPolicy(secondVault, collateralVault, token);
         secondVault.initializeController(address(this));
         secondVault.proposeController(address(secondPolicy));
         uint256 acceptanceTime = vm.getBlockTimestamp() + secondVault.controllerChangeDelay();
@@ -456,12 +473,78 @@ contract DisputePolicyTest is OrchestratorV3Fixture {
         assertEq(secondVault.controller(), address(secondPolicy));
     }
 
-    function _stake(address stakeOwner, uint256 amount) internal {
-        token.transfer(stakeOwner, amount);
+    function _stake(address stakeOwner, uint256 assets) internal returns (uint256 shares) {
+        token.transfer(stakeOwner, assets);
         vm.startPrank(stakeOwner);
-        token.approve(address(vault), amount);
-        vault.depositStake(amount);
+        token.approve(address(collateralVault), assets);
+        shares = collateralVault.deposit(assets, stakeOwner);
+        collateralVault.approve(address(vault), shares);
+        vault.depositStake(shares);
         vm.stopPrank();
+    }
+
+    function _newPolicy(StakeVault stakeVault_, ERC4626Mock collateralVault_, IERC20 settlementToken_)
+        internal
+        returns (DisputePolicy)
+    {
+        return new DisputePolicy(
+            address(this), settlementToken_, collateralVault_, stakeVault_, disputeVerifier, disputeNullifierRegistry
+        );
+    }
+
+    function test_YieldReducesSharesPaidAndReturnsExcessCollateralToStaker() public {
+        _admitAndSettle(INTENT, 40e6, false);
+        uint256 lockedShares = _settledCollateral(INTENT);
+        token.transfer(address(collateralVault), STAKE_ASSETS);
+        uint256 compensatedShares = collateralVault.previewWithdraw(40e6);
+        assertLt(compensatedShares, lockedShares);
+
+        _bindPaymentAndSubmit(INTENT);
+
+        assertEq(vault.claimable(depositor), compensatedShares);
+        assertEq(vault.stakeBalance(taker), stakeShares - compensatedShares);
+        assertEq(vault.freeStake(taker), stakeShares - compensatedShares);
+        assertEq(vault.lockedStake(taker), 0);
+    }
+
+    function test_CollateralLossCapsDisputeCompensationAtLockedShares() public {
+        _admitAndSettle(INTENT, 40e6, false);
+        uint256 lockedShares = _settledCollateral(INTENT);
+        collateralVault.removeAssets(address(this), STAKE_ASSETS - 10e6);
+        assertGt(collateralVault.previewWithdraw(40e6), lockedShares);
+
+        _bindPaymentAndSubmit(INTENT);
+
+        assertEq(vault.claimable(depositor), lockedShares);
+        assertEq(vault.stakeBalance(taker), stakeShares - lockedShares);
+        assertEq(vault.lockedStake(taker), 0);
+    }
+
+    function test_PreviewFailureBlocksAdmissionButDisputeFallsBackToFullLock() public {
+        collateralVault.setPreviewWithdrawReverting(true);
+        vm.expectRevert(IDisputePolicy.CollateralConversionUnavailable.selector);
+        policy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+
+        collateralVault.setPreviewWithdrawReverting(false);
+        _admitAndSettle(INTENT, 40e6, false);
+        uint256 lockedShares = _settledCollateral(INTENT);
+        collateralVault.setPreviewWithdrawReverting(true);
+
+        _bindPaymentAndSubmit(INTENT);
+
+        assertEq(vault.claimable(depositor), lockedShares);
+        assertEq(vault.lockedStake(taker), 0);
+    }
+
+    function _settledCollateral(bytes32 intentHash) internal view returns (uint256 amount) {
+        (, amount,) = vault.locks(intentHash);
+    }
+
+    function _bindPaymentAndSubmit(bytes32 intentHash) internal {
+        bytes32 paymentId = keccak256("payment");
+        nullifierRegistry.addWritePermission(address(this));
+        nullifierRegistry.addNullifier(keccak256(abi.encodePacked(METHOD, paymentId)), intentHash);
+        policy.submitDispute(_attestation(intentHash, METHOD, paymentId, keccak256("dispute")));
     }
 
     function _admitAndSettle(bytes32 intentHash, uint256 releaseAmount, bool manualRelease) internal {

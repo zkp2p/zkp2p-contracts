@@ -11,6 +11,7 @@ import {DisputePolicy} from "contracts/hooks/DisputePolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";
+import {ERC4626Mock} from "contracts/mocks/ERC4626Mock.sol";
 import {IntentLifecycleHookV1Mock} from "contracts/mocks/IntentLifecycleHookV1Mock.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
@@ -40,10 +41,13 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
         PEER_MERCHANTS = groupRegistry.createGroup("Peer Merchants");
 
         policy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
-        stakeVault = new StakeVault(address(this), token, address(0), 1 days);
+        ERC4626Mock collateralVault = new ERC4626Mock(token);
+        stakeVault = new StakeVault(address(this), collateralVault, address(0), 1 days);
         NullifierRegistry disputeNullifierRegistry = new NullifierRegistry();
         disputePolicy = new DisputePolicy(
             address(this),
+            token,
+            collateralVault,
             stakeVault,
             new DisputeVerifier(
                 address(this), new NullifierRegistryV2(new NullifierRegistry()), new AttestationVerifierMock()

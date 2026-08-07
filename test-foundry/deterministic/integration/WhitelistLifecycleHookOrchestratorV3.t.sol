@@ -12,6 +12,7 @@ import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.so
 import {IOrchestratorRegistry} from "contracts/interfaces/IOrchestratorRegistry.sol";
 import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
 import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";
+import {ERC4626Mock} from "contracts/mocks/ERC4626Mock.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
@@ -161,10 +162,13 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         internal
         returns (StakeVault vault, DisputePolicy disputePolicy, IntentLifecycleHookV1 combinedHook)
     {
-        vault = new StakeVault(address(this), token, address(0), 1 days);
+        ERC4626Mock collateralVault = new ERC4626Mock(token);
+        vault = new StakeVault(address(this), collateralVault, address(0), 1 days);
         NullifierRegistry disputeNullifierRegistry = new NullifierRegistry();
         disputePolicy = new DisputePolicy(
             address(this),
+            token,
+            collateralVault,
             vault,
             new DisputeVerifier(
                 address(this), new NullifierRegistryV2(new NullifierRegistry()), new AttestationVerifierMock()
@@ -179,8 +183,10 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
 
         token.transfer(taker, STAKE_AMOUNT);
         vm.startPrank(taker);
-        token.approve(address(vault), STAKE_AMOUNT);
-        vault.depositStake(STAKE_AMOUNT);
+        token.approve(address(collateralVault), STAKE_AMOUNT);
+        uint256 shares = collateralVault.deposit(STAKE_AMOUNT, taker);
+        collateralVault.approve(address(vault), shares);
+        vault.depositStake(shares);
         vm.stopPrank();
     }
 }
