@@ -35,7 +35,15 @@ for (const subpath of [
   if (!requireFromInstall(subpath)) fail(`consumer import ${subpath} is missing`);
 }
 const sourceAbis = requireFromInstall('@zkp2p/contracts-v2/abis/contracts');
-for (const contractName of ['OrchestratorV3', 'WhitelistLifecycleHook']) {
+for (const contractName of [
+  'OrchestratorV3',
+  'WhitelistLifecycleHook',
+  'DisputeNullifierRegistry',
+  'DisputePolicy',
+  'DisputeVerifier',
+  'IntentLifecycleHookV1',
+  'StakeVault',
+]) {
   if (!Array.isArray(sourceAbis[contractName]) || sourceAbis[contractName].length === 0) {
     fail(`${contractName} source ABI export is missing`);
   }
@@ -51,6 +59,23 @@ for (const network of ['base', 'baseStaging']) {
     }
     if (!Array.isArray(bundle[contractName]) || bundle[contractName].length === 0) {
       fail(`${network}.${contractName} ABI export is missing`);
+    }
+  }
+  if (network === 'baseStaging') {
+    for (const contractName of [
+      'DisputeNullifierRegistry',
+      'DisputePolicy',
+      'DisputeVerifier',
+      'IntentLifecycleHookV1',
+      'StakeVault',
+    ]) {
+      const address = addresses?.contracts?.[contractName];
+      if (!/^0x[0-9a-fA-F]{40}$/.test(address) || /^0x0{40}$/.test(address)) {
+        fail(`${network}.${contractName} does not expose the fresh nonzero address`);
+      }
+      if (!Array.isArray(bundle[contractName]) || bundle[contractName].length === 0) {
+        fail(`${network}.${contractName} ABI export is missing`);
+      }
     }
   }
 }

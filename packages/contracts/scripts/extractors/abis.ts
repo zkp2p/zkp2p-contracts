@@ -17,7 +17,6 @@ const ROOT = path.resolve(__dirname, '../../../../');
 const OUTPUTS_DIR = path.join(ROOT, 'deployments', 'outputs');
 const PKG_ROOT = path.resolve(__dirname, '../..');
 const ABIS_DIR = path.join(PKG_ROOT, 'abis');
-
 const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
   IntentGuardian: 'contracts/IntentGuardian.sol/IntentGuardian.json',
   OrchestratorV3: 'contracts/OrchestratorV3.sol/OrchestratorV3.json',
@@ -28,6 +27,13 @@ const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
   WhitelistPolicy: 'contracts/hooks/WhitelistPolicy.sol/WhitelistPolicy.json',
   WhitelistLifecycleHook:
     'contracts/hooks/WhitelistLifecycleHook.sol/WhitelistLifecycleHook.json',
+  DisputeNullifierRegistry:
+    'contracts/registries/NullifierRegistry.sol/NullifierRegistry.json',
+  DisputePolicy: 'contracts/hooks/DisputePolicy.sol/DisputePolicy.json',
+  DisputeVerifier: 'contracts/unifiedVerifier/DisputeVerifier.sol/DisputeVerifier.json',
+  IntentLifecycleHookV1:
+    'contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json',
+  StakeVault: 'contracts/StakeVault.sol/StakeVault.json',
 };
 
 function ensureDir(dir: string) {

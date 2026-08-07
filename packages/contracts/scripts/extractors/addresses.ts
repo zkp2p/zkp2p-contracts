@@ -17,7 +17,6 @@ const ROOT = path.resolve(__dirname, '../../../../');
 const OUTPUTS_DIR = path.join(ROOT, 'deployments', 'outputs');
 const PKG_ROOT = path.resolve(__dirname, '../..');
 const ADDRESSES_DIR = path.join(PKG_ROOT, 'addresses');
-
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
@@ -48,9 +47,7 @@ export async function extractAddresses(): Promise<void> {
     const data: OutputsFileShape = mod.default || mod;
     networksData.push({ file, network, data });
 
-    for (const name of Object.keys(data.contracts)) {
-      allContractNames.add(name);
-    }
+    for (const name of Object.keys(data.contracts)) allContractNames.add(name);
   }
 
   const indexExports: string[] = [];

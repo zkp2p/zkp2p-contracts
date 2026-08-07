@@ -625,9 +625,9 @@ This script currently covers:
 
 ### V3 Groups Cutover
 
-The lifecycle cutover is split into two explicit lanes. Lane 30 supports the whitelist-only groups
-deployment on Base staging and Base; lane 31 remains staging-only until the dispute/staking cutover
-is separately approved.
+The lifecycle rollout is split into explicit lanes. Lane 30 supports the whitelist-only groups
+deployment on Base staging and Base. Lane 31 deploys the fresh dispute/staking stack on staging,
+and lane 32 activates it only after compatible downstream releases are live.
 
 `deploy/30_deploy_v3_lifecycle_stack.ts` is the groups-only lane. Its lane-29 dependency supplies a
 fresh `WhitelistPolicy`; lane 30 deploys a fresh `WhitelistLifecycleHook` and `OrchestratorV3`, sets
@@ -652,32 +652,30 @@ The staging confirmation is an operator acknowledgement; the deploy script inten
 indexer client or drain-query implementation. Base fails unless O2 and EscrowV2 are already registered,
 the existing stack remains intact, and the generated Safe batch contains only the fresh O3 registration.
 
-`deploy/31_deploy_dispute_lifecycle_stack.ts` is the later dispute/staking lane. Before it
-runs, move only these canonical artifacts aside:
+`deploy/31_deploy_dispute_lifecycle_stack.ts` is the staging dispute/staking deployment lane. Run
+`--tags V3DisputeLifecycleStack` with
+`ENABLE_STAGING_V3_DISPUTE_DEPLOYMENT=true`. It deploys a fresh `DisputeNullifierRegistry`,
+`DisputeVerifier`, `StakeVault`, `DisputePolicy`, and `IntentLifecycleHookV1`; initializes the vault
+controller; applies the canonical risk windows; authorizes the combined hook; grants the policy
+nullifier-writer permission; and transfers ownership. It deliberately leaves the active O3 hook
+unchanged.
 
-- `deployments/base_staging/StakeVault.json`
-- `deployments/base_staging/DisputePolicy.json` when present
-- `deployments/base_staging/IntentLifecycleHookV1.json`
-
-Lane 31 activation is blocked until every compatible downstream release is deployed:
+Commit the five newly generated deployment artifacts so their addresses can flow through the
+package, indexer, curator, and attestation-service releases. Activation remains blocked until every
+compatible downstream release is deployed:
 
 - [ ] `zkp2p-indexer` indexes the fresh contract addresses and the renamed `Dispute*` events.
 - [ ] `curator` recognizes `IntentLifecycleHookV1` as the enforcement hook and enables dispute enforcement.
-- [ ] `@zkp2p/contracts-v2` publishes the hard-cutover dispute ABI and staging addresses, and its consumers upgrade.
+- [ ] `@zkp2p/contracts-v2` publishes the hard-renamed dispute ABI and staging addresses, and its consumers upgrade.
 - [ ] `attestation-service` targets the fresh `DisputeVerifier` and signs the `ZKP2P DisputeVerifier`
   `DisputeAttestation` domain and type.
 
-Consumer renames belong in their owning repositories. Do not add legacy `Chargeback*` ABI aliases to this repository.
+After the checklist is complete, run `--tags ActivateV3DisputeLifecycleStack` with
+`ENABLE_STAGING_V3_DISPUTE_ACTIVATION=true`. Lane 32 verifies the exact fresh stack and only then
+rotates the existing O3 to the fresh combined hook. It deploys nothing. Existing intents retain
+their snapshotted previous hook.
 
-Run `--tags V3DisputeLifecycleStack` with `ENABLE_STAGING_V3_DISPUTE_CUTOVER=true`. The lane
-requires the retired vault's aggregate stake and claim liabilities to be zero before any write. It
-then deploys a fresh dispute verifier, vault, policy, and combined hook; reuses the existing
-nullifier registry; initializes the controller; applies the canonical risk windows; authorizes the
-combined hook on the new policy; rotates the already-deployed O3; and revokes the retired policy's
-nullifier-writer permission. Existing intents retain their snapshotted whitelist-only hook.
-
-Commit the newly generated canonical artifacts after each authorized deployment. Do not commit the
-temporary artifact removals.
+Commit the newly generated canonical artifacts after the authorized deployment.
 
 ### Whitelist Bootstrap
 

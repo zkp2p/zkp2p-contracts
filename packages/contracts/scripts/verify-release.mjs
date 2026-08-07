@@ -39,6 +39,23 @@ const sourceAbiArtifacts = {
   WhitelistPolicy: 'artifacts/contracts/hooks/WhitelistPolicy.sol/WhitelistPolicy.json',
   WhitelistLifecycleHook:
     'artifacts/contracts/hooks/WhitelistLifecycleHook.sol/WhitelistLifecycleHook.json',
+  DisputeNullifierRegistry:
+    'artifacts/contracts/registries/NullifierRegistry.sol/NullifierRegistry.json',
+  DisputePolicy: 'artifacts/contracts/hooks/DisputePolicy.sol/DisputePolicy.json',
+  DisputeVerifier:
+    'artifacts/contracts/unifiedVerifier/DisputeVerifier.sol/DisputeVerifier.json',
+  IntentLifecycleHookV1:
+    'artifacts/contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json',
+  StakeVault: 'artifacts/contracts/StakeVault.sol/StakeVault.json',
+};
+const requiredNetworkContracts = {
+  baseStaging: [
+    'DisputeNullifierRegistry',
+    'DisputePolicy',
+    'DisputeVerifier',
+    'IntentLifecycleHookV1',
+    'StakeVault',
+  ],
 };
 
 function fail(message) {
@@ -129,6 +146,12 @@ for (const {
 
   const contracts = Object.entries(addresses.contracts || {});
   if (contracts.length === 0) fail(`${name} package has no contract addresses`);
+  for (const contractName of requiredNetworkContracts[name] || []) {
+    const address = addresses.contracts?.[contractName];
+    if (!address || address.toLowerCase() === zeroAddress) {
+      fail(`${name}.${contractName} must expose the fresh deployment address`);
+    }
+  }
 
   for (const [contractName, packageAddress] of contracts) {
     const outputEntry = output.contracts?.[contractName];
