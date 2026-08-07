@@ -123,18 +123,18 @@ export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
   "base_staging": "",
 };
 
-// V3 lifecycle stack parameters. Base staging and production use the ratified 14-day chargeback policy.
+// V3 lifecycle stack parameters. Base staging and production use the ratified 14-day dispute policy.
 export const STAKE_VAULT_CONTROLLER_CHANGE_DELAY = ONE_DAY_IN_SECONDS.mul(2);
 
-export const CHARGEBACK_RISK_WINDOW: any = {
+export const DISPUTE_RISK_WINDOW: any = {
   "localhost": ONE_DAY_IN_SECONDS.mul(14),
   "hardhat": ONE_DAY_IN_SECONDS.mul(14),
   "base": ONE_DAY_IN_SECONDS.mul(14),
   "base_staging": ONE_DAY_IN_SECONDS.mul(14),
 };
 
-// Ratified policy: all five methods are chargebackable on Base staging and production.
-export const CHARGEBACKABLE_PAYMENT_METHODS: string[] = [
+// Ratified policy: all five methods are disputable on Base staging and production.
+export const DISPUTABLE_PAYMENT_METHODS: string[] = [
   "paypal",
   "venmo",
   "cashapp",
