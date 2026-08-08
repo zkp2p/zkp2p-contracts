@@ -145,10 +145,10 @@ Check the invariants relevant to the scope:
 
 ## OrchestratorV3 invariant parity
 
-`OrchestratorV3` is a dedicated current implementation with a mounted
-Base-staging lifecycle lane, not a textual V2 scaffold. Current source retains
-the relayer-gated multi-intent admission and core escrow, fee, registry, and
-payment-verification boundaries. It intentionally replaces the V2
+`OrchestratorV3` is a dedicated current implementation with separate lifecycle
+deployment and activation lanes, not a textual V2 scaffold. Current source
+retains the relayer-gated multi-intent admission and core escrow, fee, registry,
+and payment-verification boundaries. It intentionally replaces the V2
 deposit-whitelist-hook path with a governance-selected lifecycle hook
 snapshotted per intent and fail-closed callbacks across signal, cancellation,
 fulfillment, and manual release.
@@ -157,7 +157,7 @@ When either V2 or V3 source changes:
 
 1. Diff both implementations and interfaces against canonical current main.
 2. Derive the intended V3 deltas from current interfaces, lifecycle tests,
-   deployment tests, and `deploy/30_deploy_v3_lifecycle_stack.ts`; do not copy an
+   deployment tests, and deploy lanes `30`, `31`, and `32`; do not copy an
    allowlist from an older review.
 3. Verify shared admission, fee, escrow, registry, payment-verifier, nullifier,
    replay, authorization, and settlement invariants semantically.
@@ -165,10 +165,22 @@ When either V2 or V3 source changes:
    behavior, reentrancy protection, cancellation/pruning, and dispute/stake
    ownership boundaries with the closest deterministic, fuzz, invariant, and
    integration tests.
-5. Inspect `scripts/deployActive.ts`, lane `30` network guards and `skip`
-   behavior, Base-staging artifacts, package addresses, and live state
-   separately. A mounted script or checked-in artifact is not production or
-   live-state evidence.
+5. Inspect `scripts/deployActive.ts`, the network guards, opt-in flags, `skip`
+   behavior, dependencies, and readiness checks in
+   `deploy/30_deploy_v3_lifecycle_stack.ts`,
+   `deploy/31_deploy_dispute_lifecycle_stack.ts`, and
+   `deploy/32_activate_dispute_lifecycle_stack.ts`. Lane `31` must deploy and
+   verify the dispute registry, verifier, vault, policy, hook authorization,
+   writer permission, and payment-method risk windows without changing the
+   active OrchestratorV3 hook. Lane `32` may activate that verified hook only as
+   a separate explicitly enabled staging action.
+6. Verify the dispute path binds the payment to the disputed intent and preserves
+   stake-vault controller, verifier/nullifier, lifecycle-hook authorization,
+   risk-window, replay, and settlement invariants. Run
+   `scripts/test-dispute-lifecycle-deployment.cjs` when either lane changes.
+7. Inspect Base/Base-staging artifacts, package addresses, and live state
+   separately. Lanes `31` and `32` currently exclude Base, and a mounted script,
+   checked-in artifact, or packaged address is not activation evidence.
 
 Do not require the remaining V2/V3 source diff to be empty and do not normalize
 away a lifecycle, storage, governance, or settlement delta. If bytecode,
