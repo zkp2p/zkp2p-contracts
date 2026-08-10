@@ -67,7 +67,7 @@ Important ownership boundaries:
 - `OrchestratorV3` owns the V3 intent lifecycle and snapshots the
   governance-selected `IIntentLifecycleHook` for each intent.
 - `IntentLifecycleHookV1` composes whitelist admission with fail-closed
-  lifecycle callbacks into `DisputePolicy`; `StakeVault`, the dispute
+  lifecycle callbacks into `DisputeProtectionPolicy`; `StakeVault`, the dispute
   verifier, and its dedicated nullifier registry retain their separate
   accounting, proof, and replay boundaries.
 - `PaymentVerifierRegistry` owns payment-method-to-verifier routing.

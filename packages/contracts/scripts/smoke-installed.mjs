@@ -39,7 +39,7 @@ for (const contractName of [
   'OrchestratorV3',
   'WhitelistLifecycleHook',
   'DisputeNullifierRegistry',
-  'DisputePolicy',
+  'DisputeProtectionPolicy',
   'DisputeVerifier',
   'IntentLifecycleHookV1',
   'StakeVault',
@@ -64,7 +64,7 @@ for (const network of ['base', 'baseStaging']) {
   if (network === 'baseStaging') {
     for (const contractName of [
       'DisputeNullifierRegistry',
-      'DisputePolicy',
+      'DisputeProtectionPolicy',
       'DisputeVerifier',
       'IntentLifecycleHookV1',
       'StakeVault',

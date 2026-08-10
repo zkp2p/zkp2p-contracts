@@ -50,7 +50,8 @@ export async function disputeStackReady(hre: HardhatRuntimeEnvironment): Promise
       (await hre.deployments.get("DisputeNullifierRegistry")).address;
     const verifierAddress = (await hre.deployments.get("DisputeVerifier")).address;
     const vaultAddress = (await hre.deployments.get("StakeVault")).address;
-    const policyAddress = (await hre.deployments.get("DisputePolicy")).address;
+    const disputeProtectionPolicyAddress =
+      (await hre.deployments.get("DisputeProtectionPolicy")).address;
     const hookAddress = (await hre.deployments.get("IntentLifecycleHookV1")).address;
 
     const disputeNullifierRegistry = await ethers.getContractAt(
@@ -59,7 +60,10 @@ export async function disputeStackReady(hre: HardhatRuntimeEnvironment): Promise
     );
     const verifier = await ethers.getContractAt("DisputeVerifier", verifierAddress);
     const vault = await ethers.getContractAt("StakeVault", vaultAddress);
-    const policy = await ethers.getContractAt("DisputePolicy", policyAddress);
+    const disputeProtectionPolicy = await ethers.getContractAt(
+      "DisputeProtectionPolicy",
+      disputeProtectionPolicyAddress,
+    );
     const hook = await ethers.getContractAt("IntentLifecycleHookV1", hookAddress);
 
     if (!sameAddress(await disputeNullifierRegistry.owner(), governance)) return false;
@@ -67,21 +71,24 @@ export async function disputeStackReady(hre: HardhatRuntimeEnvironment): Promise
     if (!sameAddress(await verifier.attestationVerifier(), attestationVerifier.address)) return false;
     if (!sameAddress(await verifier.owner(), governance)) return false;
     if (!sameAddress(await vault.stakeToken(), stakeTokenAddress)) return false;
-    if (!sameAddress(await vault.controller(), policyAddress)) return false;
+    if (!sameAddress(await vault.controller(), disputeProtectionPolicyAddress)) return false;
     if (!(await vault.controllerChangeDelay()).eq(STAKE_VAULT_CONTROLLER_CHANGE_DELAY)) return false;
     if (!sameAddress(await vault.owner(), governance)) return false;
-    if (!sameAddress(await policy.stakeVault(), vaultAddress)) return false;
-    if (!sameAddress(await policy.disputeVerifier(), verifierAddress)) return false;
-    if (!sameAddress(await policy.disputeNullifierRegistry(), disputeNullifierRegistryAddress)) return false;
-    if (!(await policy.isLifecycleHookAuthorized(hookAddress))) return false;
-    if (!sameAddress(await policy.owner(), governance)) return false;
-    if (!(await disputeNullifierRegistry.isWriter(policyAddress))) return false;
+    if (!sameAddress(await disputeProtectionPolicy.stakeVault(), vaultAddress)) return false;
+    if (!sameAddress(await disputeProtectionPolicy.disputeVerifier(), verifierAddress)) return false;
+    if (!sameAddress(
+      await disputeProtectionPolicy.disputeNullifierRegistry(),
+      disputeNullifierRegistryAddress,
+    )) return false;
+    if (!(await disputeProtectionPolicy.isLifecycleHookAuthorized(hookAddress))) return false;
+    if (!sameAddress(await disputeProtectionPolicy.owner(), governance)) return false;
+    if (!(await disputeNullifierRegistry.isWriter(disputeProtectionPolicyAddress))) return false;
     if (!sameAddress(await hook.orchestratorRegistry(), registryAddress)) return false;
     if (!sameAddress(await hook.whitelistPolicy(), whitelistPolicyAddress)) return false;
-    if (!sameAddress(await hook.disputePolicy(), policyAddress)) return false;
+    if (!sameAddress(await hook.disputeProtectionPolicy(), disputeProtectionPolicyAddress)) return false;
 
     for (const methodName of DISPUTABLE_PAYMENT_METHODS) {
-      const riskWindow = await policy.getRiskWindow(paymentMethodHash(methodName));
+      const riskWindow = await disputeProtectionPolicy.getRiskWindow(paymentMethodHash(methodName));
       if (!riskWindow.eq(DISPUTE_RISK_WINDOW[network])) return false;
     }
     return true;
@@ -145,7 +152,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   });
   await waitForDeploymentDelay(hre);
 
-  const policyDeployment = await hre.deployments.deploy("DisputePolicy", {
+  const disputeProtectionPolicyDeployment = await hre.deployments.deploy("DisputeProtectionPolicy", {
     from: deployer,
     args: [
       deployer,
@@ -159,7 +166,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const hookDeployment = await hre.deployments.deploy("IntentLifecycleHookV1", {
     from: deployer,
-    args: [orchestratorRegistryAddress, whitelistPolicyAddress, policyDeployment.address],
+    args: [orchestratorRegistryAddress, whitelistPolicyAddress, disputeProtectionPolicyDeployment.address],
     log: true,
   });
   await waitForDeploymentDelay(hre);
@@ -173,23 +180,26 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     disputeVerifierDeployment.address,
   );
   const vault = await ethers.getContractAt("StakeVault", vaultDeployment.address);
-  const policy = await ethers.getContractAt("DisputePolicy", policyDeployment.address);
+  const disputeProtectionPolicy = await ethers.getContractAt(
+    "DisputeProtectionPolicy",
+    disputeProtectionPolicyDeployment.address,
+  );
 
   if (sameAddress(await vault.controller(), ethers.constants.AddressZero)) {
-    await (await vault.initializeController(policy.address)).wait();
+    await (await vault.initializeController(disputeProtectionPolicy.address)).wait();
     await waitForDeploymentDelay(hre);
   }
-  await addWritePermission(hre, disputeNullifierRegistry, policy.address);
+  await addWritePermission(hre, disputeNullifierRegistry, disputeProtectionPolicy.address);
 
-  if (!(await policy.isLifecycleHookAuthorized(hookDeployment.address))) {
-    await (await policy.setLifecycleHookAuthorization(hookDeployment.address, true)).wait();
+  if (!(await disputeProtectionPolicy.isLifecycleHookAuthorized(hookDeployment.address))) {
+    await (await disputeProtectionPolicy.setLifecycleHookAuthorization(hookDeployment.address, true)).wait();
     await waitForDeploymentDelay(hre);
   }
   for (const methodName of DISPUTABLE_PAYMENT_METHODS) {
     const paymentMethod = paymentMethodHash(methodName);
     const riskWindow = DISPUTE_RISK_WINDOW[network];
-    if (!(await policy.getRiskWindow(paymentMethod)).eq(riskWindow)) {
-      await (await policy.setRiskWindow(paymentMethod, riskWindow)).wait();
+    if (!(await disputeProtectionPolicy.getRiskWindow(paymentMethod)).eq(riskWindow)) {
+      await (await disputeProtectionPolicy.setRiskWindow(paymentMethod, riskWindow)).wait();
       await waitForDeploymentDelay(hre);
     }
   }
@@ -197,7 +207,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await setNewOwner(hre, disputeNullifierRegistry, governance);
   await setNewOwner(hre, disputeVerifier, governance);
   await setNewOwner(hre, vault, governance);
-  await setNewOwner(hre, policy, governance);
+  await setNewOwner(hre, disputeProtectionPolicy, governance);
 
   if (!await disputeStackReady(hre)) {
     throw new Error("Dispute lifecycle stack verification failed");
@@ -207,7 +217,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("DisputeNullifierRegistry:", disputeNullifierRegistry.address);
   console.log("DisputeVerifier:", disputeVerifier.address);
   console.log("StakeVault:", vault.address);
-  console.log("DisputePolicy:", policy.address);
+  console.log("DisputeProtectionPolicy:", disputeProtectionPolicy.address);
   console.log("IntentLifecycleHookV1:", hookDeployment.address);
   console.log("OrchestratorV3 lifecycle hook was not changed");
 };

@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 
 /**
  * @title IDisputeVerifier
- * @notice Minimal verification surface consumed by DisputePolicy.
+ * @notice Minimal verification surface consumed by DisputeProtectionPolicy.
  * @dev The concrete verifier exposes its governance and digest helper functions directly.
  */
 interface IDisputeVerifier {

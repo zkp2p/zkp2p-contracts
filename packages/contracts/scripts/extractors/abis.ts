@@ -29,7 +29,7 @@ const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
     'contracts/hooks/WhitelistLifecycleHook.sol/WhitelistLifecycleHook.json',
   DisputeNullifierRegistry:
     'contracts/registries/NullifierRegistry.sol/NullifierRegistry.json',
-  DisputePolicy: 'contracts/hooks/DisputePolicy.sol/DisputePolicy.json',
+  DisputeProtectionPolicy: 'contracts/hooks/DisputeProtectionPolicy.sol/DisputeProtectionPolicy.json',
   DisputeVerifier: 'contracts/unifiedVerifier/DisputeVerifier.sol/DisputeVerifier.json',
   IntentLifecycleHookV1:
     'contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json',

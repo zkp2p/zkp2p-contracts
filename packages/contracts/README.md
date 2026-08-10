@@ -4,7 +4,7 @@ Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, an
 
 ## Release 0.4.1-rc.1
 
-- Exports the canonical source ABIs for `DisputeNullifierRegistry`, `DisputePolicy`,
+- Exports the canonical source ABIs for `DisputeNullifierRegistry`, `DisputeProtectionPolicy`,
   `DisputeVerifier`, `IntentLifecycleHookV1`, and `StakeVault`.
 - Hard-cuts unused chargeback deployment aliases and exposes only the canonical `Dispute*` API.
 - Requires a complete fresh Base staging dispute stack before the release can be published.

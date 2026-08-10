@@ -156,7 +156,7 @@ async function deployThenActivate() {
     "DisputeNullifierRegistry",
     "DisputeVerifier",
     "StakeVault",
-    "DisputePolicy",
+    "DisputeProtectionPolicy",
     "IntentLifecycleHookV1",
   ]);
   assert.equal(
@@ -164,13 +164,16 @@ async function deployThenActivate() {
     state.initialHook.toLowerCase(),
   );
 
-  const policyDeployment = state.deployments.get("DisputePolicy");
+  const disputeProtectionPolicyDeployment = state.deployments.get("DisputeProtectionPolicy");
   const registryDeployment = state.deployments.get("DisputeNullifierRegistry");
   const disputeNullifierRegistry = await ethers.getContractAt(
     "NullifierRegistry",
     registryDeployment.address,
   );
-  assert.equal(await disputeNullifierRegistry.isWriter(policyDeployment.address), true);
+  assert.equal(
+    await disputeNullifierRegistry.isWriter(disputeProtectionPolicyDeployment.address),
+    true,
+  );
   assert.equal(await deployDisputeStack.skip(state.fakeHre), true);
 
   setStagingFlags();

@@ -123,7 +123,7 @@ export const ORCHESTRATOR_V2_PROTOCOL_FEE_RECIPIENT: any = {
   "base_staging": "",
 };
 
-// V3 lifecycle stack parameters. Base staging and production use the ratified 14-day dispute policy.
+// V3 lifecycle stack parameters. Base staging and production use the ratified 14-day dispute protection policy.
 export const STAKE_VAULT_CONTROLLER_CHANGE_DELAY = ONE_DAY_IN_SECONDS.mul(2);
 
 export const DISPUTE_RISK_WINDOW: any = {
