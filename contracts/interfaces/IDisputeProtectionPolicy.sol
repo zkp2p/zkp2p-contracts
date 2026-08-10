@@ -140,7 +140,8 @@ interface IDisputeProtectionPolicy {
     function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease) external;
 
     /**
-     * @notice Returns whether a deposit opted into stake-backed dispute protection.
+     * @notice Returns whether default-on stake-backed dispute protection remains enabled for a deposit.
+     * @dev Returns true unless the depositor explicitly opts out.
      * @param _escrow Escrow containing the deposit.
      * @param _depositId Deposit whose dispute protection configuration is queried.
      */

@@ -120,9 +120,6 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         (StakeVault vault, DisputeProtectionPolicy disputeProtectionPolicy, IntentLifecycleHookV1 combinedHook) =
             _deployDisputeStack();
 
-        vm.prank(depositor);
-        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, true);
-
         bytes32 oldCancelledIntent = _signalDefault();
         bytes32 oldSettledIntent = _signalDefault();
         assertEq(address(orchestrator.getIntentLifecycleHook(oldCancelledIntent)), address(whitelistHook));
