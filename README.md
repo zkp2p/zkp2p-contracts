@@ -696,9 +696,6 @@ Dispute-evidence issuance in `attestation-service` remains a separate follow-up 
 by these contract lanes. Only PayPal, Venmo, and Cash App receive non-zero onchain risk windows, matching the
 explicitly ratified chargebackable-platform set.
 
-The complete staging and production sequence, stop conditions, Safe call boundaries, and cleanup rules are in
-[`docs/base-dispute-protection-rollout.md`](./docs/base-dispute-protection-rollout.md).
-
 Commit the newly generated canonical artifacts after the authorized deployment.
 
 ### Whitelist Bootstrap
