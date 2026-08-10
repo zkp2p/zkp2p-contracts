@@ -77,6 +77,8 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
     function test_EnabledEmptyPolicyFailsClosedBeforeEscrowLock() public {
         vm.prank(depositor);
         policy.setEnabled(address(escrow), depositId, true);
+        vm.prank(depositor);
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, false);
 
         uint256 counterBefore = orchestrator.intentCounter();
         bytes32 rejectedIntent = _intentHash(counterBefore);
@@ -98,6 +100,8 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
     function test_NonMemberRejectedAndMemberAccepted() public {
         vm.prank(depositor);
         policy.configureDeposit(address(escrow), depositId, true, _groupIds(PEERS), new address[](0));
+        vm.prank(depositor);
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, false);
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -135,6 +139,8 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
 
         vm.prank(depositor);
         policy.configureDeposit(address(escrow), depositId, true, _groupIds(PEERS), new address[](0));
+        vm.prank(depositor);
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, false);
 
         IOrchestratorV3.SignalIntentParams memory otherMethodParams = _defaultParams();
         otherMethodParams.paymentMethod = OTHER_METHOD;
@@ -159,6 +165,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
     function test_PolicyIsScopedToDepositNotMaker() public {
         vm.startPrank(depositor);
         policy.configureDeposit(address(escrow), depositId, true, _groupIds(PEERS), new address[](0));
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, false);
         uint256 secondDepositId = _createDeposit(address(0), delegate);
         vm.stopPrank();
 
@@ -169,8 +176,10 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
         secondDepositParams.depositId = secondDepositId;
         assertNotEq(_signal(taker, secondDepositParams), bytes32(0));
 
-        vm.prank(depositor);
+        vm.startPrank(depositor);
         policy.configureDeposit(address(escrow), secondDepositId, true, _groupIds(PEERS), new address[](0));
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), secondDepositId, false);
+        vm.stopPrank();
         vm.expectPartialRevert(IntentLifecycleHookV1.TakerNotWhitelisted.selector);
         _signalCall(taker, secondDepositParams);
     }
@@ -267,6 +276,8 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
     function _enablePeerPolicyAndAddTaker() internal {
         vm.prank(depositor);
         policy.configureDeposit(address(escrow), depositId, true, _groupIds(PEERS), new address[](0));
+        vm.prank(depositor);
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, false);
         _addMembers(PEERS, taker);
     }
 

@@ -42,6 +42,9 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
     );
     event LifecycleHookAuthorizationUpdated(address indexed hook, bool authorized);
     event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
+    event DisputeProtectionEnabledUpdated(
+        address indexed escrow, uint256 indexed depositId, bool isDisputeProtectionEnabled
+    );
 
     uint64 internal constant RISK_WINDOW = 30 days;
     uint256 internal constant STAKE_AMOUNT = 500e6;
@@ -67,8 +70,6 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         disputeNullifierRegistry.addWritePermission(address(disputeProtectionPolicy));
         disputeProtectionPolicy.setLifecycleHookAuthorization(address(this), true);
         disputeProtectionPolicy.setRiskWindow(METHOD, RISK_WINDOW);
-        vm.prank(depositor);
-        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, true);
         _stake(taker, STAKE_AMOUNT);
     }
 
@@ -77,7 +78,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         new DisputeProtectionPolicy(address(0), vault, disputeVerifier, disputeNullifierRegistry);
     }
 
-    function test_onIntentSignaledLocksStakeAndSnapshotsConfiguration() public {
+    function test_onIntentSignaledUntouchedDepositLocksStakeAndSnapshotsConfiguration() public {
         disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
         disputeProtectionPolicy.setRiskWindow(METHOD, 7 days);
         assertEq(disputeProtectionPolicy.getRiskWindow(METHOD), 7 days);
@@ -157,8 +158,6 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
     function test_onIntentSignaledRejectsWrongTokenAndLetsVaultEnforceCollateral() public {
         USDCMock otherToken = new USDCMock(1_000e6, "Other", "OTHER");
         DisputeProtectionEscrowMock wrongTokenEscrow = new DisputeProtectionEscrowMock(depositor, otherToken);
-        vm.prank(depositor);
-        disputeProtectionPolicy.setDisputeProtectionEnabled(address(wrongTokenEscrow), depositId, true);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IDisputeProtectionPolicy.IntentTokenMismatch.selector, address(token), address(otherToken)
@@ -462,7 +461,12 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         disputeProtectionPolicy.releaseMaturedDisputeProtectionIntent(INTENT);
     }
 
-    function test_SetDisputeProtectionEnabledEnforcesDepositorAndHandlesMissingDeposit() public {
+    function test_isDisputeProtectionEnabledDefaultsTrueForUntouchedAndMissingDeposits() public view {
+        assertTrue(disputeProtectionPolicy.isDisputeProtectionEnabled(address(escrow), depositId));
+        assertTrue(disputeProtectionPolicy.isDisputeProtectionEnabled(address(escrow), type(uint256).max));
+    }
+
+    function test_SetDisputeProtectionEnabledEnforcesDepositorHandlesMissingDepositAndRoundTrips() public {
         vm.expectRevert(
             abi.encodeWithSelector(IDisputeProtectionPolicy.NotDepositor.selector, address(escrow), depositId, other)
         );
@@ -477,9 +481,17 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         );
         disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), missingDeposit, true);
 
+        vm.expectEmit(true, true, false, true);
+        emit DisputeProtectionEnabledUpdated(address(escrow), depositId, false);
         vm.prank(depositor);
         disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, false);
         assertFalse(disputeProtectionPolicy.isDisputeProtectionEnabled(address(escrow), depositId));
+
+        vm.expectEmit(true, true, false, true);
+        emit DisputeProtectionEnabledUpdated(address(escrow), depositId, true);
+        vm.prank(depositor);
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, true);
+        assertTrue(disputeProtectionPolicy.isDisputeProtectionEnabled(address(escrow), depositId));
     }
 
     function test_AcceptVaultControllerCompletesDelayedTwoStepHandover() public {
