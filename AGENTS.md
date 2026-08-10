@@ -17,12 +17,18 @@
 - Base staging removes only the explicitly drained staging predecessors. Base keeps the existing orchestrators
   registered and queues exactly one Safe call to register the fresh O3. Base execution requires
   `ENABLE_BASE_V3_GROUPS_CUTOVER=true`, a separately approved exact source SHA, and the production governance path.
-- Lane `31` remains staging-only and must not run during the Base whitelist-only deployment. Never infer live
-  activation from source, tests, package ABIs, a mounted script, or checked-in artifacts.
+- Lane `31` is the state-aware V3 payment-binding lane. On Base staging and Base it must verify and reuse the
+  bytecode-pinned `NullifierRegistryV2` and `UnifiedPaymentVerifierV3`; missing production-like artifacts fail
+  closed. With the network-specific cutover opt-in, it preserves the live method order and currencies while
+  atomically routing all active methods to UPV3 and revoking both retired verifiers from the legacy registry.
+- Lane `32` deploys, wires, transfers, and activates the fresh dispute lifecycle stack as one explicitly gated
+  action. Staging executes activation directly. Base prepares the required ownership-acceptance and lifecycle-hook
+  Safe calls but never executes them. Never infer activation from source, tests, package ABIs, or artifacts.
 - `IntentGuardian` and `WhitelistPolicy` remain part of the V2 policy history and are reused where the mounted V3
   lifecycle lane specifies. Do not redeploy a core stack merely to change an independently owned policy component.
-- The payment-verifier cutover is one-way. In the same governance batch, authorize UPV3 on `NullifierRegistryV2`,
-  permanently revoke the retired verifier's legacy-registry write permission, and route the shared
+- The payment-verifier cutover is one-way. Before the governance batch, lane `31` must prove UPV3 is the sole
+  `NullifierRegistryV2` writer. In the same governance batch, permanently revoke every retired verifier's
+  legacy-registry write permission and route the shared
   `PaymentVerifierRegistry` to UPV3. Never route a payment method back to the retired verifier: the legacy registry
   cannot observe V2 writes, so a rollback would reopen payment replay.
 

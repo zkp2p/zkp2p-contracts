@@ -65,7 +65,17 @@ the approved target state.
 - Base lane `30` requires `ENABLE_BASE_V3_GROUPS_CUTOVER=true`, a separately
   reviewed exact source SHA, and the production governance/deployer path. It
   must leave existing orchestrators registered and produce only the fresh O3
-  registry-add Safe call. Lane `31` remains outside that deployment.
+  registry-add Safe call. Lanes `31` and `32` remain outside that deployment.
+- Lane `31` is the state-aware V3 payment-binding lane. Existing Base and Base-staging
+  deployments must match their pinned addresses, runtime code hashes, immutables,
+  owners, payment methods, and sole-writer invariant; mismatch fails closed. Its
+  gated cutover must preserve the live method order and currencies, route all ten
+  methods to UPV3, and revoke both retired legacy-registry writers in the same
+  atomic Base Safe batch.
+- Lane `32` combines dispute deployment, wiring, ownership handoff, and hook
+  activation. Staging activation is direct and explicitly gated. Base execution
+  may deploy the assets and prepare the ownership-acceptance plus hook-activation
+  Safe calls, but it must never submit or execute that batch.
 - Remove retired active routes, permissions, exports, and aliases in the same
   hard cutover.
 - Do not add rollback compatibility to a one-way verifier or nullifier
@@ -89,7 +99,7 @@ Before activation:
 
 - verify deployer, chain ID, RPC, parameters, expected old state, and expected
   new state;
-- for lane `30`, resolve the expected `OrchestratorV3`,
+- resolve the expected `OrchestratorV3`,
   `UnifiedPaymentVerifierV3`, lifecycle hook, stake vault, dispute protection
   policy, verifier/nullifier, registries, ownership, and prior-orchestrator state
   from current source and artifacts;
@@ -109,7 +119,9 @@ production immediately before submission.
 The Base whitelist-only lane must be reviewed at an exact source SHA. Require
 the explicit Base cutover flag, retain existing orchestrators, and verify that
 the generated Safe batch contains only `addOrchestrator(freshO3)`. Do not reuse
-staging artifacts or include lane `31` as a shortcut.
+staging artifacts or include lanes `31` or `32` as a shortcut. Any separate Base
+lane-32 run requires its own exact-SHA authorization and may only prepare the
+reviewed Safe batch until execution is separately approved.
 
 Fail closed on chain, address, signer, ownership, permission, or expected-state
 mismatch. Do not reuse staging approval. Do not publish a package automatically.

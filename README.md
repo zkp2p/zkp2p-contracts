@@ -626,8 +626,8 @@ This script currently covers:
 ### V3 Groups Cutover
 
 The lifecycle rollout is split into explicit lanes. Lane 30 supports the whitelist-only groups
-deployment on Base staging and Base. Lane 31 deploys the fresh dispute/staking stack on staging,
-and lane 32 activates it only after compatible downstream releases are live.
+deployment on Base staging and Base. Lane 31 verifies and cuts over the V3 payment-binding pair, and
+lane 32 deploys, wires, transfers, and activates the fresh dispute/staking stack.
 
 `deploy/30_deploy_v3_lifecycle_stack.ts` is the groups-only lane. Its lane-29 dependency supplies a
 fresh `WhitelistPolicy`; lane 30 deploys a fresh `WhitelistLifecycleHook` and `OrchestratorV3`, sets
@@ -652,28 +652,40 @@ The staging confirmation is an operator acknowledgement; the deploy script inten
 indexer client or drain-query implementation. Base fails unless O2 and EscrowV2 are already registered,
 the existing stack remains intact, and the generated Safe batch contains only the fresh O3 registration.
 
-`deploy/31_deploy_dispute_lifecycle_stack.ts` is the staging dispute/staking deployment lane. Run
-`--tags V3DisputeLifecycleStack` with
-`ENABLE_STAGING_V3_DISPUTE_DEPLOYMENT=true`. It deploys a fresh `DisputeNullifierRegistry`,
+`deploy/31_deploy_v3_payment_binding_stack.ts` is the state-aware payment-binding and hard-cutover lane.
+On Base staging and Base it pins the existing `NullifierRegistryV2` and `UnifiedPaymentVerifierV3`
+addresses and runtime code hashes, then verifies their immutable dependencies, owners, complete active
+payment-method set, and exact writer set. Missing, partial, or mismatched production-like artifacts fail
+closed; only local networks may deploy the pair. With
+`ENABLE_STAGING_V3_PAYMENT_BINDING_CUTOVER=true` or
+`ENABLE_BASE_V3_PAYMENT_BINDING_CUTOVER=true`, it snapshots the live currencies, removes all ten methods
+in reverse order, re-adds them in original order against UPV3, and revokes UPV1 and UPV2 from the legacy
+nullifier registry. This preserves the registry order and produces exactly 22 atomic Base Safe calls.
+Never route a method back to a retired verifier after this one-way cutover.
+
+`deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts` is the combined dispute/staking lane. Run
+`--tags V3DisputeLifecycleStack` with `ENABLE_STAGING_V3_DISPUTE_DEPLOYMENT=true`. It deploys a fresh
+`DisputeNullifierRegistry`,
 `DisputeVerifier`, `StakeVault`, `DisputeProtectionPolicy`, and `IntentLifecycleHookV1`; initializes the vault
-controller; applies the canonical risk windows; authorizes the combined hook; grants the policy
-nullifier-writer permission; and transfers ownership. It deliberately leaves the active O3 hook
-unchanged.
+controller; applies non-zero risk windows only to PayPal, Venmo, and Cash App; authorizes the combined
+hook; grants the policy sole nullifier-writer permission; transfers ownership; and activates the hook.
+Staging performs every action directly. Base requires `ENABLE_BASE_V3_DISPUTE_DEPLOYMENT=true`, transfers
+the plain registry immediately, and prepares an unexecuted Safe batch that accepts the three two-step
+ownership transfers and activates the hook.
 
 Commit the five newly generated deployment artifacts so their addresses can flow through the
-package, indexer, curator, and attestation-service releases. Activation remains blocked until every
-compatible downstream release is deployed:
+package, indexer, curator, and attestation-service releases. Production Safe execution remains blocked
+until every compatible downstream release is deployed:
 
 - [ ] `zkp2p-indexer` indexes the fresh contract addresses and the renamed `Dispute*` events.
 - [ ] `curator` recognizes `IntentLifecycleHookV1` as the enforcement hook and enables dispute enforcement.
 - [ ] `@zkp2p/contracts-v2` publishes the hard-renamed dispute ABI and staging addresses, and its consumers upgrade.
-- [ ] `attestation-service` targets the fresh `DisputeVerifier` and signs the `ZKP2P DisputeVerifier`
-  `DisputeAttestation` domain and type.
+- [ ] The production `attestation-service` release remains on the ratified UPV3 address; do not promote an
+      independently diverged release branch that restores UPV2.
 
-After the checklist is complete, run `--tags ActivateV3DisputeLifecycleStack` with
-`ENABLE_STAGING_V3_DISPUTE_ACTIVATION=true`. Lane 32 verifies the exact fresh stack and only then
-rotates the existing O3 to the fresh combined hook. It deploys nothing. Existing intents retain
-their snapshotted previous hook.
+Dispute-evidence issuance in `attestation-service` remains a separate follow-up and is intentionally not implemented
+by these contract lanes. Only PayPal, Venmo, and Cash App receive non-zero onchain risk windows, matching the
+explicitly ratified chargebackable-platform set.
 
 Commit the newly generated canonical artifacts after the authorized deployment.
 
