@@ -1,0 +1,579 @@
+{
+  "address": "0x973578148c5Fd49b9f68B50B26066555325AC708",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_owner",
+          "type": "address"
+        },
+        {
+          "internalType": "contract INullifierRegistryV2",
+          "name": "_nullifierRegistry",
+          "type": "address"
+        },
+        {
+          "internalType": "contract IAttestationVerifier",
+          "name": "_attestationVerifier",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [],
+      "name": "AttestationVerificationFailed",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "InvalidAttestation",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "dependency",
+          "type": "address"
+        }
+      ],
+      "name": "InvalidContract",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "nullifier",
+          "type": "bytes32"
+        }
+      ],
+      "name": "InvalidPaymentBinding",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "InvalidShortString",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "OwnershipRenunciationDisabled",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "str",
+          "type": "string"
+        }
+      ],
+      "name": "StringTooLong",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroAddress",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousVerifier",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newVerifier",
+          "type": "address"
+        }
+      ],
+      "name": "AttestationVerifierUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [],
+      "name": "EIP712DomainChanged",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferStarted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "DISPUTE_ATTESTATION_TYPEHASH",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "acceptOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "attestationVerifier",
+      "outputs": [
+        {
+          "internalType": "contract IAttestationVerifier",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "eip712Domain",
+      "outputs": [
+        {
+          "internalType": "bytes1",
+          "name": "fields",
+          "type": "bytes1"
+        },
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "version",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "chainId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "verifyingContract",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "salt",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "extensions",
+          "type": "uint256[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "dataHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes[]",
+              "name": "signatures",
+              "type": "bytes[]"
+            },
+            {
+              "internalType": "bytes",
+              "name": "data",
+              "type": "bytes"
+            }
+          ],
+          "internalType": "struct IDisputeVerifier.DisputeAttestation",
+          "name": "_attestation",
+          "type": "tuple"
+        }
+      ],
+      "name": "hashDisputeAttestation",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "nullifierRegistry",
+      "outputs": [
+        {
+          "internalType": "contract INullifierRegistryV2",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "pendingOwner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_verifier",
+          "type": "address"
+        }
+      ],
+      "name": "setAttestationVerifier",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "dataHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes[]",
+              "name": "signatures",
+              "type": "bytes[]"
+            },
+            {
+              "internalType": "bytes",
+              "name": "data",
+              "type": "bytes"
+            }
+          ],
+          "internalType": "struct IDisputeVerifier.DisputeAttestation",
+          "name": "_attestation",
+          "type": "tuple"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_paymentMethod",
+          "type": "bytes32"
+        }
+      ],
+      "name": "verifyDispute",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "disputeId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "disputeNullifier",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0xb68a82e03b8269f967627b567aa5e1b1d856b0f18db7fd09a443e0cb39535882",
+  "receipt": {
+    "to": null,
+    "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "contractAddress": "0x973578148c5Fd49b9f68B50B26066555325AC708",
+    "transactionIndex": 112,
+    "gasUsed": "943429",
+    "logsBloom": "0x00000000000000000000000000000000000000000000004000800000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000001100000000000000000000000000000000000020000000000000000000800000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000020000000000000000000000010000000000000000000000000000000000020000000",
+    "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "transactionHash": "0xb68a82e03b8269f967627b567aa5e1b1d856b0f18db7fd09a443e0cb39535882",
+    "logs": [
+      {
+        "transactionIndex": 112,
+        "blockNumber": 49796504,
+        "transactionHash": "0xb68a82e03b8269f967627b567aa5e1b1d856b0f18db7fd09a443e0cb39535882",
+        "address": "0x973578148c5Fd49b9f68B50B26066555325AC708",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x00000000000000000000000084e113087c97cd80ea9d78983d4b8ff61eca1929"
+        ],
+        "data": "0x",
+        "logIndex": 460,
+        "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      {
+        "transactionIndex": 112,
+        "blockNumber": 49796504,
+        "transactionHash": "0xb68a82e03b8269f967627b567aa5e1b1d856b0f18db7fd09a443e0cb39535882",
+        "address": "0x973578148c5Fd49b9f68B50B26066555325AC708",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x00000000000000000000000084e113087c97cd80ea9d78983d4b8ff61eca1929",
+          "0x00000000000000000000000084e113087c97cd80ea9d78983d4b8ff61eca1929"
+        ],
+        "data": "0x",
+        "logIndex": 461,
+        "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "blockNumber": 49796504,
+    "cumulativeGasUsed": "19340454",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [
+    "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "0x2eb43d6C7c7Ec4220Aa6B8735BC053824a71778C",
+    "0x9855a39aC5975069632e91160d8712CBfF19e864"
+  ],
+  "numDeployments": 1,
+  "solcInputHash": "4873c5befde1a76742d7cd30fb21abe1",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_owner\",\"type\":\"address\"},{\"internalType\":\"contract INullifierRegistryV2\",\"name\":\"_nullifierRegistry\",\"type\":\"address\"},{\"internalType\":\"contract IAttestationVerifier\",\"name\":\"_attestationVerifier\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"AttestationVerificationFailed\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidAttestation\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"dependency\",\"type\":\"address\"}],\"name\":\"InvalidContract\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"nullifier\",\"type\":\"bytes32\"}],\"name\":\"InvalidPaymentBinding\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidShortString\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"OwnershipRenunciationDisabled\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"str\",\"type\":\"string\"}],\"name\":\"StringTooLong\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAddress\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousVerifier\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newVerifier\",\"type\":\"address\"}],\"name\":\"AttestationVerifierUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[],\"name\":\"EIP712DomainChanged\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferStarted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"DISPUTE_ATTESTATION_TYPEHASH\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"acceptOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"attestationVerifier\",\"outputs\":[{\"internalType\":\"contract IAttestationVerifier\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"eip712Domain\",\"outputs\":[{\"internalType\":\"bytes1\",\"name\":\"fields\",\"type\":\"bytes1\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"version\",\"type\":\"string\"},{\"internalType\":\"uint256\",\"name\":\"chainId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"verifyingContract\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"salt\",\"type\":\"bytes32\"},{\"internalType\":\"uint256[]\",\"name\":\"extensions\",\"type\":\"uint256[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"dataHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes[]\",\"name\":\"signatures\",\"type\":\"bytes[]\"},{\"internalType\":\"bytes\",\"name\":\"data\",\"type\":\"bytes\"}],\"internalType\":\"struct IDisputeVerifier.DisputeAttestation\",\"name\":\"_attestation\",\"type\":\"tuple\"}],\"name\":\"hashDisputeAttestation\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"nullifierRegistry\",\"outputs\":[{\"internalType\":\"contract INullifierRegistryV2\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"pendingOwner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_verifier\",\"type\":\"address\"}],\"name\":\"setAttestationVerifier\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"dataHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes[]\",\"name\":\"signatures\",\"type\":\"bytes[]\"},{\"internalType\":\"bytes\",\"name\":\"data\",\"type\":\"bytes\"}],\"internalType\":\"struct IDisputeVerifier.DisputeAttestation\",\"name\":\"_attestation\",\"type\":\"tuple\"},{\"internalType\":\"bytes32\",\"name\":\"_paymentMethod\",\"type\":\"bytes32\"}],\"name\":\"verifyDispute\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"disputeId\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"disputeNullifier\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"}],\"devdoc\":{\"details\":\"Swapping this verifier rotates the EIP-712 domain (it binds this contract's address), which invalidates signed-but-unsubmitted attestations. The attestation service must always sign against the policy's currently configured verifier.\",\"events\":{\"EIP712DomainChanged()\":{\"details\":\"MAY be emitted to signal that the domain could have changed.\"}},\"kind\":\"dev\",\"methods\":{\"acceptOwnership()\":{\"details\":\"The new owner accepts the ownership transfer.\"},\"eip712Domain()\":{\"details\":\"See {EIP-5267}. _Available since v4.9._\"},\"hashDisputeAttestation((bytes32,bytes32,bytes[],bytes))\":{\"params\":{\"_attestation\":\"Dispute evidence whose intent hash and data hash are included in the digest.\"},\"returns\":{\"_0\":\"EIP-712 digest bound to this verifier's address and the current chain.\"}},\"owner()\":{\"details\":\"Returns the address of the current owner.\"},\"pendingOwner()\":{\"details\":\"Returns the address of the pending owner.\"},\"setAttestationVerifier(address)\":{\"params\":{\"_verifier\":\"New non-zero deployed attestation-verifier contract.\"}},\"transferOwnership(address)\":{\"details\":\"Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one. Can only be called by the current owner.\"},\"verifyDispute((bytes32,bytes32,bytes[],bytes),bytes32)\":{\"details\":\"View-only and stateless. Reverts when the payload is malformed, mismatched, unsigned, or not bound to the intent's original payment nullifier.\",\"params\":{\"_attestation\":\"Signed dispute evidence for an intent.\",\"_paymentMethod\":\"Payment method snapshotted by the policy when the intent was admitted.\"},\"returns\":{\"disputeId\":\"Payment-platform dispute identifier decoded from the evidence.\",\"disputeNullifier\":\"Payment-method-scoped replay key for the dispute.\"}}},\"title\":\"DisputeVerifier\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"hashDisputeAttestation((bytes32,bytes32,bytes[],bytes))\":{\"notice\":\"Returns the EIP-712 digest that witnesses sign for a dispute attestation.\"},\"renounceOwnership()\":{\"notice\":\"Disables ownership renunciation so the signature-verification dependency stays managed.\"},\"setAttestationVerifier(address)\":{\"notice\":\"GOVERNANCE ONLY: Replaces the verifier used for future witness-signature checks.\"},\"verifyDispute((bytes32,bytes32,bytes[],bytes),bytes32)\":{\"notice\":\"Validates dispute evidence against the intent context supplied by the policy.\"}},\"notice\":\"Stateless EIP-712 verifier for dispute evidence, mirroring the UnifiedPaymentVerifier layering: the dispute protection policy calls this verifier, which itself calls the attestation verifier for witness-signature checks. Holds no position state and can be swapped on the policy at any time.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/unifiedVerifier/DisputeVerifier.sol\":\"DisputeVerifier\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"@openzeppelin/contracts/access/Ownable.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (access/Ownable.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"../utils/Context.sol\\\";\\n\\n/**\\n * @dev Contract module which provides a basic access control mechanism, where\\n * there is an account (an owner) that can be granted exclusive access to\\n * specific functions.\\n *\\n * By default, the owner account will be the one that deploys the contract. This\\n * can later be changed with {transferOwnership}.\\n *\\n * This module is used through inheritance. It will make available the modifier\\n * `onlyOwner`, which can be applied to your functions to restrict their use to\\n * the owner.\\n */\\nabstract contract Ownable is Context {\\n    address private _owner;\\n\\n    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);\\n\\n    /**\\n     * @dev Initializes the contract setting the deployer as the initial owner.\\n     */\\n    constructor() {\\n        _transferOwnership(_msgSender());\\n    }\\n\\n    /**\\n     * @dev Throws if called by any account other than the owner.\\n     */\\n    modifier onlyOwner() {\\n        _checkOwner();\\n        _;\\n    }\\n\\n    /**\\n     * @dev Returns the address of the current owner.\\n     */\\n    function owner() public view virtual returns (address) {\\n        return _owner;\\n    }\\n\\n    /**\\n     * @dev Throws if the sender is not the owner.\\n     */\\n    function _checkOwner() internal view virtual {\\n        require(owner() == _msgSender(), \\\"Ownable: caller is not the owner\\\");\\n    }\\n\\n    /**\\n     * @dev Leaves the contract without owner. It will not be possible to call\\n     * `onlyOwner` functions. Can only be called by the current owner.\\n     *\\n     * NOTE: Renouncing ownership will leave the contract without an owner,\\n     * thereby disabling any functionality that is only available to the owner.\\n     */\\n    function renounceOwnership() public virtual onlyOwner {\\n        _transferOwnership(address(0));\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Can only be called by the current owner.\\n     */\\n    function transferOwnership(address newOwner) public virtual onlyOwner {\\n        require(newOwner != address(0), \\\"Ownable: new owner is the zero address\\\");\\n        _transferOwnership(newOwner);\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Internal function without access restriction.\\n     */\\n    function _transferOwnership(address newOwner) internal virtual {\\n        address oldOwner = _owner;\\n        _owner = newOwner;\\n        emit OwnershipTransferred(oldOwner, newOwner);\\n    }\\n}\\n\",\"keccak256\":\"0xba43b97fba0d32eb4254f6a5a297b39a19a247082a02d6e69349e071e2946218\",\"license\":\"MIT\"},\"@openzeppelin/contracts/access/Ownable2Step.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (access/Ownable2Step.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"./Ownable.sol\\\";\\n\\n/**\\n * @dev Contract module which provides access control mechanism, where\\n * there is an account (an owner) that can be granted exclusive access to\\n * specific functions.\\n *\\n * By default, the owner account will be the one that deploys the contract. This\\n * can later be changed with {transferOwnership} and {acceptOwnership}.\\n *\\n * This module is used through inheritance. It will make available all functions\\n * from parent (Ownable).\\n */\\nabstract contract Ownable2Step is Ownable {\\n    address private _pendingOwner;\\n\\n    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);\\n\\n    /**\\n     * @dev Returns the address of the pending owner.\\n     */\\n    function pendingOwner() public view virtual returns (address) {\\n        return _pendingOwner;\\n    }\\n\\n    /**\\n     * @dev Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one.\\n     * Can only be called by the current owner.\\n     */\\n    function transferOwnership(address newOwner) public virtual override onlyOwner {\\n        _pendingOwner = newOwner;\\n        emit OwnershipTransferStarted(owner(), newOwner);\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`) and deletes any pending owner.\\n     * Internal function without access restriction.\\n     */\\n    function _transferOwnership(address newOwner) internal virtual override {\\n        delete _pendingOwner;\\n        super._transferOwnership(newOwner);\\n    }\\n\\n    /**\\n     * @dev The new owner accepts the ownership transfer.\\n     */\\n    function acceptOwnership() public virtual {\\n        address sender = _msgSender();\\n        require(pendingOwner() == sender, \\\"Ownable2Step: caller is not the new owner\\\");\\n        _transferOwnership(sender);\\n    }\\n}\\n\",\"keccak256\":\"0xde231558366826d7cb61725af8147965a61c53b77a352cc8c9af38fc5a92ac3c\",\"license\":\"MIT\"},\"@openzeppelin/contracts/interfaces/IERC5267.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (interfaces/IERC5267.sol)\\n\\npragma solidity ^0.8.0;\\n\\ninterface IERC5267 {\\n    /**\\n     * @dev MAY be emitted to signal that the domain could have changed.\\n     */\\n    event EIP712DomainChanged();\\n\\n    /**\\n     * @dev returns the fields and values that describe the domain separator used by this contract for EIP-712\\n     * signature.\\n     */\\n    function eip712Domain()\\n        external\\n        view\\n        returns (\\n            bytes1 fields,\\n            string memory name,\\n            string memory version,\\n            uint256 chainId,\\n            address verifyingContract,\\n            bytes32 salt,\\n            uint256[] memory extensions\\n        );\\n}\\n\",\"keccak256\":\"0xac6c2efc64baccbde4904ae18ed45139c9aa8cff96d6888344d1e4d2eb8b659f\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/Context.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts v4.4.1 (utils/Context.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Provides information about the current execution context, including the\\n * sender of the transaction and its data. While these are generally available\\n * via msg.sender and msg.data, they should not be accessed in such a direct\\n * manner, since when dealing with meta-transactions the account sending and\\n * paying for execution may not be the actual sender (as far as an application\\n * is concerned).\\n *\\n * This contract is only required for intermediate, library-like contracts.\\n */\\nabstract contract Context {\\n    function _msgSender() internal view virtual returns (address) {\\n        return msg.sender;\\n    }\\n\\n    function _msgData() internal view virtual returns (bytes calldata) {\\n        return msg.data;\\n    }\\n}\\n\",\"keccak256\":\"0xe2e337e6dde9ef6b680e07338c493ebea1b5fd09b43424112868e9cc1706bca7\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/ShortStrings.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (utils/ShortStrings.sol)\\n\\npragma solidity ^0.8.8;\\n\\nimport \\\"./StorageSlot.sol\\\";\\n\\n// | string  | 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA   |\\n// | length  | 0x                                                              BB |\\ntype ShortString is bytes32;\\n\\n/**\\n * @dev This library provides functions to convert short memory strings\\n * into a `ShortString` type that can be used as an immutable variable.\\n *\\n * Strings of arbitrary length can be optimized using this library if\\n * they are short enough (up to 31 bytes) by packing them with their\\n * length (1 byte) in a single EVM word (32 bytes). Additionally, a\\n * fallback mechanism can be used for every other case.\\n *\\n * Usage example:\\n *\\n * ```solidity\\n * contract Named {\\n *     using ShortStrings for *;\\n *\\n *     ShortString private immutable _name;\\n *     string private _nameFallback;\\n *\\n *     constructor(string memory contractName) {\\n *         _name = contractName.toShortStringWithFallback(_nameFallback);\\n *     }\\n *\\n *     function name() external view returns (string memory) {\\n *         return _name.toStringWithFallback(_nameFallback);\\n *     }\\n * }\\n * ```\\n */\\nlibrary ShortStrings {\\n    // Used as an identifier for strings longer than 31 bytes.\\n    bytes32 private constant _FALLBACK_SENTINEL = 0x00000000000000000000000000000000000000000000000000000000000000FF;\\n\\n    error StringTooLong(string str);\\n    error InvalidShortString();\\n\\n    /**\\n     * @dev Encode a string of at most 31 chars into a `ShortString`.\\n     *\\n     * This will trigger a `StringTooLong` error is the input string is too long.\\n     */\\n    function toShortString(string memory str) internal pure returns (ShortString) {\\n        bytes memory bstr = bytes(str);\\n        if (bstr.length > 31) {\\n            revert StringTooLong(str);\\n        }\\n        return ShortString.wrap(bytes32(uint256(bytes32(bstr)) | bstr.length));\\n    }\\n\\n    /**\\n     * @dev Decode a `ShortString` back to a \\\"normal\\\" string.\\n     */\\n    function toString(ShortString sstr) internal pure returns (string memory) {\\n        uint256 len = byteLength(sstr);\\n        // using `new string(len)` would work locally but is not memory safe.\\n        string memory str = new string(32);\\n        /// @solidity memory-safe-assembly\\n        assembly {\\n            mstore(str, len)\\n            mstore(add(str, 0x20), sstr)\\n        }\\n        return str;\\n    }\\n\\n    /**\\n     * @dev Return the length of a `ShortString`.\\n     */\\n    function byteLength(ShortString sstr) internal pure returns (uint256) {\\n        uint256 result = uint256(ShortString.unwrap(sstr)) & 0xFF;\\n        if (result > 31) {\\n            revert InvalidShortString();\\n        }\\n        return result;\\n    }\\n\\n    /**\\n     * @dev Encode a string into a `ShortString`, or write it to storage if it is too long.\\n     */\\n    function toShortStringWithFallback(string memory value, string storage store) internal returns (ShortString) {\\n        if (bytes(value).length < 32) {\\n            return toShortString(value);\\n        } else {\\n            StorageSlot.getStringSlot(store).value = value;\\n            return ShortString.wrap(_FALLBACK_SENTINEL);\\n        }\\n    }\\n\\n    /**\\n     * @dev Decode a string that was encoded to `ShortString` or written to storage using {setWithFallback}.\\n     */\\n    function toStringWithFallback(ShortString value, string storage store) internal pure returns (string memory) {\\n        if (ShortString.unwrap(value) != _FALLBACK_SENTINEL) {\\n            return toString(value);\\n        } else {\\n            return store;\\n        }\\n    }\\n\\n    /**\\n     * @dev Return the length of a string that was encoded to `ShortString` or written to storage using {setWithFallback}.\\n     *\\n     * WARNING: This will return the \\\"byte length\\\" of the string. This may not reflect the actual length in terms of\\n     * actual characters as the UTF-8 encoding of a single character can span over multiple bytes.\\n     */\\n    function byteLengthWithFallback(ShortString value, string storage store) internal view returns (uint256) {\\n        if (ShortString.unwrap(value) != _FALLBACK_SENTINEL) {\\n            return byteLength(value);\\n        } else {\\n            return bytes(store).length;\\n        }\\n    }\\n}\\n\",\"keccak256\":\"0xc0e310c163edf15db45d4ff938113ab357f94fa86e61ea8e790853c4d2e13256\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/StorageSlot.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (utils/StorageSlot.sol)\\n// This file was procedurally generated from scripts/generate/templates/StorageSlot.js.\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Library for reading and writing primitive types to specific storage slots.\\n *\\n * Storage slots are often used to avoid storage conflict when dealing with upgradeable contracts.\\n * This library helps with reading and writing to such slots without the need for inline assembly.\\n *\\n * The functions in this library return Slot structs that contain a `value` member that can be used to read or write.\\n *\\n * Example usage to set ERC1967 implementation slot:\\n * ```solidity\\n * contract ERC1967 {\\n *     bytes32 internal constant _IMPLEMENTATION_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;\\n *\\n *     function _getImplementation() internal view returns (address) {\\n *         return StorageSlot.getAddressSlot(_IMPLEMENTATION_SLOT).value;\\n *     }\\n *\\n *     function _setImplementation(address newImplementation) internal {\\n *         require(Address.isContract(newImplementation), \\\"ERC1967: new implementation is not a contract\\\");\\n *         StorageSlot.getAddressSlot(_IMPLEMENTATION_SLOT).value = newImplementation;\\n *     }\\n * }\\n * ```\\n *\\n * _Available since v4.1 for `address`, `bool`, `bytes32`, `uint256`._\\n * _Available since v4.9 for `string`, `bytes`._\\n */\\nlibrary StorageSlot {\\n    struct AddressSlot {\\n        address value;\\n    }\\n\\n    struct BooleanSlot {\\n        bool value;\\n    }\\n\\n    struct Bytes32Slot {\\n        bytes32 value;\\n    }\\n\\n    struct Uint256Slot {\\n        uint256 value;\\n    }\\n\\n    struct StringSlot {\\n        string value;\\n    }\\n\\n    struct BytesSlot {\\n        bytes value;\\n    }\\n\\n    /**\\n     * @dev Returns an `AddressSlot` with member `value` located at `slot`.\\n     */\\n    function getAddressSlot(bytes32 slot) internal pure returns (AddressSlot storage r) {\\n        /// @solidity memory-safe-assembly\\n        assembly {\\n            r.slot := slot\\n        }\\n    }\\n\\n    /**\\n     * @dev Returns an `BooleanSlot` with member `value` located at `slot`.\\n     */\\n    function getBooleanSlot(bytes32 slot) internal pure returns (BooleanSlot storage r) {\\n        /// @solidity memory-safe-assembly\\n        assembly {\\n            r.slot := slot\\n        }\\n    }\\n\\n    /**\\n     * @dev Returns an `Bytes32Slot` with member `value` located at `slot`.\\n     */\\n    function getBytes32Slot(bytes32 slot) internal pure returns (Bytes32Slot storage r) {\\n        /// @solidity memory-safe-assembly\\n        assembly {\\n            r.slot := slot\\n        }\\n    }\\n\\n    /**\\n     * @dev Returns an `Uint256Slot` with member `value` located at `slot`.\\n     */\\n    function getUint256Slot(bytes32 slot) internal pure returns (Uint256Slot storage r) {\\n        /// @solidity memory-safe-assembly\\n        assembly {\\n            r.slot := slot\\n        }\\n    }\\n\\n    /**\\n     * @dev Returns an `StringSlot` with member `value` located at `slot`.\\n     */\\n    function getStringSlot(bytes32 slot) internal pure returns (StringSlot storage r) {\\n        /// @solidity memory-safe-assembly\\n        assembly {\\n            r.slot := slot\\n        }\\n    }\\n\\n    /**\\n     * @dev Returns an `StringSlot` representation of the string storage pointer `store`.\\n     */\\n    function getStringSlot(string storage store) internal pure returns (StringSlot storage r) {\\n        /// @solidity memory-safe-assembly\\n        assembly {\\n            r.slot := store.slot\\n        }\\n    }\\n\\n    /**\\n     * @dev Returns an `BytesSlot` with member `value` located at `slot`.\\n     */\\n    function getBytesSlot(bytes32 slot) internal pure returns (BytesSlot storage r) {\\n        /// @solidity memory-safe-assembly\\n        assembly {\\n            r.slot := slot\\n        }\\n    }\\n\\n    /**\\n     * @dev Returns an `BytesSlot` representation of the bytes storage pointer `store`.\\n     */\\n    function getBytesSlot(bytes storage store) internal pure returns (BytesSlot storage r) {\\n        /// @solidity memory-safe-assembly\\n        assembly {\\n            r.slot := store.slot\\n        }\\n    }\\n}\\n\",\"keccak256\":\"0xf09e68aa0dc6722a25bc46490e8d48ed864466d17313b8a0b254c36b54e49899\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/Strings.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (utils/Strings.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"./math/Math.sol\\\";\\nimport \\\"./math/SignedMath.sol\\\";\\n\\n/**\\n * @dev String operations.\\n */\\nlibrary Strings {\\n    bytes16 private constant _SYMBOLS = \\\"0123456789abcdef\\\";\\n    uint8 private constant _ADDRESS_LENGTH = 20;\\n\\n    /**\\n     * @dev Converts a `uint256` to its ASCII `string` decimal representation.\\n     */\\n    function toString(uint256 value) internal pure returns (string memory) {\\n        unchecked {\\n            uint256 length = Math.log10(value) + 1;\\n            string memory buffer = new string(length);\\n            uint256 ptr;\\n            /// @solidity memory-safe-assembly\\n            assembly {\\n                ptr := add(buffer, add(32, length))\\n            }\\n            while (true) {\\n                ptr--;\\n                /// @solidity memory-safe-assembly\\n                assembly {\\n                    mstore8(ptr, byte(mod(value, 10), _SYMBOLS))\\n                }\\n                value /= 10;\\n                if (value == 0) break;\\n            }\\n            return buffer;\\n        }\\n    }\\n\\n    /**\\n     * @dev Converts a `int256` to its ASCII `string` decimal representation.\\n     */\\n    function toString(int256 value) internal pure returns (string memory) {\\n        return string(abi.encodePacked(value < 0 ? \\\"-\\\" : \\\"\\\", toString(SignedMath.abs(value))));\\n    }\\n\\n    /**\\n     * @dev Converts a `uint256` to its ASCII `string` hexadecimal representation.\\n     */\\n    function toHexString(uint256 value) internal pure returns (string memory) {\\n        unchecked {\\n            return toHexString(value, Math.log256(value) + 1);\\n        }\\n    }\\n\\n    /**\\n     * @dev Converts a `uint256` to its ASCII `string` hexadecimal representation with fixed length.\\n     */\\n    function toHexString(uint256 value, uint256 length) internal pure returns (string memory) {\\n        bytes memory buffer = new bytes(2 * length + 2);\\n        buffer[0] = \\\"0\\\";\\n        buffer[1] = \\\"x\\\";\\n        for (uint256 i = 2 * length + 1; i > 1; --i) {\\n            buffer[i] = _SYMBOLS[value & 0xf];\\n            value >>= 4;\\n        }\\n        require(value == 0, \\\"Strings: hex length insufficient\\\");\\n        return string(buffer);\\n    }\\n\\n    /**\\n     * @dev Converts an `address` with fixed length of 20 bytes to its not checksummed ASCII `string` hexadecimal representation.\\n     */\\n    function toHexString(address addr) internal pure returns (string memory) {\\n        return toHexString(uint256(uint160(addr)), _ADDRESS_LENGTH);\\n    }\\n\\n    /**\\n     * @dev Returns true if the two strings are equal.\\n     */\\n    function equal(string memory a, string memory b) internal pure returns (bool) {\\n        return keccak256(bytes(a)) == keccak256(bytes(b));\\n    }\\n}\\n\",\"keccak256\":\"0x3088eb2868e8d13d89d16670b5f8612c4ab9ff8956272837d8e90106c59c14a0\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/cryptography/ECDSA.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (utils/cryptography/ECDSA.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"../Strings.sol\\\";\\n\\n/**\\n * @dev Elliptic Curve Digital Signature Algorithm (ECDSA) operations.\\n *\\n * These functions can be used to verify that a message was signed by the holder\\n * of the private keys of a given address.\\n */\\nlibrary ECDSA {\\n    enum RecoverError {\\n        NoError,\\n        InvalidSignature,\\n        InvalidSignatureLength,\\n        InvalidSignatureS,\\n        InvalidSignatureV // Deprecated in v4.8\\n    }\\n\\n    function _throwError(RecoverError error) private pure {\\n        if (error == RecoverError.NoError) {\\n            return; // no error: do nothing\\n        } else if (error == RecoverError.InvalidSignature) {\\n            revert(\\\"ECDSA: invalid signature\\\");\\n        } else if (error == RecoverError.InvalidSignatureLength) {\\n            revert(\\\"ECDSA: invalid signature length\\\");\\n        } else if (error == RecoverError.InvalidSignatureS) {\\n            revert(\\\"ECDSA: invalid signature 's' value\\\");\\n        }\\n    }\\n\\n    /**\\n     * @dev Returns the address that signed a hashed message (`hash`) with\\n     * `signature` or error string. This address can then be used for verification purposes.\\n     *\\n     * The `ecrecover` EVM opcode allows for malleable (non-unique) signatures:\\n     * this function rejects them by requiring the `s` value to be in the lower\\n     * half order, and the `v` value to be either 27 or 28.\\n     *\\n     * IMPORTANT: `hash` _must_ be the result of a hash operation for the\\n     * verification to be secure: it is possible to craft signatures that\\n     * recover to arbitrary addresses for non-hashed data. A safe way to ensure\\n     * this is by receiving a hash of the original message (which may otherwise\\n     * be too long), and then calling {toEthSignedMessageHash} on it.\\n     *\\n     * Documentation for signature generation:\\n     * - with https://web3js.readthedocs.io/en/v1.3.4/web3-eth-accounts.html#sign[Web3.js]\\n     * - with https://docs.ethers.io/v5/api/signer/#Signer-signMessage[ethers]\\n     *\\n     * _Available since v4.3._\\n     */\\n    function tryRecover(bytes32 hash, bytes memory signature) internal pure returns (address, RecoverError) {\\n        if (signature.length == 65) {\\n            bytes32 r;\\n            bytes32 s;\\n            uint8 v;\\n            // ecrecover takes the signature parameters, and the only way to get them\\n            // currently is to use assembly.\\n            /// @solidity memory-safe-assembly\\n            assembly {\\n                r := mload(add(signature, 0x20))\\n                s := mload(add(signature, 0x40))\\n                v := byte(0, mload(add(signature, 0x60)))\\n            }\\n            return tryRecover(hash, v, r, s);\\n        } else {\\n            return (address(0), RecoverError.InvalidSignatureLength);\\n        }\\n    }\\n\\n    /**\\n     * @dev Returns the address that signed a hashed message (`hash`) with\\n     * `signature`. This address can then be used for verification purposes.\\n     *\\n     * The `ecrecover` EVM opcode allows for malleable (non-unique) signatures:\\n     * this function rejects them by requiring the `s` value to be in the lower\\n     * half order, and the `v` value to be either 27 or 28.\\n     *\\n     * IMPORTANT: `hash` _must_ be the result of a hash operation for the\\n     * verification to be secure: it is possible to craft signatures that\\n     * recover to arbitrary addresses for non-hashed data. A safe way to ensure\\n     * this is by receiving a hash of the original message (which may otherwise\\n     * be too long), and then calling {toEthSignedMessageHash} on it.\\n     */\\n    function recover(bytes32 hash, bytes memory signature) internal pure returns (address) {\\n        (address recovered, RecoverError error) = tryRecover(hash, signature);\\n        _throwError(error);\\n        return recovered;\\n    }\\n\\n    /**\\n     * @dev Overload of {ECDSA-tryRecover} that receives the `r` and `vs` short-signature fields separately.\\n     *\\n     * See https://eips.ethereum.org/EIPS/eip-2098[EIP-2098 short signatures]\\n     *\\n     * _Available since v4.3._\\n     */\\n    function tryRecover(bytes32 hash, bytes32 r, bytes32 vs) internal pure returns (address, RecoverError) {\\n        bytes32 s = vs & bytes32(0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff);\\n        uint8 v = uint8((uint256(vs) >> 255) + 27);\\n        return tryRecover(hash, v, r, s);\\n    }\\n\\n    /**\\n     * @dev Overload of {ECDSA-recover} that receives the `r and `vs` short-signature fields separately.\\n     *\\n     * _Available since v4.2._\\n     */\\n    function recover(bytes32 hash, bytes32 r, bytes32 vs) internal pure returns (address) {\\n        (address recovered, RecoverError error) = tryRecover(hash, r, vs);\\n        _throwError(error);\\n        return recovered;\\n    }\\n\\n    /**\\n     * @dev Overload of {ECDSA-tryRecover} that receives the `v`,\\n     * `r` and `s` signature fields separately.\\n     *\\n     * _Available since v4.3._\\n     */\\n    function tryRecover(bytes32 hash, uint8 v, bytes32 r, bytes32 s) internal pure returns (address, RecoverError) {\\n        // EIP-2 still allows signature malleability for ecrecover(). Remove this possibility and make the signature\\n        // unique. Appendix F in the Ethereum Yellow paper (https://ethereum.github.io/yellowpaper/paper.pdf), defines\\n        // the valid range for s in (301): 0 < s < secp256k1n \\u00f7 2 + 1, and for v in (302): v \\u2208 {27, 28}. Most\\n        // signatures from current libraries generate a unique signature with an s-value in the lower half order.\\n        //\\n        // If your library generates malleable signatures, such as s-values in the upper range, calculate a new s-value\\n        // with 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141 - s1 and flip v from 27 to 28 or\\n        // vice versa. If your library also generates signatures with 0/1 for v instead 27/28, add 27 to v to accept\\n        // these malleable signatures as well.\\n        if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) {\\n            return (address(0), RecoverError.InvalidSignatureS);\\n        }\\n\\n        // If the signature is valid (and not malleable), return the signer address\\n        address signer = ecrecover(hash, v, r, s);\\n        if (signer == address(0)) {\\n            return (address(0), RecoverError.InvalidSignature);\\n        }\\n\\n        return (signer, RecoverError.NoError);\\n    }\\n\\n    /**\\n     * @dev Overload of {ECDSA-recover} that receives the `v`,\\n     * `r` and `s` signature fields separately.\\n     */\\n    function recover(bytes32 hash, uint8 v, bytes32 r, bytes32 s) internal pure returns (address) {\\n        (address recovered, RecoverError error) = tryRecover(hash, v, r, s);\\n        _throwError(error);\\n        return recovered;\\n    }\\n\\n    /**\\n     * @dev Returns an Ethereum Signed Message, created from a `hash`. This\\n     * produces hash corresponding to the one signed with the\\n     * https://eth.wiki/json-rpc/API#eth_sign[`eth_sign`]\\n     * JSON-RPC method as part of EIP-191.\\n     *\\n     * See {recover}.\\n     */\\n    function toEthSignedMessageHash(bytes32 hash) internal pure returns (bytes32 message) {\\n        // 32 is the length in bytes of hash,\\n        // enforced by the type signature above\\n        /// @solidity memory-safe-assembly\\n        assembly {\\n            mstore(0x00, \\\"\\\\x19Ethereum Signed Message:\\\\n32\\\")\\n            mstore(0x1c, hash)\\n            message := keccak256(0x00, 0x3c)\\n        }\\n    }\\n\\n    /**\\n     * @dev Returns an Ethereum Signed Message, created from `s`. This\\n     * produces hash corresponding to the one signed with the\\n     * https://eth.wiki/json-rpc/API#eth_sign[`eth_sign`]\\n     * JSON-RPC method as part of EIP-191.\\n     *\\n     * See {recover}.\\n     */\\n    function toEthSignedMessageHash(bytes memory s) internal pure returns (bytes32) {\\n        return keccak256(abi.encodePacked(\\\"\\\\x19Ethereum Signed Message:\\\\n\\\", Strings.toString(s.length), s));\\n    }\\n\\n    /**\\n     * @dev Returns an Ethereum Signed Typed Data, created from a\\n     * `domainSeparator` and a `structHash`. This produces hash corresponding\\n     * to the one signed with the\\n     * https://eips.ethereum.org/EIPS/eip-712[`eth_signTypedData`]\\n     * JSON-RPC method as part of EIP-712.\\n     *\\n     * See {recover}.\\n     */\\n    function toTypedDataHash(bytes32 domainSeparator, bytes32 structHash) internal pure returns (bytes32 data) {\\n        /// @solidity memory-safe-assembly\\n        assembly {\\n            let ptr := mload(0x40)\\n            mstore(ptr, \\\"\\\\x19\\\\x01\\\")\\n            mstore(add(ptr, 0x02), domainSeparator)\\n            mstore(add(ptr, 0x22), structHash)\\n            data := keccak256(ptr, 0x42)\\n        }\\n    }\\n\\n    /**\\n     * @dev Returns an Ethereum Signed Data with intended validator, created from a\\n     * `validator` and `data` according to the version 0 of EIP-191.\\n     *\\n     * See {recover}.\\n     */\\n    function toDataWithIntendedValidatorHash(address validator, bytes memory data) internal pure returns (bytes32) {\\n        return keccak256(abi.encodePacked(\\\"\\\\x19\\\\x00\\\", validator, data));\\n    }\\n}\\n\",\"keccak256\":\"0x809bc3edb4bcbef8263fa616c1b60ee0004b50a8a1bfa164d8f57fd31f520c58\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/cryptography/EIP712.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (utils/cryptography/EIP712.sol)\\n\\npragma solidity ^0.8.8;\\n\\nimport \\\"./ECDSA.sol\\\";\\nimport \\\"../ShortStrings.sol\\\";\\nimport \\\"../../interfaces/IERC5267.sol\\\";\\n\\n/**\\n * @dev https://eips.ethereum.org/EIPS/eip-712[EIP 712] is a standard for hashing and signing of typed structured data.\\n *\\n * The encoding specified in the EIP is very generic, and such a generic implementation in Solidity is not feasible,\\n * thus this contract does not implement the encoding itself. Protocols need to implement the type-specific encoding\\n * they need in their contracts using a combination of `abi.encode` and `keccak256`.\\n *\\n * This contract implements the EIP 712 domain separator ({_domainSeparatorV4}) that is used as part of the encoding\\n * scheme, and the final step of the encoding to obtain the message digest that is then signed via ECDSA\\n * ({_hashTypedDataV4}).\\n *\\n * The implementation of the domain separator was designed to be as efficient as possible while still properly updating\\n * the chain id to protect against replay attacks on an eventual fork of the chain.\\n *\\n * NOTE: This contract implements the version of the encoding known as \\\"v4\\\", as implemented by the JSON RPC method\\n * https://docs.metamask.io/guide/signing-data.html[`eth_signTypedDataV4` in MetaMask].\\n *\\n * NOTE: In the upgradeable version of this contract, the cached values will correspond to the address, and the domain\\n * separator of the implementation contract. This will cause the `_domainSeparatorV4` function to always rebuild the\\n * separator from the immutable values, which is cheaper than accessing a cached version in cold storage.\\n *\\n * _Available since v3.4._\\n *\\n * @custom:oz-upgrades-unsafe-allow state-variable-immutable state-variable-assignment\\n */\\nabstract contract EIP712 is IERC5267 {\\n    using ShortStrings for *;\\n\\n    bytes32 private constant _TYPE_HASH =\\n        keccak256(\\\"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)\\\");\\n\\n    // Cache the domain separator as an immutable value, but also store the chain id that it corresponds to, in order to\\n    // invalidate the cached domain separator if the chain id changes.\\n    bytes32 private immutable _cachedDomainSeparator;\\n    uint256 private immutable _cachedChainId;\\n    address private immutable _cachedThis;\\n\\n    bytes32 private immutable _hashedName;\\n    bytes32 private immutable _hashedVersion;\\n\\n    ShortString private immutable _name;\\n    ShortString private immutable _version;\\n    string private _nameFallback;\\n    string private _versionFallback;\\n\\n    /**\\n     * @dev Initializes the domain separator and parameter caches.\\n     *\\n     * The meaning of `name` and `version` is specified in\\n     * https://eips.ethereum.org/EIPS/eip-712#definition-of-domainseparator[EIP 712]:\\n     *\\n     * - `name`: the user readable name of the signing domain, i.e. the name of the DApp or the protocol.\\n     * - `version`: the current major version of the signing domain.\\n     *\\n     * NOTE: These parameters cannot be changed except through a xref:learn::upgrading-smart-contracts.adoc[smart\\n     * contract upgrade].\\n     */\\n    constructor(string memory name, string memory version) {\\n        _name = name.toShortStringWithFallback(_nameFallback);\\n        _version = version.toShortStringWithFallback(_versionFallback);\\n        _hashedName = keccak256(bytes(name));\\n        _hashedVersion = keccak256(bytes(version));\\n\\n        _cachedChainId = block.chainid;\\n        _cachedDomainSeparator = _buildDomainSeparator();\\n        _cachedThis = address(this);\\n    }\\n\\n    /**\\n     * @dev Returns the domain separator for the current chain.\\n     */\\n    function _domainSeparatorV4() internal view returns (bytes32) {\\n        if (address(this) == _cachedThis && block.chainid == _cachedChainId) {\\n            return _cachedDomainSeparator;\\n        } else {\\n            return _buildDomainSeparator();\\n        }\\n    }\\n\\n    function _buildDomainSeparator() private view returns (bytes32) {\\n        return keccak256(abi.encode(_TYPE_HASH, _hashedName, _hashedVersion, block.chainid, address(this)));\\n    }\\n\\n    /**\\n     * @dev Given an already https://eips.ethereum.org/EIPS/eip-712#definition-of-hashstruct[hashed struct], this\\n     * function returns the hash of the fully encoded EIP712 message for this domain.\\n     *\\n     * This hash can be used together with {ECDSA-recover} to obtain the signer of a message. For example:\\n     *\\n     * ```solidity\\n     * bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(\\n     *     keccak256(\\\"Mail(address to,string contents)\\\"),\\n     *     mailTo,\\n     *     keccak256(bytes(mailContents))\\n     * )));\\n     * address signer = ECDSA.recover(digest, signature);\\n     * ```\\n     */\\n    function _hashTypedDataV4(bytes32 structHash) internal view virtual returns (bytes32) {\\n        return ECDSA.toTypedDataHash(_domainSeparatorV4(), structHash);\\n    }\\n\\n    /**\\n     * @dev See {EIP-5267}.\\n     *\\n     * _Available since v4.9._\\n     */\\n    function eip712Domain()\\n        public\\n        view\\n        virtual\\n        override\\n        returns (\\n            bytes1 fields,\\n            string memory name,\\n            string memory version,\\n            uint256 chainId,\\n            address verifyingContract,\\n            bytes32 salt,\\n            uint256[] memory extensions\\n        )\\n    {\\n        return (\\n            hex\\\"0f\\\", // 01111\\n            _name.toStringWithFallback(_nameFallback),\\n            _version.toStringWithFallback(_versionFallback),\\n            block.chainid,\\n            address(this),\\n            bytes32(0),\\n            new uint256[](0)\\n        );\\n    }\\n}\\n\",\"keccak256\":\"0x8432884527a7ad91e6eed1cfc5a0811ae2073e5bca107bd0ca442e9236b03dbd\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/math/Math.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (utils/math/Math.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Standard math utilities missing in the Solidity language.\\n */\\nlibrary Math {\\n    enum Rounding {\\n        Down, // Toward negative infinity\\n        Up, // Toward infinity\\n        Zero // Toward zero\\n    }\\n\\n    /**\\n     * @dev Returns the largest of two numbers.\\n     */\\n    function max(uint256 a, uint256 b) internal pure returns (uint256) {\\n        return a > b ? a : b;\\n    }\\n\\n    /**\\n     * @dev Returns the smallest of two numbers.\\n     */\\n    function min(uint256 a, uint256 b) internal pure returns (uint256) {\\n        return a < b ? a : b;\\n    }\\n\\n    /**\\n     * @dev Returns the average of two numbers. The result is rounded towards\\n     * zero.\\n     */\\n    function average(uint256 a, uint256 b) internal pure returns (uint256) {\\n        // (a + b) / 2 can overflow.\\n        return (a & b) + (a ^ b) / 2;\\n    }\\n\\n    /**\\n     * @dev Returns the ceiling of the division of two numbers.\\n     *\\n     * This differs from standard division with `/` in that it rounds up instead\\n     * of rounding down.\\n     */\\n    function ceilDiv(uint256 a, uint256 b) internal pure returns (uint256) {\\n        // (a + b - 1) / b can overflow on addition, so we distribute.\\n        return a == 0 ? 0 : (a - 1) / b + 1;\\n    }\\n\\n    /**\\n     * @notice Calculates floor(x * y / denominator) with full precision. Throws if result overflows a uint256 or denominator == 0\\n     * @dev Original credit to Remco Bloemen under MIT license (https://xn--2-umb.com/21/muldiv)\\n     * with further edits by Uniswap Labs also under MIT license.\\n     */\\n    function mulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result) {\\n        unchecked {\\n            // 512-bit multiply [prod1 prod0] = x * y. Compute the product mod 2^256 and mod 2^256 - 1, then use\\n            // use the Chinese Remainder Theorem to reconstruct the 512 bit result. The result is stored in two 256\\n            // variables such that product = prod1 * 2^256 + prod0.\\n            uint256 prod0; // Least significant 256 bits of the product\\n            uint256 prod1; // Most significant 256 bits of the product\\n            assembly {\\n                let mm := mulmod(x, y, not(0))\\n                prod0 := mul(x, y)\\n                prod1 := sub(sub(mm, prod0), lt(mm, prod0))\\n            }\\n\\n            // Handle non-overflow cases, 256 by 256 division.\\n            if (prod1 == 0) {\\n                // Solidity will revert if denominator == 0, unlike the div opcode on its own.\\n                // The surrounding unchecked block does not change this fact.\\n                // See https://docs.soliditylang.org/en/latest/control-structures.html#checked-or-unchecked-arithmetic.\\n                return prod0 / denominator;\\n            }\\n\\n            // Make sure the result is less than 2^256. Also prevents denominator == 0.\\n            require(denominator > prod1, \\\"Math: mulDiv overflow\\\");\\n\\n            ///////////////////////////////////////////////\\n            // 512 by 256 division.\\n            ///////////////////////////////////////////////\\n\\n            // Make division exact by subtracting the remainder from [prod1 prod0].\\n            uint256 remainder;\\n            assembly {\\n                // Compute remainder using mulmod.\\n                remainder := mulmod(x, y, denominator)\\n\\n                // Subtract 256 bit number from 512 bit number.\\n                prod1 := sub(prod1, gt(remainder, prod0))\\n                prod0 := sub(prod0, remainder)\\n            }\\n\\n            // Factor powers of two out of denominator and compute largest power of two divisor of denominator. Always >= 1.\\n            // See https://cs.stackexchange.com/q/138556/92363.\\n\\n            // Does not overflow because the denominator cannot be zero at this stage in the function.\\n            uint256 twos = denominator & (~denominator + 1);\\n            assembly {\\n                // Divide denominator by twos.\\n                denominator := div(denominator, twos)\\n\\n                // Divide [prod1 prod0] by twos.\\n                prod0 := div(prod0, twos)\\n\\n                // Flip twos such that it is 2^256 / twos. If twos is zero, then it becomes one.\\n                twos := add(div(sub(0, twos), twos), 1)\\n            }\\n\\n            // Shift in bits from prod1 into prod0.\\n            prod0 |= prod1 * twos;\\n\\n            // Invert denominator mod 2^256. Now that denominator is an odd number, it has an inverse modulo 2^256 such\\n            // that denominator * inv = 1 mod 2^256. Compute the inverse by starting with a seed that is correct for\\n            // four bits. That is, denominator * inv = 1 mod 2^4.\\n            uint256 inverse = (3 * denominator) ^ 2;\\n\\n            // Use the Newton-Raphson iteration to improve the precision. Thanks to Hensel's lifting lemma, this also works\\n            // in modular arithmetic, doubling the correct bits in each step.\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^8\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^16\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^32\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^64\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^128\\n            inverse *= 2 - denominator * inverse; // inverse mod 2^256\\n\\n            // Because the division is now exact we can divide by multiplying with the modular inverse of denominator.\\n            // This will give us the correct result modulo 2^256. Since the preconditions guarantee that the outcome is\\n            // less than 2^256, this is the final result. We don't need to compute the high bits of the result and prod1\\n            // is no longer required.\\n            result = prod0 * inverse;\\n            return result;\\n        }\\n    }\\n\\n    /**\\n     * @notice Calculates x * y / denominator with full precision, following the selected rounding direction.\\n     */\\n    function mulDiv(uint256 x, uint256 y, uint256 denominator, Rounding rounding) internal pure returns (uint256) {\\n        uint256 result = mulDiv(x, y, denominator);\\n        if (rounding == Rounding.Up && mulmod(x, y, denominator) > 0) {\\n            result += 1;\\n        }\\n        return result;\\n    }\\n\\n    /**\\n     * @dev Returns the square root of a number. If the number is not a perfect square, the value is rounded down.\\n     *\\n     * Inspired by Henry S. Warren, Jr.'s \\\"Hacker's Delight\\\" (Chapter 11).\\n     */\\n    function sqrt(uint256 a) internal pure returns (uint256) {\\n        if (a == 0) {\\n            return 0;\\n        }\\n\\n        // For our first guess, we get the biggest power of 2 which is smaller than the square root of the target.\\n        //\\n        // We know that the \\\"msb\\\" (most significant bit) of our target number `a` is a power of 2 such that we have\\n        // `msb(a) <= a < 2*msb(a)`. This value can be written `msb(a)=2**k` with `k=log2(a)`.\\n        //\\n        // This can be rewritten `2**log2(a) <= a < 2**(log2(a) + 1)`\\n        // \\u2192 `sqrt(2**k) <= sqrt(a) < sqrt(2**(k+1))`\\n        // \\u2192 `2**(k/2) <= sqrt(a) < 2**((k+1)/2) <= 2**(k/2 + 1)`\\n        //\\n        // Consequently, `2**(log2(a) / 2)` is a good first approximation of `sqrt(a)` with at least 1 correct bit.\\n        uint256 result = 1 << (log2(a) >> 1);\\n\\n        // At this point `result` is an estimation with one bit of precision. We know the true value is a uint128,\\n        // since it is the square root of a uint256. Newton's method converges quadratically (precision doubles at\\n        // every iteration). We thus need at most 7 iteration to turn our partial result with one bit of precision\\n        // into the expected uint128 result.\\n        unchecked {\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            result = (result + a / result) >> 1;\\n            return min(result, a / result);\\n        }\\n    }\\n\\n    /**\\n     * @notice Calculates sqrt(a), following the selected rounding direction.\\n     */\\n    function sqrt(uint256 a, Rounding rounding) internal pure returns (uint256) {\\n        unchecked {\\n            uint256 result = sqrt(a);\\n            return result + (rounding == Rounding.Up && result * result < a ? 1 : 0);\\n        }\\n    }\\n\\n    /**\\n     * @dev Return the log in base 2, rounded down, of a positive value.\\n     * Returns 0 if given 0.\\n     */\\n    function log2(uint256 value) internal pure returns (uint256) {\\n        uint256 result = 0;\\n        unchecked {\\n            if (value >> 128 > 0) {\\n                value >>= 128;\\n                result += 128;\\n            }\\n            if (value >> 64 > 0) {\\n                value >>= 64;\\n                result += 64;\\n            }\\n            if (value >> 32 > 0) {\\n                value >>= 32;\\n                result += 32;\\n            }\\n            if (value >> 16 > 0) {\\n                value >>= 16;\\n                result += 16;\\n            }\\n            if (value >> 8 > 0) {\\n                value >>= 8;\\n                result += 8;\\n            }\\n            if (value >> 4 > 0) {\\n                value >>= 4;\\n                result += 4;\\n            }\\n            if (value >> 2 > 0) {\\n                value >>= 2;\\n                result += 2;\\n            }\\n            if (value >> 1 > 0) {\\n                result += 1;\\n            }\\n        }\\n        return result;\\n    }\\n\\n    /**\\n     * @dev Return the log in base 2, following the selected rounding direction, of a positive value.\\n     * Returns 0 if given 0.\\n     */\\n    function log2(uint256 value, Rounding rounding) internal pure returns (uint256) {\\n        unchecked {\\n            uint256 result = log2(value);\\n            return result + (rounding == Rounding.Up && 1 << result < value ? 1 : 0);\\n        }\\n    }\\n\\n    /**\\n     * @dev Return the log in base 10, rounded down, of a positive value.\\n     * Returns 0 if given 0.\\n     */\\n    function log10(uint256 value) internal pure returns (uint256) {\\n        uint256 result = 0;\\n        unchecked {\\n            if (value >= 10 ** 64) {\\n                value /= 10 ** 64;\\n                result += 64;\\n            }\\n            if (value >= 10 ** 32) {\\n                value /= 10 ** 32;\\n                result += 32;\\n            }\\n            if (value >= 10 ** 16) {\\n                value /= 10 ** 16;\\n                result += 16;\\n            }\\n            if (value >= 10 ** 8) {\\n                value /= 10 ** 8;\\n                result += 8;\\n            }\\n            if (value >= 10 ** 4) {\\n                value /= 10 ** 4;\\n                result += 4;\\n            }\\n            if (value >= 10 ** 2) {\\n                value /= 10 ** 2;\\n                result += 2;\\n            }\\n            if (value >= 10 ** 1) {\\n                result += 1;\\n            }\\n        }\\n        return result;\\n    }\\n\\n    /**\\n     * @dev Return the log in base 10, following the selected rounding direction, of a positive value.\\n     * Returns 0 if given 0.\\n     */\\n    function log10(uint256 value, Rounding rounding) internal pure returns (uint256) {\\n        unchecked {\\n            uint256 result = log10(value);\\n            return result + (rounding == Rounding.Up && 10 ** result < value ? 1 : 0);\\n        }\\n    }\\n\\n    /**\\n     * @dev Return the log in base 256, rounded down, of a positive value.\\n     * Returns 0 if given 0.\\n     *\\n     * Adding one to the result gives the number of pairs of hex symbols needed to represent `value` as a hex string.\\n     */\\n    function log256(uint256 value) internal pure returns (uint256) {\\n        uint256 result = 0;\\n        unchecked {\\n            if (value >> 128 > 0) {\\n                value >>= 128;\\n                result += 16;\\n            }\\n            if (value >> 64 > 0) {\\n                value >>= 64;\\n                result += 8;\\n            }\\n            if (value >> 32 > 0) {\\n                value >>= 32;\\n                result += 4;\\n            }\\n            if (value >> 16 > 0) {\\n                value >>= 16;\\n                result += 2;\\n            }\\n            if (value >> 8 > 0) {\\n                result += 1;\\n            }\\n        }\\n        return result;\\n    }\\n\\n    /**\\n     * @dev Return the log in base 256, following the selected rounding direction, of a positive value.\\n     * Returns 0 if given 0.\\n     */\\n    function log256(uint256 value, Rounding rounding) internal pure returns (uint256) {\\n        unchecked {\\n            uint256 result = log256(value);\\n            return result + (rounding == Rounding.Up && 1 << (result << 3) < value ? 1 : 0);\\n        }\\n    }\\n}\\n\",\"keccak256\":\"0xe4455ac1eb7fc497bb7402579e7b4d64d928b846fce7d2b6fde06d366f21c2b3\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/math/SignedMath.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.8.0) (utils/math/SignedMath.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Standard signed math utilities missing in the Solidity language.\\n */\\nlibrary SignedMath {\\n    /**\\n     * @dev Returns the largest of two signed numbers.\\n     */\\n    function max(int256 a, int256 b) internal pure returns (int256) {\\n        return a > b ? a : b;\\n    }\\n\\n    /**\\n     * @dev Returns the smallest of two signed numbers.\\n     */\\n    function min(int256 a, int256 b) internal pure returns (int256) {\\n        return a < b ? a : b;\\n    }\\n\\n    /**\\n     * @dev Returns the average of two signed numbers without overflow.\\n     * The result is rounded towards zero.\\n     */\\n    function average(int256 a, int256 b) internal pure returns (int256) {\\n        // Formula from the book \\\"Hacker's Delight\\\"\\n        int256 x = (a & b) + ((a ^ b) >> 1);\\n        return x + (int256(uint256(x) >> 255) & (a ^ b));\\n    }\\n\\n    /**\\n     * @dev Returns the absolute unsigned value of a signed value.\\n     */\\n    function abs(int256 n) internal pure returns (uint256) {\\n        unchecked {\\n            // must be unchecked in order to support `n = type(int256).min`\\n            return uint256(n >= 0 ? n : -n);\\n        }\\n    }\\n}\\n\",\"keccak256\":\"0xf92515413956f529d95977adc9b0567d583c6203fc31ab1c23824c35187e3ddc\",\"license\":\"MIT\"},\"contracts/interfaces/IAttestationVerifier.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IAttestationVerifier\\n * @notice Interface for verifying attestations from various sources (witnesses, TEE, etc.)\\n */\\ninterface IAttestationVerifier {\\n    /**\\n     * @notice Verifies attestations for a given digest\\n     * @param _digest The message digest to verify (EIP-712 formatted)\\n     * @param _sigs Array of signatures from attestors\\n     * @param _data Verification data containing attestor identities or hints\\n     * @return isValid Returns true if the attestation is valid, false otherwise\\n     */\\n    function verify(\\n        bytes32 _digest,\\n        bytes[] calldata _sigs,\\n        bytes calldata _data\\n    ) external view returns (bool isValid);\\n}\",\"keccak256\":\"0x04c971cef71d95e252a97e1a242adda47bcf2bd63e86f7fd4a2da2a9a1828818\",\"license\":\"MIT\"},\"contracts/interfaces/IDisputeVerifier.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IDisputeVerifier\\n * @notice Minimal verification surface consumed by DisputeProtectionPolicy.\\n * @dev The concrete verifier exposes its governance and digest helper functions directly.\\n */\\ninterface IDisputeVerifier {\\n    /**\\n     * @notice Signed evidence tying a dispute payload to one intent.\\n     * @param intentHash Intent whose off-chain payment was disputed.\\n     * @param dataHash Hash of the ABI-encoded `DisputeDetails`.\\n     * @param signatures Witness signatures over the verifier's EIP-712 digest.\\n     * @param data ABI-encoded `DisputeDetails`.\\n     */\\n    struct DisputeAttestation {\\n        bytes32 intentHash;\\n        bytes32 dataHash;\\n        bytes[] signatures;\\n        bytes data;\\n    }\\n\\n    /**\\n     * @notice Payment and dispute identifiers attested by the dispute witnesses.\\n     * @param paymentMethod Payment rail used by the original payment.\\n     * @param originalPaymentId Provider identifier for the original payment.\\n     * @param disputeId Provider identifier for the dispute or reversal.\\n     * @param paymentAmount Attested off-chain payment amount.\\n     * @param paymentCurrency Attested off-chain payment currency.\\n     */\\n    struct DisputeDetails {\\n        bytes32 paymentMethod;\\n        bytes32 originalPaymentId;\\n        bytes32 disputeId;\\n        uint256 paymentAmount;\\n        bytes32 paymentCurrency;\\n    }\\n\\n    event AttestationVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);\\n\\n    error ZeroAddress();\\n    error InvalidContract(address dependency);\\n    error InvalidAttestation();\\n    error InvalidPaymentBinding(bytes32 intentHash, bytes32 nullifier);\\n    error AttestationVerificationFailed();\\n    error OwnershipRenunciationDisabled();\\n\\n    /**\\n     * @notice Validates dispute evidence against the intent context supplied by the policy.\\n     * @dev View-only and stateless. Reverts when the payload is malformed, mismatched, unsigned, or not bound to the\\n     * intent's original payment nullifier.\\n     * @param _attestation Signed dispute evidence for an intent.\\n     * @param _paymentMethod Payment method snapshotted by the policy when the intent was admitted.\\n     * @return disputeId Payment-platform dispute identifier decoded from the evidence.\\n     * @return disputeNullifier Payment-method-scoped replay key for the dispute.\\n     */\\n    function verifyDispute(DisputeAttestation calldata _attestation, bytes32 _paymentMethod)\\n        external\\n        view\\n        returns (bytes32 disputeId, bytes32 disputeNullifier);\\n}\\n\",\"keccak256\":\"0x55f8c56657ca89ed605d3054155677811a3d7417c74fe36129debe5fba6a7b37\",\"license\":\"MIT\"},\"contracts/interfaces/INullifierRegistry.sol\":{\"content\":\"//SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\ninterface INullifierRegistry {\\n    function addNullifier(bytes32 _nullifier) external;\\n    function isNullified(bytes32 _nullifier) external view returns(bool);\\n}\\n\",\"keccak256\":\"0x107164bc9a320938b513305878163b7fa884da4cdae58d0c8e81bfbb00c97c5e\",\"license\":\"MIT\"},\"contracts/interfaces/INullifierRegistryV2.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { INullifierRegistry } from \\\"./INullifierRegistry.sol\\\";\\n\\n/**\\n * @title INullifierRegistryV2\\n * @notice Canonically binds each consumed payment nullifier to the intent it fulfilled.\\n */\\ninterface INullifierRegistryV2 {\\n    event NullifierAdded(bytes32 indexed nullifier, bytes32 indexed intentHash, address indexed writer);\\n    event WriterAdded(address indexed writer);\\n    event WriterRemoved(address indexed writer);\\n\\n    error ZeroAddress();\\n    error ZeroNullifier();\\n    error ZeroIntentHash();\\n    error UnauthorizedWriter(address caller);\\n    error WriterAlreadyAuthorized(address writer);\\n    error WriterNotAuthorized(address writer);\\n    error NullifierAlreadyExists(bytes32 nullifier);\\n    error IntentAlreadyBound(bytes32 intentHash, bytes32 nullifier);\\n\\n    function legacyNullifierRegistry() external view returns (INullifierRegistry);\\n    function isNullified(bytes32 _nullifier) external view returns (bool);\\n    function intentHashByNullifier(bytes32 _nullifier) external view returns (bytes32);\\n    function nullifierByIntentHash(bytes32 _intentHash) external view returns (bytes32);\\n    function addNullifier(bytes32 _nullifier, bytes32 _intentHash) external;\\n    function isWriter(address _writer) external view returns (bool);\\n    function getWriters() external view returns (address[] memory);\\n    function addWritePermission(address _writer) external;\\n    function removeWritePermission(address _writer) external;\\n}\\n\",\"keccak256\":\"0xc1041b10ce93c7b93d3cf6cbd4716abf4c4dfca62b9b2c12da777d26dc3d4141\",\"license\":\"MIT\"},\"contracts/unifiedVerifier/DisputeVerifier.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {Ownable2Step} from \\\"@openzeppelin/contracts/access/Ownable2Step.sol\\\";\\nimport {EIP712} from \\\"@openzeppelin/contracts/utils/cryptography/EIP712.sol\\\";\\n\\nimport {IAttestationVerifier} from \\\"../interfaces/IAttestationVerifier.sol\\\";\\nimport {IDisputeVerifier} from \\\"../interfaces/IDisputeVerifier.sol\\\";\\nimport {INullifierRegistryV2} from \\\"../interfaces/INullifierRegistryV2.sol\\\";\\n\\n/**\\n * @title DisputeVerifier\\n * @notice Stateless EIP-712 verifier for dispute evidence, mirroring the UnifiedPaymentVerifier\\n * layering: the dispute protection policy calls this verifier, which itself calls the\\n * attestation verifier for witness-signature checks. Holds no position state and can be\\n * swapped on the policy at any time.\\n * @dev Swapping this verifier rotates the EIP-712 domain (it binds this contract's address), which\\n * invalidates signed-but-unsubmitted attestations. The attestation service must always sign against\\n * the policy's currently configured verifier.\\n */\\ncontract DisputeVerifier is IDisputeVerifier, Ownable2Step, EIP712 {\\n    /* ============ Constants ============ */\\n\\n    bytes32 public constant DISPUTE_ATTESTATION_TYPEHASH =\\n        keccak256(\\\"DisputeAttestation(bytes32 intentHash,bytes32 dataHash)\\\");\\n\\n    /* ============ State Variables ============ */\\n\\n    INullifierRegistryV2 public immutable nullifierRegistry;\\n    IAttestationVerifier public attestationVerifier;\\n\\n    /* ============ Constructor ============ */\\n\\n    constructor(address _owner, INullifierRegistryV2 _nullifierRegistry, IAttestationVerifier _attestationVerifier)\\n        EIP712(\\\"ZKP2P DisputeVerifier\\\", \\\"1\\\")\\n    {\\n        if (_owner == address(0)) revert ZeroAddress();\\n        _validateDependency(address(_nullifierRegistry));\\n        _validateDependency(address(_attestationVerifier));\\n\\n        nullifierRegistry = _nullifierRegistry;\\n        attestationVerifier = _attestationVerifier;\\n        _transferOwnership(_owner);\\n    }\\n\\n    /* ============ External Functions ============ */\\n\\n    /**\\n     * @inheritdoc IDisputeVerifier\\n     */\\n    function verifyDispute(DisputeAttestation calldata _attestation, bytes32 _paymentMethod)\\n        external\\n        view\\n        override\\n        returns (bytes32 disputeId, bytes32 disputeNullifier)\\n    {\\n        if (keccak256(_attestation.data) != _attestation.dataHash) revert InvalidAttestation();\\n\\n        DisputeDetails memory details = abi.decode(_attestation.data, (DisputeDetails));\\n        if (details.paymentMethod != _paymentMethod) revert InvalidAttestation();\\n\\n        bytes32 digest = _hashTypedDataV4(_disputeAttestationStructHash(_attestation));\\n        if (!attestationVerifier.verify(digest, _attestation.signatures, _attestation.data)) {\\n            revert AttestationVerificationFailed();\\n        }\\n\\n        bytes32 paymentNullifier = keccak256(abi.encodePacked(details.paymentMethod, details.originalPaymentId));\\n        if (\\n            nullifierRegistry.intentHashByNullifier(paymentNullifier) != _attestation.intentHash\\n                || nullifierRegistry.nullifierByIntentHash(_attestation.intentHash) != paymentNullifier\\n        ) {\\n            revert InvalidPaymentBinding(_attestation.intentHash, paymentNullifier);\\n        }\\n\\n        disputeId = details.disputeId;\\n        disputeNullifier = keccak256(abi.encodePacked(details.paymentMethod, details.disputeId));\\n    }\\n\\n    /* ============ Governance Functions ============ */\\n\\n    /**\\n     * @notice GOVERNANCE ONLY: Replaces the verifier used for future witness-signature checks.\\n     * @param _verifier New non-zero deployed attestation-verifier contract.\\n     */\\n    function setAttestationVerifier(address _verifier) external onlyOwner {\\n        _validateDependency(_verifier);\\n        address previousVerifier = address(attestationVerifier);\\n        attestationVerifier = IAttestationVerifier(_verifier);\\n        emit AttestationVerifierUpdated(previousVerifier, _verifier);\\n    }\\n\\n    /**\\n     * @notice Disables ownership renunciation so the signature-verification dependency stays managed.\\n     */\\n    function renounceOwnership() public view override onlyOwner {\\n        revert OwnershipRenunciationDisabled();\\n    }\\n\\n    /* ============ View Functions ============ */\\n\\n    /**\\n     * @notice Returns the EIP-712 digest that witnesses sign for a dispute attestation.\\n     * @param _attestation Dispute evidence whose intent hash and data hash are included in the digest.\\n     * @return EIP-712 digest bound to this verifier's address and the current chain.\\n     */\\n    function hashDisputeAttestation(DisputeAttestation calldata _attestation) external view returns (bytes32) {\\n        return _hashTypedDataV4(_disputeAttestationStructHash(_attestation));\\n    }\\n\\n    /* ============ Internal Functions ============ */\\n\\n    function _disputeAttestationStructHash(DisputeAttestation calldata _attestation) internal pure returns (bytes32) {\\n        return keccak256(abi.encode(DISPUTE_ATTESTATION_TYPEHASH, _attestation.intentHash, _attestation.dataHash));\\n    }\\n\\n    function _validateDependency(address _dependency) internal view {\\n        if (_dependency == address(0)) revert ZeroAddress();\\n        if (_dependency.code.length == 0) revert InvalidContract(_dependency);\\n    }\\n}\\n\",\"keccak256\":\"0x329c267d39280c9bf130ca3d816756d1bd82b611ff20663a06f2d2bc1fd39928\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x610180346200023e576001600160401b03601f6200152c38819003918201601f19168401919083831185841017620002285781606092869260409586528339810103126200023e5782516001600160a01b0380821694909290918581036200023e57602083015193808516938486036200023e578301519081168091036200023e578251936200008f8562000243565b6015855260208501967f5a4b5032502044697370757465566572696669657200000000000000000000008852845198620000c98a62000243565b60018a5260208a01603160f81b8152620000e3336200025f565b620000ee88620002ad565b996101209a8b52620001008c6200048a565b98610140998a525190209a8b60e052519020996101009a808c524660a05287519060208201927f8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f84528983015260608201524660808201523060a082015260a0815260c08101938185109085111762000228578388525190206080523060c052156200021957509062000198620001c393926200063f565b620001a3816200063f565b610160958652600480546001600160a01b0319169190911790556200025f565b5192610ea6948562000686863960805185610d22015260a05185610ded015260c05185610cec015260e05185610d7101525184610d97015251836106b4015251826106dd0152518181816102e4015261061d0152f35b63d92e233d60e01b8152600490fd5b634e487b7160e01b600052604160045260246000fd5b600080fd5b604081019081106001600160401b038211176200022857604052565b60018060a01b031990816001541660015560005460018060a01b038092168093821617600055167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0600080a3565b8051602090818110156200034a5750601f825111620002e95780825192015190808310620002da57501790565b82600019910360031b1b161790565b90604051809263305a27a960e01b82528060048301528251908160248401526000935b82851062000330575050604492506000838284010152601f80199101168101030190fd5b84810182015186860160440152938101938593506200030c565b906001600160401b0382116200022857600254926001938481811c911680156200047f575b838210146200046957601f81116200042f575b5081601f8411600114620003c35750928293918392600094620003b7575b50501b916000199060031b1c19161760025560ff90565b015192503880620003a0565b919083601f198116600260005284600020946000905b88838310620004145750505010620003fa575b505050811b0160025560ff90565b015160001960f88460031b161c19169055388080620003ec565b858701518855909601959485019487935090810190620003d9565b600260005284601f84600020920160051c820191601f860160051c015b8281106200045c57505062000382565b600081550185906200044c565b634e487b7160e01b600052602260045260246000fd5b90607f16906200036f565b805160209190828110156200051a575090601f825111620004b95780825192015190808310620002da57501790565b90604051809263305a27a960e01b82528060048301528251908160248401526000935b82851062000500575050604492506000838284010152601f80199101168101030190fd5b8481018201518686016044015293810193859350620004dc565b6001600160401b03811162000228576003928354926001938481811c9116801562000634575b838210146200046957601f8111620005fb575b5081601f841160011462000592575092829391839260009462000586575b50501b9160001990841b1c191617905560ff90565b01519250388062000571565b919083601f1981168760005284600020946000905b88838310620005e05750505010620005c7575b505050811b01905560ff90565b015160001983861b60f8161c19169055388080620005ba565b858701518855909601959485019487935090810190620005a7565b8560005284601f84600020920160051c820191601f860160051c015b8281106200062757505062000553565b6000815501859062000617565b90607f169062000540565b6001600160a01b03811690811562000673573b156200065b5750565b60249060405190633b00592160e21b82526004820152fd5b60405163d92e233d60e01b8152600490fdfe6080604052600436101561001257600080fd5b60003560e01c806366fa3e5514610938578063715018a61461090d57806379ba50971461084a57806382f6f608146107a757806384b0196e1461069e5780638da5cb5b14610675578063b4b3c5a01461064c578063b870676c14610607578063e30c3978146105de578063f2fde38b14610570578063f50f7e9c146105355763ff0655f4146100a057600080fd5b346103f15760403660031901126103f1576004356001600160401b0381116103f1578036039060806003198301126103f1576100e26064820182600401610c70565b6001600160401b03811161051f5760405190610108601f8201601f191660200183610a4f565b808252602082019236828201116103f1578160009260209286378301015251902060248201350361050d5760a0916101466064830183600401610c70565b90809491810103126103f1576040519260a084018481106001600160401b0382111761051f576040526080813591828652602081013560208701526040810135604087015260608101356060870152013560808501526024350361050d576101b86101b383600401610e13565b610cc3565b60045490916001600160a01b0390911690604484013590602219018112156103f1576001600160401b0360048286010135116103f1576004818501013560051b3603602482860101136103f157916102166064850185600401610c70565b60409491945194859362522ebb60e81b855260648501906004860152606060248601526004848901013590526084840160846004858a01013560051b860101936024818a01019160005b6004838c010135811061048b575050505061028d6020959385938493600319858403016044860152610ca2565b03915afa9081156103fe57600091610450575b501561043e578151602083015160405190602082019283526040820152604081526102ca81610a19565b51902060405163beddb1d160e01b815260048101829052917f00000000000000000000000000000000000000000000000000000000000000006001600160a01b031690602084602481855afa9384156103fe5760009461040a575b50600401358093149081159161038b575b5061036d57604083818101519051825160208101918252828482015283815261035e81610a19565b51902082519182526020820152f35b604492506040519163976cc19160e01b835260048301526024820152fd5b6024915060209060405192838092636d8991a760e11b82528760048301525afa80156103fe5782916000916103c4575b50141538610336565b9150506020813d6020116103f6575b816103e060209383610a4f565b810103126103f157819051386103bb565b600080fd5b3d91506103d3565b6040513d6000823e3d90fd5b9093506020813d602011610436575b8161042660209383610a4f565b810103126103f157519238610325565b3d9150610419565b6040516320dd787760e11b8152600490fd5b90506020813d602011610483575b8161046b60209383610a4f565b810103126103f1575180151581036103f157386102a0565b3d915061045e565b9193949590929650608319898203018352604219848b01360301873512156103f1576001600160401b036024858c018935010135116103f15786358a850101602481013536036044909101136103f15760019060209081906104fb908a35888f0101602481013590604401610ca2565b98019301910190889695949391610260565b60405163bd8ba84d60e01b8152600490fd5b634e487b7160e01b600052604160045260246000fd5b346103f15760003660031901126103f15760206040517fa80001b13bc451240eb60a9c81c71d67e7cf7994aa0ab64892d9512aefb189fa8152f35b346103f15760203660031901126103f1576004356001600160a01b03818116918290036103f15761059f6109c1565b816001600160601b0360a01b6001541617600155600054167f38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e22700600080a3005b346103f15760003660031901126103f1576001546040516001600160a01b039091168152602090f35b346103f15760003660031901126103f1576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b346103f15760003660031901126103f1576004546040516001600160a01b039091168152602090f35b346103f15760003660031901126103f1576000546040516001600160a01b039091168152602090f35b346103f15760003660031901126103f1576106d87f0000000000000000000000000000000000000000000000000000000000000000610a70565b6107017f0000000000000000000000000000000000000000000000000000000000000000610b9a565b6040516020808201928284106001600160401b0385111761051f57918161075a859461074c979660405260008452604051978897600f60f81b895260e0858a015260e0890190610981565b908782036040890152610981565b91466060870152306080870152600060a087015285830360c0870152519182815201929160005b82811061079057505050500390f35b835185528695509381019392810192600101610781565b346103f15760203660031901126103f1576004356001600160a01b03818116918281036103f1576107d66109c1565b8215610838573b1561081f57600454826001600160601b0360a01b821617600455167f85c440731cd72afaddddb00cf34bebcc2b6d46def5a034a30baef899583e3d15600080a3005b604051633b00592160e21b815260048101839052602490fd5b60405163d92e233d60e01b8152600490fd5b346103f15760003660031901126103f1576001546001600160a01b0333818316036108b6576001600160601b0360a01b8092166001556000549133908316176000553391167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0600080a3005b60405162461bcd60e51b815260206004820152602960248201527f4f776e61626c6532537465703a2063616c6c6572206973206e6f7420746865206044820152683732bb9037bbb732b960b91b6064820152608490fd5b346103f15760003660031901126103f1576109266109c1565b6040516310e83c2760e21b8152600490fd5b346103f1576003196020368201126103f157600435906001600160401b0382116103f15760809082360301126103f1576109796101b3602092600401610e13565b604051908152f35b919082519283825260005b8481106109ad575050826000602080949584010152601f8019910116010190565b60208183018101518483018201520161098c565b6000546001600160a01b031633036109d557565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b606081019081106001600160401b0382111761051f57604052565b604081019081106001600160401b0382111761051f57604052565b90601f801991011681019081106001600160401b0382111761051f57604052565b60ff8114610aae5760ff811690601f8211610a9c5760405191610a9283610a34565b8252602082015290565b604051632cd44ac360e21b8152600490fd5b50604051600060025490600182811c90808416938415610b90575b6020948584108114610b7c5783875286949392918115610b5c5750600114610afd575b5050610afa92500382610a4f565b90565b9093915060026000527f405787fa12a823e0f2b7631cc41b3ba8828b3321ca811111fa75cd3aa3bb5ace936000915b818310610b44575050610afa93508201013880610aec565b85548784018501529485019486945091830191610b2c565b915050610afa94925060ff191682840152151560051b8201013880610aec565b634e487b7160e01b85526022600452602485fd5b91607f1691610ac9565b60ff8114610bbc5760ff811690601f8211610a9c5760405191610a9283610a34565b50604051600060035490600182811c90808416938415610c66575b6020948584108114610b7c5783875286949392918115610b5c5750600114610c07575050610afa92500382610a4f565b9093915060036000527fc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b936000915b818310610c4e575050610afa93508201013880610aec565b85548784018501529485019486945091830191610c36565b91607f1691610bd7565b903590601e19813603018212156103f157018035906001600160401b0382116103f1576020019181360383136103f157565b908060209392818452848401376000828201840152601f01601f1916010190565b604290610cce610ce9565b906040519161190160f01b8352600283015260228201522090565b307f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03161480610dea575b15610d44577f000000000000000000000000000000000000000000000000000000000000000090565b60405160208101907f8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f82527f000000000000000000000000000000000000000000000000000000000000000060408201527f000000000000000000000000000000000000000000000000000000000000000060608201524660808201523060a082015260a0815260c081018181106001600160401b0382111761051f5760405251902090565b507f00000000000000000000000000000000000000000000000000000000000000004614610d1b565b6040516020808201927fa80001b13bc451240eb60a9c81c71d67e7cf7994aa0ab64892d9512aefb189fa8452803560408401520135606082015260608152608081018181106001600160401b0382111761051f576040525190209056fea2646970667358221220fbe8c32afcbf0f432606713ff5de3e1d7a5fc8df9370f89cc200dff0a057cde264736f6c63430008120033",
+  "deployedBytecode": "0x6080604052600436101561001257600080fd5b60003560e01c806366fa3e5514610938578063715018a61461090d57806379ba50971461084a57806382f6f608146107a757806384b0196e1461069e5780638da5cb5b14610675578063b4b3c5a01461064c578063b870676c14610607578063e30c3978146105de578063f2fde38b14610570578063f50f7e9c146105355763ff0655f4146100a057600080fd5b346103f15760403660031901126103f1576004356001600160401b0381116103f1578036039060806003198301126103f1576100e26064820182600401610c70565b6001600160401b03811161051f5760405190610108601f8201601f191660200183610a4f565b808252602082019236828201116103f1578160009260209286378301015251902060248201350361050d5760a0916101466064830183600401610c70565b90809491810103126103f1576040519260a084018481106001600160401b0382111761051f576040526080813591828652602081013560208701526040810135604087015260608101356060870152013560808501526024350361050d576101b86101b383600401610e13565b610cc3565b60045490916001600160a01b0390911690604484013590602219018112156103f1576001600160401b0360048286010135116103f1576004818501013560051b3603602482860101136103f157916102166064850185600401610c70565b60409491945194859362522ebb60e81b855260648501906004860152606060248601526004848901013590526084840160846004858a01013560051b860101936024818a01019160005b6004838c010135811061048b575050505061028d6020959385938493600319858403016044860152610ca2565b03915afa9081156103fe57600091610450575b501561043e578151602083015160405190602082019283526040820152604081526102ca81610a19565b51902060405163beddb1d160e01b815260048101829052917f00000000000000000000000000000000000000000000000000000000000000006001600160a01b031690602084602481855afa9384156103fe5760009461040a575b50600401358093149081159161038b575b5061036d57604083818101519051825160208101918252828482015283815261035e81610a19565b51902082519182526020820152f35b604492506040519163976cc19160e01b835260048301526024820152fd5b6024915060209060405192838092636d8991a760e11b82528760048301525afa80156103fe5782916000916103c4575b50141538610336565b9150506020813d6020116103f6575b816103e060209383610a4f565b810103126103f157819051386103bb565b600080fd5b3d91506103d3565b6040513d6000823e3d90fd5b9093506020813d602011610436575b8161042660209383610a4f565b810103126103f157519238610325565b3d9150610419565b6040516320dd787760e11b8152600490fd5b90506020813d602011610483575b8161046b60209383610a4f565b810103126103f1575180151581036103f157386102a0565b3d915061045e565b9193949590929650608319898203018352604219848b01360301873512156103f1576001600160401b036024858c018935010135116103f15786358a850101602481013536036044909101136103f15760019060209081906104fb908a35888f0101602481013590604401610ca2565b98019301910190889695949391610260565b60405163bd8ba84d60e01b8152600490fd5b634e487b7160e01b600052604160045260246000fd5b346103f15760003660031901126103f15760206040517fa80001b13bc451240eb60a9c81c71d67e7cf7994aa0ab64892d9512aefb189fa8152f35b346103f15760203660031901126103f1576004356001600160a01b03818116918290036103f15761059f6109c1565b816001600160601b0360a01b6001541617600155600054167f38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e22700600080a3005b346103f15760003660031901126103f1576001546040516001600160a01b039091168152602090f35b346103f15760003660031901126103f1576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b346103f15760003660031901126103f1576004546040516001600160a01b039091168152602090f35b346103f15760003660031901126103f1576000546040516001600160a01b039091168152602090f35b346103f15760003660031901126103f1576106d87f0000000000000000000000000000000000000000000000000000000000000000610a70565b6107017f0000000000000000000000000000000000000000000000000000000000000000610b9a565b6040516020808201928284106001600160401b0385111761051f57918161075a859461074c979660405260008452604051978897600f60f81b895260e0858a015260e0890190610981565b908782036040890152610981565b91466060870152306080870152600060a087015285830360c0870152519182815201929160005b82811061079057505050500390f35b835185528695509381019392810192600101610781565b346103f15760203660031901126103f1576004356001600160a01b03818116918281036103f1576107d66109c1565b8215610838573b1561081f57600454826001600160601b0360a01b821617600455167f85c440731cd72afaddddb00cf34bebcc2b6d46def5a034a30baef899583e3d15600080a3005b604051633b00592160e21b815260048101839052602490fd5b60405163d92e233d60e01b8152600490fd5b346103f15760003660031901126103f1576001546001600160a01b0333818316036108b6576001600160601b0360a01b8092166001556000549133908316176000553391167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0600080a3005b60405162461bcd60e51b815260206004820152602960248201527f4f776e61626c6532537465703a2063616c6c6572206973206e6f7420746865206044820152683732bb9037bbb732b960b91b6064820152608490fd5b346103f15760003660031901126103f1576109266109c1565b6040516310e83c2760e21b8152600490fd5b346103f1576003196020368201126103f157600435906001600160401b0382116103f15760809082360301126103f1576109796101b3602092600401610e13565b604051908152f35b919082519283825260005b8481106109ad575050826000602080949584010152601f8019910116010190565b60208183018101518483018201520161098c565b6000546001600160a01b031633036109d557565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b606081019081106001600160401b0382111761051f57604052565b604081019081106001600160401b0382111761051f57604052565b90601f801991011681019081106001600160401b0382111761051f57604052565b60ff8114610aae5760ff811690601f8211610a9c5760405191610a9283610a34565b8252602082015290565b604051632cd44ac360e21b8152600490fd5b50604051600060025490600182811c90808416938415610b90575b6020948584108114610b7c5783875286949392918115610b5c5750600114610afd575b5050610afa92500382610a4f565b90565b9093915060026000527f405787fa12a823e0f2b7631cc41b3ba8828b3321ca811111fa75cd3aa3bb5ace936000915b818310610b44575050610afa93508201013880610aec565b85548784018501529485019486945091830191610b2c565b915050610afa94925060ff191682840152151560051b8201013880610aec565b634e487b7160e01b85526022600452602485fd5b91607f1691610ac9565b60ff8114610bbc5760ff811690601f8211610a9c5760405191610a9283610a34565b50604051600060035490600182811c90808416938415610c66575b6020948584108114610b7c5783875286949392918115610b5c5750600114610c07575050610afa92500382610a4f565b9093915060036000527fc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b936000915b818310610c4e575050610afa93508201013880610aec565b85548784018501529485019486945091830191610c36565b91607f1691610bd7565b903590601e19813603018212156103f157018035906001600160401b0382116103f1576020019181360383136103f157565b908060209392818452848401376000828201840152601f01601f1916010190565b604290610cce610ce9565b906040519161190160f01b8352600283015260228201522090565b307f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03161480610dea575b15610d44577f000000000000000000000000000000000000000000000000000000000000000090565b60405160208101907f8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f82527f000000000000000000000000000000000000000000000000000000000000000060408201527f000000000000000000000000000000000000000000000000000000000000000060608201524660808201523060a082015260a0815260c081018181106001600160401b0382111761051f5760405251902090565b507f00000000000000000000000000000000000000000000000000000000000000004614610d1b565b6040516020808201927fa80001b13bc451240eb60a9c81c71d67e7cf7994aa0ab64892d9512aefb189fa8452803560408401520135606082015260608152608081018181106001600160401b0382111761051f576040525190209056fea2646970667358221220fbe8c32afcbf0f432606713ff5de3e1d7a5fc8df9370f89cc200dff0a057cde264736f6c63430008120033",
+  "devdoc": {
+    "details": "Swapping this verifier rotates the EIP-712 domain (it binds this contract's address), which invalidates signed-but-unsubmitted attestations. The attestation service must always sign against the policy's currently configured verifier.",
+    "events": {
+      "EIP712DomainChanged()": {
+        "details": "MAY be emitted to signal that the domain could have changed."
+      }
+    },
+    "kind": "dev",
+    "methods": {
+      "acceptOwnership()": {
+        "details": "The new owner accepts the ownership transfer."
+      },
+      "eip712Domain()": {
+        "details": "See {EIP-5267}. _Available since v4.9._"
+      },
+      "hashDisputeAttestation((bytes32,bytes32,bytes[],bytes))": {
+        "params": {
+          "_attestation": "Dispute evidence whose intent hash and data hash are included in the digest."
+        },
+        "returns": {
+          "_0": "EIP-712 digest bound to this verifier's address and the current chain."
+        }
+      },
+      "owner()": {
+        "details": "Returns the address of the current owner."
+      },
+      "pendingOwner()": {
+        "details": "Returns the address of the pending owner."
+      },
+      "setAttestationVerifier(address)": {
+        "params": {
+          "_verifier": "New non-zero deployed attestation-verifier contract."
+        }
+      },
+      "transferOwnership(address)": {
+        "details": "Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one. Can only be called by the current owner."
+      },
+      "verifyDispute((bytes32,bytes32,bytes[],bytes),bytes32)": {
+        "details": "View-only and stateless. Reverts when the payload is malformed, mismatched, unsigned, or not bound to the intent's original payment nullifier.",
+        "params": {
+          "_attestation": "Signed dispute evidence for an intent.",
+          "_paymentMethod": "Payment method snapshotted by the policy when the intent was admitted."
+        },
+        "returns": {
+          "disputeId": "Payment-platform dispute identifier decoded from the evidence.",
+          "disputeNullifier": "Payment-method-scoped replay key for the dispute."
+        }
+      }
+    },
+    "title": "DisputeVerifier",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "hashDisputeAttestation((bytes32,bytes32,bytes[],bytes))": {
+        "notice": "Returns the EIP-712 digest that witnesses sign for a dispute attestation."
+      },
+      "renounceOwnership()": {
+        "notice": "Disables ownership renunciation so the signature-verification dependency stays managed."
+      },
+      "setAttestationVerifier(address)": {
+        "notice": "GOVERNANCE ONLY: Replaces the verifier used for future witness-signature checks."
+      },
+      "verifyDispute((bytes32,bytes32,bytes[],bytes),bytes32)": {
+        "notice": "Validates dispute evidence against the intent context supplied by the policy."
+      }
+    },
+    "notice": "Stateless EIP-712 verifier for dispute evidence, mirroring the UnifiedPaymentVerifier layering: the dispute protection policy calls this verifier, which itself calls the attestation verifier for witness-signature checks. Holds no position state and can be swapped on the policy at any time.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 7,
+        "contract": "contracts/unifiedVerifier/DisputeVerifier.sol:DisputeVerifier",
+        "label": "_owner",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_address"
+      },
+      {
+        "astId": 120,
+        "contract": "contracts/unifiedVerifier/DisputeVerifier.sol:DisputeVerifier",
+        "label": "_pendingOwner",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_address"
+      },
+      {
+        "astId": 2815,
+        "contract": "contracts/unifiedVerifier/DisputeVerifier.sol:DisputeVerifier",
+        "label": "_nameFallback",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_string_storage"
+      },
+      {
+        "astId": 2817,
+        "contract": "contracts/unifiedVerifier/DisputeVerifier.sol:DisputeVerifier",
+        "label": "_versionFallback",
+        "offset": 0,
+        "slot": "3",
+        "type": "t_string_storage"
+      },
+      {
+        "astId": 37396,
+        "contract": "contracts/unifiedVerifier/DisputeVerifier.sol:DisputeVerifier",
+        "label": "attestationVerifier",
+        "offset": 0,
+        "slot": "4",
+        "type": "t_contract(IAttestationVerifier)25905"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_contract(IAttestationVerifier)25905": {
+        "encoding": "inplace",
+        "label": "contract IAttestationVerifier",
+        "numberOfBytes": "20"
+      },
+      "t_string_storage": {
+        "encoding": "bytes",
+        "label": "string",
+        "numberOfBytes": "32"
+      }
+    }
+  }
+}
