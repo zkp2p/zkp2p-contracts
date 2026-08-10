@@ -195,7 +195,7 @@ async function fixture({
       if (!deployment) throw new Error(`Missing deployment: ${name}`);
       return deployment;
     },
-    getOrNull: async (name) => deployments.get(name) || null,
+    getOrNull: async (name) => deployments.get(name),
     deploy: async (name, options) => {
       const existing = deployments.get(name);
       if (existing) return { ...existing, newlyDeployed: false };

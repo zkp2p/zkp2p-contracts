@@ -56,7 +56,7 @@ async function getStackDeployments(
       async (name) => [name, await hre.deployments.getOrNull(name)] as const
     )
   );
-  const present = entries.filter(([, deployment]) => deployment !== null);
+  const present = entries.filter(([, deployment]) => deployment != null);
   if (present.length === 0) return null;
   if (present.length !== STACK_DEPLOYMENT_NAMES.length) {
     throw new Error(
