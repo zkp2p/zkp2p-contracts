@@ -74,15 +74,15 @@ and the finding standard in this skill remain controlling.
 
 Start with the narrowest upstream skill that matches the review:
 
-| Review need | Upstream skill |
-|---|---|
-| Build contract context and entry points | `audit-context-building` or `entry-point-analyzer` |
-| Review a branch or PR | `differential-review` |
-| Check invariants and generated inputs | `property-based-testing` |
-| Compare implementation with a specification | `spec-to-code-compliance` |
-| Search for variants of a confirmed issue | `variant-analysis` |
-| Inspect dangerous APIs and defaults | `sharp-edges` or `insecure-defaults` |
-| Prepare a broader contract review | `audit-prep-assistant` or `guidelines-advisor` |
+| Review need                                 | Upstream skill                                     |
+| ------------------------------------------- | -------------------------------------------------- |
+| Build contract context and entry points     | `audit-context-building` or `entry-point-analyzer` |
+| Review a branch or PR                       | `differential-review`                              |
+| Check invariants and generated inputs       | `property-based-testing`                           |
+| Compare implementation with a specification | `spec-to-code-compliance`                          |
+| Search for variants of a confirmed issue    | `variant-analysis`                                 |
+| Inspect dangerous APIs and defaults         | `sharp-edges` or `insecure-defaults`               |
+| Prepare a broader contract review           | `audit-prep-assistant` or `guidelines-advisor`     |
 
 Fetch one selected skill into a temporary checkout:
 
@@ -168,19 +168,24 @@ When either V2 or V3 source changes:
 5. Inspect `scripts/deployActive.ts`, the network guards, opt-in flags, `skip`
    behavior, dependencies, and readiness checks in
    `deploy/30_deploy_v3_lifecycle_stack.ts`,
-   `deploy/31_deploy_dispute_lifecycle_stack.ts`, and
-   `deploy/32_activate_dispute_lifecycle_stack.ts`. Lane `31` must deploy and
-   verify the dispute registry, verifier, vault, policy, hook authorization,
-   writer permission, and payment-method risk windows without changing the
-   active OrchestratorV3 hook. Lane `32` may activate that verified hook only as
-   a separate explicitly enabled staging action.
+   `deploy/31_deploy_v3_payment_binding_stack.ts`, and
+   `deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts`. Lane `31` must
+   verify the bytecode-pinned payment-binding pair and refuse a non-atomic
+   Base-staging cutover. Its Base Safe batch must preserve audited method order
+   and currencies, route every active method to UPV3, and revoke every retired
+   legacy-registry writer. Lane `32` must deploy and verify
+   the dispute registry, verifier, vault, policy, hook authorization, writer
+   permission, payment-method risk windows, ownership handoff, and explicitly
+   gated hook activation as one resumable lane.
 6. Verify the dispute path binds the payment to the disputed intent and preserves
    stake-vault controller, verifier/nullifier, lifecycle-hook authorization,
    risk-window, replay, and settlement invariants. Run
    `scripts/test-dispute-lifecycle-deployment.cjs` when either lane changes.
 7. Inspect Base/Base-staging artifacts, package addresses, and live state
-   separately. Lanes `31` and `32` currently exclude Base, and a mounted script,
-   checked-in artifact, or packaged address is not activation evidence.
+   separately. Both lanes are network-gated; on Base lane `31` must verify the
+   existing pair and prepare exactly the atomic 22-call Safe cutover, while lane
+   `32` may only prepare an unexecuted Safe batch. A mounted script, checked-in
+   artifact, or packaged address is not activation evidence.
 
 Do not require the remaining V2/V3 source diff to be empty and do not normalize
 away a lifecycle, storage, governance, or settlement delta. If bytecode,

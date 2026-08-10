@@ -133,13 +133,25 @@ export const DISPUTE_RISK_WINDOW: any = {
   "base_staging": ONE_DAY_IN_SECONDS.mul(14),
 };
 
-// Ratified policy: all five methods are disputable on Base staging and production.
+// Active unified payment-method set mounted on UnifiedPaymentVerifierV3.
+export const ACTIVE_PAYMENT_METHODS: string[] = [
+  "alipay",
+  "chime",
+  "venmo",
+  "revolut",
+  "cashapp",
+  "wise",
+  "mercadopago",
+  "zelle",
+  "monzo",
+  "paypal",
+];
+
+// Only payment methods with a chargeback mechanism receive dispute protection.
 export const DISPUTABLE_PAYMENT_METHODS: string[] = [
   "paypal",
   "venmo",
   "cashapp",
-  "zelle",
-  "chime",
 ];
 
 export const ORCHESTRATOR_V3_PROTOCOL_FEE: any = {

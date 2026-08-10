@@ -1,6 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
+
 - `contracts/`: Solidity sources (0.8.18), plus `interfaces/`, `lib/`, `mocks/`, `unifiedVerifier/`.
 - `deploy/`: Hardhat Deploy scripts, ordered `NN_description.ts` (e.g., `00_deploy_system.ts`).
 - `test-foundry/`: the only contract test system, split into `deterministic/`, `fuzz/`, and `invariant/`.
@@ -17,16 +18,26 @@
 - Base staging removes only the explicitly drained staging predecessors. Base keeps the existing orchestrators
   registered and queues exactly one Safe call to register the fresh O3. Base execution requires
   `ENABLE_BASE_V3_GROUPS_CUTOVER=true`, a separately approved exact source SHA, and the production governance path.
-- Lane `31` remains staging-only and must not run during the Base whitelist-only deployment. Never infer live
-  activation from source, tests, package ABIs, a mounted script, or checked-in artifacts.
+- Lane `31` is the state-aware V3 payment-binding lane. On Base staging and Base it must verify and reuse the
+  bytecode-pinned `NullifierRegistryV2` and `UnifiedPaymentVerifierV3`; missing production-like artifacts fail
+  closed. Base staging is verification-only because its EOA-owned registries cannot provide an atomic cutover.
+  On Base, the explicit cutover opt-in preserves the audited method order and currencies while atomically routing
+  all active methods to UPV3 and revoking both retired verifiers from the legacy registry.
+- Lane `32` deploys, wires, transfers, and activates the fresh dispute lifecycle stack as one explicitly gated
+  lane. Staging must first complete a resumable deploy-only run, propagate the five fresh addresses, and then use
+  the separate activation and readiness confirmations in the same lane. Base prepares the required
+  ownership-acceptance and lifecycle-hook Safe calls but never executes them. Never infer activation from source,
+  tests, package ABIs, or artifacts.
 - `IntentGuardian` and `WhitelistPolicy` remain part of the V2 policy history and are reused where the mounted V3
   lifecycle lane specifies. Do not redeploy a core stack merely to change an independently owned policy component.
-- The payment-verifier cutover is one-way. In the same governance batch, authorize UPV3 on `NullifierRegistryV2`,
-  permanently revoke the retired verifier's legacy-registry write permission, and route the shared
+- The payment-verifier cutover is one-way. Before the governance batch, lane `31` must prove UPV3 is the sole
+  `NullifierRegistryV2` writer. In the same governance batch, permanently revoke every retired verifier's
+  legacy-registry write permission and route the shared
   `PaymentVerifierRegistry` to UPV3. Never route a payment method back to the retired verifier: the legacy registry
   cannot observe V2 writes, so a rollback would reopen payment replay.
 
 ## Architecture Overview (v2.1)
+
 - Core: `Escrow` holds maker deposits and per-deposit config (methods, currencies, min rates, intent limits/expiry); `Orchestrator` manages intents, routes to verifiers, collects protocol/referrer fees; `ProtocolViewer` provides aggregated read views.
 - Registries: `PaymentVerifierRegistry` maps `paymentMethod` → verifier + currencies; `EscrowRegistry` whitelists escrows; `PostIntentHookRegistry` whitelists post‑intent hooks; `NullifierRegistry` records consumed nullifiers. `RelayerRegistry` backs the deployed legacy V1 stack, deployed production `OrchestratorV2`, and current `OrchestratorV3` source and staging wiring, including relayer-gated multi-intent admission.
 - Unified Verifier: `unifiedVerifier/UnifiedPaymentVerifier.sol` validates EIP‑712 attestations, checks provider hashes and timestamp buffers (from `BaseUnifiedPaymentVerifier`), and nullifies payments.
@@ -34,6 +45,7 @@
 - Flow: Maker `createDeposit` on `Escrow` → Taker `signalIntent` on `Orchestrator` (escrow locks funds) → `fulfillIntent` calls method verifier → on success, `Orchestrator` unlocks/transfers from `Escrow`, applies fees, runs optional post‑intent hook.
 
 ### Minimal Diagram
+
 ```
 Maker ── createDeposit ──▶ Escrow
 Taker ── signalIntent ──▶ Orchestrator ── lockFunds ──▶ Escrow
@@ -47,6 +59,7 @@ Orchestrator ── net ──▶ Recipient OR PostIntentHook (then executes)
 ```
 
 ## Build, Test, and Development Commands
+
 - `yarn`: Install dependencies. Copy env: `cp .env.default .env` then fill keys.
 - `yarn compile`: Full Hardhat compile; use only when Hardhat artifacts or TypeChain output are required.
 - `yarn build`: Clean, compile, generate TypeChain, and transpile TypeScript. This is a cold full build, not an
@@ -113,16 +126,16 @@ iteration loop.
 
 ### Change-Aware Verification Ladder
 
-| Change | Default local verification |
-|---|---|
-| Markdown, comments, or NatSpec only | `git diff --check`; for Solidity comments, `forge fmt --check <changed-files>` and confirm no executable tokens changed. Do not compile or test. |
-| One deterministic test or test helper | Run only the changed test file or the smallest matching test/contract. |
-| One contract's internal behavior | Run its closest deterministic test file or matching contract/test. Add the directly relevant fuzz/invariant target only when the changed behavior is covered there. |
-| Shared interface, base contract, or library | Find direct consumers with `rg`; run their focused deterministic tests. Compile the affected contract dependency graph only if tests do not already do so. |
-| Fuzz/invariant property or handler | Run the changed property/handler target. Reproduce a failure with its exact seed and promote real counterexamples to deterministic regressions. |
-| Deployment or wiring script | Run the matching deployment-helper test or TypeScript check. Run `yarn deploy:localhost` only when deployment topology/wiring changed or the user requests it. |
-| Public ABI, TypeChain, or package extraction | Run focused contract tests first; generate/build the affected artifacts once after the interface is stable. |
-| Cross-cutting accounting, authorization, settlement, storage, or reentrancy change | Run the affected deterministic suites plus the relevant fuzz/invariant suites, then one complete suite at the final code state. |
+| Change                                                                             | Default local verification                                                                                                                                          |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Markdown, comments, or NatSpec only                                                | `git diff --check`; for Solidity comments, `forge fmt --check <changed-files>` and confirm no executable tokens changed. Do not compile or test.                    |
+| One deterministic test or test helper                                              | Run only the changed test file or the smallest matching test/contract.                                                                                              |
+| One contract's internal behavior                                                   | Run its closest deterministic test file or matching contract/test. Add the directly relevant fuzz/invariant target only when the changed behavior is covered there. |
+| Shared interface, base contract, or library                                        | Find direct consumers with `rg`; run their focused deterministic tests. Compile the affected contract dependency graph only if tests do not already do so.          |
+| Fuzz/invariant property or handler                                                 | Run the changed property/handler target. Reproduce a failure with its exact seed and promote real counterexamples to deterministic regressions.                     |
+| Deployment or wiring script                                                        | Run the matching deployment-helper test or TypeScript check. Run `yarn deploy:localhost` only when deployment topology/wiring changed or the user requests it.      |
+| Public ABI, TypeChain, or package extraction                                       | Run focused contract tests first; generate/build the affected artifacts once after the interface is stable.                                                         |
+| Cross-cutting accounting, authorization, settlement, storage, or reentrancy change | Run the affected deterministic suites plus the relevant fuzz/invariant suites, then one complete suite at the final code state.                                     |
 
 - Start with the smallest deterministic regression. Stop once the relevant failure is reproduced or the scoped
   verification passes.
@@ -153,6 +166,7 @@ iteration loop.
   the reason instead of running them defensively.
 
 ## Coding Style & Naming Conventions
+
 - Solidity: 4-space indent, explicit visibility, NatSpec for externals. Contracts/Libs `PascalCase`, interfaces `IName`, constants `UPPER_CASE`.
 - Solidity: Avoid single-letter local variable names in contracts (e.g., `f`, `r`). Prefer clear names like `fee`, `recipient`, `id`, `registryAddr`.
 - TypeScript: strict `tsconfig`, CommonJS; prefer path aliases `@utils/*`, `@typechain/*`.
@@ -177,6 +191,7 @@ afterward; reject impossible states instead of handling them.
   catches, no union wire types.
 
 ## Testing Guidelines
+
 - Foundry is the only contract test runner. Hardhat remains for compilation, deployment, TypeChain, verification, and
   package release.
 - Put deterministic tests in `test-foundry/deterministic/<domain>/`, fuzz properties in `test-foundry/fuzz/`, and
@@ -188,16 +203,18 @@ afterward; reject impossible states instead of handling them.
 - See `TESTING.md` for canonical full-suite, seed reproduction, invariant, and coverage details.
 
 ## Commit & Pull Request Guidelines
+
 - Use Conventional Commits where possible: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`.
 - PRs: describe scope and rationale, link issues, include test updates, and note deployment impacts (network, addresses). Update `deployments/outputs/*.ts` when applicable.
 
 ## Agent Skills
 
-| Skill | Location | Description |
-|-------|----------|-------------|
-| `audit` | `.agents/skills/audit/SKILL.md` | Review contracts and load selected Trail of Bits guidance on demand without a global install |
-| `zkp2p-contracts-publish` | `.agents/skills/zkp2p-contracts-publish/SKILL.md` | Bump, build, test, verify addresses, and publish `@zkp2p/contracts-v2` to npm |
+| Skill                     | Location                                          | Description                                                                                  |
+| ------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `audit`                   | `.agents/skills/audit/SKILL.md`                   | Review contracts and load selected Trail of Bits guidance on demand without a global install |
+| `zkp2p-contracts-publish` | `.agents/skills/zkp2p-contracts-publish/SKILL.md` | Bump, build, test, verify addresses, and publish `@zkp2p/contracts-v2` to npm                |
 
 ## Security & Configuration Tips
+
 - Never commit secrets. Configure `.env` (`ALCHEMY_API_KEY`, `BASE_DEPLOY_PRIVATE_KEY`, `BASESCAN_API_KEY`, etc.).
 - For local dev: import Hardhat Account #0 into your wallet, then `yarn deploy:localhost`.

@@ -89,5 +89,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 };
 
 func.runAtTheEnd = true;
+func.tags = ["V3PaymentBindingStack", "V3DisputeLifecycleStack"];
 
 export default func;

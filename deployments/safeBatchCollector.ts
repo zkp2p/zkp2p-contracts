@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
-interface SafeTransaction {
+export interface SafeTransaction {
   to: string;
   value: string;
   data: string;
@@ -29,8 +29,8 @@ export class SafeBatchCollector {
   hasQueued(to: string, data: string): boolean {
     return this.transactions.some(
       (transaction) =>
-        transaction.to.toLowerCase() === to.toLowerCase()
-          && transaction.data.toLowerCase() === data.toLowerCase()
+        transaction.to.toLowerCase() === to.toLowerCase() &&
+        transaction.data.toLowerCase() === data.toLowerCase()
     );
   }
 
@@ -59,7 +59,17 @@ export class SafeBatchCollector {
     return this.transactions.length;
   }
 
-  writeBatchFile(network: string, chainId: string, safeAddress: string): string {
+  getTransactionsSince(index = 0): readonly SafeTransaction[] {
+    return this.transactions.slice(index).map((transaction) => ({
+      ...transaction,
+    }));
+  }
+
+  writeBatchFile(
+    network: string,
+    chainId: string,
+    safeAddress: string
+  ): string {
     if (this.transactions.length === 0) {
       return "";
     }
@@ -81,7 +91,10 @@ export class SafeBatchCollector {
     const outputDir = path.join(__dirname, "outputs", "safe-batches");
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[:.]/g, "-")
+      .slice(0, -5);
     const filePath = path.join(outputDir, `${network}_${timestamp}.json`);
     fs.writeFileSync(filePath, JSON.stringify(batch, null, 2));
 
