@@ -12,8 +12,9 @@ import {INullifierRegistryV2} from "../interfaces/INullifierRegistryV2.sol";
 /**
  * @title DisputeVerifier
  * @notice Stateless EIP-712 verifier for dispute evidence, mirroring the UnifiedPaymentVerifier
- * layering: the dispute policy calls this verifier, which itself calls the attestation verifier
- * for witness-signature checks. Holds no position state and can be swapped on the policy at any time.
+ * layering: the dispute protection policy calls this verifier, which itself calls the
+ * attestation verifier for witness-signature checks. Holds no position state and can be
+ * swapped on the policy at any time.
  * @dev Swapping this verifier rotates the EIP-712 domain (it binds this contract's address), which
  * invalidates signed-but-unsubmitted attestations. The attestation service must always sign against
  * the policy's currently configured verifier.

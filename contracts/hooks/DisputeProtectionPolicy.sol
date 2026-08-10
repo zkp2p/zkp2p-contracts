@@ -5,20 +5,20 @@ pragma solidity ^0.8.18;
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-import {IDisputePolicy} from "../interfaces/IDisputePolicy.sol";
+import {IDisputeProtectionPolicy} from "../interfaces/IDisputeProtectionPolicy.sol";
 import {IDisputeVerifier} from "../interfaces/IDisputeVerifier.sol";
 import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 import {INullifierRegistry} from "../interfaces/INullifierRegistry.sol";
 import {IStakeVault} from "../interfaces/IStakeVault.sol";
 
 /**
- * @title DisputePolicy
+ * @title DisputeProtectionPolicy
  * @notice Deposit-scoped, stake-backed dispute coverage for intent settlement.
  * @dev The policy owns no tokens. StakeVault is the source of truth for collateral locks, a dedicated
  * `disputeNullifierRegistry` deployment is the source of truth for consumed dispute nullifiers, and the calling
  * Orchestrator is the source of truth for valid escrows and intents.
  *
- * TRUST: Dispute intents are keyed by intent hash, which embeds the originating orchestrator
+ * TRUST: Dispute protection intents are keyed by intent hash, which embeds the originating orchestrator
  * (OrchestratorV3 hashes its own address into every intent hash), so identities do not collide across orchestrators.
  * Lifecycle entrypoints trust every orchestrator admitted by OrchestratorRegistry to invoke callbacks only for
  * intents it created and already validated against its EscrowRegistry. Registering an orchestrator is therefore a
@@ -27,10 +27,10 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
  * Governance must authorize a lifecycle hook here before configuring it on an Orchestrator. Predecessor hooks must
  * remain authorized until all intents snapshotted to them have been cancelled or settled. Likewise, an orchestrator
  * must be drained before it is removed from OrchestratorRegistry. This policy must also drain every active dispute
- * intent before StakeVault controller authority moves to a replacement policy unless that replacement explicitly adopts
- * this policy's intent and lock state.
+ * protection intent before StakeVault controller authority moves to a replacement policy unless that replacement
+ * explicitly adopts this policy's intent and lock state.
  */
-contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
+contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
 
     uint64 public constant MAX_RISK_WINDOW = 365 days;
@@ -47,25 +47,25 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
     /// @notice Verifier used to validate signed dispute evidence.
     IDisputeVerifier public disputeVerifier;
 
-    /// @notice Whether new dispute-backed admissions are paused. Terminal transitions remain available.
+    /// @notice Whether new dispute-protection admissions are paused. Terminal transitions remain available.
     bool public admissionsPaused;
 
     /// @dev Lifecycle-hook authorization keyed by lifecycle hook address.
     mapping(address => bool) internal isLifecycleHookAuthorizedByHook;
 
-    /// @dev Whether disputes are enabled for each escrow deposit.
-    mapping(address => mapping(uint256 => bool)) internal isDepositDisputeEnabled;
+    /// @dev Whether dispute protection is enabled for each escrow deposit.
+    mapping(address => mapping(uint256 => bool)) internal isDepositDisputeProtectionEnabled;
 
     /// @dev Minimum collateral lock window for each payment method.
     mapping(bytes32 => uint64) internal paymentMethodRiskWindow;
 
-    /// @dev Dispute lifecycle state keyed by globally unique intent hash.
-    mapping(bytes32 => DisputeIntent) internal disputeIntentByIntentHash;
+    /// @dev Dispute protection lifecycle state keyed by globally unique intent hash.
+    mapping(bytes32 => DisputeProtectionIntent) internal disputeProtectionIntentByIntentHash;
 
     /* ============ Constructor ============ */
 
     /**
-     * @notice Creates a dispute policy over one StakeVault and one dedicated dispute-nullifier registry.
+     * @notice Creates a dispute protection policy over one StakeVault and one dedicated dispute-nullifier registry.
      * @dev After deployment, authorize this policy as the StakeVault controller and as a writer on the dedicated
      * dispute nullifier registry before enabling deposits.
      * @param _owner Governance owner for policy and dependency configuration.
@@ -108,7 +108,7 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
     /* ============ Lifecycle Functions ============ */
 
     /**
-     * @inheritdoc IDisputePolicy
+     * @inheritdoc IDisputeProtectionPolicy
      */
     function onIntentSignaled(
         bytes32 _intentHash,
@@ -123,39 +123,41 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
 
         (address stakeOwner, address depositor) = _validateIntentAdmission(_intentHash, _escrow, _depositId, _taker);
 
-        disputeIntentByIntentHash[_intentHash] = DisputeIntent({
+        disputeProtectionIntentByIntentHash[_intentHash] = DisputeProtectionIntent({
             taker: _taker,
             stakeOwner: stakeOwner,
             depositor: depositor,
             paymentMethod: _paymentMethod,
-            status: DisputeIntentStatus.PENDING,
+            status: DisputeProtectionIntentStatus.PENDING,
             riskWindow: riskWindow,
             releaseEligibleAt: 0,
             releaseAmount: 0
         });
 
         stakeVault.lockStake(stakeOwner, _intentHash, _amount, PENDING_COVERAGE_MATURITY);
-        emit DisputeIntentOpened(_intentHash, stakeOwner, depositor, _taker, _paymentMethod, _amount, riskWindow);
+        emit DisputeProtectionIntentOpened(
+            _intentHash, stakeOwner, depositor, _taker, _paymentMethod, _amount, riskWindow
+        );
     }
 
     /**
-     * @inheritdoc IDisputePolicy
+     * @inheritdoc IDisputeProtectionPolicy
      */
     function onIntentCancelled(bytes32 _intentHash) external override onlyLifecycleHook nonReentrant {
-        DisputeIntent storage disputeIntent = disputeIntentByIntentHash[_intentHash];
-        if (disputeIntent.status == DisputeIntentStatus.NONE) return;
-        if (disputeIntent.status != DisputeIntentStatus.PENDING) {
-            revert DisputeIntentNotPending(_intentHash, disputeIntent.status);
+        DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];
+        if (disputeProtectionIntent.status == DisputeProtectionIntentStatus.NONE) return;
+        if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.PENDING) {
+            revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);
         }
 
         (, uint256 releasedAmount,) = stakeVault.locks(_intentHash);
-        disputeIntent.status = DisputeIntentStatus.CANCELLED;
+        disputeProtectionIntent.status = DisputeProtectionIntentStatus.CANCELLED;
         stakeVault.unlockStake(_intentHash);
-        emit DisputeIntentCancelled(_intentHash, disputeIntent.stakeOwner, releasedAmount);
+        emit DisputeProtectionIntentCancelled(_intentHash, disputeProtectionIntent.stakeOwner, releasedAmount);
     }
 
     /**
-     * @inheritdoc IDisputePolicy
+     * @inheritdoc IDisputeProtectionPolicy
      */
     function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease)
         external
@@ -163,22 +165,22 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
         onlyLifecycleHook
         nonReentrant
     {
-        DisputeIntent storage disputeIntent = disputeIntentByIntentHash[_intentHash];
-        if (disputeIntent.status == DisputeIntentStatus.NONE) return;
-        if (disputeIntent.status != DisputeIntentStatus.PENDING) {
-            revert DisputeIntentNotPending(_intentHash, disputeIntent.status);
+        DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];
+        if (disputeProtectionIntent.status == DisputeProtectionIntentStatus.NONE) return;
+        if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.PENDING) {
+            revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);
         }
 
-        uint64 releaseEligibleAt = _calculateReleaseEligibleAt(disputeIntent.riskWindow);
-        disputeIntent.releaseAmount = _releaseAmount;
-        disputeIntent.releaseEligibleAt = releaseEligibleAt;
-        disputeIntent.status = DisputeIntentStatus.SETTLED;
+        uint64 releaseEligibleAt = _calculateReleaseEligibleAt(disputeProtectionIntent.riskWindow);
+        disputeProtectionIntent.releaseAmount = _releaseAmount;
+        disputeProtectionIntent.releaseEligibleAt = releaseEligibleAt;
+        disputeProtectionIntent.status = DisputeProtectionIntentStatus.SETTLED;
 
         stakeVault.resizeLock(_intentHash, _releaseAmount, releaseEligibleAt);
-        emit DisputeIntentSettled(
+        emit DisputeProtectionIntentSettled(
             _intentHash,
-            disputeIntent.stakeOwner,
-            disputeIntent.depositor,
+            disputeProtectionIntent.stakeOwner,
+            disputeProtectionIntent.depositor,
             _releaseAmount,
             releaseEligibleAt,
             _isManualRelease
@@ -190,20 +192,20 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
     /**
      * @notice Releases collateral for one settled intent once its minimum risk window has elapsed.
      * @dev Disputes remain valid after `releaseEligibleAt` until this release transaction executes.
-     * @param _intentHash Settled dispute intent whose collateral should be unlocked.
+     * @param _intentHash Settled dispute protection intent whose collateral should be unlocked.
      */
-    function releaseMaturedDisputeIntent(bytes32 _intentHash) external nonReentrant {
-        _releaseMaturedDisputeIntent(_intentHash);
+    function releaseMaturedDisputeProtectionIntent(bytes32 _intentHash) external nonReentrant {
+        _releaseMaturedDisputeProtectionIntent(_intentHash);
     }
 
     /**
      * @notice Releases collateral for a batch of settled intents whose minimum risk windows have elapsed.
      * @dev The batch is atomic: one invalid or ineligible intent reverts every release in the call.
-     * @param _intentHashes Settled dispute intents whose collateral should be unlocked.
+     * @param _intentHashes Settled dispute protection intents whose collateral should be unlocked.
      */
-    function releaseMaturedDisputeIntents(bytes32[] calldata _intentHashes) external nonReentrant {
+    function releaseMaturedDisputeProtectionIntents(bytes32[] calldata _intentHashes) external nonReentrant {
         for (uint256 intentIndex = 0; intentIndex < _intentHashes.length; intentIndex++) {
-            _releaseMaturedDisputeIntent(_intentHashes[intentIndex]);
+            _releaseMaturedDisputeProtectionIntent(_intentHashes[intentIndex]);
         }
     }
 
@@ -214,26 +216,27 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
      * @param _attestation Signed dispute evidence for a settled intent.
      */
     function submitDispute(IDisputeVerifier.DisputeAttestation calldata _attestation) external nonReentrant {
-        DisputeIntent storage disputeIntent = disputeIntentByIntentHash[_attestation.intentHash];
-        if (disputeIntent.status != DisputeIntentStatus.SETTLED) {
-            revert DisputeIntentNotSettled(_attestation.intentHash, disputeIntent.status);
+        DisputeProtectionIntent storage disputeProtectionIntent =
+            disputeProtectionIntentByIntentHash[_attestation.intentHash];
+        if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.SETTLED) {
+            revert DisputeProtectionIntentNotSettled(_attestation.intentHash, disputeProtectionIntent.status);
         }
 
         (bytes32 disputeId, bytes32 disputeNullifier) =
-            disputeVerifier.verifyDispute(_attestation, disputeIntent.paymentMethod);
+            disputeVerifier.verifyDispute(_attestation, disputeProtectionIntent.paymentMethod);
         disputeNullifierRegistry.addNullifier(disputeNullifier);
 
-        uint256 compensatedAmount = disputeIntent.releaseAmount;
-        disputeIntent.status = DisputeIntentStatus.DISPUTED;
+        uint256 compensatedAmount = disputeProtectionIntent.releaseAmount;
+        disputeProtectionIntent.status = DisputeProtectionIntentStatus.DISPUTED;
 
         IStakeVault.Claim[] memory claims = new IStakeVault.Claim[](1);
-        claims[0] = IStakeVault.Claim({beneficiary: disputeIntent.depositor, amount: compensatedAmount});
+        claims[0] = IStakeVault.Claim({beneficiary: disputeProtectionIntent.depositor, amount: compensatedAmount});
         stakeVault.resolveLock(_attestation.intentHash, claims);
 
         emit DisputeResolved(
             _attestation.intentHash,
-            disputeIntent.stakeOwner,
-            disputeIntent.depositor,
+            disputeProtectionIntent.stakeOwner,
+            disputeProtectionIntent.depositor,
             compensatedAmount,
             disputeId
         );
@@ -242,27 +245,27 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
     /* ============ Depositor Functions ============ */
 
     /**
-     * @notice DEPOSITOR ONLY: Enables or disables dispute-backed admission for a deposit.
+     * @notice DEPOSITOR ONLY: Enables or disables dispute protection for a deposit.
      * @dev OrchestratorV3 validates Escrow registration before signaling an intent. This policy only verifies that
      * the caller is the deposit's current depositor.
      * @param _escrow Escrow containing the deposit.
-     * @param _depositId Deposit whose dispute configuration is updated.
-     * @param _isEnabled Whether non-whitelisted takers may use stake-backed dispute admission.
+     * @param _depositId Deposit whose dispute protection configuration is updated.
+     * @param _isEnabled Whether non-whitelisted takers may use stake-backed dispute protection.
      */
-    function setDisputeEnabled(address _escrow, uint256 _depositId, bool _isEnabled)
+    function setDisputeProtectionEnabled(address _escrow, uint256 _depositId, bool _isEnabled)
         external
         onlyDepositor(_escrow, _depositId)
     {
-        isDepositDisputeEnabled[_escrow][_depositId] = _isEnabled;
-        emit DisputeEnabledUpdated(_escrow, _depositId, _isEnabled);
+        isDepositDisputeProtectionEnabled[_escrow][_depositId] = _isEnabled;
+        emit DisputeProtectionEnabledUpdated(_escrow, _depositId, _isEnabled);
     }
 
     /* ============ Governance Functions ============ */
 
     /**
      * @notice GOVERNANCE ONLY: Sets the minimum collateral lock window for future intents of a payment method.
-     * @dev Zero disables dispute state and lets the lifecycle hook pass the payment method through without a lock.
-     * Existing dispute intents retain their snapshotted risk window.
+     * @dev Zero disables dispute protection state and lets the lifecycle hook pass the payment method through without
+     * a lock. Existing dispute protection intents retain their snapshotted risk window.
      * @param _paymentMethod Payment method whose future risk window is updated.
      * @param _riskWindow Minimum seconds collateral remains locked after settlement.
      */
@@ -288,7 +291,7 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
      * @dev Authorize a hook before configuring it on an Orchestrator. Revoke a predecessor only after every intent
      * snapshotted to it has been cancelled or settled.
      * @param _hook Lifecycle hook whose callback authority is updated.
-     * @param _isAuthorized Whether the hook may mutate dispute intent state.
+     * @param _isAuthorized Whether the hook may mutate dispute protection intent state.
      */
     function setLifecycleHookAuthorization(address _hook, bool _isAuthorized) external onlyOwner {
         if (_isAuthorized) _validateDependency(_hook);
@@ -297,9 +300,9 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
     }
 
     /**
-     * @notice GOVERNANCE ONLY: Pauses or resumes new dispute-backed admissions.
+     * @notice GOVERNANCE ONLY: Pauses or resumes new dispute-protection admissions.
      * @dev Cancellation, settlement, release, and dispute submission remain available while admissions are paused.
-     * @param _isPaused Whether new dispute admissions should revert.
+     * @param _isPaused Whether new dispute protection admissions should revert.
      */
     function setAdmissionsPaused(bool _isPaused) external onlyOwner {
         admissionsPaused = _isPaused;
@@ -308,8 +311,9 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice GOVERNANCE ONLY: Accepts this policy as StakeVault's controller after its handover delay.
-     * @dev Before replacing another policy, governance must drain its active dispute intents or execute an explicit
-     * state-and-lock migration. Accepting controller authority alone cannot import the predecessor's intent state.
+     * @dev Before replacing another policy, governance must drain its active dispute protection intents or execute an
+     * explicit state-and-lock migration. Accepting controller authority alone cannot import the predecessor's intent
+     * state.
      */
     function acceptVaultController() external onlyOwner {
         stakeVault.acceptController();
@@ -325,22 +329,22 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
     /* ============ View Functions ============ */
 
     /**
-     * @notice Returns the stored dispute state for an intent.
-     * @param _intentHash Intent whose dispute state is queried.
+     * @notice Returns the stored dispute protection state for an intent.
+     * @param _intentHash Intent whose dispute protection state is queried.
      */
-    function getDisputeIntent(bytes32 _intentHash) external view returns (DisputeIntent memory) {
-        return disputeIntentByIntentHash[_intentHash];
+    function getDisputeProtectionIntent(bytes32 _intentHash) external view returns (DisputeProtectionIntent memory) {
+        return disputeProtectionIntentByIntentHash[_intentHash];
     }
 
     /**
-     * @inheritdoc IDisputePolicy
+     * @inheritdoc IDisputeProtectionPolicy
      */
-    function isDisputeEnabled(address _escrow, uint256 _depositId) external view override returns (bool) {
-        return isDepositDisputeEnabled[_escrow][_depositId];
+    function isDisputeProtectionEnabled(address _escrow, uint256 _depositId) external view override returns (bool) {
+        return isDepositDisputeProtectionEnabled[_escrow][_depositId];
     }
 
     /**
-     * @notice Returns whether a lifecycle hook may mutate dispute intent state.
+     * @notice Returns whether a lifecycle hook may mutate dispute protection intent state.
      * @param _hook Lifecycle hook whose callback authorization is queried.
      */
     function isLifecycleHookAuthorized(address _hook) external view returns (bool) {
@@ -368,11 +372,11 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
         returns (address stakeOwner, address depositor)
     {
         if (admissionsPaused) revert AdmissionsPaused();
-        if (disputeIntentByIntentHash[_intentHash].status != DisputeIntentStatus.NONE) {
-            revert DisputeIntentAlreadyExists(_intentHash);
+        if (disputeProtectionIntentByIntentHash[_intentHash].status != DisputeProtectionIntentStatus.NONE) {
+            revert DisputeProtectionIntentAlreadyExists(_intentHash);
         }
-        if (!isDepositDisputeEnabled[_escrow][_depositId]) {
-            revert DisputeNotEnabled(_escrow, _depositId);
+        if (!isDepositDisputeProtectionEnabled[_escrow][_depositId]) {
+            revert DisputeProtectionNotEnabled(_escrow, _depositId);
         }
 
         IEscrowV2.Deposit memory deposit = IEscrowV2(_escrow).getDeposit(_depositId);
@@ -385,22 +389,22 @@ contract DisputePolicy is IDisputePolicy, Ownable2Step, ReentrancyGuard {
         depositor = deposit.depositor;
     }
 
-    function _releaseMaturedDisputeIntent(bytes32 _intentHash) internal {
-        DisputeIntent storage disputeIntent = disputeIntentByIntentHash[_intentHash];
-        if (disputeIntent.status != DisputeIntentStatus.SETTLED) {
-            revert DisputeIntentNotSettled(_intentHash, disputeIntent.status);
+    function _releaseMaturedDisputeProtectionIntent(bytes32 _intentHash) internal {
+        DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];
+        if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.SETTLED) {
+            revert DisputeProtectionIntentNotSettled(_intentHash, disputeProtectionIntent.status);
         }
 
         uint64 currentTime = _currentTimestamp();
-        uint64 releaseEligibleAt = disputeIntent.releaseEligibleAt;
+        uint64 releaseEligibleAt = disputeProtectionIntent.releaseEligibleAt;
         if (currentTime < releaseEligibleAt) {
-            revert DisputeIntentNotReleaseEligible(releaseEligibleAt, currentTime);
+            revert DisputeProtectionIntentNotReleaseEligible(releaseEligibleAt, currentTime);
         }
 
-        uint256 releasedAmount = disputeIntent.releaseAmount;
-        disputeIntent.status = DisputeIntentStatus.RELEASED;
+        uint256 releasedAmount = disputeProtectionIntent.releaseAmount;
+        disputeProtectionIntent.status = DisputeProtectionIntentStatus.RELEASED;
         stakeVault.unlockStake(_intentHash);
-        emit DisputeIntentReleased(_intentHash, disputeIntent.stakeOwner, releasedAmount);
+        emit DisputeProtectionIntentReleased(_intentHash, disputeProtectionIntent.stakeOwner, releasedAmount);
     }
 
     function _calculateReleaseEligibleAt(uint64 _riskWindow) internal view returns (uint64) {

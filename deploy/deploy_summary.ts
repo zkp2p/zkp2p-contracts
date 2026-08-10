@@ -67,7 +67,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     StakeVault:                         ${await liveAddress("StakeVault")}
     DisputeNullifierRegistry:           ${await liveAddress("DisputeNullifierRegistry")}
     DisputeVerifier:                    ${await liveAddress("DisputeVerifier")}
-    DisputePolicy:                      ${await liveAddress("DisputePolicy")}
+    DisputeProtectionPolicy:            ${await liveAddress("DisputeProtectionPolicy")}
     IntentLifecycleHookV1:              ${await liveAddress("IntentLifecycleHookV1")}
     `
   );

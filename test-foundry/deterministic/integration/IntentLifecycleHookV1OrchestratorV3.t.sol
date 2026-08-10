@@ -7,7 +7,7 @@ import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorRegistry} from "contracts/interfaces/IOrchestratorRegistry.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
-import {DisputePolicy} from "contracts/hooks/DisputePolicy.sol";
+import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";
@@ -29,7 +29,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
     AddressGroupRegistry internal groupRegistry;
     WhitelistPolicy internal policy;
     StakeVault internal stakeVault;
-    DisputePolicy internal disputePolicy;
+    DisputeProtectionPolicy internal disputeProtectionPolicy;
     IntentLifecycleHookV1 internal lifecycleHook;
 
     function setUp() public override {
@@ -42,7 +42,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
         policy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
         stakeVault = new StakeVault(address(this), token, address(0), 1 days);
         NullifierRegistry disputeNullifierRegistry = new NullifierRegistry();
-        disputePolicy = new DisputePolicy(
+        disputeProtectionPolicy = new DisputeProtectionPolicy(
             address(this),
             stakeVault,
             new DisputeVerifier(
@@ -50,19 +50,19 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
             ),
             disputeNullifierRegistry
         );
-        stakeVault.initializeController(address(disputePolicy));
-        disputeNullifierRegistry.addWritePermission(address(disputePolicy));
-        lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, policy, disputePolicy);
-        disputePolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
+        stakeVault.initializeController(address(disputeProtectionPolicy));
+        disputeNullifierRegistry.addWritePermission(address(disputeProtectionPolicy));
+        lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, policy, disputeProtectionPolicy);
+        disputeProtectionPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
         IOrchestratorV3(address(orchestrator)).setLifecycleHook(lifecycleHook);
     }
 
     function test_ConstructorRejectsZeroAndNonContractDependencies() public {
         vm.expectRevert(IntentLifecycleHookV1.ZeroAddress.selector);
-        new IntentLifecycleHookV1(IOrchestratorRegistry(address(0)), policy, disputePolicy);
+        new IntentLifecycleHookV1(IOrchestratorRegistry(address(0)), policy, disputeProtectionPolicy);
 
         vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.InvalidDependency.selector, other));
-        new IntentLifecycleHookV1(IOrchestratorRegistry(other), policy, disputePolicy);
+        new IntentLifecycleHookV1(IOrchestratorRegistry(other), policy, disputeProtectionPolicy);
     }
 
     function test_DisabledPolicyPassesThroughAndSnapshotsGlobalHook() public {

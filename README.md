@@ -655,7 +655,7 @@ the existing stack remains intact, and the generated Safe batch contains only th
 `deploy/31_deploy_dispute_lifecycle_stack.ts` is the staging dispute/staking deployment lane. Run
 `--tags V3DisputeLifecycleStack` with
 `ENABLE_STAGING_V3_DISPUTE_DEPLOYMENT=true`. It deploys a fresh `DisputeNullifierRegistry`,
-`DisputeVerifier`, `StakeVault`, `DisputePolicy`, and `IntentLifecycleHookV1`; initializes the vault
+`DisputeVerifier`, `StakeVault`, `DisputeProtectionPolicy`, and `IntentLifecycleHookV1`; initializes the vault
 controller; applies the canonical risk windows; authorizes the combined hook; grants the policy
 nullifier-writer permission; and transfers ownership. It deliberately leaves the active O3 hook
 unchanged.

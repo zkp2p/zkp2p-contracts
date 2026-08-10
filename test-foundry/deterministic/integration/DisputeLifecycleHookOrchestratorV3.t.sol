@@ -3,10 +3,10 @@
 pragma solidity ^0.8.18;
 
 import {StakeVault} from "contracts/StakeVault.sol";
-import {DisputePolicy} from "contracts/hooks/DisputePolicy.sol";
+import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
-import {IDisputePolicy} from "contracts/interfaces/IDisputePolicy.sol";
+import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
@@ -29,7 +29,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     StakeVault internal vault;
     NullifierRegistryV2 internal nullifierRegistry;
     NullifierRegistry internal disputeNullifierRegistry;
-    DisputePolicy internal disputePolicy;
+    DisputeProtectionPolicy internal disputeProtectionPolicy;
     IntentLifecycleHookV1 internal lifecycleHook;
 
     function setUp() public override {
@@ -39,43 +39,43 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         vault = new StakeVault(address(this), token, address(0), 1 days);
         nullifierRegistry = new NullifierRegistryV2(new NullifierRegistry());
         disputeNullifierRegistry = new NullifierRegistry();
-        disputePolicy = new DisputePolicy(
+        disputeProtectionPolicy = new DisputeProtectionPolicy(
             address(this),
             vault,
             new DisputeVerifier(address(this), nullifierRegistry, new AttestationVerifierMock()),
             disputeNullifierRegistry
         );
-        vault.initializeController(address(disputePolicy));
-        disputeNullifierRegistry.addWritePermission(address(disputePolicy));
-        lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, disputePolicy);
-        disputePolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
-        disputePolicy.setRiskWindow(METHOD, RISK_WINDOW);
+        vault.initializeController(address(disputeProtectionPolicy));
+        disputeNullifierRegistry.addWritePermission(address(disputeProtectionPolicy));
+        lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, disputeProtectionPolicy);
+        disputeProtectionPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
+        disputeProtectionPolicy.setRiskWindow(METHOD, RISK_WINDOW);
         orchestrator.setLifecycleHook(lifecycleHook);
         _stake(taker, STAKE_AMOUNT);
     }
 
-    function test_WhitelistOnWhitelistedWithDisputeOnSkipsStake() public {
+    function test_WhitelistOnWhitelistedWithDisputeProtectionOnSkipsStake() public {
         _setWhitelist(true, true);
-        _setDispute(true);
+        _setDisputeProtection(true);
 
         bytes32 intentHash = _signalDefault();
 
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(intentHash).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
         );
         assertEq(vault.lockedStake(taker), 0);
         assertEq(escrow.getDepositIntent(depositId, intentHash).intentHash, intentHash);
     }
 
-    function test_WhitelistOnNonMemberWithDisputeOnRequiresStakeBeforeEscrowLock() public {
+    function test_WhitelistOnNonMemberWithDisputeProtectionOnRequiresStakeBeforeEscrowLock() public {
         _setWhitelist(true, false);
-        _setDispute(true);
+        _setDisputeProtection(true);
         bytes32 intentHash = _signalDefault();
         assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(intentHash).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.PENDING)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING)
         );
 
         uint256 counterBefore = orchestrator.intentCounter();
@@ -93,15 +93,15 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     function test_WhitelistOnNonMemberNonDisputableMethodGetsDirectAccess() public {
         _addPaymentMethod(WINDOWLESS_METHOD);
         _setWhitelist(true, false);
-        _setDispute(true);
+        _setDisputeProtection(true);
         IOrchestratorV3.SignalIntentParams memory params = _paramsFor(other);
         params.paymentMethod = WINDOWLESS_METHOD;
 
         bytes32 intentHash = _signal(other, params);
 
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(intentHash).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
         );
         assertEq(vault.lockedStake(other), 0);
         assertEq(escrow.getDepositIntent(depositId, intentHash).intentHash, intentHash);
@@ -109,12 +109,12 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         verifier.setShouldVerifyPayment(true);
         _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(intentHash).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
         );
     }
 
-    function test_WhitelistOnNonMemberWithDisputeOffRejects() public {
+    function test_WhitelistOnNonMemberWithDisputeProtectionOffRejects() public {
         _setWhitelist(true, false);
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -124,8 +124,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         _signalCall(taker, _defaultParams());
     }
 
-    function test_WhitelistOffDisputeOnRequiresStakeForEveryTaker() public {
-        _setDispute(true);
+    function test_WhitelistOffDisputeProtectionOnRequiresStakeForEveryTaker() public {
+        _setDisputeProtection(true);
         assertNotEq(_signalDefault(), bytes32(0));
         vm.expectRevert(
             abi.encodeWithSelector(IStakeVault.InsufficientFreeStake.selector, other, uint256(0), INTENT_AMOUNT)
@@ -133,17 +133,17 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         _signalCall(other, _paramsFor(other));
     }
 
-    function test_WhitelistOffDisputeOnNonDisputableMethodIsOpen() public {
+    function test_WhitelistOffDisputeProtectionOnNonDisputableMethodIsOpen() public {
         _addPaymentMethod(WINDOWLESS_METHOD);
-        _setDispute(true);
+        _setDisputeProtection(true);
         IOrchestratorV3.SignalIntentParams memory params = _paramsFor(other);
         params.paymentMethod = WINDOWLESS_METHOD;
 
         bytes32 intentHash = _signal(other, params);
 
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(intentHash).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
         );
         assertEq(vault.lockedStake(other), 0);
 
@@ -153,24 +153,24 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         _signalCall(other, _paramsFor(other));
     }
 
-    function test_WhitelistOffDisputeOffIsOpenAndCreatesNoDisputeIntent() public {
+    function test_WhitelistOffDisputeProtectionOffIsOpenAndCreatesNoDisputeProtectionIntent() public {
         bytes32 intentHash = _signal(other, _paramsFor(other));
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(intentHash).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
         );
         assertEq(vault.lockedStake(other), 0);
     }
 
     function test_CancelIntentAndExpiryPruneUnlockStake() public {
-        _setDispute(true);
+        _setDisputeProtection(true);
         bytes32 cancelledIntent = _signalDefault();
         vm.prank(taker);
         orchestrator.cancelIntent(cancelledIntent);
         assertEq(vault.lockedStake(taker), 0);
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(cancelledIntent).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.CANCELLED)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(cancelledIntent).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.CANCELLED)
         );
 
         bytes32 expiredIntent = _signalDefault();
@@ -179,43 +179,48 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         escrow.pruneExpiredIntents(depositId);
         assertEq(vault.lockedStake(taker), 0);
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(expiredIntent).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.CANCELLED)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(expiredIntent).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.CANCELLED)
         );
     }
 
     function test_SubMinimumFulfillResizesCoverageThenMaturityReleasesStake() public {
-        _setDispute(true);
+        _setDisputeProtection(true);
         bytes32 intentHash = _signalDefault();
         uint256 releaseAmount = 5e6;
         uint256 releaseEligibleAt = vm.getBlockTimestamp() + RISK_WINDOW;
         verifier.setShouldVerifyPayment(true);
         _fulfill(intentHash, releaseAmount, CONVERSION_RATE);
 
-        IDisputePolicy.DisputeIntent memory disputeIntent = disputePolicy.getDisputeIntent(intentHash);
-        assertEq(disputeIntent.releaseAmount, releaseAmount);
-        assertEq(disputeIntent.releaseEligibleAt, releaseEligibleAt);
+        IDisputeProtectionPolicy.DisputeProtectionIntent memory disputeProtectionIntent =
+            disputeProtectionPolicy.getDisputeProtectionIntent(intentHash);
+        assertEq(disputeProtectionIntent.releaseAmount, releaseAmount);
+        assertEq(disputeProtectionIntent.releaseEligibleAt, releaseEligibleAt);
         (, uint256 lockedAmount, uint64 maturesAt) = vault.locks(intentHash);
         assertEq(lockedAmount, releaseAmount);
         assertEq(maturesAt, releaseEligibleAt);
 
         vm.warp(releaseEligibleAt);
-        disputePolicy.releaseMaturedDisputeIntent(intentHash);
+        disputeProtectionPolicy.releaseMaturedDisputeProtectionIntent(intentHash);
         assertEq(vault.lockedStake(taker), 0);
         assertEq(vault.freeStake(taker), STAKE_AMOUNT);
     }
 
     function test_ManualReleaseRetainsStakeButRejectsDisputeWithoutPaymentBinding() public {
-        _setDispute(true);
+        _setDisputeProtection(true);
         bytes32 intentHash = _signalDefault();
         uint256 releaseEligibleAt = vm.getBlockTimestamp() + RISK_WINDOW;
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash);
 
-        IDisputePolicy.DisputeIntent memory disputeIntent = disputePolicy.getDisputeIntent(intentHash);
-        assertEq(disputeIntent.releaseAmount, INTENT_AMOUNT);
-        assertEq(disputeIntent.releaseEligibleAt, releaseEligibleAt);
-        assertEq(uint256(disputeIntent.status), uint256(IDisputePolicy.DisputeIntentStatus.SETTLED));
+        IDisputeProtectionPolicy.DisputeProtectionIntent memory disputeProtectionIntent =
+            disputeProtectionPolicy.getDisputeProtectionIntent(intentHash);
+        assertEq(disputeProtectionIntent.releaseAmount, INTENT_AMOUNT);
+        assertEq(disputeProtectionIntent.releaseEligibleAt, releaseEligibleAt);
+        assertEq(
+            uint256(disputeProtectionIntent.status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED)
+        );
         assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
         assertEq(vault.freeStake(taker), STAKE_AMOUNT - INTENT_AMOUNT);
 
@@ -224,11 +229,11 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         vm.expectRevert(
             abi.encodeWithSelector(IDisputeVerifier.InvalidPaymentBinding.selector, intentHash, paymentNullifier)
         );
-        disputePolicy.submitDispute(_attestation(intentHash, paymentId, keccak256("dispute")));
+        disputeProtectionPolicy.submitDispute(_attestation(intentHash, paymentId, keccak256("dispute")));
     }
 
     function test_DisputeAfterFulfillPaysDepositorClaim() public {
-        _setDispute(true);
+        _setDisputeProtection(true);
         bytes32 intentHash = _signalDefault();
         verifier.setShouldVerifyPayment(true);
         _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
@@ -237,24 +242,24 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         bytes32 paymentNullifier = keccak256(abi.encodePacked(METHOD, paymentId));
         nullifierRegistry.addWritePermission(address(this));
         nullifierRegistry.addNullifier(paymentNullifier, intentHash);
-        disputePolicy.submitDispute(_attestation(intentHash, paymentId, keccak256("dispute")));
+        disputeProtectionPolicy.submitDispute(_attestation(intentHash, paymentId, keccak256("dispute")));
 
         assertEq(vault.claimable(depositor), INTENT_AMOUNT);
         assertEq(vault.lockedStake(taker), 0);
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(intentHash).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.DISPUTED)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.DISPUTED)
         );
     }
 
     function test_PolicyAdmissionRevertBubblesRawAndRollsBackSignal() public {
-        _setDispute(true);
-        disputePolicy.setAdmissionsPaused(true);
+        _setDisputeProtection(true);
+        disputeProtectionPolicy.setAdmissionsPaused(true);
         uint256 counterBefore = orchestrator.intentCounter();
         bytes32 rejectedIntent = _intentHash(counterBefore);
         uint256 remainingBefore = escrow.getDeposit(depositId).remainingDeposits;
 
-        vm.expectRevert(IDisputePolicy.AdmissionsPaused.selector);
+        vm.expectRevert(IDisputeProtectionPolicy.AdmissionsPaused.selector);
         _signalCall(taker, _defaultParams());
 
         assertEq(orchestrator.intentCounter(), counterBefore);
@@ -263,7 +268,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         assertEq(escrow.getDeposit(depositId).remainingDeposits, remainingBefore);
     }
 
-    function test_CancellationWithoutDisputeIntentLeavesVaultUntouched() public {
+    function test_CancellationWithoutDisputeProtectionIntentLeavesVaultUntouched() public {
         bytes32 intentHash = _signalDefault();
         uint256 totalBefore = vault.totalStaked();
         vm.prank(taker);
@@ -271,46 +276,49 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         assertEq(vault.totalStaked(), totalBefore);
         assertEq(vault.lockedStake(taker), 0);
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(intentHash).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
         );
     }
 
     function test_LifecycleHookRotationPreservesOldIntentsAndRoutesNewIntentsToNewHook() public {
-        _setDispute(true);
+        _setDisputeProtection(true);
         bytes32 oldCancelledIntent = _signalDefault();
         bytes32 oldSettledIntent = _signalDefault();
         IntentLifecycleHookV1 newLifecycleHook =
-            new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, disputePolicy);
+            new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, disputeProtectionPolicy);
 
-        disputePolicy.setLifecycleHookAuthorization(address(newLifecycleHook), true);
+        disputeProtectionPolicy.setLifecycleHookAuthorization(address(newLifecycleHook), true);
         orchestrator.setLifecycleHook(newLifecycleHook);
 
-        disputePolicy.setLifecycleHookAuthorization(address(lifecycleHook), false);
+        disputeProtectionPolicy.setLifecycleHookAuthorization(address(lifecycleHook), false);
         vm.expectRevert(
-            abi.encodeWithSelector(IDisputePolicy.UnauthorizedLifecycleHook.selector, address(lifecycleHook))
+            abi.encodeWithSelector(IDisputeProtectionPolicy.UnauthorizedLifecycleHook.selector, address(lifecycleHook))
         );
         vm.prank(taker);
         orchestrator.cancelIntent(oldCancelledIntent);
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(oldCancelledIntent).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.PENDING)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(oldCancelledIntent).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING)
         );
 
-        disputePolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
+        disputeProtectionPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
         vm.prank(taker);
         orchestrator.cancelIntent(oldCancelledIntent);
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(oldCancelledIntent).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.CANCELLED)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(oldCancelledIntent).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.CANCELLED)
         );
 
         uint256 releaseAmount = 40e6;
         verifier.setShouldVerifyPayment(true);
         _fulfill(oldSettledIntent, releaseAmount, CONVERSION_RATE);
-        IDisputePolicy.DisputeIntent memory oldSettledIntentState =
-            disputePolicy.getDisputeIntent(oldSettledIntent);
-        assertEq(uint256(oldSettledIntentState.status), uint256(IDisputePolicy.DisputeIntentStatus.SETTLED));
+        IDisputeProtectionPolicy.DisputeProtectionIntent memory oldSettledIntentState =
+            disputeProtectionPolicy.getDisputeProtectionIntent(oldSettledIntent);
+        assertEq(
+            uint256(oldSettledIntentState.status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED)
+        );
         assertEq(oldSettledIntentState.releaseAmount, releaseAmount);
 
         bytes32 newIntent = _signalDefault();
@@ -318,8 +326,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         vm.prank(taker);
         orchestrator.cancelIntent(newIntent);
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(newIntent).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.CANCELLED)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(newIntent).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.CANCELLED)
         );
         assertEq(vault.lockedStake(taker), releaseAmount);
     }
@@ -331,9 +339,9 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         whitelistPolicy.configureDeposit(address(escrow), depositId, enabled, new bytes32[](0), takers);
     }
 
-    function _setDispute(bool enabled) internal {
+    function _setDisputeProtection(bool enabled) internal {
         vm.prank(depositor);
-        disputePolicy.setDisputeEnabled(address(escrow), depositId, enabled);
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, enabled);
     }
 
     function _addPaymentMethod(bytes32 _paymentMethod) internal {

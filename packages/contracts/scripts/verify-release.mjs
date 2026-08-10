@@ -41,7 +41,7 @@ const sourceAbiArtifacts = {
     'artifacts/contracts/hooks/WhitelistLifecycleHook.sol/WhitelistLifecycleHook.json',
   DisputeNullifierRegistry:
     'artifacts/contracts/registries/NullifierRegistry.sol/NullifierRegistry.json',
-  DisputePolicy: 'artifacts/contracts/hooks/DisputePolicy.sol/DisputePolicy.json',
+  DisputeProtectionPolicy: 'artifacts/contracts/hooks/DisputeProtectionPolicy.sol/DisputeProtectionPolicy.json',
   DisputeVerifier:
     'artifacts/contracts/unifiedVerifier/DisputeVerifier.sol/DisputeVerifier.json',
   IntentLifecycleHookV1:
@@ -51,7 +51,7 @@ const sourceAbiArtifacts = {
 const requiredNetworkContracts = {
   baseStaging: [
     'DisputeNullifierRegistry',
-    'DisputePolicy',
+    'DisputeProtectionPolicy',
     'DisputeVerifier',
     'IntentLifecycleHookV1',
     'StakeVault',

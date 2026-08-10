@@ -90,9 +90,9 @@ Before activation:
 - verify deployer, chain ID, RPC, parameters, expected old state, and expected
   new state;
 - for lane `30`, resolve the expected `OrchestratorV3`,
-  `UnifiedPaymentVerifierV3`, lifecycle hook, stake vault, dispute policy,
-  verifier/nullifier, registries, ownership, and prior-orchestrator state from
-  current source and artifacts;
+  `UnifiedPaymentVerifierV3`, lifecycle hook, stake vault, dispute protection
+  policy, verifier/nullifier, registries, ownership, and prior-orchestrator state
+  from current source and artifacts;
 - simulate or run the closest local deployment test;
 - show every deploy, registry, permission, ownership, and governance action;
 - define post-deploy reads that prove the hard cut.

@@ -3,11 +3,11 @@
 pragma solidity ^0.8.18;
 
 import {StakeVault} from "contracts/StakeVault.sol";
-import {DisputePolicy} from "contracts/hooks/DisputePolicy.sol";
+import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistLifecycleHook} from "contracts/hooks/WhitelistLifecycleHook.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
-import {IDisputePolicy} from "contracts/interfaces/IDisputePolicy.sol";
+import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 import {IOrchestratorRegistry} from "contracts/interfaces/IOrchestratorRegistry.sol";
 import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
@@ -117,10 +117,11 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_RotationTerminatesSnapshottedWhitelistIntentsAndRoutesFreshIntentToCombinedHook() public {
-        (StakeVault vault, DisputePolicy disputePolicy, IntentLifecycleHookV1 combinedHook) = _deployDisputeStack();
+        (StakeVault vault, DisputeProtectionPolicy disputeProtectionPolicy, IntentLifecycleHookV1 combinedHook) =
+            _deployDisputeStack();
 
         vm.prank(depositor);
-        disputePolicy.setDisputeEnabled(address(escrow), depositId, true);
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, true);
 
         bytes32 oldCancelledIntent = _signalDefault();
         bytes32 oldSettledIntent = _signalDefault();
@@ -131,8 +132,8 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         bytes32 freshIntent = _signalDefault();
         assertEq(address(orchestrator.getIntentLifecycleHook(freshIntent)), address(combinedHook));
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(freshIntent).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.PENDING)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(freshIntent).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING)
         );
 
         vm.prank(taker);
@@ -140,30 +141,30 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         verifier.setShouldVerifyPayment(true);
         _fulfill(oldSettledIntent, 40e6, CONVERSION_RATE);
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(oldCancelledIntent).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(oldCancelledIntent).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
         );
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(oldSettledIntent).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(oldSettledIntent).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
         );
 
         vm.prank(taker);
         orchestrator.cancelIntent(freshIntent);
         assertEq(
-            uint256(disputePolicy.getDisputeIntent(freshIntent).status),
-            uint256(IDisputePolicy.DisputeIntentStatus.CANCELLED)
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(freshIntent).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.CANCELLED)
         );
         assertEq(vault.lockedStake(taker), 0);
     }
 
     function _deployDisputeStack()
         internal
-        returns (StakeVault vault, DisputePolicy disputePolicy, IntentLifecycleHookV1 combinedHook)
+        returns (StakeVault vault, DisputeProtectionPolicy disputeProtectionPolicy, IntentLifecycleHookV1 combinedHook)
     {
         vault = new StakeVault(address(this), token, address(0), 1 days);
         NullifierRegistry disputeNullifierRegistry = new NullifierRegistry();
-        disputePolicy = new DisputePolicy(
+        disputeProtectionPolicy = new DisputeProtectionPolicy(
             address(this),
             vault,
             new DisputeVerifier(
@@ -171,11 +172,11 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
             ),
             disputeNullifierRegistry
         );
-        vault.initializeController(address(disputePolicy));
-        disputeNullifierRegistry.addWritePermission(address(disputePolicy));
-        combinedHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, disputePolicy);
-        disputePolicy.setLifecycleHookAuthorization(address(combinedHook), true);
-        disputePolicy.setRiskWindow(METHOD, RISK_WINDOW);
+        vault.initializeController(address(disputeProtectionPolicy));
+        disputeNullifierRegistry.addWritePermission(address(disputeProtectionPolicy));
+        combinedHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, disputeProtectionPolicy);
+        disputeProtectionPolicy.setLifecycleHookAuthorization(address(combinedHook), true);
+        disputeProtectionPolicy.setRiskWindow(METHOD, RISK_WINDOW);
 
         token.transfer(taker, STAKE_AMOUNT);
         vm.startPrank(taker);
