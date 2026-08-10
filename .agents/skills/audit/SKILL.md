@@ -74,15 +74,15 @@ and the finding standard in this skill remain controlling.
 
 Start with the narrowest upstream skill that matches the review:
 
-| Review need | Upstream skill |
-|---|---|
-| Build contract context and entry points | `audit-context-building` or `entry-point-analyzer` |
-| Review a branch or PR | `differential-review` |
-| Check invariants and generated inputs | `property-based-testing` |
-| Compare implementation with a specification | `spec-to-code-compliance` |
-| Search for variants of a confirmed issue | `variant-analysis` |
-| Inspect dangerous APIs and defaults | `sharp-edges` or `insecure-defaults` |
-| Prepare a broader contract review | `audit-prep-assistant` or `guidelines-advisor` |
+| Review need                                 | Upstream skill                                     |
+| ------------------------------------------- | -------------------------------------------------- |
+| Build contract context and entry points     | `audit-context-building` or `entry-point-analyzer` |
+| Review a branch or PR                       | `differential-review`                              |
+| Check invariants and generated inputs       | `property-based-testing`                           |
+| Compare implementation with a specification | `spec-to-code-compliance`                          |
+| Search for variants of a confirmed issue    | `variant-analysis`                                 |
+| Inspect dangerous APIs and defaults         | `sharp-edges` or `insecure-defaults`               |
+| Prepare a broader contract review           | `audit-prep-assistant` or `guidelines-advisor`     |
 
 Fetch one selected skill into a temporary checkout:
 
@@ -170,9 +170,10 @@ When either V2 or V3 source changes:
    `deploy/30_deploy_v3_lifecycle_stack.ts`,
    `deploy/31_deploy_v3_payment_binding_stack.ts`, and
    `deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts`. Lane `31` must
-   verify the bytecode-pinned payment-binding pair, preserve method order and
-   currencies during the hard cutover, route every active method to UPV3, and
-   revoke every retired legacy-registry writer. Lane `32` must deploy and verify
+   verify the bytecode-pinned payment-binding pair and refuse a non-atomic
+   Base-staging cutover. Its Base Safe batch must preserve audited method order
+   and currencies, route every active method to UPV3, and revoke every retired
+   legacy-registry writer. Lane `32` must deploy and verify
    the dispute registry, verifier, vault, policy, hook authorization, writer
    permission, payment-method risk windows, ownership handoff, and explicitly
    gated hook activation as one resumable lane.

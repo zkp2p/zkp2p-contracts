@@ -654,24 +654,33 @@ the existing stack remains intact, and the generated Safe batch contains only th
 
 `deploy/31_deploy_v3_payment_binding_stack.ts` is the state-aware payment-binding and hard-cutover lane.
 On Base staging and Base it pins the existing `NullifierRegistryV2` and `UnifiedPaymentVerifierV3`
-addresses and runtime code hashes, then verifies their immutable dependencies, owners, complete active
-payment-method set, and exact writer set. Missing, partial, or mismatched production-like artifacts fail
-closed; only local networks may deploy the pair. With
-`ENABLE_STAGING_V3_PAYMENT_BINDING_CUTOVER=true` or
-`ENABLE_BASE_V3_PAYMENT_BINDING_CUTOVER=true`, it snapshots the live currencies, removes all ten methods
-in reverse order, re-adds them in original order against UPV3, and revokes UPV1 and UPV2 from the legacy
-nullifier registry. This preserves the registry order and produces exactly 22 atomic Base Safe calls.
-Never route a method back to a retired verifier after this one-way cutover.
+addresses, runtime code hashes, immutable dependencies, owners, active method order, exact currency arrays,
+and writer set. Missing, partial, or mismatched production-like artifacts fail closed; only local networks
+may deploy the pair. Base staging is already fully cut over and is verification-only: its registries are
+EOA-owned, so the script refuses to approximate an atomic cutover with 22 independent transactions. On Base,
+`ENABLE_BASE_V3_PAYMENT_BINDING_CUTOVER=true` removes all ten methods in reverse order, re-adds them in
+original order against UPV3, and revokes UPV1 and UPV2 from the legacy nullifier registry. This preserves
+the registry order and produces exactly 22 atomic Safe calls. Never route a method back to a retired verifier
+after this one-way cutover.
 
 `deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts` is the combined dispute/staking lane. Run
 `--tags V3DisputeLifecycleStack` with `ENABLE_STAGING_V3_DISPUTE_DEPLOYMENT=true`. It deploys a fresh
 `DisputeNullifierRegistry`,
 `DisputeVerifier`, `StakeVault`, `DisputeProtectionPolicy`, and `IntentLifecycleHookV1`; initializes the vault
 controller; applies non-zero risk windows only to PayPal, Venmo, and Cash App; authorizes the combined
-hook; grants the policy sole nullifier-writer permission; transfers ownership; and activates the hook.
-Staging performs every action directly. Base requires `ENABLE_BASE_V3_DISPUTE_DEPLOYMENT=true`, transfers
-the plain registry immediately, and prepares an unexecuted Safe batch that accepts the three two-step
-ownership transfers and activates the hook.
+hook; grants the policy sole nullifier-writer permission; and transfers ownership. A partial deployment is
+resumable only when every persisted dependency, owner, writer, and risk window remains recognizable.
+
+Staging deliberately uses two runs of this one lane. First,
+`ENABLE_STAGING_V3_DISPUTE_DEPLOYMENT=true` deploys and prepares the five contracts without changing the
+active O3 hook. Commit and propagate the fresh addresses, verify the live predecessor is drained, then run
+again with `ENABLE_STAGING_V3_DISPUTE_ACTIVATION=true`,
+`CONFIRM_STAGING_V3_DISPUTE_DOWNSTREAM_READY=true`, and
+`CONFIRM_STAGING_V3_DISPUTE_PREDECESSOR_DRAINED=true`. Base requires
+`ENABLE_BASE_V3_DISPUTE_DEPLOYMENT=true`, transfers the plain registry immediately, and prepares an
+unexecuted Safe batch that accepts the three two-step ownership transfers and activates the hook. Both
+production-like paths pin the expected O3 address, runtime hash, owner, registry membership, unpaused state,
+and predecessor hook before preparing activation.
 
 Commit the five newly generated deployment artifacts so their addresses can flow through the
 package, indexer, curator, and attestation-service releases. Production Safe execution remains blocked
@@ -686,6 +695,9 @@ until every compatible downstream release is deployed:
 Dispute-evidence issuance in `attestation-service` remains a separate follow-up and is intentionally not implemented
 by these contract lanes. Only PayPal, Venmo, and Cash App receive non-zero onchain risk windows, matching the
 explicitly ratified chargebackable-platform set.
+
+The complete staging and production sequence, stop conditions, Safe call boundaries, and cleanup rules are in
+[`docs/base-dispute-protection-rollout.md`](./docs/base-dispute-protection-rollout.md).
 
 Commit the newly generated canonical artifacts after the authorized deployment.
 

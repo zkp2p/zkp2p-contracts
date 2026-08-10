@@ -68,14 +68,17 @@ the approved target state.
   registry-add Safe call. Lanes `31` and `32` remain outside that deployment.
 - Lane `31` is the state-aware V3 payment-binding lane. Existing Base and Base-staging
   deployments must match their pinned addresses, runtime code hashes, immutables,
-  owners, payment methods, and sole-writer invariant; mismatch fails closed. Its
-  gated cutover must preserve the live method order and currencies, route all ten
-  methods to UPV3, and revoke both retired legacy-registry writers in the same
-  atomic Base Safe batch.
+  owners, payment methods, and sole-writer invariant; mismatch fails closed. Base
+  staging is verification-only because its EOA-owned registries cannot provide an
+  atomic cutover. The gated Base cutover must preserve the audited method order and
+  currencies, route all ten methods to UPV3, and revoke both retired
+  legacy-registry writers in the same atomic Safe batch.
 - Lane `32` combines dispute deployment, wiring, ownership handoff, and hook
-  activation. Staging activation is direct and explicitly gated. Base execution
-  may deploy the assets and prepare the ownership-acceptance plus hook-activation
-  Safe calls, but it must never submit or execute that batch.
+  activation in one source lane. Staging must use a deploy-only run followed by
+  a separately confirmed activation run after the fresh addresses are propagated
+  and the predecessor is drained. Base execution may deploy the assets and prepare
+  the ownership-acceptance plus hook-activation Safe calls, but it must never
+  submit or execute that batch.
 - Remove retired active routes, permissions, exports, and aliases in the same
   hard cutover.
 - Do not add rollback compatibility to a one-way verifier or nullifier
