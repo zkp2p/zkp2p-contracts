@@ -39,6 +39,7 @@ const {
   assertLifecycleHookPhase,
   assertStagingRetiredDepositSettingEvidence,
   disputeStackReady,
+  mayPrepareBeforePaymentBindingCutover,
   stagingDisputeActivationRequested,
 } = require("../deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts");
 const deploySummary = require("../deploy/deploy_summary.ts").default;
@@ -516,6 +517,13 @@ async function disputeDeploymentRejectsMissingPaymentCutover() {
     deployAndActivateDispute(state.fakeHre),
     /V3 payment binding must be fully cut over/
   );
+}
+
+function onlyBaseMayPrepareBeforePaymentCutover() {
+  assert.equal(mayPrepareBeforePaymentBindingCutover("base"), true);
+  assert.equal(mayPrepareBeforePaymentBindingCutover("base_staging"), false);
+  assert.equal(mayPrepareBeforePaymentBindingCutover("hardhat"), false);
+  assert.equal(mayPrepareBeforePaymentBindingCutover("localhost"), false);
 }
 
 async function disputeDeploymentRejectsOrchestratorDriftBeforeDeploying() {
@@ -1116,6 +1124,7 @@ async function run() {
   await paymentBindingRejectsRoutesWithoutWriterCleanup();
   await combinedStagingDeploymentRequiresExplicitFlag();
   await disputeDeploymentRejectsMissingPaymentCutover();
+  onlyBaseMayPrepareBeforePaymentCutover();
   await disputeDeploymentRejectsOrchestratorDriftBeforeDeploying();
   stagingActivationRequiresPriorDeploymentAndConfirmations();
   taggedDeploymentsPersistSafeBatches();
