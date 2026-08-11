@@ -60,9 +60,22 @@ function parseGitHubOutput(output) {
   );
 }
 
-function releaseEnvironment(overrides = {}) {
+const releaseWorkflowEnvironmentKeys = [
+  'DIST_TAG',
+  'EXPECTED_LATEST',
+  'EXPECTED_RC',
+  'RELEASE_ENVIRONMENT',
+  'RELEASE_TAG',
+  'RELEASE_VERSION',
+  'REQUIRE_PROVENANCE',
+];
+
+function releaseEnvironment(overrides = {}, ambientEnvironment = process.env) {
+  const environment = { ...ambientEnvironment };
+  for (const key of releaseWorkflowEnvironmentKeys) delete environment[key];
+
   return {
-    ...process.env,
+    ...environment,
     GITHUB_ACTIONS: 'false',
     LATEST_BASELINE: '0.3.0',
     RC_BASELINE: '0.4.0-rc.5',
@@ -306,8 +319,8 @@ function originalJobsFixture(overrides = {}) {
 test('resolves an RC from the committed release-line prerelease', () => {
   assert.deepEqual(
     resolveReleasePolicy({
-      release: '0.4.1-rc.1',
-      packageVersion: '0.4.1-rc.1',
+      release: '0.4.1-rc.2',
+      packageVersion: '0.4.1-rc.2',
     }),
     { channel: 'rc', distTag: 'rc', environment: 'npm-publish' },
   );
@@ -345,7 +358,7 @@ test('derives a future RC release line from the package version', () => {
 
 test('commits the next RC candidate while preserving stable release support', () => {
   const packageManifest = JSON.parse(fs.readFileSync(packageManifestPath, 'utf8'));
-  assert.equal(packageManifest.version, '0.4.1-rc.1');
+  assert.equal(packageManifest.version, '0.4.1-rc.2');
   assert.deepEqual(
     resolveReleasePolicy({
       release: '0.4.1',
@@ -353,6 +366,22 @@ test('commits the next RC candidate while preserving stable release support', ()
     }),
     { channel: 'stable', distTag: 'latest', environment: 'npm-publish' },
   );
+});
+
+test('release CLI fixtures do not inherit workflow policy variables', () => {
+  const environment = releaseEnvironment({}, {
+    PATH: process.env.PATH,
+    DIST_TAG: 'rc',
+    EXPECTED_LATEST: '0.4.0',
+    EXPECTED_RC: '0.4.0-rc.5',
+    RELEASE_ENVIRONMENT: 'npm-publish',
+    RELEASE_TAG: 'contracts-v2-v0.4.1-rc.1',
+    RELEASE_VERSION: '0.4.1-rc.1',
+    REQUIRE_PROVENANCE: 'true',
+  });
+
+  for (const key of releaseWorkflowEnvironmentKeys) assert.equal(environment[key], undefined);
+  assert.equal(environment.PATH, process.env.PATH);
 });
 
 test('publish workflow consumes the version-derived channel without RC-only paths', () => {
