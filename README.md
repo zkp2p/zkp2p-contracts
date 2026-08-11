@@ -617,10 +617,10 @@ This script currently covers:
 
 The canonical `DepositCreationGuard` was deployed once on Base at
 `0x0D765BD7322b9E8C85F66Cc3353dBc6B6d602e2f` in transaction
-`0xaa732525f07f9919e3e5ac991430f7f5e7a88e945a4204a23571c14d1a63cfaf`. The deployment artifact is
-recorded under `deployments/base_staging/DepositCreationGuard.json`. Because the guard is stateless and receives
-the target escrow on each call, the same Base deployment is intentionally reused by staging and production
-Curator configurations; production does not require a second contract deployment or a duplicate Base artifact.
+`0xaa732525f07f9919e3e5ac991430f7f5e7a88e945a4204a23571c14d1a63cfaf`. Its canonical production artifact is
+recorded under `deployments/base_prod/DepositCreationGuard.json`. Because the guard is stateless and receives the
+target escrow on each call, staging intentionally reuses this production Base deployment. No separate staging
+contract deployment or duplicate staging artifact is required.
 
 #### Deployment Summary
 
