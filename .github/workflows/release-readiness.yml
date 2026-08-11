@@ -1,0 +1,187 @@
+name: Release readiness
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "contracts/**"
+      - "deploy/**"
+      - "deployments/**"
+      - "packages/**"
+      - "scripts/**"
+      - "tasks/**"
+      - "test-foundry/**"
+      - ".env.default"
+      - "foundry.toml"
+      - "hardhat.config.ts"
+      - "package.json"
+      - "tsconfig.json"
+      - "yarn.lock"
+      - ".github/workflows/**"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "deploy/**"
+      - "deployments/**"
+      - "packages/**"
+      - "scripts/**"
+      - "tasks/**"
+      - ".env.default"
+      - "hardhat.config.ts"
+      - "package.json"
+      - "tsconfig.json"
+      - "yarn.lock"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-readiness-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  FOUNDRY_VERSION: v1.7.1
+  NODE_VERSION: 20.20.2
+
+jobs:
+  build-and-deploy:
+    name: Build, package, and localhost deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: recursive
+      - name: Install pinned Foundry
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+      - name: Install dependencies reproducibly
+        run: |
+          corepack enable
+          corepack yarn install --immutable
+      - name: Prepare local environment
+        run: cp .env.default .env
+      - name: Test release environment policy
+        run: corepack yarn test:release-policy
+      - name: Compile deployment contracts and package
+        run: |
+          corepack yarn compile
+          corepack yarn pkg:build
+          corepack yarn pkg:test
+      - name: Test V3 lifecycle deployment lanes
+        run: |
+          corepack yarn test:v3-groups-deployment
+          corepack yarn test:dispute-lifecycle-deployment
+      - name: Start local chain
+        run: |
+          corepack yarn chain > /tmp/zkp2p-hardhat-node.log 2>&1 &
+          for attempt in {1..60}; do
+            if node -e "const socket=require('net').connect(8545,'127.0.0.1');socket.on('connect',()=>process.exit(0));socket.on('error',()=>process.exit(1))"; then
+              exit 0
+            fi
+            sleep 1
+          done
+          tail -200 /tmp/zkp2p-hardhat-node.log
+          exit 1
+      - name: Deploy production scripts to localhost
+        run: corepack yarn deploy:localhost
+
+  coverage-shards:
+    name: Foundry coverage shard (${{ matrix.lane }})
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        lane:
+          - escrow
+          - verifiers
+          - orchestrator
+          - remaining
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: recursive
+      - name: Install pinned Foundry
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+      - name: Install dependencies reproducibly
+        run: |
+          corepack enable
+          corepack yarn install --immutable
+      - name: Prepare local environment
+        run: cp .env.default .env
+      - name: Run deterministic Foundry coverage lane
+        run: corepack yarn coverage --lane=${{ matrix.lane }}
+      - name: Upload fresh coverage shard outputs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: foundry-coverage-${{ matrix.lane }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            coverage/shards/deterministic-*.lcov
+            coverage/shards/deterministic-*.log
+            coverage/shards/deterministic-*.timing.json
+          if-no-files-found: error
+          retention-days: 1
+
+  coverage:
+    name: Foundry coverage and Codecov
+    needs: coverage-shards
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: recursive
+      - name: Install pinned Foundry
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+      - name: Install dependencies reproducibly
+        run: |
+          corepack enable
+          corepack yarn install --immutable
+      - name: Prepare local environment
+        run: cp .env.default .env
+      - name: Download fresh deterministic coverage shards
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: foundry-coverage-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: coverage/shards
+          merge-multiple: true
+      - name: Merge deterministic coverage and enforce baseline floors
+        run: corepack yarn coverage --merge-partitions
+      - name: Upload Foundry LCOV to Codecov with OIDC
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac
+        with:
+          use_oidc: true
+          files: ./coverage/lcov.info
+          flags: foundry
+          disable_search: true
+          fail_ci_if_error: true
