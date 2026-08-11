@@ -7,6 +7,7 @@ import {SignatureGatingPreIntentHook} from "contracts/hooks/SignatureGatingPreIn
 import {RateManagerV1} from "contracts/RateManagerV1.sol";
 import {ChainlinkOracleAdapter} from "contracts/oracles/ChainlinkOracleAdapter.sol";
 import {ProtocolViewerV2} from "contracts/ProtocolViewerV2.sol";
+import {DepositCreationGuard} from "contracts/DepositCreationGuard.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 
@@ -19,6 +20,7 @@ contract V2PeripheryDeploymentTest is Test {
     RateManagerV1 internal rateManager;
     ChainlinkOracleAdapter internal chainlinkAdapter;
     ProtocolViewerV2 internal protocolViewer;
+    DepositCreationGuard internal depositCreationGuard;
 
     function setUp() public {
         multisig = makeAddr("multisig");
@@ -29,6 +31,7 @@ contract V2PeripheryDeploymentTest is Test {
         rateManager = new RateManagerV1(address(escrowRegistry));
         chainlinkAdapter = new ChainlinkOracleAdapter();
         protocolViewer = new ProtocolViewerV2();
+        depositCreationGuard = new DepositCreationGuard();
 
         rateManager.transferOwnership(multisig);
     }
@@ -63,5 +66,9 @@ contract V2PeripheryDeploymentTest is Test {
 
     function test_ProtocolViewerV2IsDeployed() public view {
         assertGt(address(protocolViewer).code.length, 0);
+    }
+
+    function test_DepositCreationGuardIsDeployed() public view {
+        assertGt(address(depositCreationGuard).code.length, 0);
     }
 }
