@@ -61,21 +61,19 @@ for (const network of ['base', 'baseStaging']) {
       fail(`${network}.${contractName} ABI export is missing`);
     }
   }
-  if (network === 'baseStaging') {
-    for (const contractName of [
-      'DisputeNullifierRegistry',
-      'DisputeProtectionPolicy',
-      'DisputeVerifier',
-      'IntentLifecycleHookV1',
-      'StakeVault',
-    ]) {
-      const address = addresses?.contracts?.[contractName];
-      if (!/^0x[0-9a-fA-F]{40}$/.test(address) || /^0x0{40}$/.test(address)) {
-        fail(`${network}.${contractName} does not expose the fresh nonzero address`);
-      }
-      if (!Array.isArray(bundle[contractName]) || bundle[contractName].length === 0) {
-        fail(`${network}.${contractName} ABI export is missing`);
-      }
+  for (const contractName of [
+    'DisputeNullifierRegistry',
+    'DisputeProtectionPolicy',
+    'DisputeVerifier',
+    'IntentLifecycleHookV1',
+    'StakeVault',
+  ]) {
+    const address = addresses?.contracts?.[contractName];
+    if (!/^0x[0-9a-fA-F]{40}$/.test(address) || /^0x0{40}$/.test(address)) {
+      fail(`${network}.${contractName} does not expose the fresh nonzero address`);
+    }
+    if (!Array.isArray(bundle[contractName]) || bundle[contractName].length === 0) {
+      fail(`${network}.${contractName} ABI export is missing`);
     }
   }
 }

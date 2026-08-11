@@ -48,14 +48,16 @@ const sourceAbiArtifacts = {
     'artifacts/contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json',
   StakeVault: 'artifacts/contracts/StakeVault.sol/StakeVault.json',
 };
+const requiredDisputeContracts = [
+  'DisputeNullifierRegistry',
+  'DisputeProtectionPolicy',
+  'DisputeVerifier',
+  'IntentLifecycleHookV1',
+  'StakeVault',
+];
 const requiredNetworkContracts = {
-  baseStaging: [
-    'DisputeNullifierRegistry',
-    'DisputeProtectionPolicy',
-    'DisputeVerifier',
-    'IntentLifecycleHookV1',
-    'StakeVault',
-  ],
+  base: requiredDisputeContracts,
+  baseStaging: requiredDisputeContracts,
 };
 
 function fail(message) {

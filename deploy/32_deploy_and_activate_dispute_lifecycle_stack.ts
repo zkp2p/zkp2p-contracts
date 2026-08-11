@@ -1751,6 +1751,12 @@ export function stagingDisputeActivationRequested(
   return true;
 }
 
+export function mayPrepareBeforePaymentBindingCutover(
+  network: string
+): boolean {
+  return network === "base";
+}
+
 async function assertStackPreparedForGovernance(
   governance: string,
   contracts: Awaited<ReturnType<typeof getStackContracts>>
@@ -1843,9 +1849,15 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const network = hre.deployments.getNetworkName();
   await assertExpectedNetworkDependencies(hre);
   await assertOrchestratorPreflight(hre);
-  if (!(await paymentBindingCutoverReady(hre))) {
+  const paymentBindingReady = await paymentBindingCutoverReady(hre);
+  if (!paymentBindingReady && !mayPrepareBeforePaymentBindingCutover(network)) {
     throw new Error(
       "V3 payment binding must be fully cut over before the dispute stack is deployed"
+    );
+  }
+  if (!paymentBindingReady) {
+    console.log(
+      "Base payment binding is not cut over; deploying the passive dispute stack and preparing an unsigned Safe activation batch only"
     );
   }
   const [deployer] = await hre.getUnnamedAccounts();
