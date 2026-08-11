@@ -534,7 +534,20 @@ See [TESTING.md](./TESTING.md) for suite design, seed reproduction, coverage mec
 
 - `corepack yarn coverage`: run deterministic coverage once, build accurate Foundry LCOV, and enforce the permanent Foundry baseline floors
 
-Coverage runs on every pull request and every push to `main`. Fuzz and invariant tests remain outside coverage but always run in the complete-suite job. The output is `coverage/lcov.info`; CI uploads it to the `foundry` Codecov flag through OIDC and fails visibly on upload errors.
+Coverage is deliberately outside the pull-request critical path. Code pull requests run the complete deterministic,
+fuzz, invariant, integration, and deployment Foundry suite. The `Release readiness` workflow runs package and
+localhost-deployment checks for release-surface pull requests, every relevant push to `main`, and manual dispatches;
+its four coverage lanes run on `main` and manual dispatches only. Markdown, agent guidance, audits, and deployment
+logs do not start these workflows when the entire PR or push is limited to those paths. A docs-only follow-up inside
+a mixed PR still reruns CI because GitHub evaluates pull-request path filters against the complete PR diff.
+
+Before publishing the contracts package, promoting a release branch, or deploying to Base staging or Base, verify
+that the exact release SHA has a green complete Foundry suite and a green `Release readiness` run including package,
+localhost-deployment, and coverage jobs. A green contract-only pull request is not release-readiness evidence because
+the deferred workflow runs after merge to `main`; if the release SHA has not run there, dispatch `Release readiness`
+on its release ref and wait for it. Never reuse coverage or deployment evidence from another SHA.
+An ignored documentation-only head may inherit the immediately preceding green runtime SHA only after its complete
+intervening diff is proven to contain no executable, package, configuration, or deployment input.
 
 ### Packaging Commands
 
@@ -764,7 +777,11 @@ Foundry is the sole contract test system. The suite is separated by assurance ty
 - `test-foundry/fuzz/`: bounded real-contract properties that add input breadth beyond deterministic cases
 - `test-foundry/invariant/`: multi-actor handlers, ghost accounting, lifecycle conservation, and nullifier uniqueness
 
-The default `corepack yarn test` command runs every layer with the centrally configured run counts. CI has no event gates, reduced fuzz counts, live forks, pending cases, or ignored test failures. For ordinary development, run the affected file first and the complete command before pushing; run coverage whenever production or test behavior changes.
+The default `corepack yarn test` command runs every layer with the centrally configured run counts. The PR suite has
+no reduced fuzz counts, pending cases, or ignored test failures, but non-runtime paths are skipped and coverage is
+deferred. During development, run the affected file first and rely on the exact commit's PR suite for the complete
+gate. Run or confirm the deferred coverage and release-readiness workflow only when preparing a package, release
+branch, or deployment, or when changing its configuration.
 
 ## Networks and Deployment Artifacts
 

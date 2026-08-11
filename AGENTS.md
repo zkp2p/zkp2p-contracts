@@ -165,6 +165,26 @@ iteration loop.
 - Once the requested behavior and proportionate verification are complete, stop. Report broader gates not run and
   the reason instead of running them defensively.
 
+### PR Feedback Versus Release Readiness
+
+- Code pull requests run the complete Foundry suite without coverage. Contract-only changes intentionally do not run
+  package and localhost-deployment validation until the integrated `main` commit. Release-surface pull requests that
+  touch deploy, package, scripts, tasks, utilities, configuration, or workflow files run those checks immediately.
+- Markdown, agent instructions, audits, and deployment logs intentionally skip CI. Use `git diff --check` and any
+  documentation-specific validation; do not manufacture an empty status check. A docs-only release head may inherit
+  the immediately preceding green runtime SHA only after the complete intervening diff is proven non-executable.
+  This skip applies only when the entire PR or push is limited to ignored paths; a docs-only follow-up in a mixed PR
+  still reruns CI because GitHub evaluates the complete PR diff.
+- A green pull request is development evidence, not permission or evidence to publish or deploy. Before package
+  publication, release-branch promotion, Base staging deployment, or Base deployment, require the exact release SHA
+  to have a green complete Foundry suite and a green `Release readiness` run including build/package, localhost
+  deployment, all four coverage lanes, coverage-floor enforcement, and Codecov upload.
+- Relevant pushes to `main` run those deferred gates automatically. If the exact release SHA has not run on `main`,
+  manually dispatch `Release readiness` on its release ref and wait for it. Never substitute results from another
+  commit, and do not rerun a gate locally when the exact SHA already has equivalent green CI evidence.
+- Deployment, governance, package-publication, and production approvals remain separate. Follow the applicable
+  release/deployment skill after the deferred technical gates are green.
+
 ## Coding Style & Naming Conventions
 
 - Solidity: 4-space indent, explicit visibility, NatSpec for externals. Contracts/Libs `PascalCase`, interfaces `IName`, constants `UPPER_CASE`.
