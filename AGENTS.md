@@ -173,6 +173,8 @@ iteration loop.
 - Markdown, agent instructions, audits, and deployment logs intentionally skip CI. Use `git diff --check` and any
   documentation-specific validation; do not manufacture an empty status check. A docs-only release head may inherit
   the immediately preceding green runtime SHA only after the complete intervening diff is proven non-executable.
+  This skip applies only when the entire PR or push is limited to ignored paths; a docs-only follow-up in a mixed PR
+  still reruns CI because GitHub evaluates the complete PR diff.
 - A green pull request is development evidence, not permission or evidence to publish or deploy. Before package
   publication, release-branch promotion, Base staging deployment, or Base deployment, require the exact release SHA
   to have a green complete Foundry suite and a green `Release readiness` run including build/package, localhost

@@ -538,7 +538,8 @@ Coverage is deliberately outside the pull-request critical path. Code pull reque
 fuzz, invariant, integration, and deployment Foundry suite. The `Release readiness` workflow runs package and
 localhost-deployment checks for release-surface pull requests, every relevant push to `main`, and manual dispatches;
 its four coverage lanes run on `main` and manual dispatches only. Markdown, agent guidance, audits, and deployment
-logs do not start these workflows.
+logs do not start these workflows when the entire PR or push is limited to those paths. A docs-only follow-up inside
+a mixed PR still reruns CI because GitHub evaluates pull-request path filters against the complete PR diff.
 
 Before publishing the contracts package, promoting a release branch, or deploying to Base staging or Base, verify
 that the exact release SHA has a green complete Foundry suite and a green `Release readiness` run including package,
