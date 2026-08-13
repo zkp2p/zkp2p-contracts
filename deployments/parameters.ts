@@ -171,10 +171,10 @@ export const ORCHESTRATOR_V3_PROTOCOL_FEE_RECIPIENT: any = {
 // Initial hourly fee for the standalone IntentGuardian, denominated in basis points of the
 // locked intent amount. Governance can update this value on the deployed guardian.
 export const INTENT_GUARDIAN_EXTENSION_FEE_BPS_PER_HOUR: Record<string, number> = {
-  localhost: 2,
-  hardhat: 2,
-  base_staging: 2,
-  base: 2,
+  localhost: 1,
+  hardhat: 1,
+  base_staging: 1,
+  base: 1,
 };
 
 // Pyth Network contract addresses
