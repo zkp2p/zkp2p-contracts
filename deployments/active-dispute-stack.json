@@ -2,14 +2,14 @@
   "version": 1,
   "networks": {
     "base": {
-      "StakeVault": "StakeVault",
-      "DisputeProtectionPolicy": "DisputeProtectionPolicy",
-      "IntentLifecycleHookV1": "IntentLifecycleHookV1"
+      "StakeVault": "StakeVaultOptIn",
+      "DisputeProtectionPolicy": "DisputeProtectionPolicyOptIn",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1OptIn"
     },
     "base_staging": {
-      "StakeVault": "StakeVault",
-      "DisputeProtectionPolicy": "DisputeProtectionPolicy",
-      "IntentLifecycleHookV1": "IntentLifecycleHookV1"
+      "StakeVault": "StakeVaultOptIn",
+      "DisputeProtectionPolicy": "DisputeProtectionPolicyOptIn",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1OptIn"
     },
     "localhost": {
       "StakeVault": "StakeVaultOptIn",

@@ -832,7 +832,7 @@ export default {
       ]
     },
     "DisputeProtectionPolicy": {
-      "address": "0xc086b6120B5e61EF48221E6A78c69737c9948dF9",
+      "address": "0xcEc48F7242eDBf02875BB4629115Bd927e1287aA",
       "abi": [
         {
           "inputs": [
@@ -8078,7 +8078,7 @@ export default {
       ]
     },
     "IntentLifecycleHookV1": {
-      "address": "0x5B0017FCA6A2131701ef718e470a3930c1b6C12c",
+      "address": "0x71467dCac3B50eeED5A485aC6a70f27B1EAC1970",
       "abi": [
         {
           "inputs": [
@@ -17436,7 +17436,7 @@ export default {
       ]
     },
     "StakeVault": {
-      "address": "0x8B8e853f47e6e0d3944e3689197B35216933dDea",
+      "address": "0x4d16F4a9946CfC76b1c1A4B63aa9D94cdA2dbCEB",
       "abi": [
         {
           "inputs": [
@@ -21393,5 +21393,9 @@ export default {
         }
       ]
     }
+  },
+  "activeDisputeStack": {
+    "version": 1,
+    "selectionHash": "a4f17ae7c1620ecfe7d036f0b9cc7b39c50e1382dc8dc14d2e5f7f21061cd5ad"
   }
 } as const;

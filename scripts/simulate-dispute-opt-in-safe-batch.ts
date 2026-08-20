@@ -1,4 +1,5 @@
 import { readFileSync } from "fs";
+import { resolve } from "path";
 import { ethers } from "ethers";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
@@ -22,6 +23,17 @@ export const MULTI_SEND_CALL_ONLY =
   "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D";
 export const MULTI_SEND_CALL_ONLY_RUNTIME_HASH =
   "0xa9865ac2d9c7a1591619b188c4d88167b50df6cc0c5327fcbd1c8c75f7c066ad";
+
+export function restoreHardhatModuleResolution(): void {
+  const moduleAlias = require("module-alias");
+  moduleAlias.reset();
+  moduleAlias.addAlias("@utils", resolve(__dirname, "../utils"));
+}
+
+function loadHardhatRuntime(): HardhatRuntimeEnvironment {
+  restoreHardhatModuleResolution();
+  return require("hardhat");
+}
 
 const safeInterface = new ethers.utils.Interface([
   "function VERSION() view returns (string)",
@@ -137,6 +149,13 @@ export function requireRuntimeHash(
   }
 }
 
+export function voidCallDidNotSucceed(
+  returnData: string | undefined,
+  threw: boolean
+): boolean {
+  return threw || (returnData !== undefined && returnData !== "0x");
+}
+
 async function assertRuntime(
   hre: HardhatRuntimeEnvironment,
   address: string,
@@ -191,11 +210,14 @@ async function callSafeSimulation(
   );
   let envelope: string | undefined;
   try {
-    await hre.ethers.provider.call({ to: BASE_SAFE, data: simulationCalldata });
+    envelope = await hre.ethers.provider.call({
+      to: BASE_SAFE,
+      data: simulationCalldata,
+    });
   } catch (error) {
     envelope = extractRevertData(error);
   }
-  if (!envelope)
+  if (!envelope || envelope === "0x")
     throw new Error(
       "Safe simulation did not return its deliberate revert envelope"
     );
@@ -298,18 +320,19 @@ export async function simulateObsoleteDisputeSafeBatchInvalidation(
         `${label} ownership cancellation is not present on the pinned fork`
       );
   }
-  let secondCallReverted = false;
+  let secondCallThrew = false;
+  let secondCallReturnData: string | undefined;
   try {
-    await hre.ethers.provider.call({
+    secondCallReturnData = await hre.ethers.provider.call({
       from: BASE_SAFE,
       to: normalized[1].to,
       value: normalized[1].value,
       data: normalized[1].data,
     });
   } catch {
-    secondCallReverted = true;
+    secondCallThrew = true;
   }
-  if (!secondCallReverted)
+  if (!voidCallDidNotSucceed(secondCallReturnData, secondCallThrew))
     throw new Error(
       "Obsolete predecessor StakeVault ownership call is still executable"
     );
@@ -352,7 +375,7 @@ export async function buildBasePostconditionConfig(
 async function main(): Promise<void> {
   const inlinePayload = process.env.DISPUTE_SAFE_SIMULATION_PAYLOAD;
   if (inlinePayload) {
-    const hre: HardhatRuntimeEnvironment = require("hardhat");
+    const hre = loadHardhatRuntime();
     const payload = JSON.parse(inlinePayload) as {
       manifest: DisputeSafeBatchManifest;
       postconditions: DisputePostconditionConfig;
@@ -385,7 +408,7 @@ async function main(): Promise<void> {
       throw new Error(
         "Could not pin the latest Base block for obsolete-batch simulation"
       );
-    const hre: HardhatRuntimeEnvironment = require("hardhat");
+    const hre = loadHardhatRuntime();
     await simulateObsoleteDisputeSafeBatchInvalidation(
       hre,
       transactions,
@@ -410,7 +433,7 @@ async function main(): Promise<void> {
       "usage: simulate-dispute-opt-in-safe-batch --batch <path> --sidecar <path>"
     );
   }
-  const hre: HardhatRuntimeEnvironment = require("hardhat");
+  const hre = loadHardhatRuntime();
   const batch = JSON.parse(readFileSync(process.argv[batchIndex + 1], "utf8"));
   const manifest = validateSafeBatchManifest(
     JSON.parse(readFileSync(process.argv[sidecarIndex + 1], "utf8"))
