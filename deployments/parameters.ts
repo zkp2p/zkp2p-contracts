@@ -151,6 +151,7 @@ export const ACTIVE_PAYMENT_METHODS: string[] = [
 // unchanged until that boundary is explicitly authorized.
 export const BASE_STAGING_ACTIVE_PAYMENT_METHODS: string[] = [
   ...ACTIVE_PAYMENT_METHODS,
+  "monobank",
   "mercury",
 ];
 
