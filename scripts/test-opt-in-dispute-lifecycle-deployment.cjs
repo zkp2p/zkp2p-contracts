@@ -13,7 +13,7 @@ moduleAlias.reset();
 moduleAlias.addAlias("@utils", process.cwd() + "/utils");
 
 const assert = require("node:assert/strict");
-const { execFileSync } = require("node:child_process");
+const { execFileSync, spawnSync } = require("node:child_process");
 const {
   mkdirSync,
   mkdtempSync,
@@ -53,6 +53,8 @@ const {
   encodeMultiSendCalldata,
   packMultiSendTransactions,
   requireRuntimeHash,
+  restoreHardhatModuleResolution,
+  voidCallDidNotSucceed,
 } = require("./simulate-dispute-opt-in-safe-batch.ts");
 const {
   DISPUTE_SAFE_BATCH_PATH,
@@ -578,7 +580,7 @@ test("the obsolete Base lifecycle batch remains exact historical evidence", () =
     readFileSync(
       join(
         process.cwd(),
-        "deployments/outputs/safe-batches/base_2026-08-11T07-40-03.json"
+        "deployments/outputs/safe-batches/superseded/base_2026-08-11T07-40-03.json"
       ),
       "utf8"
     )
@@ -800,6 +802,60 @@ test("MultiSend packing and Safe deliberate-revert decoding are exact", () => {
     () => requireRuntimeHash(code, `0x${"0".repeat(64)}`, "pinned"),
     /runtime bytecode hash/
   );
+  assert.equal(voidCallDidNotSucceed("0x", false), false);
+  assert.equal(voidCallDidNotSucceed(undefined, true), true);
+  assert.equal(
+    voidCallDidNotSucceed(
+      "0x08c379a000000000000000000000000000000000000000000000000000000000",
+      false
+    ),
+    true
+  );
+});
+
+test("Safe simulation restores package resolution before loading Hardhat", () => {
+  moduleAlias.addAlias("@typechain", join(process.cwd(), "typechain"));
+  assert.throws(() => require.resolve("@typechain/hardhat"), /Cannot find module/);
+  assert.equal(typeof restoreHardhatModuleResolution, "function");
+  restoreHardhatModuleResolution();
+  assert.match(
+    require.resolve("@typechain/hardhat"),
+    /node_modules\/@typechain\/hardhat/
+  );
+});
+
+test("direct Safe simulation reaches CLI validation before Hardhat loading", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      require.resolve("ts-node/dist/bin.js"),
+      "--transpile-only",
+      "scripts/simulate-dispute-opt-in-safe-batch.ts",
+    ],
+    {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        DISPUTE_SAFE_SIMULATION_PAYLOAD: "",
+      },
+    }
+  );
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /usage: simulate-dispute-opt-in-safe-batch/);
+  assert.doesNotMatch(result.stderr, /typechain\/hardhat/);
+});
+
+test("Hardhat knows the exact Base Prague activation block", () => {
+  restoreHardhatModuleResolution();
+  const hardhatConfig = /** @type {any} */ (
+    require("../hardhat.config.ts").default
+  );
+  assert.deepEqual(hardhatConfig.networks.hardhat.chains[8453], {
+    hardforkHistory: {
+      prague: 30_008_527,
+    },
+  });
 });
 
 test("Safe artifact Git modes reject dirt, unrelated descendants, and non-ancestors", () => {

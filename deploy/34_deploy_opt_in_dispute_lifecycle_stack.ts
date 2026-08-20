@@ -1,5 +1,3 @@
-import "module-alias/register";
-
 import { spawnSync } from "child_process";
 import {
   closeSync,
