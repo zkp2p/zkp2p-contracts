@@ -4,6 +4,8 @@
     "allowJs": true,
     "allowImportingTsExtensions": true,
     "checkJs": true,
+    "module": "Node16",
+    "moduleResolution": "Node16",
     "noEmit": true
   },
   "files": [
@@ -14,7 +16,12 @@
     "deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts",
     "deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts",
     "deploy/deploy_summary.ts",
+    "packages/contracts/scripts/extractors/abis.ts",
+    "packages/contracts/scripts/extractors/addresses.ts",
+    "packages/contracts/scripts/smoke-installed.mjs",
+    "packages/contracts/scripts/verify-release.mjs",
     "scripts/deployActive.ts",
+    "scripts/canonicalizeDeploymentOutput.ts",
     "scripts/simulate-dispute-opt-in-safe-batch.ts",
     "scripts/verify-dispute-opt-in-safe-batch.ts",
     "scripts/active-dispute-stack.spec.cjs",
