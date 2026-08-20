@@ -53,6 +53,15 @@ const config: HardhatUserConfig = {
       initialBaseFeePerGas: 0,
       blockGasLimit: 100_000_000,
       gas: 100_000_000,
+      chains: {
+        8453: {
+          hardforkHistory: {
+            // Base activated the Prague-equivalent Isthmus upgrade at
+            // timestamp 1746806401, first observed at this block.
+            prague: 30_008_527,
+          },
+        },
+      },
     },
     localhost: {
       allowBlocksWithSameTimestamp: true,

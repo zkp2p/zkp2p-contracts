@@ -1,5 +1,3 @@
-import "module-alias/register";
-
 import { ethers } from "ethers";
 
 type HistoricalRuntimeEnvironment = {

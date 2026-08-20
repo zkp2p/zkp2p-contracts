@@ -1,4 +1,3 @@
-import "module-alias/register";
 import { ONE_DAY_IN_SECONDS, THREE_MINUTES_IN_SECONDS, ZERO, ONE_HOUR_IN_SECONDS, SIX_HOURS_IN_SECONDS } from "../utils/constants";
 import { ether, usdc } from "../utils/common/units";
 
