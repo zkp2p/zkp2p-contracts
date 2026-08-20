@@ -533,6 +533,14 @@ export async function extractDisputeReadiness(): Promise<void> {
   )
     .map((paymentMethodHash) => `'${paymentMethodHash}'`)
     .join(" | ");
+  const riskWindowSecondsType = [...new Set(
+    Object.values(EVIDENCE.riskWindowSecondsByPaymentMethod).flatMap((windows) =>
+      Object.values(windows),
+    ),
+  )]
+    .sort((left, right) => (BigInt(left) < BigInt(right) ? -1 : BigInt(left) > BigInt(right) ? 1 : 0))
+    .map((seconds) => `'${seconds}'`)
+    .join(" | ");
 
   fs.writeFileSync(
     path.join(OUTPUT_DIRECTORY, "types.d.ts"),
@@ -542,7 +550,7 @@ export type ReadinessNetwork = 'base' | 'base_staging';
 export type BasePaymentMethodHash = ${basePaymentMethodHashType};
 export type BaseStagingPaymentMethodHash = ${baseStagingPaymentMethodHashType};
 export type PaymentMethodHash<Network extends ReadinessNetwork = ReadinessNetwork> = Network extends 'base_staging' ? BaseStagingPaymentMethodHash : BasePaymentMethodHash;
-export type RiskWindowSeconds = '0' | '1209600';
+export type RiskWindowSeconds = ${riskWindowSecondsType};
 export interface RuntimeIdentity { address: Address; runtimeCodeHash: RuntimeCodeHash; }
 export type RuntimeIdentityName = 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'IntentLifecycleHookV1' | 'RecognizedPredecessorHook' | 'RecognizedPredecessorPolicy' | 'OrchestratorRegistry' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry' | 'MultiAttestationVerifier';
 export type GovernedRuntimeIdentityName = 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry' | 'MultiAttestationVerifier';

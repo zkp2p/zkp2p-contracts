@@ -502,7 +502,14 @@ test("package extraction publishes exact dispute readiness metadata without inte
     join(readinessDirectory, "types.d.ts"),
     "utf8"
   );
-  assert.match(declarations, /export type RiskWindowSeconds = '0' \| '1209600';/);
+  const riskWindowValues = new Set(
+    Object.values(RISK_WINDOWS_BY_NETWORK).flatMap((windows) =>
+      Object.values(windows)
+    )
+  );
+  for (const seconds of riskWindowValues) {
+    assert.equal(declarations.includes(`'${seconds}'`), true);
+  }
   assert.match(declarations, /chainId: 8453;/);
   for (const paymentMethodHash of Object.keys(RISK_WINDOWS_BY_NETWORK.baseStaging)) {
     assert.equal(declarations.includes(`'${paymentMethodHash}'`), true);
