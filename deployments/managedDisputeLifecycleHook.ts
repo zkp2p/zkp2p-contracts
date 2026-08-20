@@ -17,7 +17,7 @@ function sameAddress(left: string, right: string): boolean {
 
 export type ManagedHookSnapshot = {
   currentHook: string;
-  predecessor: { address: string; runtimeCodeHash: string };
+  predecessor?: { address: string; runtimeCodeHash: string };
   successor?: { address: string; runtimeCodeHash: string };
   actualRuntimeCodeHash: string;
   actualOrchestratorRegistry: string;
@@ -29,15 +29,14 @@ export type ManagedHookSnapshot = {
 export function validateManagedDisputeHookSnapshot(
   snapshot: ManagedHookSnapshot
 ): boolean {
-  const expected = sameAddress(
-    snapshot.currentHook,
-    snapshot.predecessor.address
-  )
-    ? snapshot.predecessor
-    : snapshot.successor &&
-      sameAddress(snapshot.currentHook, snapshot.successor.address)
-    ? snapshot.successor
-    : undefined;
+  const expected =
+    snapshot.predecessor &&
+    sameAddress(snapshot.currentHook, snapshot.predecessor.address)
+      ? snapshot.predecessor
+      : snapshot.successor &&
+        sameAddress(snapshot.currentHook, snapshot.successor.address)
+      ? snapshot.successor
+      : undefined;
   if (!expected) return false;
   if (snapshot.actualRuntimeCodeHash !== expected.runtimeCodeHash) {
     throw new Error("Managed dispute lifecycle hook runtime bytecode mismatch");
@@ -65,7 +64,13 @@ export async function guardManagedDisputeLifecycleHook(
   hre: HardhatRuntimeEnvironment
 ): Promise<boolean> {
   const network = hre.deployments.getNetworkName();
-  if (network !== "base" && network !== "base_staging") return false;
+  if (
+    network !== "base" &&
+    network !== "base_staging" &&
+    network !== "localhost" &&
+    network !== "hardhat"
+  )
+    return false;
   const predecessor = PREDECESSOR_DISPUTE_STACKS[network];
   const orchestratorDeployment = await hre.deployments.getOrNull(
     "OrchestratorV3"
@@ -82,7 +87,8 @@ export async function guardManagedDisputeLifecycleHook(
   );
   const successorDeployment = await hre.deployments.getOrNull(successorName);
   const matched =
-    sameAddress(currentHook, predecessor.activeLifecycleHook.address) ||
+    (predecessor &&
+      sameAddress(currentHook, predecessor.activeLifecycleHook.address)) ||
     (successorDeployment &&
       sameAddress(currentHook, successorDeployment.address));
   if (!matched) return false;
@@ -105,10 +111,11 @@ export async function guardManagedDisputeLifecycleHook(
   let successor: { address: string; runtimeCodeHash: string } | undefined;
   if (
     successorDeployment &&
-    !sameAddress(
-      successorDeployment.address,
-      predecessor.activeLifecycleHook.address
-    )
+    (!predecessor ||
+      !sameAddress(
+        successorDeployment.address,
+        predecessor.activeLifecycleHook.address
+      ))
   ) {
     if (typeof successorDeployment.deployedBytecode !== "string") {
       throw new Error(
@@ -124,7 +131,7 @@ export async function guardManagedDisputeLifecycleHook(
   }
   return validateManagedDisputeHookSnapshot({
     currentHook,
-    predecessor: predecessor.activeLifecycleHook,
+    predecessor: predecessor?.activeLifecycleHook,
     successor,
     actualRuntimeCodeHash: ethers.utils.keccak256(runtimeCode),
     actualOrchestratorRegistry: await hook.orchestratorRegistry(),

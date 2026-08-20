@@ -155,7 +155,7 @@ async function addMismatchedArtifacts(state) {
 
 /**
  * @param {any} state
- * @param {"base" | "base_staging"} networkName
+ * @param {"base" | "base_staging" | "localhost" | "hardhat"} networkName
  * @param {{ kind: "predecessor" | "successor" | "unknown", missingRuntime?: boolean, successorBytecode?: boolean, wrongRegistry?: boolean, wrongPolicy?: boolean }} options
  */
 async function installManagedHookState(state, networkName, options) {
@@ -189,9 +189,11 @@ async function installManagedHookState(state, networkName, options) {
   state.deployments.set("OrchestratorV3", { address: orchestrator.address });
 
   const predecessor =
-    PREDECESSOR_DISPUTE_STACKS[networkName].activeLifecycleHook;
-  const originalPredecessor = { ...predecessor };
+    PREDECESSOR_DISPUTE_STACKS[networkName]?.activeLifecycleHook;
+  const originalPredecessor = predecessor ? { ...predecessor } : undefined;
   if (options.kind === "predecessor") {
+    if (!predecessor)
+      throw new Error(`No predecessor evidence for ${networkName}`);
     predecessor.address = currentHook;
     predecessor.runtimeCodeHash = options.missingRuntime
       ? ethers.utils.keccak256("0x01")
@@ -208,8 +210,10 @@ async function installManagedHookState(state, networkName, options) {
   return {
     currentHook,
     restore: () => {
-      predecessor.address = originalPredecessor.address;
-      predecessor.runtimeCodeHash = originalPredecessor.runtimeCodeHash;
+      if (predecessor && originalPredecessor) {
+        predecessor.address = originalPredecessor.address;
+        predecessor.runtimeCodeHash = originalPredecessor.runtimeCodeHash;
+      }
     },
   };
 }
@@ -306,6 +310,24 @@ async function run() {
       }
     }
 
+    for (const networkName of /** @type {Array<"localhost" | "hardhat">} */ ([
+      "localhost",
+      "hardhat",
+    ])) {
+      const state = await fixture();
+      const managed = await installManagedHookState(state, networkName, {
+        kind: "successor",
+      });
+      try {
+        passed =
+          passed &&
+          (await guardManagedDisputeLifecycleHook(state.fakeHre)) === true &&
+          (await skipGroupsStack(state.fakeHre)) === true;
+      } finally {
+        managed.restore();
+      }
+    }
+
     const missingEvidenceState = await fixture();
     const missingEvidence = await installManagedHookState(
       missingEvidenceState,
@@ -382,7 +404,10 @@ async function run() {
       else process.env.ENABLE_BASE_V3_GROUPS_CUTOVER = previousCutover;
     }
 
-    process.stdout.write(passed ? "0x01" : "0x00");
+    if (!passed) {
+      throw new Error("Managed lifecycle hook rollback regression failed");
+    }
+    process.stdout.write("0x01");
     return;
   }
 
