@@ -2,7 +2,7 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
-## Release 0.4.1-rc.2
+## Release 0.4.1-rc.3
 
 - Exports the canonical source ABIs for `DisputeNullifierRegistry`, `DisputeProtectionPolicy`,
   `DisputeVerifier`, `IntentLifecycleHookV1`, and `StakeVault`.
@@ -10,7 +10,8 @@ Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, an
 - Requires a complete fresh Base staging dispute stack before the release can be published.
 - Keeps `OrchestratorV3` hook activation as a separate governance operation after downstream
   consumers have upgraded.
-- Exports deterministic dispute-protection readiness metadata for Base production and staging.
+- Exports deterministic dispute-protection readiness metadata for Base production and staging,
+  including runtime identities, governance ownership, attestation trust, and exact authorization sets.
 
 ## Installation
 

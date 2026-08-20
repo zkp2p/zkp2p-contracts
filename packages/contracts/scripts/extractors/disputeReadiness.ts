@@ -11,7 +11,12 @@ import {
 } from "../../../../deployments/parameters";
 
 type ActiveDisputeStack = { version: number; selectionHash: string };
-type DeploymentEntry = { address: string; deployedBytecode?: string; solcInputHash?: string };
+type DeploymentEntry = {
+  address: string;
+  deployedBytecode?: string;
+  solcInputHash?: string;
+  receipt?: { blockNumber?: number };
+};
 type DeploymentOutput = {
   name: string;
   chainId: string | number;
@@ -24,10 +29,12 @@ type RuntimeIdentityName =
   | "DisputeProtectionPolicy"
   | "IntentLifecycleHookV1"
   | "RecognizedPredecessorHook"
+  | "RecognizedPredecessorPolicy"
   | "OrchestratorRegistry"
   | "WhitelistPolicy"
   | "DisputeVerifier"
-  | "DisputeNullifierRegistry";
+  | "DisputeNullifierRegistry"
+  | "MultiAttestationVerifier";
 type RuntimeIdentity = { address: string; runtimeCodeHash: string };
 type AddressExpectationName =
   | "AddressGroupRegistry"
@@ -35,7 +42,6 @@ type AddressExpectationName =
   | "PaymentVerifierRegistry"
   | "RelayerRegistry"
   | "NullifierRegistryV2"
-  | "MultiAttestationVerifier"
   | "StakeToken";
 type ReadinessEvidence = {
   schemaVersion: number;
@@ -54,15 +60,24 @@ type ReadinessEvidence = {
   networks: Record<
     string,
     {
+      governance: { owner: string; pendingOwner: string };
+      attestationTrust: { requiredSignatures: string; witnesses: string[] };
       activeDisputeStack: ActiveDisputeStack;
       recognizedPredecessorHook: RuntimeIdentity;
-      addresses: Record<Exclude<RuntimeIdentityName, "RecognizedPredecessorHook">, string>;
+      recognizedPredecessorPolicy: RuntimeIdentity;
+      addresses: Record<
+        Exclude<RuntimeIdentityName, "RecognizedPredecessorHook" | "RecognizedPredecessorPolicy">,
+        string
+      >;
       addressExpectations: Record<AddressExpectationName, string>;
       deploymentEvidence: Record<
         RuntimeIdentityName,
         { deploymentName: string; solcInputHash: string; deployedBytecodeHash: string }
       >;
-      runtimeCodeHashes: Record<Exclude<RuntimeIdentityName, "RecognizedPredecessorHook">, string>;
+      runtimeCodeHashes: Record<
+        Exclude<RuntimeIdentityName, "RecognizedPredecessorHook" | "RecognizedPredecessorPolicy">,
+        string
+      >;
     }
   >;
 };
@@ -100,25 +115,45 @@ const RUNTIME_IDENTITY_NAMES: RuntimeIdentityName[] = [
   "DisputeProtectionPolicy",
   "IntentLifecycleHookV1",
   "RecognizedPredecessorHook",
+  "RecognizedPredecessorPolicy",
   "OrchestratorRegistry",
   "WhitelistPolicy",
   "DisputeVerifier",
   "DisputeNullifierRegistry",
+  "MultiAttestationVerifier",
 ];
-const DIRECT_RUNTIME_NAMES = ["OrchestratorRegistry", "DisputeNullifierRegistry"] as const;
+const DIRECT_RUNTIME_NAMES = [
+  "OrchestratorRegistry",
+  "DisputeNullifierRegistry",
+  "MultiAttestationVerifier",
+] as const;
 const ADDRESS_EXPECTATION_NAMES: AddressExpectationName[] = [
   "AddressGroupRegistry",
   "EscrowRegistry",
   "PaymentVerifierRegistry",
   "RelayerRegistry",
   "NullifierRegistryV2",
-  "MultiAttestationVerifier",
   "StakeToken",
 ];
 const HASH_PATTERN = /^0x[0-9a-f]{64}$/;
 const ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
 const SENTINEL_ESCROW = "0x0000000000000000000000000000000000000001";
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const MAX_UINT64 = "18446744073709551615";
+const GOVERNED_RUNTIME_IDENTITIES = [
+  "OrchestratorV3",
+  "StakeVault",
+  "DisputeProtectionPolicy",
+  "WhitelistPolicy",
+  "DisputeVerifier",
+  "DisputeNullifierRegistry",
+  "MultiAttestationVerifier",
+] as const;
+const TWO_STEP_GOVERNED_RUNTIME_IDENTITIES = [
+  "StakeVault",
+  "DisputeProtectionPolicy",
+  "DisputeVerifier",
+] as const;
 
 function isDirectRuntimeName(
   name: RuntimeIdentityName,
@@ -178,6 +213,21 @@ function validateEvidence(network: (typeof NETWORKS)[number], output: Deployment
   );
   const evidence = EVIDENCE.networks[network.manifestName];
   if (!evidence) throw new Error(`Missing dispute readiness evidence for ${network.manifestName}`);
+  requireExactKeys(
+    evidence as unknown as Record<string, unknown>,
+    [
+      "governance",
+      "attestationTrust",
+      "activeDisputeStack",
+      "recognizedPredecessorHook",
+      "recognizedPredecessorPolicy",
+      "addresses",
+      "addressExpectations",
+      "deploymentEvidence",
+      "runtimeCodeHashes",
+    ],
+    `${network.manifestName} readiness evidence`,
+  );
   const expectedSelection = getActiveDisputeSelectionStamp(network.manifestName);
   if (!sameJson(evidence.activeDisputeStack, expectedSelection)) {
     throw new Error(`${network.manifestName} readiness selection evidence mismatch`);
@@ -185,15 +235,28 @@ function validateEvidence(network: (typeof NETWORKS)[number], output: Deployment
   if (!sameJson(output.activeDisputeStack, expectedSelection)) {
     throw new Error(`${network.manifestName} deployment output selection stamp mismatch`);
   }
-  if (
-    !ADDRESS_PATTERN.test(evidence.recognizedPredecessorHook.address) ||
-    !HASH_PATTERN.test(evidence.recognizedPredecessorHook.runtimeCodeHash)
-  ) {
+  if ([evidence.recognizedPredecessorHook, evidence.recognizedPredecessorPolicy].some(
+    (identity) =>
+      !ADDRESS_PATTERN.test(identity.address) || !HASH_PATTERN.test(identity.runtimeCodeHash),
+  )) {
     throw new Error(`${network.manifestName} predecessor readiness evidence is malformed`);
+  }
+  if (
+    !ADDRESS_PATTERN.test(evidence.governance.owner) ||
+    evidence.governance.pendingOwner !== ZERO_ADDRESS ||
+    evidence.attestationTrust.requiredSignatures !== "1" ||
+    evidence.attestationTrust.witnesses.length === 0 ||
+    evidence.attestationTrust.witnesses.some((witness) => !ADDRESS_PATTERN.test(witness)) ||
+    new Set(evidence.attestationTrust.witnesses.map((witness) => witness.toLowerCase())).size !==
+      evidence.attestationTrust.witnesses.length
+  ) {
+    throw new Error(`${network.manifestName} governance or attestation trust evidence is malformed`);
   }
   requireExactKeys(
     evidence.addresses,
-    RUNTIME_IDENTITY_NAMES.filter((name) => name !== "RecognizedPredecessorHook"),
+    RUNTIME_IDENTITY_NAMES.filter(
+      (name) => name !== "RecognizedPredecessorHook" && name !== "RecognizedPredecessorPolicy",
+    ),
     `${network.manifestName} runtime addresses`,
   );
   requireExactKeys(
@@ -208,7 +271,9 @@ function validateEvidence(network: (typeof NETWORKS)[number], output: Deployment
   );
   requireExactKeys(
     evidence.runtimeCodeHashes,
-    RUNTIME_IDENTITY_NAMES.filter((name) => name !== "RecognizedPredecessorHook"),
+    RUNTIME_IDENTITY_NAMES.filter(
+      (name) => name !== "RecognizedPredecessorHook" && name !== "RecognizedPredecessorPolicy",
+    ),
     `${network.manifestName} runtime evidence`,
   );
   for (const [name, runtimeCodeHash] of Object.entries(evidence.runtimeCodeHashes)) {
@@ -238,7 +303,7 @@ function validateIdentityDeployment(
   expectedAddress: string,
 ): DeploymentEntry & { deployedBytecode: string; solcInputHash: string } {
   const evidence = EVIDENCE.networks[network.manifestName].deploymentEvidence[canonicalName];
-  if (canonicalName !== "RecognizedPredecessorHook") {
+  if (canonicalName !== "RecognizedPredecessorHook" && canonicalName !== "RecognizedPredecessorPolicy") {
     const selectedDeploymentName = deploymentName(network.manifestName, canonicalName);
     if (evidence.deploymentName !== selectedDeploymentName) {
       throw new Error(`${network.manifestName}.${canonicalName} deployment selection evidence mismatch`);
@@ -269,9 +334,12 @@ function createRuntimeIdentities(
   const evidence = EVIDENCE.networks[network.manifestName];
   const identities = {} as Record<RuntimeIdentityName, RuntimeIdentity>;
   for (const canonicalName of RUNTIME_IDENTITY_NAMES) {
-    if (canonicalName === "RecognizedPredecessorHook") {
-      validateIdentityDeployment(network, canonicalName, evidence.recognizedPredecessorHook.address);
-      identities[canonicalName] = evidence.recognizedPredecessorHook;
+    if (canonicalName === "RecognizedPredecessorHook" || canonicalName === "RecognizedPredecessorPolicy") {
+      const predecessor = canonicalName === "RecognizedPredecessorHook"
+        ? evidence.recognizedPredecessorHook
+        : evidence.recognizedPredecessorPolicy;
+      validateIdentityDeployment(network, canonicalName, predecessor.address);
+      identities[canonicalName] = predecessor;
       continue;
     }
     const outputEntry = outputContracts[canonicalName];
@@ -322,6 +390,19 @@ function createAddressExpectations(
   return expectations;
 }
 
+function deploymentBlockNumber(
+  network: (typeof NETWORKS)[number],
+  canonicalName: RuntimeIdentityName,
+): string {
+  const evidence = EVIDENCE.networks[network.manifestName].deploymentEvidence[canonicalName];
+  const deployment = readDeployment(network.deploymentDirectory, evidence.deploymentName);
+  const blockNumber = deployment.receipt?.blockNumber;
+  if (typeof blockNumber !== "number" || !Number.isSafeInteger(blockNumber) || blockNumber <= 0) {
+    throw new Error(`${network.manifestName}.${canonicalName} deployment block evidence is malformed`);
+  }
+  return blockNumber.toString();
+}
+
 function configuredRiskWindows(network: string): Record<string, string> {
   const activePaymentMethods = getActivePaymentMethods(network);
   const configured = new Set(DISPUTABLE_PAYMENT_METHODS);
@@ -352,6 +433,7 @@ export function buildDisputeReadinessManifest(packageName: "base" | "baseStaging
   const addressExpectations = createAddressExpectations(network, contracts);
   const configuredWindows = configuredRiskWindows(network.manifestName);
   const evidenceWindows = EVIDENCE.riskWindowSecondsByPaymentMethod[network.manifestName];
+  const networkEvidence = EVIDENCE.networks[network.manifestName];
   if (!sameJson(configuredWindows, evidenceWindows)) {
     throw new Error(`${network.manifestName} active payment method risk policy mismatch`);
   }
@@ -377,11 +459,12 @@ export function buildDisputeReadinessManifest(packageName: "base" | "baseStaging
     schemaVersion: 1,
     network: network.manifestName,
     chainId: Number(output.chainId),
-    activeDisputeStack: EVIDENCE.networks[network.manifestName].activeDisputeStack,
+    activeDisputeStack: networkEvidence.activeDisputeStack,
     runtimeIdentities,
     addressExpectations,
     expectedRelations: {
       activeLifecycleHook: runtimeIdentities.IntentLifecycleHookV1.address,
+      recognizedPredecessorPolicy: runtimeIdentities.RecognizedPredecessorPolicy.address,
       registeredOrchestrator: runtimeIdentities.OrchestratorV3.address,
       authorizedLifecycleHook: runtimeIdentities.IntentLifecycleHookV1.address,
       disputeNullifierAuthorizedWriter: runtimeIdentities.DisputeProtectionPolicy.address,
@@ -398,9 +481,25 @@ export function buildDisputeReadinessManifest(packageName: "base" | "baseStaging
       policyDisputeVerifier: runtimeIdentities.DisputeVerifier.address,
       policyDisputeNullifierRegistry: runtimeIdentities.DisputeNullifierRegistry.address,
       disputeVerifierNullifierRegistry: addressExpectations.NullifierRegistryV2,
-      disputeVerifierAttestationVerifier: addressExpectations.MultiAttestationVerifier,
+      disputeVerifierAttestationVerifier: runtimeIdentities.MultiAttestationVerifier.address,
       vaultController: runtimeIdentities.DisputeProtectionPolicy.address,
       vaultStakeToken: addressExpectations.StakeToken,
+    },
+    expectedGovernance: {
+      owner: networkEvidence.governance.owner,
+      governedRuntimeIdentities: GOVERNED_RUNTIME_IDENTITIES,
+      pendingOwner: networkEvidence.governance.pendingOwner,
+      twoStepGovernedRuntimeIdentities: TWO_STEP_GOVERNED_RUNTIME_IDENTITIES,
+    },
+    attestationTrust: networkEvidence.attestationTrust,
+    exactAuthorizationSets: {
+      lifecycleHookAuthorizationFromBlock: deploymentBlockNumber(
+        network,
+        "DisputeProtectionPolicy",
+      ),
+      authorizedLifecycleHooks: [runtimeIdentities.IntentLifecycleHookV1.address],
+      passiveDisputeNullifierWriters: [runtimeIdentities.RecognizedPredecessorPolicy.address],
+      activeDisputeNullifierWriters: [runtimeIdentities.DisputeProtectionPolicy.address],
     },
     riskWindowSecondsByPaymentMethod: evidenceWindows,
     sentinel: EVIDENCE.sentinel,
@@ -445,7 +544,9 @@ export type BaseStagingPaymentMethodHash = ${baseStagingPaymentMethodHashType};
 export type PaymentMethodHash<Network extends ReadinessNetwork = ReadinessNetwork> = Network extends 'base_staging' ? BaseStagingPaymentMethodHash : BasePaymentMethodHash;
 export type RiskWindowSeconds = '0' | '1209600';
 export interface RuntimeIdentity { address: Address; runtimeCodeHash: RuntimeCodeHash; }
-export type RuntimeIdentityName = 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'IntentLifecycleHookV1' | 'RecognizedPredecessorHook' | 'OrchestratorRegistry' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry';
+export type RuntimeIdentityName = 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'IntentLifecycleHookV1' | 'RecognizedPredecessorHook' | 'RecognizedPredecessorPolicy' | 'OrchestratorRegistry' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry' | 'MultiAttestationVerifier';
+export type GovernedRuntimeIdentityName = 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry' | 'MultiAttestationVerifier';
+export type TwoStepGovernedRuntimeIdentityName = 'StakeVault' | 'DisputeProtectionPolicy' | 'DisputeVerifier';
 export interface DisputeProtectionReadinessManifest<Network extends ReadinessNetwork = ReadinessNetwork> {
   schemaVersion: 1;
   network: Network;
@@ -458,11 +559,11 @@ export interface DisputeProtectionReadinessManifest<Network extends ReadinessNet
     PaymentVerifierRegistry: Address;
     RelayerRegistry: Address;
     NullifierRegistryV2: Address;
-    MultiAttestationVerifier: Address;
     StakeToken: Address;
   };
   expectedRelations: {
     activeLifecycleHook: Address;
+    recognizedPredecessorPolicy: Address;
     registeredOrchestrator: Address;
     authorizedLifecycleHook: Address;
     disputeNullifierAuthorizedWriter: Address;
@@ -482,6 +583,19 @@ export interface DisputeProtectionReadinessManifest<Network extends ReadinessNet
     disputeVerifierAttestationVerifier: Address;
     vaultController: Address;
     vaultStakeToken: Address;
+  };
+  expectedGovernance: {
+    owner: Address;
+    governedRuntimeIdentities: readonly GovernedRuntimeIdentityName[];
+    pendingOwner: '0x0000000000000000000000000000000000000000';
+    twoStepGovernedRuntimeIdentities: readonly TwoStepGovernedRuntimeIdentityName[];
+  };
+  attestationTrust: { requiredSignatures: '1'; witnesses: readonly Address[] };
+  exactAuthorizationSets: {
+    lifecycleHookAuthorizationFromBlock: string;
+    authorizedLifecycleHooks: readonly [Address];
+    passiveDisputeNullifierWriters: readonly [Address];
+    activeDisputeNullifierWriters: readonly [Address];
   };
   riskWindowSecondsByPaymentMethod: Record<PaymentMethodHash<Network>, RiskWindowSeconds>;
   sentinel: { escrow: Address; depositId: '0'; expected: false };
@@ -504,7 +618,7 @@ export interface DisputeProtectionReadinessManifest<Network extends ReadinessNet
 import baseData from './base.json';
 import baseStagingData from './baseStaging.json';
 import type { DisputeProtectionReadinessManifest } from './types';
-export type { Address, DisputeProtectionReadinessManifest, PaymentMethodHash, ReadinessNetwork, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName } from './types';
+export type { Address, DisputeProtectionReadinessManifest, GovernedRuntimeIdentityName, PaymentMethodHash, ReadinessNetwork, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName, TwoStepGovernedRuntimeIdentityName } from './types';
 export { default as base } from './base.json';
 export { default as baseStaging } from './baseStaging.json';
 export const disputeReadinessByNetwork = {
@@ -515,7 +629,7 @@ export const disputeReadinessByNetwork = {
   );
   fs.writeFileSync(
     path.join(OUTPUT_DIRECTORY, "index.d.ts"),
-    `export type { Address, DisputeProtectionReadinessManifest, PaymentMethodHash, ReadinessNetwork, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName } from './types';\nexport { default as base } from './base';\nexport { default as baseStaging } from './baseStaging';\nexport declare const disputeReadinessByNetwork: { base: import('./types').DisputeProtectionReadinessManifest<'base'>; baseStaging: import('./types').DisputeProtectionReadinessManifest<'base_staging'> };\n`,
+    `export type { Address, DisputeProtectionReadinessManifest, GovernedRuntimeIdentityName, PaymentMethodHash, ReadinessNetwork, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName, TwoStepGovernedRuntimeIdentityName } from './types';\nexport { default as base } from './base';\nexport { default as baseStaging } from './baseStaging';\nexport declare const disputeReadinessByNetwork: { base: import('./types').DisputeProtectionReadinessManifest<'base'>; baseStaging: import('./types').DisputeProtectionReadinessManifest<'base_staging'> };\n`,
   );
   console.log(`✅ Dispute readiness metadata written to ${OUTPUT_DIRECTORY}`);
 }

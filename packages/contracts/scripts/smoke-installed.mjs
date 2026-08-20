@@ -86,6 +86,28 @@ for (const [network, expectedRiskWindowCount] of [
   ) {
     fail(`${network} readiness metadata does not pin Base USDC`);
   }
+  if (
+    !manifest.runtimeIdentities?.MultiAttestationVerifier?.runtimeCodeHash ||
+    manifest.attestationTrust?.requiredSignatures !== "1" ||
+    manifest.attestationTrust?.witnesses?.length !== 2
+  ) {
+    fail(`${network} readiness metadata does not pin attestation trust`);
+  }
+  if (
+    !manifest.expectedGovernance?.owner ||
+    manifest.expectedGovernance?.pendingOwner !==
+      "0x0000000000000000000000000000000000000000"
+  ) {
+    fail(`${network} readiness metadata does not pin governance ownership`);
+  }
+  if (
+    manifest.exactAuthorizationSets?.authorizedLifecycleHooks?.length !== 1 ||
+    manifest.exactAuthorizationSets?.passiveDisputeNullifierWriters?.length !==
+      1 ||
+    manifest.exactAuthorizationSets?.activeDisputeNullifierWriters?.length !== 1
+  ) {
+    fail(`${network} readiness metadata does not pin exact authorization sets`);
+  }
 }
 const sourceAbis = requireFromInstall("@zkp2p/contracts-v2/abis/contracts");
 for (const contractName of [

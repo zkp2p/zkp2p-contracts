@@ -228,14 +228,21 @@ for (const {
       "DisputeProtectionPolicy",
       "IntentLifecycleHookV1",
       "RecognizedPredecessorHook",
+      "RecognizedPredecessorPolicy",
       "OrchestratorRegistry",
       "WhitelistPolicy",
       "DisputeVerifier",
       "DisputeNullifierRegistry",
+      "MultiAttestationVerifier",
     ].map((contractName) => [
       contractName,
-      contractName === "RecognizedPredecessorHook"
-        ? networkEvidence.recognizedPredecessorHook
+      contractName === "RecognizedPredecessorHook" ||
+      contractName === "RecognizedPredecessorPolicy"
+        ? networkEvidence[
+            contractName === "RecognizedPredecessorHook"
+              ? "recognizedPredecessorHook"
+              : "recognizedPredecessorPolicy"
+          ]
         : {
             address: networkEvidence.addresses[contractName],
             runtimeCodeHash: networkEvidence.runtimeCodeHashes[contractName],
@@ -248,7 +255,10 @@ for (const {
     const deploymentEvidence = networkEvidence.deploymentEvidence?.[contractName];
     if (!deploymentEvidence)
       fail(`${name}.${contractName} deployment evidence is missing`);
-    if (contractName !== "RecognizedPredecessorHook") {
+    if (
+      contractName !== "RecognizedPredecessorHook" &&
+      contractName !== "RecognizedPredecessorPolicy"
+    ) {
       const selectedDeploymentName = canonicalDisputeContracts.has(contractName)
         ? getActiveDisputeDeploymentName(manifestNetwork, contractName)
         : contractName;
@@ -274,7 +284,11 @@ for (const {
       fail(`${name}.${contractName} deployment evidence mismatch`);
     }
     if (
-      ["OrchestratorRegistry", "DisputeNullifierRegistry"].includes(contractName) &&
+      [
+        "OrchestratorRegistry",
+        "DisputeNullifierRegistry",
+        "MultiAttestationVerifier",
+      ].includes(contractName) &&
       deploymentEvidence.deployedBytecodeHash !== identity.runtimeCodeHash
     ) {
       fail(`${name}.${contractName} direct runtime hash differs from deployment evidence`);
@@ -296,6 +310,7 @@ for (const {
   const expectedAddresses = readiness.addressExpectations;
   const expectedRelations = {
     activeLifecycleHook: identities.IntentLifecycleHookV1.address,
+    recognizedPredecessorPolicy: identities.RecognizedPredecessorPolicy.address,
     registeredOrchestrator: identities.OrchestratorV3.address,
     authorizedLifecycleHook: identities.IntentLifecycleHookV1.address,
     disputeNullifierAuthorizedWriter: identities.DisputeProtectionPolicy.address,
@@ -312,12 +327,49 @@ for (const {
     policyDisputeVerifier: identities.DisputeVerifier.address,
     policyDisputeNullifierRegistry: identities.DisputeNullifierRegistry.address,
     disputeVerifierNullifierRegistry: expectedAddresses.NullifierRegistryV2,
-    disputeVerifierAttestationVerifier: expectedAddresses.MultiAttestationVerifier,
+    disputeVerifierAttestationVerifier: identities.MultiAttestationVerifier.address,
     vaultController: identities.DisputeProtectionPolicy.address,
     vaultStakeToken: expectedAddresses.StakeToken,
   };
   if (!sameJson(readiness.expectedRelations, expectedRelations))
     fail(`${name} readiness dependency relations differ from trusted evidence`);
+  const expectedGovernance = {
+    owner: networkEvidence.governance.owner,
+    governedRuntimeIdentities: [
+      "OrchestratorV3",
+      "StakeVault",
+      "DisputeProtectionPolicy",
+      "WhitelistPolicy",
+      "DisputeVerifier",
+      "DisputeNullifierRegistry",
+      "MultiAttestationVerifier",
+    ],
+    pendingOwner: networkEvidence.governance.pendingOwner,
+    twoStepGovernedRuntimeIdentities: [
+      "StakeVault",
+      "DisputeProtectionPolicy",
+      "DisputeVerifier",
+    ],
+  };
+  if (!sameJson(readiness.expectedGovernance, expectedGovernance))
+    fail(`${name} readiness governance differs from trusted evidence`);
+  if (!sameJson(readiness.attestationTrust, networkEvidence.attestationTrust))
+    fail(`${name} readiness attestation trust differs from trusted evidence`);
+  const policyDeploymentEvidence = networkEvidence.deploymentEvidence.DisputeProtectionPolicy;
+  const policyDeployment = JSON.parse(
+    fs.readFileSync(
+      path.join(repoRoot, deploymentDirectory, `${policyDeploymentEvidence.deploymentName}.json`),
+      "utf8"
+    )
+  );
+  const expectedAuthorizationSets = {
+    lifecycleHookAuthorizationFromBlock: policyDeployment.receipt.blockNumber.toString(),
+    authorizedLifecycleHooks: [identities.IntentLifecycleHookV1.address],
+    passiveDisputeNullifierWriters: [identities.RecognizedPredecessorPolicy.address],
+    activeDisputeNullifierWriters: [identities.DisputeProtectionPolicy.address],
+  };
+  if (!sameJson(readiness.exactAuthorizationSets, expectedAuthorizationSets))
+    fail(`${name} readiness authorization sets differ from trusted evidence`);
   if (JSON.stringify(readiness).includes("OptIn"))
     fail(`${name} readiness metadata exposes an internal OptIn name`);
   if (

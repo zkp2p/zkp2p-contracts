@@ -45,6 +45,17 @@
   },
   "networks": {
     "base": {
+      "governance": {
+        "owner": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+        "pendingOwner": "0x0000000000000000000000000000000000000000"
+      },
+      "attestationTrust": {
+        "requiredSignatures": "1",
+        "witnesses": [
+          "0xDB4Ed7FAF170F0f6493E3adaaCaaFaF47092c754",
+          "0xE078D93bFdd87A8c5C5cCA5905DCbA0Dd7A1F0BD"
+        ]
+      },
       "activeDisputeStack": {
         "version": 1,
         "selectionHash": "a4f17ae7c1620ecfe7d036f0b9cc7b39c50e1382dc8dc14d2e5f7f21061cd5ad"
@@ -52,6 +63,10 @@
       "recognizedPredecessorHook": {
         "address": "0x251d78fb6bBb4071995Bce74bAfC9E4168638622",
         "runtimeCodeHash": "0x03d02863ed5eaa096d4089cb1e126681c0621d99409124f4af5be7ed83e341fe"
+      },
+      "recognizedPredecessorPolicy": {
+        "address": "0xc086b6120B5e61EF48221E6A78c69737c9948dF9",
+        "runtimeCodeHash": "0xf08bce9ad622b9d45ce310493627cbef3bf6c4ac915661d5bc572bb59b61e084"
       },
       "addresses": {
         "OrchestratorV3": "0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7",
@@ -61,7 +76,8 @@
         "OrchestratorRegistry": "0xBe9fED15ED7A4B915C03EFcEcb9662739C3382A9",
         "WhitelistPolicy": "0xBC53641b4B2504f0061D6a9426C61B8eBE9B4Ff0",
         "DisputeVerifier": "0x30d4947f005653637005eed991005119D9eB2f34",
-        "DisputeNullifierRegistry": "0xA845615b5203F7a21321DdF5e3a1ca024D93a443"
+        "DisputeNullifierRegistry": "0xA845615b5203F7a21321DdF5e3a1ca024D93a443",
+        "MultiAttestationVerifier": "0x9Fe920b24e50e6a6362BA71a1BeB502A99c402d5"
       },
       "addressExpectations": {
         "AddressGroupRegistry": "0x39F80118f9eB619135f116171b6Cb91D372C5AF2",
@@ -69,7 +85,6 @@
         "PaymentVerifierRegistry": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
         "RelayerRegistry": "0xEbA979889a9c97382A92472fF3703786fF180083",
         "NullifierRegistryV2": "0x5455e761b866dfa6A2f5Dc6d6525825bf9C09aeB",
-        "MultiAttestationVerifier": "0x9Fe920b24e50e6a6362BA71a1BeB502A99c402d5",
         "StakeToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
       },
       "deploymentEvidence": {
@@ -98,6 +113,11 @@
           "solcInputHash": "1ca14361f73731f7336a0f6ab32e0034",
           "deployedBytecodeHash": "0x580bff934d9a1b51e205becde084e8d8a9f578f27eb64a336f05400478fd4ae7"
         },
+        "RecognizedPredecessorPolicy": {
+          "deploymentName": "DisputeProtectionPolicy",
+          "solcInputHash": "4873c5befde1a76742d7cd30fb21abe1",
+          "deployedBytecodeHash": "0x6146f8eb152848ddfd40d67a152a44230ed783b6c1e768d023b88fc2a09cb38f"
+        },
         "OrchestratorRegistry": {
           "deploymentName": "OrchestratorRegistry",
           "solcInputHash": "064dd90fd2334c0d4c31f55ac149684c",
@@ -117,6 +137,11 @@
           "deploymentName": "DisputeNullifierRegistry",
           "solcInputHash": "4873c5befde1a76742d7cd30fb21abe1",
           "deployedBytecodeHash": "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a"
+        },
+        "MultiAttestationVerifier": {
+          "deploymentName": "MultiAttestationVerifier",
+          "solcInputHash": "063e9f3925209f1b8c9514da0ff7d6bf",
+          "deployedBytecodeHash": "0x828a5dae520d3eaed904dfed56994dc6e892eb6416b58ad952c079e220ef841a"
         }
       },
       "runtimeCodeHashes": {
@@ -127,10 +152,22 @@
         "OrchestratorRegistry": "0xf0d132d621ac03181a6fade6a93bd0968d33830c8bf393793236787e7978aee1",
         "WhitelistPolicy": "0xa3cf0fdf3835887de432cbac9c192edf6c93a8589748aa93f8294333d57024b2",
         "DisputeVerifier": "0x65246e11392befc33d92246cf3ac2467d1f338a8b73c6514b76fab0a70a01ead",
-        "DisputeNullifierRegistry": "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a"
+        "DisputeNullifierRegistry": "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
+        "MultiAttestationVerifier": "0x828a5dae520d3eaed904dfed56994dc6e892eb6416b58ad952c079e220ef841a"
       }
     },
     "base_staging": {
+      "governance": {
+        "owner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+        "pendingOwner": "0x0000000000000000000000000000000000000000"
+      },
+      "attestationTrust": {
+        "requiredSignatures": "1",
+        "witnesses": [
+          "0x66649F896521b0fb487fE2077b4FBDA283d7f19a",
+          "0x4ab950AE1e3326578Bf7e643a2031E858aBa2927"
+        ]
+      },
       "activeDisputeStack": {
         "version": 1,
         "selectionHash": "586c90f9de3d10b6d48f4286c709aa7f870fc2fdcfb0af1da947c1da76132dd0"
@@ -138,6 +175,10 @@
       "recognizedPredecessorHook": {
         "address": "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
         "runtimeCodeHash": "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367"
+      },
+      "recognizedPredecessorPolicy": {
+        "address": "0x21517b7743E727ae47A66FafF93550B689c15020",
+        "runtimeCodeHash": "0x4e6617a94819ad15693289b173a9a66a78cfe1dd706f6b4fdc5a5f6ad6a32971"
       },
       "addresses": {
         "OrchestratorV3": "0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f",
@@ -147,7 +188,8 @@
         "OrchestratorRegistry": "0xfA6384EB6176cfEC049540526A3d2126C3666d8A",
         "WhitelistPolicy": "0x7d9277cb8bb78a51eeaafB7CFF306E7DA4C972fD",
         "DisputeVerifier": "0x973578148c5Fd49b9f68B50B26066555325AC708",
-        "DisputeNullifierRegistry": "0xE0B05a9655AF0f31E32904267baa50FbC7f217ea"
+        "DisputeNullifierRegistry": "0xE0B05a9655AF0f31E32904267baa50FbC7f217ea",
+        "MultiAttestationVerifier": "0x9855a39aC5975069632e91160d8712CBfF19e864"
       },
       "addressExpectations": {
         "AddressGroupRegistry": "0x54Ff7788Cb42B46FE2F016a65Fd0f654Bb9BcF3D",
@@ -155,7 +197,6 @@
         "PaymentVerifierRegistry": "0x2261416DA54C85f975C73FA56EF4D2D6b0aEF7Cc",
         "RelayerRegistry": "0xB214650b424E6b5fdcB1259566eB7A512D8Bd25E",
         "NullifierRegistryV2": "0x2eb43d6C7c7Ec4220Aa6B8735BC053824a71778C",
-        "MultiAttestationVerifier": "0x9855a39aC5975069632e91160d8712CBfF19e864",
         "StakeToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
       },
       "deploymentEvidence": {
@@ -184,6 +225,11 @@
           "solcInputHash": "4873c5befde1a76742d7cd30fb21abe1",
           "deployedBytecodeHash": "0xad298e1829958f431833bf1c0e53311f27e95dd29806c4d55aa75163e6dbcc21"
         },
+        "RecognizedPredecessorPolicy": {
+          "deploymentName": "DisputeProtectionPolicy",
+          "solcInputHash": "4873c5befde1a76742d7cd30fb21abe1",
+          "deployedBytecodeHash": "0x6146f8eb152848ddfd40d67a152a44230ed783b6c1e768d023b88fc2a09cb38f"
+        },
         "OrchestratorRegistry": {
           "deploymentName": "OrchestratorRegistry",
           "solcInputHash": "94a3c07062f0a98136d6dfc096f70421",
@@ -203,6 +249,11 @@
           "deploymentName": "DisputeNullifierRegistry",
           "solcInputHash": "4873c5befde1a76742d7cd30fb21abe1",
           "deployedBytecodeHash": "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a"
+        },
+        "MultiAttestationVerifier": {
+          "deploymentName": "MultiAttestationVerifier",
+          "solcInputHash": "063e9f3925209f1b8c9514da0ff7d6bf",
+          "deployedBytecodeHash": "0x828a5dae520d3eaed904dfed56994dc6e892eb6416b58ad952c079e220ef841a"
         }
       },
       "runtimeCodeHashes": {
@@ -213,7 +264,8 @@
         "OrchestratorRegistry": "0xf0d132d621ac03181a6fade6a93bd0968d33830c8bf393793236787e7978aee1",
         "WhitelistPolicy": "0x917965fdc75580147ad0787c86f8b2a0f0185ef6e101567b82dc1245d6eb63bc",
         "DisputeVerifier": "0xb3b34734cfd162cd129d0c84285461c751321545213ec20164745b8e72f9dd6c",
-        "DisputeNullifierRegistry": "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a"
+        "DisputeNullifierRegistry": "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
+        "MultiAttestationVerifier": "0x828a5dae520d3eaed904dfed56994dc6e892eb6416b58ad952c079e220ef841a"
       }
     }
   }

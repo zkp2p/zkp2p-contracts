@@ -1,6 +1,6 @@
 {
   "name": "@zkp2p/contracts-v2",
-  "version": "0.4.1-rc.2",
+  "version": "0.4.1-rc.3",
   "description": "ZKP2P V2 smart contract interfaces and utilities",
   "main": "./_cjs/index.js",
   "module": "./_esm/index.js",

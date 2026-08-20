@@ -269,6 +269,12 @@ const RISK_WINDOWS_BY_NETWORK = {
 const READINESS_BY_NETWORK = {
   base: {
     riskWindows: RISK_WINDOWS_BY_NETWORK.base,
+    governanceOwner: "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+    policyDeploymentBlock: "50201693",
+    attestationWitnesses: [
+      "0xDB4Ed7FAF170F0f6493E3adaaCaaFaF47092c754",
+      "0xE078D93bFdd87A8c5C5cCA5905DCbA0Dd7A1F0BD",
+    ],
     selectionHash: "a4f17ae7c1620ecfe7d036f0b9cc7b39c50e1382dc8dc14d2e5f7f21061cd5ad",
     runtimeIdentities: {
       OrchestratorV3: {
@@ -291,6 +297,10 @@ const READINESS_BY_NETWORK = {
         address: "0x251d78fb6bBb4071995Bce74bAfC9E4168638622",
         runtimeCodeHash: "0x03d02863ed5eaa096d4089cb1e126681c0621d99409124f4af5be7ed83e341fe",
       },
+      RecognizedPredecessorPolicy: {
+        address: "0xc086b6120B5e61EF48221E6A78c69737c9948dF9",
+        runtimeCodeHash: "0xf08bce9ad622b9d45ce310493627cbef3bf6c4ac915661d5bc572bb59b61e084",
+      },
       OrchestratorRegistry: {
         address: "0xBe9fED15ED7A4B915C03EFcEcb9662739C3382A9",
         runtimeCodeHash: "0xf0d132d621ac03181a6fade6a93bd0968d33830c8bf393793236787e7978aee1",
@@ -307,6 +317,10 @@ const READINESS_BY_NETWORK = {
         address: "0xA845615b5203F7a21321DdF5e3a1ca024D93a443",
         runtimeCodeHash: "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
       },
+      MultiAttestationVerifier: {
+        address: "0x9Fe920b24e50e6a6362BA71a1BeB502A99c402d5",
+        runtimeCodeHash: "0x828a5dae520d3eaed904dfed56994dc6e892eb6416b58ad952c079e220ef841a",
+      },
     },
     addressExpectations: {
       AddressGroupRegistry: "0x39F80118f9eB619135f116171b6Cb91D372C5AF2",
@@ -314,12 +328,17 @@ const READINESS_BY_NETWORK = {
       PaymentVerifierRegistry: "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
       RelayerRegistry: "0xEbA979889a9c97382A92472fF3703786fF180083",
       NullifierRegistryV2: "0x5455e761b866dfa6A2f5Dc6d6525825bf9C09aeB",
-      MultiAttestationVerifier: "0x9Fe920b24e50e6a6362BA71a1BeB502A99c402d5",
       StakeToken: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     },
   },
   baseStaging: {
     riskWindows: RISK_WINDOWS_BY_NETWORK.baseStaging,
+    governanceOwner: "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    policyDeploymentBlock: "50201496",
+    attestationWitnesses: [
+      "0x66649F896521b0fb487fE2077b4FBDA283d7f19a",
+      "0x4ab950AE1e3326578Bf7e643a2031E858aBa2927",
+    ],
     selectionHash: "586c90f9de3d10b6d48f4286c709aa7f870fc2fdcfb0af1da947c1da76132dd0",
     runtimeIdentities: {
       OrchestratorV3: {
@@ -342,6 +361,10 @@ const READINESS_BY_NETWORK = {
         address: "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
         runtimeCodeHash: "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367",
       },
+      RecognizedPredecessorPolicy: {
+        address: "0x21517b7743E727ae47A66FafF93550B689c15020",
+        runtimeCodeHash: "0x4e6617a94819ad15693289b173a9a66a78cfe1dd706f6b4fdc5a5f6ad6a32971",
+      },
       OrchestratorRegistry: {
         address: "0xfA6384EB6176cfEC049540526A3d2126C3666d8A",
         runtimeCodeHash: "0xf0d132d621ac03181a6fade6a93bd0968d33830c8bf393793236787e7978aee1",
@@ -358,6 +381,10 @@ const READINESS_BY_NETWORK = {
         address: "0xE0B05a9655AF0f31E32904267baa50FbC7f217ea",
         runtimeCodeHash: "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
       },
+      MultiAttestationVerifier: {
+        address: "0x9855a39aC5975069632e91160d8712CBfF19e864",
+        runtimeCodeHash: "0x828a5dae520d3eaed904dfed56994dc6e892eb6416b58ad952c079e220ef841a",
+      },
     },
     addressExpectations: {
       AddressGroupRegistry: "0x54Ff7788Cb42B46FE2F016a65Fd0f654Bb9BcF3D",
@@ -365,7 +392,6 @@ const READINESS_BY_NETWORK = {
       PaymentVerifierRegistry: "0x2261416DA54C85f975C73FA56EF4D2D6b0aEF7Cc",
       RelayerRegistry: "0xB214650b424E6b5fdcB1259566eB7A512D8Bd25E",
       NullifierRegistryV2: "0x2eb43d6C7c7Ec4220Aa6B8735BC053824a71778C",
-      MultiAttestationVerifier: "0x9855a39aC5975069632e91160d8712CBfF19e864",
       StakeToken: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     },
   },
@@ -397,6 +423,7 @@ test("package extraction publishes exact dispute readiness metadata without inte
     assert.deepEqual(manifest.addressExpectations, expected.addressExpectations);
     assert.deepEqual(manifest.expectedRelations, {
       activeLifecycleHook: expected.runtimeIdentities.IntentLifecycleHookV1.address,
+      recognizedPredecessorPolicy: expected.runtimeIdentities.RecognizedPredecessorPolicy.address,
       registeredOrchestrator: expected.runtimeIdentities.OrchestratorV3.address,
       authorizedLifecycleHook: expected.runtimeIdentities.IntentLifecycleHookV1.address,
       disputeNullifierAuthorizedWriter: expected.runtimeIdentities.DisputeProtectionPolicy.address,
@@ -413,9 +440,41 @@ test("package extraction publishes exact dispute readiness metadata without inte
       policyDisputeVerifier: expected.runtimeIdentities.DisputeVerifier.address,
       policyDisputeNullifierRegistry: expected.runtimeIdentities.DisputeNullifierRegistry.address,
       disputeVerifierNullifierRegistry: expected.addressExpectations.NullifierRegistryV2,
-      disputeVerifierAttestationVerifier: expected.addressExpectations.MultiAttestationVerifier,
+      disputeVerifierAttestationVerifier: expected.runtimeIdentities.MultiAttestationVerifier.address,
       vaultController: expected.runtimeIdentities.DisputeProtectionPolicy.address,
       vaultStakeToken: expected.addressExpectations.StakeToken,
+    });
+    assert.deepEqual(manifest.expectedGovernance, {
+      owner: expected.governanceOwner,
+      governedRuntimeIdentities: [
+        "OrchestratorV3",
+        "StakeVault",
+        "DisputeProtectionPolicy",
+        "WhitelistPolicy",
+        "DisputeVerifier",
+        "DisputeNullifierRegistry",
+        "MultiAttestationVerifier",
+      ],
+      pendingOwner: "0x0000000000000000000000000000000000000000",
+      twoStepGovernedRuntimeIdentities: [
+        "StakeVault",
+        "DisputeProtectionPolicy",
+        "DisputeVerifier",
+      ],
+    });
+    assert.deepEqual(manifest.attestationTrust, {
+      requiredSignatures: "1",
+      witnesses: expected.attestationWitnesses,
+    });
+    assert.deepEqual(manifest.exactAuthorizationSets, {
+      lifecycleHookAuthorizationFromBlock: expected.policyDeploymentBlock,
+      authorizedLifecycleHooks: [expected.runtimeIdentities.IntentLifecycleHookV1.address],
+      passiveDisputeNullifierWriters: [
+        expected.runtimeIdentities.RecognizedPredecessorPolicy.address,
+      ],
+      activeDisputeNullifierWriters: [
+        expected.runtimeIdentities.DisputeProtectionPolicy.address,
+      ],
     });
     assert.deepEqual(
       manifest.riskWindowSecondsByPaymentMethod,
