@@ -696,8 +696,10 @@ there is no supported lane-32 deployment or activation flag.
 `ENABLE_BASE_V3_DISPUTE_OPT_IN_DEPLOYMENT=true`, it reuses the pinned `DisputeVerifier` and
 `DisputeNullifierRegistry`, deploys a fresh `StakeVault`, `DisputeProtectionPolicy`, and
 `IntentLifecycleHookV1`, applies non-zero risk windows only to PayPal, Venmo, and Cash App, authorizes
-the fresh hook, and initiates the required ownership handovers. The deploy-only run is transaction-by-
-transaction resumable and leaves the active O3 hook and dispute-registry writer set unchanged.
+the fresh hook, and initiates the required ownership handovers where the deployer is not governance.
+On Base it also clears the obsolete predecessor vault and policy pending-owner transfers after proving
+their exact expected state. The deploy-only run is transaction-by-transaction resumable and leaves the
+active O3 hook and dispute-registry writer set unchanged.
 
 Commit and propagate the three successor records before activation. Base governance is prepared only
 as a deterministic unsigned Safe batch after downstream readiness and exact fork simulation; the

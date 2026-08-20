@@ -7,10 +7,18 @@
     "noEmit": true
   },
   "files": [
+    "hardhat.config.ts",
     "deployments/activeDisputeStack.cjs",
+    "deploy/30_deploy_v3_lifecycle_stack.ts",
     "deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts",
+    "deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts",
+    "deploy/deploy_summary.ts",
+    "scripts/deployActive.ts",
     "scripts/active-dispute-stack.spec.cjs",
-    "scripts/test-dispute-lifecycle-deployment.cjs"
+    "scripts/test-dispute-lifecycle-deployment.cjs",
+    "scripts/test-opt-in-dispute-lifecycle-deployment.cjs",
+    "scripts/test-v3-groups-base-deployment.cjs",
+    "tasks/etherscanVerifyWithDelay.ts"
   ],
   "include": []
 }
