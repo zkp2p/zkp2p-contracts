@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "networks": {
+    "base": {
+      "StakeVault": "StakeVault",
+      "DisputeProtectionPolicy": "DisputeProtectionPolicy",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1"
+    },
+    "base_staging": {
+      "StakeVault": "StakeVault",
+      "DisputeProtectionPolicy": "DisputeProtectionPolicy",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1"
+    },
+    "localhost": {
+      "StakeVault": "StakeVaultOptIn",
+      "DisputeProtectionPolicy": "DisputeProtectionPolicyOptIn",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1OptIn"
+    },
+    "hardhat": {
+      "StakeVault": "StakeVaultOptIn",
+      "DisputeProtectionPolicy": "DisputeProtectionPolicyOptIn",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1OptIn"
+    }
+  }
+}

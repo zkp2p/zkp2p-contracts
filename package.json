@@ -32,11 +32,12 @@
     "test:fuzz": "forge test --match-path 'test-foundry/fuzz/**/*.t.sol'",
     "test:invariant": "forge test --match-path 'test-foundry/invariant/**/*.t.sol'",
     "test:intent-guardian-fee-update": "node --test scripts/intent-guardian-fee-update.spec.cjs",
-    "test:dispute-lifecycle-deployment": "node scripts/test-dispute-lifecycle-deployment.cjs",
+    "test:dispute-lifecycle-deployment": "node --test scripts/active-dispute-stack.spec.cjs && node scripts/test-dispute-lifecycle-deployment.cjs",
     "test:v3-groups-deployment": "node scripts/test-v3-groups-base-deployment.cjs prepare-resume && node scripts/test-v3-groups-base-deployment.cjs reject-mismatch",
     "test:release-policy": "node --test scripts/verify-github-environment.spec.mjs scripts/npm-release.spec.mjs",
     "typechain": "hardhat typechain",
-    "transpile": "tsc"
+    "transpile": "tsc",
+    "typecheck:dispute-deployment": "tsc -p tsconfig.dispute-deployment.json"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-verify": "2.1.3",

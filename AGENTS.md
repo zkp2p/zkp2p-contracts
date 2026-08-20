@@ -23,11 +23,17 @@
   closed. Base staging is verification-only because its EOA-owned registries cannot provide an atomic cutover.
   On Base, the explicit cutover opt-in preserves the audited method order and currencies while atomically routing
   all active methods to UPV3 and revoking both retired verifiers from the legacy registry.
-- Lane `32` deploys, wires, transfers, and activates the fresh dispute lifecycle stack as one explicitly gated
-  lane. Staging must first complete a resumable deploy-only run, propagate the five fresh addresses, and then use
-  the separate activation and readiness confirmations in the same lane. Base prepares the required
-  ownership-acceptance and lifecycle-hook Safe calls but never executes them. Never infer activation from source,
-  tests, package ABIs, or artifacts.
+- Lane `32` is immutable, read-only predecessor evidence. It verifies the exact historical Base-staging and Base
+  deployment records and runtime hashes, always skips execution, and must never deploy, transfer ownership, mutate
+  writers, prepare governance, or activate a hook.
+- Lane `33` is the independently owned IntentGuardian fee update.
+- Lane `34` is the only opt-in dispute successor lane. Its tag-scoped live commands deploy and configure a fresh
+  `StakeVault`, `DisputeProtectionPolicy`, and `IntentLifecycleHookV1` while reusing the pinned verifier and dispute
+  registry. `ENABLE_STAGING_V3_DISPUTE_OPT_IN_DEPLOYMENT=true` and
+  `ENABLE_BASE_V3_DISPUTE_OPT_IN_DEPLOYMENT=true` authorize passive deployment only; deployment leaves the current
+  writer set and OrchestratorV3 hook unchanged. Base activation is an unsigned, separately reviewed Safe batch that
+  the lane never signs, proposes, or executes. Base-staging activation advances separately confirmed EOA-owned
+  transitions one at a time. Never infer activation from source, tests, package ABIs, artifacts, or deployment.
 - `IntentGuardian` and `WhitelistPolicy` remain part of the V2 policy history and are reused where the mounted V3
   lifecycle lane specifies. Do not redeploy a core stack merely to change an independently owned policy component.
 - The payment-verifier cutover is one-way. Before the governance batch, lane `31` must prove UPV3 is the sole

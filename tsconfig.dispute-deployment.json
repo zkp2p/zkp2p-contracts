@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "allowImportingTsExtensions": true,
+    "checkJs": true,
+    "noEmit": true
+  },
+  "files": [
+    "deployments/activeDisputeStack.cjs",
+    "deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts",
+    "scripts/active-dispute-stack.spec.cjs",
+    "scripts/test-dispute-lifecycle-deployment.cjs"
+  ],
+  "include": []
+}

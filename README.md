@@ -648,8 +648,9 @@ contract deployment or duplicate staging artifact is required.
 ### V3 Groups Cutover
 
 The lifecycle rollout is split into explicit lanes. Lane 30 supports the whitelist-only groups
-deployment on Base staging and Base. Lane 31 verifies and cuts over the V3 payment-binding pair, and
-lane 32 deploys, wires, transfers, and activates the fresh dispute/staking stack.
+deployment on Base staging and Base. Lane 31 verifies and cuts over the V3 payment-binding pair. Lane
+32 is immutable predecessor evidence, lane 33 owns the IntentGuardian fee update, and lane 34 is the
+only lane allowed to deploy or prepare activation of the opt-in dispute/staking successor.
 
 `deploy/30_deploy_v3_lifecycle_stack.ts` is the groups-only lane. Its lane-29 dependency supplies a
 fresh `WhitelistPolicy`; lane 30 deploys a fresh `WhitelistLifecycleHook` and `OrchestratorV3`, sets
@@ -685,40 +686,37 @@ original order against UPV3, and revokes UPV1 and UPV2 from the legacy nullifier
 the registry order and produces exactly 22 atomic Safe calls. Never route a method back to a retired verifier
 after this one-way cutover.
 
-`deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts` is the combined dispute/staking lane. Run
-`--tags V3DisputeLifecycleStack` with `ENABLE_STAGING_V3_DISPUTE_DEPLOYMENT=true`. It deploys a fresh
-`DisputeNullifierRegistry`,
-`DisputeVerifier`, `StakeVault`, `DisputeProtectionPolicy`, and `IntentLifecycleHookV1`; initializes the vault
-controller; applies non-zero risk windows only to PayPal, Venmo, and Cash App; authorizes the combined
-hook; grants the policy sole nullifier-writer permission; and transfers ownership. A partial deployment is
-resumable only when every persisted dependency, owner, writer, and risk window remains recognizable.
+`deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts` is retained only as read-only historical
+evidence. It pins the predecessor records and runtime hashes on Base staging and Base and always skips;
+there is no supported lane-32 deployment or activation flag.
 
-Staging deliberately uses two runs of this one lane. First,
-`ENABLE_STAGING_V3_DISPUTE_DEPLOYMENT=true` deploys and prepares the five contracts without changing the
-active O3 hook. Commit and propagate the fresh addresses, verify the live predecessor is drained, then run
-again with `ENABLE_STAGING_V3_DISPUTE_ACTIVATION=true`,
-`CONFIRM_STAGING_V3_DISPUTE_DOWNSTREAM_READY=true`, and
-`CONFIRM_STAGING_V3_DISPUTE_PREDECESSOR_DRAINED=true`. Base requires
-`ENABLE_BASE_V3_DISPUTE_DEPLOYMENT=true`, transfers the plain registry immediately, and prepares an
-unexecuted Safe batch that accepts the three two-step ownership transfers and activates the hook. Both
-production-like paths pin the expected O3 address, runtime hash, owner, registry membership, unpaused state,
-and predecessor hook before preparing activation.
+`deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts` owns the successor. Use only the dedicated
+`yarn deploy:dispute-opt-in:base_staging` or `yarn deploy:dispute-opt-in:base` command. With
+`ENABLE_STAGING_V3_DISPUTE_OPT_IN_DEPLOYMENT=true` or
+`ENABLE_BASE_V3_DISPUTE_OPT_IN_DEPLOYMENT=true`, it reuses the pinned `DisputeVerifier` and
+`DisputeNullifierRegistry`, deploys a fresh `StakeVault`, `DisputeProtectionPolicy`, and
+`IntentLifecycleHookV1`, applies non-zero risk windows only to PayPal, Venmo, and Cash App, authorizes
+the fresh hook, and initiates the required ownership handovers. The deploy-only run is transaction-by-
+transaction resumable and leaves the active O3 hook and dispute-registry writer set unchanged.
 
-Commit the five newly generated deployment artifacts so their addresses can flow through the
-package, indexer, curator, and attestation-service releases. Production Safe execution remains blocked
-until every compatible downstream release is deployed:
+Commit and propagate the three successor records before activation. Base governance is prepared only
+as a deterministic unsigned Safe batch after downstream readiness and exact fork simulation; the
+deployment lane never signs, proposes, or executes it. Base staging has no Safe artifact and advances
+its EOA-owned activation state only through separately confirmed, one-call transitions. Both paths
+must recheck the payment-binding cutover, predecessor drain, owners, writers, vault accounting, O3
+configuration, and current hook immediately before activation.
+
+Production activation remains blocked until every compatible downstream release is deployed:
 
 - [ ] `zkp2p-indexer` indexes the fresh contract addresses and the renamed `Dispute*` events.
 - [ ] `curator` recognizes `IntentLifecycleHookV1` as the enforcement hook and enables dispute enforcement.
-- [ ] `@zkp2p/contracts-v2` publishes the hard-renamed dispute ABI and staging addresses, and its consumers upgrade.
+- [ ] `@zkp2p/contracts-v2` publishes the opt-in dispute ABI and replacement addresses, and its consumers upgrade.
 - [ ] The production `attestation-service` release remains on the ratified UPV3 address; do not promote an
       independently diverged release branch that restores UPV2.
 
 Dispute-evidence issuance in `attestation-service` remains a separate follow-up and is intentionally not implemented
 by these contract lanes. Only PayPal, Venmo, and Cash App receive non-zero onchain risk windows, matching the
 explicitly ratified chargebackable-platform set.
-
-Commit the newly generated canonical artifacts after the authorized deployment.
 
 ### Whitelist Bootstrap
 
