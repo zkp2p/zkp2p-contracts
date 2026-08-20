@@ -68,17 +68,21 @@ test("normalizes Hardhat and package network names through one boundary", () => 
   );
 });
 
-test("resolves predecessor records on live networks before the successor deployment", () => {
+test("resolves successor records on live networks after the passive deployment", () => {
   assert.deepEqual(resolveActiveDisputeAliases("base", contracts()), {
     OtherContract: deployment("0x0000000000000000000000000000000000000001", []),
-    StakeVault: deployment("0x0000000000000000000000000000000000000011"),
+    StakeVault: deployment("0x0000000000000000000000000000000000000021"),
     DisputeProtectionPolicy: deployment(
-      "0x0000000000000000000000000000000000000012"
+      "0x0000000000000000000000000000000000000022"
     ),
     IntentLifecycleHookV1: deployment(
-      "0x0000000000000000000000000000000000000013"
+      "0x0000000000000000000000000000000000000023"
     ),
   });
+  assert.equal(
+    resolveActiveDisputeAliases("base_staging", contracts()).StakeVault.address,
+    "0x0000000000000000000000000000000000000021"
+  );
 });
 
 test("resolves successor records locally and removes every internal deployment key", () => {
@@ -105,7 +109,7 @@ test("resolves successor records locally and removes every internal deployment k
 test("returns only known canonical deployment names", () => {
   assert.equal(
     getActiveDisputeDeploymentName("base", "StakeVault"),
-    "StakeVault"
+    "StakeVaultOptIn"
   );
   assert.equal(
     getActiveDisputeDeploymentName("hardhat", "StakeVault"),
