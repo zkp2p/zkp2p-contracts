@@ -107,17 +107,20 @@ payment method.
 
 ### Lane ownership
 
-Lane 32 is historical predecessor state. Lane 33 is the only current-tree lane
+Lane 32 is historical predecessor state. Lane 34 is the only current-tree lane
 allowed to create or prepare activation of the opt-in dispute stack.
+
+Lane 34 is used because lane 33 was assigned to the IntentGuardian fee update
+on `main` after this design was approved.
 
 Changing the policy source means lane 32 cannot compare the deployed
 default-on policy against the current compiled artifact. On Base and Base
 staging it must recognize only pinned predecessor addresses and runtime hashes,
 report the lane as superseded, and leave all state untouched. On localhost and
-Hardhat, lane 33 supplies the final current stack; lane 32 must not deploy a
+Hardhat, lane 34 supplies the final current stack; lane 32 must not deploy a
 second current-policy stack first.
 
-Lane 33 uses versioned internal deployment records so it never overwrites the
+Lane 34 uses versioned internal deployment records so it never overwrites the
 predecessor evidence:
 
 - `StakeVaultOptIn`
@@ -140,7 +143,7 @@ evidence.
 
 ### Reused and fresh components
 
-On Base staging and Base, lane 33 reuses the network's exact deployed:
+On Base staging and Base, lane 34 reuses the network's exact deployed:
 
 - `DisputeVerifier`
 - `DisputeNullifierRegistry`
@@ -156,7 +159,7 @@ It deploys a fresh:
 - `IntentLifecycleHookV1`, pointing at the existing orchestrator registry and
   whitelist policy plus the fresh dispute policy.
 
-On a fresh localhost or Hardhat deployment, lane 33 also deploys the local-only
+On a fresh localhost or Hardhat deployment, lane 34 also deploys the local-only
 `DisputeNullifierRegistry` and `DisputeVerifier` dependencies that lane 32
 previously supplied. Local deployment tests start from an empty deployment
 database and may not rely on warm lane-32 artifacts.
@@ -287,7 +290,7 @@ Activation additionally requires:
   remains active, reports the expected fail-closed/direct-only state rather than
   `Canonical`.
 
-Lane 33 fails closed on unknown code, address drift, hook drift, accounting,
+Lane 34 fails closed on unknown code, address drift, hook drift, accounting,
 unexpected writers, permission drift, ownership drift, missing confirmations,
 stale nonce, Base batch drift, or an unrecognized partial transition.
 
@@ -332,7 +335,7 @@ network configurations:
   replacement address, not from chain ID. Base staging and Base both use chain
   ID 8453.
 - Base-staging and Base policy, hook, and vault addresses are replaced with the
-  real lane-33 deployments.
+  real lane-34 deployments.
 - The published contracts package dependency and lockfile are updated.
 - Envio codegen/config synchronization is regenerated before typecheck.
 - The deployment/reindex excludes predecessor policy events from active policy
@@ -374,7 +377,7 @@ non-USDC mismatch, `riskWindow == 0`, and hook snapshot behavior.
 
 ### Deployment tests
 
-The lane-33 helper tests cover:
+The lane-34 helper tests cover:
 
 - Base's whitelist-hook predecessor and Base staging's old combined-hook
   predecessor;
@@ -424,7 +427,7 @@ Indexer verification includes:
 
 ## Delivery sequence
 
-1. Implement and merge the contracts behavior plus lane-33 machinery.
+1. Implement and merge the contracts behavior plus lane-34 machinery.
 2. Run deploy-only on Base staging and Base; verify and commit real artifacts
    and regenerated outputs. Do not swap either hook as part of deployment.
 3. Publish the newly discovered protected contracts package version from the
