@@ -29,6 +29,10 @@ const { dirname, join, resolve } = require("node:path");
 const { test } = require("node:test");
 
 const lane34Module = require("../deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts");
+const { PREDECESSOR_DISPUTE_STACKS } = require(
+  "../deployments/predecessorDisputeStack.ts"
+);
+const readinessEvidence = require("../deployments/dispute-readiness-evidence.json");
 const {
   DEPLOY_ONLY_STEP_KINDS,
   EXPECTED_LIVE,
@@ -119,6 +123,47 @@ test("live dependency pins use deployed runtime hashes", () => {
       },
     }
   );
+});
+
+test("package readiness evidence stays pinned to the immutable predecessor and lane 34 live dependencies", () => {
+  for (const network of /** @type {Array<"base" | "base_staging">} */ ([
+    "base",
+    "base_staging",
+  ])) {
+    const evidence = readinessEvidence.networks[network];
+    const predecessor = PREDECESSOR_DISPUTE_STACKS[network];
+    const live = EXPECTED_LIVE[network];
+
+    assert.deepEqual(evidence.recognizedPredecessorHook, predecessor.activeLifecycleHook);
+    for (const contractName of /** @type {Array<"DisputeVerifier" | "DisputeNullifierRegistry">} */ ([
+      "DisputeVerifier",
+      "DisputeNullifierRegistry",
+    ])) {
+      assert.equal(evidence.addresses[contractName], predecessor.contracts[contractName].address);
+      assert.equal(
+        evidence.runtimeCodeHashes[contractName],
+        predecessor.contracts[contractName].runtimeCodeHash
+      );
+    }
+    assert.equal(evidence.addresses.OrchestratorV3, live.orchestrator);
+    assert.equal(evidence.runtimeCodeHashes.OrchestratorV3, live.orchestratorCodeHash);
+    assert.equal(evidence.addresses.OrchestratorRegistry, live.orchestratorRegistry);
+    assert.equal(
+      evidence.runtimeCodeHashes.OrchestratorRegistry,
+      live.orchestratorRegistryCodeHash
+    );
+    assert.equal(evidence.addresses.WhitelistPolicy, live.whitelistPolicy);
+    assert.equal(evidence.runtimeCodeHashes.WhitelistPolicy, live.whitelistPolicyCodeHash);
+    assert.deepEqual(evidence.addressExpectations, {
+      AddressGroupRegistry: live.addressGroupRegistry,
+      EscrowRegistry: live.escrowRegistry,
+      PaymentVerifierRegistry: live.paymentVerifierRegistry,
+      RelayerRegistry: live.relayerRegistry,
+      NullifierRegistryV2: live.nullifierRegistryV2,
+      MultiAttestationVerifier: live.attestationVerifier,
+      StakeToken: live.stakeToken,
+    });
+  }
 });
 
 test("missing successor deployment records normalize to the absent state", async () => {

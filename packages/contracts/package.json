@@ -15,6 +15,7 @@
     "paymentMethods",
     "currencies",
     "oracleFeeds",
+    "disputeReadiness",
     "networks",
     "types",
     "utils"
@@ -22,7 +23,7 @@
   "scripts": {
     "build": "yarn clean && yarn extract && yarn generate:wrappers && yarn generate:networks && yarn bundle",
     "build:full": "yarn build",
-    "clean": "rimraf _cjs _esm _types addresses abis constants paymentMethods currencies oracleFeeds networks types utils",
+    "clean": "rimraf _cjs _esm _types addresses abis constants paymentMethods currencies oracleFeeds disputeReadiness networks types utils",
     "extract": "ts-node --transpile-only scripts/extract-all.ts",
     "generate:wrappers": "ts-node --transpile-only scripts/generate-abi-wrappers.ts",
     "generate:networks": "ts-node --transpile-only scripts/generate-network-entries.ts",
@@ -114,6 +115,21 @@
       "default": "./_esm/oracleFeeds/*.js"
     },
     "./oracleFeeds/*.json": "./oracleFeeds/*.json",
+    "./disputeReadiness": {
+      "types": "./_types/disputeReadiness/index.d.ts",
+      "import": "./_esm/disputeReadiness/index.js",
+      "react-native": "./_esm/disputeReadiness/index.js",
+      "require": "./_cjs/disputeReadiness/index.js",
+      "default": "./_esm/disputeReadiness/index.js"
+    },
+    "./disputeReadiness/*": {
+      "types": "./_types/disputeReadiness/*.d.ts",
+      "import": "./_esm/disputeReadiness/*.js",
+      "react-native": "./_esm/disputeReadiness/*.js",
+      "require": "./_cjs/disputeReadiness/*.js",
+      "default": "./_esm/disputeReadiness/*.js"
+    },
+    "./disputeReadiness/*.json": "./disputeReadiness/*.json",
     "./types": {
       "types": "./types/index.ts"
     },

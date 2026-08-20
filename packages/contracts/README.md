@@ -10,6 +10,7 @@ Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, an
 - Requires a complete fresh Base staging dispute stack before the release can be published.
 - Keeps `OrchestratorV3` hook activation as a separate governance operation after downstream
   consumers have upgraded.
+- Exports deterministic dispute-protection readiness metadata for Base production and staging.
 
 ## Installation
 
@@ -50,6 +51,9 @@ import {
   WhitelistPolicy,
 } from "@zkp2p/contracts-v2/abis/contracts"
 
+// Import the trusted readiness contract used before accepting a V3 successor
+import { base as baseDisputeReadiness } from "@zkp2p/contracts-v2/disputeReadiness"
+
 // Example: Create contract instance with ethers
 import { ethers } from 'ethers';
 
@@ -62,6 +66,7 @@ const orchestrator = new ethers.Contract(
 
 console.log('Intent expiration:', INTENT_EXPIRATION_PERIOD);
 console.log('Venmo config:', paymentMethods.venmo);
+console.log('Expected successor hook:', baseDisputeReadiness.expectedRelations.activeLifecycleHook);
 ```
 
 ## Features
@@ -154,6 +159,26 @@ console.log('Currency code:', usdInfo.code);
 console.log('Decimals:', usdInfo.decimals);
 ```
 
+### 🛡️ Dispute-Protection Readiness
+
+`@zkp2p/contracts-v2/disputeReadiness` exports `base`, `baseStaging`, and
+`disputeReadinessByNetwork` in CommonJS and ESM, with declarations under the same subpath. Each
+manifest pins:
+
+- The selected dispute-stack version and selection hash.
+- The exact successor and recognized predecessor addresses and runtime code hashes.
+- Registry, verifier, whitelist, vault-controller, lifecycle-hook authorization, and Base USDC
+  dependency expectations.
+- A fail-closed sentinel probe and the active-successor prerequisites, including unpaused
+  admission, an unpaused orchestrator, and `allowMultipleIntents = true`.
+- The approved risk window for every active payment-method bytes32 hash: 1,209,600 seconds for
+  PayPal, Venmo, and Cash App, and zero for all other active methods.
+
+These are trusted package expectations, not a statement that governance has already activated the
+successor. A consumer must read current on-chain code and state, compare it with the manifest, and
+fail closed on any missing or mismatched identity, dependency, authorization, prerequisite, or
+sentinel result.
+
 
 ## API Reference
 
@@ -167,6 +192,7 @@ The package follows modern ESM/CJS patterns with clean subpath exports:
 ├── abis/              # Network-specific contract ABIs  
 ├── constants/         # Protocol constants per network
 ├── paymentMethods/    # Payment method configurations
+├── disputeReadiness/  # Trusted V3 readiness identities and policy expectations
 ├── types/             # TypeScript type definitions
 └── utils/             # Utility functions
 ```
@@ -181,6 +207,8 @@ All modules are directly accessible via subpath exports:
 - `@zkp2p/contracts-v2/abis/<network>/<contract>.json` - Direct JSON import for specific contracts
 - `@zkp2p/contracts-v2/constants/<network>` - Constants per network
 - `@zkp2p/contracts-v2/paymentMethods` - Payment method configs
+- `@zkp2p/contracts-v2/disputeReadiness` - Typed Base production/staging readiness manifests
+- `@zkp2p/contracts-v2/disputeReadiness/<network>.json` - Direct readiness JSON import
 - `@zkp2p/contracts-v2/utils/protocolUtils` - Protocol utilities
 - `@zkp2p/contracts-v2/types` - TypeScript types
 

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const expectedVersion = process.argv[2];
 const requireFromInstall = createRequire(
@@ -40,14 +40,48 @@ if (packageJson.version !== expectedVersion) {
 }
 
 requireFromInstall("@zkp2p/contracts-v2");
+const installedPackageRoot = path.dirname(packageJsonPath);
+const readinessCjs = requireFromInstall("@zkp2p/contracts-v2/disputeReadiness");
+const readinessEsm = await import(
+  pathToFileURL(
+    path.join(installedPackageRoot, "_esm", "disputeReadiness", "index.js")
+  ).href
+);
 for (const subpath of [
   "@zkp2p/contracts-v2/addresses/base.json",
   "@zkp2p/contracts-v2/addresses/baseStaging.json",
   "@zkp2p/contracts-v2/currencies/currencies.json",
   "@zkp2p/contracts-v2/paymentMethods/lookups.json",
+  "@zkp2p/contracts-v2/disputeReadiness/base.json",
+  "@zkp2p/contracts-v2/disputeReadiness/baseStaging.json",
 ]) {
   if (!requireFromInstall(subpath))
     fail(`consumer import ${subpath} is missing`);
+}
+
+for (const network of ["base", "baseStaging"]) {
+  const manifest = requireFromInstall(
+    `@zkp2p/contracts-v2/disputeReadiness/${network}.json`
+  );
+  if (JSON.stringify(manifest).includes("OptIn"))
+    fail(`${network} readiness metadata exposes an internal OptIn name`);
+  if (
+    JSON.stringify(readinessCjs[network]) !== JSON.stringify(manifest) ||
+    JSON.stringify(readinessEsm[network]) !== JSON.stringify(manifest)
+  ) {
+    fail(`${network} readiness CJS/ESM exports differ from packaged JSON`);
+  }
+  if (
+    Object.keys(manifest.riskWindowSecondsByPaymentMethod || {}).length !== 10
+  ) {
+    fail(`${network} readiness metadata does not cover all active methods`);
+  }
+  if (
+    manifest.addressExpectations?.StakeToken !==
+    "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+  ) {
+    fail(`${network} readiness metadata does not pin Base USDC`);
+  }
 }
 const sourceAbis = requireFromInstall("@zkp2p/contracts-v2/abis/contracts");
 for (const contractName of [
