@@ -410,10 +410,7 @@ function immutableLaneFixture() {
     mkdirSync(dirname(destination), { recursive: true });
     writeFileSync(
       destination,
-      execFileSync("git", [
-        "show",
-        `fbe141161fe4138421a21e28715e540dafdfee4f:deploy/${filename}`,
-      ])
+      readFileSync(resolve(process.cwd(), "deploy", filename))
     );
   }
   const wrapper = join(
