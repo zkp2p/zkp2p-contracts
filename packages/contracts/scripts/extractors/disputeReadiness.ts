@@ -141,6 +141,7 @@ const SENTINEL_ESCROW = "0x0000000000000000000000000000000000000001";
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const MAX_UINT64 = "18446744073709551615";
 const GOVERNED_RUNTIME_IDENTITIES = [
+  "OrchestratorRegistry",
   "OrchestratorV3",
   "StakeVault",
   "DisputeProtectionPolicy",
@@ -553,7 +554,7 @@ export type PaymentMethodHash<Network extends ReadinessNetwork = ReadinessNetwor
 export type RiskWindowSeconds = ${riskWindowSecondsType};
 export interface RuntimeIdentity { address: Address; runtimeCodeHash: RuntimeCodeHash; }
 export type RuntimeIdentityName = 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'IntentLifecycleHookV1' | 'RecognizedPredecessorHook' | 'RecognizedPredecessorPolicy' | 'OrchestratorRegistry' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry' | 'MultiAttestationVerifier';
-export type GovernedRuntimeIdentityName = 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry' | 'MultiAttestationVerifier';
+export type GovernedRuntimeIdentityName = 'OrchestratorRegistry' | 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry' | 'MultiAttestationVerifier';
 export type TwoStepGovernedRuntimeIdentityName = 'StakeVault' | 'DisputeProtectionPolicy' | 'DisputeVerifier';
 export interface DisputeProtectionReadinessManifest<Network extends ReadinessNetwork = ReadinessNetwork> {
   schemaVersion: 1;

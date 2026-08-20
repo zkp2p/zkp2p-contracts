@@ -447,6 +447,7 @@ test("package extraction publishes exact dispute readiness metadata without inte
     assert.deepEqual(manifest.expectedGovernance, {
       owner: expected.governanceOwner,
       governedRuntimeIdentities: [
+        "OrchestratorRegistry",
         "OrchestratorV3",
         "StakeVault",
         "DisputeProtectionPolicy",

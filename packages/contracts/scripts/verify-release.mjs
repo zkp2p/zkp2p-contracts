@@ -336,6 +336,7 @@ for (const {
   const expectedGovernance = {
     owner: networkEvidence.governance.owner,
     governedRuntimeIdentities: [
+      "OrchestratorRegistry",
       "OrchestratorV3",
       "StakeVault",
       "DisputeProtectionPolicy",
