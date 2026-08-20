@@ -112,6 +112,13 @@ for (const [network, expectedRiskWindowCount] of [
     fail(`${network} readiness metadata does not pin governance ownership`);
   }
   if (
+    manifest.prerequisites?.vaultPendingController !==
+      "0x0000000000000000000000000000000000000000" ||
+    manifest.prerequisites?.vaultPendingControllerValidAt !== "0"
+  ) {
+    fail(`${network} readiness metadata does not pin the inactive vault controller handover`);
+  }
+  if (
     manifest.exactAuthorizationSets?.authorizedLifecycleHooks?.length !== 1 ||
     manifest.exactAuthorizationSets?.passiveDisputeNullifierWriters?.length !==
       1 ||

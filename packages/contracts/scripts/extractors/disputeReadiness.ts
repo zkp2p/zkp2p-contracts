@@ -55,6 +55,8 @@ type ReadinessEvidence = {
     lifecycleHookAuthorized: true;
     disputeNullifierWriterAuthorized: true;
     vaultControllerActivated: true;
+    vaultPendingController: string;
+    vaultPendingControllerValidAt: string;
     pendingCoverageMaturity: string;
   };
   networks: Record<
@@ -450,6 +452,8 @@ export function buildDisputeReadinessManifest(packageName: "base" | "baseStaging
       lifecycleHookAuthorized: true,
       disputeNullifierWriterAuthorized: true,
       vaultControllerActivated: true,
+      vaultPendingController: ZERO_ADDRESS,
+      vaultPendingControllerValidAt: "0",
       pendingCoverageMaturity: MAX_UINT64,
     })
   ) {
@@ -616,6 +620,8 @@ export interface DisputeProtectionReadinessManifest<Network extends ReadinessNet
     lifecycleHookAuthorized: true;
     disputeNullifierWriterAuthorized: true;
     vaultControllerActivated: true;
+    vaultPendingController: '0x0000000000000000000000000000000000000000';
+    vaultPendingControllerValidAt: '0';
     pendingCoverageMaturity: '18446744073709551615';
   };
 }

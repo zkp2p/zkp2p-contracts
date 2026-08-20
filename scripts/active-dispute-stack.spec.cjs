@@ -494,6 +494,8 @@ test("package extraction publishes exact dispute readiness metadata without inte
       lifecycleHookAuthorized: true,
       disputeNullifierWriterAuthorized: true,
       vaultControllerActivated: true,
+      vaultPendingController: "0x0000000000000000000000000000000000000000",
+      vaultPendingControllerValidAt: "0",
       pendingCoverageMaturity: "18446744073709551615",
     });
     assert.equal(JSON.stringify(manifest).includes("OptIn"), false);
