@@ -168,8 +168,9 @@ manifest pins:
 
 - The selected dispute-stack version and selection hash.
 - The exact successor and recognized predecessor addresses and runtime code hashes.
-- Registry, verifier, whitelist, vault-controller, lifecycle-hook authorization, and Base USDC
-  dependency expectations.
+- The complete approved orchestrator membership, its runtime identities, and the registry deployment
+  block from which consumers reconstruct additions/removals and reject extras; plus verifier, whitelist,
+  vault-controller, lifecycle-hook authorization, and Base USDC dependency expectations.
 - A fail-closed sentinel probe and the active-successor prerequisites, including unpaused
   admission, an unpaused orchestrator, and `allowMultipleIntents = true`.
 - The approved risk window for every active payment-method bytes32 hash: 1,209,600 seconds for

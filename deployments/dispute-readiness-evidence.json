@@ -71,6 +71,8 @@
         "runtimeCodeHash": "0xf08bce9ad622b9d45ce310493627cbef3bf6c4ac915661d5bc572bb59b61e084"
       },
       "addresses": {
+        "Orchestrator": "0x88888883Ed048FF0a415271B28b2F52d431810D0",
+        "OrchestratorV2": "0x888888359E981B5225CA48fbCdCeff702FC3b888",
         "OrchestratorV3": "0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7",
         "StakeVault": "0x4d16F4a9946CfC76b1c1A4B63aa9D94cdA2dbCEB",
         "DisputeProtectionPolicy": "0xcEc48F7242eDBf02875BB4629115Bd927e1287aA",
@@ -90,6 +92,16 @@
         "StakeToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
       },
       "deploymentEvidence": {
+        "Orchestrator": {
+          "deploymentName": "Orchestrator",
+          "solcInputHash": "29b38fa2f0853a716ac0a544a2824744",
+          "deployedBytecodeHash": "0x164f1360215041f25ddd204a06b06ae2f0c7622f45622c5b67fc0c5678c83eee"
+        },
+        "OrchestratorV2": {
+          "deploymentName": "OrchestratorV2",
+          "solcInputHash": "05cc52f3002eebe6383cf80d644323dd",
+          "deployedBytecodeHash": "0x325d03a8e3a2384bef718227e9fed42f21805f887db6059c7ad8fa05e08d4ba7"
+        },
         "OrchestratorV3": {
           "deploymentName": "OrchestratorV3",
           "solcInputHash": "1ca14361f73731f7336a0f6ab32e0034",
@@ -147,6 +159,8 @@
         }
       },
       "runtimeCodeHashes": {
+        "Orchestrator": "0xf511343f2903dd1877c490796cc9423fac66b162b59004d55e522046c1ceb050",
+        "OrchestratorV2": "0xcf70a08cc24fcc00799f9f365d0998abe37c718c93ee370a78d1ca06c60d01e0",
         "OrchestratorV3": "0x4e58f26129559301c017ff264b61dd2255ed2107593d308472ef32d07b8745e9",
         "StakeVault": "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
         "DisputeProtectionPolicy": "0x9c4be279da216021183638eaef79ebf98db248472685e9ecd0de3f24a513a641",
@@ -183,6 +197,8 @@
         "runtimeCodeHash": "0x4e6617a94819ad15693289b173a9a66a78cfe1dd706f6b4fdc5a5f6ad6a32971"
       },
       "addresses": {
+        "Orchestrator": "0xF9b9CD27Deea496B960b3cb5221b514705fCaF5e",
+        "OrchestratorV2": "0xc17a59227B136c45fAa153086a15EF87ED14bE00",
         "OrchestratorV3": "0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f",
         "StakeVault": "0x01075fdCB8D38fD5A1070db41B3c00DC2459e71e",
         "DisputeProtectionPolicy": "0x51436B8051cCf52739A2090C29DA208B70eC2663",
@@ -202,6 +218,16 @@
         "StakeToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
       },
       "deploymentEvidence": {
+        "Orchestrator": {
+          "deploymentName": "Orchestrator",
+          "solcInputHash": "e09254eb8d91b1419683ee018cba1bd4",
+          "deployedBytecodeHash": "0x164f1360215041f25ddd204a06b06ae2f0c7622f45622c5b67fc0c5678c83eee"
+        },
+        "OrchestratorV2": {
+          "deploymentName": "OrchestratorV2",
+          "solcInputHash": "05cc52f3002eebe6383cf80d644323dd",
+          "deployedBytecodeHash": "0x325d03a8e3a2384bef718227e9fed42f21805f887db6059c7ad8fa05e08d4ba7"
+        },
         "OrchestratorV3": {
           "deploymentName": "OrchestratorV3",
           "solcInputHash": "01ce69770d4a50d03b62e83febe8a535",
@@ -259,6 +285,8 @@
         }
       },
       "runtimeCodeHashes": {
+        "Orchestrator": "0xf511343f2903dd1877c490796cc9423fac66b162b59004d55e522046c1ceb050",
+        "OrchestratorV2": "0xcf70a08cc24fcc00799f9f365d0998abe37c718c93ee370a78d1ca06c60d01e0",
         "OrchestratorV3": "0x4e58f26129559301c017ff264b61dd2255ed2107593d308472ef32d07b8745e9",
         "StakeVault": "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
         "DisputeProtectionPolicy": "0xa4c6a33333e10da596805b6127e96f78e40fe5a0f0ab0cfa8f4683fbeac91a37",

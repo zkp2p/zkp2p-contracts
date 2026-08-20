@@ -119,6 +119,7 @@ for (const [network, expectedRiskWindowCount] of [
     fail(`${network} readiness metadata does not pin the inactive vault controller handover`);
   }
   if (
+    manifest.exactAuthorizationSets?.authorizedOrchestrators?.length !== 3 ||
     manifest.exactAuthorizationSets?.authorizedLifecycleHooks?.length !== 1 ||
     manifest.exactAuthorizationSets?.passiveDisputeNullifierWriters?.length !==
       1 ||

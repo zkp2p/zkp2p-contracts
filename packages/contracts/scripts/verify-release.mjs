@@ -223,6 +223,8 @@ for (const {
     fail(`${name} readiness selection differs from trusted evidence`);
   const expectedRuntimeIdentities = Object.fromEntries(
     [
+      "Orchestrator",
+      "OrchestratorV2",
       "OrchestratorV3",
       "StakeVault",
       "DisputeProtectionPolicy",
@@ -364,6 +366,17 @@ for (const {
     )
   );
   const expectedAuthorizationSets = {
+    orchestratorAuthorizationFromBlock: JSON.parse(
+      fs.readFileSync(
+        path.join(repoRoot, deploymentDirectory, "OrchestratorRegistry.json"),
+        "utf8"
+      )
+    ).receipt.blockNumber.toString(),
+    authorizedOrchestrators: [
+      identities.Orchestrator.address,
+      identities.OrchestratorV2.address,
+      identities.OrchestratorV3.address,
+    ],
     lifecycleHookAuthorizationFromBlock: policyDeployment.receipt.blockNumber.toString(),
     authorizedLifecycleHooks: [identities.IntentLifecycleHookV1.address],
     passiveDisputeNullifierWriters: [identities.RecognizedPredecessorPolicy.address],

@@ -270,6 +270,7 @@ const READINESS_BY_NETWORK = {
   base: {
     riskWindows: RISK_WINDOWS_BY_NETWORK.base,
     governanceOwner: "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+    orchestratorAuthorizationFromBlock: "42878566",
     policyDeploymentBlock: "50201693",
     attestationWitnesses: [
       "0xDB4Ed7FAF170F0f6493E3adaaCaaFaF47092c754",
@@ -277,6 +278,14 @@ const READINESS_BY_NETWORK = {
     ],
     selectionHash: "a4f17ae7c1620ecfe7d036f0b9cc7b39c50e1382dc8dc14d2e5f7f21061cd5ad",
     runtimeIdentities: {
+      Orchestrator: {
+        address: "0x88888883Ed048FF0a415271B28b2F52d431810D0",
+        runtimeCodeHash: "0xf511343f2903dd1877c490796cc9423fac66b162b59004d55e522046c1ceb050",
+      },
+      OrchestratorV2: {
+        address: "0x888888359E981B5225CA48fbCdCeff702FC3b888",
+        runtimeCodeHash: "0xcf70a08cc24fcc00799f9f365d0998abe37c718c93ee370a78d1ca06c60d01e0",
+      },
       OrchestratorV3: {
         address: "0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7",
         runtimeCodeHash: "0x4e58f26129559301c017ff264b61dd2255ed2107593d308472ef32d07b8745e9",
@@ -334,6 +343,7 @@ const READINESS_BY_NETWORK = {
   baseStaging: {
     riskWindows: RISK_WINDOWS_BY_NETWORK.baseStaging,
     governanceOwner: "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    orchestratorAuthorizationFromBlock: "42614859",
     policyDeploymentBlock: "50201496",
     attestationWitnesses: [
       "0x66649F896521b0fb487fE2077b4FBDA283d7f19a",
@@ -341,6 +351,14 @@ const READINESS_BY_NETWORK = {
     ],
     selectionHash: "586c90f9de3d10b6d48f4286c709aa7f870fc2fdcfb0af1da947c1da76132dd0",
     runtimeIdentities: {
+      Orchestrator: {
+        address: "0xF9b9CD27Deea496B960b3cb5221b514705fCaF5e",
+        runtimeCodeHash: "0xf511343f2903dd1877c490796cc9423fac66b162b59004d55e522046c1ceb050",
+      },
+      OrchestratorV2: {
+        address: "0xc17a59227B136c45fAa153086a15EF87ED14bE00",
+        runtimeCodeHash: "0xcf70a08cc24fcc00799f9f365d0998abe37c718c93ee370a78d1ca06c60d01e0",
+      },
       OrchestratorV3: {
         address: "0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f",
         runtimeCodeHash: "0x4e58f26129559301c017ff264b61dd2255ed2107593d308472ef32d07b8745e9",
@@ -468,6 +486,12 @@ test("package extraction publishes exact dispute readiness metadata without inte
       witnesses: expected.attestationWitnesses,
     });
     assert.deepEqual(manifest.exactAuthorizationSets, {
+      orchestratorAuthorizationFromBlock: expected.orchestratorAuthorizationFromBlock,
+      authorizedOrchestrators: [
+        expected.runtimeIdentities.Orchestrator.address,
+        expected.runtimeIdentities.OrchestratorV2.address,
+        expected.runtimeIdentities.OrchestratorV3.address,
+      ],
       lifecycleHookAuthorizationFromBlock: expected.policyDeploymentBlock,
       authorizedLifecycleHooks: [expected.runtimeIdentities.IntentLifecycleHookV1.address],
       passiveDisputeNullifierWriters: [

@@ -24,6 +24,8 @@ type DeploymentOutput = {
   activeDisputeStack?: ActiveDisputeStack;
 };
 type RuntimeIdentityName =
+  | "Orchestrator"
+  | "OrchestratorV2"
   | "OrchestratorV3"
   | "StakeVault"
   | "DisputeProtectionPolicy"
@@ -112,6 +114,8 @@ const NETWORKS = [
 ] as const;
 
 const RUNTIME_IDENTITY_NAMES: RuntimeIdentityName[] = [
+  "Orchestrator",
+  "OrchestratorV2",
   "OrchestratorV3",
   "StakeVault",
   "DisputeProtectionPolicy",
@@ -498,6 +502,12 @@ export function buildDisputeReadinessManifest(packageName: "base" | "baseStaging
     },
     attestationTrust: networkEvidence.attestationTrust,
     exactAuthorizationSets: {
+      orchestratorAuthorizationFromBlock: deploymentBlockNumber(network, "OrchestratorRegistry"),
+      authorizedOrchestrators: [
+        runtimeIdentities.Orchestrator.address,
+        runtimeIdentities.OrchestratorV2.address,
+        runtimeIdentities.OrchestratorV3.address,
+      ],
       lifecycleHookAuthorizationFromBlock: deploymentBlockNumber(
         network,
         "DisputeProtectionPolicy",
@@ -557,7 +567,7 @@ export type BaseStagingPaymentMethodHash = ${baseStagingPaymentMethodHashType};
 export type PaymentMethodHash<Network extends ReadinessNetwork = ReadinessNetwork> = Network extends 'base_staging' ? BaseStagingPaymentMethodHash : BasePaymentMethodHash;
 export type RiskWindowSeconds = ${riskWindowSecondsType};
 export interface RuntimeIdentity { address: Address; runtimeCodeHash: RuntimeCodeHash; }
-export type RuntimeIdentityName = 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'IntentLifecycleHookV1' | 'RecognizedPredecessorHook' | 'RecognizedPredecessorPolicy' | 'OrchestratorRegistry' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry' | 'MultiAttestationVerifier';
+export type RuntimeIdentityName = 'Orchestrator' | 'OrchestratorV2' | 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'IntentLifecycleHookV1' | 'RecognizedPredecessorHook' | 'RecognizedPredecessorPolicy' | 'OrchestratorRegistry' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry' | 'MultiAttestationVerifier';
 export type GovernedRuntimeIdentityName = 'OrchestratorRegistry' | 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry' | 'MultiAttestationVerifier';
 export type TwoStepGovernedRuntimeIdentityName = 'StakeVault' | 'DisputeProtectionPolicy' | 'DisputeVerifier';
 export interface DisputeProtectionReadinessManifest<Network extends ReadinessNetwork = ReadinessNetwork> {
@@ -605,6 +615,8 @@ export interface DisputeProtectionReadinessManifest<Network extends ReadinessNet
   };
   attestationTrust: { requiredSignatures: '1'; witnesses: readonly Address[] };
   exactAuthorizationSets: {
+    orchestratorAuthorizationFromBlock: string;
+    authorizedOrchestrators: readonly [Address, Address, Address];
     lifecycleHookAuthorizationFromBlock: string;
     authorizedLifecycleHooks: readonly [Address];
     passiveDisputeNullifierWriters: readonly [Address];
