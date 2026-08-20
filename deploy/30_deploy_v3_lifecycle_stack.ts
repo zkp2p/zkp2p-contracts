@@ -16,11 +16,6 @@ import {
   waitForDeploymentDelay,
 } from "../deployments/helpers";
 import { safeBatchCollector } from "../deployments/safeBatchCollector";
-import { PREDECESSOR_DISPUTE_STACKS } from "./32_deploy_and_activate_dispute_lifecycle_stack";
-
-const { getActiveDisputeDeploymentName } = require("../deployments/activeDisputeStack.cjs") as {
-  getActiveDisputeDeploymentName(network: string, canonicalName: string): string;
-};
 
 const SUPPORTED_NETWORKS = new Set(["localhost", "hardhat", "base_staging", "base"]);
 const RETIRED_STAGING_WHITELIST_POLICY = "0xe3d3E798AbF1c021730d951d0589bCa63d9CB3F0";
@@ -31,86 +26,6 @@ const RETIRED_STAGING_ORCHESTRATORS = [
 
 function sameAddress(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
-}
-
-type ManagedHookSnapshot = {
-  currentHook: string;
-  predecessor: { address: string; runtimeCodeHash: string };
-  successor?: { address: string; runtimeCodeHash: string };
-  actualRuntimeCodeHash: string;
-  actualOrchestratorRegistry: string;
-  expectedOrchestratorRegistry: string;
-  actualWhitelistPolicy: string;
-  expectedWhitelistPolicy: string;
-};
-
-export function validateManagedDisputeHookSnapshot(snapshot: ManagedHookSnapshot): boolean {
-  const expected = sameAddress(snapshot.currentHook, snapshot.predecessor.address)
-    ? snapshot.predecessor
-    : snapshot.successor && sameAddress(snapshot.currentHook, snapshot.successor.address)
-      ? snapshot.successor
-      : undefined;
-  if (!expected) return false;
-  if (snapshot.actualRuntimeCodeHash !== expected.runtimeCodeHash) {
-    throw new Error("Managed dispute lifecycle hook runtime bytecode mismatch");
-  }
-  if (!sameAddress(snapshot.actualOrchestratorRegistry, snapshot.expectedOrchestratorRegistry)) {
-    throw new Error("Managed dispute lifecycle hook registry mismatch");
-  }
-  if (!sameAddress(snapshot.actualWhitelistPolicy, snapshot.expectedWhitelistPolicy)) {
-    throw new Error("Managed dispute lifecycle hook whitelist policy mismatch");
-  }
-  return true;
-}
-
-export async function guardManagedDisputeLifecycleHook(
-  hre: HardhatRuntimeEnvironment,
-): Promise<boolean> {
-  const network = hre.deployments.getNetworkName();
-  if (network !== "base" && network !== "base_staging") return false;
-  const predecessor = PREDECESSOR_DISPUTE_STACKS[network];
-  const orchestratorDeployment = await hre.deployments.getOrNull("OrchestratorV3");
-  if (!orchestratorDeployment) return false;
-  const orchestrator = await ethers.getContractAt("OrchestratorV3", orchestratorDeployment.address);
-  const currentHook = await orchestrator.lifecycleHook();
-  const successorName = getActiveDisputeDeploymentName(network, "IntentLifecycleHookV1");
-  const successorDeployment = await hre.deployments.getOrNull(successorName);
-  const matched = sameAddress(currentHook, predecessor.activeLifecycleHook.address)
-    || (successorDeployment && sameAddress(currentHook, successorDeployment.address));
-  if (!matched) return false;
-
-  const runtimeCode = await ethers.provider.getCode(currentHook);
-  if (runtimeCode === "0x") throw new Error("Managed dispute lifecycle hook has no bytecode");
-  const hook = new ethers.Contract(
-    currentHook,
-    [
-      "function orchestratorRegistry() view returns (address)",
-      "function whitelistPolicy() view returns (address)",
-    ],
-    ethers.provider,
-  );
-  const orchestratorRegistry = await hre.deployments.get("OrchestratorRegistry");
-  const whitelistPolicy = await hre.deployments.get("WhitelistPolicy");
-  let successor: { address: string; runtimeCodeHash: string } | undefined;
-  if (successorDeployment && !sameAddress(successorDeployment.address, predecessor.activeLifecycleHook.address)) {
-    if (typeof successorDeployment.deployedBytecode !== "string") {
-      throw new Error("Managed successor lifecycle hook lacks deployment bytecode evidence");
-    }
-    successor = {
-      address: successorDeployment.address,
-      runtimeCodeHash: ethers.utils.keccak256(successorDeployment.deployedBytecode),
-    };
-  }
-  return validateManagedDisputeHookSnapshot({
-    currentHook,
-    predecessor: predecessor.activeLifecycleHook,
-    successor,
-    actualRuntimeCodeHash: ethers.utils.keccak256(runtimeCode),
-    actualOrchestratorRegistry: await hook.orchestratorRegistry(),
-    expectedOrchestratorRegistry: orchestratorRegistry.address,
-    actualWhitelistPolicy: await hook.whitelistPolicy(),
-    expectedWhitelistPolicy: whitelistPolicy.address,
-  });
 }
 
 async function assertCode(address: string, label: string): Promise<void> {
@@ -171,9 +86,7 @@ async function systemReady(
     if (!sameAddress(await hook.orchestratorRegistry(), registryAddress)) return false;
     if (!sameAddress(await hook.whitelistPolicy(), policy.address)) return false;
     if (!sameAddress(currentLifecycleHook, hook.address)) {
-      const combinedHookDeployment = await hre.deployments.get(
-        getActiveDisputeDeploymentName(network, "IntentLifecycleHookV1"),
-      );
+      const combinedHookDeployment = await hre.deployments.get("IntentLifecycleHookV1");
       if (!sameAddress(currentLifecycleHook, combinedHookDeployment.address)) return false;
       const combinedHook = await ethers.getContractAt("IntentLifecycleHookV1", combinedHookDeployment.address);
       if (!sameAddress(await combinedHook.orchestratorRegistry(), registryAddress)) return false;
@@ -207,7 +120,6 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const network = hre.deployments.getNetworkName();
-  if (await guardManagedDisputeLifecycleHook(hre)) return;
   const chainId = (await ethers.provider.getNetwork()).chainId;
   const [deployer] = await hre.getUnnamedAccounts();
   const governance = MULTI_SIG[network] || deployer;
@@ -270,7 +182,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       args: [orchestratorRegistryAddress, policyDeployment.address],
       log: true,
     });
-    if (!(hookDeployment as any).newlyDeployed) throw new Error("WhitelistLifecycleHook was not freshly deployed");
+    if (!hookDeployment.newlyDeployed) throw new Error("WhitelistLifecycleHook was not freshly deployed");
     await waitForDeploymentDelay(hre);
 
     orchestratorDeployment = await hre.deployments.deploy("OrchestratorV3", {
@@ -286,7 +198,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       ],
       log: true,
     });
-    if (!(orchestratorDeployment as any).newlyDeployed) throw new Error("OrchestratorV3 was not freshly deployed");
+    if (!orchestratorDeployment.newlyDeployed) throw new Error("OrchestratorV3 was not freshly deployed");
     await waitForDeploymentDelay(hre);
   } else {
     console.log("Resuming the prepared whitelist-only V3 groups deployment");
@@ -362,7 +274,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.deployments.getNetworkName();
   if (!SUPPORTED_NETWORKS.has(network)) return true;
-  if (await guardManagedDisputeLifecycleHook(hre)) return true;
   if (await systemFullyWired(hre)) return true;
   if (network === "base_staging" && process.env.ENABLE_STAGING_V3_GROUPS_CUTOVER !== "true") return true;
   if (network === "base" && process.env.ENABLE_BASE_V3_GROUPS_CUTOVER !== "true") return true;

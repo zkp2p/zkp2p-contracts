@@ -15,14 +15,17 @@ moduleAlias.addAlias("@utils", process.cwd() + "/utils");
 const assert = require("node:assert/strict");
 const { execFileSync, spawnSync } = require("node:child_process");
 const {
+  existsSync,
   mkdirSync,
   mkdtempSync,
+  readlinkSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } = require("node:fs");
 const { tmpdir } = require("node:os");
-const { dirname, join } = require("node:path");
+const { dirname, join, resolve } = require("node:path");
 const { test } = require("node:test");
 
 const lane34Module = require("../deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts");
@@ -41,7 +44,16 @@ const {
   selectVerificationDeployments,
   verifyDeployments,
 } = require("../tasks/etherscanVerifyWithDelay.ts");
-const { buildDeployArguments } = require("./deployActive.ts");
+const {
+  buildDeployArguments,
+  runActiveDeployment,
+} = require("./deployActive.ts");
+const {
+  IMMUTABLE_DEPLOYMENT_LANES,
+  assertImmutableDeploymentLanes,
+  assertSupportedDeploymentTag,
+  selectActiveDeploymentScripts,
+} = require("../deployments/immutableDeploymentLanes.ts");
 const {
   canonicalTransactionBytes,
   canonicalTransactionHash,
@@ -88,17 +100,22 @@ test("live dependency pins use deployed runtime hashes", () => {
       },
       base_staging: {
         whitelistPolicy: EXPECTED_LIVE.base_staging.whitelistPolicyCodeHash,
-        nullifierRegistryV2: EXPECTED_LIVE.base_staging.nullifierRegistryV2CodeHash,
+        nullifierRegistryV2:
+          EXPECTED_LIVE.base_staging.nullifierRegistryV2CodeHash,
       },
     },
     {
       base: {
-        whitelistPolicy: "0xa3cf0fdf3835887de432cbac9c192edf6c93a8589748aa93f8294333d57024b2",
-        nullifierRegistryV2: "0x423e2a2183ecd538864079b6268f41957028c25514d1de57bd3d0e70fa6b9bd4",
+        whitelistPolicy:
+          "0xa3cf0fdf3835887de432cbac9c192edf6c93a8589748aa93f8294333d57024b2",
+        nullifierRegistryV2:
+          "0x423e2a2183ecd538864079b6268f41957028c25514d1de57bd3d0e70fa6b9bd4",
       },
       base_staging: {
-        whitelistPolicy: "0x917965fdc75580147ad0787c86f8b2a0f0185ef6e101567b82dc1245d6eb63bc",
-        nullifierRegistryV2: "0xd9d2f4b8bbca6fe26d7a0dfd7e0d6a6d63823ab2a1fe12971e752cf33dee72a0",
+        whitelistPolicy:
+          "0x917965fdc75580147ad0787c86f8b2a0f0185ef6e101567b82dc1245d6eb63bc",
+        nullifierRegistryV2:
+          "0xd9d2f4b8bbca6fe26d7a0dfd7e0d6a6d63823ab2a1fe12971e752cf33dee72a0",
       },
     }
   );
@@ -281,9 +298,13 @@ test("local activation and live ownership checks fail closed on drift", () => {
   );
 });
 
-test("tag-scoped deployment runs lane 34 without dependencies", () => {
+test("active deployment arguments always use the filtered deployment directory", () => {
   assert.deepEqual(
-    buildDeployArguments("base", "34_deploy_opt_in_dispute_lifecycle_stack"),
+    buildDeployArguments(
+      "base",
+      "/tmp/active-deployments",
+      "34_deploy_opt_in_dispute_lifecycle_stack"
+    ),
     [
       "deploy",
       "--network",
@@ -291,8 +312,241 @@ test("tag-scoped deployment runs lane 34 without dependencies", () => {
       "--tags",
       "34_deploy_opt_in_dispute_lifecycle_stack",
       "--no-compile",
+      "--deploy-scripts",
+      "/tmp/active-deployments",
     ]
   );
+  assert.deepEqual(buildDeployArguments("base", "/tmp/active-deployments"), [
+    "deploy",
+    "--network",
+    "base",
+    "--deploy-scripts",
+    "/tmp/active-deployments",
+  ]);
+});
+
+test("immutable lane manifest pins the exact deployed sources", () => {
+  assert.deepEqual(IMMUTABLE_DEPLOYMENT_LANES, {
+    "30_deploy_v3_lifecycle_stack.ts": {
+      deployedSourceSha: "3c4c1306dcce6693cf32300d8917d45c4604b84e",
+      sha256:
+        "97ed83a35e91167186da7a1bde9d3534e6eced436a843a0afd07c0f055bf20fa",
+      activeSource:
+        "deployments/activeDeploymentLanes/30_deploy_v3_lifecycle_stack.ts",
+      retired: false,
+      tags: [
+        "30_deploy_v3_lifecycle_stack",
+        "V3LifecycleStack",
+        "OrchestratorV3",
+      ],
+    },
+    "32_deploy_and_activate_dispute_lifecycle_stack.ts": {
+      deployedSourceSha: "d5558c2888c9246448e1926135fd0c2cbeceb3e4",
+      sha256:
+        "e103f2b9eb4168504cb226a6191a05c432e313ca5b649b0cc2a3d77fb3a5d283",
+      activeSource: null,
+      retired: true,
+      tags: [
+        "32_deploy_and_activate_dispute_lifecycle_stack",
+        "V3DisputeLifecycleStack",
+      ],
+    },
+  });
+});
+
+test("active deployment selection replaces lane 30 and retires only historical lane 32", () => {
+  const selected = selectActiveDeploymentScripts(process.cwd(), [
+    "30_deploy_v3_lifecycle_stack.ts",
+    "32_deploy_and_activate_dispute_lifecycle_stack.ts",
+    "32_deploy_deposit_creation_guard.ts",
+    "34_deploy_opt_in_dispute_lifecycle_stack.ts",
+  ]);
+  assert.deepEqual(
+    selected.map(({ filename }) => filename),
+    [
+      "30_deploy_v3_lifecycle_stack.ts",
+      "32_deploy_deposit_creation_guard.ts",
+      "34_deploy_opt_in_dispute_lifecycle_stack.ts",
+    ]
+  );
+  assert.equal(
+    selected[0].sourcePath,
+    resolve(
+      process.cwd(),
+      "deployments/activeDeploymentLanes/30_deploy_v3_lifecycle_stack.ts"
+    )
+  );
+  assert.equal(
+    selected[1].sourcePath,
+    resolve(process.cwd(), "deploy/32_deploy_deposit_creation_guard.ts")
+  );
+});
+
+test("retired and multi-tag deployment requests fail closed", () => {
+  assert.doesNotThrow(() =>
+    assertSupportedDeploymentTag("34_deploy_opt_in_dispute_lifecycle_stack")
+  );
+  assert.throws(
+    () =>
+      assertSupportedDeploymentTag(
+        "32_deploy_and_activate_dispute_lifecycle_stack"
+      ),
+    /retired deployment tag/
+  );
+  assert.throws(
+    () => assertSupportedDeploymentTag("V3DisputeLifecycleStack"),
+    /retired deployment tag/
+  );
+  assert.throws(
+    () => assertSupportedDeploymentTag("OrchestratorV3,V3LifecycleStack"),
+    /exactly one deployment tag/
+  );
+});
+
+function immutableLaneFixture() {
+  const repository = mkdtempSync(join(tmpdir(), "immutable-deploy-lanes-"));
+  for (const filename of Object.keys(IMMUTABLE_DEPLOYMENT_LANES)) {
+    const destination = join(repository, "deploy", filename);
+    mkdirSync(dirname(destination), { recursive: true });
+    writeFileSync(
+      destination,
+      execFileSync("git", [
+        "show",
+        `fbe141161fe4138421a21e28715e540dafdfee4f:deploy/${filename}`,
+      ])
+    );
+  }
+  const wrapper = join(
+    repository,
+    "deployments/activeDeploymentLanes/30_deploy_v3_lifecycle_stack.ts"
+  );
+  mkdirSync(dirname(wrapper), { recursive: true });
+  writeFileSync(wrapper, "export default async function () {}\n");
+  writeFileSync(
+    join(repository, "deploy", "32_deploy_deposit_creation_guard.ts"),
+    "export default async function () {}\n"
+  );
+  writeFileSync(
+    join(repository, "deploy", "34_deploy_opt_in_dispute_lifecycle_stack.ts"),
+    "export default async function () {}\n"
+  );
+  return repository;
+}
+
+test("immutable lane integrity detects a one-byte mutation", () => {
+  const repository = immutableLaneFixture();
+  try {
+    assert.doesNotThrow(() => assertImmutableDeploymentLanes(repository));
+    const lane = join(repository, "deploy/30_deploy_v3_lifecycle_stack.ts");
+    writeFileSync(lane, Buffer.concat([readFileSync(lane), Buffer.from(" ")]));
+    assert.throws(
+      () => assertImmutableDeploymentLanes(repository),
+      /30_deploy_v3_lifecycle_stack\.ts.*97ed83a35e91167186da7a1bde9d3534e6eced436a843a0afd07c0f055bf20fa/
+    );
+  } finally {
+    rmSync(repository, { recursive: true, force: true });
+  }
+});
+
+test("active runner mounts one filtered lane set for tagged and untagged runs", () => {
+  for (const tag of [undefined, "34_deploy_opt_in_dispute_lifecycle_stack"]) {
+    let activeDirectory;
+    const staleEnv = { ...process.env, DEPLOY_ACTIVE_TAG: "stale" };
+    const status = runActiveDeployment("base", tag, {
+      repositoryRoot: process.cwd(),
+      hardhatCli: "/virtual/hardhat-cli.js",
+      env: staleEnv,
+      spawnSync: (_command, args, options) => {
+        const deployScriptsIndex = args.indexOf("--deploy-scripts");
+        assert.notEqual(deployScriptsIndex, -1);
+        activeDirectory = args[deployScriptsIndex + 1];
+        const filenames = readdirSync(activeDirectory);
+        assert.ok(filenames.includes("30_deploy_v3_lifecycle_stack.ts"));
+        assert.ok(filenames.includes("32_deploy_deposit_creation_guard.ts"));
+        assert.ok(
+          filenames.includes("34_deploy_opt_in_dispute_lifecycle_stack.ts")
+        );
+        assert.ok(
+          !filenames.includes(
+            "32_deploy_and_activate_dispute_lifecycle_stack.ts"
+          )
+        );
+        assert.equal(
+          readlinkSync(
+            join(activeDirectory, "30_deploy_v3_lifecycle_stack.ts")
+          ),
+          resolve(
+            process.cwd(),
+            "deployments/activeDeploymentLanes/30_deploy_v3_lifecycle_stack.ts"
+          )
+        );
+        assert.equal(options.env.DEPLOY_ACTIVE_TAG, tag || undefined);
+        return { status: 0 };
+      },
+    });
+    assert.equal(status, 0);
+    assert.ok(activeDirectory);
+    assert.equal(existsSync(activeDirectory), false);
+  }
+});
+
+test("active runner validates before spawn, propagates status, and always cleans up", () => {
+  const invalidRepository = immutableLaneFixture();
+  const invalidLane = join(
+    invalidRepository,
+    "deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts"
+  );
+  writeFileSync(
+    invalidLane,
+    Buffer.concat([readFileSync(invalidLane), Buffer.from(" ")])
+  );
+  let spawned = false;
+  try {
+    assert.throws(
+      () =>
+        runActiveDeployment("base", undefined, {
+          repositoryRoot: invalidRepository,
+          hardhatCli: "/virtual/hardhat-cli.js",
+          spawnSync: () => {
+            spawned = true;
+            return { status: 0 };
+          },
+        }),
+      /immutable deployment lane/
+    );
+    assert.equal(spawned, false);
+  } finally {
+    rmSync(invalidRepository, { recursive: true, force: true });
+  }
+
+  let failedDirectory;
+  const status = runActiveDeployment("base", undefined, {
+    repositoryRoot: process.cwd(),
+    hardhatCli: "/virtual/hardhat-cli.js",
+    spawnSync: (_command, args) => {
+      failedDirectory = args[args.indexOf("--deploy-scripts") + 1];
+      return { status: 7 };
+    },
+  });
+  assert.equal(status, 7);
+  assert.ok(failedDirectory);
+  assert.equal(existsSync(failedDirectory), false);
+
+  let errorDirectory;
+  assert.throws(
+    () =>
+      runActiveDeployment("base", undefined, {
+        repositoryRoot: process.cwd(),
+        hardhatCli: "/virtual/hardhat-cli.js",
+        spawnSync: (_command, args) => {
+          errorDirectory = args[args.indexOf("--deploy-scripts") + 1];
+          return { status: null, error: new Error("spawn failed") };
+        },
+      }),
+    /spawn failed/
+  );
+  assert.ok(errorDirectory);
+  assert.equal(existsSync(errorDirectory), false);
 });
 
 test("verification allowlist preserves requested order and rejects unknown records", () => {
@@ -815,7 +1069,10 @@ test("MultiSend packing and Safe deliberate-revert decoding are exact", () => {
 
 test("Safe simulation restores package resolution before loading Hardhat", () => {
   moduleAlias.addAlias("@typechain", join(process.cwd(), "typechain"));
-  assert.throws(() => require.resolve("@typechain/hardhat"), /Cannot find module/);
+  assert.throws(
+    () => require.resolve("@typechain/hardhat"),
+    /Cannot find module/
+  );
   assert.equal(typeof restoreHardhatModuleResolution, "function");
   restoreHardhatModuleResolution();
   assert.match(

@@ -110,9 +110,7 @@ export function assertBatchMatchesManifest(
   ) {
     throw new Error("Persisted Safe transaction shape is not canonical");
   }
-  const persisted = normalizeSafeTransactions(
-    batch.transactions
-  );
+  const persisted = normalizeSafeTransactions(batch.transactions);
   if (JSON.stringify(persisted) !== JSON.stringify(manifest.transactions)) {
     throw new Error("Persisted Safe transactions do not match their manifest");
   }
@@ -243,9 +241,8 @@ export async function verifyDisputeSafeArtifacts(
       owner: await orchestrator.owner(),
       currentHook: await orchestrator.lifecycleHook(),
     },
-    predecessorHook:
-      require("../deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts")
-        .PREDECESSOR_DISPUTE_STACKS.base.activeLifecycleHook.address,
+    predecessorHook: require("../deployments/predecessorDisputeStack.ts")
+      .PREDECESSOR_DISPUTE_STACKS.base.activeLifecycleHook.address,
     freshHook: postconditions.freshHook,
   });
   if (

@@ -11,9 +11,11 @@
   "files": [
     "hardhat.config.ts",
     "deployments/activeDisputeStack.cjs",
+    "deployments/activeDeploymentLanes/30_deploy_v3_lifecycle_stack.ts",
+    "deployments/immutableDeploymentLanes.ts",
+    "deployments/managedDisputeLifecycleHook.ts",
+    "deployments/predecessorDisputeStack.ts",
     "deployments/safeBatchManifest.ts",
-    "deploy/30_deploy_v3_lifecycle_stack.ts",
-    "deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts",
     "deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts",
     "deploy/deploy_summary.ts",
     "packages/contracts/scripts/extractors/abis.ts",

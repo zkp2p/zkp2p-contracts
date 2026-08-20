@@ -40,7 +40,7 @@
     "test:invariant": "forge test --match-path 'test-foundry/invariant/**/*.t.sol'",
     "test:intent-guardian-fee-update": "node --test scripts/intent-guardian-fee-update.spec.cjs",
     "test:dispute-lifecycle-deployment": "node --test scripts/active-dispute-stack.spec.cjs && node scripts/test-dispute-lifecycle-deployment.cjs && node scripts/test-opt-in-dispute-lifecycle-deployment.cjs",
-    "test:v3-groups-deployment": "node scripts/test-v3-groups-base-deployment.cjs prepare-resume && node scripts/test-v3-groups-base-deployment.cjs reject-mismatch && node scripts/test-v3-groups-base-deployment.cjs managed-hook-guard",
+    "test:v3-groups-deployment": "node scripts/test-v3-groups-base-deployment.cjs prepare-resume && node scripts/test-v3-groups-base-deployment.cjs reject-mismatch && node scripts/test-v3-groups-base-deployment.cjs managed-hook-guard && node scripts/test-v3-groups-base-deployment.cjs managed-hook-no-rollback",
     "test:release-policy": "node --test scripts/verify-github-environment.spec.mjs scripts/npm-release.spec.mjs",
     "typechain": "hardhat typechain",
     "transpile": "tsc",
