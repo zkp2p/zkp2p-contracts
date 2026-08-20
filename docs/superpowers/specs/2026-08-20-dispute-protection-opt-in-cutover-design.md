@@ -50,10 +50,12 @@ The implementation must re-read all state before acting. At approval time:
   `0x251d78fb6bBb4071995Bce74bAfC9E4168638622`.
 - Base's prepared default-on `IntentLifecycleHookV1` at
   `0x5B0017FCA6A2131701ef718e470a3930c1b6C12c` is passive.
-- Base staging OrchestratorV3 uses the pinned predecessor lifecycle hook at
-  `0xE8Fe714f848fAf7ecff7960AfD0C395771C22AA1`. The old default-on
-  `IntentLifecycleHookV1` at `0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65`
-  remains separate predecessor evidence and is not the active hook.
+- Base staging OrchestratorV3 uses the old default-on `IntentLifecycleHookV1`
+  at `0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65`. The staging EOA changed it
+  from `0xE8Fe714f848fAf7ecff7960AfD0C395771C22AA1` in transaction
+  `0x8fde3cda70c11ee70beae1a0c56e45e83bbea3375b9dcb09bc1e8a511a00ea25`
+  at block `49806712`; the successor deployment remains independent from that
+  already-completed staging hook swap.
 - The Base and Base-staging predecessor `StakeVault` contracts report zero
   `totalStaked` and zero `totalClaimable`.
 - The Base `DisputeNullifierRegistry` is already Safe-owned. The predecessor
