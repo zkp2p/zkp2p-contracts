@@ -14,7 +14,7 @@ import {
   DISPUTABLE_PAYMENT_METHODS,
   DISPUTE_RISK_WINDOW,
 } from "../deployments/parameters";
-import { PREDECESSOR_DISPUTE_STACKS } from "../deploy/32_deploy_and_activate_dispute_lifecycle_stack";
+import { PREDECESSOR_DISPUTE_STACKS } from "../deployments/predecessorDisputeStack";
 
 export const BASE_SAFE = "0x0bC26FF515411396DD588Abd6Ef6846E04470227";
 export const BASE_SAFE_RUNTIME_HASH =

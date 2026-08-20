@@ -28,7 +28,7 @@ import { waitForDeploymentDelay } from "../deployments/helpers";
 import {
   PREDECESSOR_DISPUTE_STACKS,
   assertHistoricalDisputeStack,
-} from "./32_deploy_and_activate_dispute_lifecycle_stack";
+} from "../deployments/predecessorDisputeStack";
 import { paymentBindingCutoverReady } from "./31_deploy_v3_payment_binding_stack";
 import {
   DisputeSafeBatchManifest,
