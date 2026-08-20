@@ -547,7 +547,7 @@ test("contracts package exposes dispute readiness metadata through public CJS, E
     types: "./_types/disputeReadiness/*.d.ts",
     import: "./_esm/disputeReadiness/*.js",
     "react-native": "./_esm/disputeReadiness/*.js",
-    require: "./_cjs/disputeReadiness/*.js",
+    require: "./disputeReadiness/*.json",
     default: "./_esm/disputeReadiness/*.js",
   });
   assert.equal(

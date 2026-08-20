@@ -66,6 +66,17 @@ for (const [network, expectedRiskWindowCount] of [
   const manifest = requireFromInstall(
     `@zkp2p/contracts-v2/disputeReadiness/${network}.json`
   );
+  const extensionlessCjsManifest = requireFromInstall(
+    `@zkp2p/contracts-v2/disputeReadiness/${network}`
+  );
+  if (
+    Object.prototype.hasOwnProperty.call(extensionlessCjsManifest, "default") ||
+    JSON.stringify(extensionlessCjsManifest) !== JSON.stringify(manifest)
+  ) {
+    fail(
+      `${network} extensionless CommonJS readiness export differs from packaged JSON`
+    );
+  }
   if (JSON.stringify(manifest).includes("OptIn"))
     fail(`${network} readiness metadata exposes an internal OptIn name`);
   if (

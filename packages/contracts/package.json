@@ -126,7 +126,7 @@
       "types": "./_types/disputeReadiness/*.d.ts",
       "import": "./_esm/disputeReadiness/*.js",
       "react-native": "./_esm/disputeReadiness/*.js",
-      "require": "./_cjs/disputeReadiness/*.js",
+      "require": "./disputeReadiness/*.json",
       "default": "./_esm/disputeReadiness/*.js"
     },
     "./disputeReadiness/*.json": "./disputeReadiness/*.json",
