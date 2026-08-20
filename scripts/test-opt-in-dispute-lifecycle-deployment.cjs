@@ -33,6 +33,7 @@ const { PREDECESSOR_DISPUTE_STACKS } = require(
   "../deployments/predecessorDisputeStack.ts"
 );
 const readinessEvidence = require("../deployments/dispute-readiness-evidence.json");
+const { MULTI_SIG } = require("../deployments/parameters.ts");
 const {
   DEPLOY_ONLY_STEP_KINDS,
   EXPECTED_LIVE,
@@ -135,6 +136,10 @@ test("package readiness evidence stays pinned to the immutable predecessor and l
     const live = EXPECTED_LIVE[network];
 
     assert.deepEqual(evidence.recognizedPredecessorHook, predecessor.activeLifecycleHook);
+    assert.deepEqual(evidence.recognizedPredecessorPolicy, {
+      address: predecessor.contracts.DisputeProtectionPolicy.address,
+      runtimeCodeHash: predecessor.contracts.DisputeProtectionPolicy.runtimeCodeHash,
+    });
     for (const contractName of /** @type {Array<"DisputeVerifier" | "DisputeNullifierRegistry">} */ ([
       "DisputeVerifier",
       "DisputeNullifierRegistry",
@@ -154,13 +159,25 @@ test("package readiness evidence stays pinned to the immutable predecessor and l
     );
     assert.equal(evidence.addresses.WhitelistPolicy, live.whitelistPolicy);
     assert.equal(evidence.runtimeCodeHashes.WhitelistPolicy, live.whitelistPolicyCodeHash);
+    assert.equal(evidence.addresses.MultiAttestationVerifier, live.attestationVerifier);
+    assert.equal(
+      evidence.runtimeCodeHashes.MultiAttestationVerifier,
+      live.attestationVerifierCodeHash
+    );
+    assert.deepEqual(evidence.governance, {
+      owner: MULTI_SIG[network] || live.deployer,
+      pendingOwner: "0x0000000000000000000000000000000000000000",
+    });
+    assert.deepEqual(evidence.attestationTrust, {
+      requiredSignatures: "1",
+      witnesses: live.attestationWitnesses,
+    });
     assert.deepEqual(evidence.addressExpectations, {
       AddressGroupRegistry: live.addressGroupRegistry,
       EscrowRegistry: live.escrowRegistry,
       PaymentVerifierRegistry: live.paymentVerifierRegistry,
       RelayerRegistry: live.relayerRegistry,
       NullifierRegistryV2: live.nullifierRegistryV2,
-      MultiAttestationVerifier: live.attestationVerifier,
       StakeToken: live.stakeToken,
     });
   }
