@@ -708,6 +708,16 @@ its EOA-owned activation state only through separately confirmed, one-call trans
 must recheck the payment-binding cutover, predecessor drain, owners, writers, vault accounting, O3
 configuration, and current hook immediately before activation.
 
+Use `PREPARE_STAGING_V3_DISPUTE_OPT_IN_ACTIVATION=true` for the read-only staging preflight or
+`ENABLE_STAGING_V3_DISPUTE_OPT_IN_ACTIVATION=true` for one approved staging transition. Either mode
+also requires all three `CONFIRM_STAGING_V3_DISPUTE_OPT_IN_{ACTIVATION,DOWNSTREAM_READY,PREDECESSOR_DRAINED}`
+confirmations. Base batch generation uses `ENABLE_BASE_V3_DISPUTE_OPT_IN_GOVERNANCE_PREPARATION=true`,
+the corresponding three `CONFIRM_BASE_V3_DISPUTE_OPT_IN_*` confirmations,
+`CONFIRM_BASE_V3_DISPUTE_OPT_IN_RELEASE_READY_SHA=<exact-green-sha>`, and `BASE_FORK_RPC_URL`.
+It writes only `base_opt_in_dispute_lifecycle.json` and its `.sha256.json` sidecar after the pinned
+atomic simulation passes. `yarn verify:dispute-opt-in-safe-batch` reruns the artifact-child checks;
+`yarn simulate:obsolete-dispute-safe-batch` proves the superseded four-call batch is invalid before archival.
+
 Production activation remains blocked until every compatible downstream release is deployed:
 
 - [ ] `zkp2p-indexer` indexes the fresh contract addresses and the renamed `Dispute*` events.
