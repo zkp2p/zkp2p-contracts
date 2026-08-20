@@ -23,11 +23,12 @@ type HistoricalDeployFunction = {
 
 type HistoricalContractEvidence = {
   address: string;
+  deploymentBytecodeHash: string;
   runtimeCodeHash: string;
 };
 
 type HistoricalDisputeStack = {
-  activeLifecycleHook: HistoricalContractEvidence;
+  activeLifecycleHook: Omit<HistoricalContractEvidence, "deploymentBytecodeHash">;
   contracts: Record<string, HistoricalContractEvidence>;
 };
 
@@ -40,50 +41,60 @@ export const PREDECESSOR_DISPUTE_STACKS: Record<string, HistoricalDisputeStack> 
     contracts: {
       StakeVault: {
         address: "0x8B8e853f47e6e0d3944e3689197B35216933dDea",
-        runtimeCodeHash: "0x3ceac244f2d721614975457b041e95f661feba8ef6bbfc73c23b55aaac27d3e6",
+        deploymentBytecodeHash: "0x3ceac244f2d721614975457b041e95f661feba8ef6bbfc73c23b55aaac27d3e6",
+        runtimeCodeHash: "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
       },
       DisputeProtectionPolicy: {
         address: "0xc086b6120B5e61EF48221E6A78c69737c9948dF9",
-        runtimeCodeHash: "0x6146f8eb152848ddfd40d67a152a44230ed783b6c1e768d023b88fc2a09cb38f",
+        deploymentBytecodeHash: "0x6146f8eb152848ddfd40d67a152a44230ed783b6c1e768d023b88fc2a09cb38f",
+        runtimeCodeHash: "0xf08bce9ad622b9d45ce310493627cbef3bf6c4ac915661d5bc572bb59b61e084",
       },
       IntentLifecycleHookV1: {
         address: "0x5B0017FCA6A2131701ef718e470a3930c1b6C12c",
-        runtimeCodeHash: "0xad298e1829958f431833bf1c0e53311f27e95dd29806c4d55aa75163e6dbcc21",
+        deploymentBytecodeHash: "0xad298e1829958f431833bf1c0e53311f27e95dd29806c4d55aa75163e6dbcc21",
+        runtimeCodeHash: "0xff9db07ce83908b7cedb31f8c085004aa78c91bb86e0565f11fad3e4bc36c5cb",
       },
       DisputeVerifier: {
         address: "0x30d4947f005653637005eed991005119D9eB2f34",
-        runtimeCodeHash: "0x7aae03ea4bd5bc953dc87b7a272ef967dc093a71b39417f4b7bd88f46210e876",
+        deploymentBytecodeHash: "0x7aae03ea4bd5bc953dc87b7a272ef967dc093a71b39417f4b7bd88f46210e876",
+        runtimeCodeHash: "0x65246e11392befc33d92246cf3ac2467d1f338a8b73c6514b76fab0a70a01ead",
       },
       DisputeNullifierRegistry: {
         address: "0xA845615b5203F7a21321DdF5e3a1ca024D93a443",
+        deploymentBytecodeHash: "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
         runtimeCodeHash: "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
       },
     },
   },
   base_staging: {
     activeLifecycleHook: {
-      address: "0xE8Fe714f848fAf7ecff7960AfD0C395771C22AA1",
-      runtimeCodeHash: "0xfe6624ddbdcca7a2469af6ad6aecd50eda492aae017ad959093b3db1fd7f298a",
+      address: "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
+      runtimeCodeHash: "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367",
     },
     contracts: {
       StakeVault: {
         address: "0xEc9f801e2a9Cc22bdc217aD3BB1E3058d0668f43",
-        runtimeCodeHash: "0x3ceac244f2d721614975457b041e95f661feba8ef6bbfc73c23b55aaac27d3e6",
+        deploymentBytecodeHash: "0x3ceac244f2d721614975457b041e95f661feba8ef6bbfc73c23b55aaac27d3e6",
+        runtimeCodeHash: "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
       },
       DisputeProtectionPolicy: {
         address: "0x21517b7743E727ae47A66FafF93550B689c15020",
-        runtimeCodeHash: "0x6146f8eb152848ddfd40d67a152a44230ed783b6c1e768d023b88fc2a09cb38f",
+        deploymentBytecodeHash: "0x6146f8eb152848ddfd40d67a152a44230ed783b6c1e768d023b88fc2a09cb38f",
+        runtimeCodeHash: "0x4e6617a94819ad15693289b173a9a66a78cfe1dd706f6b4fdc5a5f6ad6a32971",
       },
       IntentLifecycleHookV1: {
         address: "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
-        runtimeCodeHash: "0xad298e1829958f431833bf1c0e53311f27e95dd29806c4d55aa75163e6dbcc21",
+        deploymentBytecodeHash: "0xad298e1829958f431833bf1c0e53311f27e95dd29806c4d55aa75163e6dbcc21",
+        runtimeCodeHash: "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367",
       },
       DisputeVerifier: {
         address: "0x973578148c5Fd49b9f68B50B26066555325AC708",
-        runtimeCodeHash: "0x7aae03ea4bd5bc953dc87b7a272ef967dc093a71b39417f4b7bd88f46210e876",
+        deploymentBytecodeHash: "0x7aae03ea4bd5bc953dc87b7a272ef967dc093a71b39417f4b7bd88f46210e876",
+        runtimeCodeHash: "0xb3b34734cfd162cd129d0c84285461c751321545213ec20164745b8e72f9dd6c",
       },
       DisputeNullifierRegistry: {
         address: "0xE0B05a9655AF0f31E32904267baa50FbC7f217ea",
+        deploymentBytecodeHash: "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
         runtimeCodeHash: "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
       },
     },
@@ -113,7 +124,7 @@ export async function assertHistoricalDisputeStack(hre: HistoricalRuntimeEnviron
     }
     if (
       typeof deployment.deployedBytecode !== "string" ||
-      ethers.utils.keccak256(deployment.deployedBytecode) !== expected.runtimeCodeHash
+      ethers.utils.keccak256(deployment.deployedBytecode) !== expected.deploymentBytecodeHash
     ) {
       throw new Error(`${name} predecessor deployment bytecode hash mismatch on ${network}`);
     }

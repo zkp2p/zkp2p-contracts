@@ -28,10 +28,12 @@ const { test } = require("node:test");
 const lane34Module = require("../deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts");
 const {
   DEPLOY_ONLY_STEP_KINDS,
+  EXPECTED_LIVE,
   LIVE_SUCCESSOR_DEPLOYMENT_NAMES,
   LOCAL_DISPUTE_DEPLOYMENT_NAMES,
   classifyDeployOnlyPrefix,
   classifyLiveDisputePhase,
+  getSuccessorDeployments,
   ownershipStepState,
   requireLocalPaymentBindingReady,
 } = lane34Module;
@@ -73,6 +75,42 @@ test("lane 34 owns the exact local and live deployment records", () => {
     "IntentLifecycleHookV1OptIn",
   ]);
   assert.deepEqual(lane34Module.default.dependencies, []);
+});
+
+test("live dependency pins use deployed runtime hashes", () => {
+  assert.deepEqual(
+    {
+      base: {
+        whitelistPolicy: EXPECTED_LIVE.base.whitelistPolicyCodeHash,
+        nullifierRegistryV2: EXPECTED_LIVE.base.nullifierRegistryV2CodeHash,
+      },
+      base_staging: {
+        whitelistPolicy: EXPECTED_LIVE.base_staging.whitelistPolicyCodeHash,
+        nullifierRegistryV2: EXPECTED_LIVE.base_staging.nullifierRegistryV2CodeHash,
+      },
+    },
+    {
+      base: {
+        whitelistPolicy: "0xa3cf0fdf3835887de432cbac9c192edf6c93a8589748aa93f8294333d57024b2",
+        nullifierRegistryV2: "0x423e2a2183ecd538864079b6268f41957028c25514d1de57bd3d0e70fa6b9bd4",
+      },
+      base_staging: {
+        whitelistPolicy: "0x917965fdc75580147ad0787c86f8b2a0f0185ef6e101567b82dc1245d6eb63bc",
+        nullifierRegistryV2: "0xd9d2f4b8bbca6fe26d7a0dfd7e0d6a6d63823ab2a1fe12971e752cf33dee72a0",
+      },
+    }
+  );
+});
+
+test("missing successor deployment records normalize to the absent state", async () => {
+  const deployments = await getSuccessorDeployments(
+    /** @type {any} */ ({
+      deployments: {
+        getOrNull: async () => undefined,
+      },
+    })
+  );
+  assert.deepEqual(deployments, [null, null, null]);
 });
 
 test("live deployment fails closed without the network opt-in flag", async () => {

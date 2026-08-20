@@ -115,7 +115,7 @@ export const DEPLOY_ONLY_STEP_KINDS: Record<LiveNetwork, readonly string[]> = {
   ],
 };
 
-const EXPECTED_LIVE: Record<
+export const EXPECTED_LIVE: Record<
   LiveNetwork,
   {
     deployer: string;
@@ -145,13 +145,13 @@ const EXPECTED_LIVE: Record<
       "0xf0d132d621ac03181a6fade6a93bd0968d33830c8bf393793236787e7978aee1",
     whitelistPolicy: "0xBC53641b4B2504f0061D6a9426C61B8eBE9B4Ff0",
     whitelistPolicyCodeHash:
-      "0x68bd91b1dbb2d87201ad7b9f8ba14c4eb5c8d28d3dd794fb6299bb596855973a",
+      "0xa3cf0fdf3835887de432cbac9c192edf6c93a8589748aa93f8294333d57024b2",
     orchestrator: "0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7",
     orchestratorCodeHash:
       "0x4e58f26129559301c017ff264b61dd2255ed2107593d308472ef32d07b8745e9",
     nullifierRegistryV2: "0x5455e761b866dfa6A2f5Dc6d6525825bf9C09aeB",
     nullifierRegistryV2CodeHash:
-      "0x1f0b423f44d0df7110fccf01861f7e0a99d80943dfe0531e8e96ef23f57ad9f8",
+      "0x423e2a2183ecd538864079b6268f41957028c25514d1de57bd3d0e70fa6b9bd4",
     attestationVerifier: "0x9Fe920b24e50e6a6362BA71a1BeB502A99c402d5",
     attestationVerifierCodeHash:
       "0x828a5dae520d3eaed904dfed56994dc6e892eb6416b58ad952c079e220ef841a",
@@ -173,13 +173,13 @@ const EXPECTED_LIVE: Record<
       "0xf0d132d621ac03181a6fade6a93bd0968d33830c8bf393793236787e7978aee1",
     whitelistPolicy: "0x7d9277cb8bb78a51eeaafB7CFF306E7DA4C972fD",
     whitelistPolicyCodeHash:
-      "0x68bd91b1dbb2d87201ad7b9f8ba14c4eb5c8d28d3dd794fb6299bb596855973a",
+      "0x917965fdc75580147ad0787c86f8b2a0f0185ef6e101567b82dc1245d6eb63bc",
     orchestrator: "0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f",
     orchestratorCodeHash:
       "0x4e58f26129559301c017ff264b61dd2255ed2107593d308472ef32d07b8745e9",
     nullifierRegistryV2: "0x2eb43d6C7c7Ec4220Aa6B8735BC053824a71778C",
     nullifierRegistryV2CodeHash:
-      "0x1f0b423f44d0df7110fccf01861f7e0a99d80943dfe0531e8e96ef23f57ad9f8",
+      "0xd9d2f4b8bbca6fe26d7a0dfd7e0d6a6d63823ab2a1fe12971e752cf33dee72a0",
     attestationVerifier: "0x9855a39aC5975069632e91160d8712CBfF19e864",
     attestationVerifierCodeHash:
       "0x828a5dae520d3eaed904dfed56994dc6e892eb6416b58ad952c079e220ef841a",
@@ -965,14 +965,15 @@ async function readBasePredecessorCancellationState(
   return completed;
 }
 
-async function getSuccessorDeployments(
+export async function getSuccessorDeployments(
   hre: HardhatRuntimeEnvironment
 ): Promise<Array<any | null>> {
-  const deployments = await Promise.all(
+  const records = await Promise.all(
     LIVE_SUCCESSOR_DEPLOYMENT_NAMES.map((name) =>
       hre.deployments.getOrNull(name)
     )
   );
+  const deployments = records.map((deployment) => deployment ?? null);
   const firstMissing = deployments.findIndex(
     (deployment) => deployment === null
   );
