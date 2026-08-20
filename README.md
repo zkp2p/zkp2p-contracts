@@ -645,35 +645,25 @@ contract deployment or duplicate staging artifact is required.
 - `yarn deploy:base`
 - `yarn deploy:base_staging`
 
+These are the supported deployment entrypoints and all route through `scripts/deployActive.ts`. Do not invoke
+`hardhat deploy` directly: it bypasses the immutable-lane hash and retirement filter.
+
 ### V3 Groups Cutover
 
-The lifecycle rollout is split into explicit lanes. Lane 30 supports the whitelist-only groups
-deployment on Base staging and Base. Lane 31 verifies and cuts over the V3 payment-binding pair. Lane
-32 is immutable predecessor evidence, lane 33 owns the IntentGuardian fee update, and lane 34 is the
-only lane allowed to deploy or prepare activation of the opt-in dispute/staking successor.
+The lifecycle rollout is split into explicit lanes. Production-executed numbered scripts are immutable
+provenance: new behavior gets a new lane, while retirement and live-state checks stay in current helpers
+or runner metadata. Lane 31 verifies and cuts over the V3 payment-binding pair, lane 33 owns the
+IntentGuardian fee update, and lane 34 is the only supported lane allowed to deploy or prepare activation
+of the opt-in dispute/staking successor.
 
-`deploy/30_deploy_v3_lifecycle_stack.ts` is the groups-only lane. Its lane-29 dependency supplies a
-fresh `WhitelistPolicy`; lane 30 deploys a fresh `WhitelistLifecycleHook` and `OrchestratorV3`, sets
-the hook after O3 construction, registers the new O3, and removes the two drained staging
-predecessors. It reuses the existing registries, UPV3, NullifierRegistryV2, dispute stack, and
-payment routing without mutating them. On Base it leaves existing orchestrators registered and queues
-exactly one Safe transaction to add the fresh O3 to `OrchestratorRegistry`.
-
-Before a separately authorized live cutover, move these three artifacts aside for the selected
-environment in the deployment worktree:
-
-- `deployments/<environment>/WhitelistPolicy.json`
-- `deployments/<environment>/WhitelistLifecycleHook.json` when present
-- `deployments/<environment>/OrchestratorV3.json`
-
-Do not commit the temporary removals: the authorized deployment must replace all three artifacts with fresh
-creation records. Keep `AddressGroupRegistry` and every other deployment artifact intact. After an
-external read-only check proves both registered predecessor O3s have no unresolved intents, run
-`--tags V3LifecycleStack`. Base staging requires `ENABLE_STAGING_V3_GROUPS_CUTOVER=true` and
-`CONFIRM_STAGING_V3_PREDECESSORS_DRAINED=true`; Base requires `ENABLE_BASE_V3_GROUPS_CUTOVER=true`.
-The staging confirmation is an operator acknowledgement; the deploy script intentionally contains no
-indexer client or drain-query implementation. Base fails unless O2 and EscrowV2 are already registered,
-the existing stack remains intact, and the generated Safe batch contains only the fresh O3 registration.
+`deploy/30_deploy_v3_lifecycle_stack.ts` is the exact historical groups-only source used in production.
+Its original implementation deploys `WhitelistLifecycleHook` and `OrchestratorV3` with the lane-29
+`WhitelistPolicy` dependency. The supported runner first verifies the historical source digest, then mounts
+`deployments/activeDeploymentLanes/30_deploy_v3_lifecycle_stack.ts` under lane 30's filename. The wrapper
+returns without invoking the historical implementation when the live O3 already uses a bytecode- and
+configuration-verified predecessor or successor dispute hook; otherwise it delegates to lane 30's exact
+historical function and skip behavior. Do not move live artifacts aside or rerun lane 30 to replace the
+current stack. A future O3 deployment requires a new numbered lane.
 
 `deploy/31_deploy_v3_payment_binding_stack.ts` is the state-aware payment-binding and hard-cutover lane.
 On Base staging and Base it pins the existing `NullifierRegistryV2` and `UnifiedPaymentVerifierV3`
@@ -686,9 +676,12 @@ original order against UPV3, and revokes UPV1 and UPV2 from the legacy nullifier
 the registry order and produces exactly 22 atomic Safe calls. Never route a method back to a retired verifier
 after this one-way cutover.
 
-`deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts` is retained only as read-only historical
-evidence. It pins the predecessor records and runtime hashes on Base staging and Base and always skips;
-there is no supported lane-32 deployment or activation flag.
+`deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts` is the exact executable source used for the
+production dispute-stack deployment. It remains at its original path only as immutable audit provenance;
+it is not current read-only code. The supported runner verifies its digest, excludes the exact file from
+all tagged and untagged runs, and rejects both historical lane-32 tags. Never invoke it directly.
+`deployments/predecessorDisputeStack.ts` owns current read-only predecessor address, deployment-bytecode,
+and runtime-bytecode verification used by lane 34 and the Safe tooling.
 
 `deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts` owns the successor. Use only the dedicated
 `yarn deploy:dispute-opt-in:base_staging` or `yarn deploy:dispute-opt-in:base` command. With

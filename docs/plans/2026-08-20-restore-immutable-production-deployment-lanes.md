@@ -3,6 +3,8 @@
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 >
 > **Review:** Internal reviewer ✅ | Codex CLI convergence ✅ (4 rounds)
+>
+> **Implementation:** The executable correction was completed in `24f5e3b`; this plan remains the verification record.
 
 **Goal:** Restore production-executed lanes 30 and 32 byte-for-byte while enforcing lane-32 retirement outside the historical files.
 

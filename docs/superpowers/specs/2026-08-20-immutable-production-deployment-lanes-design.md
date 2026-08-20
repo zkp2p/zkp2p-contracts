@@ -1,5 +1,7 @@
 # Immutable Production Deployment Lanes Design
 
+> **Implemented:** `24f5e3b` restores and externally retires the historical lanes without performing a deployment.
+
 ## Decision
 
 Once a numbered deployment script has been used to deploy production contracts, its source file is immutable provenance. New safety checks, successor deployments, and retirement behavior must be implemented in new files rather than by rewriting that historical script.

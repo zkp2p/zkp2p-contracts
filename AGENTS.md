@@ -9,12 +9,17 @@
 - `deployments/`: Network artifacts and exported addresses; update on live deploys.
 - `tasks/`: Custom Hardhat tasks (e.g., Etherscan verification with delay).
 - `typechain/`, `artifacts/`, `out/`, `dist/`: Generated output; do not edit by hand.
+- A numbered deployment script becomes immutable after any production execution. Never edit that source again;
+  add a new numbered lane for new behavior and keep retirement, live-state checks, and active mounting in current
+  helpers or runner metadata outside the historical file.
 
 ## V3 Lifecycle Deployment Status
 
-- `deploy/30_deploy_v3_lifecycle_stack.ts` is the mounted whitelist-only V3 lifecycle lane for `localhost`, `hardhat`,
-  Base staging, and Base. Its lane-29 dependency supplies `WhitelistPolicy`; lane 30 deploys
-  `WhitelistLifecycleHook` and `OrchestratorV3` without activating the staking/dispute lane.
+- `deploy/30_deploy_v3_lifecycle_stack.ts` is immutable production provenance for the whitelist-only V3 lifecycle
+  deployment. The supported runner verifies its deployed-source hash and mounts
+  `deployments/activeDeploymentLanes/30_deploy_v3_lifecycle_stack.ts` under lane 30's filename. That current wrapper
+  preserves the exact tags and lane-29 dependency, refuses to roll a verified predecessor or successor dispute hook
+  back to `WhitelistLifecycleHook`, and otherwise delegates to the immutable historical implementation.
 - Base staging removes only the explicitly drained staging predecessors. Base keeps the existing orchestrators
   registered and queues exactly one Safe call to register the fresh O3. Base execution requires
   `ENABLE_BASE_V3_GROUPS_CUTOVER=true`, a separately approved exact source SHA, and the production governance path.
@@ -23,9 +28,11 @@
   closed. Base staging is verification-only because its EOA-owned registries cannot provide an atomic cutover.
   On Base, the explicit cutover opt-in preserves the audited method order and currencies while atomically routing
   all active methods to UPV3 and revoking both retired verifiers from the legacy registry.
-- Lane `32` is immutable, read-only predecessor evidence. It verifies the exact historical Base-staging and Base
-  deployment records and runtime hashes, always skips execution, and must never deploy, transfer ownership, mutate
-  writers, prepare governance, or activate a hook.
+- `deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts` is executable immutable production history, not current
+  read-only logic. `scripts/deployActive.ts` verifies its deployed-source hash and excludes the exact file from every
+  supported tagged and untagged run; both historical lane-32 tags are rejected. Never invoke the historical file
+  directly. Current read-only predecessor address and bytecode checks live in
+  `deployments/predecessorDisputeStack.ts`.
 - Lane `33` is the independently owned IntentGuardian fee update.
 - Lane `34` is the only opt-in dispute successor lane. Its tag-scoped live commands deploy and configure a fresh
   `StakeVault`, `DisputeProtectionPolicy`, and `IntentLifecycleHookV1` while reusing the pinned verifier and dispute
@@ -76,7 +83,9 @@ Orchestrator ── net ──▶ Recipient OR PostIntentHook (then executes)
 - Focused iteration: `forge test --match-path '<test-file>'`, `forge test --match-contract <Contract>`, or
   `forge test --match-test <testName>`.
 - `yarn coverage`: Run the deterministic Foundry coverage pipeline. It is intentionally much heavier than tests.
-- Deploy: `yarn deploy:localhost`, `yarn deploy:base`, `yarn deploy:base_staging`.
+- Deploy: `yarn deploy:localhost`, `yarn deploy:base`, `yarn deploy:base_staging`. These supported commands route
+  through `scripts/deployActive.ts`; direct `hardhat deploy` invocation bypasses immutable-lane retirement and is
+  unsupported.
 - Verify: `yarn etherscan:base` and `yarn etherscan:base_staging`.
 
 ## Fast Development Workflow
