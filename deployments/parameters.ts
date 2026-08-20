@@ -146,6 +146,21 @@ export const ACTIVE_PAYMENT_METHODS: string[] = [
   "paypal",
 ];
 
+// Base staging can carry a reviewed payment-method candidate before the
+// separately approved production activation. Keep the production list above
+// unchanged until that boundary is explicitly authorized.
+export const BASE_STAGING_ACTIVE_PAYMENT_METHODS: string[] = [
+  ...ACTIVE_PAYMENT_METHODS,
+  "monobank",
+  "mercury",
+];
+
+export function getActivePaymentMethods(network: string): string[] {
+  return network === "base_staging"
+    ? BASE_STAGING_ACTIVE_PAYMENT_METHODS
+    : ACTIVE_PAYMENT_METHODS;
+}
+
 // Only payment methods with a chargeback mechanism receive dispute protection.
 export const DISPUTABLE_PAYMENT_METHODS: string[] = [
   "paypal",

@@ -37,6 +37,7 @@ const PUBLISHED_PAYMENT_METHOD_NAMES = new Set([
   'cashapp',
   'chime',
   'mercadopago',
+  'mercury',
   'monzo',
   'paypal',
   'revolut',

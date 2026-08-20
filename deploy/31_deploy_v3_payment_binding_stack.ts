@@ -4,7 +4,7 @@ import { ethers } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 
-import { ACTIVE_PAYMENT_METHODS, MULTI_SIG } from "../deployments/parameters";
+import { getActivePaymentMethods, MULTI_SIG } from "../deployments/parameters";
 import {
   addPaymentMethodToRegistry,
   addPaymentMethodToUnifiedVerifier,
@@ -97,6 +97,8 @@ export const RATIFIED_PAYMENT_METHOD_CURRENCIES: Record<string, string[]> = {
   zelle: ["USD"],
   monzo: ["GBP"],
   paypal: ["USD", "EUR", "GBP", "SGD", "NZD", "AUD", "CAD"],
+  monobank: ["UAH"],
+  mercury: ["USD"],
 };
 
 export const RATIFIED_PAYMENT_METHOD_ORDER: Record<string, string[]> = {
@@ -113,7 +115,7 @@ export const RATIFIED_PAYMENT_METHOD_ORDER: Record<string, string[]> = {
     "monzo",
     "paypal",
   ],
-  // Base staging block 49,793,275. Staging was already hard-cut to UPV3 before
+  // Base staging block 50,211,289. Staging was already hard-cut to UPV3 before
   // this lane was introduced, so lane 31 verifies this live order and never
   // attempts an unsafe multi-transaction EOA cutover there.
   base_staging: [
@@ -127,6 +129,8 @@ export const RATIFIED_PAYMENT_METHOD_ORDER: Record<string, string[]> = {
     "wise",
     "mercadopago",
     "paypal",
+    "monobank",
+    "mercury",
   ],
 };
 
@@ -543,7 +547,8 @@ export async function assertPaymentBindingReady(
     throw new Error("UnifiedPaymentVerifierV3 owner mismatch");
   }
 
-  const expectedPaymentMethods = ACTIVE_PAYMENT_METHODS.map(paymentMethodHash);
+  const expectedPaymentMethods =
+    getActivePaymentMethods(network).map(paymentMethodHash);
   const actualPaymentMethods =
     await unifiedPaymentVerifierV3.getPaymentMethods();
   if (!sameStringSet(actualPaymentMethods, expectedPaymentMethods)) {
@@ -595,7 +600,8 @@ async function assertRegistrySurface(
   }
   const actualMethods: string[] =
     await paymentVerifierRegistry.getPaymentMethods();
-  const expectedMethods = ACTIVE_PAYMENT_METHODS.map(paymentMethodHash);
+  const activePaymentMethods = getActivePaymentMethods(network);
+  const expectedMethods = activePaymentMethods.map(paymentMethodHash);
   if (!sameStringSet(actualMethods, expectedMethods)) {
     throw new Error(
       "PaymentVerifierRegistry methods do not match the active method set"
@@ -604,7 +610,7 @@ async function assertRegistrySurface(
   const ratifiedOrder = RATIFIED_PAYMENT_METHOD_ORDER[network];
   if (
     network === "base" &&
-    !sameStringArray(ACTIVE_PAYMENT_METHODS, ratifiedOrder)
+    !sameStringArray(activePaymentMethods, ratifiedOrder)
   ) {
     throw new Error(
       "ACTIVE_PAYMENT_METHODS drifted from the audited Base method order"
@@ -682,6 +688,7 @@ async function deployLocalPaymentBinding(
   deployer: string,
   governance: string
 ): Promise<void> {
+  const network = hre.deployments.getNetworkName();
   const legacyNullifierRegistryAddress = (
     await hre.deployments.get("NullifierRegistry")
   ).address;
@@ -733,7 +740,7 @@ async function deployLocalPaymentBinding(
     "UnifiedPaymentVerifierV3",
     unifiedPaymentVerifierV3Deployment.address
   );
-  for (const methodName of ACTIVE_PAYMENT_METHODS) {
+  for (const methodName of getActivePaymentMethods(network)) {
     await addPaymentMethodToUnifiedVerifier(
       hre,
       unifiedPaymentVerifierV3,
