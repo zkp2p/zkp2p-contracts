@@ -11,6 +11,10 @@ import {
 import { getDeployedContractAddress } from "../deployments/helpers";
 import { safeBatchCollector } from "../deployments/safeBatchCollector";
 
+const { getActiveDisputeDeploymentName } = require("../deployments/activeDisputeStack.cjs") as {
+  getActiveDisputeDeploymentName(network: string, canonicalName: string): string;
+};
+
 function tryGetAddress(network: string, contractName: string): string {
   try { return getDeployedContractAddress(network, contractName); } catch (e) { return "NOT DEPLOYED"; }
 }
@@ -22,6 +26,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const chainId = (await ethers.provider.getNetwork()).chainId;
   const liveAddress = async (contractName: string): Promise<string> =>
     (await hre.deployments.getOrNull(contractName))?.address || "NOT DEPLOYED";
+  const activeDisputeAddress = async (canonicalName: string): Promise<string> =>
+    liveAddress(getActiveDisputeDeploymentName(network, canonicalName));
 
   const [deployer] = await hre.getUnnamedAccounts();
   const multiSig = MULTI_SIG[network] ? MULTI_SIG[network] : deployer;
@@ -64,11 +70,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     UnifiedPaymentVerifierV3:           ${tryGetAddress(network, "UnifiedPaymentVerifierV3")}
     OrchestratorV3:                     ${await liveAddress("OrchestratorV3")}
     WhitelistLifecycleHook:             ${await liveAddress("WhitelistLifecycleHook")}
-    StakeVault:                         ${await liveAddress("StakeVault")}
+    StakeVault:                         ${await activeDisputeAddress("StakeVault")}
     DisputeNullifierRegistry:           ${await liveAddress("DisputeNullifierRegistry")}
     DisputeVerifier:                    ${await liveAddress("DisputeVerifier")}
-    DisputeProtectionPolicy:            ${await liveAddress("DisputeProtectionPolicy")}
-    IntentLifecycleHookV1:              ${await liveAddress("IntentLifecycleHookV1")}
+    DisputeProtectionPolicy:            ${await activeDisputeAddress("DisputeProtectionPolicy")}
+    IntentLifecycleHookV1:              ${await activeDisputeAddress("IntentLifecycleHookV1")}
     `
   );
 
@@ -89,6 +95,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 };
 
 func.runAtTheEnd = true;
-func.tags = ["V3PaymentBindingStack", "V3DisputeLifecycleStack"];
+func.tags = ["V3PaymentBindingStack", "V3DisputeLifecycleStack", "V3DisputeOptInStack"];
 
 export default func;

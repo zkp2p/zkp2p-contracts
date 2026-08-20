@@ -7,18 +7,20 @@ process.env.BASE_DEPLOY_PRIVATE_KEY ||=
 process.env.TESTNET_DEPLOY_PRIVATE_KEY ||=
   "2222222222222222222222222222222222222222222222222222222222222222";
 
-require("ts-node/register/transpile-only");
-require("module-alias/register");
+require(require.resolve("ts-node/register/transpile-only"));
+require(require.resolve("module-alias/register"));
 
-const moduleAlias = require("module-alias");
+const moduleAlias = require(require.resolve("module-alias"));
 moduleAlias.reset();
 moduleAlias.addAlias("@utils", process.cwd() + "/utils");
 
 console.log = () => {};
 
-const hre = require("hardhat");
+const hre = /** @type {any} */ (require("hardhat"));
 const { ethers } = hre;
-const deployGroupsStack = require("../deploy/30_deploy_v3_lifecycle_stack.ts").default;
+const groupsDeploymentModule = require("../deploy/30_deploy_v3_lifecycle_stack.ts");
+const deployGroupsStack = groupsDeploymentModule.default;
+const { validateManagedDisputeHookSnapshot } = groupsDeploymentModule;
 const { MULTI_SIG, ORCHESTRATOR_V3_PROTOCOL_FEE, ORCHESTRATOR_V3_PROTOCOL_FEE_RECIPIENT } = require(
   "../deployments/parameters.ts",
 );
@@ -26,6 +28,7 @@ const { safeBatchCollector } = require("../deployments/safeBatchCollector.ts");
 
 const scenario = process.argv[2];
 
+/** @param {string} name @param {any[]} args */
 async function deployContract(name, args = []) {
   const factory = await ethers.getContractFactory(name);
   const contract = await factory.deploy(...args);
@@ -64,12 +67,15 @@ async function fixture() {
 
   const deploymentApi = {
     getNetworkName: () => "base",
+    /** @param {string} name */
     get: async (name) => {
       const deployment = deployments.get(name);
       if (!deployment) throw new Error(`Missing deployment: ${name}`);
       return deployment;
     },
+    /** @param {string} name */
     getOrNull: async (name) => deployments.get(name) || null,
+    /** @param {string} name @param {any} options */
     deploy: async (name, options) => {
       const existing = deployments.get(name);
       if (existing) return { ...existing, newlyDeployed: false };
@@ -83,6 +89,7 @@ async function fixture() {
       deployments.set(name, deployment);
       return deployment;
     },
+    /** @param {{to: string, data: string}} transaction */
     rawTx: async (transaction) => {
       const response = await deployerSigner.sendTransaction({ to: transaction.to, data: transaction.data });
       await response.wait();
@@ -90,15 +97,16 @@ async function fixture() {
     },
   };
 
-  const fakeHre = {
+  const fakeHre = /** @type {any} */ ({
     deployments: deploymentApi,
     ethers,
     getUnnamedAccounts: async () => [deployer],
-  };
+  });
 
   return { deployer, deployments, fakeHre, network, orchestratorRegistry, safe };
 }
 
+/** @param {any} state */
 async function addMismatchedArtifacts(state) {
   const hook = await deployContract("WhitelistLifecycleHook", [
     (await state.fakeHre.deployments.get("OrchestratorRegistry")).address,
@@ -120,6 +128,45 @@ async function addMismatchedArtifacts(state) {
 }
 
 async function run() {
+  if (scenario === "managed-hook-guard") {
+    const predecessor = "0x0000000000000000000000000000000000000001";
+    const successor = "0x0000000000000000000000000000000000000002";
+    const registry = "0x0000000000000000000000000000000000000003";
+    const policy = "0x0000000000000000000000000000000000000004";
+    const predecessorHash = ethers.utils.keccak256("0x01");
+    const successorHash = ethers.utils.keccak256("0x02");
+    /** @param {string} currentHook @param {string} actualRuntimeCodeHash */
+    const snapshot = (currentHook, actualRuntimeCodeHash = predecessorHash) => ({
+      currentHook,
+      predecessor: { address: predecessor, runtimeCodeHash: predecessorHash },
+      successor: { address: successor, runtimeCodeHash: successorHash },
+      actualRuntimeCodeHash,
+      actualOrchestratorRegistry: registry,
+      expectedOrchestratorRegistry: registry,
+      actualWhitelistPolicy: policy,
+      expectedWhitelistPolicy: policy,
+    });
+    let passed = validateManagedDisputeHookSnapshot(snapshot(predecessor));
+    passed = passed && validateManagedDisputeHookSnapshot(snapshot(successor, successorHash));
+    try {
+      validateManagedDisputeHookSnapshot({
+        ...snapshot(predecessor),
+        actualWhitelistPolicy: successor,
+      });
+      passed = false;
+    } catch (error) {
+      passed = passed && error instanceof Error && error.message.includes("whitelist policy mismatch");
+    }
+    try {
+      validateManagedDisputeHookSnapshot(snapshot(predecessor, successorHash));
+      passed = false;
+    } catch (error) {
+      passed = passed && error instanceof Error && error.message.includes("runtime bytecode mismatch");
+    }
+    process.stdout.write(passed ? "0x01" : "0x00");
+    return;
+  }
+
   const state = await fixture();
 
   if (scenario === "prepare-resume") {

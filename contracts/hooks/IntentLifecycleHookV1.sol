@@ -10,9 +10,10 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 
 /**
  * @title IntentLifecycleHookV1
- * @notice Lifecycle hook combining a deposit-scoped whitelist fast lane with default-on stake-backed dispute protection.
+ * @notice Lifecycle hook combining a deposit-scoped whitelist fast lane with opt-in stake-backed dispute protection.
  * Whitelisted takers bypass staking. Non-whitelisted takers use stake-backed admission for disputable payment methods
- * unless the depositor opts out; an enabled whitelist then rejects them, while a whitelist-disabled deposit stays open.
+ * only after the depositor opts in; otherwise an enabled whitelist rejects them while a whitelist-disabled deposit
+ * stays open.
  * Non-disputable payment methods give every taker direct access without a dispute protection intent or stake lock,
  * regardless of whitelist or dispute protection configuration.
  * @dev Reads canonical intent data from the calling orchestrator and forwards cancellation and settlement accounting

@@ -13,7 +13,7 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
 
 /**
  * @title DisputeProtectionPolicy
- * @notice Deposit-scoped, stake-backed dispute protection that is enabled by default with depositor opt-out.
+ * @notice Deposit-scoped, stake-backed dispute protection that requires explicit depositor opt-in.
  * @dev The policy owns no tokens. StakeVault is the source of truth for collateral locks, a dedicated
  * `disputeNullifierRegistry` deployment is the source of truth for consumed dispute nullifiers, and the calling
  * Orchestrator is the source of truth for valid escrows and intents.
@@ -53,8 +53,8 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     /// @dev Lifecycle-hook authorization keyed by lifecycle hook address.
     mapping(address => bool) internal isLifecycleHookAuthorizedByHook;
 
-    /// @dev Whether default stake-backed dispute protection is disabled for each escrow deposit.
-    mapping(address => mapping(uint256 => bool)) internal isDepositDisputeProtectionDisabled;
+    /// @dev Whether stake-backed dispute protection is enabled for each escrow deposit.
+    mapping(address => mapping(uint256 => bool)) internal isDepositDisputeProtectionEnabled;
 
     /// @dev Minimum collateral lock window for each payment method.
     mapping(bytes32 => uint64) internal paymentMethodRiskWindow;
@@ -245,18 +245,19 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     /* ============ Depositor Functions ============ */
 
     /**
-     * @notice DEPOSITOR ONLY: Updates the default-on dispute protection setting for a deposit.
-     * @dev Protection is enabled by default. OrchestratorV3 validates Escrow registration before signaling an intent;
-     * this policy only verifies that the caller is the deposit's current depositor.
+     * @notice DEPOSITOR ONLY: Updates the dispute protection setting for a deposit.
+     * @dev Protection is disabled until the depositor explicitly enables it. OrchestratorV3 validates Escrow
+     * registration before signaling an intent; this policy only verifies that the caller is the deposit's current
+     * depositor.
      * @param _escrow Escrow containing the deposit.
      * @param _depositId Deposit whose dispute protection configuration is updated.
-     * @param _isEnabled Whether non-whitelisted takers may use stake-backed dispute protection; false opts out.
+     * @param _isEnabled Whether non-whitelisted takers may use stake-backed dispute protection.
      */
     function setDisputeProtectionEnabled(address _escrow, uint256 _depositId, bool _isEnabled)
         external
         onlyDepositor(_escrow, _depositId)
     {
-        isDepositDisputeProtectionDisabled[_escrow][_depositId] = !_isEnabled;
+        isDepositDisputeProtectionEnabled[_escrow][_depositId] = _isEnabled;
         emit DisputeProtectionEnabledUpdated(_escrow, _depositId, _isEnabled);
     }
 
@@ -301,11 +302,10 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
 
     /**
      * @notice GOVERNANCE ONLY: Pauses or resumes new dispute-protection admissions.
-     * @dev Protection is enabled by default, so pausing acts as a protocol-wide kill switch, not as a per-deposit
-     * control. It rejects every non-whitelisted taker on every covered deposit whose payment method has a nonzero risk
+     * @dev It rejects every non-whitelisted taker on every opted-in deposit whose payment method has a nonzero risk
      * window. Whitelisted takers return from the lifecycle hook before this policy is reached, and payment methods with
-     * a zero risk window return before the pause check. Deposits that opt out do not call this policy; when their
-     * whitelist is disabled, they remain open. Cancellation, settlement, release, and dispute submission remain
+     * a zero risk window return before the pause check. Deposits that remain disabled do not call this policy; when
+     * their whitelist is disabled, they remain open. Cancellation, settlement, release, and dispute submission remain
      * available while admissions are paused.
      * @param _isPaused Whether new dispute protection admissions should revert.
      */
@@ -342,13 +342,13 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     }
 
     /**
-     * @notice Returns whether default-on stake-backed dispute protection remains enabled for a deposit.
-     * @dev Returns true for untouched deposits and false only after the depositor opts out.
+     * @notice Returns whether stake-backed dispute protection is enabled for a deposit.
+     * @dev Returns false for untouched deposits until the depositor explicitly opts in.
      * @param _escrow Escrow containing the deposit.
      * @param _depositId Deposit whose dispute protection configuration is queried.
      */
     function isDisputeProtectionEnabled(address _escrow, uint256 _depositId) external view override returns (bool) {
-        return !isDepositDisputeProtectionDisabled[_escrow][_depositId];
+        return isDepositDisputeProtectionEnabled[_escrow][_depositId];
     }
 
     /**
@@ -383,7 +383,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
         if (disputeProtectionIntentByIntentHash[_intentHash].status != DisputeProtectionIntentStatus.NONE) {
             revert DisputeProtectionIntentAlreadyExists(_intentHash);
         }
-        if (isDepositDisputeProtectionDisabled[_escrow][_depositId]) {
+        if (!isDepositDisputeProtectionEnabled[_escrow][_depositId]) {
             revert DisputeProtectionNotEnabled(_escrow, _depositId);
         }
 
