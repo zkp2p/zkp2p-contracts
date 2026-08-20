@@ -245,7 +245,7 @@ test("address extraction preserves the exact active dispute selection stamp", as
   }
 });
 
-const RISK_WINDOWS = {
+const BASE_RISK_WINDOWS = {
   "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d": "1209600",
   "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f": "1209600",
   "0x554a007c2217df766b977723b276671aee5ebb4adaea0edb6433c88b3e61dac5": "0",
@@ -257,9 +257,18 @@ const RISK_WINDOWS = {
   "0xcac9daea62d7b89d75ac73af4ee14dcf25721012ae82b568c2ea5c808eaa04ff": "0",
   "0xf752c7d19698ecb0bb8988abf9b9a53a4c3657f3bc8850a6fb59fdf3e3ce8cd3": "0",
 };
+const RISK_WINDOWS_BY_NETWORK = {
+  base: BASE_RISK_WINDOWS,
+  baseStaging: {
+    ...BASE_RISK_WINDOWS,
+    "0x1d966dbd6aeb8674d7c05174bd0ded7b56a798672bfb862ef20bbe8c2bbfce18": "0",
+    "0xf81480907d808d639ad3230869e4b05a3b01b2d34e323af40f2efab807effd32": "0",
+  },
+};
 
 const READINESS_BY_NETWORK = {
   base: {
+    riskWindows: RISK_WINDOWS_BY_NETWORK.base,
     selectionHash: "a4f17ae7c1620ecfe7d036f0b9cc7b39c50e1382dc8dc14d2e5f7f21061cd5ad",
     runtimeIdentities: {
       OrchestratorV3: {
@@ -310,6 +319,7 @@ const READINESS_BY_NETWORK = {
     },
   },
   baseStaging: {
+    riskWindows: RISK_WINDOWS_BY_NETWORK.baseStaging,
     selectionHash: "586c90f9de3d10b6d48f4286c709aa7f870fc2fdcfb0af1da947c1da76132dd0",
     runtimeIdentities: {
       OrchestratorV3: {
@@ -407,7 +417,10 @@ test("package extraction publishes exact dispute readiness metadata without inte
       vaultController: expected.runtimeIdentities.DisputeProtectionPolicy.address,
       vaultStakeToken: expected.addressExpectations.StakeToken,
     });
-    assert.deepEqual(manifest.riskWindowSecondsByPaymentMethod, RISK_WINDOWS);
+    assert.deepEqual(
+      manifest.riskWindowSecondsByPaymentMethod,
+      expected.riskWindows
+    );
     assert.deepEqual(manifest.sentinel, {
       escrow: "0x0000000000000000000000000000000000000001",
       depositId: "0",
@@ -432,7 +445,7 @@ test("package extraction publishes exact dispute readiness metadata without inte
   );
   assert.match(declarations, /export type RiskWindowSeconds = '0' \| '1209600';/);
   assert.match(declarations, /chainId: 8453;/);
-  for (const paymentMethodHash of Object.keys(RISK_WINDOWS)) {
+  for (const paymentMethodHash of Object.keys(RISK_WINDOWS_BY_NETWORK.baseStaging)) {
     assert.equal(declarations.includes(`'${paymentMethodHash}'`), true);
   }
   assert.equal(declarations.includes("OptIn"), false);
@@ -444,6 +457,13 @@ test("package extraction publishes exact dispute readiness metadata without inte
     readFileSync(join(readinessDirectory, "baseStaging.d.ts"), "utf8"),
     /DisputeProtectionReadinessManifest<'base_staging'>/
   );
+  const indexDeclarations = readFileSync(
+    join(readinessDirectory, "index.d.ts"),
+    "utf8"
+  );
+  assert.match(indexDeclarations, /from ['"]\.\/base['"]/);
+  assert.match(indexDeclarations, /from ['"]\.\/baseStaging['"]/);
+  assert.doesNotMatch(indexDeclarations, /\.json['"]/);
 });
 
 test("contracts package exposes dispute readiness metadata through public CJS, ESM, JSON, and type subpaths", () => {

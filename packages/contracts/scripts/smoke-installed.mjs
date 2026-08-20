@@ -59,7 +59,10 @@ for (const subpath of [
     fail(`consumer import ${subpath} is missing`);
 }
 
-for (const network of ["base", "baseStaging"]) {
+for (const [network, expectedRiskWindowCount] of [
+  ["base", 10],
+  ["baseStaging", 12],
+]) {
   const manifest = requireFromInstall(
     `@zkp2p/contracts-v2/disputeReadiness/${network}.json`
   );
@@ -72,7 +75,8 @@ for (const network of ["base", "baseStaging"]) {
     fail(`${network} readiness CJS/ESM exports differ from packaged JSON`);
   }
   if (
-    Object.keys(manifest.riskWindowSecondsByPaymentMethod || {}).length !== 10
+    Object.keys(manifest.riskWindowSecondsByPaymentMethod || {}).length !==
+    expectedRiskWindowCount
   ) {
     fail(`${network} readiness metadata does not cover all active methods`);
   }

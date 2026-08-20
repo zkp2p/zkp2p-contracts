@@ -4,10 +4,10 @@ import * as fs from "fs";
 import * as path from "path";
 
 import {
-  ACTIVE_PAYMENT_METHODS,
   DISPUTABLE_PAYMENT_METHODS,
   DISPUTE_RISK_WINDOW,
   USDC,
+  getActivePaymentMethods,
 } from "../../../../deployments/parameters";
 
 type ActiveDisputeStack = { version: number; selectionHash: string };
@@ -39,7 +39,7 @@ type AddressExpectationName =
   | "StakeToken";
 type ReadinessEvidence = {
   schemaVersion: number;
-  riskWindowSecondsByPaymentMethod: Record<string, string>;
+  riskWindowSecondsByPaymentMethod: Record<string, Record<string, string>>;
   sentinel: { escrow: string; depositId: string; expected: false };
   prerequisites: {
     orchestratorPaused: false;
@@ -171,6 +171,11 @@ function validateEvidence(network: (typeof NETWORKS)[number], output: Deployment
     "Readiness evidence",
   );
   requireExactKeys(EVIDENCE.networks, ["base", "base_staging"], "Readiness evidence networks");
+  requireExactKeys(
+    EVIDENCE.riskWindowSecondsByPaymentMethod,
+    ["base", "base_staging"],
+    "Readiness evidence risk-window networks",
+  );
   const evidence = EVIDENCE.networks[network.manifestName];
   if (!evidence) throw new Error(`Missing dispute readiness evidence for ${network.manifestName}`);
   const expectedSelection = getActiveDisputeSelectionStamp(network.manifestName);
@@ -318,15 +323,16 @@ function createAddressExpectations(
 }
 
 function configuredRiskWindows(network: string): Record<string, string> {
+  const activePaymentMethods = getActivePaymentMethods(network);
   const configured = new Set(DISPUTABLE_PAYMENT_METHODS);
-  if (DISPUTABLE_PAYMENT_METHODS.some((method) => !ACTIVE_PAYMENT_METHODS.includes(method))) {
+  if (DISPUTABLE_PAYMENT_METHODS.some((method) => !activePaymentMethods.includes(method))) {
     throw new Error("Disputable payment methods must be active");
   }
-  const entries = ACTIVE_PAYMENT_METHODS.map((method) => [
+  const entries = activePaymentMethods.map((method) => [
     ethers.utils.id(method).toLowerCase(),
     configured.has(method) ? DISPUTE_RISK_WINDOW[network].toString() : "0",
   ] as const).sort(([left], [right]) => left.localeCompare(right));
-  if (new Set(entries.map(([paymentMethod]) => paymentMethod)).size !== ACTIVE_PAYMENT_METHODS.length) {
+  if (new Set(entries.map(([paymentMethod]) => paymentMethod)).size !== activePaymentMethods.length) {
     throw new Error("Active payment method hashes must be unique");
   }
   return Object.fromEntries(entries);
@@ -345,7 +351,8 @@ export function buildDisputeReadinessManifest(packageName: "base" | "baseStaging
   const runtimeIdentities = createRuntimeIdentities(network, contracts);
   const addressExpectations = createAddressExpectations(network, contracts);
   const configuredWindows = configuredRiskWindows(network.manifestName);
-  if (!sameJson(configuredWindows, EVIDENCE.riskWindowSecondsByPaymentMethod)) {
+  const evidenceWindows = EVIDENCE.riskWindowSecondsByPaymentMethod[network.manifestName];
+  if (!sameJson(configuredWindows, evidenceWindows)) {
     throw new Error(`${network.manifestName} active payment method risk policy mismatch`);
   }
   if (!sameJson(EVIDENCE.sentinel, { escrow: SENTINEL_ESCROW, depositId: "0", expected: false })) {
@@ -395,7 +402,7 @@ export function buildDisputeReadinessManifest(packageName: "base" | "baseStaging
       vaultController: runtimeIdentities.DisputeProtectionPolicy.address,
       vaultStakeToken: addressExpectations.StakeToken,
     },
-    riskWindowSecondsByPaymentMethod: EVIDENCE.riskWindowSecondsByPaymentMethod,
+    riskWindowSecondsByPaymentMethod: evidenceWindows,
     sentinel: EVIDENCE.sentinel,
     prerequisites: EVIDENCE.prerequisites,
   } as const;
@@ -419,7 +426,12 @@ export async function extractDisputeReadiness(): Promise<void> {
     );
   }
 
-  const paymentMethodHashType = Object.keys(EVIDENCE.riskWindowSecondsByPaymentMethod)
+  const basePaymentMethodHashType = Object.keys(EVIDENCE.riskWindowSecondsByPaymentMethod.base)
+    .map((paymentMethodHash) => `'${paymentMethodHash}'`)
+    .join(" | ");
+  const baseStagingPaymentMethodHashType = Object.keys(
+    EVIDENCE.riskWindowSecondsByPaymentMethod.base_staging,
+  )
     .map((paymentMethodHash) => `'${paymentMethodHash}'`)
     .join(" | ");
 
@@ -427,9 +439,11 @@ export async function extractDisputeReadiness(): Promise<void> {
     path.join(OUTPUT_DIRECTORY, "types.d.ts"),
     `export type Address = \`0x\${string}\`;
 export type RuntimeCodeHash = \`0x\${string}\`;
-export type PaymentMethodHash = ${paymentMethodHashType};
-export type RiskWindowSeconds = '0' | '1209600';
 export type ReadinessNetwork = 'base' | 'base_staging';
+export type BasePaymentMethodHash = ${basePaymentMethodHashType};
+export type BaseStagingPaymentMethodHash = ${baseStagingPaymentMethodHashType};
+export type PaymentMethodHash<Network extends ReadinessNetwork = ReadinessNetwork> = Network extends 'base_staging' ? BaseStagingPaymentMethodHash : BasePaymentMethodHash;
+export type RiskWindowSeconds = '0' | '1209600';
 export interface RuntimeIdentity { address: Address; runtimeCodeHash: RuntimeCodeHash; }
 export type RuntimeIdentityName = 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'IntentLifecycleHookV1' | 'RecognizedPredecessorHook' | 'OrchestratorRegistry' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry';
 export interface DisputeProtectionReadinessManifest<Network extends ReadinessNetwork = ReadinessNetwork> {
@@ -469,7 +483,7 @@ export interface DisputeProtectionReadinessManifest<Network extends ReadinessNet
     vaultController: Address;
     vaultStakeToken: Address;
   };
-  riskWindowSecondsByPaymentMethod: Record<PaymentMethodHash, RiskWindowSeconds>;
+  riskWindowSecondsByPaymentMethod: Record<PaymentMethodHash<Network>, RiskWindowSeconds>;
   sentinel: { escrow: Address; depositId: '0'; expected: false };
   prerequisites: {
     orchestratorPaused: false;

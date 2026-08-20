@@ -285,7 +285,7 @@ for (const {
   if (
     !sameJson(
       readiness.riskWindowSecondsByPaymentMethod,
-      readinessEvidence.riskWindowSecondsByPaymentMethod
+      readinessEvidence.riskWindowSecondsByPaymentMethod[manifestNetwork]
     )
   ) fail(`${name} risk windows differ from trusted evidence`);
   if (!sameJson(readiness.sentinel, readinessEvidence.sentinel))
