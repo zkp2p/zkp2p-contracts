@@ -685,6 +685,7 @@ async function deployLocalPaymentBinding(
   deployer: string,
   governance: string
 ): Promise<void> {
+  const network = hre.deployments.getNetworkName();
   const legacyNullifierRegistryAddress = (
     await hre.deployments.get("NullifierRegistry")
   ).address;
