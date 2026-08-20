@@ -1,5 +1,7 @@
 // @ts-check
 
+const { createHash } = require("crypto");
+
 /** @typedef {"StakeVault" | "DisputeProtectionPolicy" | "IntentLifecycleHookV1"} CanonicalName */
 /** @typedef {"base" | "base_staging" | "localhost" | "hardhat"} DisputeNetwork */
 /** @typedef {{ abi?: unknown[], address?: string, [key: string]: unknown }} DeploymentEntry */
@@ -71,6 +73,40 @@ function getActiveDisputeDeploymentName(network, canonicalName) {
 }
 
 /**
+ * @param {string} network
+ * @returns {{ version: number, selectionHash: string }}
+ */
+function getActiveDisputeSelectionStamp(network) {
+  const normalized = normalizeDisputeNetworkName(network);
+  const selectionHash = createHash("sha256")
+    .update(
+      JSON.stringify({
+        version: manifest.version,
+        network: normalized,
+        selection: manifest.networks[normalized],
+      }),
+      "utf8"
+    )
+    .digest("hex");
+  return { version: manifest.version, selectionHash };
+}
+
+/**
+ * @param {string} network
+ * @param {{ version?: unknown, selectionHash?: unknown } | undefined} stamp
+ * @returns {boolean}
+ */
+function hasCurrentDisputeSelectionStamp(network, stamp) {
+  if (!stamp || typeof stamp !== "object") return false;
+  const expected = getActiveDisputeSelectionStamp(network);
+  return (
+    stamp.version === expected.version &&
+    stamp.selectionHash === expected.selectionHash &&
+    Object.keys(stamp).length === 2
+  );
+}
+
+/**
  * @param {unknown[] | undefined} left
  * @param {unknown[] | undefined} right
  * @returns {boolean}
@@ -82,14 +118,26 @@ function sameAbi(left, right) {
 /**
  * @param {string} network
  * @param {Record<string, DeploymentEntry>} contracts
+ * @param {{ version?: unknown, selectionHash?: unknown } | undefined} [selectionStamp]
  * @returns {Record<string, DeploymentEntry>}
  */
-function resolveActiveDisputeAliases(network, contracts) {
+function resolveActiveDisputeAliases(network, contracts, selectionStamp) {
+  const stampedCanonicalOutput = hasCurrentDisputeSelectionStamp(
+    network,
+    selectionStamp
+  );
+  if (selectionStamp !== undefined && !stampedCanonicalOutput) {
+    throw new Error("Canonical dispute deployment selection stamp mismatch");
+  }
   const resolved = { ...contracts };
 
   for (const canonicalName of CANONICAL_NAMES) {
     const internalName = getActiveDisputeDeploymentName(network, canonicalName);
-    const selected = contracts[internalName];
+    const selected =
+      contracts[internalName] ||
+      (stampedCanonicalOutput && internalName !== canonicalName
+        ? contracts[canonicalName]
+        : undefined);
     if (!selected) {
       throw new Error(`Missing active dispute deployment ${internalName}`);
     }
@@ -108,6 +156,7 @@ function resolveActiveDisputeAliases(network, contracts) {
 
 module.exports = {
   getActiveDisputeDeploymentName,
+  getActiveDisputeSelectionStamp,
   normalizeDisputeNetworkName,
   resolveActiveDisputeAliases,
 };

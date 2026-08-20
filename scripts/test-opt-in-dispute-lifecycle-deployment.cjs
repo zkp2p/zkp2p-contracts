@@ -393,6 +393,14 @@ test("activation confirmations and payment binding are mandatory", () => {
   );
 });
 
+test("staging activation refuses a nonce race after its first preflight", () => {
+  assert.doesNotThrow(() => lane34Module.requireStableStagingNonce(17, 17));
+  assert.throws(
+    () => lane34Module.requireStableStagingNonce(17, 18),
+    /nonce changed after preflight/
+  );
+});
+
 test("staging activation calldata is exact and drain is reread before writer removal", () => {
   const snapshot = {
     registry: "0x0000000000000000000000000000000000000011",
@@ -673,6 +681,31 @@ test("Safe manifest validation rejects metadata and simulation tampering", () =>
         manifest
       ),
     /transactions/
+  );
+  const { operation: _operation, ...withoutOperation } = batch.transactions[0];
+  assert.throws(
+    () =>
+      assertBatchMatchesManifest(
+        { ...batch, transactions: [withoutOperation] },
+        manifest
+      ),
+    /transaction shape/
+  );
+  assert.throws(
+    () =>
+      assertBatchMatchesManifest(
+        {
+          ...batch,
+          transactions: [
+            {
+              ...batch.transactions[0],
+              contractMethod: { name: "acceptOwnership" },
+            },
+          ],
+        },
+        manifest
+      ),
+    /transaction shape/
   );
 });
 

@@ -100,11 +100,18 @@ export function assertBatchMatchesManifest(
     throw new Error(
       "Persisted Safe batch metadata does not match its manifest"
     );
+  if (
+    batch.transactions.some(
+      (transaction: any) =>
+        !Object.prototype.hasOwnProperty.call(transaction, "operation") ||
+        transaction.contractMethod !== null ||
+        transaction.contractInputsValues !== null
+    )
+  ) {
+    throw new Error("Persisted Safe transaction shape is not canonical");
+  }
   const persisted = normalizeSafeTransactions(
-    batch.transactions.map((transaction: any) => ({
-      ...transaction,
-      operation: transaction.operation ?? 0,
-    }))
+    batch.transactions
   );
   if (JSON.stringify(persisted) !== JSON.stringify(manifest.transactions)) {
     throw new Error("Persisted Safe transactions do not match their manifest");

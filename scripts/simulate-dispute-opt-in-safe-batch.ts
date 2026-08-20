@@ -415,12 +415,11 @@ async function main(): Promise<void> {
   const manifest = validateSafeBatchManifest(
     JSON.parse(readFileSync(process.argv[sidecarIndex + 1], "utf8"))
   );
-  const persisted = normalizeSafeTransactions(
-    batch.transactions.map((transaction: any) => ({
-      ...transaction,
-      operation: transaction.operation ?? 0,
-    }))
-  );
+  const {
+    assertBatchMatchesManifest,
+  } = require("./verify-dispute-opt-in-safe-batch.ts");
+  assertBatchMatchesManifest(batch, manifest);
+  const persisted = normalizeSafeTransactions(batch.transactions);
   if (JSON.stringify(persisted) !== JSON.stringify(manifest.transactions)) {
     throw new Error(
       "Persisted Safe batch transactions do not match the sidecar"

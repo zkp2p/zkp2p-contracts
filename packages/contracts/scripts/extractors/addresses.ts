@@ -11,6 +11,7 @@ type OutputsFileShape = {
   name: string; // network name
   chainId: string | number;
   contracts: Record<string, OutputsContractEntry>;
+  activeDisputeStack?: { version: number; selectionHash: string };
 };
 
 const ROOT = path.resolve(__dirname, "../../../../");
@@ -25,9 +26,10 @@ const { resolveActiveDisputeAliases } = require(path.join(
 
 export function resolveAddressOutputContracts(
   network: string,
-  contracts: Record<string, OutputsContractEntry>
+  contracts: Record<string, OutputsContractEntry>,
+  activeDisputeStack?: { version: number; selectionHash: string }
 ): Record<string, OutputsContractEntry> {
-  return resolveActiveDisputeAliases(network, contracts);
+  return resolveActiveDisputeAliases(network, contracts, activeDisputeStack);
 }
 
 function ensureDir(dir: string) {
@@ -64,7 +66,11 @@ export async function extractAddresses(): Promise<void> {
     const rawData: OutputsFileShape = mod.default || mod;
     const data: OutputsFileShape = {
       ...rawData,
-      contracts: resolveAddressOutputContracts(network, rawData.contracts),
+      contracts: resolveAddressOutputContracts(
+        network,
+        rawData.contracts,
+        rawData.activeDisputeStack
+      ),
     };
     networksData.push({ file, network, data });
 

@@ -200,7 +200,8 @@ for (const {
     ...rawOutput,
     contracts: resolveActiveDisputeAliases(
       manifestNetwork,
-      rawOutput.contracts || {}
+      rawOutput.contracts || {},
+      rawOutput.activeDisputeStack
     ),
   };
   if (Number(output.chainId) !== addresses.chainId) {

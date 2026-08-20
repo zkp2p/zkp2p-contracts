@@ -1,7 +1,7 @@
 # Dispute protection opt-in successor cutover
 
 Date: 2026-08-20
-Status: approved, ready for implementation planning
+Status: implementation complete, verification in progress
 Scope: contracts behavior, successor deployment lane, protected package
 publication, and the required indexer hard cut
 Supersedes: `2026-08-08-dispute-opt-out-design.md`
@@ -50,8 +50,10 @@ The implementation must re-read all state before acting. At approval time:
   `0x251d78fb6bBb4071995Bce74bAfC9E4168638622`.
 - Base's prepared default-on `IntentLifecycleHookV1` at
   `0x5B0017FCA6A2131701ef718e470a3930c1b6C12c` is passive.
-- Base staging OrchestratorV3 uses the default-on `IntentLifecycleHookV1` at
-  `0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65`.
+- Base staging OrchestratorV3 uses the pinned predecessor lifecycle hook at
+  `0xE8Fe714f848fAf7ecff7960AfD0C395771C22AA1`. The old default-on
+  `IntentLifecycleHookV1` at `0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65`
+  remains separate predecessor evidence and is not the active hook.
 - The Base and Base-staging predecessor `StakeVault` contracts report zero
   `totalStaked` and zero `totalClaimable`.
 - The Base `DisputeNullifierRegistry` is already Safe-owned. The predecessor
@@ -138,6 +140,9 @@ Public package exports remain `StakeVault`, `DisputeProtectionPolicy`, and
 `IntentLifecycleHookV1`. The deployment-output generator, address extractor,
 network ABI extractor, release verifier, and installed-package smoke test all
 consume the same alias manifest. They must not expose `*OptIn` keys publicly.
+Canonicalized deployment outputs carry a deterministic manifest-selection hash
+so those consumers can distinguish an already-canonicalized current output from
+an unstamped or stale predecessor output without exposing internal record names.
 The historical canonical deployment JSON remains unchanged as predecessor
 evidence.
 

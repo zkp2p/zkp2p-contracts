@@ -13,9 +13,11 @@ export type DeploymentOutput = {
   name: string;
   chainId: string | number;
   contracts: Record<string, DeploymentEntry>;
+  activeDisputeStack?: { version: number; selectionHash: string };
 };
 
 const {
+  getActiveDisputeSelectionStamp,
   normalizeDisputeNetworkName,
   resolveActiveDisputeAliases,
 } = require("../deployments/activeDisputeStack.cjs");
@@ -56,7 +58,12 @@ export function canonicalizeDeploymentOutput(
   }
   const canonical = {
     ...output,
-    contracts: resolveActiveDisputeAliases(normalizedNetwork, output.contracts),
+    contracts: resolveActiveDisputeAliases(
+      normalizedNetwork,
+      output.contracts,
+      output.activeDisputeStack
+    ),
+    activeDisputeStack: getActiveDisputeSelectionStamp(normalizedNetwork),
   };
   fs.writeFileSync(outputPath, serializeDeploymentOutput(canonical));
 }

@@ -1693,6 +1693,15 @@ async function preflightStagingTransaction(
   return { request, nonce, gasLimit };
 }
 
+export function requireStableStagingNonce(
+  initialNonce: number,
+  executionNonce: number
+): void {
+  if (executionNonce !== initialNonce) {
+    throw new Error("Base staging deployer nonce changed after preflight");
+  }
+}
+
 async function prepareOrExecuteStagingActivation(
   hre: HardhatRuntimeEnvironment
 ): Promise<void> {
@@ -1743,9 +1752,13 @@ async function prepareOrExecuteStagingActivation(
       "Base staging activation transaction changed after preflight"
     );
   }
+  const executionPreflight = await preflightStagingTransaction(
+    executionState.transaction
+  );
+  requireStableStagingNonce(preflight.nonce, executionPreflight.nonce);
 
   const signer = await ethers.getSigner(EXPECTED_LIVE.base_staging.deployer);
-  const response = await signer.sendTransaction(preflight.request);
+  const response = await signer.sendTransaction(executionPreflight.request);
   await response.wait();
   await waitForDeploymentDelay(hre);
   if (!(await paymentBindingCutoverReady(hre))) {

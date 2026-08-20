@@ -10,6 +10,7 @@ const { test } = require("node:test");
 
 const {
   getActiveDisputeDeploymentName,
+  getActiveDisputeSelectionStamp,
   normalizeDisputeNetworkName,
   resolveActiveDisputeAliases,
 } = require("../deployments/activeDisputeStack.cjs");
@@ -174,6 +175,35 @@ test("every deployment/package consumer exposes only canonical aliases", () => {
   }
 });
 
+test("accepts only a currently stamped canonical successor output", () => {
+  const canonical = /** @type {ReturnType<typeof contracts>} */ (
+    resolveActiveDisputeAliases("localhost", contracts())
+  );
+  const stamp = getActiveDisputeSelectionStamp("localhost");
+  const consumers =
+    /** @type {Array<(value: ReturnType<typeof contracts>) => ReturnType<typeof contracts>>} */ ([
+      (value) => resolveActiveDisputeAliases("localhost", value, stamp),
+      (value) => resolveAddressOutputContracts("localhost", value, stamp),
+      (value) => resolveAbiOutputContracts("localhost", value, stamp),
+    ]);
+
+  for (const resolveContracts of consumers) {
+    assert.deepEqual(resolveContracts(canonical), canonical);
+  }
+  assert.throws(
+    () => resolveActiveDisputeAliases("localhost", canonical),
+    /Missing active dispute deployment/
+  );
+  assert.throws(
+    () =>
+      resolveActiveDisputeAliases("localhost", canonical, {
+        ...stamp,
+        selectionHash: "0".repeat(64),
+      }),
+    /selection stamp mismatch/
+  );
+});
+
 test("canonical deployment-output rewriting is deterministic and leaves deployment evidence untouched", () => {
   const directory = mkdtempSync(join(tmpdir(), "active-dispute-output-"));
   const outputPath = join(directory, "localhostContracts.ts");
@@ -190,7 +220,6 @@ test("canonical deployment-output rewriting is deterministic and leaves deployme
     writeFileSync(historicalPath, historicalBytes);
     canonicalizeDeploymentOutput("localhost", outputPath);
     const first = readFileSync(outputPath, "utf8");
-    writeFileSync(outputPath, originalOutput);
     canonicalizeDeploymentOutput("localhost", outputPath);
     assert.equal(readFileSync(outputPath, "utf8"), first);
     assert.equal(readFileSync(historicalPath, "utf8"), historicalBytes);

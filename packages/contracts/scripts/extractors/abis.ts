@@ -11,6 +11,7 @@ type OutputsFileShape = {
   name: string; // network name
   chainId: string | number;
   contracts: Record<string, OutputsContractEntry>;
+  activeDisputeStack?: { version: number; selectionHash: string };
 };
 
 const ROOT = path.resolve(__dirname, "../../../../");
@@ -25,9 +26,10 @@ const { resolveActiveDisputeAliases } = require(path.join(
 
 export function resolveAbiOutputContracts(
   network: string,
-  contracts: Record<string, OutputsContractEntry>
+  contracts: Record<string, OutputsContractEntry>,
+  activeDisputeStack?: { version: number; selectionHash: string }
 ): Record<string, OutputsContractEntry> {
-  return resolveActiveDisputeAliases(network, contracts);
+  return resolveActiveDisputeAliases(network, contracts, activeDisputeStack);
 }
 
 const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
@@ -85,7 +87,11 @@ export async function extractABIs(): Promise<void> {
     const rawData: OutputsFileShape = mod.default || mod;
     const data: OutputsFileShape = {
       ...rawData,
-      contracts: resolveAbiOutputContracts(network, rawData.contracts),
+      contracts: resolveAbiOutputContracts(
+        network,
+        rawData.contracts,
+        rawData.activeDisputeStack
+      ),
     };
 
     const networkDir = path.join(ABIS_DIR, network);
