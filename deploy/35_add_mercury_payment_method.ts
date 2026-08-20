@@ -9,7 +9,12 @@ import {
   addPaymentMethodToUnifiedVerifier,
   savePaymentMethodSnapshot,
 } from "../deployments/helpers";
+import {
+  RATIFIED_PAYMENT_METHOD_CURRENCIES,
+  RATIFIED_PAYMENT_METHOD_ORDER,
+} from "./31_deploy_v3_payment_binding_stack";
 import { MERCURY_PROVIDER_CONFIG } from "../deployments/verifiers/mercury";
+import { calculatePaymentMethodHash } from "../utils/protocolUtils";
 
 const PREPARE_FLAG = "PREPARE_STAGING_MERCURY_PAYMENT_METHOD";
 const EXECUTE_FLAG = "EXECUTE_STAGING_MERCURY_PAYMENT_METHOD";
@@ -17,6 +22,8 @@ const TAG = "35_add_mercury_payment_method";
 const EXPECTED_CHAIN_ID = 8453;
 const EXPECTED_STAGING = {
   governance: "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+  legacyNullifierRegistry: "0x3FFd04f7909a16d3476263A1f4ce413A089dCc69",
+  nullifierRegistryV2: "0x2eb43d6C7c7Ec4220Aa6B8735BC053824a71778C",
   paymentVerifierRegistry: "0x2261416DA54C85f975C73FA56EF4D2D6b0aEF7Cc",
   unifiedPaymentVerifierV3: "0x4c62E99649c8Ba745E67018f5c8a483D77c429C4",
 } as const;
@@ -34,7 +41,19 @@ function sameStringArray(left: string[], right: string[]): boolean {
   );
 }
 
+function sameStringSet(left: string[], right: string[]): boolean {
+  return (
+    left.length === right.length &&
+    new Set(left.map((value) => value.toLowerCase())).size === left.length &&
+    left.every((value) =>
+      right.some((candidate) => sameAddress(value, candidate))
+    )
+  );
+}
+
 async function loadStagingContracts(hre: HardhatRuntimeEnvironment): Promise<{
+  legacyNullifierRegistry: any;
+  nullifierRegistryV2: any;
   paymentVerifierRegistry: any;
   unifiedPaymentVerifierV3: any;
 }> {
@@ -56,6 +75,12 @@ async function loadStagingContracts(hre: HardhatRuntimeEnvironment): Promise<{
   const verifierDeployment = await hre.deployments.get(
     "UnifiedPaymentVerifierV3"
   );
+  const nullifierV2Deployment = await hre.deployments.get(
+    "NullifierRegistryV2"
+  );
+  const legacyNullifierDeployment = await hre.deployments.get(
+    "NullifierRegistry"
+  );
   if (
     !sameAddress(
       registryDeployment.address,
@@ -64,6 +89,14 @@ async function loadStagingContracts(hre: HardhatRuntimeEnvironment): Promise<{
     !sameAddress(
       verifierDeployment.address,
       EXPECTED_STAGING.unifiedPaymentVerifierV3
+    ) ||
+    !sameAddress(
+      nullifierV2Deployment.address,
+      EXPECTED_STAGING.nullifierRegistryV2
+    ) ||
+    !sameAddress(
+      legacyNullifierDeployment.address,
+      EXPECTED_STAGING.legacyNullifierRegistry
     )
   ) {
     throw new Error(
@@ -74,6 +107,8 @@ async function loadStagingContracts(hre: HardhatRuntimeEnvironment): Promise<{
   for (const [label, address] of [
     ["PaymentVerifierRegistry", registryDeployment.address],
     ["UnifiedPaymentVerifierV3", verifierDeployment.address],
+    ["NullifierRegistryV2", nullifierV2Deployment.address],
+    ["NullifierRegistry", legacyNullifierDeployment.address],
   ] as const) {
     if ((await ethers.provider.getCode(address)) === "0x") {
       throw new Error(`${label} has no bytecode at ${address}`);
@@ -88,53 +123,157 @@ async function loadStagingContracts(hre: HardhatRuntimeEnvironment): Promise<{
     "UnifiedPaymentVerifierV3",
     verifierDeployment.address
   );
+  const nullifierRegistryV2 = await ethers.getContractAt(
+    "NullifierRegistryV2",
+    nullifierV2Deployment.address
+  );
+  const legacyNullifierRegistry = await ethers.getContractAt(
+    "NullifierRegistry",
+    legacyNullifierDeployment.address
+  );
   const [deployer] = await hre.getUnnamedAccounts();
-  const [registryOwner, verifierOwner] = await Promise.all([
-    paymentVerifierRegistry.owner(),
-    unifiedPaymentVerifierV3.owner(),
-  ]);
+  const [registryOwner, verifierOwner, nullifierV2Owner, legacyNullifierOwner] =
+    await Promise.all([
+      paymentVerifierRegistry.owner(),
+      unifiedPaymentVerifierV3.owner(),
+      nullifierRegistryV2.owner(),
+      legacyNullifierRegistry.owner(),
+    ]);
   if (
     !sameAddress(deployer, EXPECTED_STAGING.governance) ||
     !sameAddress(registryOwner, EXPECTED_STAGING.governance) ||
-    !sameAddress(verifierOwner, EXPECTED_STAGING.governance)
+    !sameAddress(verifierOwner, EXPECTED_STAGING.governance) ||
+    !sameAddress(nullifierV2Owner, EXPECTED_STAGING.governance) ||
+    !sameAddress(legacyNullifierOwner, EXPECTED_STAGING.governance)
   ) {
     throw new Error("Mercury activation signer or contract owner mismatch");
   }
 
-  return { paymentVerifierRegistry, unifiedPaymentVerifierV3 };
+  return {
+    legacyNullifierRegistry,
+    nullifierRegistryV2,
+    paymentVerifierRegistry,
+    unifiedPaymentVerifierV3,
+  };
+}
+
+async function assertPaymentBindingState(
+  paymentVerifierRegistry: any,
+  unifiedPaymentVerifierV3: any,
+  nullifierRegistryV2: any,
+  legacyNullifierRegistry: any
+): Promise<{ registryHasMethod: boolean; verifierHasMethod: boolean }> {
+  const paymentMethodHash = MERCURY_PROVIDER_CONFIG.paymentMethodHash;
+  const [registryMethods, verifierMethods, nullifierWriters, legacyWriters] =
+    await Promise.all([
+      paymentVerifierRegistry.getPaymentMethods(),
+      unifiedPaymentVerifierV3.getPaymentMethods(),
+      nullifierRegistryV2.getWriters(),
+      legacyNullifierRegistry.getWriters(),
+    ]);
+  const registryHasMethod = registryMethods.some((method: string) =>
+    sameAddress(method, paymentMethodHash)
+  );
+  const verifierHasMethod = verifierMethods.some((method: string) =>
+    sameAddress(method, paymentMethodHash)
+  );
+  if (registryHasMethod && !verifierHasMethod) {
+    throw new Error(
+      "PaymentVerifierRegistry contains Mercury before UnifiedPaymentVerifierV3"
+    );
+  }
+
+  const ratifiedOrder = RATIFIED_PAYMENT_METHOD_ORDER.base_staging;
+  const existingMethodNames = ratifiedOrder.filter(
+    (name) => name !== "mercury"
+  );
+  const expectedRegistryNames = registryHasMethod
+    ? ratifiedOrder
+    : existingMethodNames;
+  const expectedVerifierNames = verifierHasMethod
+    ? ratifiedOrder
+    : existingMethodNames;
+  const expectedRegistryMethods = expectedRegistryNames.map(
+    calculatePaymentMethodHash
+  );
+  const expectedVerifierMethods = expectedVerifierNames.map(
+    calculatePaymentMethodHash
+  );
+
+  if (!sameStringArray(registryMethods, expectedRegistryMethods)) {
+    throw new Error(
+      "PaymentVerifierRegistry methods drifted from the ratified staging order"
+    );
+  }
+  if (!sameStringSet(verifierMethods, expectedVerifierMethods)) {
+    throw new Error(
+      "UnifiedPaymentVerifierV3 methods drifted from the ratified staging set"
+    );
+  }
+  if (
+    !sameAddress(
+      await unifiedPaymentVerifierV3.nullifierRegistry(),
+      nullifierRegistryV2.address
+    ) ||
+    !sameAddress(
+      await nullifierRegistryV2.legacyNullifierRegistry(),
+      legacyNullifierRegistry.address
+    )
+  ) {
+    throw new Error("Mercury activation nullifier binding mismatch");
+  }
+  if (
+    nullifierWriters.length !== 1 ||
+    !sameAddress(nullifierWriters[0], unifiedPaymentVerifierV3.address) ||
+    legacyWriters.length !== 0
+  ) {
+    throw new Error("Mercury activation nullifier writer invariant failed");
+  }
+
+  for (let index = 0; index < expectedRegistryNames.length; index += 1) {
+    const methodName = expectedRegistryNames[index];
+    const methodHash = expectedRegistryMethods[index];
+    const [verifier, currencies] = await Promise.all([
+      paymentVerifierRegistry.getVerifier(methodHash),
+      paymentVerifierRegistry.getCurrencies(methodHash),
+    ]);
+    const expectedCurrencies = RATIFIED_PAYMENT_METHOD_CURRENCIES[
+      methodName
+    ].map(calculatePaymentMethodHash);
+    if (
+      !sameAddress(verifier, unifiedPaymentVerifierV3.address) ||
+      !sameStringArray(currencies, expectedCurrencies)
+    ) {
+      throw new Error(`Staging payment binding drifted for ${methodName}`);
+    }
+  }
+
+  return { registryHasMethod, verifierHasMethod };
 }
 
 export async function mercuryStagingReady(
   hre: HardhatRuntimeEnvironment
 ): Promise<boolean> {
-  const { paymentVerifierRegistry, unifiedPaymentVerifierV3 } =
-    await loadStagingContracts(hre);
-  const paymentMethodHash = MERCURY_PROVIDER_CONFIG.paymentMethodHash;
-  const verifierMethods: string[] =
-    await unifiedPaymentVerifierV3.getPaymentMethods();
-  const registryHasMethod = await paymentVerifierRegistry.isPaymentMethod(
-    paymentMethodHash
-  );
-  const verifierHasMethod = verifierMethods.some((method) =>
-    sameAddress(method, paymentMethodHash)
-  );
-
-  if (registryHasMethod) {
-    if (!verifierHasMethod) {
-      throw new Error(
-        "PaymentVerifierRegistry contains Mercury before UnifiedPaymentVerifierV3"
-      );
-    }
-    const [verifier, currencies] = await Promise.all([
-      paymentVerifierRegistry.getVerifier(paymentMethodHash),
-      paymentVerifierRegistry.getCurrencies(paymentMethodHash),
-    ]);
-    if (
-      !sameAddress(verifier, EXPECTED_STAGING.unifiedPaymentVerifierV3) ||
-      !sameStringArray(currencies, MERCURY_PROVIDER_CONFIG.currencies)
-    ) {
-      throw new Error("Existing Mercury registry configuration drifted");
-    }
+  const {
+    legacyNullifierRegistry,
+    nullifierRegistryV2,
+    paymentVerifierRegistry,
+    unifiedPaymentVerifierV3,
+  } = await loadStagingContracts(hre);
+  const { registryHasMethod, verifierHasMethod } =
+    await assertPaymentBindingState(
+      paymentVerifierRegistry,
+      unifiedPaymentVerifierV3,
+      nullifierRegistryV2,
+      legacyNullifierRegistry
+    );
+  if (
+    registryHasMethod !==
+    (await paymentVerifierRegistry.isPaymentMethod(
+      MERCURY_PROVIDER_CONFIG.paymentMethodHash
+    ))
+  ) {
+    throw new Error("Mercury registry membership views disagree");
   }
 
   return registryHasMethod && verifierHasMethod;
@@ -189,8 +328,18 @@ async function simulateMissingWrites(
 const func: DeployFunction = async function (
   hre: HardhatRuntimeEnvironment
 ): Promise<void> {
-  const { paymentVerifierRegistry, unifiedPaymentVerifierV3 } =
-    await loadStagingContracts(hre);
+  const {
+    legacyNullifierRegistry,
+    nullifierRegistryV2,
+    paymentVerifierRegistry,
+    unifiedPaymentVerifierV3,
+  } = await loadStagingContracts(hre);
+  await assertPaymentBindingState(
+    paymentVerifierRegistry,
+    unifiedPaymentVerifierV3,
+    nullifierRegistryV2,
+    legacyNullifierRegistry
+  );
   await simulateMissingWrites(
     paymentVerifierRegistry,
     unifiedPaymentVerifierV3

@@ -97,6 +97,8 @@ export const RATIFIED_PAYMENT_METHOD_CURRENCIES: Record<string, string[]> = {
   zelle: ["USD"],
   monzo: ["GBP"],
   paypal: ["USD", "EUR", "GBP", "SGD", "NZD", "AUD", "CAD"],
+  monobank: ["UAH"],
+  mercury: ["USD"],
 };
 
 export const RATIFIED_PAYMENT_METHOD_ORDER: Record<string, string[]> = {
@@ -113,7 +115,7 @@ export const RATIFIED_PAYMENT_METHOD_ORDER: Record<string, string[]> = {
     "monzo",
     "paypal",
   ],
-  // Base staging block 49,793,275. Staging was already hard-cut to UPV3 before
+  // Base staging block 50,211,289. Staging was already hard-cut to UPV3 before
   // this lane was introduced, so lane 31 verifies this live order and never
   // attempts an unsafe multi-transaction EOA cutover there.
   base_staging: [
@@ -127,6 +129,7 @@ export const RATIFIED_PAYMENT_METHOD_ORDER: Record<string, string[]> = {
     "wise",
     "mercadopago",
     "paypal",
+    "monobank",
     "mercury",
   ],
 };
