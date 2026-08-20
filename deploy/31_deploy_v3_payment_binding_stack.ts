@@ -4,7 +4,7 @@ import { ethers } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 
-import { ACTIVE_PAYMENT_METHODS, MULTI_SIG } from "../deployments/parameters";
+import { getActivePaymentMethods, MULTI_SIG } from "../deployments/parameters";
 import {
   addPaymentMethodToRegistry,
   addPaymentMethodToUnifiedVerifier,
@@ -127,6 +127,7 @@ export const RATIFIED_PAYMENT_METHOD_ORDER: Record<string, string[]> = {
     "wise",
     "mercadopago",
     "paypal",
+    "mercury",
   ],
 };
 
@@ -543,7 +544,8 @@ export async function assertPaymentBindingReady(
     throw new Error("UnifiedPaymentVerifierV3 owner mismatch");
   }
 
-  const expectedPaymentMethods = ACTIVE_PAYMENT_METHODS.map(paymentMethodHash);
+  const expectedPaymentMethods =
+    getActivePaymentMethods(network).map(paymentMethodHash);
   const actualPaymentMethods =
     await unifiedPaymentVerifierV3.getPaymentMethods();
   if (!sameStringSet(actualPaymentMethods, expectedPaymentMethods)) {
@@ -595,7 +597,8 @@ async function assertRegistrySurface(
   }
   const actualMethods: string[] =
     await paymentVerifierRegistry.getPaymentMethods();
-  const expectedMethods = ACTIVE_PAYMENT_METHODS.map(paymentMethodHash);
+  const activePaymentMethods = getActivePaymentMethods(network);
+  const expectedMethods = activePaymentMethods.map(paymentMethodHash);
   if (!sameStringSet(actualMethods, expectedMethods)) {
     throw new Error(
       "PaymentVerifierRegistry methods do not match the active method set"
@@ -604,7 +607,7 @@ async function assertRegistrySurface(
   const ratifiedOrder = RATIFIED_PAYMENT_METHOD_ORDER[network];
   if (
     network === "base" &&
-    !sameStringArray(ACTIVE_PAYMENT_METHODS, ratifiedOrder)
+    !sameStringArray(activePaymentMethods, ratifiedOrder)
   ) {
     throw new Error(
       "ACTIVE_PAYMENT_METHODS drifted from the audited Base method order"
@@ -733,7 +736,7 @@ async function deployLocalPaymentBinding(
     "UnifiedPaymentVerifierV3",
     unifiedPaymentVerifierV3Deployment.address
   );
-  for (const methodName of ACTIVE_PAYMENT_METHODS) {
+  for (const methodName of getActivePaymentMethods(network)) {
     await addPaymentMethodToUnifiedVerifier(
       hre,
       unifiedPaymentVerifierV3,
