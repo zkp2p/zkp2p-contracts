@@ -78,7 +78,7 @@ function releaseEnvironment(overrides = {}, ambientEnvironment = process.env) {
     ...environment,
     GITHUB_ACTIONS: 'false',
     LATEST_BASELINE: '0.3.0',
-    RC_BASELINE: '0.4.0-rc.5',
+    RC_BASELINE: '0.4.1-rc.2',
     RECOVERY_MODE: 'false',
     ...overrides,
   };
@@ -319,8 +319,8 @@ function originalJobsFixture(overrides = {}) {
 test('resolves an RC from the committed release-line prerelease', () => {
   assert.deepEqual(
     resolveReleasePolicy({
-      release: '0.4.1-rc.2',
-      packageVersion: '0.4.1-rc.2',
+      release: '0.4.1-rc.3',
+      packageVersion: '0.4.1-rc.3',
     }),
     { channel: 'rc', distTag: 'rc', environment: 'npm-publish' },
   );
@@ -358,7 +358,7 @@ test('derives a future RC release line from the package version', () => {
 
 test('commits the next RC candidate while preserving stable release support', () => {
   const packageManifest = JSON.parse(fs.readFileSync(packageManifestPath, 'utf8'));
-  assert.equal(packageManifest.version, '0.4.1-rc.2');
+  assert.equal(packageManifest.version, '0.4.1-rc.3');
   assert.deepEqual(
     resolveReleasePolicy({
       release: '0.4.1',
@@ -388,7 +388,7 @@ test('publish workflow consumes the version-derived channel without RC-only path
   const workflow = fs.readFileSync(releaseWorkflowPath, 'utf8');
 
   assert.match(workflow, /^  LATEST_BASELINE: 0\.4\.0$/m);
-  assert.match(workflow, /^  RC_BASELINE: 0\.4\.0-rc\.5$/m);
+  assert.match(workflow, /^  RC_BASELINE: 0\.4\.1-rc\.2$/m);
   assert.match(workflow, /^\s{2}policy:\s*$/m);
   assert.match(workflow, /node scripts\/npm-release\.mjs resolve "\$PACKAGE_JSON" "\$RELEASE_VERSION"/);
   assert.match(workflow, /DIST_TAG:\s*\$\{\{ needs\.policy\.outputs\.dist_tag \}\}/);
@@ -571,9 +571,9 @@ test('resolve writes all release policy outputs', (context) => {
     dist_tag: 'latest',
     environment: 'npm-publish',
     guard_latest: '0.3.0',
-    guard_rc: '0.4.0-rc.5',
+    guard_rc: '0.4.1-rc.2',
     verify_latest: '0.4.0',
-    verify_rc: '0.4.0-rc.5',
+    verify_rc: '0.4.1-rc.2',
   });
 });
 

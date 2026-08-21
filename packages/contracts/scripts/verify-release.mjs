@@ -13,9 +13,16 @@ const packageRoot = path.resolve(
 );
 const repoRoot = path.resolve(packageRoot, "..", "..");
 const requireFromRepo = createRequire(import.meta.url);
+const { ethers } = requireFromRepo("ethers");
 const { getActiveDisputeDeploymentName, resolveActiveDisputeAliases } =
   requireFromRepo("../../../deployments/activeDisputeStack.cjs");
 const args = process.argv.slice(2);
+const readinessEvidence = JSON.parse(
+  fs.readFileSync(
+    path.join(repoRoot, "deployments", "dispute-readiness-evidence.json"),
+    "utf8"
+  )
+);
 const packJsonIndex = args.indexOf("--pack-json");
 const packDirIndex = args.indexOf("--pack-dir");
 const networkConfigs = [
@@ -113,7 +120,15 @@ const requiredPackFiles = [
     `abis/${name}.cjs`,
     `abis/${name}.d.ts`,
     `abis/${name}.mjs`,
+    `disputeReadiness/${name}.json`,
+    `_cjs/disputeReadiness/${name}.js`,
+    `_esm/disputeReadiness/${name}.js`,
+    `_types/disputeReadiness/${name}.d.ts`,
   ]),
+  "_cjs/disputeReadiness/index.js",
+  "_esm/disputeReadiness/index.js",
+  "_types/disputeReadiness/index.d.ts",
+  "_types/disputeReadiness/types.d.ts",
 ];
 
 if (packJsonIndex !== -1) {
@@ -170,6 +185,11 @@ if (
 }
 if (packageJson.publishConfig?.provenance !== true)
   fail("publishConfig.provenance must be true");
+for (const condition of ["types", "import", "require"]) {
+  if (!packageJson.exports?.["./disputeReadiness"]?.[condition]) {
+    fail(`dispute readiness package export is missing ${condition}`);
+  }
+}
 
 const zeroAddress = "0x0000000000000000000000000000000000000000";
 let verifiedDeployments = 0;
@@ -187,6 +207,185 @@ for (const {
   if (addresses.chainId !== 8453)
     fail(`${name} package chainId is ${addresses.chainId}, expected 8453`);
   const rawOutput = readDeploymentOutput(outputFile);
+  const readiness = JSON.parse(
+    fs.readFileSync(requireFile(`disputeReadiness/${name}.json`), "utf8")
+  );
+  const networkEvidence = readinessEvidence.networks?.[manifestNetwork];
+  if (!networkEvidence)
+    fail(`${name} readiness evidence is missing`);
+  if (readiness.schemaVersion !== readinessEvidence.schemaVersion)
+    fail(`${name} readiness schema version mismatch`);
+  if (readiness.network !== manifestNetwork || readiness.chainId !== 8453)
+    fail(`${name} readiness network identity mismatch`);
+  if (!sameJson(readiness.activeDisputeStack, rawOutput.activeDisputeStack))
+    fail(`${name} readiness selection differs from deployment output`);
+  if (!sameJson(readiness.activeDisputeStack, networkEvidence.activeDisputeStack))
+    fail(`${name} readiness selection differs from trusted evidence`);
+  const expectedRuntimeIdentities = Object.fromEntries(
+    [
+      "Orchestrator",
+      "OrchestratorV2",
+      "OrchestratorV3",
+      "StakeVault",
+      "DisputeProtectionPolicy",
+      "IntentLifecycleHookV1",
+      "RecognizedPredecessorHook",
+      "RecognizedPredecessorPolicy",
+      "OrchestratorRegistry",
+      "WhitelistPolicy",
+      "DisputeVerifier",
+      "DisputeNullifierRegistry",
+      "MultiAttestationVerifier",
+    ].map((contractName) => [
+      contractName,
+      contractName === "RecognizedPredecessorHook" ||
+      contractName === "RecognizedPredecessorPolicy"
+        ? networkEvidence[
+            contractName === "RecognizedPredecessorHook"
+              ? "recognizedPredecessorHook"
+              : "recognizedPredecessorPolicy"
+          ]
+        : {
+            address: networkEvidence.addresses[contractName],
+            runtimeCodeHash: networkEvidence.runtimeCodeHashes[contractName],
+          },
+    ])
+  );
+  if (!sameJson(readiness.runtimeIdentities, expectedRuntimeIdentities))
+    fail(`${name} runtime identities differ from trusted evidence`);
+  for (const [contractName, identity] of Object.entries(expectedRuntimeIdentities)) {
+    const deploymentEvidence = networkEvidence.deploymentEvidence?.[contractName];
+    if (!deploymentEvidence)
+      fail(`${name}.${contractName} deployment evidence is missing`);
+    if (
+      contractName !== "RecognizedPredecessorHook" &&
+      contractName !== "RecognizedPredecessorPolicy"
+    ) {
+      const selectedDeploymentName = canonicalDisputeContracts.has(contractName)
+        ? getActiveDisputeDeploymentName(manifestNetwork, contractName)
+        : contractName;
+      if (deploymentEvidence.deploymentName !== selectedDeploymentName) {
+        fail(`${name}.${contractName} deployment selection evidence mismatch`);
+      }
+    }
+    const deploymentPath = path.join(
+      repoRoot,
+      deploymentDirectory,
+      `${deploymentEvidence.deploymentName}.json`
+    );
+    if (!fs.existsSync(deploymentPath))
+      fail(`${name}.${contractName} deployment evidence artifact is missing`);
+    const deployment = JSON.parse(fs.readFileSync(deploymentPath, "utf8"));
+    if (
+      deployment.address.toLowerCase() !== identity.address.toLowerCase() ||
+      deployment.solcInputHash !== deploymentEvidence.solcInputHash ||
+      typeof deployment.deployedBytecode !== "string" ||
+      ethers.utils.keccak256(deployment.deployedBytecode).toLowerCase() !==
+        deploymentEvidence.deployedBytecodeHash
+    ) {
+      fail(`${name}.${contractName} deployment evidence mismatch`);
+    }
+    if (
+      [
+        "OrchestratorRegistry",
+        "DisputeNullifierRegistry",
+        "MultiAttestationVerifier",
+      ].includes(contractName) &&
+      deploymentEvidence.deployedBytecodeHash !== identity.runtimeCodeHash
+    ) {
+      fail(`${name}.${contractName} direct runtime hash differs from deployment evidence`);
+    }
+  }
+  if (!sameJson(readiness.addressExpectations, networkEvidence.addressExpectations))
+    fail(`${name} address expectations differ from trusted evidence`);
+  if (
+    !sameJson(
+      readiness.riskWindowSecondsByPaymentMethod,
+      readinessEvidence.riskWindowSecondsByPaymentMethod[manifestNetwork]
+    )
+  ) fail(`${name} risk windows differ from trusted evidence`);
+  if (!sameJson(readiness.sentinel, readinessEvidence.sentinel))
+    fail(`${name} readiness sentinel differs from trusted evidence`);
+  if (!sameJson(readiness.prerequisites, readinessEvidence.prerequisites))
+    fail(`${name} readiness prerequisites differ from trusted evidence`);
+  const identities = readiness.runtimeIdentities;
+  const expectedAddresses = readiness.addressExpectations;
+  const expectedRelations = {
+    activeLifecycleHook: identities.IntentLifecycleHookV1.address,
+    recognizedPredecessorPolicy: identities.RecognizedPredecessorPolicy.address,
+    registeredOrchestrator: identities.OrchestratorV3.address,
+    authorizedLifecycleHook: identities.IntentLifecycleHookV1.address,
+    disputeNullifierAuthorizedWriter: identities.DisputeProtectionPolicy.address,
+    orchestratorEscrowRegistry: expectedAddresses.EscrowRegistry,
+    orchestratorPaymentVerifierRegistry: expectedAddresses.PaymentVerifierRegistry,
+    orchestratorRelayerRegistry: expectedAddresses.RelayerRegistry,
+    hookOrchestratorRegistry: identities.OrchestratorRegistry.address,
+    hookWhitelistPolicy: identities.WhitelistPolicy.address,
+    hookDisputeProtectionPolicy: identities.DisputeProtectionPolicy.address,
+    whitelistGroupRegistry: expectedAddresses.AddressGroupRegistry,
+    whitelistEscrowRegistry: expectedAddresses.EscrowRegistry,
+    whitelistOrchestratorRegistry: identities.OrchestratorRegistry.address,
+    policyStakeVault: identities.StakeVault.address,
+    policyDisputeVerifier: identities.DisputeVerifier.address,
+    policyDisputeNullifierRegistry: identities.DisputeNullifierRegistry.address,
+    disputeVerifierNullifierRegistry: expectedAddresses.NullifierRegistryV2,
+    disputeVerifierAttestationVerifier: identities.MultiAttestationVerifier.address,
+    vaultController: identities.DisputeProtectionPolicy.address,
+    vaultStakeToken: expectedAddresses.StakeToken,
+  };
+  if (!sameJson(readiness.expectedRelations, expectedRelations))
+    fail(`${name} readiness dependency relations differ from trusted evidence`);
+  const expectedGovernance = {
+    owner: networkEvidence.governance.owner,
+    governedRuntimeIdentities: [
+      "OrchestratorRegistry",
+      "OrchestratorV3",
+      "StakeVault",
+      "DisputeProtectionPolicy",
+      "WhitelistPolicy",
+      "DisputeVerifier",
+      "DisputeNullifierRegistry",
+      "MultiAttestationVerifier",
+    ],
+    pendingOwner: networkEvidence.governance.pendingOwner,
+    twoStepGovernedRuntimeIdentities: [
+      "StakeVault",
+      "DisputeProtectionPolicy",
+      "DisputeVerifier",
+    ],
+  };
+  if (!sameJson(readiness.expectedGovernance, expectedGovernance))
+    fail(`${name} readiness governance differs from trusted evidence`);
+  if (!sameJson(readiness.attestationTrust, networkEvidence.attestationTrust))
+    fail(`${name} readiness attestation trust differs from trusted evidence`);
+  const policyDeploymentEvidence = networkEvidence.deploymentEvidence.DisputeProtectionPolicy;
+  const policyDeployment = JSON.parse(
+    fs.readFileSync(
+      path.join(repoRoot, deploymentDirectory, `${policyDeploymentEvidence.deploymentName}.json`),
+      "utf8"
+    )
+  );
+  const expectedAuthorizationSets = {
+    orchestratorAuthorizationFromBlock: JSON.parse(
+      fs.readFileSync(
+        path.join(repoRoot, deploymentDirectory, "OrchestratorRegistry.json"),
+        "utf8"
+      )
+    ).receipt.blockNumber.toString(),
+    authorizedOrchestrators: [
+      identities.Orchestrator.address,
+      identities.OrchestratorV2.address,
+      identities.OrchestratorV3.address,
+    ],
+    lifecycleHookAuthorizationFromBlock: policyDeployment.receipt.blockNumber.toString(),
+    authorizedLifecycleHooks: [identities.IntentLifecycleHookV1.address],
+    passiveDisputeNullifierWriters: [identities.RecognizedPredecessorPolicy.address],
+    activeDisputeNullifierWriters: [identities.DisputeProtectionPolicy.address],
+  };
+  if (!sameJson(readiness.exactAuthorizationSets, expectedAuthorizationSets))
+    fail(`${name} readiness authorization sets differ from trusted evidence`);
+  if (JSON.stringify(readiness).includes("OptIn"))
+    fail(`${name} readiness metadata exposes an internal OptIn name`);
   if (
     Object.keys(rawOutput.contracts || {}).some((contractName) =>
       contractName.endsWith("OptIn")

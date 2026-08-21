@@ -96,6 +96,7 @@ export async function extractAddresses(): Promise<void> {
       name: data.name,
       chainId,
       contracts,
+      activeDisputeStack: data.activeDisputeStack,
       meta: { generatedAt: new Date().toISOString() },
     };
 
@@ -109,7 +110,7 @@ export async function extractAddresses(): Promise<void> {
 
     // Write per-network .d.ts alongside JSON for strong typing
     const perNetworkDts = `// Typed address file for ${network}
-export type AddressFile = { name: string; chainId: number; contracts: Record<string, \`0x\${string}\`>; meta?: Record<string, unknown> };
+export type AddressFile = { name: string; chainId: number; contracts: Record<string, \`0x\${string}\`>; activeDisputeStack: { version: number; selectionHash: string }; meta?: Record<string, unknown> };
 declare const value: AddressFile;
 export default value;
 `;
