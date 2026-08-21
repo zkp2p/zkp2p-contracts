@@ -319,8 +319,8 @@ function originalJobsFixture(overrides = {}) {
 test('resolves an RC from the committed release-line prerelease', () => {
   assert.deepEqual(
     resolveReleasePolicy({
-      release: '0.4.1-rc.3',
-      packageVersion: '0.4.1-rc.3',
+      release: '0.4.1-rc.4',
+      packageVersion: '0.4.1-rc.4',
     }),
     { channel: 'rc', distTag: 'rc', environment: 'npm-publish' },
   );
