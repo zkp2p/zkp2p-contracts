@@ -358,7 +358,7 @@ test('derives a future RC release line from the package version', () => {
 
 test('commits the next RC candidate while preserving stable release support', () => {
   const packageManifest = JSON.parse(fs.readFileSync(packageManifestPath, 'utf8'));
-  assert.equal(packageManifest.version, '0.4.1-rc.3');
+  assert.equal(packageManifest.version, '0.4.1-rc.4');
   assert.deepEqual(
     resolveReleasePolicy({
       release: '0.4.1',
@@ -404,6 +404,20 @@ test('publish workflow consumes the version-derived channel without RC-only path
   assert.doesNotMatch(workflow, /@zkp2p\/contracts-v2@rc\b/);
   assert.doesNotMatch(workflow, /Verify published RC recovery/);
   assert.doesNotMatch(workflow, /^\s*RELEASE_LINE:/m);
+});
+
+test('publish and recovery jobs install verification dependencies before inspecting tarballs', () => {
+  const workflow = fs.readFileSync(releaseWorkflowPath, 'utf8');
+  const publishJob = workflow.slice(workflow.indexOf('  publish:\n'), workflow.indexOf('  recover:\n'));
+  const recoveryJob = workflow.slice(workflow.indexOf('  recover:\n'));
+
+  for (const job of [publishJob, recoveryJob]) {
+    const installIndex = job.indexOf('corepack yarn install --immutable');
+    const verifyIndex = job.indexOf('node packages/contracts/scripts/verify-release.mjs');
+    assert.notEqual(installIndex, -1);
+    assert.notEqual(verifyIndex, -1);
+    assert.ok(installIndex < verifyIndex);
+  }
 });
 
 test('rejects a nested RC prerelease', () => {
