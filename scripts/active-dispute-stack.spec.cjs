@@ -266,7 +266,7 @@ const RISK_WINDOWS_BY_NETWORK = {
   },
 };
 
-const READINESS_BY_NETWORK = {
+const DISPUTE_STACK_BY_NETWORK = {
   base: {
     riskWindows: RISK_WINDOWS_BY_NETWORK.base,
     governanceOwner: "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
@@ -415,21 +415,21 @@ const READINESS_BY_NETWORK = {
   },
 };
 
-test("package extraction publishes exact dispute readiness metadata without internal deployment names", async () => {
-  const readinessDirectory = join(
+test("package extraction publishes the exact dispute stack manifest without internal deployment names", async () => {
+  const disputeStackDirectory = join(
     __dirname,
     "..",
     "packages",
     "contracts",
-    "disputeReadiness"
+    "disputeStack"
   );
-  rmSync(readinessDirectory, { recursive: true, force: true });
+  rmSync(disputeStackDirectory, { recursive: true, force: true });
   await extractAll();
-  assert.equal(existsSync(readinessDirectory), true);
+  assert.equal(existsSync(disputeStackDirectory), true);
 
-  for (const [network, expected] of Object.entries(READINESS_BY_NETWORK)) {
+  for (const [network, expected] of Object.entries(DISPUTE_STACK_BY_NETWORK)) {
     const manifest = JSON.parse(
-      readFileSync(join(readinessDirectory, `${network}.json`), "utf8")
+      readFileSync(join(disputeStackDirectory, `${network}.json`), "utf8")
     );
     assert.equal(manifest.schemaVersion, 1);
     assert.equal(manifest.chainId, 8453);
@@ -526,7 +526,7 @@ test("package extraction publishes exact dispute readiness metadata without inte
   }
 
   const declarations = readFileSync(
-    join(readinessDirectory, "types.d.ts"),
+    join(disputeStackDirectory, "types.d.ts"),
     "utf8"
   );
   const riskWindowValues = new Set(
@@ -543,15 +543,15 @@ test("package extraction publishes exact dispute readiness metadata without inte
   }
   assert.equal(declarations.includes("OptIn"), false);
   assert.match(
-    readFileSync(join(readinessDirectory, "base.d.ts"), "utf8"),
-    /DisputeProtectionReadinessManifest<'base'>/
+    readFileSync(join(disputeStackDirectory, "base.d.ts"), "utf8"),
+    /DisputeStackManifest<'base'>/
   );
   assert.match(
-    readFileSync(join(readinessDirectory, "baseStaging.d.ts"), "utf8"),
-    /DisputeProtectionReadinessManifest<'base_staging'>/
+    readFileSync(join(disputeStackDirectory, "baseStaging.d.ts"), "utf8"),
+    /DisputeStackManifest<'base_staging'>/
   );
   const indexDeclarations = readFileSync(
-    join(readinessDirectory, "index.d.ts"),
+    join(disputeStackDirectory, "index.d.ts"),
     "utf8"
   );
   assert.match(indexDeclarations, /from ['"]\.\/base['"]/);
@@ -559,27 +559,29 @@ test("package extraction publishes exact dispute readiness metadata without inte
   assert.doesNotMatch(indexDeclarations, /\.json['"]/);
 });
 
-test("contracts package exposes dispute readiness metadata through public CJS, ESM, JSON, and type subpaths", () => {
+test("contracts package exposes the dispute stack manifest through public CJS, ESM, JSON, and type subpaths", () => {
   const packageJson = require("../packages/contracts/package.json");
-  assert.equal(packageJson.files.includes("disputeReadiness"), true);
-  assert.deepEqual(packageJson.exports["./disputeReadiness"], {
-    types: "./_types/disputeReadiness/index.d.ts",
-    import: "./_esm/disputeReadiness/index.js",
-    "react-native": "./_esm/disputeReadiness/index.js",
-    require: "./_cjs/disputeReadiness/index.js",
-    default: "./_esm/disputeReadiness/index.js",
+  assert.equal(packageJson.files.includes("disputeStack"), true);
+  assert.equal(packageJson.files.includes("disputeReadiness"), false);
+  assert.deepEqual(packageJson.exports["./disputeStack"], {
+    types: "./_types/disputeStack/index.d.ts",
+    import: "./_esm/disputeStack/index.js",
+    "react-native": "./_esm/disputeStack/index.js",
+    require: "./_cjs/disputeStack/index.js",
+    default: "./_esm/disputeStack/index.js",
   });
-  assert.deepEqual(packageJson.exports["./disputeReadiness/*"], {
-    types: "./_types/disputeReadiness/*.d.ts",
-    import: "./_esm/disputeReadiness/*.js",
-    "react-native": "./_esm/disputeReadiness/*.js",
-    require: "./disputeReadiness/*.json",
-    default: "./_esm/disputeReadiness/*.js",
+  assert.deepEqual(packageJson.exports["./disputeStack/*"], {
+    types: "./_types/disputeStack/*.d.ts",
+    import: "./_esm/disputeStack/*.js",
+    "react-native": "./_esm/disputeStack/*.js",
+    require: "./disputeStack/*.json",
+    default: "./_esm/disputeStack/*.js",
   });
   assert.equal(
-    packageJson.exports["./disputeReadiness/*.json"],
-    "./disputeReadiness/*.json"
+    packageJson.exports["./disputeStack/*.json"],
+    "./disputeStack/*.json"
   );
+  assert.equal(packageJson.exports["./disputeReadiness"], undefined);
 });
 
 test("canonical deployment-output rewriting is deterministic and leaves deployment evidence untouched", () => {

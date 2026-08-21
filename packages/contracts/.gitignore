@@ -5,7 +5,7 @@
 /currencies/
 /oracleFeeds/
 /paymentMethods/
-/disputeReadiness/
+/disputeStack/
 /networks/
 /types/
 /utils/

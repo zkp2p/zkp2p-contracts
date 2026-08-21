@@ -17,9 +17,9 @@ const { ethers } = requireFromRepo("ethers");
 const { getActiveDisputeDeploymentName, resolveActiveDisputeAliases } =
   requireFromRepo("../../../deployments/activeDisputeStack.cjs");
 const args = process.argv.slice(2);
-const readinessEvidence = JSON.parse(
+const disputeStackEvidence = JSON.parse(
   fs.readFileSync(
-    path.join(repoRoot, "deployments", "dispute-readiness-evidence.json"),
+    path.join(repoRoot, "deployments", "dispute-stack-evidence.json"),
     "utf8"
   )
 );
@@ -120,15 +120,15 @@ const requiredPackFiles = [
     `abis/${name}.cjs`,
     `abis/${name}.d.ts`,
     `abis/${name}.mjs`,
-    `disputeReadiness/${name}.json`,
-    `_cjs/disputeReadiness/${name}.js`,
-    `_esm/disputeReadiness/${name}.js`,
-    `_types/disputeReadiness/${name}.d.ts`,
+    `disputeStack/${name}.json`,
+    `_cjs/disputeStack/${name}.js`,
+    `_esm/disputeStack/${name}.js`,
+    `_types/disputeStack/${name}.d.ts`,
   ]),
-  "_cjs/disputeReadiness/index.js",
-  "_esm/disputeReadiness/index.js",
-  "_types/disputeReadiness/index.d.ts",
-  "_types/disputeReadiness/types.d.ts",
+  "_cjs/disputeStack/index.js",
+  "_esm/disputeStack/index.js",
+  "_types/disputeStack/index.d.ts",
+  "_types/disputeStack/types.d.ts",
 ];
 
 if (packJsonIndex !== -1) {
@@ -186,9 +186,12 @@ if (
 if (packageJson.publishConfig?.provenance !== true)
   fail("publishConfig.provenance must be true");
 for (const condition of ["types", "import", "require"]) {
-  if (!packageJson.exports?.["./disputeReadiness"]?.[condition]) {
-    fail(`dispute readiness package export is missing ${condition}`);
+  if (!packageJson.exports?.["./disputeStack"]?.[condition]) {
+    fail(`dispute stack package export is missing ${condition}`);
   }
+}
+if (packageJson.exports?.["./disputeReadiness"] !== undefined) {
+  fail("retired dispute readiness package export is still present");
 }
 
 const zeroAddress = "0x0000000000000000000000000000000000000000";
@@ -207,20 +210,20 @@ for (const {
   if (addresses.chainId !== 8453)
     fail(`${name} package chainId is ${addresses.chainId}, expected 8453`);
   const rawOutput = readDeploymentOutput(outputFile);
-  const readiness = JSON.parse(
-    fs.readFileSync(requireFile(`disputeReadiness/${name}.json`), "utf8")
+  const disputeStack = JSON.parse(
+    fs.readFileSync(requireFile(`disputeStack/${name}.json`), "utf8")
   );
-  const networkEvidence = readinessEvidence.networks?.[manifestNetwork];
+  const networkEvidence = disputeStackEvidence.networks?.[manifestNetwork];
   if (!networkEvidence)
-    fail(`${name} readiness evidence is missing`);
-  if (readiness.schemaVersion !== readinessEvidence.schemaVersion)
-    fail(`${name} readiness schema version mismatch`);
-  if (readiness.network !== manifestNetwork || readiness.chainId !== 8453)
-    fail(`${name} readiness network identity mismatch`);
-  if (!sameJson(readiness.activeDisputeStack, rawOutput.activeDisputeStack))
-    fail(`${name} readiness selection differs from deployment output`);
-  if (!sameJson(readiness.activeDisputeStack, networkEvidence.activeDisputeStack))
-    fail(`${name} readiness selection differs from trusted evidence`);
+    fail(`${name} dispute stack evidence is missing`);
+  if (disputeStack.schemaVersion !== disputeStackEvidence.schemaVersion)
+    fail(`${name} dispute stack schema version mismatch`);
+  if (disputeStack.network !== manifestNetwork || disputeStack.chainId !== 8453)
+    fail(`${name} dispute stack network identity mismatch`);
+  if (!sameJson(disputeStack.activeDisputeStack, rawOutput.activeDisputeStack))
+    fail(`${name} dispute stack selection differs from deployment output`);
+  if (!sameJson(disputeStack.activeDisputeStack, networkEvidence.activeDisputeStack))
+    fail(`${name} dispute stack selection differs from trusted evidence`);
   const expectedRuntimeIdentities = Object.fromEntries(
     [
       "Orchestrator",
@@ -251,7 +254,7 @@ for (const {
           },
     ])
   );
-  if (!sameJson(readiness.runtimeIdentities, expectedRuntimeIdentities))
+  if (!sameJson(disputeStack.runtimeIdentities, expectedRuntimeIdentities))
     fail(`${name} runtime identities differ from trusted evidence`);
   for (const [contractName, identity] of Object.entries(expectedRuntimeIdentities)) {
     const deploymentEvidence = networkEvidence.deploymentEvidence?.[contractName];
@@ -296,20 +299,20 @@ for (const {
       fail(`${name}.${contractName} direct runtime hash differs from deployment evidence`);
     }
   }
-  if (!sameJson(readiness.addressExpectations, networkEvidence.addressExpectations))
+  if (!sameJson(disputeStack.addressExpectations, networkEvidence.addressExpectations))
     fail(`${name} address expectations differ from trusted evidence`);
   if (
     !sameJson(
-      readiness.riskWindowSecondsByPaymentMethod,
-      readinessEvidence.riskWindowSecondsByPaymentMethod[manifestNetwork]
+      disputeStack.riskWindowSecondsByPaymentMethod,
+      disputeStackEvidence.riskWindowSecondsByPaymentMethod[manifestNetwork]
     )
   ) fail(`${name} risk windows differ from trusted evidence`);
-  if (!sameJson(readiness.sentinel, readinessEvidence.sentinel))
-    fail(`${name} readiness sentinel differs from trusted evidence`);
-  if (!sameJson(readiness.prerequisites, readinessEvidence.prerequisites))
-    fail(`${name} readiness prerequisites differ from trusted evidence`);
-  const identities = readiness.runtimeIdentities;
-  const expectedAddresses = readiness.addressExpectations;
+  if (!sameJson(disputeStack.sentinel, disputeStackEvidence.sentinel))
+    fail(`${name} dispute stack sentinel differs from trusted evidence`);
+  if (!sameJson(disputeStack.prerequisites, disputeStackEvidence.prerequisites))
+    fail(`${name} dispute stack prerequisites differ from trusted evidence`);
+  const identities = disputeStack.runtimeIdentities;
+  const expectedAddresses = disputeStack.addressExpectations;
   const expectedRelations = {
     activeLifecycleHook: identities.IntentLifecycleHookV1.address,
     recognizedPredecessorPolicy: identities.RecognizedPredecessorPolicy.address,
@@ -333,8 +336,8 @@ for (const {
     vaultController: identities.DisputeProtectionPolicy.address,
     vaultStakeToken: expectedAddresses.StakeToken,
   };
-  if (!sameJson(readiness.expectedRelations, expectedRelations))
-    fail(`${name} readiness dependency relations differ from trusted evidence`);
+  if (!sameJson(disputeStack.expectedRelations, expectedRelations))
+    fail(`${name} dispute stack dependency relations differ from trusted evidence`);
   const expectedGovernance = {
     owner: networkEvidence.governance.owner,
     governedRuntimeIdentities: [
@@ -354,10 +357,10 @@ for (const {
       "DisputeVerifier",
     ],
   };
-  if (!sameJson(readiness.expectedGovernance, expectedGovernance))
-    fail(`${name} readiness governance differs from trusted evidence`);
-  if (!sameJson(readiness.attestationTrust, networkEvidence.attestationTrust))
-    fail(`${name} readiness attestation trust differs from trusted evidence`);
+  if (!sameJson(disputeStack.expectedGovernance, expectedGovernance))
+    fail(`${name} dispute stack governance differs from trusted evidence`);
+  if (!sameJson(disputeStack.attestationTrust, networkEvidence.attestationTrust))
+    fail(`${name} dispute stack attestation trust differs from trusted evidence`);
   const policyDeploymentEvidence = networkEvidence.deploymentEvidence.DisputeProtectionPolicy;
   const policyDeployment = JSON.parse(
     fs.readFileSync(
@@ -382,10 +385,10 @@ for (const {
     passiveDisputeNullifierWriters: [identities.RecognizedPredecessorPolicy.address],
     activeDisputeNullifierWriters: [identities.DisputeProtectionPolicy.address],
   };
-  if (!sameJson(readiness.exactAuthorizationSets, expectedAuthorizationSets))
-    fail(`${name} readiness authorization sets differ from trusted evidence`);
-  if (JSON.stringify(readiness).includes("OptIn"))
-    fail(`${name} readiness metadata exposes an internal OptIn name`);
+  if (!sameJson(disputeStack.exactAuthorizationSets, expectedAuthorizationSets))
+    fail(`${name} dispute stack authorization sets differ from trusted evidence`);
+  if (JSON.stringify(disputeStack).includes("OptIn"))
+    fail(`${name} dispute stack metadata exposes an internal OptIn name`);
   if (
     Object.keys(rawOutput.contracts || {}).some((contractName) =>
       contractName.endsWith("OptIn")

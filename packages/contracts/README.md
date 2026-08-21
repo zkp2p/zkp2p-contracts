@@ -2,7 +2,7 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
-## Release 0.4.1-rc.3
+## Release 0.4.1-rc.6
 
 - Exports the canonical source ABIs for `DisputeNullifierRegistry`, `DisputeProtectionPolicy`,
   `DisputeVerifier`, `IntentLifecycleHookV1`, and `StakeVault`.
@@ -10,8 +10,10 @@ Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, an
 - Requires a complete fresh Base staging dispute stack before the release can be published.
 - Keeps `OrchestratorV3` hook activation as a separate governance operation after downstream
   consumers have upgraded.
-- Exports deterministic dispute-protection readiness metadata for Base production and staging,
+- Exports deterministic dispute-stack manifests for Base production and staging,
   including runtime identities, governance ownership, attestation trust, and exact authorization sets.
+- Hard-cuts the retired `disputeReadiness` subpath in favor of `disputeStack`; runtime readiness
+  remains a consumer decision based on fresh on-chain reads.
 
 ## Installation
 
@@ -52,8 +54,8 @@ import {
   WhitelistPolicy,
 } from "@zkp2p/contracts-v2/abis/contracts"
 
-// Import the trusted readiness contract used before accepting a V3 successor
-import { base as baseDisputeReadiness } from "@zkp2p/contracts-v2/disputeReadiness"
+// Import the trusted dispute-stack manifest used before accepting a V3 successor
+import { base as baseDisputeStack } from "@zkp2p/contracts-v2/disputeStack"
 
 // Example: Create contract instance with ethers
 import { ethers } from 'ethers';
@@ -67,7 +69,7 @@ const orchestrator = new ethers.Contract(
 
 console.log('Intent expiration:', INTENT_EXPIRATION_PERIOD);
 console.log('Venmo config:', paymentMethods.venmo);
-console.log('Expected successor hook:', baseDisputeReadiness.expectedRelations.activeLifecycleHook);
+console.log('Expected successor hook:', baseDisputeStack.expectedRelations.activeLifecycleHook);
 ```
 
 ## Features
@@ -160,10 +162,10 @@ console.log('Currency code:', usdInfo.code);
 console.log('Decimals:', usdInfo.decimals);
 ```
 
-### 🛡️ Dispute-Protection Readiness
+### 🛡️ Dispute Stack
 
-`@zkp2p/contracts-v2/disputeReadiness` exports `base`, `baseStaging`, and
-`disputeReadinessByNetwork` in CommonJS and ESM, with declarations under the same subpath. Each
+`@zkp2p/contracts-v2/disputeStack` exports `base`, `baseStaging`, and
+`disputeStackByNetwork` in CommonJS and ESM, with declarations under the same subpath. Each
 manifest pins:
 
 - The selected dispute-stack version and selection hash.
@@ -194,7 +196,7 @@ The package follows modern ESM/CJS patterns with clean subpath exports:
 ├── abis/              # Network-specific contract ABIs  
 ├── constants/         # Protocol constants per network
 ├── paymentMethods/    # Payment method configurations
-├── disputeReadiness/  # Trusted V3 readiness identities and policy expectations
+├── disputeStack/      # Trusted V3 identities and policy expectations
 ├── types/             # TypeScript type definitions
 └── utils/             # Utility functions
 ```
@@ -209,8 +211,8 @@ All modules are directly accessible via subpath exports:
 - `@zkp2p/contracts-v2/abis/<network>/<contract>.json` - Direct JSON import for specific contracts
 - `@zkp2p/contracts-v2/constants/<network>` - Constants per network
 - `@zkp2p/contracts-v2/paymentMethods` - Payment method configs
-- `@zkp2p/contracts-v2/disputeReadiness` - Typed Base production/staging readiness manifests
-- `@zkp2p/contracts-v2/disputeReadiness/<network>.json` - Direct readiness JSON import
+- `@zkp2p/contracts-v2/disputeStack` - Typed Base production/staging dispute-stack manifests
+- `@zkp2p/contracts-v2/disputeStack/<network>.json` - Direct dispute-stack JSON import
 - `@zkp2p/contracts-v2/utils/protocolUtils` - Protocol utilities
 - `@zkp2p/contracts-v2/types` - TypeScript types
 

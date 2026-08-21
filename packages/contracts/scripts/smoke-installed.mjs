@@ -41,10 +41,10 @@ if (packageJson.version !== expectedVersion) {
 
 requireFromInstall("@zkp2p/contracts-v2");
 const installedPackageRoot = path.dirname(packageJsonPath);
-const readinessCjs = requireFromInstall("@zkp2p/contracts-v2/disputeReadiness");
-const readinessEsm = await import(
+const disputeStackCjs = requireFromInstall("@zkp2p/contracts-v2/disputeStack");
+const disputeStackEsm = await import(
   pathToFileURL(
-    path.join(installedPackageRoot, "_esm", "disputeReadiness", "index.js")
+    path.join(installedPackageRoot, "_esm", "disputeStack", "index.js")
   ).href
 );
 for (const subpath of [
@@ -52,8 +52,8 @@ for (const subpath of [
   "@zkp2p/contracts-v2/addresses/baseStaging.json",
   "@zkp2p/contracts-v2/currencies/currencies.json",
   "@zkp2p/contracts-v2/paymentMethods/lookups.json",
-  "@zkp2p/contracts-v2/disputeReadiness/base.json",
-  "@zkp2p/contracts-v2/disputeReadiness/baseStaging.json",
+  "@zkp2p/contracts-v2/disputeStack/base.json",
+  "@zkp2p/contracts-v2/disputeStack/baseStaging.json",
 ]) {
   if (!requireFromInstall(subpath))
     fail(`consumer import ${subpath} is missing`);
@@ -64,59 +64,59 @@ for (const [network, expectedRiskWindowCount] of [
   ["baseStaging", 12],
 ]) {
   const manifest = requireFromInstall(
-    `@zkp2p/contracts-v2/disputeReadiness/${network}.json`
+    `@zkp2p/contracts-v2/disputeStack/${network}.json`
   );
   const extensionlessCjsManifest = requireFromInstall(
-    `@zkp2p/contracts-v2/disputeReadiness/${network}`
+    `@zkp2p/contracts-v2/disputeStack/${network}`
   );
   if (
     Object.prototype.hasOwnProperty.call(extensionlessCjsManifest, "default") ||
     JSON.stringify(extensionlessCjsManifest) !== JSON.stringify(manifest)
   ) {
     fail(
-      `${network} extensionless CommonJS readiness export differs from packaged JSON`
+      `${network} extensionless CommonJS dispute stack export differs from packaged JSON`
     );
   }
   if (JSON.stringify(manifest).includes("OptIn"))
-    fail(`${network} readiness metadata exposes an internal OptIn name`);
+    fail(`${network} dispute stack metadata exposes an internal OptIn name`);
   if (
-    JSON.stringify(readinessCjs[network]) !== JSON.stringify(manifest) ||
-    JSON.stringify(readinessEsm[network]) !== JSON.stringify(manifest)
+    JSON.stringify(disputeStackCjs[network]) !== JSON.stringify(manifest) ||
+    JSON.stringify(disputeStackEsm[network]) !== JSON.stringify(manifest)
   ) {
-    fail(`${network} readiness CJS/ESM exports differ from packaged JSON`);
+    fail(`${network} dispute stack CJS/ESM exports differ from packaged JSON`);
   }
   if (
     Object.keys(manifest.riskWindowSecondsByPaymentMethod || {}).length !==
     expectedRiskWindowCount
   ) {
-    fail(`${network} readiness metadata does not cover all active methods`);
+    fail(`${network} dispute stack metadata does not cover all active methods`);
   }
   if (
     manifest.addressExpectations?.StakeToken !==
     "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
   ) {
-    fail(`${network} readiness metadata does not pin Base USDC`);
+    fail(`${network} dispute stack metadata does not pin Base USDC`);
   }
   if (
     !manifest.runtimeIdentities?.MultiAttestationVerifier?.runtimeCodeHash ||
     manifest.attestationTrust?.requiredSignatures !== "1" ||
     manifest.attestationTrust?.witnesses?.length !== 2
   ) {
-    fail(`${network} readiness metadata does not pin attestation trust`);
+    fail(`${network} dispute stack metadata does not pin attestation trust`);
   }
   if (
     !manifest.expectedGovernance?.owner ||
     manifest.expectedGovernance?.pendingOwner !==
       "0x0000000000000000000000000000000000000000"
   ) {
-    fail(`${network} readiness metadata does not pin governance ownership`);
+    fail(`${network} dispute stack metadata does not pin governance ownership`);
   }
   if (
     manifest.prerequisites?.vaultPendingController !==
       "0x0000000000000000000000000000000000000000" ||
     manifest.prerequisites?.vaultPendingControllerValidAt !== "0"
   ) {
-    fail(`${network} readiness metadata does not pin the inactive vault controller handover`);
+    fail(`${network} dispute stack metadata does not pin the inactive vault controller handover`);
   }
   if (
     manifest.exactAuthorizationSets?.authorizedOrchestrators?.length !== 3 ||
@@ -125,7 +125,7 @@ for (const [network, expectedRiskWindowCount] of [
       1 ||
     manifest.exactAuthorizationSets?.activeDisputeNullifierWriters?.length !== 1
   ) {
-    fail(`${network} readiness metadata does not pin exact authorization sets`);
+    fail(`${network} dispute stack metadata does not pin exact authorization sets`);
   }
 }
 const sourceAbis = requireFromInstall("@zkp2p/contracts-v2/abis/contracts");

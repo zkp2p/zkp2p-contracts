@@ -45,7 +45,7 @@ type AddressExpectationName =
   | "RelayerRegistry"
   | "NullifierRegistryV2"
   | "StakeToken";
-type ReadinessEvidence = {
+type DisputeStackEvidence = {
   schemaVersion: number;
   riskWindowSecondsByPaymentMethod: Record<string, Record<string, string>>;
   sentinel: { escrow: string; depositId: string; expected: false };
@@ -88,10 +88,10 @@ type ReadinessEvidence = {
 
 const ROOT = path.resolve(__dirname, "../../../../");
 const PACKAGE_ROOT = path.resolve(__dirname, "../..");
-const OUTPUT_DIRECTORY = path.join(PACKAGE_ROOT, "disputeReadiness");
+const OUTPUT_DIRECTORY = path.join(PACKAGE_ROOT, "disputeStack");
 const EVIDENCE = JSON.parse(
-  fs.readFileSync(path.join(ROOT, "deployments", "dispute-readiness-evidence.json"), "utf8"),
-) as ReadinessEvidence;
+  fs.readFileSync(path.join(ROOT, "deployments", "dispute-stack-evidence.json"), "utf8"),
+) as DisputeStackEvidence;
 const {
   getActiveDisputeDeploymentName,
   getActiveDisputeSelectionStamp,
@@ -180,7 +180,7 @@ function requireExactKeys(value: Record<string, unknown>, expected: readonly str
   const actual = Object.keys(value).sort();
   const sortedExpected = [...expected].sort();
   if (!sameJson(actual, sortedExpected)) {
-    throw new Error(`${label} keys do not match the readiness contract`);
+    throw new Error(`${label} keys do not match the dispute stack contract`);
   }
 }
 
@@ -193,7 +193,7 @@ function readDeploymentOutput(fileName: string): DeploymentOutput {
 function readDeployment(network: string, deploymentName: string): DeploymentEntry & { args?: unknown[] } {
   const artifactPath = path.join(ROOT, "deployments", network, `${deploymentName}.json`);
   if (!fs.existsSync(artifactPath)) {
-    throw new Error(`Missing readiness deployment evidence ${network}.${deploymentName}`);
+    throw new Error(`Missing dispute stack deployment evidence ${network}.${deploymentName}`);
   }
   return JSON.parse(fs.readFileSync(artifactPath, "utf8"));
 }
@@ -206,20 +206,20 @@ function deploymentName(manifestNetwork: string, canonicalName: string): string 
 }
 
 function validateEvidence(network: (typeof NETWORKS)[number], output: DeploymentOutput): void {
-  if (EVIDENCE.schemaVersion !== 1) throw new Error("Unsupported dispute readiness evidence schema");
+  if (EVIDENCE.schemaVersion !== 1) throw new Error("Unsupported dispute stack evidence schema");
   requireExactKeys(
     EVIDENCE as unknown as Record<string, unknown>,
     ["schemaVersion", "riskWindowSecondsByPaymentMethod", "sentinel", "prerequisites", "networks"],
-    "Readiness evidence",
+    "Dispute stack evidence",
   );
-  requireExactKeys(EVIDENCE.networks, ["base", "base_staging"], "Readiness evidence networks");
+  requireExactKeys(EVIDENCE.networks, ["base", "base_staging"], "Dispute stack evidence networks");
   requireExactKeys(
     EVIDENCE.riskWindowSecondsByPaymentMethod,
     ["base", "base_staging"],
-    "Readiness evidence risk-window networks",
+    "Dispute stack evidence risk-window networks",
   );
   const evidence = EVIDENCE.networks[network.manifestName];
-  if (!evidence) throw new Error(`Missing dispute readiness evidence for ${network.manifestName}`);
+  if (!evidence) throw new Error(`Missing dispute stack evidence for ${network.manifestName}`);
   requireExactKeys(
     evidence as unknown as Record<string, unknown>,
     [
@@ -233,7 +233,7 @@ function validateEvidence(network: (typeof NETWORKS)[number], output: Deployment
       "deploymentEvidence",
       "runtimeCodeHashes",
     ],
-    `${network.manifestName} readiness evidence`,
+    `${network.manifestName} dispute stack evidence`,
   );
   const expectedSelection = getActiveDisputeSelectionStamp(network.manifestName);
   if (!sameJson(evidence.activeDisputeStack, expectedSelection)) {
@@ -426,9 +426,9 @@ function configuredRiskWindows(network: string): Record<string, string> {
   return Object.fromEntries(entries);
 }
 
-export function buildDisputeReadinessManifest(packageName: "base" | "baseStaging") {
+export function buildDisputeStackManifest(packageName: "base" | "baseStaging") {
   const network = NETWORKS.find((candidate) => candidate.packageName === packageName);
-  if (!network) throw new Error(`Unsupported dispute readiness network ${packageName}`);
+  if (!network) throw new Error(`Unsupported dispute stack network ${packageName}`);
   const output = readDeploymentOutput(network.outputFile);
   validateEvidence(network, output);
   const contracts = resolveActiveDisputeAliases(
@@ -445,7 +445,7 @@ export function buildDisputeReadinessManifest(packageName: "base" | "baseStaging
     throw new Error(`${network.manifestName} active payment method risk policy mismatch`);
   }
   if (!sameJson(EVIDENCE.sentinel, { escrow: SENTINEL_ESCROW, depositId: "0", expected: false })) {
-    throw new Error("Dispute readiness sentinel evidence mismatch");
+    throw new Error("Dispute stack sentinel evidence mismatch");
   }
   if (
     !sameJson(EVIDENCE.prerequisites, {
@@ -461,7 +461,7 @@ export function buildDisputeReadinessManifest(packageName: "base" | "baseStaging
       pendingCoverageMaturity: MAX_UINT64,
     })
   ) {
-    throw new Error("Dispute readiness prerequisites evidence mismatch");
+    throw new Error("Dispute stack prerequisites evidence mismatch");
   }
 
   return {
@@ -526,17 +526,17 @@ function ensureDirectory(directory: string): void {
   if (!fs.existsSync(directory)) fs.mkdirSync(directory, { recursive: true });
 }
 
-export async function extractDisputeReadiness(): Promise<void> {
+export async function extractDisputeStack(): Promise<void> {
   ensureDirectory(OUTPUT_DIRECTORY);
   for (const network of NETWORKS) {
-    const manifest = buildDisputeReadinessManifest(network.packageName);
+    const manifest = buildDisputeStackManifest(network.packageName);
     fs.writeFileSync(
       path.join(OUTPUT_DIRECTORY, `${network.packageName}.json`),
       `${JSON.stringify(manifest, null, 2)}\n`,
     );
     fs.writeFileSync(
       path.join(OUTPUT_DIRECTORY, `${network.packageName}.d.ts`),
-      `import type { DisputeProtectionReadinessManifest } from './types';\ndeclare const value: DisputeProtectionReadinessManifest<'${network.manifestName}'>;\nexport default value;\n`,
+      `import type { DisputeStackManifest } from './types';\ndeclare const value: DisputeStackManifest<'${network.manifestName}'>;\nexport default value;\n`,
     );
   }
 
@@ -561,16 +561,16 @@ export async function extractDisputeReadiness(): Promise<void> {
     path.join(OUTPUT_DIRECTORY, "types.d.ts"),
     `export type Address = \`0x\${string}\`;
 export type RuntimeCodeHash = \`0x\${string}\`;
-export type ReadinessNetwork = 'base' | 'base_staging';
+export type DisputeStackNetwork = 'base' | 'base_staging';
 export type BasePaymentMethodHash = ${basePaymentMethodHashType};
 export type BaseStagingPaymentMethodHash = ${baseStagingPaymentMethodHashType};
-export type PaymentMethodHash<Network extends ReadinessNetwork = ReadinessNetwork> = Network extends 'base_staging' ? BaseStagingPaymentMethodHash : BasePaymentMethodHash;
+export type PaymentMethodHash<Network extends DisputeStackNetwork = DisputeStackNetwork> = Network extends 'base_staging' ? BaseStagingPaymentMethodHash : BasePaymentMethodHash;
 export type RiskWindowSeconds = ${riskWindowSecondsType};
 export interface RuntimeIdentity { address: Address; runtimeCodeHash: RuntimeCodeHash; }
 export type RuntimeIdentityName = 'Orchestrator' | 'OrchestratorV2' | 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'IntentLifecycleHookV1' | 'RecognizedPredecessorHook' | 'RecognizedPredecessorPolicy' | 'OrchestratorRegistry' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry' | 'MultiAttestationVerifier';
 export type GovernedRuntimeIdentityName = 'OrchestratorRegistry' | 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry' | 'MultiAttestationVerifier';
 export type TwoStepGovernedRuntimeIdentityName = 'StakeVault' | 'DisputeProtectionPolicy' | 'DisputeVerifier';
-export interface DisputeProtectionReadinessManifest<Network extends ReadinessNetwork = ReadinessNetwork> {
+export interface DisputeStackManifest<Network extends DisputeStackNetwork = DisputeStackNetwork> {
   schemaVersion: 1;
   network: Network;
   chainId: 8453;
@@ -644,19 +644,19 @@ export interface DisputeProtectionReadinessManifest<Network extends ReadinessNet
     `// Auto-generated by extract-all.ts
 import baseData from './base.json';
 import baseStagingData from './baseStaging.json';
-import type { DisputeProtectionReadinessManifest } from './types';
-export type { Address, DisputeProtectionReadinessManifest, GovernedRuntimeIdentityName, PaymentMethodHash, ReadinessNetwork, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName, TwoStepGovernedRuntimeIdentityName } from './types';
+import type { DisputeStackManifest } from './types';
+export type { Address, DisputeStackManifest, DisputeStackNetwork, GovernedRuntimeIdentityName, PaymentMethodHash, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName, TwoStepGovernedRuntimeIdentityName } from './types';
 export { default as base } from './base.json';
 export { default as baseStaging } from './baseStaging.json';
-export const disputeReadinessByNetwork = {
-  base: baseData as DisputeProtectionReadinessManifest<'base'>,
-  baseStaging: baseStagingData as DisputeProtectionReadinessManifest<'base_staging'>,
+export const disputeStackByNetwork = {
+  base: baseData as DisputeStackManifest<'base'>,
+  baseStaging: baseStagingData as DisputeStackManifest<'base_staging'>,
 };
 `,
   );
   fs.writeFileSync(
     path.join(OUTPUT_DIRECTORY, "index.d.ts"),
-    `export type { Address, DisputeProtectionReadinessManifest, GovernedRuntimeIdentityName, PaymentMethodHash, ReadinessNetwork, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName, TwoStepGovernedRuntimeIdentityName } from './types';\nexport { default as base } from './base';\nexport { default as baseStaging } from './baseStaging';\nexport declare const disputeReadinessByNetwork: { base: import('./types').DisputeProtectionReadinessManifest<'base'>; baseStaging: import('./types').DisputeProtectionReadinessManifest<'base_staging'> };\n`,
+    `export type { Address, DisputeStackManifest, DisputeStackNetwork, GovernedRuntimeIdentityName, PaymentMethodHash, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName, TwoStepGovernedRuntimeIdentityName } from './types';\nexport { default as base } from './base';\nexport { default as baseStaging } from './baseStaging';\nexport declare const disputeStackByNetwork: { base: import('./types').DisputeStackManifest<'base'>; baseStaging: import('./types').DisputeStackManifest<'base_staging'> };\n`,
   );
-  console.log(`✅ Dispute readiness metadata written to ${OUTPUT_DIRECTORY}`);
+  console.log(`✅ Dispute stack metadata written to ${OUTPUT_DIRECTORY}`);
 }
