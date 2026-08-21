@@ -237,7 +237,7 @@ function validateEvidence(network: (typeof NETWORKS)[number], output: Deployment
   );
   const expectedSelection = getActiveDisputeSelectionStamp(network.manifestName);
   if (!sameJson(evidence.activeDisputeStack, expectedSelection)) {
-    throw new Error(`${network.manifestName} readiness selection evidence mismatch`);
+    throw new Error(`${network.manifestName} dispute stack selection evidence mismatch`);
   }
   if (!sameJson(output.activeDisputeStack, expectedSelection)) {
     throw new Error(`${network.manifestName} deployment output selection stamp mismatch`);
@@ -246,7 +246,7 @@ function validateEvidence(network: (typeof NETWORKS)[number], output: Deployment
     (identity) =>
       !ADDRESS_PATTERN.test(identity.address) || !HASH_PATTERN.test(identity.runtimeCodeHash),
   )) {
-    throw new Error(`${network.manifestName} predecessor readiness evidence is malformed`);
+    throw new Error(`${network.manifestName} predecessor dispute stack evidence is malformed`);
   }
   if (
     !ADDRESS_PATTERN.test(evidence.governance.owner) ||
@@ -351,7 +351,7 @@ function createRuntimeIdentities(
     }
     const outputEntry = outputContracts[canonicalName];
     if (!outputEntry || !ADDRESS_PATTERN.test(outputEntry.address)) {
-      throw new Error(`Missing canonical readiness address ${network.manifestName}.${canonicalName}`);
+      throw new Error(`Missing canonical dispute stack address ${network.manifestName}.${canonicalName}`);
     }
     if (!sameAddress(outputEntry.address, evidence.addresses[canonicalName])) {
       throw new Error(`${network.manifestName}.${canonicalName} address evidence mismatch`);

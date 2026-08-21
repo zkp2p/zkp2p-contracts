@@ -32,7 +32,7 @@ const lane34Module = require("../deploy/34_deploy_opt_in_dispute_lifecycle_stack
 const { PREDECESSOR_DISPUTE_STACKS } = require(
   "../deployments/predecessorDisputeStack.ts"
 );
-const readinessEvidence = require("../deployments/dispute-readiness-evidence.json");
+const disputeStackEvidence = require("../deployments/dispute-stack-evidence.json");
 const { MULTI_SIG } = require("../deployments/parameters.ts");
 const {
   DEPLOY_ONLY_STEP_KINDS,
@@ -126,12 +126,12 @@ test("live dependency pins use deployed runtime hashes", () => {
   );
 });
 
-test("package readiness evidence stays pinned to the immutable predecessor and lane 34 live dependencies", () => {
+test("package dispute stack evidence stays pinned to the immutable predecessor and lane 34 live dependencies", () => {
   for (const network of /** @type {Array<"base" | "base_staging">} */ ([
     "base",
     "base_staging",
   ])) {
-    const evidence = readinessEvidence.networks[network];
+    const evidence = disputeStackEvidence.networks[network];
     const predecessor = PREDECESSOR_DISPUTE_STACKS[network];
     const live = EXPECTED_LIVE[network];
 
