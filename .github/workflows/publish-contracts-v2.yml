@@ -33,7 +33,7 @@ env:
   RELEASE_VERSION: ${{ inputs.release }}
   RELEASE_TAG: contracts-v2-v${{ inputs.release }}
   LATEST_BASELINE: 0.4.0
-  RC_BASELINE: 0.4.1-rc.2
+  RC_BASELINE: 0.4.1-rc.5
   NPM_CONFIG_PROVENANCE: "true"
   REQUIRE_PROVENANCE: "true"
   RECOVERY_MODE: ${{ inputs.recovery }}

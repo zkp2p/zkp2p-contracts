@@ -48,12 +48,12 @@ describe("native module generation", () => {
     write(packageRoot, "paymentMethods/lookups.json", JSON.stringify({ nameToHash: {}, hashToName: {} }));
     write(packageRoot, "paymentMethods/types.d.ts", "export interface PaymentMethodConfig {}\nexport interface NetworkPaymentMethods { methods: Record<string, PaymentMethodConfig>; }\n");
     write(packageRoot, "paymentMethods/index.ts", renderPaymentMethodsIndex(["base", "baseStaging"]));
-    write(packageRoot, "disputeReadiness/base.json", JSON.stringify({ network: "base" }));
-    write(packageRoot, "disputeReadiness/types.d.ts", "export interface DisputeProtectionReadinessManifest { network: string; }\n");
+    write(packageRoot, "disputeStack/base.json", JSON.stringify({ network: "base" }));
+    write(packageRoot, "disputeStack/types.d.ts", "export interface DisputeStackManifest { network: string; }\n");
     write(
       packageRoot,
-      "disputeReadiness/index.ts",
-      "import baseData from './base.json';\nexport type { DisputeProtectionReadinessManifest } from './types';\nexport const base = baseData;\n",
+      "disputeStack/index.ts",
+      "import baseData from './base.json';\nexport type { DisputeStackManifest } from './types';\nexport const base = baseData;\n",
     );
     write(packageRoot, "utils/protocolUtils.ts", "export const protocolValue = 1;\n");
     write(packageRoot, "utils/sideEffect.ts", "export const sideEffectValue = 1;\n");
@@ -124,9 +124,9 @@ describe("native module generation", () => {
     expect(read("_esm/index.js")).toContain(`export const version = ${JSON.stringify(manifest.version)};`);
     expect(read("_esm/index.js")).not.toContain("require(");
     expect(read("_cjs/index.js")).toContain(`exports.version = ${JSON.stringify(manifest.version)};`);
-    expect(read("_esm/disputeReadiness/index.js")).toMatch(/from ["']\.\/base\.js["']/);
-    expect(read("_cjs/disputeReadiness/index.js")).toContain("exports.base");
-    expect(read("_types/disputeReadiness/types.d.ts")).toContain("DisputeProtectionReadinessManifest");
+    expect(read("_esm/disputeStack/index.js")).toMatch(/from ["']\.\/base\.js["']/);
+    expect(read("_cjs/disputeStack/index.js")).toContain("exports.base");
+    expect(read("_types/disputeStack/types.d.ts")).toContain("DisputeStackManifest");
 
     for (const relativePath of esmFiles.filter((file) => file.endsWith(".js"))) {
       const source = read(relativePath);

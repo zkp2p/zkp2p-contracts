@@ -9,7 +9,7 @@ import { extractUtils } from './extractors/utils';
 import { extractPaymentMethods } from './extractors/paymentMethods';
 import { extractCurrencies } from './extractors/currencies';
 import { extractOracleFeeds } from './extractors/oracleFeeds';
-import { extractDisputeReadiness } from './extractors/disputeReadiness';
+import { extractDisputeStack } from './extractors/disputeStack';
 import { execFileSync } from 'child_process';
 import * as path from 'path';
 
@@ -39,7 +39,7 @@ export async function extractAll(): Promise<void> {
   await extractPaymentMethods();
   await extractCurrencies();
   await extractOracleFeeds();
-  await extractDisputeReadiness();
+  await extractDisputeStack();
 
   // Generate .d.ts files for all index.ts files
   await generateTypeDeclarations();
