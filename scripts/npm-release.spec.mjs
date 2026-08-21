@@ -319,8 +319,8 @@ function originalJobsFixture(overrides = {}) {
 test('resolves an RC from the committed release-line prerelease', () => {
   assert.deepEqual(
     resolveReleasePolicy({
-      release: '0.4.1-rc.4',
-      packageVersion: '0.4.1-rc.4',
+      release: '0.4.1-rc.5',
+      packageVersion: '0.4.1-rc.5',
     }),
     { channel: 'rc', distTag: 'rc', environment: 'npm-publish' },
   );
@@ -358,7 +358,7 @@ test('derives a future RC release line from the package version', () => {
 
 test('commits the next RC candidate while preserving stable release support', () => {
   const packageManifest = JSON.parse(fs.readFileSync(packageManifestPath, 'utf8'));
-  assert.equal(packageManifest.version, '0.4.1-rc.4');
+  assert.equal(packageManifest.version, '0.4.1-rc.5');
   assert.deepEqual(
     resolveReleasePolicy({
       release: '0.4.1',
@@ -412,7 +412,7 @@ test('publish and recovery jobs install verification dependencies before inspect
   const recoveryJob = workflow.slice(workflow.indexOf('  recover:\n'));
 
   for (const job of [publishJob, recoveryJob]) {
-    const installIndex = job.indexOf('corepack yarn install --immutable');
+    const installIndex = job.indexOf('corepack yarn install --immutable --mode=skip-build');
     const verifyIndex = job.indexOf('node packages/contracts/scripts/verify-release.mjs');
     assert.notEqual(installIndex, -1);
     assert.notEqual(verifyIndex, -1);
