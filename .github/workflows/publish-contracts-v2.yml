@@ -277,7 +277,7 @@ jobs:
       - name: Install verification dependencies
         run: |
           corepack enable
-          corepack yarn install --immutable
+          corepack yarn install --immutable --mode=skip-build
 
       - name: Download validated tarball
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
@@ -361,7 +361,7 @@ jobs:
       - name: Install verification dependencies
         run: |
           corepack enable
-          corepack yarn install --immutable
+          corepack yarn install --immutable --mode=skip-build
 
       - name: Re-check canonical recovery source
         run: node scripts/npm-release.mjs recover "$PACKAGE_JSON" "$RELEASE_VERSION" "$DIST_TAG"
