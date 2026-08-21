@@ -581,7 +581,13 @@ test("contracts package exposes the dispute stack manifest through public CJS, E
     packageJson.exports["./disputeStack/*.json"],
     "./disputeStack/*.json"
   );
-  assert.equal(packageJson.exports["./disputeReadiness"], undefined);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      packageJson.exports,
+      "./disputeReadiness"
+    ),
+    false
+  );
 });
 
 test("canonical deployment-output rewriting is deterministic and leaves deployment evidence untouched", () => {
