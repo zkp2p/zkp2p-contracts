@@ -8,6 +8,27 @@ type ImmutableReference = {
 
 type ImmutableReferences = Record<string, ImmutableReference[]>;
 
+export function deploymentCodeMatchesRecord(
+  recordBytecode: string,
+  chainCode: string
+): boolean {
+  const bytecodePattern = /^0x(?:[0-9a-fA-F]{2})*$/;
+  if (
+    !bytecodePattern.test(recordBytecode) ||
+    !bytecodePattern.test(chainCode) ||
+    recordBytecode.length !== chainCode.length
+  ) {
+    return false;
+  }
+
+  for (let index = 2; index < recordBytecode.length; index += 2) {
+    const recordByte = recordBytecode.slice(index, index + 2).toLowerCase();
+    const chainByte = chainCode.slice(index, index + 2).toLowerCase();
+    if (recordByte !== chainByte && recordByte !== "00") return false;
+  }
+  return true;
+}
+
 export function zeroImmutableValues(
   bytecode: string,
   immutableReferences: ImmutableReferences
@@ -34,33 +55,29 @@ export async function assertDeploymentMatchesChain(
   const artifact = await hre.deployments.getExtendedArtifact(artifactName);
   const code = await hre.ethers.provider.getCode(deployment.address);
   const deployedBytecode = deployment.deployedBytecode;
-  const immutableReferences =
-    typeof deployment.solcInputHash === "string" &&
-    deployment.solcInputHash === artifact.solcInputHash
-      ? (artifact.evm?.deployedBytecode?.immutableReferences as
-          | ImmutableReferences
-          | undefined) || {}
-      : {};
-  const normalizedRecord =
-    typeof deployedBytecode === "string"
-      ? zeroImmutableValues(deployedBytecode, immutableReferences)
-      : undefined;
-  const normalizedCode = zeroImmutableValues(code, immutableReferences);
-  let rawBytecodeMatches = false;
-  if (typeof deployedBytecode === "string" && code !== "0x") {
-    try {
-      rawBytecodeMatches =
-        hre.ethers.utils.keccak256(deployedBytecode) ===
-        hre.ethers.utils.keccak256(code);
-    } catch {
-      rawBytecodeMatches = false;
-    }
+  if (code === "0x" || typeof deployedBytecode !== "string") {
+    throw new Error(
+      `${deploymentName} on-chain code does not match its deployment record`
+    );
   }
-  if (
-    code === "0x" ||
-    normalizedRecord === undefined ||
-    (normalizedRecord !== normalizedCode && !rawBytecodeMatches)
-  ) {
+
+  if (deployment.solcInputHash === artifact.solcInputHash) {
+    const immutableReferences =
+      (artifact.evm?.deployedBytecode?.immutableReferences as
+        | ImmutableReferences
+        | undefined) || {};
+    if (
+      zeroImmutableValues(deployedBytecode, immutableReferences) !==
+      zeroImmutableValues(code, immutableReferences)
+    ) {
+      throw new Error(
+        `${deploymentName} on-chain code does not match its deployment record`
+      );
+    }
+    return;
+  }
+
+  if (!deploymentCodeMatchesRecord(deployedBytecode, code)) {
     throw new Error(
       `${deploymentName} on-chain code does not match its deployment record`
     );

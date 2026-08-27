@@ -26,7 +26,8 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 const { test } = require("node:test");
 
-const { ethers } = require("hardhat");
+const hardhat = require("hardhat");
+const { ethers } = hardhat;
 const { ethers: ethersLibrary } = require("ethers");
 const lane34Module = require("../deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts");
 const lane31Module = require("../deploy/31_deploy_v3_payment_binding_stack.ts");
@@ -39,6 +40,7 @@ const {
 const {
   assertCanonicalDeployment,
   assertDeploymentMatchesChain,
+  deploymentCodeMatchesRecord,
 } = require("../deployments/canonicalDeployment.ts");
 const {
   IMMUTABLE_DEPLOYMENT_LANES,
@@ -64,6 +66,134 @@ const skipLane37 = lane37Module.default.skip;
 if (!skipLane36 || !skipLane37) {
   throw new Error("Method-scoped deployment lanes must define skip functions");
 }
+
+test("deployment record matching accepts identical bytecode", () => {
+  assert.equal(deploymentCodeMatchesRecord("0x60016002", "0x60016002"), true);
+});
+
+test("deployment record matching accepts values in zero placeholder slots", () => {
+  const recordBytes = Buffer.alloc(100, 0x60);
+  const offsets = [1, 34, 67];
+  for (const offset of offsets) recordBytes.fill(0, offset, offset + 32);
+  const chainBytes = Buffer.from(recordBytes);
+  chainBytes.fill(0x11, offsets[0], offsets[0] + 32);
+  Buffer.from("1234567890abcdef1234567890abcdef12345678", "hex").copy(
+    chainBytes,
+    offsets[1] + 12
+  );
+  assert.ok(
+    chainBytes.subarray(offsets[1], offsets[1] + 12).equals(Buffer.alloc(12))
+  );
+  chainBytes.fill(0x33, offsets[2], offsets[2] + 32);
+
+  assert.equal(
+    deploymentCodeMatchesRecord(
+      `0x${recordBytes.toString("hex")}`,
+      `0x${chainBytes.toString("hex")}`
+    ),
+    true
+  );
+});
+
+test("deployment record matching rejects drift at a nonzero record byte", () => {
+  assert.equal(deploymentCodeMatchesRecord("0x60016002", "0x60026002"), false);
+});
+
+test("deployment record matching rejects longer chain bytecode", () => {
+  assert.equal(deploymentCodeMatchesRecord("0x6001", "0x600100"), false);
+});
+
+test("deployment record matching rejects chain bytecode shorter by one byte", () => {
+  assert.equal(deploymentCodeMatchesRecord("0x600100", "0x6001"), false);
+});
+
+test("executed Base hook record matches chain code across build hashes", async () => {
+  const deployment = /** @type {any} */ (
+    require("../deployments/base/IntentLifecycleHookV1OptIn.json")
+  );
+  const artifact = await hardhat.deployments.getExtendedArtifact(
+    "IntentLifecycleHookV1"
+  );
+  assert.notEqual(deployment.solcInputHash, artifact.solcInputHash);
+
+  const immutableReferences = artifact.evm.deployedBytecode.immutableReferences;
+  const referencesByArgument = Object.values(immutableReferences);
+  assert.equal(referencesByArgument.length, deployment.args.length);
+  assert.deepEqual(
+    referencesByArgument.map((references) => references.length),
+    [4, 2, 4]
+  );
+  const currentReferences = referencesByArgument
+    .flatMap((references, argumentIndex) =>
+      references.map(
+        (/** @type {{ start: number; length: number }} */ reference) => ({
+          ...reference,
+          argumentIndex,
+        })
+      )
+    )
+    .sort((left, right) => left.start - right.start);
+  assert.equal(currentReferences.length, 10);
+  assert.ok(currentReferences.every(({ length }) => length === 32));
+
+  const recordHex = deployment.deployedBytecode.slice(2);
+  const recordOffsets = [];
+  for (let start = 0; start <= recordHex.length - 64; start += 2) {
+    if (recordHex.slice(start, start + 64) === "0".repeat(64)) {
+      recordOffsets.push(start / 2);
+    }
+  }
+  assert.equal(recordOffsets.length, currentReferences.length);
+
+  let chainHex = recordHex;
+  for (const [index, offset] of recordOffsets.entries()) {
+    const argument = deployment.args[currentReferences[index].argumentIndex]
+      .slice(2)
+      .toLowerCase()
+      .padStart(64, "0");
+    const start = offset * 2;
+    chainHex = `${chainHex.slice(0, start)}${argument}${chainHex.slice(
+      start + 64
+    )}`;
+  }
+  const chainCode = `0x${chainHex}`;
+  const hre = /** @type {any} */ ({
+    deployments: { getExtendedArtifact: async () => artifact },
+    ethers: { provider: { getCode: async () => chainCode } },
+  });
+
+  await assertDeploymentMatchesChain(
+    hre,
+    deployment,
+    "IntentLifecycleHookV1OptIn",
+    "IntentLifecycleHookV1"
+  );
+
+  const driftedChainCode = `0x61${chainHex.slice(2)}`;
+  await assert.rejects(
+    assertDeploymentMatchesChain(
+      {
+        ...hre,
+        ethers: {
+          provider: { getCode: async () => driftedChainCode },
+        },
+      },
+      deployment,
+      "IntentLifecycleHookV1OptIn",
+      "IntentLifecycleHookV1"
+    ),
+    /IntentLifecycleHookV1OptIn on-chain code does not match its deployment record/
+  );
+  await assert.rejects(
+    assertCanonicalDeployment(
+      hre,
+      deployment,
+      "IntentLifecycleHookV1OptIn",
+      "IntentLifecycleHookV1"
+    ),
+    /lacks canonical deployment evidence/
+  );
+});
 
 test("deployment record matching does not depend on the current solc input", async () => {
   const artifact = {
