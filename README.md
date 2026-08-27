@@ -784,8 +784,9 @@ lane-36 `WhitelistPolicyMethodScoped` record for the ordered, non-empty, distinc
 `WhitelistPolicyMethodScoped` artifact does not exist yet. It imports no indexer
 schema package, so the contracts and indexer packages remain acyclic. Discovery is a dry-run by
 default; mutation and Safe output require both the exact expected deposit count and the printed
-selection digest, which binds both the selected tuples and the ordered group IDs, and all discovery modes enforce
-a configurable maximum.
+selection digest, which bind the eligible onchain-filtered set and the ordered group IDs. Withdrawn deposits and
+inactive payment-method rows are skipped and reported; the count, digest, and generated batches cover only eligible
+tuples. All discovery modes enforce a configurable maximum.
 
 - Staging execution requires `BOOTSTRAP_EXECUTE=true` and the current policy owner's private key.
 - Production Safe preparation requires `BOOTSTRAP_SAFE_OUTPUT_FILE`; it emits unsigned Transaction

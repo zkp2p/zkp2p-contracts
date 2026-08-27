@@ -17,6 +17,17 @@ type BootstrapTarget = {
   paymentMethodHash: string;
 };
 
+type EvaluatedBootstrapTarget = {
+  target: BootstrapTarget;
+  status: "withdrawn" | "methodInactive" | "completed" | "eligible";
+};
+
+type BootstrapTargetBatch = {
+  escrowAddress: string;
+  paymentMethodHash: string;
+  targets: BootstrapTarget[];
+};
+
 type TargetPaymentMethodRow = {
   depositId: string;
   depositIdOnContract: string | number;
@@ -600,6 +611,131 @@ function buildSelectionDigest(deposits: ActiveDeposit[], groupIds: string[]): st
   return ethers.utils.keccak256(ethers.utils.toUtf8Bytes(payload.join("\n")));
 }
 
+function buildActiveDeposits(targets: BootstrapTarget[]): ActiveDeposit[] {
+  const depositsByKey = new Map<string, ActiveDeposit>();
+  for (const target of targets) {
+    const key = `${target.escrowAddress.toLowerCase()}:${target.depositId.toString()}`;
+    const deposit = depositsByKey.get(key) || {
+      escrowAddress: target.escrowAddress,
+      depositId: target.depositId,
+      paymentMethodHashes: [],
+    };
+    deposit.paymentMethodHashes.push(target.paymentMethodHash);
+    depositsByKey.set(key, deposit);
+  }
+  return [...depositsByKey.values()].map((deposit) => ({
+    ...deposit,
+    paymentMethodHashes: [...deposit.paymentMethodHashes].sort(),
+  })).sort((left, right) => {
+    const byEscrow = left.escrowAddress.toLowerCase().localeCompare(right.escrowAddress.toLowerCase());
+    if (byEscrow !== 0) return byEscrow;
+    return left.depositId.lt(right.depositId) ? -1 : left.depositId.eq(right.depositId) ? 0 : 1;
+  });
+}
+
+async function evaluateBootstrapTargets(
+  targets: BootstrapTarget[],
+  escrows: Map<string, Contract>,
+  policy: Contract,
+  groupIds: string[],
+  allowCompleted: boolean,
+  readConcurrency: number,
+  onProgress?: (evaluatedCount: number) => void,
+): Promise<EvaluatedBootstrapTarget[]> {
+  let evaluatedCount = 0;
+  return mapWithConcurrency(
+    targets,
+    readConcurrency,
+    async (target): Promise<EvaluatedBootstrapTarget> => {
+      const escrow = escrows.get(target.escrowAddress.toLowerCase())!;
+      const deposit = await escrow.getDeposit(target.depositId);
+      if (deposit.depositor === ethers.constants.AddressZero) {
+        evaluatedCount += 1;
+        onProgress?.(evaluatedCount);
+        return { target, status: "withdrawn" };
+      }
+      if (!(await escrow.getDepositPaymentMethodActive(target.depositId, target.paymentMethodHash))) {
+        evaluatedCount += 1;
+        onProgress?.(evaluatedCount);
+        return { target, status: "methodInactive" };
+      }
+
+      const [isBootstrapped, isEnabled] = await Promise.all([
+        policy.bootstrapped(target.escrowAddress, target.depositId, target.paymentMethodHash),
+        policy.enabled(target.escrowAddress, target.depositId, target.paymentMethodHash),
+      ]);
+      if (isBootstrapped) {
+        if (!allowCompleted) {
+          throw new Error(
+            `Active deposit ${target.depositId.toString()} payment method ${target.paymentMethodHash} `
+            + "is already bootstrapped; "
+            + "set BOOTSTRAP_ALLOW_COMPLETED=true only to resume a verified partial run",
+          );
+        }
+        if (!isEnabled) {
+          throw new Error(
+            `Previously bootstrapped deposit ${target.depositId.toString()} payment method `
+            + `${target.paymentMethodHash} is no longer enabled`,
+          );
+        }
+        const existingGroups = (await policy.getAllowedGroups(
+          target.escrowAddress,
+          target.depositId,
+          target.paymentMethodHash,
+        )).map((groupId: string) => groupId.toLowerCase());
+        if (!groupIds.every((groupId) => existingGroups.includes(groupId))) {
+          throw new Error(
+            `Previously bootstrapped deposit ${target.depositId.toString()} payment method `
+            + `${target.paymentMethodHash} lacks a requested group`,
+          );
+        }
+        evaluatedCount += 1;
+        onProgress?.(evaluatedCount);
+        return { target, status: "completed" };
+      }
+      if (isEnabled) {
+        throw new Error(
+          `Active deposit ${target.depositId.toString()} payment method ${target.paymentMethodHash} `
+          + "was enabled outside the one-time bootstrap",
+        );
+      }
+      evaluatedCount += 1;
+      onProgress?.(evaluatedCount);
+      return { target, status: "eligible" };
+    },
+  );
+}
+
+function buildBootstrapBatches(targets: BootstrapTarget[], batchSize: number): BootstrapTargetBatch[] {
+  const grouped = new Map<string, BootstrapTargetBatch>();
+  for (const target of targets) {
+    const key = `${target.escrowAddress.toLowerCase()}:${target.paymentMethodHash.toLowerCase()}`;
+    const current = grouped.get(key) || {
+      escrowAddress: target.escrowAddress,
+      paymentMethodHash: target.paymentMethodHash,
+      targets: [],
+    };
+    current.targets.push(target);
+    grouped.set(key, current);
+  }
+  return [...grouped.values()].flatMap(({ escrowAddress, paymentMethodHash, targets: groupedTargets }) => (
+    batch(groupedTargets, batchSize).map((targetBatch) => ({
+      escrowAddress,
+      paymentMethodHash,
+      targets: targetBatch,
+    }))
+  ));
+}
+
+function formatDepositIds(targets: BootstrapTarget[], limit = 200): string {
+  const depositIds = [...new Map(targets.map(({ depositId }) => [depositId.toString(), depositId])).values()]
+    .sort((left, right) => left.lt(right) ? -1 : left.eq(right) ? 0 : 1)
+    .map((depositId) => depositId.toString());
+  const visibleIds = depositIds.slice(0, limit);
+  const remaining = depositIds.length - visibleIds.length;
+  return visibleIds.join(", ") + (remaining > 0 ? ` …and ${remaining} more` : "");
+}
+
 function batch<T>(values: T[], size: number): T[][] {
   const batches: T[][] = [];
   for (let index = 0; index < values.length; index += size) {
@@ -807,6 +943,55 @@ async function runSelfTest(): Promise<void> {
   if (selectionDigest === buildSelectionDigest(selectionDeposits, [...groupIds].reverse())) {
     throw new Error("Self-test selection digest did not bind the configured group order");
   }
+  const staleSelectionTargets: BootstrapTarget[] = [
+    ...selectionDeposits.flatMap((deposit) => deposit.paymentMethodHashes.map((paymentMethodHash) => ({
+      escrowAddress: deposit.escrowAddress,
+      depositId: deposit.depositId,
+      paymentMethodHash,
+    }))),
+    {
+      escrowAddress,
+      depositId: BigNumber.from(99),
+      paymentMethodHash: TARGET_PAYMENT_METHODS[0].hash,
+    },
+    {
+      escrowAddress,
+      depositId: BigNumber.from(100),
+      paymentMethodHash: TARGET_PAYMENT_METHODS[1].hash,
+    },
+  ];
+  const staleSelectionEscrow = {
+    getDeposit: async (depositId: BigNumber) => ({
+      depositor: depositId.eq(99) ? ethers.constants.AddressZero : safeAddress,
+    }),
+    getDepositPaymentMethodActive: async (depositId: BigNumber) => !depositId.eq(100),
+  } as unknown as Contract;
+  const unconfiguredPolicy = {
+    bootstrapped: async () => false,
+    enabled: async () => false,
+  } as unknown as Contract;
+  const staleSelectionEvaluation = await evaluateBootstrapTargets(
+    staleSelectionTargets,
+    new Map([[escrowAddress.toLowerCase(), staleSelectionEscrow]]),
+    unconfiguredPolicy,
+    groupIds,
+    false,
+    2,
+  );
+  const staleEligibleTargets = staleSelectionEvaluation
+    .filter(({ status }) => status === "eligible")
+    .map(({ target }) => target);
+  const staleSelectionDeposits = buildActiveDeposits(staleEligibleTargets);
+  if (buildSelectionDigest(staleSelectionDeposits, groupIds) !== selectionDigest) {
+    throw new Error("Self-test included withdrawn or inactive rows in the selection digest");
+  }
+  const staleSelectionBatches = buildBootstrapBatches(staleEligibleTargets, 1);
+  if (
+    staleSelectionBatches.flatMap(({ targets }) => targets)
+      .some(({ depositId }) => depositId.eq(99) || depositId.eq(100))
+  ) {
+    throw new Error("Self-test included withdrawn or inactive rows in bootstrap batches");
+  }
   const safeBatch = buildSafeBatch("base", 8453, policyAddress, safeAddress, 2, [transactions[1]]);
   if (safeBatch.chainId !== "8453" || !sameAddressForSelfTest(
     safeBatch.meta.createdFromSafeAddress,
@@ -981,14 +1166,77 @@ async function main(): Promise<void> {
     );
   }
 
-  const activeDeposits = await loadEligibleDeposits(config);
-  const selectionDigest = buildSelectionDigest(activeDeposits, config.groupIds);
+  const discoveredDeposits = await loadEligibleDeposits(config);
+  const discoveredTargets: BootstrapTarget[] = discoveredDeposits.flatMap((deposit) => (
+    deposit.paymentMethodHashes.map((paymentMethodHash) => ({
+      escrowAddress: deposit.escrowAddress,
+      depositId: deposit.depositId,
+      paymentMethodHash,
+    }))
+  ));
+  const evaluatedTargets = await evaluateBootstrapTargets(
+    discoveredTargets,
+    escrows,
+    policy,
+    config.groupIds,
+    config.allowCompleted,
+    config.readConcurrency,
+    (evaluatedCount) => {
+      if (evaluatedCount % 100 === 0 || evaluatedCount === discoveredTargets.length) {
+        console.log(
+          `Policy preflight: ${evaluatedCount}/${discoveredTargets.length} discovered deposit/payment-method tuples checked`,
+        );
+      }
+    },
+  );
+  const targetsWithStatus = (status: EvaluatedBootstrapTarget["status"]) => (
+    evaluatedTargets.filter((target) => target.status === status).map(({ target }) => target)
+  );
+  const withdrawnTargets = targetsWithStatus("withdrawn");
+  const methodInactiveTargets = targetsWithStatus("methodInactive");
+  const completedTargets = targetsWithStatus("completed");
+  const eligibleTargets = targetsWithStatus("eligible");
+  const eligibleDeposits = buildActiveDeposits(eligibleTargets);
+  const selectionDigest = buildSelectionDigest(eligibleDeposits, config.groupIds);
+  const bootstrapBatches = buildBootstrapBatches(eligibleTargets, config.batchSize);
+
+  console.log(`Mode: ${config.mode}`);
+  console.log(`Network: ${config.network} (chain ${config.expectedChainId})`);
+  console.log(`WhitelistPolicy: ${config.policyAddress}`);
+  console.log(`AddressGroupRegistry: ${groupRegistryAddress}`);
+  console.log("Whitelist groups:");
+  for (const groupId of config.groupIds) {
+    console.log(`  ${groupId} (${KNOWN_PRODUCTION_GROUP_NAMES.get(groupId) || "unlisted"})`);
+  }
+  console.log("Preflight summary:");
+  for (const targetMethod of TARGET_PAYMENT_METHODS) {
+    const count = discoveredTargets.filter(({ paymentMethodHash }) => (
+      paymentMethodHash === targetMethod.hash
+    )).length;
+    console.log(`  Discovered ${targetMethod.name} tuples: ${count}`);
+  }
+  console.log(`  Skipped withdrawn tuples: ${withdrawnTargets.length}`);
+  if (withdrawnTargets.length > 0) {
+    console.log(`    Deposit ids: ${formatDepositIds(withdrawnTargets)}`);
+  }
+  console.log(`  Skipped method-inactive tuples: ${methodInactiveTargets.length}`);
+  if (methodInactiveTargets.length > 0) {
+    console.log(`    Deposit ids: ${formatDepositIds(methodInactiveTargets)}`);
+  }
+  console.log(`  Already bootstrapped and enabled tuples: ${completedTargets.length}`);
+  console.log(`  Eligible tuples: ${eligibleTargets.length}`);
+  console.log(`  Eligible distinct deposits: ${eligibleDeposits.length}`);
+  console.log(
+    `  bootstrapDeposits calls at batch size ${config.batchSize}: ${bootstrapBatches.length}`,
+  );
+  console.log(`Selection digest: ${selectionDigest}`);
+
   if (
     config.expectedDepositCount !== undefined
-    && activeDeposits.length !== config.expectedDepositCount
+    && eligibleDeposits.length !== config.expectedDepositCount
   ) {
     throw new Error(
-      `Discovered ${activeDeposits.length} eligible active deposits; expected ${config.expectedDepositCount}`,
+      `Discovered ${eligibleDeposits.length} eligible active deposits; expected ${config.expectedDepositCount}`,
     );
   }
   if (
@@ -999,106 +1247,6 @@ async function main(): Promise<void> {
       `Selection digest ${selectionDigest} does not match expected ${config.expectedSelectionDigest}`,
     );
   }
-
-  const activeTargets: BootstrapTarget[] = activeDeposits.flatMap((deposit) => (
-    deposit.paymentMethodHashes.map((paymentMethodHash) => ({
-      escrowAddress: deposit.escrowAddress,
-      depositId: deposit.depositId,
-      paymentMethodHash,
-    }))
-  ));
-  let evaluatedTargetCount = 0;
-  const evaluatedTargets = await mapWithConcurrency(
-    activeTargets,
-    config.readConcurrency,
-    async (target): Promise<{ target: BootstrapTarget; completed: boolean }> => {
-      const escrow = escrows.get(target.escrowAddress.toLowerCase())!;
-      await assertDepositStillExists(escrow, target.depositId);
-      await assertDepositPaymentMethodStillActive(
-        escrow,
-        target.depositId,
-        target.paymentMethodHash,
-      );
-      const [isBootstrapped, isEnabled] = await Promise.all([
-        policy.bootstrapped(target.escrowAddress, target.depositId, target.paymentMethodHash),
-        policy.enabled(target.escrowAddress, target.depositId, target.paymentMethodHash),
-      ]);
-      let completed = false;
-      if (isBootstrapped) {
-        if (!config.allowCompleted) {
-          throw new Error(
-            `Active deposit ${target.depositId.toString()} payment method ${target.paymentMethodHash} `
-            + "is already bootstrapped; "
-            + "set BOOTSTRAP_ALLOW_COMPLETED=true only to resume a verified partial run",
-          );
-        }
-        if (!isEnabled) {
-          throw new Error(
-            `Previously bootstrapped deposit ${target.depositId.toString()} payment method `
-            + `${target.paymentMethodHash} is no longer enabled`,
-          );
-        }
-        const existingGroups = (await policy.getAllowedGroups(
-          target.escrowAddress,
-          target.depositId,
-          target.paymentMethodHash,
-        )).map((groupId: string) => groupId.toLowerCase());
-        if (!config.groupIds.every((groupId) => existingGroups.includes(groupId))) {
-          throw new Error(
-            `Previously bootstrapped deposit ${target.depositId.toString()} payment method `
-            + `${target.paymentMethodHash} lacks a requested group`,
-          );
-        }
-        completed = true;
-      } else if (isEnabled) {
-        throw new Error(
-          `Active deposit ${target.depositId.toString()} payment method ${target.paymentMethodHash} `
-          + "was enabled outside the one-time bootstrap",
-        );
-      }
-      evaluatedTargetCount += 1;
-      if (evaluatedTargetCount % 100 === 0 || evaluatedTargetCount === activeTargets.length) {
-        console.log(
-          `Policy preflight: ${evaluatedTargetCount}/${activeTargets.length} eligible deposit/payment-method tuples checked`,
-        );
-      }
-      return { target, completed };
-    },
-  );
-  const eligibleTargets = evaluatedTargets.filter(({ completed }) => !completed).map(({ target }) => target);
-  const completedBeforeRun = evaluatedTargets.length - eligibleTargets.length;
-
-  const grouped = new Map<string, { escrowAddress: string; paymentMethodHash: string; targets: BootstrapTarget[] }>();
-  for (const target of eligibleTargets) {
-    const key = `${target.escrowAddress.toLowerCase()}:${target.paymentMethodHash.toLowerCase()}`;
-    const current = grouped.get(key) || {
-      escrowAddress: target.escrowAddress,
-      paymentMethodHash: target.paymentMethodHash,
-      targets: [],
-    };
-    current.targets.push(target);
-    grouped.set(key, current);
-  }
-
-  console.log(`Mode: ${config.mode}`);
-  console.log(`Network: ${config.network} (chain ${config.expectedChainId})`);
-  console.log(`WhitelistPolicy: ${config.policyAddress}`);
-  console.log(`AddressGroupRegistry: ${groupRegistryAddress}`);
-  console.log("Whitelist groups:");
-  for (const groupId of config.groupIds) {
-    console.log(`  ${groupId} (${KNOWN_PRODUCTION_GROUP_NAMES.get(groupId) || "unlisted"})`);
-  }
-  console.log(`Eligible active deposits discovered: ${activeDeposits.length}`);
-  console.log(`Eligible deposit/payment-method tuples discovered: ${activeTargets.length}`);
-  console.log(`Selection digest: ${selectionDigest}`);
-  for (const targetMethod of TARGET_PAYMENT_METHODS) {
-    const count = activeDeposits.filter(({ paymentMethodHashes }) => (
-      paymentMethodHashes.includes(targetMethod.hash)
-    )).length;
-    console.log(`Eligible with ${targetMethod.name}: ${count}`);
-  }
-  console.log(`Pending tuple bootstrap: ${eligibleTargets.length}`);
-  console.log(`Verified completed before this run: ${completedBeforeRun}`);
 
   let writablePolicy = policy;
   let executionSignerAddress: string | undefined;
@@ -1126,115 +1274,112 @@ async function main(): Promise<void> {
   }
 
   const safeTransactions: SafeTransaction[] = [];
-  const totalBatchCount = [...grouped.values()]
-    .reduce((total, { targets }) => total + Math.ceil(targets.length / config.batchSize), 0);
+  const totalBatchCount = bootstrapBatches.length;
   let processedBatchCount = 0;
 
-  for (const { escrowAddress, paymentMethodHash, targets } of grouped.values()) {
+  for (const { escrowAddress, paymentMethodHash, targets } of bootstrapBatches) {
     const escrow = stateEscrows.get(escrowAddress.toLowerCase())!;
-    for (const targetBatch of batch(targets, config.batchSize)) {
-      const depositIds = targetBatch.map(({ depositId }) => depositId);
+    const depositIds = targets.map(({ depositId }) => depositId);
 
-      // Re-read both escrow and policy state immediately before simulation/submission. This fails
-      // closed if the indexer page became stale or a depositor configured policy after discovery.
-      await Promise.all(depositIds.map(async (depositId) => {
-        await assertDepositStillExists(escrow, depositId);
-        await assertDepositPaymentMethodStillActive(
-          escrow,
-          depositId,
-          paymentMethodHash,
-        );
-        const [isBootstrapped, isEnabled] = await Promise.all([
-          statePolicy.bootstrapped(escrowAddress, depositId, paymentMethodHash),
-          statePolicy.enabled(escrowAddress, depositId, paymentMethodHash),
-        ]);
-        if (isBootstrapped || isEnabled) {
-          throw new Error(
-            `Deposit ${depositId.toString()} payment method ${paymentMethodHash} changed policy state after discovery`,
-          );
-        }
-      }));
-      await assertPolicyOwner(
-        config.mode === "execute" ? confirmedStatePolicy : statePolicy,
-        config.mode === "execute" ? executionSignerAddress! : owner,
+    // Re-read both escrow and policy state immediately before simulation/submission. This fails
+    // closed if escrow or policy state changed after the selection digest was confirmed.
+    await Promise.all(depositIds.map(async (depositId) => {
+      await assertDepositStillExists(escrow, depositId);
+      await assertDepositPaymentMethodStillActive(
+        escrow,
+        depositId,
+        paymentMethodHash,
       );
-      await statePolicy.callStatic.bootstrapDeposits(
+      const [isBootstrapped, isEnabled] = await Promise.all([
+        statePolicy.bootstrapped(escrowAddress, depositId, paymentMethodHash),
+        statePolicy.enabled(escrowAddress, depositId, paymentMethodHash),
+      ]);
+      if (isBootstrapped || isEnabled) {
+        throw new Error(
+          `Deposit ${depositId.toString()} payment method ${paymentMethodHash} changed policy state after digest confirmation`,
+        );
+      }
+    }));
+    await assertPolicyOwner(
+      config.mode === "execute" ? confirmedStatePolicy : statePolicy,
+      config.mode === "execute" ? executionSignerAddress! : owner,
+    );
+    await statePolicy.callStatic.bootstrapDeposits(
+      escrowAddress,
+      depositIds,
+      paymentMethodHash,
+      config.groupIds,
+      { from: owner },
+    );
+    processedBatchCount += 1;
+
+    if (config.mode === "safe") {
+      safeTransactions.push(buildSafeTransaction(
+        config.policyAddress,
         escrowAddress,
         depositIds,
         paymentMethodHash,
         config.groupIds,
-        { from: owner },
-      );
-      processedBatchCount += 1;
-
-      if (config.mode === "safe") {
-        safeTransactions.push(buildSafeTransaction(
-          config.policyAddress,
-          escrowAddress,
-          depositIds,
-          paymentMethodHash,
-          config.groupIds,
-        ));
-        continue;
-      }
-      if (config.mode === "dry-run") {
-        if (processedBatchCount % 5 === 0 || processedBatchCount === totalBatchCount) {
-          console.log(`Batch simulation: ${processedBatchCount}/${totalBatchCount} passed`);
-        }
-        continue;
-      }
-      const transaction = await writablePolicy.bootstrapDeposits(
-        escrowAddress,
-        depositIds,
-        paymentMethodHash,
-        config.groupIds,
-        await buildExecutionFeeOverrides(stateProvider, config),
-      );
-      console.log(
-        `Submitted bootstrap batch ${processedBatchCount}/${totalBatchCount} `
-        + `(${depositIds.length} deposits for ${paymentMethodHash}): ${transaction.hash}`,
-      );
-      const receipt = await receiptProvider.waitForTransaction(
-        transaction.hash,
-        config.confirmations,
-        config.receiptTimeoutMs,
-      );
-      if (!receipt) {
-        throw new Error(`Timed out waiting for bootstrap transaction ${transaction.hash}`);
-      }
-      if (receipt.status !== 1) {
-        throw new Error(`Bootstrap transaction reverted: ${transaction.hash}`);
-      }
-
-      await mapWithConcurrency(depositIds, 2, async (depositId) => {
-        const blockTag = { blockTag: receipt.blockNumber };
-        const [isBootstrapped, isEnabled, allowedGroupsResult] = await retryConfirmedRead(
-          `Confirmed state for deposit ${depositId.toString()}`,
-          () => Promise.all([
-            confirmedStatePolicy.bootstrapped(escrowAddress, depositId, paymentMethodHash, blockTag),
-            confirmedStatePolicy.enabled(escrowAddress, depositId, paymentMethodHash, blockTag),
-            confirmedStatePolicy.getAllowedGroups(escrowAddress, depositId, paymentMethodHash, blockTag),
-          ]),
-        );
-        if (!isBootstrapped) {
-          throw new Error(
-            `Deposit ${depositId.toString()} payment method ${paymentMethodHash} was not marked bootstrapped`,
-          );
-        }
-        if (!isEnabled) {
-          throw new Error(`Deposit ${depositId.toString()} payment method ${paymentMethodHash} was not enabled`);
-        }
-        const allowedGroups = allowedGroupsResult
-          .map((groupId: string) => groupId.toLowerCase());
-        for (const groupId of config.groupIds) {
-          if (!allowedGroups.includes(groupId)) {
-            throw new Error(
-              `Deposit ${depositId.toString()} payment method ${paymentMethodHash} is missing a configured group`,
-            );
-          }
-        }
-      });
+      ));
+      continue;
     }
+    if (config.mode === "dry-run") {
+      if (processedBatchCount % 5 === 0 || processedBatchCount === totalBatchCount) {
+        console.log(`Batch simulation: ${processedBatchCount}/${totalBatchCount} passed`);
+      }
+      continue;
+    }
+    const transaction = await writablePolicy.bootstrapDeposits(
+      escrowAddress,
+      depositIds,
+      paymentMethodHash,
+      config.groupIds,
+      await buildExecutionFeeOverrides(stateProvider, config),
+    );
+    console.log(
+      `Submitted bootstrap batch ${processedBatchCount}/${totalBatchCount} `
+      + `(${depositIds.length} deposits for ${paymentMethodHash}): ${transaction.hash}`,
+    );
+    const receipt = await receiptProvider.waitForTransaction(
+      transaction.hash,
+      config.confirmations,
+      config.receiptTimeoutMs,
+    );
+    if (!receipt) {
+      throw new Error(`Timed out waiting for bootstrap transaction ${transaction.hash}`);
+    }
+    if (receipt.status !== 1) {
+      throw new Error(`Bootstrap transaction reverted: ${transaction.hash}`);
+    }
+
+    await mapWithConcurrency(depositIds, 2, async (depositId) => {
+      const blockTag = { blockTag: receipt.blockNumber };
+      const [isBootstrapped, isEnabled, allowedGroupsResult] = await retryConfirmedRead(
+        `Confirmed state for deposit ${depositId.toString()}`,
+        () => Promise.all([
+          confirmedStatePolicy.bootstrapped(escrowAddress, depositId, paymentMethodHash, blockTag),
+          confirmedStatePolicy.enabled(escrowAddress, depositId, paymentMethodHash, blockTag),
+          confirmedStatePolicy.getAllowedGroups(escrowAddress, depositId, paymentMethodHash, blockTag),
+        ]),
+      );
+      if (!isBootstrapped) {
+        throw new Error(
+          `Deposit ${depositId.toString()} payment method ${paymentMethodHash} was not marked bootstrapped`,
+        );
+      }
+      if (!isEnabled) {
+        throw new Error(`Deposit ${depositId.toString()} payment method ${paymentMethodHash} was not enabled`);
+      }
+      const allowedGroups = allowedGroupsResult
+        .map((groupId: string) => groupId.toLowerCase());
+      for (const groupId of config.groupIds) {
+        if (!allowedGroups.includes(groupId)) {
+          throw new Error(
+            `Deposit ${depositId.toString()} payment method ${paymentMethodHash} is missing a configured group`,
+          );
+        }
+      }
+    });
   }
 
   if (config.mode === "execute") {
@@ -1262,10 +1407,10 @@ async function main(): Promise<void> {
 
   console.log(
     config.mode === "execute"
-      ? `Bootstrap complete: ${activeTargets.length}/${activeTargets.length} eligible tuples verified`
+      ? `Bootstrap complete: ${eligibleTargets.length}/${eligibleTargets.length} eligible tuples verified`
       : config.mode === "safe"
         ? `Safe batch validation passed: ${eligibleTargets.length} pending tuples in ${safeTransactions.length} transactions`
-        : `Dry-run simulation passed: ${eligibleTargets.length} pending, ${completedBeforeRun} already complete, ${activeTargets.length} eligible tuples discovered`,
+        : `Dry-run simulation passed: ${eligibleTargets.length} eligible, ${completedTargets.length} already complete, ${withdrawnTargets.length + methodInactiveTargets.length} stale tuples skipped`,
   );
 }
 
