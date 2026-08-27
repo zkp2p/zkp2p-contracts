@@ -12,14 +12,14 @@
       "IntentLifecycleHookV1": "IntentLifecycleHookV1OptIn"
     },
     "localhost": {
-      "StakeVault": "StakeVaultOptIn",
-      "DisputeProtectionPolicy": "DisputeProtectionPolicyOptIn",
-      "IntentLifecycleHookV1": "IntentLifecycleHookV1OptIn"
+      "StakeVault": "StakeVaultMethodScoped",
+      "DisputeProtectionPolicy": "DisputeProtectionPolicyMethodScoped",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1MethodScoped"
     },
     "hardhat": {
-      "StakeVault": "StakeVaultOptIn",
-      "DisputeProtectionPolicy": "DisputeProtectionPolicyOptIn",
-      "IntentLifecycleHookV1": "IntentLifecycleHookV1OptIn"
+      "StakeVault": "StakeVaultMethodScoped",
+      "DisputeProtectionPolicy": "DisputeProtectionPolicyMethodScoped",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1MethodScoped"
     }
   }
 }

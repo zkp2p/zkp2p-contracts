@@ -31,9 +31,7 @@ const {
 const {
   resolveAbiOutputContracts,
 } = require("../packages/contracts/scripts/extractors/abis.ts");
-const {
-  extractAll,
-} = require("../packages/contracts/scripts/extract-all.ts");
+const { extractAll } = require("../packages/contracts/scripts/extract-all.ts");
 
 const ABI = [{ type: "function", name: "owner", inputs: [], outputs: [] }];
 
@@ -62,6 +60,15 @@ function contracts() {
     ),
     IntentLifecycleHookV1OptIn: deployment(
       "0x0000000000000000000000000000000000000023"
+    ),
+    StakeVaultMethodScoped: deployment(
+      "0x0000000000000000000000000000000000000031"
+    ),
+    DisputeProtectionPolicyMethodScoped: deployment(
+      "0x0000000000000000000000000000000000000032"
+    ),
+    IntentLifecycleHookV1MethodScoped: deployment(
+      "0x0000000000000000000000000000000000000033"
     ),
   };
 }
@@ -100,18 +107,22 @@ test("resolves successor records locally and removes every internal deployment k
 
   assert.equal(
     resolved.StakeVault.address,
-    "0x0000000000000000000000000000000000000021"
+    "0x0000000000000000000000000000000000000031"
   );
   assert.equal(
     resolved.DisputeProtectionPolicy.address,
-    "0x0000000000000000000000000000000000000022"
+    "0x0000000000000000000000000000000000000032"
   );
   assert.equal(
     resolved.IntentLifecycleHookV1.address,
-    "0x0000000000000000000000000000000000000023"
+    "0x0000000000000000000000000000000000000033"
   );
   assert.equal(
     Object.keys(resolved).some((name) => name.endsWith("OptIn")),
+    false
+  );
+  assert.equal(
+    Object.keys(resolved).some((name) => name.endsWith("MethodScoped")),
     false
   );
 });
@@ -123,7 +134,7 @@ test("returns only known canonical deployment names", () => {
   );
   assert.equal(
     getActiveDisputeDeploymentName("hardhat", "StakeVault"),
-    "StakeVaultOptIn"
+    "StakeVaultMethodScoped"
   );
   assert.throws(
     () => getActiveDisputeDeploymentName("base", "UnknownPolicy"),
@@ -133,7 +144,7 @@ test("returns only known canonical deployment names", () => {
 
 test("fails closed on missing records and public/internal ABI drift", () => {
   const missing = contracts();
-  delete missing.StakeVaultOptIn;
+  delete missing.StakeVaultMethodScoped;
   assert.throws(
     () => resolveActiveDisputeAliases("localhost", missing),
     /Missing active dispute deployment/
@@ -173,17 +184,24 @@ test("every deployment/package consumer exposes only canonical aliases", () => {
     ]);
   for (const resolveContracts of consumers) {
     const resolved = resolveContracts(input);
-    assert.equal(resolved.StakeVault.address, input.StakeVaultOptIn.address);
+    assert.equal(
+      resolved.StakeVault.address,
+      input.StakeVaultMethodScoped.address
+    );
     assert.equal(
       resolved.DisputeProtectionPolicy.address,
-      input.DisputeProtectionPolicyOptIn.address
+      input.DisputeProtectionPolicyMethodScoped.address
     );
     assert.equal(
       resolved.IntentLifecycleHookV1.address,
-      input.IntentLifecycleHookV1OptIn.address
+      input.IntentLifecycleHookV1MethodScoped.address
     );
     assert.equal(
       Object.keys(resolved).some((name) => name.endsWith("OptIn")),
+      false
+    );
+    assert.equal(
+      Object.keys(resolved).some((name) => name.endsWith("MethodScoped")),
       false
     );
   }
@@ -246,13 +264,16 @@ test("address extraction preserves the exact active dispute selection stamp", as
 });
 
 const BASE_RISK_WINDOWS = {
-  "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d": "1209600",
-  "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f": "1209600",
+  "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d":
+    "1209600",
+  "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f":
+    "1209600",
   "0x554a007c2217df766b977723b276671aee5ebb4adaea0edb6433c88b3e61dac5": "0",
   "0x5908bb0c9b87763ac6171d4104847667e7f02b4c47b574fe890c1f439ed128bb": "0",
   "0x617f88ab82b5c1b014c539f7e75121427f0bb50a4c58b187a238531e7d58605d": "0",
   "0x62c7ed738ad3e7618111348af32691b5767777fbaf46a2d8943237625552645c": "0",
-  "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268": "1209600",
+  "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268":
+    "1209600",
   "0xa5418819c024239299ea32e09defae8ec412c03e58f5c75f1b2fe84c857f5483": "0",
   "0xcac9daea62d7b89d75ac73af4ee14dcf25721012ae82b568c2ea5c808eaa04ff": "0",
   "0xf752c7d19698ecb0bb8988abf9b9a53a4c3657f3bc8850a6fb59fdf3e3ce8cd3": "0",
@@ -276,59 +297,73 @@ const DISPUTE_STACK_BY_NETWORK = {
       "0xDB4Ed7FAF170F0f6493E3adaaCaaFaF47092c754",
       "0xE078D93bFdd87A8c5C5cCA5905DCbA0Dd7A1F0BD",
     ],
-    selectionHash: "a4f17ae7c1620ecfe7d036f0b9cc7b39c50e1382dc8dc14d2e5f7f21061cd5ad",
+    selectionHash:
+      "a4f17ae7c1620ecfe7d036f0b9cc7b39c50e1382dc8dc14d2e5f7f21061cd5ad",
     runtimeIdentities: {
       Orchestrator: {
         address: "0x88888883Ed048FF0a415271B28b2F52d431810D0",
-        runtimeCodeHash: "0xf511343f2903dd1877c490796cc9423fac66b162b59004d55e522046c1ceb050",
+        runtimeCodeHash:
+          "0xf511343f2903dd1877c490796cc9423fac66b162b59004d55e522046c1ceb050",
       },
       OrchestratorV2: {
         address: "0x888888359E981B5225CA48fbCdCeff702FC3b888",
-        runtimeCodeHash: "0xcf70a08cc24fcc00799f9f365d0998abe37c718c93ee370a78d1ca06c60d01e0",
+        runtimeCodeHash:
+          "0xcf70a08cc24fcc00799f9f365d0998abe37c718c93ee370a78d1ca06c60d01e0",
       },
       OrchestratorV3: {
         address: "0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7",
-        runtimeCodeHash: "0x4e58f26129559301c017ff264b61dd2255ed2107593d308472ef32d07b8745e9",
+        runtimeCodeHash:
+          "0x4e58f26129559301c017ff264b61dd2255ed2107593d308472ef32d07b8745e9",
       },
       StakeVault: {
         address: "0x4d16F4a9946CfC76b1c1A4B63aa9D94cdA2dbCEB",
-        runtimeCodeHash: "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
+        runtimeCodeHash:
+          "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
       },
       DisputeProtectionPolicy: {
         address: "0xcEc48F7242eDBf02875BB4629115Bd927e1287aA",
-        runtimeCodeHash: "0x9c4be279da216021183638eaef79ebf98db248472685e9ecd0de3f24a513a641",
+        runtimeCodeHash:
+          "0x9c4be279da216021183638eaef79ebf98db248472685e9ecd0de3f24a513a641",
       },
       IntentLifecycleHookV1: {
         address: "0x71467dCac3B50eeED5A485aC6a70f27B1EAC1970",
-        runtimeCodeHash: "0x35789014e608a248f3244b61210fa259fee3566c33f50fd0e3fa1f5ae22e370b",
+        runtimeCodeHash:
+          "0x35789014e608a248f3244b61210fa259fee3566c33f50fd0e3fa1f5ae22e370b",
       },
       RecognizedPredecessorHook: {
         address: "0x251d78fb6bBb4071995Bce74bAfC9E4168638622",
-        runtimeCodeHash: "0x03d02863ed5eaa096d4089cb1e126681c0621d99409124f4af5be7ed83e341fe",
+        runtimeCodeHash:
+          "0x03d02863ed5eaa096d4089cb1e126681c0621d99409124f4af5be7ed83e341fe",
       },
       RecognizedPredecessorPolicy: {
         address: "0xc086b6120B5e61EF48221E6A78c69737c9948dF9",
-        runtimeCodeHash: "0xf08bce9ad622b9d45ce310493627cbef3bf6c4ac915661d5bc572bb59b61e084",
+        runtimeCodeHash:
+          "0xf08bce9ad622b9d45ce310493627cbef3bf6c4ac915661d5bc572bb59b61e084",
       },
       OrchestratorRegistry: {
         address: "0xBe9fED15ED7A4B915C03EFcEcb9662739C3382A9",
-        runtimeCodeHash: "0xf0d132d621ac03181a6fade6a93bd0968d33830c8bf393793236787e7978aee1",
+        runtimeCodeHash:
+          "0xf0d132d621ac03181a6fade6a93bd0968d33830c8bf393793236787e7978aee1",
       },
       WhitelistPolicy: {
         address: "0xBC53641b4B2504f0061D6a9426C61B8eBE9B4Ff0",
-        runtimeCodeHash: "0xa3cf0fdf3835887de432cbac9c192edf6c93a8589748aa93f8294333d57024b2",
+        runtimeCodeHash:
+          "0xa3cf0fdf3835887de432cbac9c192edf6c93a8589748aa93f8294333d57024b2",
       },
       DisputeVerifier: {
         address: "0x30d4947f005653637005eed991005119D9eB2f34",
-        runtimeCodeHash: "0x65246e11392befc33d92246cf3ac2467d1f338a8b73c6514b76fab0a70a01ead",
+        runtimeCodeHash:
+          "0x65246e11392befc33d92246cf3ac2467d1f338a8b73c6514b76fab0a70a01ead",
       },
       DisputeNullifierRegistry: {
         address: "0xA845615b5203F7a21321DdF5e3a1ca024D93a443",
-        runtimeCodeHash: "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
+        runtimeCodeHash:
+          "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
       },
       MultiAttestationVerifier: {
         address: "0x9Fe920b24e50e6a6362BA71a1BeB502A99c402d5",
-        runtimeCodeHash: "0x828a5dae520d3eaed904dfed56994dc6e892eb6416b58ad952c079e220ef841a",
+        runtimeCodeHash:
+          "0x828a5dae520d3eaed904dfed56994dc6e892eb6416b58ad952c079e220ef841a",
       },
     },
     addressExpectations: {
@@ -349,59 +384,73 @@ const DISPUTE_STACK_BY_NETWORK = {
       "0x66649F896521b0fb487fE2077b4FBDA283d7f19a",
       "0x4ab950AE1e3326578Bf7e643a2031E858aBa2927",
     ],
-    selectionHash: "586c90f9de3d10b6d48f4286c709aa7f870fc2fdcfb0af1da947c1da76132dd0",
+    selectionHash:
+      "586c90f9de3d10b6d48f4286c709aa7f870fc2fdcfb0af1da947c1da76132dd0",
     runtimeIdentities: {
       Orchestrator: {
         address: "0xF9b9CD27Deea496B960b3cb5221b514705fCaF5e",
-        runtimeCodeHash: "0xf511343f2903dd1877c490796cc9423fac66b162b59004d55e522046c1ceb050",
+        runtimeCodeHash:
+          "0xf511343f2903dd1877c490796cc9423fac66b162b59004d55e522046c1ceb050",
       },
       OrchestratorV2: {
         address: "0xc17a59227B136c45fAa153086a15EF87ED14bE00",
-        runtimeCodeHash: "0xcf70a08cc24fcc00799f9f365d0998abe37c718c93ee370a78d1ca06c60d01e0",
+        runtimeCodeHash:
+          "0xcf70a08cc24fcc00799f9f365d0998abe37c718c93ee370a78d1ca06c60d01e0",
       },
       OrchestratorV3: {
         address: "0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f",
-        runtimeCodeHash: "0x4e58f26129559301c017ff264b61dd2255ed2107593d308472ef32d07b8745e9",
+        runtimeCodeHash:
+          "0x4e58f26129559301c017ff264b61dd2255ed2107593d308472ef32d07b8745e9",
       },
       StakeVault: {
         address: "0x01075fdCB8D38fD5A1070db41B3c00DC2459e71e",
-        runtimeCodeHash: "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
+        runtimeCodeHash:
+          "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
       },
       DisputeProtectionPolicy: {
         address: "0x51436B8051cCf52739A2090C29DA208B70eC2663",
-        runtimeCodeHash: "0xa4c6a33333e10da596805b6127e96f78e40fe5a0f0ab0cfa8f4683fbeac91a37",
+        runtimeCodeHash:
+          "0xa4c6a33333e10da596805b6127e96f78e40fe5a0f0ab0cfa8f4683fbeac91a37",
       },
       IntentLifecycleHookV1: {
         address: "0x3AB0879499b28e03bfcA4F5bC2CBe2070Fba4E36",
-        runtimeCodeHash: "0x376364aa8b693ee8e02eacc48527114ce3cc529714be5a3f316c7323561721ab",
+        runtimeCodeHash:
+          "0x376364aa8b693ee8e02eacc48527114ce3cc529714be5a3f316c7323561721ab",
       },
       RecognizedPredecessorHook: {
         address: "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
-        runtimeCodeHash: "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367",
+        runtimeCodeHash:
+          "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367",
       },
       RecognizedPredecessorPolicy: {
         address: "0x21517b7743E727ae47A66FafF93550B689c15020",
-        runtimeCodeHash: "0x4e6617a94819ad15693289b173a9a66a78cfe1dd706f6b4fdc5a5f6ad6a32971",
+        runtimeCodeHash:
+          "0x4e6617a94819ad15693289b173a9a66a78cfe1dd706f6b4fdc5a5f6ad6a32971",
       },
       OrchestratorRegistry: {
         address: "0xfA6384EB6176cfEC049540526A3d2126C3666d8A",
-        runtimeCodeHash: "0xf0d132d621ac03181a6fade6a93bd0968d33830c8bf393793236787e7978aee1",
+        runtimeCodeHash:
+          "0xf0d132d621ac03181a6fade6a93bd0968d33830c8bf393793236787e7978aee1",
       },
       WhitelistPolicy: {
         address: "0x7d9277cb8bb78a51eeaafB7CFF306E7DA4C972fD",
-        runtimeCodeHash: "0x917965fdc75580147ad0787c86f8b2a0f0185ef6e101567b82dc1245d6eb63bc",
+        runtimeCodeHash:
+          "0x917965fdc75580147ad0787c86f8b2a0f0185ef6e101567b82dc1245d6eb63bc",
       },
       DisputeVerifier: {
         address: "0x973578148c5Fd49b9f68B50B26066555325AC708",
-        runtimeCodeHash: "0xb3b34734cfd162cd129d0c84285461c751321545213ec20164745b8e72f9dd6c",
+        runtimeCodeHash:
+          "0xb3b34734cfd162cd129d0c84285461c751321545213ec20164745b8e72f9dd6c",
       },
       DisputeNullifierRegistry: {
         address: "0xE0B05a9655AF0f31E32904267baa50FbC7f217ea",
-        runtimeCodeHash: "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
+        runtimeCodeHash:
+          "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
       },
       MultiAttestationVerifier: {
         address: "0x9855a39aC5975069632e91160d8712CBfF19e864",
-        runtimeCodeHash: "0x828a5dae520d3eaed904dfed56994dc6e892eb6416b58ad952c079e220ef841a",
+        runtimeCodeHash:
+          "0x828a5dae520d3eaed904dfed56994dc6e892eb6416b58ad952c079e220ef841a",
       },
     },
     addressExpectations: {
@@ -438,28 +487,43 @@ test("package extraction publishes the exact dispute stack manifest without inte
       selectionHash: expected.selectionHash,
     });
     assert.deepEqual(manifest.runtimeIdentities, expected.runtimeIdentities);
-    assert.deepEqual(manifest.addressExpectations, expected.addressExpectations);
+    assert.deepEqual(
+      manifest.addressExpectations,
+      expected.addressExpectations
+    );
     assert.deepEqual(manifest.expectedRelations, {
-      activeLifecycleHook: expected.runtimeIdentities.IntentLifecycleHookV1.address,
-      recognizedPredecessorPolicy: expected.runtimeIdentities.RecognizedPredecessorPolicy.address,
+      activeLifecycleHook:
+        expected.runtimeIdentities.IntentLifecycleHookV1.address,
+      recognizedPredecessorPolicy:
+        expected.runtimeIdentities.RecognizedPredecessorPolicy.address,
       registeredOrchestrator: expected.runtimeIdentities.OrchestratorV3.address,
-      authorizedLifecycleHook: expected.runtimeIdentities.IntentLifecycleHookV1.address,
-      disputeNullifierAuthorizedWriter: expected.runtimeIdentities.DisputeProtectionPolicy.address,
+      authorizedLifecycleHook:
+        expected.runtimeIdentities.IntentLifecycleHookV1.address,
+      disputeNullifierAuthorizedWriter:
+        expected.runtimeIdentities.DisputeProtectionPolicy.address,
       orchestratorEscrowRegistry: expected.addressExpectations.EscrowRegistry,
-      orchestratorPaymentVerifierRegistry: expected.addressExpectations.PaymentVerifierRegistry,
+      orchestratorPaymentVerifierRegistry:
+        expected.addressExpectations.PaymentVerifierRegistry,
       orchestratorRelayerRegistry: expected.addressExpectations.RelayerRegistry,
-      hookOrchestratorRegistry: expected.runtimeIdentities.OrchestratorRegistry.address,
+      hookOrchestratorRegistry:
+        expected.runtimeIdentities.OrchestratorRegistry.address,
       hookWhitelistPolicy: expected.runtimeIdentities.WhitelistPolicy.address,
-      hookDisputeProtectionPolicy: expected.runtimeIdentities.DisputeProtectionPolicy.address,
+      hookDisputeProtectionPolicy:
+        expected.runtimeIdentities.DisputeProtectionPolicy.address,
       whitelistGroupRegistry: expected.addressExpectations.AddressGroupRegistry,
       whitelistEscrowRegistry: expected.addressExpectations.EscrowRegistry,
-      whitelistOrchestratorRegistry: expected.runtimeIdentities.OrchestratorRegistry.address,
+      whitelistOrchestratorRegistry:
+        expected.runtimeIdentities.OrchestratorRegistry.address,
       policyStakeVault: expected.runtimeIdentities.StakeVault.address,
       policyDisputeVerifier: expected.runtimeIdentities.DisputeVerifier.address,
-      policyDisputeNullifierRegistry: expected.runtimeIdentities.DisputeNullifierRegistry.address,
-      disputeVerifierNullifierRegistry: expected.addressExpectations.NullifierRegistryV2,
-      disputeVerifierAttestationVerifier: expected.runtimeIdentities.MultiAttestationVerifier.address,
-      vaultController: expected.runtimeIdentities.DisputeProtectionPolicy.address,
+      policyDisputeNullifierRegistry:
+        expected.runtimeIdentities.DisputeNullifierRegistry.address,
+      disputeVerifierNullifierRegistry:
+        expected.addressExpectations.NullifierRegistryV2,
+      disputeVerifierAttestationVerifier:
+        expected.runtimeIdentities.MultiAttestationVerifier.address,
+      vaultController:
+        expected.runtimeIdentities.DisputeProtectionPolicy.address,
       vaultStakeToken: expected.addressExpectations.StakeToken,
     });
     assert.deepEqual(manifest.expectedGovernance, {
@@ -486,14 +550,17 @@ test("package extraction publishes the exact dispute stack manifest without inte
       witnesses: expected.attestationWitnesses,
     });
     assert.deepEqual(manifest.exactAuthorizationSets, {
-      orchestratorAuthorizationFromBlock: expected.orchestratorAuthorizationFromBlock,
+      orchestratorAuthorizationFromBlock:
+        expected.orchestratorAuthorizationFromBlock,
       authorizedOrchestrators: [
         expected.runtimeIdentities.Orchestrator.address,
         expected.runtimeIdentities.OrchestratorV2.address,
         expected.runtimeIdentities.OrchestratorV3.address,
       ],
       lifecycleHookAuthorizationFromBlock: expected.policyDeploymentBlock,
-      authorizedLifecycleHooks: [expected.runtimeIdentities.IntentLifecycleHookV1.address],
+      authorizedLifecycleHooks: [
+        expected.runtimeIdentities.IntentLifecycleHookV1.address,
+      ],
       passiveDisputeNullifierWriters: [
         expected.runtimeIdentities.RecognizedPredecessorPolicy.address,
       ],
@@ -538,7 +605,9 @@ test("package extraction publishes the exact dispute stack manifest without inte
     assert.equal(declarations.includes(`'${seconds}'`), true);
   }
   assert.match(declarations, /chainId: 8453;/);
-  for (const paymentMethodHash of Object.keys(RISK_WINDOWS_BY_NETWORK.baseStaging)) {
+  for (const paymentMethodHash of Object.keys(
+    RISK_WINDOWS_BY_NETWORK.baseStaging
+  )) {
     assert.equal(declarations.includes(`'${paymentMethodHash}'`), true);
   }
   assert.equal(declarations.includes("OptIn"), false);
@@ -610,7 +679,11 @@ test("canonical deployment-output rewriting is deterministic and leaves deployme
     assert.equal(readFileSync(outputPath, "utf8"), first);
     assert.equal(readFileSync(historicalPath, "utf8"), historicalBytes);
     assert.equal(first.includes("StakeVaultOptIn"), false);
-    assert.match(first, new RegExp(inputAddressFor("StakeVaultOptIn"), "i"));
+    assert.equal(first.includes("StakeVaultMethodScoped"), false);
+    assert.match(
+      first,
+      new RegExp(inputAddressFor("StakeVaultMethodScoped"), "i")
+    );
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

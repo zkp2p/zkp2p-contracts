@@ -46,8 +46,6 @@ async function systemFullyWired(hre: HardhatRuntimeEnvironment): Promise<boolean
   if (!sameAddress(await policy.escrowRegistry(), escrowRegistryAddress)) return false;
   if (!sameAddress(await policy.orchestratorRegistry(), orchestratorRegistryAddress)) return false;
   if (!sameAddress(await policy.owner(), governance)) return false;
-  // Probe the tuple-scoped getter so an older deposit-only policy cannot be mistaken for this release.
-  await policy.enabled(escrowV2Address, 0, ethers.constants.HashZero);
   if (!(await orchestratorRegistry.isOrchestrator(orchestratorV2Address))) return false;
   if (!(await escrowRegistry.isWhitelistedEscrow(escrowV2Address))) return false;
 

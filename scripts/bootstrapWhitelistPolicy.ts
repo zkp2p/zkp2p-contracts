@@ -196,7 +196,7 @@ Required environment:
 
 Optional environment:
   BOOTSTRAP_NETWORK=base_staging|base       (default: base_staging)
-  BOOTSTRAP_WHITELIST_POLICY_ADDRESS        (default: network deployment artifact)
+  BOOTSTRAP_WHITELIST_POLICY_ADDRESS        (default: WhitelistPolicyMethodScoped network deployment artifact)
   BOOTSTRAP_ESCROW_ADDRESSES                (comma-separated; default: EscrowV2 artifact)
   BOOTSTRAP_EXPECTED_CHAIN_ID               (default: 8453)
   BOOTSTRAP_EXPECTED_DEPOSIT_COUNT          (required for execute and Safe modes)
@@ -301,6 +301,27 @@ function deploymentAddress(network: "base" | "base_staging", contractName: strin
   return normalizeAddress(artifact.address, `${network}.${contractName}`);
 }
 
+function optionalDeploymentAddress(
+  network: "base" | "base_staging",
+  contractName: string,
+): string | undefined {
+  const artifactPath = path.resolve(__dirname, "..", "deployments", network, `${contractName}.json`);
+  return fs.existsSync(artifactPath) ? deploymentAddress(network, contractName) : undefined;
+}
+
+function assertMethodScopedPolicyTarget(
+  network: "base" | "base_staging",
+  policyAddress: string,
+): void {
+  const depositScopedPolicy = optionalDeploymentAddress(network, "WhitelistPolicy");
+  if (depositScopedPolicy?.toLowerCase() === policyAddress.toLowerCase()) {
+    throw new Error(
+      `${network} WhitelistPolicy ${policyAddress} is the deposit-scoped policy; `
+      + "bootstrap targets WhitelistPolicyMethodScoped only",
+    );
+  }
+}
+
 function loadConfig(): BootstrapConfig {
   const networkValue = process.env.BOOTSTRAP_NETWORK?.trim() || "base_staging";
   if (networkValue !== "base" && networkValue !== "base_staging") {
@@ -309,9 +330,10 @@ function loadConfig(): BootstrapConfig {
   const network = networkValue;
   const policyAddress = normalizeAddress(
     process.env.BOOTSTRAP_WHITELIST_POLICY_ADDRESS?.trim()
-      || deploymentAddress(network, "WhitelistPolicy"),
-    "WhitelistPolicy",
+      || deploymentAddress(network, "WhitelistPolicyMethodScoped"),
+    "WhitelistPolicyMethodScoped",
   );
+  assertMethodScopedPolicyTarget(network, policyAddress);
   const configuredEscrows = process.env.BOOTSTRAP_ESCROW_ADDRESSES
     ?.split(",")
     .map((address) => address.trim())
@@ -382,10 +404,12 @@ function loadConfig(): BootstrapConfig {
   }
 
   if (network === "base") {
-    const expectedPolicyAddress = deploymentAddress("base", "WhitelistPolicy");
+    const expectedPolicyAddress = deploymentAddress("base", "WhitelistPolicyMethodScoped");
     const expectedEscrowAddress = deploymentAddress("base", "EscrowV2");
     if (policyAddress.toLowerCase() !== expectedPolicyAddress.toLowerCase()) {
-      throw new Error(`Base bootstrap must use deployed WhitelistPolicy ${expectedPolicyAddress}`);
+      throw new Error(
+        `Base bootstrap must use deployed WhitelistPolicyMethodScoped ${expectedPolicyAddress}`,
+      );
     }
     if (
       escrowAddresses.length !== 1

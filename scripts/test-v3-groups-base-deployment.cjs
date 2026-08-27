@@ -31,6 +31,9 @@ const {
   PREDECESSOR_DISPUTE_STACKS,
 } = require("../deployments/predecessorDisputeStack.ts");
 const {
+  getActiveDisputeDeploymentName,
+} = require("../deployments/activeDisputeStack.cjs");
+const {
   MULTI_SIG,
   ORCHESTRATOR_V3_PROTOCOL_FEE,
   ORCHESTRATOR_V3_PROTOCOL_FEE_RECIPIENT,
@@ -88,6 +91,9 @@ async function fixture() {
     },
     /** @param {string} name */
     getOrNull: async (name) => deployments.get(name) || null,
+    getExtendedArtifact: hre.deployments.getExtendedArtifact.bind(
+      hre.deployments
+    ),
     /** @param {string} name @param {any} options */
     deploy: async (name, options) => {
       const existing = deployments.get(name);
@@ -156,7 +162,7 @@ async function addMismatchedArtifacts(state) {
 /**
  * @param {any} state
  * @param {"base" | "base_staging" | "localhost" | "hardhat"} networkName
- * @param {{ kind: "predecessor" | "successor" | "unknown", missingRuntime?: boolean, successorBytecode?: boolean, wrongRegistry?: boolean, wrongPolicy?: boolean }} options
+ * @param {{ kind: "predecessor" | "successor" | "unknown", missingRuntime?: boolean, successorBytecode?: boolean, corruptSuccessorBytecode?: boolean, wrongRegistry?: boolean, wrongPolicy?: boolean, successorPolicy?: "legacy" | "method-scoped" | "unknown" }} options
  */
 async function installManagedHookState(state, networkName, options) {
   state.fakeHre.deployments.getNetworkName = () => networkName;
@@ -168,10 +174,41 @@ async function installManagedHookState(state, networkName, options) {
   );
   const wrongAddress = (await state.fakeHre.deployments.get("EscrowRegistry"))
     .address;
-  const hook = await deployContract("WhitelistLifecycleHook", [
-    options.wrongRegistry ? wrongAddress : orchestratorRegistry.address,
-    options.wrongPolicy ? wrongAddress : whitelistPolicy.address,
-  ]);
+  let successorPolicy = whitelistPolicy.address;
+  if (
+    options.kind === "successor" &&
+    options.successorPolicy === "method-scoped"
+  ) {
+    const methodScopedPolicy = await deployContract("WhitelistPolicy", [
+      (await state.fakeHre.deployments.get("AddressGroupRegistry")).address,
+      (await state.fakeHre.deployments.get("EscrowRegistry")).address,
+      orchestratorRegistry.address,
+    ]);
+    successorPolicy = methodScopedPolicy.address;
+    state.deployments.set("WhitelistPolicyMethodScoped", {
+      address: methodScopedPolicy.address,
+    });
+  } else if (
+    options.kind === "successor" &&
+    options.successorPolicy === "unknown"
+  ) {
+    successorPolicy = wrongAddress;
+  }
+  const hook = await deployContract(
+    options.kind === "successor"
+      ? "IntentLifecycleHookV1"
+      : "WhitelistLifecycleHook",
+    options.kind === "successor"
+      ? [
+          options.wrongRegistry ? wrongAddress : orchestratorRegistry.address,
+          options.wrongPolicy ? wrongAddress : successorPolicy,
+          wrongAddress,
+        ]
+      : [
+          options.wrongRegistry ? wrongAddress : orchestratorRegistry.address,
+          options.wrongPolicy ? wrongAddress : successorPolicy,
+        ]
+  );
   const currentHook = hook.address;
   const orchestrator = await deployContract("OrchestratorV3", [
     state.deployer,
@@ -200,12 +237,25 @@ async function installManagedHookState(state, networkName, options) {
       : ethers.utils.keccak256(await ethers.provider.getCode(currentHook));
   }
   if (options.kind === "successor") {
-    /** @type {{ address: string, deployedBytecode?: string }} */
-    const successor = { address: currentHook };
+    /** @type {{ address: string, args: string[], deployedBytecode?: string }} */
+    const successor = {
+      address: currentHook,
+      args: [orchestratorRegistry.address, successorPolicy],
+    };
     if (options.successorBytecode !== false) {
-      successor.deployedBytecode = await ethers.provider.getCode(currentHook);
+      const artifact = await state.fakeHre.deployments.getExtendedArtifact(
+        "IntentLifecycleHookV1"
+      );
+      successor.deployedBytecode = options.corruptSuccessorBytecode
+        ? `0x${
+            artifact.deployedBytecode.slice(2, 4) === "00" ? "01" : "00"
+          }${artifact.deployedBytecode.slice(4)}`
+        : artifact.deployedBytecode;
     }
-    state.deployments.set("IntentLifecycleHookV1OptIn", successor);
+    state.deployments.set(
+      getActiveDisputeDeploymentName(networkName, "IntentLifecycleHookV1"),
+      successor
+    );
   }
   return {
     currentHook,
@@ -408,6 +458,90 @@ async function run() {
       throw new Error("Managed lifecycle hook rollback regression failed");
     }
     process.stdout.write("0x01");
+    return;
+  }
+
+  if (scenario === "managed-hook-successor-policy") {
+    let passed = true;
+    const methodScopedState = await fixture();
+    const methodScoped = await installManagedHookState(
+      methodScopedState,
+      "hardhat",
+      { kind: "successor", successorPolicy: "method-scoped" }
+    );
+    try {
+      passed =
+        passed &&
+        (await guardManagedDisputeLifecycleHook(methodScopedState.fakeHre)) ===
+          true;
+    } finally {
+      methodScoped.restore();
+    }
+
+    const unknownState = await fixture();
+    const unknown = await installManagedHookState(unknownState, "hardhat", {
+      kind: "successor",
+      successorPolicy: "unknown",
+    });
+    try {
+      await guardManagedDisputeLifecycleHook(unknownState.fakeHre);
+      passed = false;
+    } catch (error) {
+      passed =
+        passed &&
+        error instanceof Error &&
+        error.message.includes("successor whitelist policy");
+    } finally {
+      unknown.restore();
+    }
+
+    const missingArgsState = await fixture();
+    const missingArgs = await installManagedHookState(
+      missingArgsState,
+      "hardhat",
+      { kind: "successor" }
+    );
+    const successorName = getActiveDisputeDeploymentName(
+      "hardhat",
+      "IntentLifecycleHookV1"
+    );
+    const successorRecord = /** @type {any} */ (
+      missingArgsState.deployments.get(successorName)
+    );
+    if (!successorRecord) throw new Error("Missing successor fixture record");
+    delete successorRecord.args;
+    try {
+      await guardManagedDisputeLifecycleHook(missingArgsState.fakeHre);
+      passed = false;
+    } catch (error) {
+      passed =
+        passed &&
+        error instanceof Error &&
+        error.message.includes("malformed constructor policy evidence");
+    } finally {
+      missingArgs.restore();
+    }
+    process.stdout.write(passed ? "0x01" : "0x00");
+    return;
+  }
+
+  if (scenario === "managed-hook-bytecode-mismatch") {
+    const state = await fixture();
+    const managed = await installManagedHookState(state, "hardhat", {
+      kind: "successor",
+      corruptSuccessorBytecode: true,
+    });
+    let rejected = false;
+    try {
+      await guardManagedDisputeLifecycleHook(state.fakeHre);
+    } catch (error) {
+      rejected =
+        error instanceof Error &&
+        error.message.includes("runtime bytecode mismatch");
+    } finally {
+      managed.restore();
+    }
+    process.stdout.write(rejected ? "0x01" : "0x00");
     return;
   }
 

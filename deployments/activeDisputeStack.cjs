@@ -47,6 +47,15 @@ function validateManifest() {
 
 validateManifest();
 
+/** @type {Set<string>} */
+const SELECTED_INTERNAL_NAMES = new Set();
+for (const selection of Object.values(manifest.networks)) {
+  for (const canonicalName of CANONICAL_NAMES) {
+    const internalName = selection[canonicalName];
+    if (internalName !== canonicalName) SELECTED_INTERNAL_NAMES.add(internalName);
+  }
+}
+
 /**
  * @param {string} network
  * @returns {DisputeNetwork}
@@ -149,7 +158,7 @@ function resolveActiveDisputeAliases(network, contracts, selectionStamp) {
   }
 
   for (const name of Object.keys(resolved)) {
-    if (name.endsWith("OptIn")) delete resolved[name];
+    if (name.endsWith("OptIn") || SELECTED_INTERNAL_NAMES.has(name)) delete resolved[name];
   }
   return resolved;
 }
