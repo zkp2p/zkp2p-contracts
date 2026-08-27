@@ -172,7 +172,14 @@ deliberately absent.
 - Fresh-stack proof after deployment: controller is the fresh policy, only
   the fresh hook is authorized, risk windows equal `DISPUTE_RISK_WINDOW`,
   the fresh vault has zero accounting, and the fresh contracts emitted no
-  admission events.
+  admission events. **Amended 2026-08-27** by
+  `2026-08-27-rail-aware-default-dispute-protection-design.md`: "fresh" means
+  no lifecycle or lock activity, phase-gated on the controller. While
+  `controller == address(0)` the vault must have `totalStaked == 0` and
+  `totalClaimable == 0` (a stake deposit there bricks
+  `initializeController`); once `controller == policy`, depositor opt-outs
+  and taker stake deposits/authorizations are allowed and only
+  `totalClaimable == 0` plus the absence of lock/claim events is required.
 - Live gating: `ENABLE_STAGING_V3_DISPUTE_METHOD_SCOPED_DEPLOYMENT=true` /
   `ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_DEPLOYMENT=true`, same skip and
   tagged-run semantics as lane 36. `paymentBindingCutoverReady` from lane 31
