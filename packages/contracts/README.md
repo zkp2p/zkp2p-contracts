@@ -2,7 +2,7 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
-## Release 0.4.1-rc.6
+## Release 0.4.1 RC
 
 - Exports the canonical source ABIs for `DisputeNullifierRegistry`, `DisputeProtectionPolicy`,
   `DisputeVerifier`, `IntentLifecycleHookV1`, and `StakeVault`.
@@ -14,6 +14,10 @@ Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, an
   including runtime identities, governance ownership, attestation trust, and exact authorization sets.
 - Hard-cuts the retired `disputeReadiness` subpath in favor of `disputeStack`; runtime readiness
   remains a consumer decision based on fresh on-chain reads.
+- Front-runs the approved Base dedicated-vault cutover so clients can sync the selected addresses
+  before governance executes it. Base staging is activated; Base is pending at Safe nonce 77,
+  Safe transaction hash
+  `0x6dd4de20ac21ac2961653dd3ea07c3ab79281ce472dd5a74ec791f659620f3c9`.
 
 ## Installation
 
@@ -169,6 +173,8 @@ console.log('Decimals:', usdInfo.decimals);
 manifest pins:
 
 - The selected dispute-stack version and selection hash.
+- The network activation status. Read `activation.status`; a `pending` value also includes the
+  governing `safe`, `nonce`, and `safeTxHash`.
 - The exact successor and recognized predecessor addresses and runtime code hashes.
 - The complete approved orchestrator membership, its runtime identities, and the registry deployment
   block from which consumers reconstruct additions/removals and reject extras; plus verifier, whitelist,
@@ -177,6 +183,17 @@ manifest pins:
   admission, an unpaused orchestrator, and `allowMultipleIntents = true`.
 - The approved risk window for every active payment-method bytes32 hash: 1,209,600 seconds for
   PayPal, Venmo, and Cash App, and zero for all other active methods.
+
+This RC exports the dedicated-vault stack on both networks regardless of activation status:
+`StakeVault` selects `StakeVaultMethodScoped`, `DisputeProtectionPolicy` selects
+`DisputeProtectionPolicyMethodScopedStaked`, `IntentLifecycleHookV1` selects
+`IntentLifecycleHookV1MethodScopedStaked`, and `WhitelistPolicy` selects
+`WhitelistPolicyMethodScoped`. Base staging reports `activation.status === "activated"`. Base
+reports `activation.status === "pending"` for Safe
+`0x0bC26FF515411396DD588Abd6Ef6846E04470227`, nonce 77, and the Safe transaction hash above.
+Until that transaction executes, the live Base lifecycle hook remains `IntentLifecycleHookV1OptIn`
+at `0x71467dCac3B50eeED5A485aC6a70f27B1EAC1970` and the live writer remains
+`DisputeProtectionPolicyOptIn` at `0xcEc48F7242eDBf02875BB4629115Bd927e1287aA`.
 
 These are trusted package expectations, not a statement that governance has already activated the
 successor. A consumer must read current on-chain code and state, compare it with the manifest, and

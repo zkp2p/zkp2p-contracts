@@ -1272,15 +1272,16 @@ test("historical validation resolves the OptIn deployment record names", async (
   ]);
 });
 
-test("active dispute manifest selects OptIn live and MethodScoped locally", () => {
+test("active dispute manifest selects the dedicated-vault stack on every network", () => {
   for (const network of /** @type {Array<"base" | "base_staging">} */ ([
     "base",
     "base_staging",
   ])) {
     assert.deepEqual(Object.values(activeDisputeManifest.networks[network]), [
-      "StakeVaultOptIn",
-      "DisputeProtectionPolicyOptIn",
-      "IntentLifecycleHookV1OptIn",
+      "StakeVaultMethodScoped",
+      "DisputeProtectionPolicyMethodScopedStaked",
+      "IntentLifecycleHookV1MethodScopedStaked",
+      "WhitelistPolicyMethodScoped",
     ]);
   }
   for (const network of /** @type {Array<"localhost" | "hardhat">} */ ([
@@ -1291,12 +1292,14 @@ test("active dispute manifest selects OptIn live and MethodScoped locally", () =
       "StakeVaultMethodScoped",
       "DisputeProtectionPolicyMethodScopedStaked",
       "IntentLifecycleHookV1MethodScopedStaked",
+      "WhitelistPolicyMethodScoped",
     ]);
   }
   const resolved = resolveActiveDisputeAliases("hardhat", {
     StakeVaultMethodScoped: { address: "vault" },
     DisputeProtectionPolicyMethodScopedStaked: { address: "policy" },
     IntentLifecycleHookV1MethodScopedStaked: { address: "hook" },
+    WhitelistPolicyMethodScoped: { address: "whitelist" },
   });
   assert.equal(
     Object.keys(resolved).some(

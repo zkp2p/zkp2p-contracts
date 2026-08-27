@@ -785,6 +785,16 @@ terminal and `StakeVaultOptIn` holds no locks. Artifacts live at
 Stake in the old vaults is abandoned: stakers withdraw once their locks release and takers re-stake in the new vault
 before the cutover; that readiness is part of `CONFIRM_BASE_V3_DISPUTE_METHOD_SCOPED_VAULT_DOWNSTREAM_READY`.
 
+The `0.4.1-rc.8` package front-runs the approved Base cutover so downstream clients can sync first. On both Base and
+Base staging its canonical `StakeVault`, `DisputeProtectionPolicy`, `IntentLifecycleHookV1`, and `WhitelistPolicy`
+keys select `StakeVaultMethodScoped`, `DisputeProtectionPolicyMethodScopedStaked`,
+`IntentLifecycleHookV1MethodScopedStaked`, and `WhitelistPolicyMethodScoped`, respectively. The package dispute-stack
+manifest exposes `activation.status`: Base staging is `activated`; Base is `pending` at Safe
+`0x0bC26FF515411396DD588Abd6Ef6846E04470227`, nonce 77, Safe transaction hash
+`0x6dd4de20ac21ac2961653dd3ea07c3ab79281ce472dd5a74ec791f659620f3c9`. Until that transaction executes, Base O3
+still uses `IntentLifecycleHookV1OptIn` at `0x71467dCac3B50eeED5A485aC6a70f27B1EAC1970`, and the registry writer remains
+`DisputeProtectionPolicyOptIn` at `0xcEc48F7242eDBf02875BB4629115Bd927e1287aA`.
+
 Dispute-evidence issuance in `attestation-service` remains a separate follow-up and is intentionally not implemented
 by these contract lanes. Only PayPal, Venmo, and Cash App receive non-zero onchain risk windows, matching the
 explicitly ratified chargebackable-platform set.

@@ -832,7 +832,7 @@ export default {
       ]
     },
     "DisputeProtectionPolicy": {
-      "address": "0x51436B8051cCf52739A2090C29DA208B70eC2663",
+      "address": "0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c",
       "abi": [
         {
           "inputs": [
@@ -935,6 +935,11 @@ export default {
               "internalType": "uint256",
               "name": "depositId",
               "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
             }
           ],
           "name": "DisputeProtectionNotEnabled",
@@ -1058,6 +1063,12 @@ export default {
               "internalType": "uint256",
               "name": "depositId",
               "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
             },
             {
               "indexed": false,
@@ -1513,6 +1524,11 @@ export default {
               "internalType": "uint256",
               "name": "_depositId",
               "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
             }
           ],
           "name": "isDisputeProtectionEnabled",
@@ -1702,6 +1718,11 @@ export default {
               "internalType": "uint256",
               "name": "_depositId",
               "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
             },
             {
               "internalType": "bool",
@@ -8078,7 +8099,7 @@ export default {
       ]
     },
     "IntentLifecycleHookV1": {
-      "address": "0x3AB0879499b28e03bfcA4F5bC2CBe2070Fba4E36",
+      "address": "0x5A7f6cb7397134da1fDEFA7E2D434b4Cf18E56D9",
       "abi": [
         {
           "inputs": [
@@ -8134,6 +8155,11 @@ export default {
               "internalType": "uint256",
               "name": "depositId",
               "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
             },
             {
               "internalType": "address",
@@ -17436,7 +17462,7 @@ export default {
       ]
     },
     "StakeVault": {
-      "address": "0x01075fdCB8D38fD5A1070db41B3c00DC2459e71e",
+      "address": "0x92d7B59E99e1CD2066540Cd2413b8714948b731f",
       "abi": [
         {
           "inputs": [
@@ -20202,7 +20228,7 @@ export default {
       ]
     },
     "WhitelistPolicy": {
-      "address": "0x7d9277cb8bb78a51eeaafB7CFF306E7DA4C972fD",
+      "address": "0xF79aAD1BAaB617fF3Eb299225c80893F22F743Fe",
       "abi": [
         {
           "inputs": [
@@ -20238,39 +20264,49 @@ export default {
               "type": "uint256"
             }
           ],
-          "name": "DepositAlreadyBootstrapped",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "depositId",
-              "type": "uint256"
-            }
-          ],
-          "name": "DepositAlreadyEnabled",
-          "type": "error"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "escrow",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "depositId",
-              "type": "uint256"
-            }
-          ],
           "name": "DepositNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "DepositPaymentMethodAlreadyBootstrapped",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "address",
+              "name": "escrow",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "depositId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            }
+          ],
+          "name": "DepositPaymentMethodAlreadyEnabled",
           "type": "error"
         },
         {
@@ -20348,6 +20384,11 @@ export default {
               "internalType": "uint256",
               "name": "depositId",
               "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
             }
           ],
           "name": "TakerNotWhitelisted",
@@ -20453,6 +20494,12 @@ export default {
             {
               "indexed": true,
               "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
               "name": "groupId",
               "type": "bytes32"
             }
@@ -20478,6 +20525,12 @@ export default {
             {
               "indexed": true,
               "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "indexed": false,
+              "internalType": "bytes32",
               "name": "groupId",
               "type": "bytes32"
             }
@@ -20499,6 +20552,12 @@ export default {
               "internalType": "uint256",
               "name": "depositId",
               "type": "uint256"
+            },
+            {
+              "indexed": true,
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
             },
             {
               "indexed": false,
@@ -20544,7 +20603,7 @@ export default {
         },
         {
           "inputs": [],
-          "name": "MAX_GROUPS_PER_DEPOSIT",
+          "name": "MAX_GROUPS_PER_DEPOSIT_PAYMENT_METHOD",
           "outputs": [
             {
               "internalType": "uint256",
@@ -20566,6 +20625,11 @@ export default {
               "internalType": "uint256",
               "name": "_depositId",
               "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
             },
             {
               "internalType": "bytes32[]",
@@ -20614,6 +20678,11 @@ export default {
               "type": "uint256[]"
             },
             {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
               "internalType": "bytes32[]",
               "name": "_groupIds",
               "type": "bytes32[]"
@@ -20635,6 +20704,11 @@ export default {
               "internalType": "uint256",
               "name": "",
               "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "",
+              "type": "bytes32"
             }
           ],
           "name": "bootstrapped",
@@ -20659,6 +20733,11 @@ export default {
               "internalType": "uint256",
               "name": "_depositId",
               "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
             },
             {
               "internalType": "bool",
@@ -20692,6 +20771,11 @@ export default {
               "internalType": "uint256",
               "name": "",
               "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "",
+              "type": "bytes32"
             }
           ],
           "name": "enabled",
@@ -20729,6 +20813,11 @@ export default {
               "internalType": "uint256",
               "name": "_depositId",
               "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
             }
           ],
           "name": "getAllowedGroups",
@@ -20769,6 +20858,11 @@ export default {
             },
             {
               "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
               "name": "_groupId",
               "type": "bytes32"
             }
@@ -20795,6 +20889,11 @@ export default {
               "internalType": "uint256",
               "name": "_depositId",
               "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
             },
             {
               "internalType": "address",
@@ -20881,6 +20980,11 @@ export default {
               "type": "uint256"
             },
             {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
+            },
+            {
               "internalType": "bytes32[]",
               "name": "_groupIds",
               "type": "bytes32[]"
@@ -20932,6 +21036,11 @@ export default {
               "internalType": "uint256",
               "name": "_depositId",
               "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "_paymentMethod",
+              "type": "bytes32"
             },
             {
               "internalType": "bool",
@@ -21395,7 +21504,7 @@ export default {
     }
   },
   "activeDisputeStack": {
-    "version": 1,
-    "selectionHash": "586c90f9de3d10b6d48f4286c709aa7f870fc2fdcfb0af1da947c1da76132dd0"
+    "version": 2,
+    "selectionHash": "6c49c1ce51eec594a22385c4efcab08aa9926b6b63a725e14a0027ec5d2f4fc9"
   }
 } as const;

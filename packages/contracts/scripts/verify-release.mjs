@@ -92,6 +92,7 @@ const canonicalDisputeContracts = new Set([
   "StakeVault",
   "DisputeProtectionPolicy",
   "IntentLifecycleHookV1",
+  "WhitelistPolicy",
 ]);
 /** @type {Record<string, string[]>} */
 const requiredNetworkContracts = {
@@ -239,6 +240,8 @@ for (const {
     fail(`${name} dispute stack selection differs from deployment output`);
   if (!sameJson(disputeStack.activeDisputeStack, networkEvidence.activeDisputeStack))
     fail(`${name} dispute stack selection differs from trusted evidence`);
+  if (!sameJson(disputeStack.activation, networkEvidence.activation))
+    fail(`${name} activation status differs from trusted evidence`);
   const expectedRuntimeIdentities = Object.fromEntries(
     [
       "Orchestrator",
@@ -324,7 +327,7 @@ for (const {
   ) fail(`${name} risk windows differ from trusted evidence`);
   if (!sameJson(disputeStack.sentinel, disputeStackEvidence.sentinel))
     fail(`${name} dispute stack sentinel differs from trusted evidence`);
-  if (!sameJson(disputeStack.prerequisites, disputeStackEvidence.prerequisites))
+  if (!sameJson(disputeStack.prerequisites, networkEvidence.prerequisites))
     fail(`${name} dispute stack prerequisites differ from trusted evidence`);
   const identities = disputeStack.runtimeIdentities;
   const expectedAddresses = disputeStack.addressExpectations;
