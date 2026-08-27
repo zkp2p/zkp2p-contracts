@@ -103,12 +103,43 @@ const TARGET_PAYMENT_METHOD_HASHES = TARGET_PAYMENT_METHODS.map(({ hash }) => ha
 const TARGET_PAYMENT_METHOD_HASH_SET = new Set<string>(TARGET_PAYMENT_METHOD_HASHES);
 
 const PRODUCTION_INDEXER_URL = "https://indexer.zkp2p.xyz/v1/graphql";
-const PRODUCTION_GROUP_IDS = {
-  pro: "0xf030f72e772f954059ca28f94974088aaf6ba37bb1f264df48843a3d0c221dc3",
-  plus: "0xb8747401b308d4891385620071b5916e9c61284f25c4611541c529703de5babf",
-  peerPay: "0x174b8a29536721a3eae290bfd55651b85a53fc334b971d993fa93ed8dde15e48",
-  peerMakers: "0xdf1c64c54745aa1ce00642a5874f97e3183bf5e993c1f559d0a37a4df0b803c7",
+const KNOWN_PRODUCTION_GROUPS = {
+  peerTaker: {
+    name: "peer-taker-peer-v1",
+    id: "0x2fb4591ba225813e272f6c51e6e64edcfa21fff18ea2619726363a4f785c2c09",
+  },
+  plus: {
+    name: "peer-taker-plus-v1",
+    id: "0xb8747401b308d4891385620071b5916e9c61284f25c4611541c529703de5babf",
+  },
+  pro: {
+    name: "peer-taker-pro-v1",
+    id: "0xf030f72e772f954059ca28f94974088aaf6ba37bb1f264df48843a3d0c221dc3",
+  },
+  peerChargebackableVolume: {
+    name: "Peer Chargebackable Volume",
+    id: "0xd75c75f345c8e5d4a9f48bc0cc458cf15adb0c4393469d6b10da1655c2c1c0f1",
+  },
+  plusChargebackableVolume: {
+    name: "Plus Chargebackable Volume",
+    id: "0x76d8468179105f4ec9ba8f553823f44dcde6eeb997ba5b70da09849effc0375e",
+  },
+  proChargebackableVolume: {
+    name: "Pro Chargebackable Volume",
+    id: "0xe2ada1e143bc3a45398381b4b5bbb9e7ed6ccba40225168f32e9702e0c4e8260",
+  },
+  topChargebackMerchants: {
+    name: "Top Chargeback Merchants",
+    id: "0xdf1c64c54745aa1ce00642a5874f97e3183bf5e993c1f559d0a37a4df0b803c7",
+  },
+  peerPay: {
+    name: "Peer Pay",
+    id: "0x174b8a29536721a3eae290bfd55651b85a53fc334b971d993fa93ed8dde15e48",
+  },
 } as const;
+const KNOWN_PRODUCTION_GROUP_NAMES = new Map<string, string>(
+  Object.values(KNOWN_PRODUCTION_GROUPS).map(({ id, name }) => [id, name]),
+);
 
 const TARGET_PAYMENT_METHODS_QUERY = `
   query TargetPaymentMethods(
@@ -190,10 +221,7 @@ function printUsage(): void {
 Required environment:
   BOOTSTRAP_RPC_URL
   BOOTSTRAP_INDEXER_GRAPHQL_URL
-  WHITELIST_PRO_GROUP_ID
-  WHITELIST_PLUS_GROUP_ID
-  WHITELIST_PEER_PAY_GROUP_ID
-  WHITELIST_PEER_MAKERS_GROUP_ID
+  WHITELIST_GROUP_IDS                       (comma-separated ordered bytes32 list; at least one)
 
 Optional environment:
   BOOTSTRAP_NETWORK=base_staging|base       (default: base_staging)
@@ -220,6 +248,9 @@ Optional environment:
 
 Validation-only:
   yarn whitelist:bootstrap --self-test
+
+Base safety:
+  Every WHITELIST_GROUP_IDS entry must be a known production AddressGroupRegistry group.
 `);
 }
 
@@ -273,6 +304,30 @@ function normalizeGroupId(value: string, label: string): string {
     throw new Error(`${label} must be a nonzero bytes32 value`);
   }
   return value.toLowerCase();
+}
+
+function parseGroupIds(): string[] {
+  const groupIds = requireEnvironment("WHITELIST_GROUP_IDS")
+    .split(",")
+    .map((groupId, index) => normalizeGroupId(
+      groupId.trim(),
+      `WHITELIST_GROUP_IDS entry ${index + 1}`,
+    ));
+  if (new Set(groupIds).size !== groupIds.length) {
+    throw new Error("WHITELIST_GROUP_IDS entries must be distinct");
+  }
+  return groupIds;
+}
+
+function assertKnownBaseGroupIds(groupIds: string[]): void {
+  for (const groupId of groupIds) {
+    if (!KNOWN_PRODUCTION_GROUP_NAMES.has(groupId)) {
+      throw new Error(
+        `Unknown Base whitelist group id ${groupId}; known production groups: `
+        + [...KNOWN_PRODUCTION_GROUP_NAMES.values()].join(", "),
+      );
+    }
+  }
 }
 
 function normalizeSelectionDigest(value: string, label: string): string {
@@ -347,15 +402,7 @@ function loadConfig(): BootstrapConfig {
     ).values(),
   ];
 
-  const groupIds = [
-    normalizeGroupId(requireEnvironment("WHITELIST_PRO_GROUP_ID"), "WHITELIST_PRO_GROUP_ID"),
-    normalizeGroupId(requireEnvironment("WHITELIST_PLUS_GROUP_ID"), "WHITELIST_PLUS_GROUP_ID"),
-    normalizeGroupId(requireEnvironment("WHITELIST_PEER_PAY_GROUP_ID"), "WHITELIST_PEER_PAY_GROUP_ID"),
-    normalizeGroupId(requireEnvironment("WHITELIST_PEER_MAKERS_GROUP_ID"), "WHITELIST_PEER_MAKERS_GROUP_ID"),
-  ];
-  if (new Set(groupIds).size !== groupIds.length) {
-    throw new Error("PRO, PLUS, Peer Pay, and Peer Makers group ids must be distinct");
-  }
+  const groupIds = parseGroupIds();
 
   const execute = process.env.BOOTSTRAP_EXECUTE === "true";
   const safeOutputFile = process.env.BOOTSTRAP_SAFE_OUTPUT_FILE?.trim();
@@ -421,15 +468,7 @@ function loadConfig(): BootstrapConfig {
     if (config.indexerUrl.replace(/\/$/, "") !== PRODUCTION_INDEXER_URL) {
       throw new Error(`Base bootstrap must use production indexer ${PRODUCTION_INDEXER_URL}`);
     }
-    const expectedGroupIds = [
-      PRODUCTION_GROUP_IDS.pro,
-      PRODUCTION_GROUP_IDS.plus,
-      PRODUCTION_GROUP_IDS.peerPay,
-      PRODUCTION_GROUP_IDS.peerMakers,
-    ];
-    if (!groupIds.every((groupId, index) => groupId === expectedGroupIds[index])) {
-      throw new Error("Base bootstrap group ids do not match the exact PRO, PLUS, Peer Pay, and Peer Makers groups");
-    }
+    assertKnownBaseGroupIds(groupIds);
     if (mode === "execute" && process.env.BOOTSTRAP_CONFIRM_PRODUCTION !== "true") {
       throw new Error("BOOTSTRAP_CONFIRM_PRODUCTION=true is required for direct execution on Base");
     }
@@ -546,17 +585,18 @@ async function loadEligibleDeposits(config: BootstrapConfig): Promise<ActiveDepo
   return deposits;
 }
 
-function buildSelectionDigest(deposits: ActiveDeposit[]): string {
+function buildSelectionDigest(deposits: ActiveDeposit[], groupIds: string[]): string {
   const sortedDeposits = [...deposits].sort((left, right) => {
     const byEscrow = left.escrowAddress.toLowerCase().localeCompare(right.escrowAddress.toLowerCase());
     if (byEscrow !== 0) return byEscrow;
     return left.depositId.lt(right.depositId) ? -1 : left.depositId.eq(right.depositId) ? 0 : 1;
   });
-  const payload = sortedDeposits.map((deposit) => [
+  const depositPayload = sortedDeposits.map((deposit) => [
     deposit.escrowAddress.toLowerCase(),
     deposit.depositId.toString(),
     [...deposit.paymentMethodHashes].sort().join(","),
   ].join(":"));
+  const payload = [`groups:${groupIds.join(",")}`, ...depositPayload];
   return ethers.utils.keccak256(ethers.utils.toUtf8Bytes(payload.join("\n")));
 }
 
@@ -680,29 +720,71 @@ async function runSelfTest(): Promise<void> {
     `0x${"33".repeat(32)}`,
     `0x${"44".repeat(32)}`,
   ];
+  const selfTestGroupIds = process.env.WHITELIST_GROUP_IDS;
+  try {
+    process.env.WHITELIST_GROUP_IDS = groupIds[0];
+    if (parseGroupIds().join(",") !== groupIds[0]) {
+      throw new Error("Self-test failed to load a one-group whitelist bootstrap config");
+    }
+
+    process.env.WHITELIST_GROUP_IDS = groupIds.join(",");
+    if (parseGroupIds().join(",") !== groupIds.join(",")) {
+      throw new Error("Self-test failed to preserve a multi-group whitelist bootstrap config");
+    }
+
+    process.env.WHITELIST_GROUP_IDS = `${groupIds[0]},${groupIds[0]}`;
+    try {
+      parseGroupIds();
+      throw new Error("Self-test accepted duplicate whitelist group ids");
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "WHITELIST_GROUP_IDS entries must be distinct") {
+        throw error;
+      }
+    }
+  } finally {
+    if (selfTestGroupIds === undefined) delete process.env.WHITELIST_GROUP_IDS;
+    else process.env.WHITELIST_GROUP_IDS = selfTestGroupIds;
+  }
+  assertKnownBaseGroupIds([KNOWN_PRODUCTION_GROUPS.peerPay.id]);
+  const unknownGroupId = `0x${"55".repeat(32)}`;
+  try {
+    assertKnownBaseGroupIds([unknownGroupId]);
+    throw new Error("Self-test accepted an unknown Base whitelist group id");
+  } catch (error) {
+    if (
+      !(error instanceof Error)
+      || !error.message.includes(unknownGroupId)
+      || ![...KNOWN_PRODUCTION_GROUP_NAMES.values()].every((name) => error.message.includes(name))
+    ) {
+      throw error;
+    }
+  }
   const paymentMethodHash = TARGET_PAYMENT_METHODS[0].hash;
-  const transaction = buildSafeTransaction(
-    policyAddress,
-    escrowAddress,
-    depositIds,
-    paymentMethodHash,
-    groupIds,
-  );
-  const decoded = new ethers.utils.Interface(POLICY_ABI)
-    .decodeFunctionData("bootstrapDeposits", transaction.data);
-  if (!sameAddressForSelfTest(decoded[0], escrowAddress)) {
-    throw new Error("Self-test decoded the wrong escrow address");
-  }
-  if ((decoded[1] as BigNumber[]).map((value) => value.toString()).join(",") !== "7,42") {
-    throw new Error("Self-test decoded the wrong deposit ids");
-  }
-  if ((decoded[2] as string).toLowerCase() !== paymentMethodHash) {
-    throw new Error("Self-test decoded the wrong payment method");
-  }
-  if ((decoded[3] as string[]).map((value) => value.toLowerCase()).join(",") !== groupIds.join(",")) {
-    throw new Error("Self-test decoded the wrong group ids");
-  }
-  const selectionDigest = buildSelectionDigest([
+  const transactions = [[groupIds[0]], groupIds].map((selfTestIds) => {
+    const transaction = buildSafeTransaction(
+      policyAddress,
+      escrowAddress,
+      depositIds,
+      paymentMethodHash,
+      selfTestIds,
+    );
+    const decoded = new ethers.utils.Interface(POLICY_ABI)
+      .decodeFunctionData("bootstrapDeposits", transaction.data);
+    if (!sameAddressForSelfTest(decoded[0], escrowAddress)) {
+      throw new Error("Self-test decoded the wrong escrow address");
+    }
+    if ((decoded[1] as BigNumber[]).map((value) => value.toString()).join(",") !== "7,42") {
+      throw new Error("Self-test decoded the wrong deposit ids");
+    }
+    if ((decoded[2] as string).toLowerCase() !== paymentMethodHash) {
+      throw new Error("Self-test decoded the wrong payment method");
+    }
+    if ((decoded[3] as string[]).map((value) => value.toLowerCase()).join(",") !== selfTestIds.join(",")) {
+      throw new Error("Self-test decoded the wrong group ids");
+    }
+    return transaction;
+  });
+  const selectionDeposits: ActiveDeposit[] = [
     {
       escrowAddress,
       depositId: BigNumber.from(7),
@@ -713,11 +795,19 @@ async function runSelfTest(): Promise<void> {
       depositId: BigNumber.from(42),
       paymentMethodHashes: [TARGET_PAYMENT_METHODS[1].hash, TARGET_PAYMENT_METHODS[2].hash],
     },
-  ]);
+  ];
+  const selectionDigest = buildSelectionDigest(selectionDeposits, groupIds);
   if (!/^0x[0-9a-f]{64}$/.test(selectionDigest)) {
     throw new Error("Self-test produced an invalid selection digest");
   }
-  const safeBatch = buildSafeBatch("base", 8453, policyAddress, safeAddress, 2, [transaction]);
+  const oneGroupSelectionDigest = buildSelectionDigest(selectionDeposits, [groupIds[0]]);
+  if (selectionDigest === oneGroupSelectionDigest) {
+    throw new Error("Self-test selection digest did not bind the configured group ids");
+  }
+  if (selectionDigest === buildSelectionDigest(selectionDeposits, [...groupIds].reverse())) {
+    throw new Error("Self-test selection digest did not bind the configured group order");
+  }
+  const safeBatch = buildSafeBatch("base", 8453, policyAddress, safeAddress, 2, [transactions[1]]);
   if (safeBatch.chainId !== "8453" || !sameAddressForSelfTest(
     safeBatch.meta.createdFromSafeAddress,
     safeAddress,
@@ -749,7 +839,7 @@ async function runSelfTest(): Promise<void> {
       throw error;
     }
   }
-  console.log("Whitelist bootstrap raw calldata and Safe metadata self-test passed");
+  console.log("Whitelist bootstrap configuration, calldata, digest, and Safe metadata self-test passed");
 }
 
 function sameAddressForSelfTest(left: string, right: string): boolean {
@@ -892,7 +982,7 @@ async function main(): Promise<void> {
   }
 
   const activeDeposits = await loadEligibleDeposits(config);
-  const selectionDigest = buildSelectionDigest(activeDeposits);
+  const selectionDigest = buildSelectionDigest(activeDeposits, config.groupIds);
   if (
     config.expectedDepositCount !== undefined
     && activeDeposits.length !== config.expectedDepositCount
@@ -994,6 +1084,10 @@ async function main(): Promise<void> {
   console.log(`Network: ${config.network} (chain ${config.expectedChainId})`);
   console.log(`WhitelistPolicy: ${config.policyAddress}`);
   console.log(`AddressGroupRegistry: ${groupRegistryAddress}`);
+  console.log("Whitelist groups:");
+  for (const groupId of config.groupIds) {
+    console.log(`  ${groupId} (${KNOWN_PRODUCTION_GROUP_NAMES.get(groupId) || "unlisted"})`);
+  }
   console.log(`Eligible active deposits discovered: ${activeDeposits.length}`);
   console.log(`Eligible deposit/payment-method tuples discovered: ${activeTargets.length}`);
   console.log(`Selection digest: ${selectionDigest}`);
