@@ -2,7 +2,7 @@
 
 const { createHash } = require("crypto");
 
-/** @typedef {"StakeVault" | "DisputeProtectionPolicy" | "IntentLifecycleHookV1"} CanonicalName */
+/** @typedef {"StakeVault" | "DisputeProtectionPolicy" | "IntentLifecycleHookV1" | "WhitelistPolicy"} CanonicalName */
 /** @typedef {"base" | "base_staging" | "localhost" | "hardhat"} DisputeNetwork */
 /** @typedef {{ abi?: unknown[], address?: string, [key: string]: unknown }} DeploymentEntry */
 
@@ -14,6 +14,7 @@ const CANONICAL_NAMES = [
   "StakeVault",
   "DisputeProtectionPolicy",
   "IntentLifecycleHookV1",
+  "WhitelistPolicy",
 ];
 const INTERNAL_POLICY_RECORDS = [
   "WhitelistPolicyMethodScoped",
@@ -33,7 +34,7 @@ const SUPPORTED_NETWORKS = new Set([
 
 function validateManifest() {
   if (
-    manifest.version !== 1 ||
+    manifest.version !== 2 ||
     !manifest.networks ||
     typeof manifest.networks !== "object"
   ) {
@@ -144,15 +145,6 @@ function hasCurrentDisputeSelectionStamp(network, stamp) {
 }
 
 /**
- * @param {unknown[] | undefined} left
- * @param {unknown[] | undefined} right
- * @returns {boolean}
- */
-function sameAbi(left, right) {
-  return JSON.stringify(left || []) === JSON.stringify(right || []);
-}
-
-/**
  * @param {string} network
  * @param {Record<string, DeploymentEntry>} contracts
  * @param {{ version?: unknown, selectionHash?: unknown } | undefined} [selectionStamp]
@@ -177,16 +169,6 @@ function resolveActiveDisputeAliases(network, contracts, selectionStamp) {
         : undefined);
     if (!selected) {
       throw new Error(`Missing active dispute deployment ${internalName}`);
-    }
-    const existingPublic = contracts[canonicalName];
-    if (
-      internalName !== canonicalName &&
-      existingPublic &&
-      !sameAbi(existingPublic.abi, selected.abi)
-    ) {
-      throw new Error(
-        `Active dispute deployment ABI mismatch for ${canonicalName}`
-      );
     }
     resolved[canonicalName] = selected;
   }

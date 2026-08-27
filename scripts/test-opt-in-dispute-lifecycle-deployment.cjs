@@ -126,7 +126,7 @@ test("live dependency pins use deployed runtime hashes", () => {
   );
 });
 
-test("package dispute stack evidence stays pinned to the immutable predecessor and lane 34 live dependencies", () => {
+test("package dispute stack evidence stays pinned to the selected stack and recognized predecessor", () => {
   for (const network of /** @type {Array<"base" | "base_staging">} */ ([
     "base",
     "base_staging",
@@ -170,10 +170,11 @@ test("package dispute stack evidence stays pinned to the immutable predecessor a
       evidence.runtimeCodeHashes.OrchestratorRegistry,
       live.orchestratorRegistryCodeHash
     );
-    assert.equal(evidence.addresses.WhitelistPolicy, live.whitelistPolicy);
+    const selectedWhitelist = require(`../deployments/${network}/WhitelistPolicyMethodScoped.json`);
+    assert.equal(evidence.addresses.WhitelistPolicy, selectedWhitelist.address);
     assert.equal(
-      evidence.runtimeCodeHashes.WhitelistPolicy,
-      live.whitelistPolicyCodeHash
+      evidence.deploymentEvidence.WhitelistPolicy.deploymentName,
+      "WhitelistPolicyMethodScoped"
     );
     assert.equal(
       evidence.addresses.MultiAttestationVerifier,
@@ -980,14 +981,62 @@ test("the obsolete Base lifecycle batch remains exact historical evidence", () =
       "utf8"
     )
   );
-  const transactions = lane34Module.assertObsoleteBaseBatchShape(obsoleteBatch);
+  assert.deepEqual(
+    obsoleteBatch.transactions.map(
+      (/** @type {{ to: string }} */ transaction) => transaction.to
+    ),
+    [
+      "0x30d4947f005653637005eed991005119D9eB2f34",
+      "0x8B8e853f47e6e0d3944e3689197B35216933dDea",
+      "0xc086b6120B5e61EF48221E6A78c69737c9948dF9",
+      "0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7",
+    ]
+  );
+  assert.equal(
+    obsoleteBatch.transactions[3].data,
+    "0xbb4995af0000000000000000000000005b0017fca6a2131701ef718e470a3930c1b6c12c"
+  );
+
+  const ownershipData = "0x79ba5097";
+  const lifecycleInterface = new (require("ethers").utils.Interface)([
+    "function setLifecycleHook(address)",
+  ]);
+  const currentFixture = {
+    ...obsoleteBatch,
+    transactions: [
+      {
+        ...obsoleteBatch.transactions[0],
+        to: PREDECESSOR_DISPUTE_STACKS.base.contracts.DisputeVerifier.address,
+        data: ownershipData,
+      },
+      {
+        ...obsoleteBatch.transactions[1],
+        to: PREDECESSOR_DISPUTE_STACKS.base.contracts.StakeVault.address,
+        data: ownershipData,
+      },
+      {
+        ...obsoleteBatch.transactions[2],
+        to: PREDECESSOR_DISPUTE_STACKS.base.contracts.DisputeProtectionPolicy
+          .address,
+        data: ownershipData,
+      },
+      {
+        ...obsoleteBatch.transactions[3],
+        data: lifecycleInterface.encodeFunctionData("setLifecycleHook", [
+          PREDECESSOR_DISPUTE_STACKS.base.contracts.IntentLifecycleHookV1
+            .address,
+        ]),
+      },
+    ],
+  };
+  const transactions =
+    lane34Module.assertObsoleteBaseBatchShape(currentFixture);
   assert.equal(transactions.length, 4);
-  assert.equal(transactions[3].data.slice(0, 10), "0xbb4995af");
   assert.throws(
     () =>
       lane34Module.assertObsoleteBaseBatchShape({
-        ...obsoleteBatch,
-        transactions: obsoleteBatch.transactions.slice().reverse(),
+        ...currentFixture,
+        transactions: currentFixture.transactions.slice().reverse(),
       }),
     /transaction drifted/
   );
