@@ -74,27 +74,27 @@ async function readDependencies(hre: HardhatRuntimeEnvironment): Promise<{
   addressGroupRegistry: string;
   escrowRegistry: string;
   orchestratorRegistry: string;
-  orchestratorV2: string;
+  orchestratorV3: string;
   escrowV2: string;
 }> {
   const [
     addressGroupRegistry,
     escrowRegistry,
     orchestratorRegistry,
-    orchestratorV2,
+    orchestratorV3,
     escrowV2,
   ] = await Promise.all([
     hre.deployments.get("AddressGroupRegistry"),
     hre.deployments.get("EscrowRegistry"),
     hre.deployments.get("OrchestratorRegistry"),
-    hre.deployments.get("OrchestratorV2"),
+    hre.deployments.get("OrchestratorV3"),
     hre.deployments.get("EscrowV2"),
   ]);
   return {
     addressGroupRegistry: addressGroupRegistry.address,
     escrowRegistry: escrowRegistry.address,
     orchestratorRegistry: orchestratorRegistry.address,
-    orchestratorV2: orchestratorV2.address,
+    orchestratorV3: orchestratorV3.address,
     escrowV2: escrowV2.address,
   };
 }
@@ -111,9 +111,9 @@ async function assertRegistryState(
     dependencies.escrowRegistry
   );
   if (
-    !(await orchestratorRegistry.isOrchestrator(dependencies.orchestratorV2))
+    !(await orchestratorRegistry.isOrchestrator(dependencies.orchestratorV3))
   ) {
-    throw new Error("OrchestratorV2 must already be registered");
+    throw new Error("OrchestratorV3 must already be registered");
   }
   if (!(await escrowRegistry.isWhitelistedEscrow(dependencies.escrowV2))) {
     throw new Error("EscrowV2 must already be whitelisted");
@@ -207,7 +207,7 @@ const func: DeployFunction = async function (
   }
 
   console.log("=== Deploying method-scoped whitelist policy ===");
-  console.log("Reusing OrchestratorV2:", dependencies.orchestratorV2);
+  console.log("Reusing OrchestratorV3:", dependencies.orchestratorV3);
   console.log("Reusing EscrowV2:", dependencies.escrowV2);
 
   const existing = await hre.deployments.getOrNull(

@@ -506,13 +506,16 @@ test("lane 36 skips unsupported and unflagged live runs but tagged runs fail", a
   }
 });
 
-test("lane 36 resumes only an incomplete deployer-to-governance handover", async () => {
+async function withLane36ExistingPolicy(
+  /** @type {{ getOwner: () => string; isOrchestrator: (address: string) => Promise<boolean> }} */ options,
+  /** @type {(context: { fakeHre: any; orchestratorV2: string; orchestratorV3: string }) => Promise<void>} */ assertion
+) {
   const network = "base";
   const expected = lane36Module.EXPECTED_LIVE[network];
   const policyAddress = "0x0000000000000000000000000000000000000100";
   const orchestratorV2 = "0x0000000000000000000000000000000000000200";
+  const orchestratorV3 = "0x0000000000000000000000000000000000000250";
   const escrowV2 = "0x0000000000000000000000000000000000000300";
-  const stranger = "0x0000000000000000000000000000000000000400";
   const artifact = await require("hardhat").deployments.getExtendedArtifact(
     "WhitelistPolicy"
   );
@@ -521,12 +524,12 @@ test("lane 36 resumes only an incomplete deployer-to-governance handover", async
     deployedBytecode: artifact.deployedBytecode,
     solcInputHash: "executed-input",
   };
-  let owner = expected.deployer;
   const dependencies = new Map([
     ["AddressGroupRegistry", { address: expected.addressGroupRegistry }],
     ["EscrowRegistry", { address: expected.escrowRegistry }],
     ["OrchestratorRegistry", { address: expected.orchestratorRegistry }],
     ["OrchestratorV2", { address: orchestratorV2 }],
+    ["OrchestratorV3", { address: orchestratorV3 }],
     ["EscrowV2", { address: escrowV2 }],
   ]);
   const fakeHre = /** @type {any} */ ({
@@ -549,7 +552,7 @@ test("lane 36 resumes only an incomplete deployer-to-governance handover", async
     /** @type {string} */ name
   ) => {
     if (name === "OrchestratorRegistry") {
-      return { isOrchestrator: async () => true };
+      return { isOrchestrator: options.isOrchestrator };
     }
     if (name === "EscrowRegistry") {
       return { isWhitelistedEscrow: async () => true };
@@ -559,20 +562,69 @@ test("lane 36 resumes only an incomplete deployer-to-governance handover", async
         groupRegistry: async () => expected.addressGroupRegistry,
         escrowRegistry: async () => expected.escrowRegistry,
         orchestratorRegistry: async () => expected.orchestratorRegistry,
-        owner: async () => owner,
+        owner: async () => options.getOwner(),
       };
     }
     throw new Error(`Unexpected contract ${name}`);
   };
   try {
-    assert.equal(await skipLane36(fakeHre), false);
-    owner = expected.governance;
-    assert.equal(await skipLane36(fakeHre), true);
-    owner = stranger;
-    await assert.rejects(skipLane36(fakeHre), /owner drifted/);
+    await assertion({ fakeHre, orchestratorV2, orchestratorV3 });
   } finally {
     /** @type {any} */ (ethers).getContractAt = originalGetContractAt;
   }
+}
+
+test("lane 36 resumes only an incomplete deployer-to-governance handover", async () => {
+  const expected = lane36Module.EXPECTED_LIVE.base;
+  const stranger = "0x0000000000000000000000000000000000000400";
+  let owner = expected.deployer;
+  await withLane36ExistingPolicy(
+    {
+      getOwner: () => owner,
+      isOrchestrator: async () => true,
+    },
+    async ({ fakeHre }) => {
+      assert.equal(await skipLane36(fakeHre), false);
+      owner = expected.governance;
+      assert.equal(await skipLane36(fakeHre), true);
+      owner = stranger;
+      await assert.rejects(skipLane36(fakeHre), /owner drifted/);
+    }
+  );
+});
+
+test("lane 36 accepts registered OrchestratorV3 when OrchestratorV2 is unregistered", async () => {
+  await withLane36ExistingPolicy(
+    {
+      getOwner: () => lane36Module.EXPECTED_LIVE.base.governance,
+      isOrchestrator: async (address) =>
+        address === "0x0000000000000000000000000000000000000250",
+    },
+    async ({ fakeHre, orchestratorV2, orchestratorV3 }) => {
+      const registry = await ethers.getContractAt(
+        "OrchestratorRegistry",
+        lane36Module.EXPECTED_LIVE.base.orchestratorRegistry
+      );
+      assert.equal(await registry.isOrchestrator(orchestratorV2), false);
+      assert.equal(await registry.isOrchestrator(orchestratorV3), true);
+      assert.equal(await skipLane36(fakeHre), true);
+    }
+  );
+});
+
+test("lane 36 rejects an unregistered OrchestratorV3", async () => {
+  await withLane36ExistingPolicy(
+    {
+      getOwner: () => lane36Module.EXPECTED_LIVE.base.governance,
+      isOrchestrator: async () => false,
+    },
+    async ({ fakeHre }) => {
+      await assert.rejects(
+        skipLane36(fakeHre),
+        /OrchestratorV3 must already be registered/
+      );
+    }
+  );
 });
 
 test("lane 36 and lane 37 share every common live dependency pin", () => {
