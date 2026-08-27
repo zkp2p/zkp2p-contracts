@@ -184,7 +184,11 @@ The package intentionally exports V3 source ABIs and current Base-staging
 lifecycle addresses while Base production may have no corresponding active V3
 address. Never invent a zero address, copy a staging address into Base, publish
 an inactive address as active, or remove an ABI merely because the contract is
-not deployed on every network.
+not deployed on every network. One explicit exception (decided 2026-08-28): a
+release candidate may front-run an approved, already-queued governance cutover
+so clients can sync before it executes, provided the package's dispute-stack
+readiness metadata and README state that the cutover is pending and name the
+Safe transaction.
 
 Any publication must use
 `.agents/skills/zkp2p-contracts-publish/SKILL.md`; never publish locally or
