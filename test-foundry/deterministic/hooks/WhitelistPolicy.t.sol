@@ -16,6 +16,8 @@ contract WhitelistPolicyTest is Test {
     uint256 internal constant DEPOSIT_ONE = 1;
     uint256 internal constant DEPOSIT_TWO = 2;
     uint256 internal constant UNKNOWN_DEPOSIT = 99;
+    bytes32 internal constant PAYMENT_METHOD = keccak256("venmo");
+    bytes32 internal constant OTHER_PAYMENT_METHOD = keccak256("zelle");
 
     bytes32 internal PEERS;
     bytes32 internal PEER_PLUSES;
@@ -34,11 +36,17 @@ contract WhitelistPolicyTest is Test {
     EscrowDepositorMock internal unregisteredEscrow;
     WhitelistPolicy internal policy;
 
-    event EnabledUpdated(address indexed escrow, uint256 indexed depositId, bool enabled);
+    event EnabledUpdated(
+        address indexed escrow, uint256 indexed depositId, bytes32 indexed paymentMethod, bool enabled
+    );
     event AddressWhitelisted(address indexed escrow, uint256 indexed depositId, address indexed taker);
     event AddressRemovedFromWhitelist(address indexed escrow, uint256 indexed depositId, address indexed taker);
-    event AllowedGroupAdded(address indexed escrow, uint256 indexed depositId, bytes32 indexed groupId);
-    event AllowedGroupRemoved(address indexed escrow, uint256 indexed depositId, bytes32 indexed groupId);
+    event AllowedGroupAdded(
+        address indexed escrow, uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 groupId
+    );
+    event AllowedGroupRemoved(
+        address indexed escrow, uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 groupId
+    );
     event EscrowRegistryUpdated(address indexed escrowRegistry);
 
     function setUp() public {
@@ -133,9 +141,9 @@ contract WhitelistPolicyTest is Test {
         newEscrowRegistry.addEscrow(address(escrow));
 
         vm.prank(maker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, new bytes32[](0), _addresses(taker));
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true, new bytes32[](0), _addresses(taker));
 
-        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, taker));
+        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, taker));
 
         escrowRegistry.removeEscrow(address(escrow));
 
@@ -143,7 +151,7 @@ contract WhitelistPolicyTest is Test {
         vm.prank(maker);
         policy.removeWhitelistedAddresses(address(escrow), DEPOSIT_ONE, _addresses(taker));
 
-        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, taker));
+        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, taker));
 
         policy.setEscrowRegistry(newEscrowRegistry);
 
@@ -151,53 +159,68 @@ contract WhitelistPolicyTest is Test {
         policy.removeWhitelistedAddresses(address(escrow), DEPOSIT_ONE, _addresses(taker));
 
         assertFalse(policy.isWhitelisted(address(escrow), DEPOSIT_ONE, taker));
-        assertFalse(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, taker));
+        assertFalse(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, taker));
     }
 
     /* ============ bootstrapDeposits ============ */
 
     function test_BootstrapDepositsEnablesBatchAndAddsGroups() public {
-        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE, DEPOSIT_TWO), _groupIds(PEERS, PEER_PLUSES));
+        policy.bootstrapDeposits(
+            address(escrow), _depositIds(DEPOSIT_ONE, DEPOSIT_TWO), PAYMENT_METHOD, _groupIds(PEERS, PEER_PLUSES)
+        );
 
-        assertTrue(policy.bootstrapped(address(escrow), DEPOSIT_ONE));
-        assertTrue(policy.bootstrapped(address(escrow), DEPOSIT_TWO));
-        assertTrue(policy.enabled(address(escrow), DEPOSIT_ONE));
-        assertTrue(policy.enabled(address(escrow), DEPOSIT_TWO));
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE), _groupIds(PEERS, PEER_PLUSES));
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_TWO), _groupIds(PEERS, PEER_PLUSES));
+        assertTrue(policy.bootstrapped(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
+        assertTrue(policy.bootstrapped(address(escrow), DEPOSIT_TWO, PAYMENT_METHOD));
+        assertTrue(policy.enabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
+        assertTrue(policy.enabled(address(escrow), DEPOSIT_TWO, PAYMENT_METHOD));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD), _groupIds(PEERS, PEER_PLUSES));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_TWO, PAYMENT_METHOD), _groupIds(PEERS, PEER_PLUSES));
+        assertFalse(policy.bootstrapped(address(escrow), DEPOSIT_ONE, OTHER_PAYMENT_METHOD));
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE, OTHER_PAYMENT_METHOD));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, OTHER_PAYMENT_METHOD).length, 0);
     }
 
     function test_BootstrapDepositsIsOwnerOnly() public {
         vm.expectRevert(bytes("Ownable: caller is not the owner"));
         vm.prank(maker);
-        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEERS));
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), PAYMENT_METHOD, _groupIds(PEERS));
 
-        assertFalse(policy.bootstrapped(address(escrow), DEPOSIT_ONE));
-        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
+        assertFalse(policy.bootstrapped(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
     }
 
     function test_BootstrapDepositsRejectsAlreadyBootstrappedDeposit() public {
-        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEERS));
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), PAYMENT_METHOD, _groupIds(PEERS));
 
         vm.expectRevert(
-            abi.encodeWithSelector(WhitelistPolicy.DepositAlreadyBootstrapped.selector, address(escrow), DEPOSIT_ONE)
+            abi.encodeWithSelector(
+                WhitelistPolicy.DepositPaymentMethodAlreadyBootstrapped.selector,
+                address(escrow),
+                DEPOSIT_ONE,
+                PAYMENT_METHOD
+            )
         );
-        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEER_PLUSES));
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), PAYMENT_METHOD, _groupIds(PEER_PLUSES));
 
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE), _groupIds(PEERS));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD), _groupIds(PEERS));
     }
 
     function test_BootstrapDepositsRejectsAlreadyEnabledDeposit() public {
         vm.prank(maker);
-        policy.setEnabled(address(escrow), DEPOSIT_ONE, true);
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
 
         vm.expectRevert(
-            abi.encodeWithSelector(WhitelistPolicy.DepositAlreadyEnabled.selector, address(escrow), DEPOSIT_ONE)
+            abi.encodeWithSelector(
+                WhitelistPolicy.DepositPaymentMethodAlreadyEnabled.selector,
+                address(escrow),
+                DEPOSIT_ONE,
+                PAYMENT_METHOD
+            )
         );
-        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEERS));
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), PAYMENT_METHOD, _groupIds(PEERS));
 
-        assertFalse(policy.bootstrapped(address(escrow), DEPOSIT_ONE));
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 0);
+        assertFalse(policy.bootstrapped(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD).length, 0);
     }
 
     function test_BootstrapDepositsRollsBackEntireBatchWhenLaterDepositFails() public {
@@ -205,66 +228,79 @@ contract WhitelistPolicyTest is Test {
             abi.encodeWithSelector(WhitelistPolicy.DepositNotFound.selector, address(escrow), UNKNOWN_DEPOSIT)
         );
         policy.bootstrapDeposits(
-            address(escrow), _depositIds(DEPOSIT_ONE, UNKNOWN_DEPOSIT), _groupIds(PEERS, PEER_PLUSES)
+            address(escrow), _depositIds(DEPOSIT_ONE, UNKNOWN_DEPOSIT), PAYMENT_METHOD, _groupIds(PEERS, PEER_PLUSES)
         );
 
-        assertFalse(policy.bootstrapped(address(escrow), DEPOSIT_ONE));
-        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 0);
+        assertFalse(policy.bootstrapped(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD).length, 0);
     }
 
     function test_BootstrapDepositsRejectsEmptyArrays() public {
         vm.expectRevert(WhitelistPolicy.EmptyArray.selector);
-        policy.bootstrapDeposits(address(escrow), new uint256[](0), _groupIds(PEERS));
+        policy.bootstrapDeposits(address(escrow), new uint256[](0), PAYMENT_METHOD, _groupIds(PEERS));
 
         vm.expectRevert(WhitelistPolicy.EmptyArray.selector);
-        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), new bytes32[](0));
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), PAYMENT_METHOD, new bytes32[](0));
     }
 
     function test_BootstrapDepositsRejectsUnregisteredEscrow() public {
         vm.expectRevert(
             abi.encodeWithSelector(WhitelistPolicy.EscrowNotWhitelisted.selector, address(unregisteredEscrow))
         );
-        policy.bootstrapDeposits(address(unregisteredEscrow), _depositIds(DEPOSIT_ONE), _groupIds(PEERS));
+        policy.bootstrapDeposits(
+            address(unregisteredEscrow), _depositIds(DEPOSIT_ONE), PAYMENT_METHOD, _groupIds(PEERS)
+        );
     }
 
     function test_BootstrapDepositsRejectsUnknownGroupAndRollsBack() public {
         bytes32 unknownGroup = bytes32(uint256(999));
         vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.GroupDoesNotExist.selector, unknownGroup));
-        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEERS, unknownGroup));
+        policy.bootstrapDeposits(
+            address(escrow), _depositIds(DEPOSIT_ONE), PAYMENT_METHOD, _groupIds(PEERS, unknownGroup)
+        );
 
-        assertFalse(policy.bootstrapped(address(escrow), DEPOSIT_ONE));
-        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 0);
+        assertFalse(policy.bootstrapped(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD).length, 0);
     }
 
     function test_BootstrapDepositsEmitsCanonicalEvents() public {
         vm.expectEmit(true, true, false, true, address(policy));
-        emit EnabledUpdated(address(escrow), DEPOSIT_ONE, true);
+        emit EnabledUpdated(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
         vm.expectEmit(true, true, true, true, address(policy));
-        emit AllowedGroupAdded(address(escrow), DEPOSIT_ONE, PEERS);
+        emit AllowedGroupAdded(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, PEERS);
         vm.expectEmit(true, true, true, true, address(policy));
-        emit AllowedGroupAdded(address(escrow), DEPOSIT_ONE, PEER_PLUSES);
+        emit AllowedGroupAdded(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, PEER_PLUSES);
 
-        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEERS, PEER_PLUSES));
+        policy.bootstrapDeposits(
+            address(escrow), _depositIds(DEPOSIT_ONE), PAYMENT_METHOD, _groupIds(PEERS, PEER_PLUSES)
+        );
     }
 
     function test_DepositorCanDisableAndRemoveAllGroupsAfterBootstrap() public {
-        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEERS, PEER_PLUSES));
+        policy.bootstrapDeposits(
+            address(escrow), _depositIds(DEPOSIT_ONE), PAYMENT_METHOD, _groupIds(PEERS, PEER_PLUSES)
+        );
 
         vm.startPrank(maker);
-        policy.setEnabled(address(escrow), DEPOSIT_ONE, false);
-        policy.removeAllowedGroups(address(escrow), DEPOSIT_ONE, _groupIds(PEERS, PEER_PLUSES));
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, false);
+        policy.removeAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, _groupIds(PEERS, PEER_PLUSES));
         vm.stopPrank();
 
-        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 0);
-        assertTrue(policy.bootstrapped(address(escrow), DEPOSIT_ONE));
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD).length, 0);
+        assertTrue(policy.bootstrapped(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
 
         vm.expectRevert(
-            abi.encodeWithSelector(WhitelistPolicy.DepositAlreadyBootstrapped.selector, address(escrow), DEPOSIT_ONE)
+            abi.encodeWithSelector(
+                WhitelistPolicy.DepositPaymentMethodAlreadyBootstrapped.selector,
+                address(escrow),
+                DEPOSIT_ONE,
+                PAYMENT_METHOD
+            )
         );
-        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), _groupIds(PEER_MERCHANTS));
+        policy.bootstrapDeposits(address(escrow), _depositIds(DEPOSIT_ONE), PAYMENT_METHOD, _groupIds(PEER_MERCHANTS));
     }
 
     /* ============ Authorization ============ */
@@ -274,9 +310,9 @@ contract WhitelistPolicyTest is Test {
             abi.encodeWithSelector(WhitelistPolicy.NotDepositor.selector, address(escrow), DEPOSIT_ONE, otherMaker)
         );
         vm.prank(otherMaker);
-        policy.setEnabled(address(escrow), DEPOSIT_ONE, true);
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
 
-        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
     }
 
     function test_AllSixGatedEntryPointsRevertForNonDepositor() public {
@@ -285,11 +321,11 @@ contract WhitelistPolicyTest is Test {
 
         vm.expectRevert(expectedRevert);
         vm.prank(otherMaker);
-        policy.setEnabled(address(escrow), DEPOSIT_ONE, true);
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
 
         vm.expectRevert(expectedRevert);
         vm.prank(otherMaker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, new bytes32[](0), new address[](0));
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true, new bytes32[](0), new address[](0));
 
         vm.expectRevert(expectedRevert);
         vm.prank(otherMaker);
@@ -301,11 +337,11 @@ contract WhitelistPolicyTest is Test {
 
         vm.expectRevert(expectedRevert);
         vm.prank(otherMaker);
-        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, _groupIds(PEERS));
+        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, _groupIds(PEERS));
 
         vm.expectRevert(expectedRevert);
         vm.prank(otherMaker);
-        policy.removeAllowedGroups(address(escrow), DEPOSIT_ONE, _groupIds(PEERS));
+        policy.removeAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, _groupIds(PEERS));
     }
 
     function test_SetEnabledRevertsForUnknownDeposit() public {
@@ -313,7 +349,7 @@ contract WhitelistPolicyTest is Test {
             abi.encodeWithSelector(WhitelistPolicy.DepositNotFound.selector, address(escrow), UNKNOWN_DEPOSIT)
         );
         vm.prank(maker);
-        policy.setEnabled(address(escrow), UNKNOWN_DEPOSIT, true);
+        policy.setEnabled(address(escrow), UNKNOWN_DEPOSIT, PAYMENT_METHOD, true);
     }
 
     function test_SetEnabledRevertsForUnregisteredEscrow() public {
@@ -321,33 +357,34 @@ contract WhitelistPolicyTest is Test {
             abi.encodeWithSelector(WhitelistPolicy.EscrowNotWhitelisted.selector, address(unregisteredEscrow))
         );
         vm.prank(maker);
-        policy.setEnabled(address(unregisteredEscrow), DEPOSIT_ONE, true);
+        policy.setEnabled(address(unregisteredEscrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
     }
 
     function test_AcceptAllEscrowsModePermitsUnregisteredEscrow() public {
         escrowRegistry.setAcceptAllEscrows(true);
 
         vm.prank(maker);
-        policy.setEnabled(address(unregisteredEscrow), DEPOSIT_ONE, true);
+        policy.setEnabled(address(unregisteredEscrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
 
-        assertTrue(policy.enabled(address(unregisteredEscrow), DEPOSIT_ONE));
+        assertTrue(policy.enabled(address(unregisteredEscrow), DEPOSIT_ONE, PAYMENT_METHOD));
     }
 
     /* ============ setEnabled ============ */
 
-    function test_SetEnabledIsScopedToDeposit() public {
+    function test_SetEnabledIsScopedToDepositAndPaymentMethod() public {
         vm.expectEmit(true, true, false, true, address(policy));
-        emit EnabledUpdated(address(escrow), DEPOSIT_ONE, true);
+        emit EnabledUpdated(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
         vm.prank(maker);
-        policy.setEnabled(address(escrow), DEPOSIT_ONE, true);
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
 
-        assertTrue(policy.enabled(address(escrow), DEPOSIT_ONE));
-        assertFalse(policy.enabled(address(escrow), DEPOSIT_TWO));
-        assertFalse(policy.enabled(address(otherEscrow), DEPOSIT_ONE));
+        assertTrue(policy.enabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE, OTHER_PAYMENT_METHOD));
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_TWO, PAYMENT_METHOD));
+        assertFalse(policy.enabled(address(otherEscrow), DEPOSIT_ONE, PAYMENT_METHOD));
 
         vm.prank(maker);
-        policy.setEnabled(address(escrow), DEPOSIT_ONE, false);
-        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, false);
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
     }
 
     /* ============ Direct whitelist ============ */
@@ -415,154 +452,167 @@ contract WhitelistPolicyTest is Test {
         bytes32[] memory groups = _groupIds(PEERS, PEER_PLUSES);
 
         vm.expectEmit(true, true, true, true, address(policy));
-        emit AllowedGroupAdded(address(escrow), DEPOSIT_ONE, PEERS);
+        emit AllowedGroupAdded(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, PEERS);
         vm.expectEmit(true, true, true, true, address(policy));
-        emit AllowedGroupAdded(address(escrow), DEPOSIT_ONE, PEER_PLUSES);
+        emit AllowedGroupAdded(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, PEER_PLUSES);
         vm.prank(maker);
-        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, groups);
+        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, groups);
 
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE), groups);
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_TWO).length, 0);
-        assertTrue(policy.isGroupAllowed(address(escrow), DEPOSIT_ONE, PEERS));
-        assertTrue(policy.isGroupAllowed(address(escrow), DEPOSIT_ONE, PEER_PLUSES));
-        assertFalse(policy.isGroupAllowed(address(escrow), DEPOSIT_TWO, PEERS));
-        assertFalse(policy.isGroupAllowed(address(otherEscrow), DEPOSIT_ONE, PEERS));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD), groups);
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_TWO, PAYMENT_METHOD).length, 0);
+        assertTrue(policy.isGroupAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, PEERS));
+        assertTrue(policy.isGroupAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, PEER_PLUSES));
+        assertFalse(policy.isGroupAllowed(address(escrow), DEPOSIT_TWO, PAYMENT_METHOD, PEERS));
+        assertFalse(policy.isGroupAllowed(address(otherEscrow), DEPOSIT_ONE, PAYMENT_METHOD, PEERS));
 
         vm.recordLogs();
         vm.prank(maker);
-        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, groups);
+        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, groups);
         assertEq(vm.getRecordedLogs().length, 0);
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 2);
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD).length, 2);
     }
 
     function test_AddAllowedGroupsRejectsEmptyAndUnknownGroups() public {
         vm.expectRevert(WhitelistPolicy.EmptyArray.selector);
         vm.prank(maker);
-        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, new bytes32[](0));
+        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, new bytes32[](0));
 
         bytes32 unknownGroup = bytes32(uint256(999));
         vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.GroupDoesNotExist.selector, unknownGroup));
         vm.prank(maker);
-        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, _groupIds(unknownGroup));
+        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, _groupIds(unknownGroup));
 
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 0);
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD).length, 0);
     }
 
-    function test_GroupCapIsPerDeposit() public {
+    function test_GroupCapIsPerDepositPaymentMethod() public {
         bytes32[] memory firstTen = new bytes32[](10);
         for (uint256 i = 0; i < firstTen.length; ++i) {
             firstTen[i] = registry.createGroup("Curated Group");
         }
 
         vm.prank(maker);
-        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, firstTen);
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, policy.MAX_GROUPS_PER_DEPOSIT());
+        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, firstTen);
+        assertEq(
+            policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD).length,
+            policy.MAX_GROUPS_PER_DEPOSIT_PAYMENT_METHOD()
+        );
 
         bytes32 eleventh = registry.createGroup("Eleventh Group");
         vm.expectRevert(
             abi.encodeWithSelector(
                 WhitelistPolicy.TooManyGroups.selector,
-                policy.MAX_GROUPS_PER_DEPOSIT() + 1,
-                policy.MAX_GROUPS_PER_DEPOSIT()
+                policy.MAX_GROUPS_PER_DEPOSIT_PAYMENT_METHOD() + 1,
+                policy.MAX_GROUPS_PER_DEPOSIT_PAYMENT_METHOD()
             )
         );
         vm.prank(maker);
-        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, _groupIds(eleventh));
+        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, _groupIds(eleventh));
 
         vm.prank(maker);
-        policy.addAllowedGroups(address(escrow), DEPOSIT_TWO, _groupIds(eleventh));
-        assertTrue(policy.isGroupAllowed(address(escrow), DEPOSIT_TWO, eleventh));
+        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, OTHER_PAYMENT_METHOD, _groupIds(eleventh));
+        assertTrue(policy.isGroupAllowed(address(escrow), DEPOSIT_ONE, OTHER_PAYMENT_METHOD, eleventh));
     }
 
     function test_RemoveAllowedGroupsUsesSwapAndPopAndIsIdempotent() public {
         vm.prank(maker);
-        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, _groupIds(PEERS, PEER_PLUSES, PEER_MERCHANTS));
+        policy.addAllowedGroups(
+            address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, _groupIds(PEERS, PEER_PLUSES, PEER_MERCHANTS)
+        );
 
         vm.expectEmit(true, true, true, true, address(policy));
-        emit AllowedGroupRemoved(address(escrow), DEPOSIT_ONE, PEERS);
+        emit AllowedGroupRemoved(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, PEERS);
         vm.prank(maker);
-        policy.removeAllowedGroups(address(escrow), DEPOSIT_ONE, _groupIds(PEERS));
+        policy.removeAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, _groupIds(PEERS));
 
-        bytes32[] memory remaining = policy.getAllowedGroups(address(escrow), DEPOSIT_ONE);
+        bytes32[] memory remaining = policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD);
         assertEq(remaining.length, 2);
         assertEq(remaining[0], PEER_MERCHANTS);
         assertEq(remaining[1], PEER_PLUSES);
-        assertFalse(policy.isGroupAllowed(address(escrow), DEPOSIT_ONE, PEERS));
+        assertFalse(policy.isGroupAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, PEERS));
 
         vm.recordLogs();
         vm.prank(maker);
-        policy.removeAllowedGroups(address(escrow), DEPOSIT_ONE, _groupIds(PEERS));
+        policy.removeAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, _groupIds(PEERS));
         assertEq(vm.getRecordedLogs().length, 0);
     }
 
     function test_RemoveAllowedGroupsRejectsEmptyArray() public {
         vm.expectRevert(WhitelistPolicy.EmptyArray.selector);
         vm.prank(maker);
-        policy.removeAllowedGroups(address(escrow), DEPOSIT_ONE, new bytes32[](0));
+        policy.removeAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, new bytes32[](0));
     }
 
     /* ============ configureDeposit ============ */
 
     function test_ConfigureDepositSetsEnabledGroupsAndTakersInOneCall() public {
         vm.prank(maker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS, PEER_PLUSES), _addresses(taker));
+        policy.configureDeposit(
+            address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true, _groupIds(PEERS, PEER_PLUSES), _addresses(taker)
+        );
 
-        assertTrue(policy.enabled(address(escrow), DEPOSIT_ONE));
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 2);
+        assertTrue(policy.enabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD).length, 2);
         assertTrue(policy.isWhitelisted(address(escrow), DEPOSIT_ONE, taker));
-        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, taker));
+        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, taker));
     }
 
     function test_ConfigureDepositAcceptsEmptyArrays() public {
         vm.prank(maker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, new bytes32[](0), new address[](0));
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true, new bytes32[](0), new address[](0));
 
-        assertTrue(policy.enabled(address(escrow), DEPOSIT_ONE));
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 0);
-        assertFalse(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, taker));
+        assertTrue(policy.enabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD).length, 0);
+        assertFalse(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, taker));
     }
 
     function test_ConfigureDepositIsAdditive() public {
         vm.startPrank(maker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS), _addresses(taker));
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, _groupIds(PEER_PLUSES), _addresses(otherTaker));
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true, _groupIds(PEERS), _addresses(taker));
+        policy.configureDeposit(
+            address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true, _groupIds(PEER_PLUSES), _addresses(otherTaker)
+        );
         vm.stopPrank();
 
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 2);
-        assertTrue(policy.isGroupAllowed(address(escrow), DEPOSIT_ONE, PEERS));
-        assertTrue(policy.isGroupAllowed(address(escrow), DEPOSIT_ONE, PEER_PLUSES));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD).length, 2);
+        assertTrue(policy.isGroupAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, PEERS));
+        assertTrue(policy.isGroupAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, PEER_PLUSES));
         assertTrue(policy.isWhitelisted(address(escrow), DEPOSIT_ONE, taker));
         assertTrue(policy.isWhitelisted(address(escrow), DEPOSIT_ONE, otherTaker));
     }
 
     function test_ConfigureDepositEmitsGranularEvents() public {
         vm.expectEmit(true, true, false, true, address(policy));
-        emit EnabledUpdated(address(escrow), DEPOSIT_ONE, true);
+        emit EnabledUpdated(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
         vm.expectEmit(true, true, true, true, address(policy));
-        emit AllowedGroupAdded(address(escrow), DEPOSIT_ONE, PEERS);
+        emit AllowedGroupAdded(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, PEERS);
         vm.expectEmit(true, true, true, true, address(policy));
         emit AddressWhitelisted(address(escrow), DEPOSIT_ONE, taker);
 
         vm.prank(maker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS), _addresses(taker));
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true, _groupIds(PEERS), _addresses(taker));
     }
 
     function test_ConfigureDepositRollsBackPartialWritesOnValidationFailure() public {
         bytes32 unknownGroup = bytes32(uint256(999));
         vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.GroupDoesNotExist.selector, unknownGroup));
         vm.prank(maker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS, unknownGroup), _addresses(taker));
+        policy.configureDeposit(
+            address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true, _groupIds(PEERS, unknownGroup), _addresses(taker)
+        );
 
-        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 0);
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD).length, 0);
         assertFalse(policy.isWhitelisted(address(escrow), DEPOSIT_ONE, taker));
 
         vm.expectRevert(WhitelistPolicy.ZeroAddress.selector);
         vm.prank(maker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS), _addresses(taker, address(0)));
+        policy.configureDeposit(
+            address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true, _groupIds(PEERS), _addresses(taker, address(0))
+        );
 
-        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, 0);
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
+        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD).length, 0);
         assertFalse(policy.isWhitelisted(address(escrow), DEPOSIT_ONE, taker));
     }
 
@@ -574,20 +624,25 @@ contract WhitelistPolicyTest is Test {
         bytes32 eleventh = registry.createGroup("Eleventh Group");
 
         vm.prank(maker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, firstTen, new address[](0));
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true, firstTen, new address[](0));
 
         vm.expectRevert(
             abi.encodeWithSelector(
                 WhitelistPolicy.TooManyGroups.selector,
-                policy.MAX_GROUPS_PER_DEPOSIT() + 1,
-                policy.MAX_GROUPS_PER_DEPOSIT()
+                policy.MAX_GROUPS_PER_DEPOSIT_PAYMENT_METHOD() + 1,
+                policy.MAX_GROUPS_PER_DEPOSIT_PAYMENT_METHOD()
             )
         );
         vm.prank(maker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, false, _groupIds(eleventh), _addresses(taker));
+        policy.configureDeposit(
+            address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, false, _groupIds(eleventh), _addresses(taker)
+        );
 
-        assertTrue(policy.enabled(address(escrow), DEPOSIT_ONE));
-        assertEq(policy.getAllowedGroups(address(escrow), DEPOSIT_ONE).length, policy.MAX_GROUPS_PER_DEPOSIT());
+        assertTrue(policy.enabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
+        assertEq(
+            policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD).length,
+            policy.MAX_GROUPS_PER_DEPOSIT_PAYMENT_METHOD()
+        );
         assertFalse(policy.isWhitelisted(address(escrow), DEPOSIT_ONE, taker));
     }
 
@@ -596,82 +651,88 @@ contract WhitelistPolicyTest is Test {
             abi.encodeWithSelector(WhitelistPolicy.NotDepositor.selector, address(escrow), DEPOSIT_ONE, otherMaker)
         );
         vm.prank(otherMaker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, new bytes32[](0), new address[](0));
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true, new bytes32[](0), new address[](0));
     }
 
     function test_ConfigureDepositWithEnabledFalseDisablesGateEvenWhenAppendingTakers() public {
         vm.prank(maker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS), new address[](0));
-        assertTrue(policy.enabled(address(escrow), DEPOSIT_ONE));
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true, _groupIds(PEERS), new address[](0));
+        assertTrue(policy.enabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
 
         vm.prank(maker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, false, new bytes32[](0), _addresses(taker));
+        policy.configureDeposit(
+            address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, false, new bytes32[](0), _addresses(taker)
+        );
 
-        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE));
+        assertFalse(policy.enabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD));
         assertTrue(policy.isWhitelisted(address(escrow), DEPOSIT_ONE, taker));
 
-        bytes32[] memory groups = policy.getAllowedGroups(address(escrow), DEPOSIT_ONE);
+        bytes32[] memory groups = policy.getAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD);
         assertEq(groups.length, 1);
         assertEq(groups[0], PEERS);
 
-        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, otherTaker));
+        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, otherTaker));
     }
 
     /* ============ isTakerAllowed ============ */
 
     function test_IsTakerAllowedReturnsTrueWhenPolicyDisabled() public view {
-        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, taker));
+        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, taker));
     }
 
     function test_IsTakerAllowedReturnsFalseForEnabledEmptyPolicy() public {
         vm.prank(maker);
-        policy.setEnabled(address(escrow), DEPOSIT_ONE, true);
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
 
-        assertFalse(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, taker));
-        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_TWO, taker));
+        assertFalse(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, taker));
+        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_TWO, PAYMENT_METHOD, taker));
     }
 
     function test_IsTakerAllowedReturnsFalseForNonMember() public {
         vm.startPrank(maker);
-        policy.setEnabled(address(escrow), DEPOSIT_ONE, true);
-        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, _groupIds(PEERS));
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
+        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, _groupIds(PEERS));
         vm.stopPrank();
 
-        assertFalse(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, taker));
+        assertFalse(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, taker));
     }
 
-    function test_DirectWhitelistIsScopedToDeposit() public {
+    function test_DirectWhitelistIsDepositWideAcrossPaymentMethods() public {
         vm.startPrank(maker);
-        policy.setEnabled(address(escrow), DEPOSIT_ONE, true);
-        policy.setEnabled(address(escrow), DEPOSIT_TWO, true);
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, OTHER_PAYMENT_METHOD, true);
+        policy.setEnabled(address(escrow), DEPOSIT_TWO, PAYMENT_METHOD, true);
         policy.addWhitelistedAddresses(address(escrow), DEPOSIT_ONE, _addresses(taker));
         vm.stopPrank();
 
-        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, taker));
-        assertFalse(policy.isTakerAllowed(address(escrow), DEPOSIT_TWO, taker));
+        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, taker));
+        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, OTHER_PAYMENT_METHOD, taker));
+        assertFalse(policy.isTakerAllowed(address(escrow), DEPOSIT_TWO, PAYMENT_METHOD, taker));
     }
 
-    function test_GroupAdmissionIsScopedToDeposit() public {
+    function test_GroupAdmissionIsScopedToDepositAndPaymentMethod() public {
         vm.startPrank(maker);
-        policy.setEnabled(address(escrow), DEPOSIT_ONE, true);
-        policy.setEnabled(address(escrow), DEPOSIT_TWO, true);
-        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, _groupIds(PEERS));
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, OTHER_PAYMENT_METHOD, true);
+        policy.setEnabled(address(escrow), DEPOSIT_TWO, PAYMENT_METHOD, true);
+        policy.addAllowedGroups(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, _groupIds(PEERS));
         vm.stopPrank();
         registry.addMembers(PEERS, _addresses(taker));
 
-        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, taker));
-        assertFalse(policy.isTakerAllowed(address(escrow), DEPOSIT_TWO, taker));
+        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, taker));
+        assertFalse(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, OTHER_PAYMENT_METHOD, taker));
+        assertFalse(policy.isTakerAllowed(address(escrow), DEPOSIT_TWO, PAYMENT_METHOD, taker));
     }
 
     function test_PolicyIsIsolatedAcrossEscrowsWithSameDepositId() public {
         vm.prank(maker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, new bytes32[](0), _addresses(taker));
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true, new bytes32[](0), _addresses(taker));
 
         vm.prank(otherMaker);
-        policy.setEnabled(address(otherEscrow), DEPOSIT_ONE, true);
+        policy.setEnabled(address(otherEscrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
 
-        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, taker));
-        assertFalse(policy.isTakerAllowed(address(otherEscrow), DEPOSIT_ONE, taker));
+        assertTrue(policy.isTakerAllowed(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, taker));
+        assertFalse(policy.isTakerAllowed(address(otherEscrow), DEPOSIT_ONE, PAYMENT_METHOD, taker));
     }
 
     /* ============ Pre-intent hook ============ */
@@ -683,7 +744,7 @@ contract WhitelistPolicyTest is Test {
 
     function test_ValidateSignalIntentAllowsDirectlyWhitelistedTaker() public {
         vm.prank(maker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, new bytes32[](0), _addresses(taker));
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true, new bytes32[](0), _addresses(taker));
         orchestratorRegistry.addOrchestrator(address(this));
 
         policy.validateSignalIntent(_preIntentContext(taker));
@@ -691,7 +752,7 @@ contract WhitelistPolicyTest is Test {
 
     function test_ValidateSignalIntentAllowsGroupMember() public {
         vm.prank(maker);
-        policy.configureDeposit(address(escrow), DEPOSIT_ONE, true, _groupIds(PEERS), new address[](0));
+        policy.configureDeposit(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true, _groupIds(PEERS), new address[](0));
         registry.addMembers(PEERS, _addresses(taker));
         orchestratorRegistry.addOrchestrator(address(this));
 
@@ -700,11 +761,13 @@ contract WhitelistPolicyTest is Test {
 
     function test_ValidateSignalIntentRejectsNonWhitelistedTaker() public {
         vm.prank(maker);
-        policy.setEnabled(address(escrow), DEPOSIT_ONE, true);
+        policy.setEnabled(address(escrow), DEPOSIT_ONE, PAYMENT_METHOD, true);
         orchestratorRegistry.addOrchestrator(address(this));
 
         vm.expectRevert(
-            abi.encodeWithSelector(WhitelistPolicy.TakerNotWhitelisted.selector, taker, address(escrow), DEPOSIT_ONE)
+            abi.encodeWithSelector(
+                WhitelistPolicy.TakerNotWhitelisted.selector, taker, address(escrow), DEPOSIT_ONE, PAYMENT_METHOD
+            )
         );
         policy.validateSignalIntent(_preIntentContext(taker));
     }
@@ -767,7 +830,7 @@ contract WhitelistPolicyTest is Test {
             depositId: DEPOSIT_ONE,
             amount: 1,
             to: _taker,
-            paymentMethod: bytes32(0),
+            paymentMethod: PAYMENT_METHOD,
             fiatCurrency: bytes32(0),
             conversionRate: 0,
             referralFees: new IReferralFee.ReferralFee[](0),

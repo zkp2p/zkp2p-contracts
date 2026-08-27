@@ -56,11 +56,11 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
 
     function test_EnabledWhitelistRejectsNonMemberAndAcceptsMember() public {
         vm.prank(depositor);
-        whitelistPolicy.setEnabled(address(escrow), depositId, true);
+        whitelistPolicy.setEnabled(address(escrow), depositId, METHOD, true);
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                WhitelistLifecycleHook.TakerNotWhitelisted.selector, address(escrow), depositId, taker
+                WhitelistLifecycleHook.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker
             )
         );
         _signalCall(taker, _defaultParams());
@@ -126,7 +126,7 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         assertEq(address(orchestrator.getIntentLifecycleHook(oldSettledIntent)), address(whitelistHook));
 
         vm.prank(depositor);
-        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, true);
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, true);
         orchestrator.setLifecycleHook(combinedHook);
         bytes32 freshIntent = _signalDefault();
         assertEq(address(orchestrator.getIntentLifecycleHook(freshIntent)), address(combinedHook));

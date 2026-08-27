@@ -78,7 +78,10 @@ interface IDisputeProtectionPolicy {
         bytes32 disputeId
     );
     event DisputeProtectionEnabledUpdated(
-        address indexed escrow, uint256 indexed depositId, bool isDisputeProtectionEnabled
+        address indexed escrow,
+        uint256 indexed depositId,
+        bytes32 indexed paymentMethod,
+        bool isDisputeProtectionEnabled
     );
     event RiskWindowUpdated(bytes32 indexed paymentMethod, uint64 riskWindow);
     event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
@@ -89,7 +92,7 @@ interface IDisputeProtectionPolicy {
     error InvalidContract(address dependency);
     error UnauthorizedLifecycleHook(address caller);
     error AdmissionsPaused();
-    error DisputeProtectionNotEnabled(address escrow, uint256 depositId);
+    error DisputeProtectionNotEnabled(address escrow, uint256 depositId, bytes32 paymentMethod);
     error DisputeProtectionIntentAlreadyExists(bytes32 intentHash);
     error DisputeProtectionIntentNotPending(bytes32 intentHash, DisputeProtectionIntentStatus status);
     error DisputeProtectionIntentNotSettled(bytes32 intentHash, DisputeProtectionIntentStatus status);
@@ -140,10 +143,14 @@ interface IDisputeProtectionPolicy {
     function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease) external;
 
     /**
-     * @notice Returns whether stake-backed dispute protection is enabled for a deposit.
+     * @notice Returns whether stake-backed dispute protection is enabled for a deposit payment method.
      * @dev Returns false until the depositor explicitly opts in.
      * @param _escrow Escrow containing the deposit.
-     * @param _depositId Deposit whose dispute protection configuration is queried.
+     * @param _depositId Deposit whose payment-method-specific configuration is queried.
+     * @param _paymentMethod Payment method whose dispute protection configuration is queried.
      */
-    function isDisputeProtectionEnabled(address _escrow, uint256 _depositId) external view returns (bool);
+    function isDisputeProtectionEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod)
+        external
+        view
+        returns (bool);
 }

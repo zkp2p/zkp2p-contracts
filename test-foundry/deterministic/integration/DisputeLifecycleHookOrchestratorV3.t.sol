@@ -23,6 +23,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     uint64 internal constant RISK_WINDOW = 30 days;
     uint256 internal constant STAKE_AMOUNT = 500e6;
     bytes32 internal constant WINDOWLESS_METHOD = keccak256("windowless");
+    bytes32 internal constant OTHER_METHOD = keccak256("zelle");
 
     AddressGroupRegistry internal groupRegistry;
     WhitelistPolicy internal whitelistPolicy;
@@ -74,7 +75,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IntentLifecycleHookV1.TakerNotWhitelisted.selector, address(escrow), depositId, taker
+                IntentLifecycleHookV1.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker
             )
         );
         _signalCall(taker, _defaultParams());
@@ -142,7 +143,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         _setDisputeProtection(false);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IntentLifecycleHookV1.TakerNotWhitelisted.selector, address(escrow), depositId, taker
+                IntentLifecycleHookV1.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker
             )
         );
         _signalCall(taker, _defaultParams());
@@ -162,6 +163,31 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         );
         assertEq(vault.lockedStake(taker), 0);
         assertEq(vault.lockedStake(other), 0);
+    }
+
+    function test_DisputeProtectionOptInIsScopedToPaymentMethod() public {
+        _addPaymentMethod(OTHER_METHOD);
+        disputeProtectionPolicy.setRiskWindow(OTHER_METHOD, RISK_WINDOW);
+        _setDisputeProtection(true);
+
+        IOrchestratorV3.SignalIntentParams memory otherMethodParams = _defaultParams();
+        otherMethodParams.paymentMethod = OTHER_METHOD;
+        bytes32 openIntent = _signal(taker, otherMethodParams);
+        assertEq(
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(openIntent).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+        );
+
+        vm.prank(taker);
+        orchestrator.cancelIntent(openIntent);
+        vm.prank(depositor);
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, OTHER_METHOD, true);
+
+        bytes32 protectedIntent = _signal(taker, otherMethodParams);
+        assertEq(
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(protectedIntent).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING)
+        );
     }
 
     function test_WhitelistOffOptedInWindowlessMethodIsOpen() public {
@@ -367,12 +393,12 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         address[] memory takers = new address[](includeTaker ? 1 : 0);
         if (includeTaker) takers[0] = taker;
         vm.prank(depositor);
-        whitelistPolicy.configureDeposit(address(escrow), depositId, enabled, new bytes32[](0), takers);
+        whitelistPolicy.configureDeposit(address(escrow), depositId, METHOD, enabled, new bytes32[](0), takers);
     }
 
     function _setDisputeProtection(bool enabled) internal {
         vm.prank(depositor);
-        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, enabled);
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, enabled);
     }
 
     function _addPaymentMethod(bytes32 _paymentMethod) internal {

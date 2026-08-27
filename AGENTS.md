@@ -34,13 +34,29 @@
   directly. Current read-only predecessor address and bytecode checks live in
   `deployments/predecessorDisputeStack.ts`.
 - Lane `33` is the independently owned IntentGuardian fee update.
-- Lane `34` is the only opt-in dispute successor lane. Its tag-scoped live commands deploy and configure a fresh
-  `StakeVault`, `DisputeProtectionPolicy`, and `IntentLifecycleHookV1` while reusing the pinned verifier and dispute
-  registry. `ENABLE_STAGING_V3_DISPUTE_OPT_IN_DEPLOYMENT=true` and
-  `ENABLE_BASE_V3_DISPUTE_OPT_IN_DEPLOYMENT=true` authorize passive deployment only; deployment leaves the current
-  writer set and OrchestratorV3 hook unchanged. Base activation is an unsigned, separately reviewed Safe batch that
-  the lane never signs, proposes, or executes. Base-staging activation advances separately confirmed EOA-owned
-  transitions one at a time. Never infer activation from source, tests, package ABIs, artifacts, or deployment.
+- `deploy/29_deploy_whitelist_policy.ts` is immutable production provenance for the deposit-scoped
+  `WhitelistPolicy`. It stays mounted because lane 30 depends on its tag and its `skip` already recognizes the wired
+  production policy; its digest is pinned in `deployments/immutableDeploymentLanes.ts`.
+- `deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts` is immutable and retired. It deployed and, on Base, activated
+  the `*OptIn` dispute stack built from the deposit-only interfaces; the runner verifies its digest, excludes it from
+  every supported run, and rejects both of its tags. Its Safe simulation and verification scripts remain as tooling
+  for that executed history. The Base `*OptIn` trio is the live dispute stack until a later activation lane replaces
+  it; the Base-staging `*OptIn` trio is deployed but was never activated.
+- Lanes `36` and `37` are the current, deploy-only successors for the payment-method-scoped policies. Lane `36`
+  deploys `WhitelistPolicyMethodScoped`; lane `37` deploys `StakeVaultMethodScoped`,
+  `DisputeProtectionPolicyMethodScoped`, and `IntentLifecycleHookV1MethodScoped` against the lane-36 policy and the
+  network's pinned verifier and dispute registry. `ENABLE_{STAGING,BASE}_METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT=true`
+  and `ENABLE_{STAGING,BASE}_V3_DISPUTE_METHOD_SCOPED_DEPLOYMENT=true` authorize passive deployment only: the
+  OrchestratorV3 hook, the dispute-registry writer set, and every V2 deposit hook stay unchanged, and Base ownership
+  handover is initiated for the Safe to accept later. Activation, the predecessor writer revoke, and the canonical
+  selection flip belong to a future lane; never infer activation from source, tests, package ABIs, artifacts, or
+  deployment.
+- `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
+  predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
+  identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the
+  Base `*OptIn` trio, the Base-staging lane-32 stack). Do not merge them until the method-scoped stack is activated.
+- `scripts/bootstrapWhitelistPolicy.ts` targets only `WhitelistPolicyMethodScoped` and refuses the lane-29 policy
+  address. Until the lane-36 artifact exists for a network the script fails closed on the missing artifact.
 - `IntentGuardian` and `WhitelistPolicy` remain part of the V2 policy history and are reused where the mounted V3
   lifecycle lane specifies. Do not redeploy a core stack merely to change an independently owned policy component.
 - The payment-verifier cutover is one-way. Before the governance batch, lane `31` must prove UPV3 is the sole

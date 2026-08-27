@@ -16,6 +16,7 @@ type HistoricalContractEvidence = {
   address: string;
   deploymentBytecodeHash: string;
   runtimeCodeHash: string;
+  deploymentName?: string;
 };
 
 type HistoricalDisputeStack = {
@@ -26,6 +27,7 @@ type HistoricalDisputeStack = {
   contracts: Record<string, HistoricalContractEvidence>;
 };
 
+// Predecessor of the currently selected dispute stack.
 export const PREDECESSOR_DISPUTE_STACKS: Record<
   string,
   HistoricalDisputeStack
@@ -120,23 +122,69 @@ export const PREDECESSOR_DISPUTE_STACKS: Record<
   },
 };
 
+// Stack replaced by lane 37, which differs from the selected-stack predecessor on Base.
+export const METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS: Record<
+  string,
+  HistoricalDisputeStack
+> = {
+  base: {
+    activeLifecycleHook: {
+      address: "0x71467dCac3B50eeED5A485aC6a70f27B1EAC1970",
+      runtimeCodeHash:
+        "0x35789014e608a248f3244b61210fa259fee3566c33f50fd0e3fa1f5ae22e370b",
+    },
+    contracts: {
+      StakeVault: {
+        deploymentName: "StakeVaultOptIn",
+        address: "0x4d16F4a9946CfC76b1c1A4B63aa9D94cdA2dbCEB",
+        deploymentBytecodeHash:
+          "0x3ceac244f2d721614975457b041e95f661feba8ef6bbfc73c23b55aaac27d3e6",
+        runtimeCodeHash:
+          "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
+      },
+      DisputeProtectionPolicy: {
+        deploymentName: "DisputeProtectionPolicyOptIn",
+        address: "0xcEc48F7242eDBf02875BB4629115Bd927e1287aA",
+        deploymentBytecodeHash:
+          "0xe4600241bce095f1a8789d46efb639b2d8c681a423a836c66173274b5284a788",
+        runtimeCodeHash:
+          "0x9c4be279da216021183638eaef79ebf98db248472685e9ecd0de3f24a513a641",
+      },
+      IntentLifecycleHookV1: {
+        deploymentName: "IntentLifecycleHookV1OptIn",
+        address: "0x71467dCac3B50eeED5A485aC6a70f27B1EAC1970",
+        deploymentBytecodeHash:
+          "0xd379478c4798979d09db6bef1dbf626739cd50ffe6469732f6e182ecb7cea7db",
+        runtimeCodeHash:
+          "0x35789014e608a248f3244b61210fa259fee3566c33f50fd0e3fa1f5ae22e370b",
+      },
+      DisputeVerifier:
+        PREDECESSOR_DISPUTE_STACKS.base.contracts.DisputeVerifier,
+      DisputeNullifierRegistry:
+        PREDECESSOR_DISPUTE_STACKS.base.contracts.DisputeNullifierRegistry,
+    },
+  },
+  base_staging: PREDECESSOR_DISPUTE_STACKS.base_staging,
+};
+
 function sameAddress(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
 }
 
 export async function assertHistoricalDisputeStack(
-  hre: HistoricalRuntimeEnvironment
+  hre: HistoricalRuntimeEnvironment,
+  stacks: Record<string, HistoricalDisputeStack> = PREDECESSOR_DISPUTE_STACKS
 ): Promise<void> {
   const network = hre.deployments.getNetworkName();
   if (network === "localhost" || network === "hardhat") return;
 
-  const expectedStack = PREDECESSOR_DISPUTE_STACKS[network];
+  const expectedStack = stacks[network];
   if (!expectedStack) return;
 
   for (const [name, expected] of Object.entries(expectedStack.contracts)) {
     let deployment;
     try {
-      deployment = await hre.deployments.get(name);
+      deployment = await hre.deployments.get(expected.deploymentName || name);
     } catch {
       throw new Error(`Missing predecessor deployment ${name} on ${network}`);
     }

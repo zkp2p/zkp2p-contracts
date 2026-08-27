@@ -10,7 +10,7 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 
 /**
  * @title IntentLifecycleHookV1
- * @notice Lifecycle hook combining a deposit-scoped whitelist fast lane with opt-in stake-backed dispute protection.
+ * @notice Lifecycle hook combining tuple-scoped whitelist admission with opt-in stake-backed dispute protection.
  * Whitelisted takers bypass staking. Non-whitelisted takers use stake-backed admission for disputable payment methods
  * only after the depositor opts in; otherwise an enabled whitelist rejects them while a whitelist-disabled deposit
  * stays open.
@@ -35,7 +35,7 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     error InvalidDependency(address dependency);
     error UnauthorizedOrchestrator(address caller);
     error IntentNotFound(bytes32 intentHash);
-    error TakerNotWhitelisted(address escrow, uint256 depositId, address taker);
+    error TakerNotWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker);
 
     /* ============ Constructor ============ */
 
@@ -62,18 +62,21 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
         IOrchestratorV3.Intent memory intent = IOrchestratorV3(msg.sender).getIntent(_intentHash);
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
-        bool isWhitelistEnabled = whitelistPolicy.enabled(intent.escrow, intent.depositId);
-        if (isWhitelistEnabled && whitelistPolicy.isTakerAllowed(intent.escrow, intent.depositId, intent.owner)) {
+        bool isWhitelistEnabled = whitelistPolicy.enabled(intent.escrow, intent.depositId, intent.paymentMethod);
+        if (
+            isWhitelistEnabled
+                && whitelistPolicy.isTakerAllowed(intent.escrow, intent.depositId, intent.paymentMethod, intent.owner)
+        ) {
             return;
         }
         // Dispute protection admission is stateful, so the configuration query only selects the route.
         // onIntentSignaled remains authoritative for token compatibility, collateral, and pause checks.
-        if (disputeProtectionPolicy.isDisputeProtectionEnabled(intent.escrow, intent.depositId)) {
+        if (disputeProtectionPolicy.isDisputeProtectionEnabled(intent.escrow, intent.depositId, intent.paymentMethod)) {
             disputeProtectionPolicy.onIntentSignaled(
                 _intentHash, intent.escrow, intent.depositId, intent.owner, intent.paymentMethod, intent.amount
             );
         } else if (isWhitelistEnabled) {
-            revert TakerNotWhitelisted(intent.escrow, intent.depositId, intent.owner);
+            revert TakerNotWhitelisted(intent.escrow, intent.depositId, intent.paymentMethod, intent.owner);
         }
     }
 

@@ -1,6 +1,7 @@
 import { ethers } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
+import { zeroImmutableValues } from "./canonicalDeployment";
 import { PREDECESSOR_DISPUTE_STACKS } from "./predecessorDisputeStack";
 
 const { getActiveDisputeDeploymentName } =
@@ -86,12 +87,13 @@ export async function guardManagedDisputeLifecycleHook(
     "IntentLifecycleHookV1"
   );
   const successorDeployment = await hre.deployments.getOrNull(successorName);
-  const matched =
-    (predecessor &&
-      sameAddress(currentHook, predecessor.activeLifecycleHook.address)) ||
-    (successorDeployment &&
-      sameAddress(currentHook, successorDeployment.address));
-  if (!matched) return false;
+  const matchedPredecessor =
+    predecessor &&
+    sameAddress(currentHook, predecessor.activeLifecycleHook.address);
+  const matchedSuccessor =
+    successorDeployment &&
+    sameAddress(currentHook, successorDeployment.address);
+  if (!matchedPredecessor && !matchedSuccessor) return false;
 
   const runtimeCode = await ethers.provider.getCode(currentHook);
   if (runtimeCode === "0x")
@@ -108,35 +110,76 @@ export async function guardManagedDisputeLifecycleHook(
     "OrchestratorRegistry"
   );
   const whitelistPolicy = await hre.deployments.get("WhitelistPolicy");
+  let expectedWhitelistPolicy = whitelistPolicy.address;
+  if (matchedSuccessor && !matchedPredecessor) {
+    const successorArgs = successorDeployment.args;
+    const successorWhitelistPolicy = successorArgs?.[1];
+    if (
+      !Array.isArray(successorArgs) ||
+      typeof successorWhitelistPolicy !== "string" ||
+      !ethers.utils.isAddress(successorWhitelistPolicy)
+    ) {
+      throw new Error(
+        "Managed successor lifecycle hook has malformed constructor policy evidence"
+      );
+    }
+    const methodScopedWhitelistPolicy = await hre.deployments.getOrNull(
+      "WhitelistPolicyMethodScoped"
+    );
+    if (
+      !sameAddress(successorWhitelistPolicy, whitelistPolicy.address) &&
+      (!methodScopedWhitelistPolicy ||
+        !sameAddress(
+          successorWhitelistPolicy,
+          methodScopedWhitelistPolicy.address
+        ))
+    ) {
+      throw new Error(
+        "Managed successor whitelist policy does not match a recognized deployment"
+      );
+    }
+    expectedWhitelistPolicy = successorWhitelistPolicy;
+  }
+  let actualRuntimeCodeHash = ethers.utils.keccak256(runtimeCode);
   let successor: { address: string; runtimeCodeHash: string } | undefined;
-  if (
-    successorDeployment &&
-    (!predecessor ||
-      !sameAddress(
-        successorDeployment.address,
-        predecessor.activeLifecycleHook.address
-      ))
-  ) {
+  if (matchedSuccessor && !matchedPredecessor) {
     if (typeof successorDeployment.deployedBytecode !== "string") {
       throw new Error(
         "Managed successor lifecycle hook lacks deployment bytecode evidence"
       );
     }
+    const artifact = await hre.deployments.getExtendedArtifact(
+      "IntentLifecycleHookV1"
+    );
+    const artifactDeployedBytecode = artifact.evm?.deployedBytecode;
+    if (!artifactDeployedBytecode) {
+      throw new Error(
+        "Managed successor lifecycle hook artifact lacks deployed bytecode metadata"
+      );
+    }
+    const immutableReferences =
+      artifactDeployedBytecode.immutableReferences || {};
     successor = {
       address: successorDeployment.address,
       runtimeCodeHash: ethers.utils.keccak256(
-        successorDeployment.deployedBytecode
+        zeroImmutableValues(
+          successorDeployment.deployedBytecode,
+          immutableReferences
+        )
       ),
     };
+    actualRuntimeCodeHash = ethers.utils.keccak256(
+      zeroImmutableValues(runtimeCode, immutableReferences)
+    );
   }
   return validateManagedDisputeHookSnapshot({
     currentHook,
     predecessor: predecessor?.activeLifecycleHook,
     successor,
-    actualRuntimeCodeHash: ethers.utils.keccak256(runtimeCode),
+    actualRuntimeCodeHash,
     actualOrchestratorRegistry: await hook.orchestratorRegistry(),
     expectedOrchestratorRegistry: orchestratorRegistry.address,
     actualWhitelistPolicy: await hook.whitelistPolicy(),
-    expectedWhitelistPolicy: whitelistPolicy.address,
+    expectedWhitelistPolicy,
   });
 }
