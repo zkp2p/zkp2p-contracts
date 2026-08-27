@@ -265,8 +265,18 @@ resolution order at activation is therefore fixed now:
       hash), one after it is permitted.
     Drop the `totalAccounted`, `unaccountedBalance`, and raw `balanceOf` zero
     checks in both phases (griefable by a dust transfer and not load-bearing).
-  Deployment, controller, and ownership events that lane 37 itself emits are
-  in neither list. Add deployment-helper tests proving: a configuration
+  Deployment, controller, and ownership events that lane 37 itself emits
+  (`RiskWindowUpdated`, `DisputeVerifierUpdated`,
+  `LifecycleHookAuthorizationUpdated`, `AdmissionsPausedUpdated`,
+  `ControllerInitialized`, `ControllerProposed`, `ControllerAccepted`,
+  `ControllerProposalCancelled`, `OwnershipTransferStarted`,
+  `OwnershipTransferred`) form a third, explicitly expected list per
+  contract. The classifier is fail-closed: every event decoded from a
+  policy or vault log must belong to exactly one of that contract's
+  allowed / expected / forbidden lists, and a log the ABI cannot decode
+  is an error, so a future event cannot slip past the guard. A test
+  derives the event names from the compiled artifacts and asserts the
+  three lists partition them. Add deployment-helper tests proving: a configuration
   event after deployment leaves the stack `prepared`; a stake deposit or
   taker authorization **after** controller initialization leaves it
   `prepared`; a stake deposit **before** controller initialization fails the
@@ -276,9 +286,9 @@ resolution order at activation is therefore fixed now:
   Pre-activation opt-outs and post-preparation staking are expected and
   supported. `2026-08-27-method-scoped-policy-successor-lanes-design.md`
   gets a one-line amendment pointing here for the fresh-vault rule.
-- Event topics stay ABI-derived; the scan now carries the two name lists
-  above (allowed configuration / collateral events, forbidden lifecycle /
-  lock events) instead of one "any activity" list.
+- Event decoding stays ABI-derived; the scan reads every log of each fresh
+  contract without a topic filter and classifies it through the per-contract
+  allowed / expected / forbidden lists instead of one "any activity" list.
 - `deployments/dispute-stack-evidence.json` `sentinel`
   (`escrow 0x…01, depositId 0, expected false`) is a static shape check with no
   payment method. It stays as is for this PR; the activation PR that refreshes
