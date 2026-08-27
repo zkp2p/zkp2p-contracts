@@ -181,15 +181,37 @@ inventory from chain and requires, before the hook flip:
    an active chargebackable method: the same per-tuple successor opt-out
    (their non-whitelisted takers would otherwise revert
    `IntentTokenMismatch` after activation);
-3. **successor vault readiness**: stake is taker-owned and is not migrated
-   from the predecessor vault, so the activation runbook publishes a staking
-   window during which takers withdraw from the predecessor vault, deposit
-   into `StakeVaultMethodScoped`, and restore their taker authorizations and
-   stake-owner selections there. The gate reports the successor vault's
-   `totalStaked` and the predecessor's, and activation is a conscious call
-   on those numbers. Takers who have not staked on the successor by the flip
-   cannot take protected rails until they do; that residual outage is
-   inherent to a non-migrated, taker-owned vault and is accepted.
+3. **vault controller rotation** (amended 2026-08-27: the predecessor
+   `StakeVault` is reused, not replaced — see "Deployment and tooling").
+   `StakeVault` is unchanged by this work and already provides a two-step,
+   delayed controller handover (`proposeController` by the vault owner,
+   `controllerChangeDelay` = 2 days, `acceptController` by the pending
+   controller, which `DisputeProtectionPolicy.acceptVaultController()`
+   wraps). Rotation does not require zero liabilities, so takers' stake,
+   taker authorizations, and stake-owner selections carry over untouched
+   and there is no staking window or outage. The one hard constraint: lock
+   operations (`unlockStake`, `resizeLock`, `resolveLock`, `increaseLock`)
+   are controller-only, so any lock still open from a predecessor-policy
+   intent at the moment of `acceptController` is stranded. The activation
+   sequence is therefore:
+   - Safe batch 1 (Base) / EOA step 1 (staging):
+     `predecessorPolicy.setAdmissionsPaused(true)` so no new lock can be
+     created, then `vault.proposeController(successorPolicy)`;
+   - wait for `pendingControllerValidAt` **and** for the predecessor policy
+     to report zero live locks (no `PENDING` intent and no settled intent
+     whose coverage window is still open — on Base today one coverage lock
+     resolves ~2026-09-08); the gate scans the predecessor policy's intents
+     and the vault's `locks` for its intent hashes and fails closed while
+     any remain;
+   - Safe batch 2 / EOA step 2: `successorPolicy.acceptVaultController()`,
+     grant the successor policy dispute-registry write permission,
+     `OrchestratorV3.setLifecycleHook(successorHook)`, and — only once the
+     predecessor is fully drained of claims too — revoke the predecessor's
+     write permission.
+   Between batch 1 and batch 2 the predecessor policy still serves its
+   existing locks (it remains controller) but admits nothing new; the only
+   takers affected are non-whitelisted takers on the two explicitly opted-in
+   Base deposits, for the duration of the wait. That is accepted.
 
 "Chargebackable" in this inventory means `successorRiskWindow != 0` for the
 tuple's payment method. The whole inventory — deposit state, active methods,
@@ -231,72 +253,52 @@ resolution order at activation is therefore fixed now:
   runner on a live network (its `ENABLE_*` flags are unset everywhere). The
   implementation PR re-checks both deployment directories before editing
   lane 37, because the lane becomes immutable the moment it executes.
-- `deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts` currently
-  treats `DisputeProtectionEnabledUpdated` as "stack used" in
-  `assertFreshStackUnused`, which would make a depositor's pre-activation
-  opt-out (exactly what non-USDC depositors must do) flip the deploy-only
-  prefix out of `prepared`. The same rule blocks takers from pre-funding the
-  successor vault, which under a default-on policy would turn the hook flip
-  into an outage for every non-whitelisted taker on chargebackable rails.
-  Redefine "fresh" as **no lifecycle or lock activity**, not "untouched":
-  - allowed before activation: `DisputeProtectionEnabledUpdated` on the
-    policy; `StakeDeposited`, `StakeWithdrawn`, `TakerAuthorizationUpdated`,
-    `StakeOwnerSelected` on the vault (pure taker collateral management, which
-    cannot create a lock while no intent routes through the policy);
-  - forbidden before activation: the policy's intent opened/cancelled/
-    settled/released and `DisputeResolved`; the vault's `StakeLocked`,
-    `LockFunded`, `StakeLockIncreased`, `StakeLockResized`, `StakeUnlocked`,
-    `StakeLockResolved`, `ClaimCreated`, `ClaimWithdrawn`.
-  - accounting is **phase-gated**, because `StakeVault.initializeController`
-    reverts `ControllerInitializationWithLiabilities` while `totalStaked` or
-    `totalClaimable` is nonzero, and `depositStake` is permissionless — a
-    one-unit deposit before step four would brick the lane permanently:
-    - while `controller == address(0)` (steps `deploy-vault` through
-      `initialize-controller`): require `totalStaked == 0` and
-      `totalClaimable == 0` **as current state**, which is exactly the
-      condition `initializeController` enforces. Collateral events are never
-      fatal on their own: `setTakerAuthorization` and `selectStakeOwner` are
-      permissionless and free, and a deposit followed by a withdrawal leaves
-      no liability, so a history-based rule would let anyone brick the lane
-      for nothing (Codex review finding on the PR, accepted). If stake is
-      present the run fails closed with a message telling the operator to
-      wait for (or ask) the staker to withdraw and resume; the lane resumes
-      from the same prefix once the state clears.
-    - once `controller == policy`: allow `totalStaked > 0`; require
-      `totalClaimable == 0` and no lock or claim event.
-    Residual, accepted: a griefer who keeps at least one unit staked blocks
-    `initialize-controller` until they withdraw. That is a property of
-    `StakeVault.initializeController`, shared with lane 34's identical step
-    order, and bounded by the fact that `deploy-vault` and
-    `initialize-controller` execute back-to-back in one run; it is not made
-    worse by this design.
-    Drop the `totalAccounted`, `unaccountedBalance`, and raw `balanceOf` zero
-    checks in both phases (griefable by a dust transfer and not load-bearing).
-  Deployment, controller, and ownership events that lane 37 itself emits
-  (`RiskWindowUpdated`, `DisputeVerifierUpdated`,
-  `LifecycleHookAuthorizationUpdated`, `AdmissionsPausedUpdated`,
-  `ControllerInitialized`, `ControllerProposed`, `ControllerAccepted`,
-  `ControllerProposalCancelled`, `OwnershipTransferStarted`,
-  `OwnershipTransferred`) form a third, explicitly expected list per
-  contract. The classifier is fail-closed: every event decoded from a
-  policy or vault log must belong to exactly one of that contract's
-  allowed / expected / forbidden lists, and a log the ABI cannot decode
-  is an error, so a future event cannot slip past the guard. A test
-  derives the event names from the compiled artifacts and asserts the
-  three lists partition them. Add deployment-helper tests proving: a configuration
-  event after deployment leaves the stack `prepared`; collateral events in
-  either phase are ignored as history; nonzero `totalStaked` before
-  controller initialization fails the prefix while the same after
-  initialization is `prepared`; a lock or claim event fails it in either
-  phase.
-  The staking window (see the activation gate) is published only after lane
-  37 reports `prepared` on that network, i.e. after `controller == policy`.
-  Pre-activation opt-outs and post-preparation staking are expected and
-  supported. `2026-08-27-method-scoped-policy-successor-lanes-design.md`
-  gets a one-line amendment pointing here for the fresh-vault rule.
-- Event decoding stays ABI-derived; the scan reads every log of each fresh
-  contract without a topic filter and classifies it through the per-contract
-  allowed / expected / forbidden lists instead of one "any activity" list.
+- **Lane 37 reuses the predecessor `StakeVault` on live networks** (amended
+  2026-08-27; supersedes the earlier fresh-vault design and its phase-gated
+  freshness rule). `StakeVault` bytecode is unchanged, the vault holds real
+  taker state, and controller rotation is the mechanism the contract was
+  built with. On `base` the reused vault is `StakeVaultOptIn`
+  (`0x4d16…bCEB`, controller = `DisputeProtectionPolicyOptIn`); on
+  `base_staging` it is the lane-32 staging vault (`0xEc9f…8f43`, controller
+  = the lane-32 staging policy) — both already pinned in
+  `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS[network].contracts.StakeVault`.
+  - Live deploy-only steps become: `deploy-policy` (constructor
+    `[deployer, predecessorVault, DisputeVerifier, DisputeNullifierRegistry]`),
+    `deploy-hook`, `authorize-hook`, `set-risk-window:<method>` per
+    disputable method, and on Base `transfer-policy-owner`. There is no
+    `deploy-vault`, `initialize-controller`, or `transfer-vault-owner`.
+    `LIVE_SUCCESSOR_DEPLOYMENT_NAMES` is
+    `[DisputeProtectionPolicyMethodScoped, IntentLifecycleHookV1MethodScoped]`;
+    `StakeVaultMethodScoped` survives only as a localhost/hardhat record
+    (like the local-only `DisputeNullifierRegistry` / `DisputeVerifier`),
+    where the local path still deploys and initializes its own vault
+    because no predecessor exists there.
+  - `assertLiveSharedState` additionally pins the predecessor vault:
+    `controller() == predecessorPolicy`, `pendingController() == 0` and
+    `pendingControllerValidAt() == 0` (no rotation in flight during
+    deploy-only), `owner() == governance`, `controllerChangeDelay() ==
+    172800`. It deliberately does **not** require the vault to be empty or
+    quiet — it is live.
+  - Fresh-stack proof covers the **policy only**: every log the successor
+    policy emitted since deployment is decoded through its ABI and must fall
+    in exactly one of `ALLOWED_POLICY_CONFIGURATION_EVENTS`
+    (`DisputeProtectionEnabledUpdated`), `EXPECTED_POLICY_GOVERNANCE_EVENTS`
+    (`RiskWindowUpdated`, `DisputeVerifierUpdated`,
+    `LifecycleHookAuthorizationUpdated`, `AdmissionsPausedUpdated`,
+    `OwnershipTransferStarted`, `OwnershipTransferred`), or
+    `FORBIDDEN_POLICY_LIFECYCLE_EVENTS` (intent opened / cancelled / settled
+    / released, `DisputeResolved`); an unclassified or undecodable log fails
+    closed. A test partitions the compiled `DisputeProtectionPolicy` ABI
+    across the three lists. Pre-activation depositor opt-outs are expected
+    and never invalidate `prepared`. No vault log is scanned and no vault
+    accounting is asserted, so the griefing surface of the fresh-vault
+    design is gone by construction.
+  - The successor policy cannot lock anything before activation: it is not
+    the vault's controller until `acceptVaultController()` succeeds, and it
+    is not the orchestrator's hook. Its `stakeVault()` must equal the
+    pinned predecessor vault (partial-prefix drift check).
+  - `2026-08-27-method-scoped-policy-successor-lanes-design.md` is amended
+    to match (constructor wiring, step list, and reused components).
 - `deployments/dispute-stack-evidence.json` `sentinel`
   (`escrow 0x…01, depositId 0, expected false`) is a static shape check with no
   payment method. It stays as is for this PR; the activation PR that refreshes
@@ -385,12 +387,14 @@ Test-first, smallest Foundry targets:
   rail reads `true`) is asserted once, as documentation of the API contract.
 
 `scripts/test-method-scoped-deployment.cjs`
-- a configuration event after deployment leaves lane 37 `prepared`;
-  collateral events (deposit, withdrawal, taker authorization, stake-owner
-  selection) never fail the prefix by themselves; nonzero `totalStaked`
-  before controller initialization fails it, nonzero `totalStaked` with
-  `totalClaimable == 0` after initialization is `prepared`; a lifecycle,
-  lock, or claim event fails it in either phase.
+- live names are exactly `[DisputeProtectionPolicyMethodScoped,
+  IntentLifecycleHookV1MethodScoped]`; step kinds are the six staging steps
+  and the seven Base steps above, with no vault step;
+- a configuration event after deployment leaves lane 37 `prepared`; a
+  lifecycle event fails it; an unclassified or undecodable policy log fails
+  it; the three policy lists partition the compiled ABI;
+- the local path still deploys `StakeVaultMethodScoped` and initializes its
+  controller (topology test via the localhost gate).
 
 Rename tests whose names encode "opt-in" (`test_onIntentSignaledRequiresExplicitOptIn…`,
 `test_isDisputeProtectionEnabledDefaultsFalse…`,

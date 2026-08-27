@@ -702,26 +702,30 @@ or `yarn deploy:method-scoped-policy:base` with `ENABLE_STAGING_METHOD_SCOPED_WH
 or `ENABLE_BASE_METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT=true`. The lane never mutates the registries and
 never touches the lane-29 policy or any V2 deposit hook; an existing record is canonical-checked and reused.
 
-`deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts` deploys `StakeVaultMethodScoped`,
-`DisputeProtectionPolicyMethodScoped`, and `IntentLifecycleHookV1MethodScoped`, wiring the hook to the
-lane-36 policy and the fresh dispute policy while reusing the network's pinned `DisputeVerifier` and
-`DisputeNullifierRegistry`. Use `yarn deploy:dispute-method-scoped:base_staging` or
+`deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts` deploys `DisputeProtectionPolicyMethodScoped`
+and `IntentLifecycleHookV1MethodScoped`, wiring the hook to the lane-36 policy and the fresh dispute policy
+while reusing the network's pinned `DisputeVerifier`, `DisputeNullifierRegistry`, and — because `StakeVault`
+is unchanged and holds live taker stake — the predecessor `StakeVault` itself (`StakeVaultOptIn` on Base, the
+lane-32 vault on Base staging). The fresh policy becomes that vault's controller only through the vault's
+delayed two-step handover in the activation lane; a `StakeVaultMethodScoped` record exists on localhost only. Use `yarn deploy:dispute-method-scoped:base_staging` or
 `yarn deploy:dispute-method-scoped:base` with `ENABLE_STAGING_V3_DISPUTE_METHOD_SCOPED_DEPLOYMENT=true` or
-`ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_DEPLOYMENT=true`. The deploy-only run initializes the vault
-controller, authorizes only the fresh hook, applies non-zero risk windows only to PayPal, Venmo, and Cash
-App, and on Base initiates the two-step ownership transfers for the Safe to accept later. It is
+`ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_DEPLOYMENT=true`. The deploy-only run authorizes only the
+fresh hook, applies non-zero risk windows only to PayPal, Venmo, and Cash App, and on Base initiates the
+policy's two-step ownership transfer for the Safe to accept later. It is
 transaction-by-transaction resumable and leaves the active O3 hook and the dispute-registry writer set
 unchanged. The method-scoped policy is on by default for every payment method with a nonzero risk window
 (paypal, venmo, cashapp) and can be opted out per deposit payment method by the depositor; depositor
-opt-outs and taker stake deposits are allowed on the passive stack once its vault controller is
-initialized, and only lifecycle, lock, or claim activity invalidates the deploy-only preparation.
+opt-outs on the passive policy are expected, and only lifecycle activity on it invalidates the deploy-only
+preparation; the live vault is never inspected.
 `deployments/predecessorDisputeStack.ts` pins what the lane replaces per network in
 `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS`; `PREDECESSOR_DISPUTE_STACKS` keeps describing the predecessor of
 the currently selected stack until activation.
 
 Activation of the method-scoped stack is not implemented by lanes 36 or 37. A future lane owns the
 Base-staging EOA transitions, the unsigned Base Safe batch (ownership acceptance, fresh writer grant,
-hook swap, and the lane-34 writer revoke once `StakeVaultOptIn` accounting is zero), the
+hook swap, and the lane-34 writer revoke once the predecessor policy is drained), preceded by
+pausing predecessor admissions and proposing the fresh policy as the vault controller so the delayed
+`acceptVaultController()` can run once no predecessor lock is open, the
 `active-dispute-stack.json` selection flip, and the evidence refresh. Before that lane can run:
 
 - [ ] Lanes 36 and 37 have executed deploy-only on Base staging and Base and their records are committed.

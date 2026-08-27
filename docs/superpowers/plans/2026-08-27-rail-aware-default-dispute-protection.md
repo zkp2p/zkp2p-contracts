@@ -4,6 +4,8 @@
 >
 > **Review:** Internal self-review ✅ | Codex convergence ✅ (2 rounds)
 >
+> **Amendment 2 (2026-08-27, user decision):** lane 37 reuses the predecessor `StakeVault` on live networks (controller rotation at activation) instead of deploying `StakeVaultMethodScoped`; live steps are policy → hook → authorize → risk windows → (Base) policy ownership transfer, and the fresh-stack proof scans the policy only. Task 3's vault-side classifier, lists, and tests are superseded; `StakeVaultMethodScoped` remains localhost-only. See the spec's "Deployment and tooling".
+>
 > **Amendment (post-implementation, Codex PR review P1):** Task 3's pre-controller rule is state-based, not history-based — `classifyFreshStackActivity` takes `controllerInitialized: boolean`, never fails on collateral events, and requires `totalStaked == 0 && totalClaimable == 0` only while the controller is unset. The ordering helpers and the "collateral activity before controller initialization" error in Task 3 Steps 1/3 are superseded; see the spec's phase-gating bullet.
 
 **Goal:** Make stake-backed dispute protection default-on for every `(deposit, paymentMethod)` tuple whose payment method has a nonzero risk window, with a depositor opt-out, while keeping the PR #278 ABI byte-for-byte and letting lane 37 tolerate pre-activation opt-outs and post-preparation staking.
