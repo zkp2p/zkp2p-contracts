@@ -1880,18 +1880,18 @@ function verificationFixture(kind, overrides = {}) {
     const { manifestSha256: _oldDigest, ...withConstructorArgs } = manifest;
     manifest.manifestSha256 = computeManifestSha256(withConstructorArgs);
   }
-  const forgeGuard = require(`../out/${guardArtifactName}.sol/${guardArtifactName}.json`);
-  const forgePostcondition = require(`../out/${postconditionArtifactName}.sol/${postconditionArtifactName}.json`);
+  const hardhatGuard = require(`../artifacts/contracts/mocks/${guardArtifactName}.sol/${guardArtifactName}.json`);
+  const hardhatPostcondition = require(`../artifacts/contracts/mocks/${postconditionArtifactName}.sol/${postconditionArtifactName}.json`);
   /** @type {Record<string, any>} */
   const artifacts = {
     [guardArtifactName]: {
-      abi: forgeGuard.abi,
+      abi: hardhatGuard.abi,
       bytecode: "0x6000",
       deployedBytecode: runtime,
       evm: { deployedBytecode: { immutableReferences: {} } },
     },
     [postconditionArtifactName]: {
-      abi: forgePostcondition.abi,
+      abi: hardhatPostcondition.abi,
       bytecode: "0x6000",
       deployedBytecode: runtime,
       evm: { deployedBytecode: { immutableReferences: {} } },
