@@ -81,6 +81,7 @@ const SAFE_ABI = [
 
 const ESCROW_ABI = [
   "function getDeposit(uint256) view returns (tuple(address depositor,address delegate,address token,tuple(uint256 min,uint256 max) intentAmountRange,bool acceptingIntents,uint256 remainingDeposits,uint256 outstandingIntentAmount,address intentGuardian,bool retainOnEmpty))",
+  "function getDepositPaymentMethodActive(uint256,bytes32) view returns (bool)",
 ];
 
 const TARGET_PAYMENT_METHODS = [
@@ -668,7 +669,7 @@ export function buildSafeBatch(
   };
 }
 
-function runSelfTest(): void {
+async function runSelfTest(): Promise<void> {
   const policyAddress = "0x1000000000000000000000000000000000000001";
   const escrowAddress = "0x2000000000000000000000000000000000000002";
   const safeAddress = "0x3000000000000000000000000000000000000003";
@@ -723,6 +724,31 @@ function runSelfTest(): void {
   )) {
     throw new Error("Self-test produced invalid Safe metadata");
   }
+  const activeEscrow = {
+    getDepositPaymentMethodActive: async () => true,
+  } as unknown as Contract;
+  await assertDepositPaymentMethodStillActive(
+    activeEscrow,
+    depositIds[0],
+    paymentMethodHash,
+  );
+  const inactiveEscrow = {
+    getDepositPaymentMethodActive: async () => false,
+  } as unknown as Contract;
+  try {
+    await assertDepositPaymentMethodStillActive(
+      inactiveEscrow,
+      depositIds[0],
+      paymentMethodHash,
+    );
+    throw new Error("Self-test accepted an inactive deposit payment method");
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes(
+      `Deposit 7 payment method ${paymentMethodHash} is no longer active`,
+    )) {
+      throw error;
+    }
+  }
   console.log("Whitelist bootstrap raw calldata and Safe metadata self-test passed");
 }
 
@@ -734,6 +760,18 @@ async function assertDepositStillExists(escrow: Contract, depositId: BigNumber):
   const deposit = await escrow.getDeposit(depositId);
   if (deposit.depositor === ethers.constants.AddressZero) {
     throw new Error(`Deposit ${depositId.toString()} no longer exists; indexer discovery is stale`);
+  }
+}
+
+async function assertDepositPaymentMethodStillActive(
+  escrow: Contract,
+  depositId: BigNumber,
+  paymentMethodHash: string,
+): Promise<void> {
+  if (!(await escrow.getDepositPaymentMethodActive(depositId, paymentMethodHash))) {
+    throw new Error(
+      `Deposit ${depositId.toString()} payment method ${paymentMethodHash} is no longer active`,
+    );
   }
 }
 
@@ -793,7 +831,7 @@ async function retryConfirmedRead<T>(label: string, operation: () => Promise<T>)
 
 async function main(): Promise<void> {
   if (process.argv.includes("--self-test")) {
-    runSelfTest();
+    await runSelfTest();
     return;
   }
   if (process.argv.includes("--help")) {
@@ -886,6 +924,11 @@ async function main(): Promise<void> {
     async (target): Promise<{ target: BootstrapTarget; completed: boolean }> => {
       const escrow = escrows.get(target.escrowAddress.toLowerCase())!;
       await assertDepositStillExists(escrow, target.depositId);
+      await assertDepositPaymentMethodStillActive(
+        escrow,
+        target.depositId,
+        target.paymentMethodHash,
+      );
       const [isBootstrapped, isEnabled] = await Promise.all([
         policy.bootstrapped(target.escrowAddress, target.depositId, target.paymentMethodHash),
         policy.enabled(target.escrowAddress, target.depositId, target.paymentMethodHash),
@@ -1002,6 +1045,11 @@ async function main(): Promise<void> {
       // closed if the indexer page became stale or a depositor configured policy after discovery.
       await Promise.all(depositIds.map(async (depositId) => {
         await assertDepositStillExists(escrow, depositId);
+        await assertDepositPaymentMethodStillActive(
+          escrow,
+          depositId,
+          paymentMethodHash,
+        );
         const [isBootstrapped, isEnabled] = await Promise.all([
           statePolicy.bootstrapped(escrowAddress, depositId, paymentMethodHash),
           statePolicy.enabled(escrowAddress, depositId, paymentMethodHash),
