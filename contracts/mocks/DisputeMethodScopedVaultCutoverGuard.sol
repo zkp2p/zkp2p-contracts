@@ -9,6 +9,12 @@ import {
     VaultTrustSurface
 } from "./DisputeMethodScopedVaultActivationTypes.sol";
 
+/**
+ * @title DisputeMethodScopedVaultCutoverGuard
+ * @notice Binds the dedicated-vault cutover to its proof-time trust surface and depositor inventory.
+ * @dev The proof-time deposit counter is a floor because later deposits cannot carry predecessor opt-outs that the
+ *      fresh default-on policy would honor. A depositor who needs an opt-out re-applies it on the fresh policy.
+ */
 contract DisputeMethodScopedVaultCutoverGuard is DisputeMethodScopedVaultTrustSurfaceChecks {
     bool private immutable expectVaultAcceptOwnership;
     bool private immutable expectPolicyAcceptOwnership;
@@ -43,7 +49,9 @@ contract DisputeMethodScopedVaultCutoverGuard is DisputeMethodScopedVaultTrustSu
         _assertFreshPolicyConfiguration();
 
         uint256 actualCounter = IActivationEscrow(escrow).depositCounter();
-        if (actualCounter != expectedDepositCounter) revert DepositCounterMismatch(actualCounter);
+        if (actualCounter < expectedDepositCounter) {
+            revert DepositCounterBelowProof(actualCounter, expectedDepositCounter);
+        }
         IActivationPolicy fresh = IActivationPolicy(expected.freshPolicy);
         for (uint256 tupleIndex = 0; tupleIndex < inventoryTuples.length; tupleIndex++) {
             InventoryTuple memory tuple = inventoryTuples[tupleIndex];

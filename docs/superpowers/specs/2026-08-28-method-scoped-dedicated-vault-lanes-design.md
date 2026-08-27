@@ -67,3 +67,12 @@ Lane 38 without the rotation. Reuses lane 38's exported machinery by import wher
 ## Non-goals
 
 No changes to `StakeVault`, `DisputeProtectionPolicy`, `IntentLifecycleHookV1`, or `WhitelistPolicy` source; no migration of stake or depositor opt-outs from the old stacks; no rollback path to lane 37/38 artifacts.
+
+## Amendment 2026-08-28: cutover deposit-counter floor
+
+The lane-40 vault-cutover guard and fresh-block verifier treat the proof-time `inventory.depositCounter` as a floor:
+the live counter must be greater than or equal to the pinned value. `EscrowV2` continues minting deposits between
+proof generation and Safe execution, so exact equality made an otherwise valid batch expire immediately. Every
+pinned inventory tuple remains equality-bound and is re-checked on-chain against the fresh policy. Deposits created
+after the proof cannot carry predecessor opt-outs that the fresh default-on policy would honor; a depositor who needs
+an opt-out re-applies it on the fresh policy.

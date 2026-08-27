@@ -118,7 +118,7 @@ abstract contract DisputeMethodScopedVaultTrustSurfaceChecks {
     error LifecycleHookMismatch(address actual);
     error PredecessorIntentStatusMismatch(bytes32 intentHash, uint8 actual);
     error PredecessorIntentLockAmountMismatch(bytes32 intentHash, uint256 actual);
-    error DepositCounterMismatch(uint256 actual);
+    error DepositCounterBelowProof(uint256 actual, uint256 pinned);
     error InventoryTupleProtectionMismatch(address escrow, uint256 depositId, bytes32 paymentMethod, bool actual);
 
     VaultTrustSurface internal expected;
