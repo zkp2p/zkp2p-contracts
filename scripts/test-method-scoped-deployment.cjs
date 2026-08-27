@@ -390,10 +390,15 @@ test("lane 37 exports the method-scoped dispute stack identity", () => {
     "IntentLifecycleHookV1MethodScoped",
   ]);
   assert.deepEqual(lane37Module.LIVE_SUCCESSOR_DEPLOYMENT_NAMES, [
-    "StakeVaultMethodScoped",
     "DisputeProtectionPolicyMethodScoped",
     "IntentLifecycleHookV1MethodScoped",
   ]);
+  assert.equal(
+    lane37Module.LIVE_SUCCESSOR_DEPLOYMENT_NAMES.includes(
+      "StakeVaultMethodScoped"
+    ),
+    false
+  );
   assert.deepEqual(lane37Module.ARTIFACT_NAMES, {
     DisputeNullifierRegistry: "NullifierRegistry",
     DisputeVerifier: "DisputeVerifier",
@@ -446,10 +451,8 @@ test("lane 37 skips unsupported and unflagged live runs but tagged runs fail", a
 
 test("lane 37 deploy-only steps are ordered contiguous prefixes", () => {
   const common = [
-    "deploy-vault",
     "deploy-policy",
     "deploy-hook",
-    "initialize-controller",
     "authorize-hook",
     "set-risk-window:paypal",
     "set-risk-window:venmo",
@@ -458,9 +461,20 @@ test("lane 37 deploy-only steps are ordered contiguous prefixes", () => {
   assert.deepEqual(lane37Module.DEPLOY_ONLY_STEP_KINDS.base_staging, common);
   assert.deepEqual(lane37Module.DEPLOY_ONLY_STEP_KINDS.base, [
     ...common,
-    "transfer-vault-owner",
     "transfer-policy-owner",
   ]);
+  assert.equal(
+    Object.values(lane37Module.DEPLOY_ONLY_STEP_KINDS)
+      .flat()
+      .some((step) =>
+        [
+          "deploy-vault",
+          "initialize-controller",
+          "transfer-vault-owner",
+        ].includes(step)
+      ),
+    false
+  );
   for (const network of /** @type {Array<"base_staging" | "base">} */ ([
     "base_staging",
     "base",
@@ -554,28 +568,69 @@ test("lane 37 ownership states distinguish complete, pending, absent, and drift"
   );
 });
 
-test("lane 37 local readiness and successor records fail closed", async () => {
+test("lane 37 local readiness and live successor records fail closed", async () => {
   assert.throws(
     () => lane37Module.requireLocalPaymentBindingReady(false),
     /must be fully cut over/
   );
-  const records = new Map([
-    [
-      "DisputeProtectionPolicyMethodScoped",
-      { address: "0x0000000000000000000000000000000000000001" },
-    ],
-  ]);
-  await assert.rejects(
-    lane37Module.getSuccessorDeployments(
-      /** @type {any} */ ({
-        deployments: {
-          /** @param {string} name */
-          getOrNull: async (name) => records.get(name) || null,
+
+  const policyArtifact =
+    await require("hardhat").deployments.getExtendedArtifact(
+      "DisputeProtectionPolicy"
+    );
+  const hookArtifact = await require("hardhat").deployments.getExtendedArtifact(
+    "IntentLifecycleHookV1"
+  );
+  const policy = {
+    address: "0x0000000000000000000000000000000000000001",
+    deployedBytecode: policyArtifact.deployedBytecode,
+    solcInputHash: policyArtifact.solcInputHash,
+  };
+  const hook = {
+    address: "0x0000000000000000000000000000000000000002",
+    deployedBytecode: hookArtifact.deployedBytecode,
+    solcInputHash: hookArtifact.solcInputHash,
+  };
+  const records = new Map([["IntentLifecycleHookV1MethodScoped", hook]]);
+  const fakeHre = /** @type {any} */ ({
+    deployments: {
+      getNetworkName: () => "base",
+      /** @param {string} name */
+      getOrNull: async (name) => records.get(name) || null,
+      /** @param {string} name */
+      getExtendedArtifact: async (name) => {
+        if (name === "DisputeProtectionPolicy") return policyArtifact;
+        if (name === "IntentLifecycleHookV1") return hookArtifact;
+        throw new Error(`Unexpected artifact ${name}`);
+      },
+    },
+    ethers: {
+      provider: {
+        /** @param {string} address */
+        getCode: async (address) => {
+          if (address === policy.address) return policy.deployedBytecode;
+          if (address === hook.address) return hook.deployedBytecode;
+          return "0x";
         },
-      })
-    ),
+      },
+    },
+  });
+  await assert.rejects(
+    lane37Module.getSuccessorDeployments(fakeHre),
     /not a contiguous prefix/
   );
+
+  records.clear();
+  records.set("DisputeProtectionPolicyMethodScoped", policy);
+  assert.deepEqual(await lane37Module.getSuccessorDeployments(fakeHre), [
+    policy,
+    null,
+  ]);
+  records.set("IntentLifecycleHookV1MethodScoped", hook);
+  assert.deepEqual(await lane37Module.getSuccessorDeployments(fakeHre), [
+    policy,
+    hook,
+  ]);
 });
 
 test("lane 37 local deployment requires the lane 36 policy record", async () => {
@@ -849,6 +904,17 @@ test("summary and package wiring expose only the current deployment lanes", () =
     ),
     false
   );
+  const scripts = /** @type {Record<string, string>} */ (packageJson.scripts);
+  for (const network of ["base_staging", "base"]) {
+    assert.match(
+      scripts[`verify:method-scoped:${network}`],
+      /--contracts WhitelistPolicyMethodScoped,DisputeProtectionPolicyMethodScoped,IntentLifecycleHookV1MethodScoped /
+    );
+    assert.doesNotMatch(
+      scripts[`verify:method-scoped:${network}`],
+      /StakeVaultMethodScoped/
+    );
+  }
 });
 
 /**
@@ -866,106 +932,28 @@ function freshEvent(
   return { name, blockNumber, transactionIndex: 0, logIndex, transactionHash };
 }
 
-test("fresh-stack classifier allows configuration and post-controller collateral activity", () => {
+test("fresh-policy classifier allows configuration events", () => {
   assert.doesNotThrow(() =>
     lane37Module.classifyFreshStackActivity({
-      controllerInitialized: true,
       policyEvents: [freshEvent("DisputeProtectionEnabledUpdated", 120, 0)],
-      vaultEvents: [
-        freshEvent("StakeDeposited", 130, 0),
-        freshEvent("TakerAuthorizationUpdated", 131, 0),
-        freshEvent("StakeOwnerSelected", 131, 1),
-        freshEvent("StakeWithdrawn", 140, 0),
-      ],
-      totalStaked: 1_000_000,
-      totalClaimable: 0,
     })
   );
 });
 
-test("fresh-stack classifier ignores collateral event history and gates only on pre-controller state", () => {
-  const vaultEvents = [
-    freshEvent("TakerAuthorizationUpdated", 90, 0),
-    freshEvent("StakeOwnerSelected", 91, 0),
-    freshEvent("StakeDeposited", 92, 0),
-    freshEvent("StakeWithdrawn", 93, 0),
-  ];
-  assert.doesNotThrow(() =>
-    lane37Module.classifyFreshStackActivity({
-      controllerInitialized: false,
-      policyEvents: [],
-      vaultEvents,
-      totalStaked: 0,
-      totalClaimable: 0,
-    })
-  );
-  assert.throws(
-    () =>
-      lane37Module.classifyFreshStackActivity({
-        controllerInitialized: false,
-        policyEvents: [],
-        vaultEvents,
-        totalStaked: 1,
-        totalClaimable: 0,
-      }),
-    /totalStaked must be zero before controller initialization/
-  );
-  assert.doesNotThrow(() =>
-    lane37Module.classifyFreshStackActivity({
-      controllerInitialized: true,
-      policyEvents: [],
-      vaultEvents,
-      totalStaked: 1_000_000,
-      totalClaimable: 0,
-    })
-  );
-});
-
-test("fresh-stack classifier rejects lifecycle, lock, and claim activity in either phase", () => {
+test("fresh-policy classifier rejects every lifecycle event", () => {
   for (const name of lane37Module.FORBIDDEN_POLICY_LIFECYCLE_EVENTS) {
     assert.throws(
       () =>
         lane37Module.classifyFreshStackActivity({
-          controllerInitialized: true,
           policyEvents: [freshEvent(name, 150, 0)],
-          vaultEvents: [],
-          totalStaked: 0,
-          totalClaimable: 0,
         }),
       new RegExp(name)
     );
   }
-  for (const name of lane37Module.FORBIDDEN_VAULT_LOCK_EVENTS) {
-    for (const controllerInitialized of [false, true]) {
-      assert.throws(
-        () =>
-          lane37Module.classifyFreshStackActivity({
-            controllerInitialized,
-            policyEvents: [],
-            vaultEvents: [freshEvent(name, 150, 0)],
-            totalStaked: 0,
-            totalClaimable: 0,
-          }),
-        new RegExp(name)
-      );
-    }
-  }
-  assert.throws(
-    () =>
-      lane37Module.classifyFreshStackActivity({
-        controllerInitialized: true,
-        policyEvents: [],
-        vaultEvents: [],
-        totalStaked: 0,
-        totalClaimable: 5,
-      }),
-    /totalClaimable must be zero/
-  );
 });
 
-test("fresh-stack event lists partition every policy and vault ABI event exactly once", () => {
-  /** @param {"DisputeProtectionPolicy" | "StakeVault"} name */
-  const artifactEvents = (name) =>
+test("fresh-policy event lists partition the policy ABI exactly once", () => {
+  const artifactEvents =
     /** @type {{ abi: Array<{ type: string, name: string }> }} */ (
       JSON.parse(
         readFileSync(
@@ -973,7 +961,9 @@ test("fresh-stack event lists partition every policy and vault ABI event exactly
             repositoryRoot,
             "artifacts",
             "contracts",
-            ...ARTIFACT_PATHS[name]
+            "hooks",
+            "DisputeProtectionPolicy.sol",
+            "DisputeProtectionPolicy.json"
           ),
           "utf8"
         )
@@ -982,43 +972,22 @@ test("fresh-stack event lists partition every policy and vault ABI event exactly
       .filter((entry) => entry.type === "event")
       .map((entry) => entry.name)
       .sort();
-  const ARTIFACT_PATHS = {
-    DisputeProtectionPolicy: [
-      "hooks",
-      "DisputeProtectionPolicy.sol",
-      "DisputeProtectionPolicy.json",
-    ],
-    StakeVault: ["StakeVault.sol", "StakeVault.json"],
-  };
   const policyLists = [
     lane37Module.ALLOWED_POLICY_CONFIGURATION_EVENTS,
     lane37Module.EXPECTED_POLICY_GOVERNANCE_EVENTS,
     lane37Module.FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
   ];
-  const vaultLists = [
-    lane37Module.ALLOWED_VAULT_COLLATERAL_EVENTS,
-    lane37Module.EXPECTED_VAULT_GOVERNANCE_EVENTS,
-    lane37Module.FORBIDDEN_VAULT_LOCK_EVENTS,
-  ];
-  for (const [
-    artifact,
-    lists,
-  ] of /** @type {Array<["DisputeProtectionPolicy" | "StakeVault", ReadonlyArray<readonly string[]>]>} */ ([
-    ["DisputeProtectionPolicy", policyLists],
-    ["StakeVault", vaultLists],
-  ])) {
-    const classified = lists.flat();
-    assert.equal(
-      new Set(classified).size,
-      classified.length,
-      `${artifact} lists overlap`
-    );
-    assert.deepEqual(
-      [...classified].sort(),
-      artifactEvents(artifact),
-      `${artifact} ABI events are not all classified`
-    );
-  }
+  const classified = policyLists.flat();
+  assert.equal(
+    new Set(classified).size,
+    classified.length,
+    "policy lists overlap"
+  );
+  assert.deepEqual(
+    [...classified].sort(),
+    artifactEvents,
+    "policy ABI events are not all classified"
+  );
   assert.deepEqual(
     [...lane37Module.ALLOWED_POLICY_CONFIGURATION_EVENTS],
     ["DisputeProtectionEnabledUpdated"]
@@ -1033,60 +1002,47 @@ test("fresh-stack event lists partition every policy and vault ABI event exactly
       "DisputeResolved",
     ]
   );
-  assert.deepEqual(
-    [...lane37Module.ALLOWED_VAULT_COLLATERAL_EVENTS],
-    [
-      "StakeDeposited",
-      "StakeWithdrawn",
-      "TakerAuthorizationUpdated",
-      "StakeOwnerSelected",
-    ]
-  );
-  assert.deepEqual(
-    [...lane37Module.FORBIDDEN_VAULT_LOCK_EVENTS],
-    [
-      "StakeLocked",
-      "LockFunded",
-      "StakeLockIncreased",
-      "StakeLockResized",
-      "StakeUnlocked",
-      "StakeLockResolved",
-      "ClaimCreated",
-      "ClaimWithdrawn",
-    ]
-  );
 });
 
-test("fresh-stack classifier fails closed on an unclassified event", () => {
+test("fresh-policy classifier allows every governance event", () => {
+  for (const name of lane37Module.EXPECTED_POLICY_GOVERNANCE_EVENTS) {
+    assert.doesNotThrow(() =>
+      lane37Module.classifyFreshStackActivity({
+        policyEvents: [freshEvent(name, 100, 0)],
+      })
+    );
+  }
+});
+
+test("fresh-policy classifier fails closed on an unclassified event", () => {
   assert.throws(
     () =>
       lane37Module.classifyFreshStackActivity({
-        controllerInitialized: true,
         policyEvents: [freshEvent("SomeFutureEvent", 101, 0)],
-        vaultEvents: [],
-        totalStaked: 0,
-        totalClaimable: 0,
       }),
     /unclassified.*SomeFutureEvent/
   );
 });
 
 test("decodeFreshStackLogs maps raw logs to named events and rejects unknown topics", () => {
-  const vaultInterface = new ethersLibrary.utils.Interface(
+  const policyInterface = new ethersLibrary.utils.Interface(
     JSON.parse(
       readFileSync(
         join(
           repositoryRoot,
           "artifacts",
           "contracts",
-          "StakeVault.sol",
-          "StakeVault.json"
+          "hooks",
+          "DisputeProtectionPolicy.sol",
+          "DisputeProtectionPolicy.json"
         ),
         "utf8"
       )
     ).abi
   );
-  const depositTopic = vaultInterface.getEventTopic("StakeDeposited");
+  const configurationTopic = policyInterface.getEventTopic(
+    "DisputeProtectionEnabledUpdated"
+  );
   /**
    * @param {string} topic
    * @param {number} blockNumber
@@ -1112,13 +1068,13 @@ test("decodeFreshStackLogs maps raw logs to named events and rejects unknown top
     removed: false,
   });
   const decoded = lane37Module.decodeFreshStackLogs(
-    vaultInterface,
-    [rawLog(depositTopic, 7, 3, 5, "0x" + "ee".repeat(32))],
-    "StakeVaultMethodScoped"
+    policyInterface,
+    [rawLog(configurationTopic, 7, 3, 5, "0x" + "ee".repeat(32))],
+    "DisputeProtectionPolicyMethodScoped"
   );
   assert.deepEqual(decoded, [
     {
-      name: "StakeDeposited",
+      name: "DisputeProtectionEnabledUpdated",
       blockNumber: 7,
       transactionIndex: 3,
       logIndex: 5,
@@ -1128,10 +1084,10 @@ test("decodeFreshStackLogs maps raw logs to named events and rejects unknown top
   assert.throws(
     () =>
       lane37Module.decodeFreshStackLogs(
-        vaultInterface,
+        policyInterface,
         [rawLog("0x" + "ff".repeat(32), 7, 0, 0, "0x" + "ee".repeat(32))],
-        "StakeVaultMethodScoped"
+        "DisputeProtectionPolicyMethodScoped"
       ),
-    /StakeVaultMethodScoped emitted a log this ABI cannot decode/
+    /DisputeProtectionPolicyMethodScoped emitted a log this ABI cannot decode/
   );
 });
