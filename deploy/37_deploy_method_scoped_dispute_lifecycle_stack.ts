@@ -158,7 +158,7 @@ export type FreshStackEvent = {
 };
 
 export type FreshStackInput = {
-  controllerInitialized: FreshStackEvent | null;
+  controllerInitialized: boolean;
   policyEvents: FreshStackEvent[];
   vaultEvents: FreshStackEvent[];
   totalStaked: BigNumberish;
@@ -213,16 +213,6 @@ export const FORBIDDEN_VAULT_LOCK_EVENTS = [
   "ClaimWithdrawn",
 ] as const;
 
-function eventOrder(event: FreshStackEvent): [number, number, number] {
-  return [event.blockNumber, event.transactionIndex, event.logIndex];
-}
-
-function isBefore(left: FreshStackEvent, right: FreshStackEvent): boolean {
-  const [lb, lt, ll] = eventOrder(left);
-  const [rb, rt, rl] = eventOrder(right);
-  return lb !== rb ? lb < rb : lt !== rt ? lt < rt : ll < rl;
-}
-
 function includes(list: readonly string[], name: string): boolean {
   return list.includes(name);
 }
@@ -249,16 +239,10 @@ export function classifyFreshStackActivity(input: FreshStackInput): void {
         `Fresh StakeVaultMethodScoped has lock or claim activity: ${event.name} in ${event.transactionHash}`
       );
     }
-    if (includes(ALLOWED_VAULT_COLLATERAL_EVENTS, event.name)) {
-      if (
-        !input.controllerInitialized ||
-        isBefore(event, input.controllerInitialized)
-      ) {
-        throw new Error(
-          `StakeVaultMethodScoped received collateral activity before controller initialization (${event.name} in ${event.transactionHash}); the lane cannot initialize the controller and must be superseded`
-        );
-      }
-    } else if (!includes(EXPECTED_VAULT_GOVERNANCE_EVENTS, event.name)) {
+    if (
+      !includes(ALLOWED_VAULT_COLLATERAL_EVENTS, event.name) &&
+      !includes(EXPECTED_VAULT_GOVERNANCE_EVENTS, event.name)
+    ) {
       throw new Error(
         `StakeVaultMethodScoped emitted an unclassified event: ${event.name} in ${event.transactionHash}`
       );
@@ -274,7 +258,7 @@ export function classifyFreshStackActivity(input: FreshStackInput): void {
     !ethers.BigNumber.from(input.totalStaked).isZero()
   ) {
     throw new Error(
-      "StakeVaultMethodScoped totalStaked must be zero before controller initialization"
+      "StakeVaultMethodScoped totalStaked must be zero before controller initialization; withdraw the stake (or wait for the staker to) before resuming"
     );
   }
 }
@@ -489,7 +473,7 @@ async function assertFreshStackUnused(
 ): Promise<void> {
   const [vaultDeployment, policyDeployment] = deployments;
   const latestBlock = await ethers.provider.getBlockNumber();
-  let controllerInitialized: FreshStackEvent | null = null;
+  let controllerInitialized = false;
   let vaultEvents: FreshStackEvent[] = [];
   let totalStaked: BigNumberish = 0;
   let totalClaimable: BigNumberish = 0;
@@ -524,7 +508,7 @@ async function assertFreshStackUnused(
         "StakeVaultMethodScoped emitted more than one ControllerInitialized event"
       );
     }
-    controllerInitialized = controllerEvents[0] ?? null;
+    controllerInitialized = controllerEvents.length === 1;
   }
 
   let policyEvents: FreshStackEvent[] = [];

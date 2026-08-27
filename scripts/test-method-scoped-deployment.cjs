@@ -798,10 +798,9 @@ function freshEvent(
 }
 
 test("fresh-stack classifier allows configuration and post-controller collateral activity", () => {
-  const controllerInitialized = freshEvent("ControllerInitialized", 100, 0);
   assert.doesNotThrow(() =>
     lane37Module.classifyFreshStackActivity({
-      controllerInitialized,
+      controllerInitialized: true,
       policyEvents: [freshEvent("DisputeProtectionEnabledUpdated", 120, 0)],
       vaultEvents: [
         freshEvent("StakeDeposited", 130, 0),
@@ -815,29 +814,41 @@ test("fresh-stack classifier allows configuration and post-controller collateral
   );
 });
 
-test("fresh-stack classifier rejects stake before controller initialization by transaction hash", () => {
-  const offending = "0x" + "cd".repeat(32);
-  assert.throws(
-    () =>
-      lane37Module.classifyFreshStackActivity({
-        controllerInitialized: freshEvent("ControllerInitialized", 100, 0),
-        policyEvents: [],
-        vaultEvents: [freshEvent("StakeDeposited", 99, 3, offending)],
-        totalStaked: 1,
-        totalClaimable: 0,
-      }),
-    new RegExp(`before controller initialization.*${offending}`)
+test("fresh-stack classifier ignores collateral event history and gates only on pre-controller state", () => {
+  const vaultEvents = [
+    freshEvent("TakerAuthorizationUpdated", 90, 0),
+    freshEvent("StakeOwnerSelected", 91, 0),
+    freshEvent("StakeDeposited", 92, 0),
+    freshEvent("StakeWithdrawn", 93, 0),
+  ];
+  assert.doesNotThrow(() =>
+    lane37Module.classifyFreshStackActivity({
+      controllerInitialized: false,
+      policyEvents: [],
+      vaultEvents,
+      totalStaked: 0,
+      totalClaimable: 0,
+    })
   );
   assert.throws(
     () =>
       lane37Module.classifyFreshStackActivity({
-        controllerInitialized: null,
+        controllerInitialized: false,
         policyEvents: [],
-        vaultEvents: [],
+        vaultEvents,
         totalStaked: 1,
         totalClaimable: 0,
       }),
     /totalStaked must be zero before controller initialization/
+  );
+  assert.doesNotThrow(() =>
+    lane37Module.classifyFreshStackActivity({
+      controllerInitialized: true,
+      policyEvents: [],
+      vaultEvents,
+      totalStaked: 1_000_000,
+      totalClaimable: 0,
+    })
   );
 });
 
@@ -846,7 +857,7 @@ test("fresh-stack classifier rejects lifecycle, lock, and claim activity in eith
     assert.throws(
       () =>
         lane37Module.classifyFreshStackActivity({
-          controllerInitialized: freshEvent("ControllerInitialized", 100, 0),
+          controllerInitialized: true,
           policyEvents: [freshEvent(name, 150, 0)],
           vaultEvents: [],
           totalStaked: 0,
@@ -856,10 +867,7 @@ test("fresh-stack classifier rejects lifecycle, lock, and claim activity in eith
     );
   }
   for (const name of lane37Module.FORBIDDEN_VAULT_LOCK_EVENTS) {
-    for (const controllerInitialized of [
-      null,
-      freshEvent("ControllerInitialized", 100, 0),
-    ]) {
+    for (const controllerInitialized of [false, true]) {
       assert.throws(
         () =>
           lane37Module.classifyFreshStackActivity({
@@ -876,7 +884,7 @@ test("fresh-stack classifier rejects lifecycle, lock, and claim activity in eith
   assert.throws(
     () =>
       lane37Module.classifyFreshStackActivity({
-        controllerInitialized: freshEvent("ControllerInitialized", 100, 0),
+        controllerInitialized: true,
         policyEvents: [],
         vaultEvents: [],
         totalStaked: 0,
@@ -980,59 +988,17 @@ test("fresh-stack event lists partition every policy and vault ABI event exactly
   );
 });
 
-test("fresh-stack classifier fails closed on an unclassified event and orders same-block events by index", () => {
+test("fresh-stack classifier fails closed on an unclassified event", () => {
   assert.throws(
     () =>
       lane37Module.classifyFreshStackActivity({
-        controllerInitialized: freshEvent("ControllerInitialized", 100, 0),
+        controllerInitialized: true,
         policyEvents: [freshEvent("SomeFutureEvent", 101, 0)],
         vaultEvents: [],
         totalStaked: 0,
         totalClaimable: 0,
       }),
     /unclassified.*SomeFutureEvent/
-  );
-  // Same block: a deposit at a lower logIndex than ControllerInitialized is pre-controller; a higher one is allowed.
-  const controllerInitialized = {
-    ...freshEvent("ControllerInitialized", 100, 2),
-    transactionIndex: 1,
-  };
-  assert.throws(
-    () =>
-      lane37Module.classifyFreshStackActivity({
-        controllerInitialized,
-        policyEvents: [],
-        vaultEvents: [
-          { ...freshEvent("StakeDeposited", 100, 1), transactionIndex: 1 },
-        ],
-        totalStaked: 1,
-        totalClaimable: 0,
-      }),
-    /before controller initialization/
-  );
-  assert.throws(
-    () =>
-      lane37Module.classifyFreshStackActivity({
-        controllerInitialized,
-        policyEvents: [],
-        vaultEvents: [
-          { ...freshEvent("StakeDeposited", 100, 9), transactionIndex: 0 },
-        ],
-        totalStaked: 1,
-        totalClaimable: 0,
-      }),
-    /before controller initialization/
-  );
-  assert.doesNotThrow(() =>
-    lane37Module.classifyFreshStackActivity({
-      controllerInitialized,
-      policyEvents: [],
-      vaultEvents: [
-        { ...freshEvent("StakeDeposited", 100, 3), transactionIndex: 1 },
-      ],
-      totalStaked: 1,
-      totalClaimable: 0,
-    })
   );
 });
 
