@@ -23,6 +23,7 @@
     "deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts",
     "deploy/36_deploy_method_scoped_whitelist_policy.ts",
     "deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts",
+    "deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts",
     "deploy/deploy_summary.ts",
     "packages/contracts/scripts/extractors/abis.ts",
     "packages/contracts/scripts/extractors/addresses.ts",

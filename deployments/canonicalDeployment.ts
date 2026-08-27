@@ -50,10 +50,11 @@ export async function assertDeploymentMatchesChain(
   hre: HardhatRuntimeEnvironment,
   deployment: Deployment,
   deploymentName: string,
-  artifactName: string
+  artifactName: string,
+  blockTag?: string | number
 ): Promise<void> {
   const artifact = await hre.deployments.getExtendedArtifact(artifactName);
-  const code = await hre.ethers.provider.getCode(deployment.address);
+  const code = await hre.ethers.provider.getCode(deployment.address, blockTag);
   const deployedBytecode = deployment.deployedBytecode;
   if (code === "0x" || typeof deployedBytecode !== "string") {
     throw new Error(
@@ -88,16 +89,18 @@ export async function assertCanonicalDeployment(
   hre: HardhatRuntimeEnvironment,
   deployment: Deployment,
   deploymentName: string,
-  artifactName: string
+  artifactName: string,
+  blockTag?: string | number
 ): Promise<void> {
   await assertDeploymentMatchesChain(
     hre,
     deployment,
     deploymentName,
-    artifactName
+    artifactName,
+    blockTag
   );
   const artifact = await hre.deployments.getExtendedArtifact(artifactName);
-  const code = await hre.ethers.provider.getCode(deployment.address);
+  const code = await hre.ethers.provider.getCode(deployment.address, blockTag);
   if (
     typeof deployment.deployedBytecode !== "string" ||
     typeof deployment.solcInputHash !== "string" ||

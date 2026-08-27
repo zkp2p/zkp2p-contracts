@@ -22,7 +22,8 @@ const {
 const { tmpdir } = require("node:os");
 const { basename, join } = require("node:path");
 const { test } = require("node:test");
-const { BigNumber } = require("ethers");
+const { BigNumber, utils } = require("ethers");
+const { readFileSync: readTextFileSync } = require("node:fs");
 
 const {
   ACTIVATION_INTERFACES,
@@ -978,4 +979,637 @@ test("assertSafeArtifactPairConsistent parses and verifies the transaction hash"
     () => assertSafeArtifactPairConsistent(batchPath, sidecarPath),
     /incomplete artifact pair/
   );
+});
+
+test("lane 38 exports its identity, flags, stubs, and no dependencies", () => {
+  const lane = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  assert.deepEqual([...lane.SUPPORTED_NETWORKS], ["base_staging", "base"]);
+  assert.equal(lane.TAG, "38_activate_method_scoped_dispute_lifecycle_stack");
+  assert.deepEqual(lane.default.tags, [
+    "38_activate_method_scoped_dispute_lifecycle_stack",
+    "V3DisputeMethodScopedActivation",
+  ]);
+  assert.deepEqual(lane.default.dependencies, []);
+  assert.equal(
+    lane.FLAGS.stagingPrepare,
+    "PREPARE_STAGING_V3_DISPUTE_METHOD_SCOPED_ACTIVATION"
+  );
+  assert.equal(
+    lane.FLAGS.stagingExecute,
+    "ENABLE_STAGING_V3_DISPUTE_METHOD_SCOPED_ACTIVATION"
+  );
+  assert.equal(
+    lane.FLAGS.baseRotationPrepare,
+    "ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_ROTATION_PREPARATION"
+  );
+  assert.equal(
+    lane.FLAGS.baseCutoverPrepare,
+    "ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_CUTOVER_PREPARATION"
+  );
+  assert.equal(
+    lane.FLAGS.baseReleaseMatured,
+    "ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_RELEASE_MATURED"
+  );
+  assert.equal(
+    lane.FLAGS.confirmActivation("base_staging"),
+    "CONFIRM_STAGING_V3_DISPUTE_METHOD_SCOPED_ACTIVATION"
+  );
+  assert.equal(
+    lane.FLAGS.confirmDownstreamReady("base"),
+    "CONFIRM_BASE_V3_DISPUTE_METHOD_SCOPED_DOWNSTREAM_READY"
+  );
+  assert.equal(
+    lane.FLAGS.releaseReadySha,
+    "CONFIRM_BASE_V3_DISPUTE_METHOD_SCOPED_RELEASE_READY_SHA"
+  );
+  assert.throws(
+    () => lane.prepareBaseRotationBatch(/** @type {any} */ ({})),
+    /not implemented until Task 4/
+  );
+  assert.throws(
+    () => lane.prepareBaseCutoverBatch(/** @type {any} */ ({})),
+    /not implemented until Task 4/
+  );
+  assert.throws(
+    () => lane.deployActivationContract(/** @type {any} */ ({}), "Guard", []),
+    /not implemented until Task 4/
+  );
+  assert.throws(
+    () => lane.runPinnedSimulation(/** @type {any} */ ({}), "rpc"),
+    /not implemented until Task 4/
+  );
+});
+
+test("deploy summary includes both lane 38 tags without a dependency chain", () => {
+  const summary = readTextFileSync("deploy/deploy_summary.ts", "utf8");
+  assert.match(summary, /38_activate_method_scoped_dispute_lifecycle_stack/);
+  assert.match(summary, /V3DisputeMethodScopedActivation/);
+  const tsconfig = JSON.parse(
+    readTextFileSync("tsconfig.dispute-deployment.json", "utf8")
+  );
+  assert.ok(
+    tsconfig.files.includes(
+      "deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts"
+    )
+  );
+});
+
+test("lane 38 skip rejects unsafe selection before any chain read", async () => {
+  const lane = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  const envNames = [
+    "DEPLOY_ACTIVE_TAG",
+    lane.FLAGS.stagingPrepare,
+    lane.FLAGS.stagingExecute,
+    lane.FLAGS.baseRotationPrepare,
+    lane.FLAGS.baseCutoverPrepare,
+    lane.FLAGS.baseReleaseMatured,
+  ];
+  const saved = Object.fromEntries(
+    envNames.map((name) => [name, process.env[name]])
+  );
+  const skip = lane.default.skip;
+  assert.ok(skip);
+  /** @param {string} network */
+  const hre = (network) =>
+    /** @type {any} */ ({
+      deployments: { getNetworkName: () => network },
+      ethers: {
+        provider: new Proxy(
+          {},
+          {
+            get: () => () => {
+              throw new Error("unexpected chain read");
+            },
+          }
+        ),
+      },
+    });
+  try {
+    for (const name of envNames) delete process.env[name];
+    assert.equal(await skip(hre("sepolia")), true);
+    assert.equal(await skip(hre("localhost")), true);
+    process.env.DEPLOY_ACTIVE_TAG = lane.TAG;
+    await assert.rejects(
+      skip(hre("hardhat")),
+      /no predecessor stack on local networks/
+    );
+    delete process.env.DEPLOY_ACTIVE_TAG;
+    assert.equal(await skip(hre("base")), true);
+    process.env[lane.FLAGS.baseRotationPrepare] = "true";
+    await assert.rejects(skip(hre("base")), /DEPLOY_ACTIVE_TAG/);
+  } finally {
+    for (const name of envNames) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+  }
+});
+
+test("canonical and predecessor helpers thread an optional block tag", async () => {
+  const {
+    assertCanonicalDeployment,
+    assertDeploymentMatchesChain,
+  } = require("../deployments/canonicalDeployment.ts");
+  const {
+    assertHistoricalDisputeStack,
+  } = require("../deployments/predecessorDisputeStack.ts");
+  const code = "0x6000";
+  const deployment = {
+    address: address(500),
+    abi: [],
+    deployedBytecode: code,
+    solcInputHash: hash(500),
+  };
+  /** @type {Array<[string, string | number | undefined]>} */
+  const calls = [];
+  const canonicalHre = /** @type {any} */ ({
+    deployments: {
+      getExtendedArtifact: async () => ({
+        deployedBytecode: code,
+        solcInputHash: deployment.solcInputHash,
+        evm: { deployedBytecode: { immutableReferences: {} } },
+      }),
+    },
+    ethers: {
+      provider: {
+        /** @param {string} target @param {string | number | undefined} blockTag */
+        getCode: async (target, blockTag) => {
+          calls.push([target, blockTag]);
+          return code;
+        },
+      },
+    },
+  });
+  await assertDeploymentMatchesChain(
+    canonicalHre,
+    deployment,
+    "Example",
+    "Example",
+    123
+  );
+  await assertCanonicalDeployment(
+    canonicalHre,
+    deployment,
+    "Example",
+    "Example",
+    "0xabc"
+  );
+  assert.deepEqual(calls, [
+    [deployment.address, 123],
+    [deployment.address, "0xabc"],
+    [deployment.address, "0xabc"],
+  ]);
+
+  /** @type {Array<[string, string | number | undefined]>} */
+  const historicalCalls = [];
+  const historicalHre = {
+    deployments: {
+      getNetworkName: () => "base_staging",
+      /** @param {string} name */
+      get: async (name) => require(`../deployments/base_staging/${name}.json`),
+    },
+    ethers: {
+      provider: {
+        /** @param {string} target @param {string | number | undefined} blockTag */
+        getCode: async (target, blockTag) => {
+          historicalCalls.push([target, blockTag]);
+          return "0x";
+        },
+      },
+    },
+  };
+  await assert.rejects(
+    assertHistoricalDisputeStack(historicalHre, undefined, 456),
+    /runtime bytecode hash mismatch/
+  );
+  assert.equal(historicalCalls[0][1], 456);
+});
+
+test("readActivationSnapshot pins every read and decodes both policy event signatures", async () => {
+  const lane = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  const {
+    EXPECTED_LIVE,
+    getRiskWindowPaymentMethods,
+  } = require("../deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts");
+  const {
+    METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS,
+  } = require("../deployments/predecessorDisputeStack.ts");
+  const {
+    DISPUTABLE_PAYMENT_METHODS,
+    DISPUTE_RISK_WINDOW,
+  } = require("../deployments/parameters.ts");
+  const compiledPolicy = require("../artifacts/contracts/hooks/DisputeProtectionPolicy.sol/DisputeProtectionPolicy.json");
+  const predecessorRecord = require("../deployments/base_staging/DisputeProtectionPolicy.json");
+  const predecessor = METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS.base_staging;
+  const live = EXPECTED_LIVE.base_staging;
+  const deployer = live.deployer.toLowerCase();
+  const escrow = address(600);
+  const whitelistPolicy = address(601);
+  const freshPolicy = address(602);
+  const freshHook = address(603);
+  const thirdHook = address(604);
+  const blockTag = 20777;
+  const blockHash = hash(blockTag);
+  const paymentMethods = getRiskWindowPaymentMethods("base_staging");
+  const riskWindows = Object.fromEntries(
+    paymentMethods.map((method) => [
+      utils.keccak256(utils.toUtf8Bytes(method)).toLowerCase(),
+      DISPUTABLE_PAYMENT_METHODS.includes(method)
+        ? DISPUTE_RISK_WINDOW.base_staging.toString()
+        : "0",
+    ])
+  );
+  const listedMethod = utils
+    .keccak256(utils.toUtf8Bytes("paypal"))
+    .toLowerCase();
+  const intentHash = hash(700);
+  const predecessorInterface = new utils.Interface(predecessorRecord.abi);
+  const successorInterface = new utils.Interface(compiledPolicy.abi);
+
+  /**
+   * @param {utils.Interface} iface
+   * @param {string} eventName
+   * @param {unknown[]} args
+   * @param {string} emitter
+   * @param {number} blockNumber
+   * @param {number} logIndex
+   */
+  function rawLog(iface, eventName, args, emitter, blockNumber, logIndex) {
+    const encoded = iface.encodeEventLog(iface.getEvent(eventName), args);
+    return {
+      address: emitter,
+      topics: encoded.topics,
+      data: encoded.data,
+      blockNumber,
+      transactionIndex: 0,
+      logIndex,
+      transactionHash: hash(800 + logIndex),
+      blockHash: hash(blockNumber),
+      removed: false,
+    };
+  }
+
+  const logs = [
+    rawLog(
+      predecessorInterface,
+      "DisputeProtectionIntentOpened",
+      [
+        intentHash,
+        address(701),
+        address(702),
+        address(703),
+        listedMethod,
+        "5",
+        "100",
+      ],
+      predecessor.contracts.DisputeProtectionPolicy.address,
+      120,
+      1
+    ),
+    rawLog(
+      successorInterface,
+      "DisputeProtectionEnabledUpdated",
+      [escrow, "0", listedMethod, true],
+      freshPolicy,
+      130,
+      2
+    ),
+    rawLog(
+      predecessorInterface,
+      "DisputeProtectionEnabledUpdated",
+      [escrow, "0", false],
+      predecessor.contracts.DisputeProtectionPolicy.address,
+      140,
+      3
+    ),
+    rawLog(
+      successorInterface,
+      "LifecycleHookAuthorizationUpdated",
+      [freshHook, true],
+      freshPolicy,
+      150,
+      4
+    ),
+    rawLog(
+      successorInterface,
+      "LifecycleHookAuthorizationUpdated",
+      [thirdHook, true],
+      freshPolicy,
+      151,
+      5
+    ),
+    rawLog(
+      successorInterface,
+      "LifecycleHookAuthorizationUpdated",
+      [thirdHook, false],
+      freshPolicy,
+      152,
+      6
+    ),
+  ];
+  assert.notEqual(
+    predecessorInterface.getEventTopic("DisputeProtectionEnabledUpdated"),
+    successorInterface.getEventTopic("DisputeProtectionEnabledUpdated")
+  );
+
+  /** @param {Record<string, unknown>} methods */
+  const taggedContract = (methods) =>
+    new Proxy(
+      {},
+      {
+        /** @param {object} _target @param {string} property */
+        get(_target, property) {
+          if (property === "then") return undefined;
+          /** @param {unknown[]} args */
+          return async (...args) => {
+            const override = args.at(-1);
+            assert.deepEqual(override, { blockTag });
+            const value = methods[property];
+            return typeof value === "function"
+              ? value(...args.slice(0, -1))
+              : value;
+          };
+        },
+      }
+    );
+
+  const contracts = new Map();
+  contracts.set(
+    freshPolicy.toLowerCase(),
+    taggedContract({
+      owner: deployer,
+      pendingOwner: ZERO,
+      admissionsPaused: false,
+      disputeVerifier: predecessor.contracts.DisputeVerifier.address,
+      disputeNullifierRegistry:
+        predecessor.contracts.DisputeNullifierRegistry.address,
+      stakeVault: predecessor.contracts.StakeVault.address,
+      /** @param {string} method */
+      getRiskWindow: (method) => BigNumber.from(riskWindows[method]),
+      isDisputeProtectionEnabled: false,
+    })
+  );
+  contracts.set(
+    predecessor.contracts.DisputeProtectionPolicy.address.toLowerCase(),
+    taggedContract({
+      owner: deployer,
+      pendingOwner: ZERO,
+      admissionsPaused: false,
+      disputeVerifier: predecessor.contracts.DisputeVerifier.address,
+      disputeNullifierRegistry:
+        predecessor.contracts.DisputeNullifierRegistry.address,
+      getDisputeProtectionIntent: { status: 4 },
+    })
+  );
+  contracts.set(
+    predecessor.contracts.DisputeVerifier.address.toLowerCase(),
+    taggedContract({
+      owner: deployer,
+      pendingOwner: ZERO,
+      attestationVerifier: live.attestationVerifier,
+      nullifierRegistry: live.nullifierRegistryV2,
+    })
+  );
+  contracts.set(
+    predecessor.contracts.StakeVault.address.toLowerCase(),
+    taggedContract({
+      owner: deployer,
+      pendingOwner: ZERO,
+      controller: predecessor.contracts.DisputeProtectionPolicy.address,
+      pendingController: ZERO,
+      pendingControllerValidAt: BigNumber.from(0),
+      controllerChangeDelay: BigNumber.from(172800),
+      stakeToken: live.stakeToken,
+      locks: [address(701), BigNumber.from(0), BigNumber.from(0)],
+    })
+  );
+  contracts.set(
+    predecessor.contracts.DisputeNullifierRegistry.address.toLowerCase(),
+    taggedContract({
+      owner: deployer,
+      getWriters: [predecessor.contracts.DisputeProtectionPolicy.address],
+    })
+  );
+  contracts.set(
+    live.orchestrator.toLowerCase(),
+    taggedContract({
+      owner: deployer,
+      paused: false,
+      lifecycleHook: predecessor.activeLifecycleHook.address,
+      escrowRegistry: live.escrowRegistry,
+      paymentVerifierRegistry: live.paymentVerifierRegistry,
+      relayerRegistry: live.relayerRegistry,
+      protocolFee: BigNumber.from(0),
+      protocolFeeRecipient: live.protocolFeeRecipient,
+      allowMultipleIntents: false,
+    })
+  );
+  contracts.set(
+    live.orchestratorRegistry.toLowerCase(),
+    taggedContract({ isOrchestrator: true })
+  );
+  contracts.set(
+    freshHook.toLowerCase(),
+    taggedContract({
+      orchestratorRegistry: live.orchestratorRegistry,
+      whitelistPolicy,
+      disputeProtectionPolicy: freshPolicy,
+    })
+  );
+  contracts.set(
+    whitelistPolicy.toLowerCase(),
+    taggedContract({
+      owner: deployer,
+      escrowRegistry: live.escrowRegistry,
+      groupRegistry: live.addressGroupRegistry,
+      orchestratorRegistry: live.orchestratorRegistry,
+    })
+  );
+  contracts.set(
+    live.attestationVerifier.toLowerCase(),
+    taggedContract({
+      owner: deployer,
+      requiredSignatures: BigNumber.from(1),
+      witnesses: live.attestationWitnesses,
+    })
+  );
+  contracts.set(
+    escrow.toLowerCase(),
+    taggedContract({
+      depositCounter: BigNumber.from(1),
+      getDeposit: {
+        depositor: address(900),
+        token: live.stakeToken,
+      },
+      getDepositPaymentMethods: [listedMethod],
+    })
+  );
+
+  /** @type {Record<string, any>} */
+  const records = {
+    EscrowV2: { address: escrow, abi: [], receipt: { blockNumber: 100 } },
+    WhitelistPolicyMethodScoped: {
+      address: whitelistPolicy,
+      abi: [],
+      receipt: { blockNumber: 100 },
+    },
+    DisputeProtectionPolicyMethodScoped: {
+      address: freshPolicy,
+      abi: compiledPolicy.abi,
+      receipt: { blockNumber: 100 },
+    },
+    IntentLifecycleHookV1MethodScoped: {
+      address: freshHook,
+      abi: [],
+      receipt: { blockNumber: 100 },
+    },
+    DisputeProtectionPolicy: {
+      ...predecessorRecord,
+      receipt: { ...predecessorRecord.receipt, blockNumber: 100 },
+    },
+  };
+  /** @type {any[]} */
+  const logQueries = [];
+  const provider = {
+    /** @param {string | number} requestedTag */
+    getBlock: async (requestedTag) => {
+      assert.equal(requestedTag, blockTag);
+      return { number: blockTag, hash: blockHash, timestamp: 1000 };
+    },
+    /** @param {any} filter */
+    getLogs: async (filter) => {
+      logQueries.push(filter);
+      assert.ok(Number.isSafeInteger(filter.fromBlock));
+      assert.ok(Number.isSafeInteger(filter.toBlock));
+      assert.ok(filter.toBlock - filter.fromBlock < 10000);
+      return logs.filter((log) => {
+        if (log.address.toLowerCase() !== filter.address.toLowerCase())
+          return false;
+        if (
+          log.blockNumber < filter.fromBlock ||
+          log.blockNumber > filter.toBlock
+        )
+          return false;
+        return (filter.topics || []).every(
+          /** @param {string | null} topic @param {number} index */
+          (topic, index) => topic == null || log.topics[index] === topic
+        );
+      });
+    },
+  };
+  const hre = /** @type {any} */ ({
+    getUnnamedAccounts: async () => [deployer],
+    deployments: {
+      /** @param {string} name */
+      getOrNull: async (name) => records[name] || null,
+      /** @param {string} name */
+      getExtendedArtifact: async (name) => {
+        assert.equal(name, "DisputeProtectionPolicy");
+        return compiledPolicy;
+      },
+    },
+    ethers: {
+      provider,
+      BigNumber,
+      utils,
+      /** @param {unknown} _artifact @param {string} target */
+      getContractAt: async (_artifact, target) => {
+        const contract = contracts.get(target.toLowerCase());
+        if (!contract) throw new Error(`unexpected contract ${target}`);
+        return contract;
+      },
+    },
+  });
+  const result = await lane.readActivationSnapshot(
+    hre,
+    "base_staging",
+    blockTag
+  );
+  assert.equal(result.blockNumber, blockTag);
+  assert.equal(result.lockProof.intents[0].intentHash, intentHash);
+  assert.equal(result.lockProof.intents[0].classification, "terminal");
+  assert.deepEqual(result.freshPolicy.authorizedHooks, [freshHook]);
+  assert.deepEqual(result.inventory.tuples, [
+    {
+      escrow,
+      depositId: "0",
+      paymentMethod: listedMethod,
+      sources: ["predecessor-opt-out"],
+    },
+  ]);
+  assert.equal(result.inventory.ok, true);
+  assert.ok(logQueries.some((query) => query.fromBlock >= 10000));
+  assert.equal(
+    lane.expectedActivationState("base_staging").addresses.freshPolicy,
+    freshPolicy
+  );
+});
+
+test("staging advance accepts the controller wait but rejects a two-step jump", () => {
+  const {
+    assertStagingAdvance,
+  } = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  /** @type {import("../deployments/methodScopedActivation").ActivationReduction} */
+  const before = {
+    phase: "rotation-proposed",
+    nextStagingAction: "propose-controller",
+    waiting: null,
+    violations: [],
+  };
+  assert.doesNotThrow(() =>
+    assertStagingAdvance(before, {
+      phase: "rotation-proposed",
+      nextStagingAction: null,
+      waiting: { reason: "controller-delay", earliestChangeAt: "100" },
+      violations: [],
+    })
+  );
+  assert.throws(
+    () =>
+      assertStagingAdvance(before, {
+        phase: "rotation-proposed",
+        nextStagingAction: "add-fresh-writer",
+        waiting: null,
+        violations: [],
+      }),
+    /exactly one step/
+  );
+});
+
+test("staging flags are mutually exclusive and confirmations fail in order", async () => {
+  const lane = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  const names = [
+    lane.FLAGS.stagingPrepare,
+    lane.FLAGS.stagingExecute,
+    lane.FLAGS.confirmActivation("base_staging"),
+    lane.FLAGS.confirmDownstreamReady("base_staging"),
+  ];
+  const saved = Object.fromEntries(
+    names.map((name) => [name, process.env[name]])
+  );
+  const hre = /** @type {any} */ ({});
+  try {
+    for (const name of names) delete process.env[name];
+    process.env[lane.FLAGS.stagingPrepare] = "true";
+    process.env[lane.FLAGS.stagingExecute] = "true";
+    await assert.rejects(
+      lane.prepareOrExecuteStagingActivation(hre),
+      /Set exactly one/
+    );
+    delete process.env[lane.FLAGS.stagingExecute];
+    await assert.rejects(
+      lane.prepareOrExecuteStagingActivation(hre),
+      new RegExp(lane.FLAGS.confirmActivation("base_staging"))
+    );
+    process.env[lane.FLAGS.confirmActivation("base_staging")] = "true";
+    await assert.rejects(
+      lane.prepareOrExecuteStagingActivation(hre),
+      new RegExp(lane.FLAGS.confirmDownstreamReady("base_staging"))
+    );
+  } finally {
+    for (const name of names) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+  }
 });

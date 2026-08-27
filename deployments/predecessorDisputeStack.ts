@@ -7,7 +7,7 @@ type HistoricalRuntimeEnvironment = {
   };
   ethers: {
     provider: {
-      getCode(address: string): Promise<string>;
+      getCode(address: string, blockTag?: string | number): Promise<string>;
     };
   };
 };
@@ -195,7 +195,8 @@ export function findPinnedLifecycleHookRuntimeHash(
 
 export async function assertHistoricalDisputeStack(
   hre: HistoricalRuntimeEnvironment,
-  stacks: Record<string, HistoricalDisputeStack> = PREDECESSOR_DISPUTE_STACKS
+  stacks: Record<string, HistoricalDisputeStack> = PREDECESSOR_DISPUTE_STACKS,
+  blockTag?: string | number
 ): Promise<void> {
   const network = hre.deployments.getNetworkName();
   if (network === "localhost" || network === "hardhat") return;
@@ -222,7 +223,10 @@ export async function assertHistoricalDisputeStack(
         `${name} predecessor deployment bytecode hash mismatch on ${network}`
       );
     }
-    const runtimeCode = await hre.ethers.provider.getCode(expected.address);
+    const runtimeCode = await hre.ethers.provider.getCode(
+      expected.address,
+      blockTag
+    );
     if (
       runtimeCode === "0x" ||
       ethers.utils.keccak256(runtimeCode) !== expected.runtimeCodeHash
