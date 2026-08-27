@@ -781,3 +781,322 @@ test("summary and package wiring expose only the current deployment lanes", () =
     false
   );
 });
+
+/**
+ * @param {string} name
+ * @param {number} blockNumber
+ * @param {number} logIndex
+ * @param {string} [transactionHash]
+ */
+function freshEvent(
+  name,
+  blockNumber,
+  logIndex,
+  transactionHash = "0x" + "ab".repeat(32)
+) {
+  return { name, blockNumber, transactionIndex: 0, logIndex, transactionHash };
+}
+
+test("fresh-stack classifier allows configuration and post-controller collateral activity", () => {
+  const controllerInitialized = freshEvent("ControllerInitialized", 100, 0);
+  assert.doesNotThrow(() =>
+    lane37Module.classifyFreshStackActivity({
+      controllerInitialized,
+      policyEvents: [freshEvent("DisputeProtectionEnabledUpdated", 120, 0)],
+      vaultEvents: [
+        freshEvent("StakeDeposited", 130, 0),
+        freshEvent("TakerAuthorizationUpdated", 131, 0),
+        freshEvent("StakeOwnerSelected", 131, 1),
+        freshEvent("StakeWithdrawn", 140, 0),
+      ],
+      totalStaked: 1_000_000,
+      totalClaimable: 0,
+    })
+  );
+});
+
+test("fresh-stack classifier rejects stake before controller initialization by transaction hash", () => {
+  const offending = "0x" + "cd".repeat(32);
+  assert.throws(
+    () =>
+      lane37Module.classifyFreshStackActivity({
+        controllerInitialized: freshEvent("ControllerInitialized", 100, 0),
+        policyEvents: [],
+        vaultEvents: [freshEvent("StakeDeposited", 99, 3, offending)],
+        totalStaked: 1,
+        totalClaimable: 0,
+      }),
+    new RegExp(`before controller initialization.*${offending}`)
+  );
+  assert.throws(
+    () =>
+      lane37Module.classifyFreshStackActivity({
+        controllerInitialized: null,
+        policyEvents: [],
+        vaultEvents: [],
+        totalStaked: 1,
+        totalClaimable: 0,
+      }),
+    /totalStaked must be zero before controller initialization/
+  );
+});
+
+test("fresh-stack classifier rejects lifecycle, lock, and claim activity in either phase", () => {
+  for (const name of lane37Module.FORBIDDEN_POLICY_LIFECYCLE_EVENTS) {
+    assert.throws(
+      () =>
+        lane37Module.classifyFreshStackActivity({
+          controllerInitialized: freshEvent("ControllerInitialized", 100, 0),
+          policyEvents: [freshEvent(name, 150, 0)],
+          vaultEvents: [],
+          totalStaked: 0,
+          totalClaimable: 0,
+        }),
+      new RegExp(name)
+    );
+  }
+  for (const name of lane37Module.FORBIDDEN_VAULT_LOCK_EVENTS) {
+    for (const controllerInitialized of [
+      null,
+      freshEvent("ControllerInitialized", 100, 0),
+    ]) {
+      assert.throws(
+        () =>
+          lane37Module.classifyFreshStackActivity({
+            controllerInitialized,
+            policyEvents: [],
+            vaultEvents: [freshEvent(name, 150, 0)],
+            totalStaked: 0,
+            totalClaimable: 0,
+          }),
+        new RegExp(name)
+      );
+    }
+  }
+  assert.throws(
+    () =>
+      lane37Module.classifyFreshStackActivity({
+        controllerInitialized: freshEvent("ControllerInitialized", 100, 0),
+        policyEvents: [],
+        vaultEvents: [],
+        totalStaked: 0,
+        totalClaimable: 5,
+      }),
+    /totalClaimable must be zero/
+  );
+});
+
+test("fresh-stack event lists partition every policy and vault ABI event exactly once", () => {
+  /** @param {"DisputeProtectionPolicy" | "StakeVault"} name */
+  const artifactEvents = (name) =>
+    /** @type {{ abi: Array<{ type: string, name: string }> }} */ (
+      JSON.parse(
+        readFileSync(
+          join(
+            repositoryRoot,
+            "artifacts",
+            "contracts",
+            ...ARTIFACT_PATHS[name]
+          ),
+          "utf8"
+        )
+      )
+    ).abi
+      .filter((entry) => entry.type === "event")
+      .map((entry) => entry.name)
+      .sort();
+  const ARTIFACT_PATHS = {
+    DisputeProtectionPolicy: [
+      "hooks",
+      "DisputeProtectionPolicy.sol",
+      "DisputeProtectionPolicy.json",
+    ],
+    StakeVault: ["StakeVault.sol", "StakeVault.json"],
+  };
+  const policyLists = [
+    lane37Module.ALLOWED_POLICY_CONFIGURATION_EVENTS,
+    lane37Module.EXPECTED_POLICY_GOVERNANCE_EVENTS,
+    lane37Module.FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
+  ];
+  const vaultLists = [
+    lane37Module.ALLOWED_VAULT_COLLATERAL_EVENTS,
+    lane37Module.EXPECTED_VAULT_GOVERNANCE_EVENTS,
+    lane37Module.FORBIDDEN_VAULT_LOCK_EVENTS,
+  ];
+  for (const [
+    artifact,
+    lists,
+  ] of /** @type {Array<["DisputeProtectionPolicy" | "StakeVault", ReadonlyArray<readonly string[]>]>} */ ([
+    ["DisputeProtectionPolicy", policyLists],
+    ["StakeVault", vaultLists],
+  ])) {
+    const classified = lists.flat();
+    assert.equal(
+      new Set(classified).size,
+      classified.length,
+      `${artifact} lists overlap`
+    );
+    assert.deepEqual(
+      [...classified].sort(),
+      artifactEvents(artifact),
+      `${artifact} ABI events are not all classified`
+    );
+  }
+  assert.deepEqual(
+    [...lane37Module.ALLOWED_POLICY_CONFIGURATION_EVENTS],
+    ["DisputeProtectionEnabledUpdated"]
+  );
+  assert.deepEqual(
+    [...lane37Module.FORBIDDEN_POLICY_LIFECYCLE_EVENTS],
+    [
+      "DisputeProtectionIntentOpened",
+      "DisputeProtectionIntentCancelled",
+      "DisputeProtectionIntentSettled",
+      "DisputeProtectionIntentReleased",
+      "DisputeResolved",
+    ]
+  );
+  assert.deepEqual(
+    [...lane37Module.ALLOWED_VAULT_COLLATERAL_EVENTS],
+    [
+      "StakeDeposited",
+      "StakeWithdrawn",
+      "TakerAuthorizationUpdated",
+      "StakeOwnerSelected",
+    ]
+  );
+  assert.deepEqual(
+    [...lane37Module.FORBIDDEN_VAULT_LOCK_EVENTS],
+    [
+      "StakeLocked",
+      "LockFunded",
+      "StakeLockIncreased",
+      "StakeLockResized",
+      "StakeUnlocked",
+      "StakeLockResolved",
+      "ClaimCreated",
+      "ClaimWithdrawn",
+    ]
+  );
+});
+
+test("fresh-stack classifier fails closed on an unclassified event and orders same-block events by index", () => {
+  assert.throws(
+    () =>
+      lane37Module.classifyFreshStackActivity({
+        controllerInitialized: freshEvent("ControllerInitialized", 100, 0),
+        policyEvents: [freshEvent("SomeFutureEvent", 101, 0)],
+        vaultEvents: [],
+        totalStaked: 0,
+        totalClaimable: 0,
+      }),
+    /unclassified.*SomeFutureEvent/
+  );
+  // Same block: a deposit at a lower logIndex than ControllerInitialized is pre-controller; a higher one is allowed.
+  const controllerInitialized = {
+    ...freshEvent("ControllerInitialized", 100, 2),
+    transactionIndex: 1,
+  };
+  assert.throws(
+    () =>
+      lane37Module.classifyFreshStackActivity({
+        controllerInitialized,
+        policyEvents: [],
+        vaultEvents: [
+          { ...freshEvent("StakeDeposited", 100, 1), transactionIndex: 1 },
+        ],
+        totalStaked: 1,
+        totalClaimable: 0,
+      }),
+    /before controller initialization/
+  );
+  assert.throws(
+    () =>
+      lane37Module.classifyFreshStackActivity({
+        controllerInitialized,
+        policyEvents: [],
+        vaultEvents: [
+          { ...freshEvent("StakeDeposited", 100, 9), transactionIndex: 0 },
+        ],
+        totalStaked: 1,
+        totalClaimable: 0,
+      }),
+    /before controller initialization/
+  );
+  assert.doesNotThrow(() =>
+    lane37Module.classifyFreshStackActivity({
+      controllerInitialized,
+      policyEvents: [],
+      vaultEvents: [
+        { ...freshEvent("StakeDeposited", 100, 3), transactionIndex: 1 },
+      ],
+      totalStaked: 1,
+      totalClaimable: 0,
+    })
+  );
+});
+
+test("decodeFreshStackLogs maps raw logs to named events and rejects unknown topics", () => {
+  const vaultInterface = new ethersLibrary.utils.Interface(
+    JSON.parse(
+      readFileSync(
+        join(
+          repositoryRoot,
+          "artifacts",
+          "contracts",
+          "StakeVault.sol",
+          "StakeVault.json"
+        ),
+        "utf8"
+      )
+    ).abi
+  );
+  const depositTopic = vaultInterface.getEventTopic("StakeDeposited");
+  /**
+   * @param {string} topic
+   * @param {number} blockNumber
+   * @param {number} transactionIndex
+   * @param {number} logIndex
+   * @param {string} transactionHash
+   */
+  const rawLog = (
+    topic,
+    blockNumber,
+    transactionIndex,
+    logIndex,
+    transactionHash
+  ) => ({
+    address: "0x" + "11".repeat(20),
+    topics: [topic],
+    data: "0x",
+    blockNumber,
+    transactionIndex,
+    logIndex,
+    transactionHash,
+    blockHash: "0x" + "22".repeat(32),
+    removed: false,
+  });
+  const decoded = lane37Module.decodeFreshStackLogs(
+    vaultInterface,
+    [rawLog(depositTopic, 7, 3, 5, "0x" + "ee".repeat(32))],
+    "StakeVaultMethodScoped"
+  );
+  assert.deepEqual(decoded, [
+    {
+      name: "StakeDeposited",
+      blockNumber: 7,
+      transactionIndex: 3,
+      logIndex: 5,
+      transactionHash: "0x" + "ee".repeat(32),
+    },
+  ]);
+  assert.throws(
+    () =>
+      lane37Module.decodeFreshStackLogs(
+        vaultInterface,
+        [rawLog("0x" + "ff".repeat(32), 7, 0, 0, "0x" + "ee".repeat(32))],
+        "StakeVaultMethodScoped"
+      ),
+    /StakeVaultMethodScoped emitted a log this ABI cannot decode/
+  );
+});
