@@ -30,6 +30,7 @@
     "scripts/simulate-dispute-opt-in-safe-batch.ts",
     "scripts/verify-dispute-opt-in-safe-batch.ts",
     "scripts/active-dispute-stack.spec.cjs",
+    "scripts/bootstrapWhitelistPolicy.ts",
     "scripts/test-dispute-lifecycle-deployment.cjs",
     "scripts/test-method-scoped-deployment.cjs",
     "scripts/test-opt-in-dispute-lifecycle-deployment.cjs",

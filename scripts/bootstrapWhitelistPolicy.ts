@@ -659,7 +659,7 @@ export function buildSafeBatch(
       description:
         `Bootstrap configured whitelist groups for ${pendingTargetCount} eligible deposit/payment-method tuples `
         + `on chain ${chainId}. `
-        + `WhitelistPolicy ${normalizedPolicy}; policy owner Safe ${normalizedSafe}. `
+        + `WhitelistPolicyMethodScoped ${normalizedPolicy}; policy owner Safe ${normalizedSafe}. `
         + "Generated unsigned; review, sign, and submit separately.",
       txBuilderVersion: "1.16.5",
       createdFromSafeAddress: normalizedSafe,
