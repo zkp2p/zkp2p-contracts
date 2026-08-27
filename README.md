@@ -779,20 +779,23 @@ explicitly ratified chargebackable-platform set.
 `yarn whitelist:bootstrap` discovers active deposits from a configurable raw GraphQL endpoint and
 selects only deposits with an active Venmo, Cash App, or PayPal payment method. It deduplicates the
 matching rows by deposit and payment method and simulates canonical `bootstrapDeposits` batches against the
-lane-36 `WhitelistPolicyMethodScoped` record for the explicitly supplied PRO, PLUS, Peer Pay, and Peer Makers
-group IDs. It refuses the lane-29 deposit-scoped policy address and fails closed on a network whose
+lane-36 `WhitelistPolicyMethodScoped` record for the ordered, non-empty, distinct group list supplied through
+`WHITELIST_GROUP_IDS`. It refuses the lane-29 deposit-scoped policy address and fails closed on a network whose
 `WhitelistPolicyMethodScoped` artifact does not exist yet. It imports no indexer
 schema package, so the contracts and indexer packages remain acyclic. Discovery is a dry-run by
 default; mutation and Safe output require both the exact expected deposit count and the printed
-selection digest, and all discovery modes enforce a configurable maximum.
+selection digest, which bind the eligible onchain-filtered set and the ordered group IDs. Withdrawn deposits and
+inactive payment-method rows are skipped and reported; the count, digest, and generated batches cover only eligible
+tuples. All discovery modes enforce a configurable maximum.
 
 - Staging execution requires `BOOTSTRAP_EXECUTE=true` and the current policy owner's private key.
 - Production Safe preparation requires `BOOTSTRAP_SAFE_OUTPUT_FILE`; it emits unsigned Transaction
   Builder JSON owned by the policy's onchain owner, and never signs or submits it.
 - Direct execution and Safe output are mutually exclusive. Every batch is simulated and its calldata
   decoded and checked before either execution or file output.
-- Base execution is pinned to the canonical production indexer, deployment artifacts, and exact four
-  production group IDs. It also requires `BOOTSTRAP_CONFIRM_PRODUCTION=true`.
+- Base execution is pinned to the canonical production indexer and deployment artifacts, and every configured
+  group ID must be one of the known production groups recorded by the Base `AddressGroupRegistry`. It also requires
+  `BOOTSTRAP_CONFIRM_PRODUCTION=true`.
 - `BOOTSTRAP_ALLOW_COMPLETED=true` resumes only batches whose deposit/payment-method tuples are still enabled and
   contain every requested group. The script rechecks policy ownership before each submitted batch.
 - Direct execution uses the receipt RPC for confirmation and bounded post-receipt state reads. It computes
