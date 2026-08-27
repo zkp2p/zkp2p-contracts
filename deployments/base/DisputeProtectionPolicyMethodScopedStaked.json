@@ -1,0 +1,1517 @@
+{
+  "address": "0xbF4B769dB70DBEc89b6b2c44988304a7aD2de4Fc",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_owner",
+          "type": "address"
+        },
+        {
+          "internalType": "contract IStakeVault",
+          "name": "_stakeVault",
+          "type": "address"
+        },
+        {
+          "internalType": "contract IDisputeVerifier",
+          "name": "_disputeVerifier",
+          "type": "address"
+        },
+        {
+          "internalType": "contract INullifierRegistry",
+          "name": "_disputeNullifierRegistry",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [],
+      "name": "AdmissionsPaused",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "DisputeProtectionIntentAlreadyExists",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "enum IDisputeProtectionPolicy.DisputeProtectionIntentStatus",
+          "name": "status",
+          "type": "uint8"
+        }
+      ],
+      "name": "DisputeProtectionIntentNotPending",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint64",
+          "name": "releaseEligibleAt",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "currentTime",
+          "type": "uint64"
+        }
+      ],
+      "name": "DisputeProtectionIntentNotReleaseEligible",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "enum IDisputeProtectionPolicy.DisputeProtectionIntentStatus",
+          "name": "status",
+          "type": "uint8"
+        }
+      ],
+      "name": "DisputeProtectionIntentNotSettled",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "paymentMethod",
+          "type": "bytes32"
+        }
+      ],
+      "name": "DisputeProtectionNotEnabled",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "expectedToken",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "actualToken",
+          "type": "address"
+        }
+      ],
+      "name": "IntentTokenMismatch",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "dependency",
+          "type": "address"
+        }
+      ],
+      "name": "InvalidContract",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint64",
+          "name": "riskWindow",
+          "type": "uint64"
+        }
+      ],
+      "name": "InvalidRiskWindow",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        }
+      ],
+      "name": "NotDepositor",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "OwnershipRenunciationDisabled",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "timestamp",
+          "type": "uint256"
+        }
+      ],
+      "name": "TimestampOverflow",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        }
+      ],
+      "name": "UnauthorizedLifecycleHook",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroAddress",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "isPaused",
+          "type": "bool"
+        }
+      ],
+      "name": "AdmissionsPausedUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "escrow",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "depositId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "isDisputeProtectionEnabled",
+          "type": "bool"
+        }
+      ],
+      "name": "DisputeProtectionEnabledUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "stakeOwner",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "releasedAmount",
+          "type": "uint256"
+        }
+      ],
+      "name": "DisputeProtectionIntentCancelled",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "stakeOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "depositor",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "taker",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "riskWindow",
+          "type": "uint64"
+        }
+      ],
+      "name": "DisputeProtectionIntentOpened",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "stakeOwner",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "releasedAmount",
+          "type": "uint256"
+        }
+      ],
+      "name": "DisputeProtectionIntentReleased",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "stakeOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "depositor",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "releaseAmount",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "releaseEligibleAt",
+          "type": "uint64"
+        },
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "isManualRelease",
+          "type": "bool"
+        }
+      ],
+      "name": "DisputeProtectionIntentSettled",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "intentHash",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "stakeOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "depositor",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "compensatedAmount",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "disputeId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "DisputeResolved",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousVerifier",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newVerifier",
+          "type": "address"
+        }
+      ],
+      "name": "DisputeVerifierUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "hook",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "isAuthorized",
+          "type": "bool"
+        }
+      ],
+      "name": "LifecycleHookAuthorizationUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferStarted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "riskWindow",
+          "type": "uint64"
+        }
+      ],
+      "name": "RiskWindowUpdated",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "MAX_RISK_WINDOW",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "",
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "PENDING_COVERAGE_MATURITY",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "",
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "acceptOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "acceptVaultController",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "admissionsPaused",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "disputeNullifierRegistry",
+      "outputs": [
+        {
+          "internalType": "contract INullifierRegistry",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "disputeVerifier",
+      "outputs": [
+        {
+          "internalType": "contract IDisputeVerifier",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_intentHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getDisputeProtectionIntent",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "address",
+              "name": "taker",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "stakeOwner",
+              "type": "address"
+            },
+            {
+              "internalType": "address",
+              "name": "depositor",
+              "type": "address"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "paymentMethod",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "enum IDisputeProtectionPolicy.DisputeProtectionIntentStatus",
+              "name": "status",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint64",
+              "name": "riskWindow",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint64",
+              "name": "releaseEligibleAt",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint256",
+              "name": "releaseAmount",
+              "type": "uint256"
+            }
+          ],
+          "internalType": "struct IDisputeProtectionPolicy.DisputeProtectionIntent",
+          "name": "",
+          "type": "tuple"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_paymentMethod",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getRiskWindow",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "",
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_paymentMethod",
+          "type": "bytes32"
+        }
+      ],
+      "name": "isDisputeProtectionEnabled",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_hook",
+          "type": "address"
+        }
+      ],
+      "name": "isLifecycleHookAuthorized",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_intentHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "onIntentCancelled",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_intentHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_releaseAmount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "_isManualRelease",
+          "type": "bool"
+        }
+      ],
+      "name": "onIntentSettled",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_intentHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "_taker",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "onIntentSignaled",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "pendingOwner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_intentHash",
+          "type": "bytes32"
+        }
+      ],
+      "name": "releaseMaturedDisputeProtectionIntent",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32[]",
+          "name": "_intentHashes",
+          "type": "bytes32[]"
+        }
+      ],
+      "name": "releaseMaturedDisputeProtectionIntents",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bool",
+          "name": "_isPaused",
+          "type": "bool"
+        }
+      ],
+      "name": "setAdmissionsPaused",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_escrow",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_depositId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "_paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bool",
+          "name": "_isEnabled",
+          "type": "bool"
+        }
+      ],
+      "name": "setDisputeProtectionEnabled",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_verifier",
+          "type": "address"
+        }
+      ],
+      "name": "setDisputeVerifier",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_hook",
+          "type": "address"
+        },
+        {
+          "internalType": "bool",
+          "name": "_isAuthorized",
+          "type": "bool"
+        }
+      ],
+      "name": "setLifecycleHookAuthorization",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "_paymentMethod",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "_riskWindow",
+          "type": "uint64"
+        }
+      ],
+      "name": "setRiskWindow",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "stakeVault",
+      "outputs": [
+        {
+          "internalType": "contract IStakeVault",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "bytes32",
+              "name": "intentHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "dataHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes[]",
+              "name": "signatures",
+              "type": "bytes[]"
+            },
+            {
+              "internalType": "bytes",
+              "name": "data",
+              "type": "bytes"
+            }
+          ],
+          "internalType": "struct IDisputeVerifier.DisputeAttestation",
+          "name": "_attestation",
+          "type": "tuple"
+        }
+      ],
+      "name": "submitDispute",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0x9c0bef1eb3671b1edf8363d0e6b35b8c56659a66d97808783445f8b8b8dddaf8",
+  "receipt": {
+    "to": null,
+    "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "contractAddress": "0xbF4B769dB70DBEc89b6b2c44988304a7aD2de4Fc",
+    "transactionIndex": 35,
+    "gasUsed": "1772412",
+    "logsBloom": "0x00000000000000000000000000000000000000000000004000800000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000020000000000000000000800000000000000000000000001000000400000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000020000000000000020000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "transactionHash": "0x9c0bef1eb3671b1edf8363d0e6b35b8c56659a66d97808783445f8b8b8dddaf8",
+    "logs": [
+      {
+        "transactionIndex": 35,
+        "blockNumber": 50537204,
+        "transactionHash": "0x9c0bef1eb3671b1edf8363d0e6b35b8c56659a66d97808783445f8b8b8dddaf8",
+        "address": "0xbF4B769dB70DBEc89b6b2c44988304a7aD2de4Fc",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x00000000000000000000000084e113087c97cd80ea9d78983d4b8ff61eca1929"
+        ],
+        "data": "0x",
+        "logIndex": 1117,
+        "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      {
+        "transactionIndex": 35,
+        "blockNumber": 50537204,
+        "transactionHash": "0x9c0bef1eb3671b1edf8363d0e6b35b8c56659a66d97808783445f8b8b8dddaf8",
+        "address": "0xbF4B769dB70DBEc89b6b2c44988304a7aD2de4Fc",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x00000000000000000000000084e113087c97cd80ea9d78983d4b8ff61eca1929",
+          "0x00000000000000000000000084e113087c97cd80ea9d78983d4b8ff61eca1929"
+        ],
+        "data": "0x",
+        "logIndex": 1118,
+        "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "blockNumber": 50537204,
+    "cumulativeGasUsed": "24026559",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [
+    "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "0x47c26258222e2f96424bD2B21bf173f0DA5034C7",
+    "0x30d4947f005653637005eed991005119D9eB2f34",
+    "0xA845615b5203F7a21321DdF5e3a1ca024D93a443"
+  ],
+  "numDeployments": 1,
+  "solcInputHash": "e92231251afd168f019cf92952f2a541",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_owner\",\"type\":\"address\"},{\"internalType\":\"contract IStakeVault\",\"name\":\"_stakeVault\",\"type\":\"address\"},{\"internalType\":\"contract IDisputeVerifier\",\"name\":\"_disputeVerifier\",\"type\":\"address\"},{\"internalType\":\"contract INullifierRegistry\",\"name\":\"_disputeNullifierRegistry\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"AdmissionsPaused\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"}],\"name\":\"DisputeProtectionIntentAlreadyExists\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"enum IDisputeProtectionPolicy.DisputeProtectionIntentStatus\",\"name\":\"status\",\"type\":\"uint8\"}],\"name\":\"DisputeProtectionIntentNotPending\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"releaseEligibleAt\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"currentTime\",\"type\":\"uint64\"}],\"name\":\"DisputeProtectionIntentNotReleaseEligible\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"enum IDisputeProtectionPolicy.DisputeProtectionIntentStatus\",\"name\":\"status\",\"type\":\"uint8\"}],\"name\":\"DisputeProtectionIntentNotSettled\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"}],\"name\":\"DisputeProtectionNotEnabled\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"expectedToken\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"actualToken\",\"type\":\"address\"}],\"name\":\"IntentTokenMismatch\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"dependency\",\"type\":\"address\"}],\"name\":\"InvalidContract\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"riskWindow\",\"type\":\"uint64\"}],\"name\":\"InvalidRiskWindow\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"}],\"name\":\"NotDepositor\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"OwnershipRenunciationDisabled\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"timestamp\",\"type\":\"uint256\"}],\"name\":\"TimestampOverflow\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"}],\"name\":\"UnauthorizedLifecycleHook\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAddress\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"isPaused\",\"type\":\"bool\"}],\"name\":\"AdmissionsPausedUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"escrow\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"depositId\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"isDisputeProtectionEnabled\",\"type\":\"bool\"}],\"name\":\"DisputeProtectionEnabledUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"stakeOwner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"releasedAmount\",\"type\":\"uint256\"}],\"name\":\"DisputeProtectionIntentCancelled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"stakeOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"depositor\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"riskWindow\",\"type\":\"uint64\"}],\"name\":\"DisputeProtectionIntentOpened\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"stakeOwner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"releasedAmount\",\"type\":\"uint256\"}],\"name\":\"DisputeProtectionIntentReleased\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"stakeOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"depositor\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"releaseAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"releaseEligibleAt\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"isManualRelease\",\"type\":\"bool\"}],\"name\":\"DisputeProtectionIntentSettled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"stakeOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"depositor\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"compensatedAmount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"disputeId\",\"type\":\"bytes32\"}],\"name\":\"DisputeResolved\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousVerifier\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newVerifier\",\"type\":\"address\"}],\"name\":\"DisputeVerifierUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"hook\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"isAuthorized\",\"type\":\"bool\"}],\"name\":\"LifecycleHookAuthorizationUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferStarted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"riskWindow\",\"type\":\"uint64\"}],\"name\":\"RiskWindowUpdated\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"MAX_RISK_WINDOW\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"PENDING_COVERAGE_MATURITY\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"acceptOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"acceptVaultController\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"admissionsPaused\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"disputeNullifierRegistry\",\"outputs\":[{\"internalType\":\"contract INullifierRegistry\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"disputeVerifier\",\"outputs\":[{\"internalType\":\"contract IDisputeVerifier\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_intentHash\",\"type\":\"bytes32\"}],\"name\":\"getDisputeProtectionIntent\",\"outputs\":[{\"components\":[{\"internalType\":\"address\",\"name\":\"taker\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"stakeOwner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"depositor\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"enum IDisputeProtectionPolicy.DisputeProtectionIntentStatus\",\"name\":\"status\",\"type\":\"uint8\"},{\"internalType\":\"uint64\",\"name\":\"riskWindow\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"releaseEligibleAt\",\"type\":\"uint64\"},{\"internalType\":\"uint256\",\"name\":\"releaseAmount\",\"type\":\"uint256\"}],\"internalType\":\"struct IDisputeProtectionPolicy.DisputeProtectionIntent\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_paymentMethod\",\"type\":\"bytes32\"}],\"name\":\"getRiskWindow\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"_paymentMethod\",\"type\":\"bytes32\"}],\"name\":\"isDisputeProtectionEnabled\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_hook\",\"type\":\"address\"}],\"name\":\"isLifecycleHookAuthorized\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_intentHash\",\"type\":\"bytes32\"}],\"name\":\"onIntentCancelled\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"_releaseAmount\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"_isManualRelease\",\"type\":\"bool\"}],\"name\":\"onIntentSettled\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"_taker\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"_paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"uint256\",\"name\":\"_amount\",\"type\":\"uint256\"}],\"name\":\"onIntentSignaled\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"pendingOwner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_intentHash\",\"type\":\"bytes32\"}],\"name\":\"releaseMaturedDisputeProtectionIntent\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"_intentHashes\",\"type\":\"bytes32[]\"}],\"name\":\"releaseMaturedDisputeProtectionIntents\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bool\",\"name\":\"_isPaused\",\"type\":\"bool\"}],\"name\":\"setAdmissionsPaused\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_escrow\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_depositId\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"_paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"bool\",\"name\":\"_isEnabled\",\"type\":\"bool\"}],\"name\":\"setDisputeProtectionEnabled\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_verifier\",\"type\":\"address\"}],\"name\":\"setDisputeVerifier\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_hook\",\"type\":\"address\"},{\"internalType\":\"bool\",\"name\":\"_isAuthorized\",\"type\":\"bool\"}],\"name\":\"setLifecycleHookAuthorization\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_paymentMethod\",\"type\":\"bytes32\"},{\"internalType\":\"uint64\",\"name\":\"_riskWindow\",\"type\":\"uint64\"}],\"name\":\"setRiskWindow\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"stakeVault\",\"outputs\":[{\"internalType\":\"contract IStakeVault\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"components\":[{\"internalType\":\"bytes32\",\"name\":\"intentHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes32\",\"name\":\"dataHash\",\"type\":\"bytes32\"},{\"internalType\":\"bytes[]\",\"name\":\"signatures\",\"type\":\"bytes[]\"},{\"internalType\":\"bytes\",\"name\":\"data\",\"type\":\"bytes\"}],\"internalType\":\"struct IDisputeVerifier.DisputeAttestation\",\"name\":\"_attestation\",\"type\":\"tuple\"}],\"name\":\"submitDispute\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"details\":\"The policy owns no tokens. StakeVault is the source of truth for collateral locks, a dedicated `disputeNullifierRegistry` deployment is the source of truth for consumed dispute nullifiers, and the calling Orchestrator is the source of truth for valid escrows and intents. TRUST: Dispute protection intents are keyed by intent hash, which embeds the originating orchestrator (OrchestratorV3 hashes its own address into every intent hash), so identities do not collide across orchestrators. Lifecycle entrypoints trust every orchestrator admitted by OrchestratorRegistry to invoke callbacks only for intents it created and already validated against its EscrowRegistry. Registering an orchestrator is therefore a governance assertion about its callback behavior. Governance must authorize a lifecycle hook here before configuring it on an Orchestrator. Predecessor hooks must remain authorized until all intents snapshotted to them have been cancelled or settled. Likewise, an orchestrator must be drained before it is removed from OrchestratorRegistry. This policy must also drain every active dispute protection intent before StakeVault controller authority moves to a replacement policy unless that replacement explicitly adopts this policy's intent and lock state.\",\"kind\":\"dev\",\"methods\":{\"acceptOwnership()\":{\"details\":\"The new owner accepts the ownership transfer.\"},\"acceptVaultController()\":{\"details\":\"Before replacing another policy, governance must drain its active dispute protection intents or execute an explicit state-and-lock migration. Accepting controller authority alone cannot import the predecessor's intent state.\"},\"constructor\":{\"details\":\"After deployment, authorize this policy as the StakeVault controller and as a writer on the dedicated dispute nullifier registry before enabling deposits.\",\"params\":{\"_disputeNullifierRegistry\":\"Dedicated registry that rejects reused dispute nullifiers.\",\"_disputeVerifier\":\"Verifier for signed dispute evidence.\",\"_owner\":\"Governance owner for policy and dependency configuration.\",\"_stakeVault\":\"Vault holding and locking taker collateral.\"}},\"getDisputeProtectionIntent(bytes32)\":{\"params\":{\"_intentHash\":\"Intent whose dispute protection state is queried.\"}},\"getRiskWindow(bytes32)\":{\"params\":{\"_paymentMethod\":\"Payment method whose configured risk window is queried.\"}},\"isDisputeProtectionEnabled(address,uint256,bytes32)\":{\"details\":\"True when the depositor has not opted the tuple out and the payment method has a nonzero risk window. Performs no validation: any escrow, any deposit id (including nonexistent ones), and any payment method with a nonzero window read true.\",\"params\":{\"_depositId\":\"Deposit whose payment-method-specific configuration is queried.\",\"_escrow\":\"Escrow containing the deposit.\",\"_paymentMethod\":\"Payment method whose dispute protection configuration is queried.\"}},\"isLifecycleHookAuthorized(address)\":{\"params\":{\"_hook\":\"Lifecycle hook whose callback authorization is queried.\"}},\"onIntentCancelled(bytes32)\":{\"details\":\"Missing dispute protection intents are ignored because payment methods with no risk window create no policy state.\",\"params\":{\"_intentHash\":\"Intent being cancelled or pruned by the orchestrator.\"}},\"onIntentSettled(bytes32,uint256,bool)\":{\"details\":\"Missing dispute protection intents are ignored. The snapshotted risk window determines when collateral becomes release-eligible; it does not invalidate dispute evidence until release actually executes.\",\"params\":{\"_intentHash\":\"Intent completed by proof-based fulfillment or manual release.\",\"_isManualRelease\":\"Whether the depositor used the manual-release path without an on-chain payment proof.\",\"_releaseAmount\":\"Amount released from Escrow before protocol, referral, and manager fees.\"}},\"onIntentSignaled(bytes32,address,uint256,address,bytes32,uint256)\":{\"details\":\"Called only by an authorized lifecycle hook. A zero configured risk window is an unrestricted pass-through for this direct policy callback; the canonical lifecycle hook never calls this function for a zero-window payment method and applies the whitelist instead. It creates no dispute protection intent. Otherwise the call validates deposit configuration and token compatibility, snapshots the risk configuration, and locks the taker's selected stake.\",\"params\":{\"_amount\":\"Full on-chain intent amount initially locked as collateral.\",\"_depositId\":\"Deposit supplying the intent liquidity.\",\"_escrow\":\"Escrow that owns the intent and deposit.\",\"_intentHash\":\"Unique intent identifier assigned by the calling orchestrator.\",\"_paymentMethod\":\"Payment method selected for the off-chain payment.\",\"_taker\":\"Account that signaled the intent.\"}},\"owner()\":{\"details\":\"Returns the address of the current owner.\"},\"pendingOwner()\":{\"details\":\"Returns the address of the pending owner.\"},\"releaseMaturedDisputeProtectionIntent(bytes32)\":{\"details\":\"Disputes remain valid after `releaseEligibleAt` until this release transaction executes.\",\"params\":{\"_intentHash\":\"Settled dispute protection intent whose collateral should be unlocked.\"}},\"releaseMaturedDisputeProtectionIntents(bytes32[])\":{\"details\":\"The batch is atomic: one invalid or ineligible intent reverts every release in the call.\",\"params\":{\"_intentHashes\":\"Settled dispute protection intents whose collateral should be unlocked.\"}},\"setAdmissionsPaused(bool)\":{\"details\":\"It rejects every non-whitelisted taker on every non-opted-out deposit payment method with a nonzero risk window. Whitelisted takers return from the lifecycle hook before this policy is reached, and payment methods with a zero risk window return before the pause check. Explicitly opted-out deposit payment methods and zero-window payment methods never reach this policy and stay gated by the whitelist or open. Cancellation, settlement, release, and dispute submission remain available while admissions are paused.\",\"params\":{\"_isPaused\":\"Whether new dispute protection admissions should revert.\"}},\"setDisputeProtectionEnabled(address,uint256,bytes32,bool)\":{\"details\":\"Protection is enabled by default on every payment method with a nonzero risk window; passing false opts the tuple out and true undoes the opt-out. The requested value is emitted as-is; the effective state also depends on the payment method's current risk window. OrchestratorV3 validates Escrow registration before signaling an intent; this policy only verifies that the caller is the deposit's current depositor.\",\"params\":{\"_depositId\":\"Deposit whose payment-method-specific configuration is updated.\",\"_escrow\":\"Escrow containing the deposit.\",\"_isEnabled\":\"Whether non-whitelisted takers may use stake-backed dispute protection on this payment method; false opts out.\",\"_paymentMethod\":\"Payment method whose dispute protection configuration is updated.\"}},\"setDisputeVerifier(address)\":{\"params\":{\"_verifier\":\"New non-zero deployed dispute verifier.\"}},\"setLifecycleHookAuthorization(address,bool)\":{\"details\":\"Authorize a hook before configuring it on an Orchestrator. Revoke a predecessor only after every intent snapshotted to it has been cancelled or settled.\",\"params\":{\"_hook\":\"Lifecycle hook whose callback authority is updated.\",\"_isAuthorized\":\"Whether the hook may mutate dispute protection intent state.\"}},\"setRiskWindow(bytes32,uint64)\":{\"details\":\"A zero window means the payment method is never routed through dispute protection: the lifecycle hook then applies the deposit's whitelist (rejecting non-members when it is enabled) or admits openly when it is disabled. Changing the window affects future admissions only; admitted intents keep their snapshotted window.\",\"params\":{\"_paymentMethod\":\"Payment method whose future risk window is updated.\",\"_riskWindow\":\"Minimum seconds collateral remains locked after settlement.\"}},\"submitDispute((bytes32,bytes32,bytes[],bytes))\":{\"details\":\"A settled intent remains disputable until its collateral release executes, even after `releaseEligibleAt`. The dedicated dispute nullifier registry atomically rejects replayed disputes.\",\"params\":{\"_attestation\":\"Signed dispute evidence for a settled intent.\"}},\"transferOwnership(address)\":{\"details\":\"Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one. Can only be called by the current owner.\"}},\"stateVariables\":{\"disputeProtectionIntentByIntentHash\":{\"details\":\"Dispute protection lifecycle state keyed by globally unique intent hash.\"},\"isDisputeProtectionDisabledByPaymentMethod\":{\"details\":\"Whether the depositor opted a deposit payment method out of default dispute protection.\"},\"isLifecycleHookAuthorizedByHook\":{\"details\":\"Lifecycle-hook authorization keyed by lifecycle hook address.\"},\"paymentMethodRiskWindow\":{\"details\":\"Minimum collateral lock window for each payment method.\"}},\"title\":\"DisputeProtectionPolicy\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"acceptVaultController()\":{\"notice\":\"GOVERNANCE ONLY: Accepts this policy as StakeVault's controller after its handover delay.\"},\"admissionsPaused()\":{\"notice\":\"Whether new dispute-protection admissions are paused. Terminal transitions remain available.\"},\"constructor\":{\"notice\":\"Creates a dispute protection policy over one StakeVault and one dedicated dispute-nullifier registry.\"},\"disputeNullifierRegistry()\":{\"notice\":\"Dedicated replay registry for payment-method-scoped dispute nullifiers.\"},\"disputeVerifier()\":{\"notice\":\"Verifier used to validate signed dispute evidence.\"},\"getDisputeProtectionIntent(bytes32)\":{\"notice\":\"Returns the stored dispute protection state for an intent.\"},\"getRiskWindow(bytes32)\":{\"notice\":\"Returns the risk window applied to future intents for a payment method.\"},\"isDisputeProtectionEnabled(address,uint256,bytes32)\":{\"notice\":\"Returns the effective stake-backed dispute protection state for a deposit payment method.\"},\"isLifecycleHookAuthorized(address)\":{\"notice\":\"Returns whether a lifecycle hook may mutate dispute protection intent state.\"},\"onIntentCancelled(bytes32)\":{\"notice\":\"Cancels a pending dispute protection intent and unlocks its collateral.\"},\"onIntentSettled(bytes32,uint256,bool)\":{\"notice\":\"Marks a pending dispute protection intent as settled and resizes its collateral.\"},\"onIntentSignaled(bytes32,address,uint256,address,bytes32,uint256)\":{\"notice\":\"Admits a newly signaled intent into dispute coverage when its payment method has a risk window.\"},\"releaseMaturedDisputeProtectionIntent(bytes32)\":{\"notice\":\"Releases collateral for one settled intent once its minimum risk window has elapsed.\"},\"releaseMaturedDisputeProtectionIntents(bytes32[])\":{\"notice\":\"Releases collateral for a batch of settled intents whose minimum risk windows have elapsed.\"},\"renounceOwnership()\":{\"notice\":\"Disables ownership renunciation so governed safety controls cannot become unreachable.\"},\"setAdmissionsPaused(bool)\":{\"notice\":\"GOVERNANCE ONLY: Pauses or resumes new dispute-protection admissions.\"},\"setDisputeProtectionEnabled(address,uint256,bytes32,bool)\":{\"notice\":\"DEPOSITOR ONLY: Updates dispute protection for one deposit payment method.\"},\"setDisputeVerifier(address)\":{\"notice\":\"GOVERNANCE ONLY: Replaces the verifier used for future dispute submissions.\"},\"setLifecycleHookAuthorization(address,bool)\":{\"notice\":\"GOVERNANCE ONLY: Authorizes or revokes one lifecycle hook.\"},\"setRiskWindow(bytes32,uint64)\":{\"notice\":\"GOVERNANCE ONLY: Sets the minimum collateral lock window for future intents of a payment method.\"},\"stakeVault()\":{\"notice\":\"Stake custody and lock accounting controlled by this policy.\"},\"submitDispute((bytes32,bytes32,bytes[],bytes))\":{\"notice\":\"Resolves valid dispute evidence into an immediately claimable depositor award.\"}},\"notice\":\"Deposit-and-payment-method-scoped, stake-backed dispute protection that is on by default for every payment method with a nonzero risk window and can be opted out per deposit payment method by the depositor.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/hooks/DisputeProtectionPolicy.sol\":\"DisputeProtectionPolicy\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"@openzeppelin/contracts/access/Ownable.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (access/Ownable.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"../utils/Context.sol\\\";\\n\\n/**\\n * @dev Contract module which provides a basic access control mechanism, where\\n * there is an account (an owner) that can be granted exclusive access to\\n * specific functions.\\n *\\n * By default, the owner account will be the one that deploys the contract. This\\n * can later be changed with {transferOwnership}.\\n *\\n * This module is used through inheritance. It will make available the modifier\\n * `onlyOwner`, which can be applied to your functions to restrict their use to\\n * the owner.\\n */\\nabstract contract Ownable is Context {\\n    address private _owner;\\n\\n    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);\\n\\n    /**\\n     * @dev Initializes the contract setting the deployer as the initial owner.\\n     */\\n    constructor() {\\n        _transferOwnership(_msgSender());\\n    }\\n\\n    /**\\n     * @dev Throws if called by any account other than the owner.\\n     */\\n    modifier onlyOwner() {\\n        _checkOwner();\\n        _;\\n    }\\n\\n    /**\\n     * @dev Returns the address of the current owner.\\n     */\\n    function owner() public view virtual returns (address) {\\n        return _owner;\\n    }\\n\\n    /**\\n     * @dev Throws if the sender is not the owner.\\n     */\\n    function _checkOwner() internal view virtual {\\n        require(owner() == _msgSender(), \\\"Ownable: caller is not the owner\\\");\\n    }\\n\\n    /**\\n     * @dev Leaves the contract without owner. It will not be possible to call\\n     * `onlyOwner` functions. Can only be called by the current owner.\\n     *\\n     * NOTE: Renouncing ownership will leave the contract without an owner,\\n     * thereby disabling any functionality that is only available to the owner.\\n     */\\n    function renounceOwnership() public virtual onlyOwner {\\n        _transferOwnership(address(0));\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Can only be called by the current owner.\\n     */\\n    function transferOwnership(address newOwner) public virtual onlyOwner {\\n        require(newOwner != address(0), \\\"Ownable: new owner is the zero address\\\");\\n        _transferOwnership(newOwner);\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Internal function without access restriction.\\n     */\\n    function _transferOwnership(address newOwner) internal virtual {\\n        address oldOwner = _owner;\\n        _owner = newOwner;\\n        emit OwnershipTransferred(oldOwner, newOwner);\\n    }\\n}\\n\",\"keccak256\":\"0xba43b97fba0d32eb4254f6a5a297b39a19a247082a02d6e69349e071e2946218\",\"license\":\"MIT\"},\"@openzeppelin/contracts/access/Ownable2Step.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (access/Ownable2Step.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"./Ownable.sol\\\";\\n\\n/**\\n * @dev Contract module which provides access control mechanism, where\\n * there is an account (an owner) that can be granted exclusive access to\\n * specific functions.\\n *\\n * By default, the owner account will be the one that deploys the contract. This\\n * can later be changed with {transferOwnership} and {acceptOwnership}.\\n *\\n * This module is used through inheritance. It will make available all functions\\n * from parent (Ownable).\\n */\\nabstract contract Ownable2Step is Ownable {\\n    address private _pendingOwner;\\n\\n    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);\\n\\n    /**\\n     * @dev Returns the address of the pending owner.\\n     */\\n    function pendingOwner() public view virtual returns (address) {\\n        return _pendingOwner;\\n    }\\n\\n    /**\\n     * @dev Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one.\\n     * Can only be called by the current owner.\\n     */\\n    function transferOwnership(address newOwner) public virtual override onlyOwner {\\n        _pendingOwner = newOwner;\\n        emit OwnershipTransferStarted(owner(), newOwner);\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`) and deletes any pending owner.\\n     * Internal function without access restriction.\\n     */\\n    function _transferOwnership(address newOwner) internal virtual override {\\n        delete _pendingOwner;\\n        super._transferOwnership(newOwner);\\n    }\\n\\n    /**\\n     * @dev The new owner accepts the ownership transfer.\\n     */\\n    function acceptOwnership() public virtual {\\n        address sender = _msgSender();\\n        require(pendingOwner() == sender, \\\"Ownable2Step: caller is not the new owner\\\");\\n        _transferOwnership(sender);\\n    }\\n}\\n\",\"keccak256\":\"0xde231558366826d7cb61725af8147965a61c53b77a352cc8c9af38fc5a92ac3c\",\"license\":\"MIT\"},\"@openzeppelin/contracts/security/ReentrancyGuard.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (security/ReentrancyGuard.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Contract module that helps prevent reentrant calls to a function.\\n *\\n * Inheriting from `ReentrancyGuard` will make the {nonReentrant} modifier\\n * available, which can be applied to functions to make sure there are no nested\\n * (reentrant) calls to them.\\n *\\n * Note that because there is a single `nonReentrant` guard, functions marked as\\n * `nonReentrant` may not call one another. This can be worked around by making\\n * those functions `private`, and then adding `external` `nonReentrant` entry\\n * points to them.\\n *\\n * TIP: If you would like to learn more about reentrancy and alternative ways\\n * to protect against it, check out our blog post\\n * https://blog.openzeppelin.com/reentrancy-after-istanbul/[Reentrancy After Istanbul].\\n */\\nabstract contract ReentrancyGuard {\\n    // Booleans are more expensive than uint256 or any type that takes up a full\\n    // word because each write operation emits an extra SLOAD to first read the\\n    // slot's contents, replace the bits taken up by the boolean, and then write\\n    // back. This is the compiler's defense against contract upgrades and\\n    // pointer aliasing, and it cannot be disabled.\\n\\n    // The values being non-zero value makes deployment a bit more expensive,\\n    // but in exchange the refund on every call to nonReentrant will be lower in\\n    // amount. Since refunds are capped to a percentage of the total\\n    // transaction's gas, it is best to keep them low in cases like this one, to\\n    // increase the likelihood of the full refund coming into effect.\\n    uint256 private constant _NOT_ENTERED = 1;\\n    uint256 private constant _ENTERED = 2;\\n\\n    uint256 private _status;\\n\\n    constructor() {\\n        _status = _NOT_ENTERED;\\n    }\\n\\n    /**\\n     * @dev Prevents a contract from calling itself, directly or indirectly.\\n     * Calling a `nonReentrant` function from another `nonReentrant`\\n     * function is not supported. It is possible to prevent this from happening\\n     * by making the `nonReentrant` function external, and making it call a\\n     * `private` function that does the actual work.\\n     */\\n    modifier nonReentrant() {\\n        _nonReentrantBefore();\\n        _;\\n        _nonReentrantAfter();\\n    }\\n\\n    function _nonReentrantBefore() private {\\n        // On the first call to nonReentrant, _status will be _NOT_ENTERED\\n        require(_status != _ENTERED, \\\"ReentrancyGuard: reentrant call\\\");\\n\\n        // Any calls to nonReentrant after this point will fail\\n        _status = _ENTERED;\\n    }\\n\\n    function _nonReentrantAfter() private {\\n        // By storing the original value once again, a refund is triggered (see\\n        // https://eips.ethereum.org/EIPS/eip-2200)\\n        _status = _NOT_ENTERED;\\n    }\\n\\n    /**\\n     * @dev Returns true if the reentrancy guard is currently set to \\\"entered\\\", which indicates there is a\\n     * `nonReentrant` function in the call stack.\\n     */\\n    function _reentrancyGuardEntered() internal view returns (bool) {\\n        return _status == _ENTERED;\\n    }\\n}\\n\",\"keccak256\":\"0xa535a5df777d44e945dd24aa43a11e44b024140fc340ad0dfe42acf4002aade1\",\"license\":\"MIT\"},\"@openzeppelin/contracts/token/ERC20/IERC20.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (token/ERC20/IERC20.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Interface of the ERC20 standard as defined in the EIP.\\n */\\ninterface IERC20 {\\n    /**\\n     * @dev Emitted when `value` tokens are moved from one account (`from`) to\\n     * another (`to`).\\n     *\\n     * Note that `value` may be zero.\\n     */\\n    event Transfer(address indexed from, address indexed to, uint256 value);\\n\\n    /**\\n     * @dev Emitted when the allowance of a `spender` for an `owner` is set by\\n     * a call to {approve}. `value` is the new allowance.\\n     */\\n    event Approval(address indexed owner, address indexed spender, uint256 value);\\n\\n    /**\\n     * @dev Returns the amount of tokens in existence.\\n     */\\n    function totalSupply() external view returns (uint256);\\n\\n    /**\\n     * @dev Returns the amount of tokens owned by `account`.\\n     */\\n    function balanceOf(address account) external view returns (uint256);\\n\\n    /**\\n     * @dev Moves `amount` tokens from the caller's account to `to`.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transfer(address to, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Returns the remaining number of tokens that `spender` will be\\n     * allowed to spend on behalf of `owner` through {transferFrom}. This is\\n     * zero by default.\\n     *\\n     * This value changes when {approve} or {transferFrom} are called.\\n     */\\n    function allowance(address owner, address spender) external view returns (uint256);\\n\\n    /**\\n     * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * IMPORTANT: Beware that changing an allowance with this method brings the risk\\n     * that someone may use both the old and the new allowance by unfortunate\\n     * transaction ordering. One possible solution to mitigate this race\\n     * condition is to first reduce the spender's allowance to 0 and set the\\n     * desired value afterwards:\\n     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729\\n     *\\n     * Emits an {Approval} event.\\n     */\\n    function approve(address spender, uint256 amount) external returns (bool);\\n\\n    /**\\n     * @dev Moves `amount` tokens from `from` to `to` using the\\n     * allowance mechanism. `amount` is then deducted from the caller's\\n     * allowance.\\n     *\\n     * Returns a boolean value indicating whether the operation succeeded.\\n     *\\n     * Emits a {Transfer} event.\\n     */\\n    function transferFrom(address from, address to, uint256 amount) external returns (bool);\\n}\\n\",\"keccak256\":\"0x287b55befed2961a7eabd7d7b1b2839cbca8a5b80ef8dcbb25ed3d4c2002c305\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/Context.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts v4.4.1 (utils/Context.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Provides information about the current execution context, including the\\n * sender of the transaction and its data. While these are generally available\\n * via msg.sender and msg.data, they should not be accessed in such a direct\\n * manner, since when dealing with meta-transactions the account sending and\\n * paying for execution may not be the actual sender (as far as an application\\n * is concerned).\\n *\\n * This contract is only required for intermediate, library-like contracts.\\n */\\nabstract contract Context {\\n    function _msgSender() internal view virtual returns (address) {\\n        return msg.sender;\\n    }\\n\\n    function _msgData() internal view virtual returns (bytes calldata) {\\n        return msg.data;\\n    }\\n}\\n\",\"keccak256\":\"0xe2e337e6dde9ef6b680e07338c493ebea1b5fd09b43424112868e9cc1706bca7\",\"license\":\"MIT\"},\"contracts/hooks/DisputeProtectionPolicy.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {Ownable2Step} from \\\"@openzeppelin/contracts/access/Ownable2Step.sol\\\";\\nimport {ReentrancyGuard} from \\\"@openzeppelin/contracts/security/ReentrancyGuard.sol\\\";\\n\\nimport {IDisputeProtectionPolicy} from \\\"../interfaces/IDisputeProtectionPolicy.sol\\\";\\nimport {IDisputeVerifier} from \\\"../interfaces/IDisputeVerifier.sol\\\";\\nimport {IEscrowV2} from \\\"../interfaces/IEscrowV2.sol\\\";\\nimport {INullifierRegistry} from \\\"../interfaces/INullifierRegistry.sol\\\";\\nimport {IStakeVault} from \\\"../interfaces/IStakeVault.sol\\\";\\n\\n/**\\n * @title DisputeProtectionPolicy\\n * @notice Deposit-and-payment-method-scoped, stake-backed dispute protection that is on by default for every payment method with a nonzero risk window and can be opted out per deposit payment method by the depositor.\\n * @dev The policy owns no tokens. StakeVault is the source of truth for collateral locks, a dedicated\\n * `disputeNullifierRegistry` deployment is the source of truth for consumed dispute nullifiers, and the calling\\n * Orchestrator is the source of truth for valid escrows and intents.\\n *\\n * TRUST: Dispute protection intents are keyed by intent hash, which embeds the originating orchestrator\\n * (OrchestratorV3 hashes its own address into every intent hash), so identities do not collide across orchestrators.\\n * Lifecycle entrypoints trust every orchestrator admitted by OrchestratorRegistry to invoke callbacks only for\\n * intents it created and already validated against its EscrowRegistry. Registering an orchestrator is therefore a\\n * governance assertion about its callback behavior.\\n *\\n * Governance must authorize a lifecycle hook here before configuring it on an Orchestrator. Predecessor hooks must\\n * remain authorized until all intents snapshotted to them have been cancelled or settled. Likewise, an orchestrator\\n * must be drained before it is removed from OrchestratorRegistry. This policy must also drain every active dispute\\n * protection intent before StakeVault controller authority moves to a replacement policy unless that replacement\\n * explicitly adopts this policy's intent and lock state.\\n */\\ncontract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, ReentrancyGuard {\\n    /* ============ Constants ============ */\\n\\n    uint64 public constant MAX_RISK_WINDOW = 365 days;\\n    uint64 public constant PENDING_COVERAGE_MATURITY = type(uint64).max;\\n\\n    /* ============ State Variables ============ */\\n\\n    /// @notice Stake custody and lock accounting controlled by this policy.\\n    IStakeVault public immutable stakeVault;\\n\\n    /// @notice Dedicated replay registry for payment-method-scoped dispute nullifiers.\\n    INullifierRegistry public immutable disputeNullifierRegistry;\\n\\n    /// @notice Verifier used to validate signed dispute evidence.\\n    IDisputeVerifier public disputeVerifier;\\n\\n    /// @notice Whether new dispute-protection admissions are paused. Terminal transitions remain available.\\n    bool public admissionsPaused;\\n\\n    /// @dev Lifecycle-hook authorization keyed by lifecycle hook address.\\n    mapping(address => bool) internal isLifecycleHookAuthorizedByHook;\\n\\n    /// @dev Whether the depositor opted a deposit payment method out of default dispute protection.\\n    mapping(address => mapping(uint256 => mapping(bytes32 => bool))) internal\\n        isDisputeProtectionDisabledByPaymentMethod;\\n\\n    /// @dev Minimum collateral lock window for each payment method.\\n    mapping(bytes32 => uint64) internal paymentMethodRiskWindow;\\n\\n    /// @dev Dispute protection lifecycle state keyed by globally unique intent hash.\\n    mapping(bytes32 => DisputeProtectionIntent) internal disputeProtectionIntentByIntentHash;\\n\\n    /* ============ Constructor ============ */\\n\\n    /**\\n     * @notice Creates a dispute protection policy over one StakeVault and one dedicated dispute-nullifier registry.\\n     * @dev After deployment, authorize this policy as the StakeVault controller and as a writer on the dedicated\\n     * dispute nullifier registry before enabling deposits.\\n     * @param _owner Governance owner for policy and dependency configuration.\\n     * @param _stakeVault Vault holding and locking taker collateral.\\n     * @param _disputeVerifier Verifier for signed dispute evidence.\\n     * @param _disputeNullifierRegistry Dedicated registry that rejects reused dispute nullifiers.\\n     */\\n    constructor(\\n        address _owner,\\n        IStakeVault _stakeVault,\\n        IDisputeVerifier _disputeVerifier,\\n        INullifierRegistry _disputeNullifierRegistry\\n    ) {\\n        if (_owner == address(0)) revert ZeroAddress();\\n        _validateDependency(address(_stakeVault));\\n        _validateDependency(address(_disputeVerifier));\\n        _validateDependency(address(_disputeNullifierRegistry));\\n\\n        stakeVault = _stakeVault;\\n        disputeVerifier = _disputeVerifier;\\n        disputeNullifierRegistry = _disputeNullifierRegistry;\\n        _transferOwnership(_owner);\\n    }\\n\\n    /* ============ Modifiers ============ */\\n\\n    modifier onlyLifecycleHook() {\\n        if (!isLifecycleHookAuthorizedByHook[msg.sender]) {\\n            revert UnauthorizedLifecycleHook(msg.sender);\\n        }\\n        _;\\n    }\\n\\n    modifier onlyDepositor(address _escrow, uint256 _depositId) {\\n        address depositor = IEscrowV2(_escrow).getDeposit(_depositId).depositor;\\n        if (msg.sender != depositor) revert NotDepositor(_escrow, _depositId, msg.sender);\\n        _;\\n    }\\n\\n    /* ============ Lifecycle Functions ============ */\\n\\n    /**\\n     * @inheritdoc IDisputeProtectionPolicy\\n     */\\n    function onIntentSignaled(\\n        bytes32 _intentHash,\\n        address _escrow,\\n        uint256 _depositId,\\n        address _taker,\\n        bytes32 _paymentMethod,\\n        uint256 _amount\\n    ) external override onlyLifecycleHook nonReentrant {\\n        uint64 riskWindow = paymentMethodRiskWindow[_paymentMethod];\\n        if (riskWindow == 0) return;\\n\\n        (address stakeOwner, address depositor) =\\n            _validateIntentAdmission(_intentHash, _escrow, _depositId, _paymentMethod, _taker);\\n\\n        disputeProtectionIntentByIntentHash[_intentHash] = DisputeProtectionIntent({\\n            taker: _taker,\\n            stakeOwner: stakeOwner,\\n            depositor: depositor,\\n            paymentMethod: _paymentMethod,\\n            status: DisputeProtectionIntentStatus.PENDING,\\n            riskWindow: riskWindow,\\n            releaseEligibleAt: 0,\\n            releaseAmount: 0\\n        });\\n\\n        stakeVault.lockStake(stakeOwner, _intentHash, _amount, PENDING_COVERAGE_MATURITY);\\n        emit DisputeProtectionIntentOpened(\\n            _intentHash, stakeOwner, depositor, _taker, _paymentMethod, _amount, riskWindow\\n        );\\n    }\\n\\n    /**\\n     * @inheritdoc IDisputeProtectionPolicy\\n     */\\n    function onIntentCancelled(bytes32 _intentHash) external override onlyLifecycleHook nonReentrant {\\n        DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];\\n        if (disputeProtectionIntent.status == DisputeProtectionIntentStatus.NONE) return;\\n        if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.PENDING) {\\n            revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);\\n        }\\n\\n        (, uint256 releasedAmount,) = stakeVault.locks(_intentHash);\\n        disputeProtectionIntent.status = DisputeProtectionIntentStatus.CANCELLED;\\n        stakeVault.unlockStake(_intentHash);\\n        emit DisputeProtectionIntentCancelled(_intentHash, disputeProtectionIntent.stakeOwner, releasedAmount);\\n    }\\n\\n    /**\\n     * @inheritdoc IDisputeProtectionPolicy\\n     */\\n    function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease)\\n        external\\n        override\\n        onlyLifecycleHook\\n        nonReentrant\\n    {\\n        DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];\\n        if (disputeProtectionIntent.status == DisputeProtectionIntentStatus.NONE) return;\\n        if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.PENDING) {\\n            revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);\\n        }\\n\\n        uint64 releaseEligibleAt = _calculateReleaseEligibleAt(disputeProtectionIntent.riskWindow);\\n        disputeProtectionIntent.releaseAmount = _releaseAmount;\\n        disputeProtectionIntent.releaseEligibleAt = releaseEligibleAt;\\n        disputeProtectionIntent.status = DisputeProtectionIntentStatus.SETTLED;\\n\\n        stakeVault.resizeLock(_intentHash, _releaseAmount, releaseEligibleAt);\\n        emit DisputeProtectionIntentSettled(\\n            _intentHash,\\n            disputeProtectionIntent.stakeOwner,\\n            disputeProtectionIntent.depositor,\\n            _releaseAmount,\\n            releaseEligibleAt,\\n            _isManualRelease\\n        );\\n    }\\n\\n    /* ============ Permissionless Functions ============ */\\n\\n    /**\\n     * @notice Releases collateral for one settled intent once its minimum risk window has elapsed.\\n     * @dev Disputes remain valid after `releaseEligibleAt` until this release transaction executes.\\n     * @param _intentHash Settled dispute protection intent whose collateral should be unlocked.\\n     */\\n    function releaseMaturedDisputeProtectionIntent(bytes32 _intentHash) external nonReentrant {\\n        _releaseMaturedDisputeProtectionIntent(_intentHash);\\n    }\\n\\n    /**\\n     * @notice Releases collateral for a batch of settled intents whose minimum risk windows have elapsed.\\n     * @dev The batch is atomic: one invalid or ineligible intent reverts every release in the call.\\n     * @param _intentHashes Settled dispute protection intents whose collateral should be unlocked.\\n     */\\n    function releaseMaturedDisputeProtectionIntents(bytes32[] calldata _intentHashes) external nonReentrant {\\n        for (uint256 intentIndex = 0; intentIndex < _intentHashes.length; intentIndex++) {\\n            _releaseMaturedDisputeProtectionIntent(_intentHashes[intentIndex]);\\n        }\\n    }\\n\\n    /**\\n     * @notice Resolves valid dispute evidence into an immediately claimable depositor award.\\n     * @dev A settled intent remains disputable until its collateral release executes, even after\\n     * `releaseEligibleAt`. The dedicated dispute nullifier registry atomically rejects replayed disputes.\\n     * @param _attestation Signed dispute evidence for a settled intent.\\n     */\\n    function submitDispute(IDisputeVerifier.DisputeAttestation calldata _attestation) external nonReentrant {\\n        DisputeProtectionIntent storage disputeProtectionIntent =\\n            disputeProtectionIntentByIntentHash[_attestation.intentHash];\\n        if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.SETTLED) {\\n            revert DisputeProtectionIntentNotSettled(_attestation.intentHash, disputeProtectionIntent.status);\\n        }\\n\\n        (bytes32 disputeId, bytes32 disputeNullifier) =\\n            disputeVerifier.verifyDispute(_attestation, disputeProtectionIntent.paymentMethod);\\n        disputeNullifierRegistry.addNullifier(disputeNullifier);\\n\\n        uint256 compensatedAmount = disputeProtectionIntent.releaseAmount;\\n        disputeProtectionIntent.status = DisputeProtectionIntentStatus.DISPUTED;\\n\\n        IStakeVault.Claim[] memory claims = new IStakeVault.Claim[](1);\\n        claims[0] = IStakeVault.Claim({beneficiary: disputeProtectionIntent.depositor, amount: compensatedAmount});\\n        stakeVault.resolveLock(_attestation.intentHash, claims);\\n\\n        emit DisputeResolved(\\n            _attestation.intentHash,\\n            disputeProtectionIntent.stakeOwner,\\n            disputeProtectionIntent.depositor,\\n            compensatedAmount,\\n            disputeId\\n        );\\n    }\\n\\n    /* ============ Depositor Functions ============ */\\n\\n    /**\\n     * @notice DEPOSITOR ONLY: Updates dispute protection for one deposit payment method.\\n     * @dev Protection is enabled by default on every payment method with a nonzero risk window; passing false opts the\\n     * tuple out and true undoes the opt-out. The requested value is emitted as-is; the effective state also depends on\\n     * the payment method's current risk window. OrchestratorV3 validates Escrow registration before signaling an\\n     * intent; this policy only verifies that the caller is the deposit's current depositor.\\n     * @param _escrow Escrow containing the deposit.\\n     * @param _depositId Deposit whose payment-method-specific configuration is updated.\\n     * @param _paymentMethod Payment method whose dispute protection configuration is updated.\\n     * @param _isEnabled Whether non-whitelisted takers may use stake-backed dispute protection on this payment method;\\n     * false opts out.\\n     */\\n    function setDisputeProtectionEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod, bool _isEnabled)\\n        external\\n        onlyDepositor(_escrow, _depositId)\\n    {\\n        isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod] = !_isEnabled;\\n        emit DisputeProtectionEnabledUpdated(_escrow, _depositId, _paymentMethod, _isEnabled);\\n    }\\n\\n    /* ============ Governance Functions ============ */\\n\\n    /**\\n     * @notice GOVERNANCE ONLY: Sets the minimum collateral lock window for future intents of a payment method.\\n     * @dev A zero window means the payment method is never routed through dispute protection: the lifecycle hook then\\n     * applies the deposit's whitelist (rejecting non-members when it is enabled) or admits openly when it is disabled.\\n     * Changing the window affects future admissions only; admitted intents keep their snapshotted window.\\n     * @param _paymentMethod Payment method whose future risk window is updated.\\n     * @param _riskWindow Minimum seconds collateral remains locked after settlement.\\n     */\\n    function setRiskWindow(bytes32 _paymentMethod, uint64 _riskWindow) external onlyOwner {\\n        if (_riskWindow > MAX_RISK_WINDOW) revert InvalidRiskWindow(_riskWindow);\\n        paymentMethodRiskWindow[_paymentMethod] = _riskWindow;\\n        emit RiskWindowUpdated(_paymentMethod, _riskWindow);\\n    }\\n\\n    /**\\n     * @notice GOVERNANCE ONLY: Replaces the verifier used for future dispute submissions.\\n     * @param _verifier New non-zero deployed dispute verifier.\\n     */\\n    function setDisputeVerifier(address _verifier) external onlyOwner {\\n        _validateDependency(_verifier);\\n        address previousVerifier = address(disputeVerifier);\\n        disputeVerifier = IDisputeVerifier(_verifier);\\n        emit DisputeVerifierUpdated(previousVerifier, _verifier);\\n    }\\n\\n    /**\\n     * @notice GOVERNANCE ONLY: Authorizes or revokes one lifecycle hook.\\n     * @dev Authorize a hook before configuring it on an Orchestrator. Revoke a predecessor only after every intent\\n     * snapshotted to it has been cancelled or settled.\\n     * @param _hook Lifecycle hook whose callback authority is updated.\\n     * @param _isAuthorized Whether the hook may mutate dispute protection intent state.\\n     */\\n    function setLifecycleHookAuthorization(address _hook, bool _isAuthorized) external onlyOwner {\\n        if (_isAuthorized) _validateDependency(_hook);\\n        isLifecycleHookAuthorizedByHook[_hook] = _isAuthorized;\\n        emit LifecycleHookAuthorizationUpdated(_hook, _isAuthorized);\\n    }\\n\\n    /**\\n     * @notice GOVERNANCE ONLY: Pauses or resumes new dispute-protection admissions.\\n     * @dev It rejects every non-whitelisted taker on every non-opted-out deposit payment method with a nonzero risk\\n     * window. Whitelisted takers return from the lifecycle hook before this policy is reached, and payment methods with\\n     * a zero risk window return before the pause check. Explicitly opted-out deposit payment methods and zero-window\\n     * payment methods never reach this policy and stay gated by the whitelist or open. Cancellation, settlement,\\n     * release, and dispute submission remain available while admissions are paused.\\n     * @param _isPaused Whether new dispute protection admissions should revert.\\n     */\\n    function setAdmissionsPaused(bool _isPaused) external onlyOwner {\\n        admissionsPaused = _isPaused;\\n        emit AdmissionsPausedUpdated(_isPaused);\\n    }\\n\\n    /**\\n     * @notice GOVERNANCE ONLY: Accepts this policy as StakeVault's controller after its handover delay.\\n     * @dev Before replacing another policy, governance must drain its active dispute protection intents or execute an\\n     * explicit state-and-lock migration. Accepting controller authority alone cannot import the predecessor's intent\\n     * state.\\n     */\\n    function acceptVaultController() external onlyOwner {\\n        stakeVault.acceptController();\\n    }\\n\\n    /**\\n     * @notice Disables ownership renunciation so governed safety controls cannot become unreachable.\\n     */\\n    function renounceOwnership() public view override onlyOwner {\\n        revert OwnershipRenunciationDisabled();\\n    }\\n\\n    /* ============ View Functions ============ */\\n\\n    /**\\n     * @notice Returns the stored dispute protection state for an intent.\\n     * @param _intentHash Intent whose dispute protection state is queried.\\n     */\\n    function getDisputeProtectionIntent(bytes32 _intentHash) external view returns (DisputeProtectionIntent memory) {\\n        return disputeProtectionIntentByIntentHash[_intentHash];\\n    }\\n\\n    /**\\n     * @notice Returns the effective stake-backed dispute protection state for a deposit payment method.\\n     * @dev True when the depositor has not opted the tuple out and the payment method has a nonzero risk window.\\n     * Performs no validation: any escrow, any deposit id (including nonexistent ones), and any payment method with a\\n     * nonzero window read true.\\n     * @param _escrow Escrow containing the deposit.\\n     * @param _depositId Deposit whose payment-method-specific configuration is queried.\\n     * @param _paymentMethod Payment method whose dispute protection configuration is queried.\\n     */\\n    function isDisputeProtectionEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod)\\n        external\\n        view\\n        override\\n        returns (bool)\\n    {\\n        return !isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod]\\n            && paymentMethodRiskWindow[_paymentMethod] != 0;\\n    }\\n\\n    /**\\n     * @notice Returns whether a lifecycle hook may mutate dispute protection intent state.\\n     * @param _hook Lifecycle hook whose callback authorization is queried.\\n     */\\n    function isLifecycleHookAuthorized(address _hook) external view returns (bool) {\\n        return isLifecycleHookAuthorizedByHook[_hook];\\n    }\\n\\n    /**\\n     * @notice Returns the risk window applied to future intents for a payment method.\\n     * @param _paymentMethod Payment method whose configured risk window is queried.\\n     */\\n    function getRiskWindow(bytes32 _paymentMethod) external view returns (uint64) {\\n        return paymentMethodRiskWindow[_paymentMethod];\\n    }\\n\\n    /* ============ Internal Functions ============ */\\n\\n    /**\\n     * @dev Validates policy-owned admission requirements and returns the collateral owner and depositor to snapshot.\\n     * StakeVault remains authoritative for collateral sufficiency and reverts from `lockStake` when free stake is\\n     * insufficient.\\n     */\\n    function _validateIntentAdmission(\\n        bytes32 _intentHash,\\n        address _escrow,\\n        uint256 _depositId,\\n        bytes32 _paymentMethod,\\n        address _taker\\n    ) internal view returns (address stakeOwner, address depositor) {\\n        if (admissionsPaused) revert AdmissionsPaused();\\n        if (disputeProtectionIntentByIntentHash[_intentHash].status != DisputeProtectionIntentStatus.NONE) {\\n            revert DisputeProtectionIntentAlreadyExists(_intentHash);\\n        }\\n        if (isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod]) {\\n            revert DisputeProtectionNotEnabled(_escrow, _depositId, _paymentMethod);\\n        }\\n\\n        IEscrowV2.Deposit memory deposit = IEscrowV2(_escrow).getDeposit(_depositId);\\n        address expectedToken = address(stakeVault.stakeToken());\\n        if (address(deposit.token) != expectedToken) {\\n            revert IntentTokenMismatch(expectedToken, address(deposit.token));\\n        }\\n\\n        stakeOwner = stakeVault.stakeOwnerOf(_taker);\\n        depositor = deposit.depositor;\\n    }\\n\\n    function _releaseMaturedDisputeProtectionIntent(bytes32 _intentHash) internal {\\n        DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];\\n        if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.SETTLED) {\\n            revert DisputeProtectionIntentNotSettled(_intentHash, disputeProtectionIntent.status);\\n        }\\n\\n        uint64 currentTime = _currentTimestamp();\\n        uint64 releaseEligibleAt = disputeProtectionIntent.releaseEligibleAt;\\n        if (currentTime < releaseEligibleAt) {\\n            revert DisputeProtectionIntentNotReleaseEligible(releaseEligibleAt, currentTime);\\n        }\\n\\n        uint256 releasedAmount = disputeProtectionIntent.releaseAmount;\\n        disputeProtectionIntent.status = DisputeProtectionIntentStatus.RELEASED;\\n        stakeVault.unlockStake(_intentHash);\\n        emit DisputeProtectionIntentReleased(_intentHash, disputeProtectionIntent.stakeOwner, releasedAmount);\\n    }\\n\\n    function _calculateReleaseEligibleAt(uint64 _riskWindow) internal view returns (uint64) {\\n        uint256 releaseEligibleAt = block.timestamp + _riskWindow;\\n        if (releaseEligibleAt > type(uint64).max) revert TimestampOverflow(releaseEligibleAt);\\n        return uint64(releaseEligibleAt);\\n    }\\n\\n    function _currentTimestamp() internal view returns (uint64) {\\n        if (block.timestamp > type(uint64).max) revert TimestampOverflow(block.timestamp);\\n        return uint64(block.timestamp);\\n    }\\n\\n    function _validateDependency(address _dependency) internal view {\\n        if (_dependency == address(0)) revert ZeroAddress();\\n        if (_dependency.code.length == 0) revert InvalidContract(_dependency);\\n    }\\n}\\n\",\"keccak256\":\"0xdfe2aa9c6c461ef311fff1c9d2d693a6655731af1dd26a917fc1581d5b71d9a7\",\"license\":\"MIT\"},\"contracts/interfaces/IDisputeProtectionPolicy.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IDisputeProtectionPolicy\\n * @notice Lifecycle-hook integration surface for stake-backed dispute coverage.\\n * @dev The concrete policy exposes depositor, governance, dispute, and release functions directly.\\n *      This interface intentionally contains only the functions consumed by IntentLifecycleHookV1.\\n */\\ninterface IDisputeProtectionPolicy {\\n    /**\\n     * @notice Lifecycle state of a dispute-protected intent.\\n     * @dev `NONE` is the required zero-value sentinel for an uninitialized mapping entry; it is not a live state.\\n     *      `SETTLED` means the underlying intent completed and its collateral remains disputable.\\n     *      `RELEASED` means the collateral was returned and the intent is no longer disputable.\\n     */\\n    enum DisputeProtectionIntentStatus {\\n        NONE,\\n        PENDING,\\n        CANCELLED,\\n        SETTLED,\\n        RELEASED,\\n        DISPUTED\\n    }\\n\\n    /**\\n     * @notice Dispute protection state retained after an intent is admitted by the lifecycle hook.\\n     * @param taker Account that signaled the intent.\\n     * @param stakeOwner Account whose StakeVault balance collateralizes the intent.\\n     * @param depositor Escrow depositor compensated by a successful dispute.\\n     * @param paymentMethod Payment method used to namespace risk configuration and dispute nullifiers.\\n     * @param status Current dispute protection lifecycle state.\\n     * @param riskWindow Minimum time collateral must remain locked after intent settlement.\\n     * @param releaseEligibleAt Earliest timestamp at which collateral may be released. Dispute evidence remains\\n     * valid after this time until release actually executes.\\n     * @param releaseAmount Amount released from Escrow before fees and therefore collateralized after settlement.\\n     */\\n    struct DisputeProtectionIntent {\\n        address taker;\\n        address stakeOwner;\\n        address depositor;\\n        bytes32 paymentMethod;\\n        DisputeProtectionIntentStatus status;\\n        uint64 riskWindow;\\n        uint64 releaseEligibleAt;\\n        uint256 releaseAmount;\\n    }\\n\\n    event DisputeProtectionIntentOpened(\\n        bytes32 indexed intentHash,\\n        address indexed stakeOwner,\\n        address indexed depositor,\\n        address taker,\\n        bytes32 paymentMethod,\\n        uint256 amount,\\n        uint64 riskWindow\\n    );\\n    event DisputeProtectionIntentCancelled(\\n        bytes32 indexed intentHash, address indexed stakeOwner, uint256 releasedAmount\\n    );\\n    event DisputeProtectionIntentSettled(\\n        bytes32 indexed intentHash,\\n        address indexed stakeOwner,\\n        address indexed depositor,\\n        uint256 releaseAmount,\\n        uint64 releaseEligibleAt,\\n        bool isManualRelease\\n    );\\n    event DisputeProtectionIntentReleased(\\n        bytes32 indexed intentHash, address indexed stakeOwner, uint256 releasedAmount\\n    );\\n    event DisputeResolved(\\n        bytes32 indexed intentHash,\\n        address indexed stakeOwner,\\n        address indexed depositor,\\n        uint256 compensatedAmount,\\n        bytes32 disputeId\\n    );\\n    event DisputeProtectionEnabledUpdated(\\n        address indexed escrow,\\n        uint256 indexed depositId,\\n        bytes32 indexed paymentMethod,\\n        bool isDisputeProtectionEnabled\\n    );\\n    event RiskWindowUpdated(bytes32 indexed paymentMethod, uint64 riskWindow);\\n    event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);\\n    event LifecycleHookAuthorizationUpdated(address indexed hook, bool isAuthorized);\\n    event AdmissionsPausedUpdated(bool isPaused);\\n\\n    error ZeroAddress();\\n    error InvalidContract(address dependency);\\n    error UnauthorizedLifecycleHook(address caller);\\n    error AdmissionsPaused();\\n    error DisputeProtectionNotEnabled(address escrow, uint256 depositId, bytes32 paymentMethod);\\n    error DisputeProtectionIntentAlreadyExists(bytes32 intentHash);\\n    error DisputeProtectionIntentNotPending(bytes32 intentHash, DisputeProtectionIntentStatus status);\\n    error DisputeProtectionIntentNotSettled(bytes32 intentHash, DisputeProtectionIntentStatus status);\\n    error IntentTokenMismatch(address expectedToken, address actualToken);\\n    error DisputeProtectionIntentNotReleaseEligible(uint64 releaseEligibleAt, uint64 currentTime);\\n    error TimestampOverflow(uint256 timestamp);\\n    error InvalidRiskWindow(uint64 riskWindow);\\n    error NotDepositor(address escrow, uint256 depositId, address caller);\\n    error OwnershipRenunciationDisabled();\\n\\n    /**\\n     * @notice Admits a newly signaled intent into dispute coverage when its payment method has a risk window.\\n     * @dev Called only by an authorized lifecycle hook. A zero configured risk window is an unrestricted pass-through\\n     * for this direct policy callback; the canonical lifecycle hook never calls this function for a zero-window payment\\n     * method and applies the whitelist instead. It creates no dispute protection intent. Otherwise the call validates\\n     * deposit configuration and token compatibility, snapshots the risk configuration, and locks the taker's selected\\n     * stake.\\n     * @param _intentHash Unique intent identifier assigned by the calling orchestrator.\\n     * @param _escrow Escrow that owns the intent and deposit.\\n     * @param _depositId Deposit supplying the intent liquidity.\\n     * @param _taker Account that signaled the intent.\\n     * @param _paymentMethod Payment method selected for the off-chain payment.\\n     * @param _amount Full on-chain intent amount initially locked as collateral.\\n     */\\n    function onIntentSignaled(\\n        bytes32 _intentHash,\\n        address _escrow,\\n        uint256 _depositId,\\n        address _taker,\\n        bytes32 _paymentMethod,\\n        uint256 _amount\\n    ) external;\\n\\n    /**\\n     * @notice Cancels a pending dispute protection intent and unlocks its collateral.\\n     * @dev Missing dispute protection intents are ignored because payment methods with no risk window create no\\n     * policy state.\\n     * @param _intentHash Intent being cancelled or pruned by the orchestrator.\\n     */\\n    function onIntentCancelled(bytes32 _intentHash) external;\\n\\n    /**\\n     * @notice Marks a pending dispute protection intent as settled and resizes its collateral.\\n     * @dev Missing dispute protection intents are ignored. The snapshotted risk window determines when collateral\\n     * becomes release-eligible; it does not invalidate dispute evidence until release actually executes.\\n     * @param _intentHash Intent completed by proof-based fulfillment or manual release.\\n     * @param _releaseAmount Amount released from Escrow before protocol, referral, and manager fees.\\n     * @param _isManualRelease Whether the depositor used the manual-release path without an on-chain payment proof.\\n     */\\n    function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease) external;\\n\\n    /**\\n     * @notice Returns the effective stake-backed dispute protection state for a deposit payment method.\\n     * @dev True when the depositor has not opted the tuple out and the payment method has a nonzero risk window.\\n     * Performs no validation: any escrow, any deposit id (including nonexistent ones), and any payment method with a\\n     * nonzero window read true.\\n     * @param _escrow Escrow containing the deposit.\\n     * @param _depositId Deposit whose payment-method-specific configuration is queried.\\n     * @param _paymentMethod Payment method whose dispute protection configuration is queried.\\n     */\\n    function isDisputeProtectionEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod)\\n        external\\n        view\\n        returns (bool);\\n}\\n\",\"keccak256\":\"0x6b657696635e6aa6a62f685fecb7ade1560baa8a3682a7c857a3f3caf557c2b9\",\"license\":\"MIT\"},\"contracts/interfaces/IDisputeVerifier.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IDisputeVerifier\\n * @notice Minimal verification surface consumed by DisputeProtectionPolicy.\\n * @dev The concrete verifier exposes its governance and digest helper functions directly.\\n */\\ninterface IDisputeVerifier {\\n    /**\\n     * @notice Signed evidence tying a dispute payload to one intent.\\n     * @param intentHash Intent whose off-chain payment was disputed.\\n     * @param dataHash Hash of the ABI-encoded `DisputeDetails`.\\n     * @param signatures Witness signatures over the verifier's EIP-712 digest.\\n     * @param data ABI-encoded `DisputeDetails`.\\n     */\\n    struct DisputeAttestation {\\n        bytes32 intentHash;\\n        bytes32 dataHash;\\n        bytes[] signatures;\\n        bytes data;\\n    }\\n\\n    /**\\n     * @notice Payment and dispute identifiers attested by the dispute witnesses.\\n     * @param paymentMethod Payment rail used by the original payment.\\n     * @param originalPaymentId Provider identifier for the original payment.\\n     * @param disputeId Provider identifier for the dispute or reversal.\\n     * @param paymentAmount Attested off-chain payment amount.\\n     * @param paymentCurrency Attested off-chain payment currency.\\n     */\\n    struct DisputeDetails {\\n        bytes32 paymentMethod;\\n        bytes32 originalPaymentId;\\n        bytes32 disputeId;\\n        uint256 paymentAmount;\\n        bytes32 paymentCurrency;\\n    }\\n\\n    event AttestationVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);\\n\\n    error ZeroAddress();\\n    error InvalidContract(address dependency);\\n    error InvalidAttestation();\\n    error InvalidPaymentBinding(bytes32 intentHash, bytes32 nullifier);\\n    error AttestationVerificationFailed();\\n    error OwnershipRenunciationDisabled();\\n\\n    /**\\n     * @notice Validates dispute evidence against the intent context supplied by the policy.\\n     * @dev View-only and stateless. Reverts when the payload is malformed, mismatched, unsigned, or not bound to the\\n     * intent's original payment nullifier.\\n     * @param _attestation Signed dispute evidence for an intent.\\n     * @param _paymentMethod Payment method snapshotted by the policy when the intent was admitted.\\n     * @return disputeId Payment-platform dispute identifier decoded from the evidence.\\n     * @return disputeNullifier Payment-method-scoped replay key for the dispute.\\n     */\\n    function verifyDispute(DisputeAttestation calldata _attestation, bytes32 _paymentMethod)\\n        external\\n        view\\n        returns (bytes32 disputeId, bytes32 disputeNullifier);\\n}\\n\",\"keccak256\":\"0x55f8c56657ca89ed605d3054155677811a3d7417c74fe36129debe5fba6a7b37\",\"license\":\"MIT\"},\"contracts/interfaces/IEscrowV2.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport { IERC20 } from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\n\\n/**\\n * @title IEscrowV2\\n * @notice Extended escrow interface with native oracle-spread rates and delegated rate managers.\\n */\\ninterface IEscrowV2 {\\n    /* ============ Structs ============ */\\n\\n    struct OracleRateConfig {\\n        address adapter;\\n        bytes adapterConfig;\\n        // Signed spread in basis points applied to the oracle market rate.\\n        // Product decision: keep spreads user-facing rather than storing a multiplier directly.\\n        // Protocol invariant: (10_000 + spreadBps) must stay strictly positive.\\n        // Practical limit: int16 caps the positive side at 32_767 bps (~4.2767x market).\\n        int16 spreadBps;\\n        uint32 maxStaleness;\\n    }\\n\\n    struct RateManagerConfig {\\n        address rateManager;\\n        bytes32 rateManagerId;\\n    }\\n\\n    struct Intent {\\n        bytes32 intentHash;                        // Unique identifier for the intent\\n        uint256 amount;                            // Amount locked\\n        uint256 timestamp;                         // When this intent was created\\n        uint256 expiryTime;                        // When this intent expires\\n    }\\n\\n    struct Range {\\n        uint256 min;                                // Minimum value\\n        uint256 max;                                // Maximum value\\n    }\\n\\n    struct Currency {\\n        bytes32 code;                               // Currency code (keccak256 hash of the currency code)\\n        uint256 minConversionRate;                  // Minimum rate of deposit token to fiat currency (in preciseUnits)\\n        OracleRateConfig oracleRateConfig;          // Oracle rate config for this currency (adapter == address(0) means disabled)\\n    }\\n\\n    struct CurrencyRateUpdate {\\n        bytes32 code;                               // Currency code to update\\n        uint256 minConversionRate;                  // New fixed floor in preciseUnits\\n        bool updateOracle;                          // True to set/remove oracle config, false to leave oracle config unchanged\\n        OracleRateConfig oracleRateConfig;          // Oracle rate config to apply; adapter == address(0) removes config when updateOracle is true\\n    }\\n\\n    struct Deposit {\\n        address depositor;                          // Address of depositor\\n        address delegate;                           // Address that can manage this deposit (address(0) if no delegate)\\n        IERC20 token;                               // Address of deposit token\\n        Range intentAmountRange;                    // Range of take amount per intent\\n        // Deposit state\\n        bool acceptingIntents;                      // State: True if the deposit is accepting intents, False otherwise\\n        uint256 remainingDeposits;                  // State: Amount of liquidity immediately available to lock\\n        uint256 outstandingIntentAmount;            // State: Amount of outstanding intents (may include expired intents)\\n        // Intent guardian\\n        address intentGuardian;                     // Address that can extend intent expiry times (address(0) if no guardian)\\n        // Retention behavior\\n        bool retainOnEmpty;                         // If true, do not auto-close/sweep when empty; keep config for reuse\\n    }\\n\\n    struct DepositPaymentMethodData {\\n        address intentGatingService;                // Public key of gating service that will be used to verify intents\\n        bytes32 payeeDetails;                       // Payee details, has to be hash of payee details\\n        bytes data;                                 // Verification Data: Additional data used for payment verification; Can hold attester address\\n                                                    // in case of TLS proofs, domain key hash in case of zkEmail proofs, currency code etc.\\n    }\\n\\n    struct CreateDepositParams {\\n        IERC20 token;                                // The token to be deposited\\n        uint256 amount;                              // The amount of token to deposit\\n        Range intentAmountRange;                     // The max and min take amount for each intent\\n        bytes32[] paymentMethods;                    // The payment methods that deposit supports\\n        DepositPaymentMethodData[] paymentMethodData;// The payment verification data for each payment method that deposit supports\\n        Currency[][] currencies;                     // The currencies for each payment method that deposit supports\\n        address delegate;                            // Optional delegate address that can manage this deposit (address(0) for no delegate)\\n        address intentGuardian;                      // Optional intent guardian address that can extend intent expiry times (address(0) for no guardian)\\n        bool retainOnEmpty;                          // Opt-in: keep deposit and config when empty\\n    }\\n\\n    /* ============ Events ============ */\\n\\n    event DepositReceived(uint256 indexed depositId, address indexed depositor, IERC20 indexed token, uint256 amount, Range intentAmountRange, address delegate, address intentGuardian);\\n\\n    event DepositPaymentMethodAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed payeeDetails, address intentGatingService);\\n    event DepositPaymentMethodActiveUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bool active);\\n\\n    event DepositCurrencyAdded(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 minConversionRate);\\n    event DepositMinConversionRateUpdated(uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 indexed currency, uint256 newMinConversionRate);\\n\\n    event DepositFundsAdded(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositWithdrawn(uint256 indexed depositId, address indexed depositor, uint256 amount);\\n    event DepositClosed(uint256 depositId, address depositor);\\n    event DepositAcceptingIntentsUpdated(uint256 indexed depositId, bool acceptingIntents);\\n\\n    event DepositIntentAmountRangeUpdated(uint256 indexed depositId, Range intentAmountRange);\\n    event DepositRetainOnEmptyUpdated(uint256 indexed depositId, bool retainOnEmpty);\\n\\n    event DepositDelegateSet(uint256 indexed depositId, address indexed depositor, address indexed delegate);\\n    event DepositDelegateRemoved(uint256 indexed depositId, address indexed depositor);\\n\\n    event MinDepositAmountSet(uint256 minDepositAmount);\\n\\n    event OrchestratorUpdated(address indexed orchestrator);\\n    event PaymentVerifierRegistryUpdated(address indexed paymentVerifierRegistry);\\n\\n    event FundsLocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount, uint256 expiryTime);\\n    event FundsUnlocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount);\\n    event FundsUnlockedAndTransferred(\\n        uint256 indexed depositId,\\n        bytes32 indexed intentHash,\\n        uint256 unlockedAmount,\\n        uint256 transferredAmount,\\n        address to\\n    );\\n    event IntentExpiryExtended(uint256 indexed depositId, bytes32 indexed intentHash, uint256 newExpiryTime);\\n\\n    event DustRecipientUpdated(address indexed dustRecipient);\\n    event DustCollected(uint256 indexed depositId, uint256 dustAmount, address indexed dustRecipient);\\n    event DustThresholdUpdated(uint256 dustThreshold);\\n    event MaxIntentsPerDepositUpdated(uint256 maxIntentsPerDeposit);\\n    event IntentExpirationPeriodUpdated(uint256 intentExpirationPeriod);\\n\\n    event DepositOracleRateConfigSet(\\n        uint256 indexed depositId,\\n        bytes32 indexed paymentMethod,\\n        bytes32 indexed currencyCode,\\n        address adapter,\\n        bytes adapterConfig,\\n        int16 spreadBps,\\n        uint32 maxStaleness\\n    );\\n\\n    event DepositOracleRateConfigRemoved(\\n        uint256 indexed depositId,\\n        bytes32 indexed paymentMethod,\\n        bytes32 indexed currencyCode\\n    );\\n\\n    event DepositRateManagerSet(\\n        uint256 indexed depositId,\\n        address indexed rateManager,\\n        bytes32 indexed rateManagerId\\n    );\\n\\n    event DepositRateManagerCleared(\\n        uint256 indexed depositId,\\n        address indexed rateManager,\\n        bytes32 indexed rateManagerId\\n    );\\n\\n    event OrchestratorRegistryUpdated(address indexed orchestratorRegistry);\\n\\n    /* ============ Custom Errors ============ */\\n\\n    // Zero value errors\\n    error ZeroAddress();\\n    error ZeroValue();\\n    error ZeroMinValue();\\n    error ZeroConversionRate();\\n\\n    // Authorization errors\\n    error UnauthorizedCaller(address caller, address authorized);\\n    error UnauthorizedCallerOrDelegate(address caller, address owner, address delegate);\\n    error CannotDelegateToSelf(address depositor);\\n\\n    // Range and amount errors\\n    error InvalidRange(uint256 min, uint256 max);\\n    error AmountBelowMin(uint256 amount, uint256 min);\\n    error AmountAboveMax(uint256 amount, uint256 max);\\n    error AmountExceedsAvailable(uint256 requested, uint256 available);\\n\\n    // Not found errors\\n    error DepositNotFound(uint256 depositId);\\n    error IntentNotFound(bytes32 intentHash);\\n    error PaymentMethodNotActive(uint256 depositId, bytes32 paymentMethod);\\n    error PaymentMethodNotListed(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyNotFound(bytes32 paymentMethod, bytes32 currency);\\n    error DelegateNotFound(uint256 depositId);\\n\\n    // Already exists errors\\n    error PaymentMethodAlreadyExists(uint256 depositId, bytes32 paymentMethod);\\n    error CurrencyAlreadyExists(bytes32 paymentMethod, bytes32 currency);\\n    error IntentAlreadyExists(uint256 depositId, bytes32 intentHash);\\n\\n    // State errors\\n    error DepositNotAcceptingIntents(uint256 depositId);\\n    error DepositAlreadyInState(uint256 depositId, bool currentState);\\n    error InsufficientDepositLiquidity(uint256 depositId, uint256 available, uint256 required);\\n    error MaxIntentsExceeded(uint256 depositId, uint256 current, uint256 max);\\n\\n    // Validation errors\\n    error EmptyPayeeDetails();\\n    error ArrayLengthMismatch(uint256 length1, uint256 length2);\\n\\n    // Payment method errors\\n    error PaymentMethodNotWhitelisted(bytes32 paymentMethod);\\n    error CurrencyNotSupported(bytes32 paymentMethod, bytes32 currency);\\n\\n    // Oracle/Rate manager errors\\n    error InvalidOracleAdapter(address adapter);\\n    error AdapterConfigTooLong(uint256 length, uint256 maxLength);\\n    error InvalidRateManager(address rateManager);\\n    error InvalidSpread(int16 spreadBps);\\n    error RateManagerAlreadySet(bytes32 rateManagerId);\\n    error RateManagerNotFound(bytes32 rateManagerId);\\n    error RateManagerNotSet(uint256 depositId);\\n\\n    /* ============ External Functions for Orchestrator ============ */\\n\\n    function lockFunds(uint256 _depositId, bytes32 _intentHash, uint256 _amount) external;\\n    function unlockFunds(uint256 _depositId, bytes32 _intentHash) external;\\n    function unlockAndTransferFunds(uint256 _depositId, bytes32 _intentHash, uint256 _transferAmount, address _to) external;\\n    function extendIntentExpiry(uint256 _depositId, bytes32 _intentHash, uint256 _additionalTime) external;\\n\\n    /* ============ External Functions ============ */\\n\\n    function depositTo(address _depositor, CreateDepositParams calldata _params) external;\\n\\n    function setOracleRateConfig(\\n        uint256 _depositId,\\n        bytes32 _paymentMethod,\\n        bytes32 _currencyCode,\\n        OracleRateConfig calldata _config\\n    ) external;\\n\\n    function setOracleRateConfigBatch(\\n        uint256 _depositId,\\n        bytes32[] calldata _paymentMethods,\\n        bytes32[][] calldata _currencyCodes,\\n        OracleRateConfig[][] calldata _configs\\n    ) external;\\n\\n    function updateCurrencyConfigBatch(\\n        uint256 _depositId,\\n        bytes32[] calldata _paymentMethods,\\n        CurrencyRateUpdate[][] calldata _updates\\n    ) external;\\n\\n    function removeOracleRateConfig(\\n        uint256 _depositId,\\n        bytes32 _paymentMethod,\\n        bytes32 _currencyCode\\n    ) external;\\n\\n    function deactivateCurrenciesBatch(\\n        uint256 _depositId,\\n        bytes32[] calldata _paymentMethods,\\n        bytes32[][] calldata _currencyCodes\\n    ) external;\\n\\n    function setRateManager(\\n        uint256 _depositId,\\n        address _rateManager,\\n        bytes32 _rateManagerId\\n    ) external;\\n\\n    function clearRateManager(uint256 _depositId) external;\\n\\n    function setOrchestratorRegistry(address _orchestratorRegistry) external;\\n\\n    /* ============ View Functions ============ */\\n\\n    function intentExpirationPeriod() external view returns (uint256);\\n    function getDeposit(uint256 _depositId) external view returns (Deposit memory);\\n    function getDepositIntent(uint256 _depositId, bytes32 _intentHash) external view returns (Intent memory);\\n    function getDepositPaymentMethods(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getDepositCurrencies(uint256 _depositId, bytes32 _paymentMethod) external view returns (bytes32[] memory);\\n    function getDepositCurrencyMinRate(uint256 _depositId, bytes32 _paymentMethod, bytes32 _currencyCode) external view returns (uint256);\\n    function getDepositPaymentMethodData(uint256 _depositId, bytes32 _paymentMethod) external view returns (DepositPaymentMethodData memory);\\n    function getDepositPaymentMethodActive(uint256 _depositId, bytes32 _paymentMethod) external view returns (bool);\\n    function getDepositGatingService(uint256 _depositId, bytes32 _paymentMethod) external view returns (address);\\n    function getDepositIntentHashes(uint256 _depositId) external view returns (bytes32[] memory);\\n    function getExpiredIntents(uint256 _depositId) external view returns (bytes32[] memory expiredIntents, uint256 reclaimableAmount);\\n\\n    function getDepositOracleRateConfig(\\n        uint256 _depositId,\\n        bytes32 _paymentMethod,\\n        bytes32 _currencyCode\\n    ) external view returns (OracleRateConfig memory);\\n\\n    function getDepositRateManager(uint256 _depositId)\\n        external\\n        view\\n        returns (address rateManager, bytes32 rateManagerId);\\n\\n    function getEffectiveRate(\\n        uint256 _depositId,\\n        bytes32 _paymentMethod,\\n        bytes32 _currencyCode\\n    ) external view returns (uint256);\\n\\n    function getManagerFee(uint256 _depositId) external view returns (address recipient, uint256 fee);\\n}\\n\",\"keccak256\":\"0xb21fab1b87b829890906a14611e60ee700bb577185d665f26b807c76bfa7e8fb\",\"license\":\"MIT\"},\"contracts/interfaces/INullifierRegistry.sol\":{\"content\":\"//SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\ninterface INullifierRegistry {\\n    function addNullifier(bytes32 _nullifier) external;\\n    function isNullified(bytes32 _nullifier) external view returns(bool);\\n}\\n\",\"keccak256\":\"0x107164bc9a320938b513305878163b7fa884da4cdae58d0c8e81bfbb00c97c5e\",\"license\":\"MIT\"},\"contracts/interfaces/IStakeVault.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\nimport {IERC20} from \\\"@openzeppelin/contracts/token/ERC20/IERC20.sol\\\";\\n\\n/**\\n * @title IStakeVault\\n * @notice Custody, delegation, locking, and immediately claimable token accounting.\\n * @dev The controller supplies all risk policy. Lock identifiers and claim allocations are opaque to the vault.\\n * ZKP2P deployments support canonical USDC only; fee-on-transfer and rebasing tokens are unsupported.\\n */\\ninterface IStakeVault {\\n    struct StakeLock {\\n        address stakeOwner;\\n        uint256 amount;\\n        uint64 maturesAt;\\n    }\\n\\n    struct Claim {\\n        address beneficiary;\\n        uint256 amount;\\n    }\\n\\n    error ZeroAddress();\\n    error ZeroAmount();\\n    error ZeroLockId();\\n    error InvalidControllerChangeDelay(uint64 suppliedDelay);\\n    error ControllerAlreadyInitialized(address controller);\\n    error ControllerInitializationWithLiabilities(uint256 totalStaked, uint256 totalClaimable);\\n    error UnauthorizedController(address caller);\\n    error UnauthorizedPendingController(address caller, address pendingController);\\n    error NoPendingController();\\n    error ControllerProposalNotReady(uint64 validAt, uint64 currentTime);\\n    error InvalidTaker(address taker);\\n    error UnauthorizedStakeOwner(address taker, address stakeOwner);\\n    error InvalidMaturity(uint64 maturity, uint64 currentTime);\\n    error LockAlreadyExists(bytes32 lockId);\\n    error LockNotFound(bytes32 lockId);\\n    error LockAlreadyMatured(bytes32 lockId, uint64 maturesAt, uint64 currentTime);\\n    error InvalidLockAmount(uint256 newAmount, uint256 currentAmount);\\n    error InsufficientFreeStake(address stakeOwner, uint256 available, uint256 required);\\n    error InsufficientUnaccountedTokens(uint256 available, uint256 required);\\n    error InvalidReceivedAmount(uint256 expected, uint256 received);\\n    error InvalidClaim(address beneficiary, uint256 amount);\\n    error ClaimsExceedLock(uint256 lockAmount, uint256 claimsAmount);\\n    error TimestampOverflow(uint256 timestamp);\\n    error OwnershipRenunciationDisabled();\\n\\n    event StakeDeposited(address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);\\n    event StakeWithdrawn(address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);\\n    event TakerAuthorizationUpdated(address indexed stakeOwner, address indexed taker, bool authorized);\\n    event StakeOwnerSelected(address indexed taker, address indexed previousStakeOwner, address indexed newStakeOwner);\\n    event StakeLocked(\\n        bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint64 maturesAt, uint256 totalLockedStake\\n    );\\n    event LockFunded(bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint256 newStakeBalance);\\n    event StakeLockIncreased(\\n        bytes32 indexed lockId,\\n        address indexed stakeOwner,\\n        uint256 previousAmount,\\n        uint256 newAmount,\\n        uint256 totalLockedStake\\n    );\\n    event StakeLockResized(\\n        bytes32 indexed lockId,\\n        address indexed stakeOwner,\\n        uint256 previousAmount,\\n        uint256 newAmount,\\n        uint64 previousMaturity,\\n        uint64 newMaturity,\\n        uint256 totalLockedStake\\n    );\\n    event StakeUnlocked(bytes32 indexed lockId, address indexed stakeOwner, uint256 amount, uint256 totalLockedStake);\\n    event StakeLockResolved(\\n        bytes32 indexed lockId,\\n        address indexed stakeOwner,\\n        uint256 lockAmount,\\n        uint256 unlockedAmount,\\n        uint256 claimedAmount,\\n        uint256 totalLockedStake\\n    );\\n    event ClaimCreated(\\n        bytes32 indexed lockId, address indexed beneficiary, uint256 amount, uint256 newClaimableBalance\\n    );\\n    event ClaimWithdrawn(address indexed beneficiary, uint256 amount);\\n    event ControllerInitialized(address indexed controller);\\n    event ControllerProposed(address indexed currentController, address indexed pendingController, uint64 validAt);\\n    event ControllerProposalCancelled(address indexed pendingController);\\n    event ControllerAccepted(address indexed previousController, address indexed newController);\\n\\n    function depositStake(uint256 _amount) external;\\n    function withdrawStake(uint256 _amount) external;\\n    function claim() external;\\n\\n    function setTakerAuthorization(address _taker, bool _authorized) external;\\n    function selectStakeOwner(address _stakeOwner) external;\\n    function clearStakeOwner() external;\\n\\n    function lockStake(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt) external;\\n    function fundLock(address _stakeOwner, bytes32 _lockId, uint256 _amount, uint64 _maturesAt) external;\\n    function increaseLock(bytes32 _lockId, uint256 _additionalAmount) external;\\n    function resizeLock(bytes32 _lockId, uint256 _newAmount, uint64 _newMaturesAt) external;\\n    function unlockStake(bytes32 _lockId) external;\\n    function resolveLock(bytes32 _lockId, Claim[] calldata _claims) external;\\n\\n    function initializeController(address _controller) external;\\n    function proposeController(address _controller) external;\\n    function cancelControllerProposal() external;\\n    function acceptController() external;\\n\\n    function stakeToken() external view returns (IERC20);\\n    function controller() external view returns (address);\\n    function pendingController() external view returns (address);\\n    function pendingControllerValidAt() external view returns (uint64);\\n    function controllerChangeDelay() external view returns (uint64);\\n    function stakeBalance(address _stakeOwner) external view returns (uint256);\\n    function lockedStake(address _stakeOwner) external view returns (uint256);\\n    function claimable(address _beneficiary) external view returns (uint256);\\n    function totalStaked() external view returns (uint256);\\n    function totalClaimable() external view returns (uint256);\\n    function locks(bytes32 _lockId) external view returns (address stakeOwner, uint256 amount, uint64 maturesAt);\\n    function selectedStakeOwner(address _taker) external view returns (address);\\n    function authorizedTakers(address _stakeOwner, address _taker) external view returns (bool);\\n    function stakeOwnerOf(address _taker) external view returns (address);\\n\\n    /**\\n     * @notice Returns a taker's live selected stake owner and that owner's aggregate balances.\\n     * @param _taker Taker whose effective stake owner and balances are queried.\\n     */\\n    function getTakerState(address _taker)\\n        external\\n        view\\n        returns (address stakeOwner, uint256 totalStake, uint256 lockedStakeAmount, uint256 freeStakeAmount);\\n    function freeStake(address _stakeOwner) external view returns (uint256);\\n    function isLockMature(bytes32 _lockId) external view returns (bool);\\n    function totalAccounted() external view returns (uint256);\\n    function unaccountedBalance() external view returns (uint256);\\n}\\n\",\"keccak256\":\"0x3b2c3e26a0962ff88cd2af5c837a80692bb632adbf811c2b324daf55d5b24d11\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x60c0346200015e57601f62001f8238819003918201601f19168301916001600160401b0383118484101762000163578084926080946040528339810103126200015e5780516001600160a01b03808216928383036200015e5760208101518281168082036200015e576040830151928484168094036200015e5760600151938416958685036200015e57620000943362000179565b6001600255156200014c57620000e495620000b3620000c492620001c7565b620000be84620001c7565b620001c7565b608052600380546001600160a01b03191691909117905560a05262000179565b604051611d869081620001fc823960805181818161042b01528181610a5f01528181610cb301528181611271015281816112f201528181611463015281816114da01528181611736015281816119320152611c1e015260a0518181816107db01526109670152f35b60405163d92e233d60e01b8152600490fd5b600080fd5b634e487b7160e01b600052604160045260246000fd5b60018060a01b031990816001541660015560005460018060a01b038092168093821617600055167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0600080a3565b6001600160a01b0381169081156200014c573b15620001e35750565b60249060405190633b00592160e21b82526004820152fdfe60c080604052600460a052600436101561001857600080fd5b600090813560e01c90816304136c141461100f57508063045c2b6c14610f6c578063050a7dad14610f3057806307612cc214610e935780630aaaa5b414610df45780630c7ec89e14610d7b5780631500256614610d085780631e37557814610ce25780632d78833314610c9d57806332ba8d0714610c745780633dffe4601461080a57806341bbc083146107c5578063473623901461069357806354c5ad9a1461065f57806356de01b6146105ee5780636754a8b2146105cc578063715018a6146105a057806379ba5097146104e35780638d56535d146104c45780638da5cb5b1461049d57806396beda781461040f57806398d7424f146103cf578063a950051c1461035b578063ccdc8cc61461020d578063e30c3978146101e4578063e7a4e041146101be5763f2fde38b1461014f57600080fd5b346101bb5760203660031901126101bb5761016861108f565b6101706110c8565b600180546001600160a01b0319166001600160a01b0392831690811790915582549091167f38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e227008380a380f35b80fd5b50346101bb57806003193601126101bb57602060ff60035460a01c166040519015158152f35b50346101bb57806003193601126101bb576001546040516001600160a01b039091168152602090f35b50346101bb5760203660031901126101bb578060409160e0835161023081611164565b82815282602082015282858201528260608201528260808201528260a08201528260c0820152015260a05135815260076020522060405161027081611164565b81546001600160a01b0390811682526001830154811660208301908152600284015482166040840190815260038501546060850190815260a051808701549693946080870193909160ff8916906006821015610346575093879360c09693610330936101009b97845281600560a08901978a6001600160401b039c8d9b8c809360081c168c52019b60481c168b5201549a60e08d019b8c52816040519d51168d52511660208c0152511660408a01525160608901525160808801906110a5565b511660a0850152511660c08301525160e0820152f35b602190634e487b7160e01b6000525260246000fd5b50346101bb5760203660031901126101bb5761037561108f565b61037d6110c8565b61038681611d0c565b600380546001600160a01b039283166001600160a01b0319821681179092559091167ff770c25506cbd44ff51f586aa1c7b778e8cec717cf608e4241912547c8db36238380a380f35b50346101bb5760203660031901126101bb5760209060ff906040906001600160a01b036103fa61108f565b16815260a05184522054166040519015158152f35b50346101bb57806003193601126101bb576104286110c8565b807f00000000000000000000000000000000000000000000000000000000000000006001600160a01b0316803b1561049a578160405180926326f0870360e21b8252818360a051925af1801561048f5761047f5750f35b61048890611120565b6101bb5780f35b6040513d84823e3d90fd5b50fd5b50346101bb57806003193601126101bb57546040516001600160a01b039091168152602090f35b50346101bb57806003193601126101bb5760206040516301e133808152f35b50346101bb57806003193601126101bb576001546001600160a01b033381831603610549576001600160a01b031991821660015582543392811683178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b608460405162461bcd60e51b8152602060a051820152602960248201527f4f776e61626c6532537465703a2063616c6c6572206973206e6f7420746865206044820152683732bb9037bbb732b960b91b6064820152fd5b50346101bb57806003193601126101bb576105b96110c8565b6040516310e83c2760e21b815260a05190fd5b50346101bb57806003193601126101bb5760206040516001600160401b038152f35b50346101bb5760603660031901126101bb57604435801515810361065a5733825260a05160205260ff604083205416156106425761063a9061062e61167a565b60243560a05135611891565b600160025580f35b6024604051630d0d1cd760e31b81523360a051820152fd5b600080fd5b50346101bb5760203660031901126101bb576001600160401b03604060209260a05135815260068452205416604051908152f35b50346101bb5760803660031901126101bb576106ad61108f565b602435604435916064358015801580920361065a576040516313f3f72d60e31b815260a05181018590526001600160a01b039384169390610140908181602481895afa9182156107ba57899261078d575b505051163303610768577fa9fab060ed9cdb986a537f9069f6899f05d87ef070e5b4fca236042ad30cd2ab9161075e6020928589526005845260408920878a52845260408920888a528452604089209060ff801983541691151516179055565b604051908152a480f35b60648385604051916334633e4160e11b835260a0518301526024820152336044820152fd5b6107ac9250803d106107b3575b6107a48183611180565b810190611ae3565b38806106fe565b503d61079a565b6040513d8b823e3d90fd5b50346101bb57806003193601126101bb576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b50346101bb576020608052600319906020823601126101bb5760a051356001600160401b0390818111610c7057608081360394850112610c705761084c61167a565b8060a051013591828452600760805152604084209460a051928387019360ff855416906006821015610c5d575060038103610c35575060018060a01b03600354169160038801549160405194633fc1957d60e21b8652604060a05187015260c48601928860448801526024830135606488015260448301359060221901811215610c3157820160a051810135918211610c31578160051b938436036024830113610c2d5791808896959493608060848901525260e4808701948701019360248301928c905b838210610bec5750505050506040949261094b85936109398460648796019060a05101611a82565b8583036043190160a487015290611a61565b90602483015203915afa8015610be15784918591610ba3575b507f00000000000000000000000000000000000000000000000000000000000000006001600160a01b031690813b15610b9f578591602483926040519485938492632dea6f9960e11b845260a0518401525af18015610b9457610b81575b50600585015491600560ff19825416179055604051926109e184611149565b600192838552855b608051811015610a1a576040516109ff81611149565b878152876080518201526080518288010152608051016109e9565b50600287018054604051959694959194899290916001600160a01b0316610a4082611149565b815283608051820152610a5282611ab3565b52610a5c81611ab3565b507f00000000000000000000000000000000000000000000000000000000000000006001600160a01b0316803b15610b7d579088916040519163bcdded0b60e01b8352604483018760a05185015260406024850152815180915260648401916080510190855b8c828210610b4b57505050508391838381809403925af1801561048f57610b33575b50508501549254604080519283526080518301959095526001600160a01b03908116949316927f2ef030cd746710443538050b41d3d8ece075f969198285f7cb87fe5c5d63175891a460025580f35b610b3c90611120565b610b47578688610ae4565b8680fd5b835180516001600160a01b03168652608080519182015191870191909152518f98506040909501949093019201610ac2565b8880fd5b610b8d90949194611120565b92386109c2565b6040513d87823e3d90fd5b8580fd5b9150506040813d604011610bd9575b81610bbf60409383611180565b81010312610bd557805190608051015138610964565b8380fd5b3d9150610bb2565b6040513d86823e3d90fd5b9193969750919394610c1660019160e3198c8203018652610c108960248601611a82565b90611a61565b966080518091019401920189979695949291610911565b8a80fd5b8980fd5b60405163a0d595eb60e01b815260a0518101879052604491610c5b9060248301906110a5565bfd5b634e487b7160e01b885260219052602487fd5b8280fd5b50346101bb57806003193601126101bb576003546040516001600160a01b039091168152602090f35b50346101bb57806003193601126101bb576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b50346101bb5760203660031901126101bb57610cfc61167a565b61063a60a05135611bb1565b50346101bb5760203660031901126101bb5760a05135801515809103610d775760207fa0a549335afe2cd79039df3d4f13486d7cab3c53e9d3d3f75948b3343d78e22891610d546110c8565b6003805460ff60a01b191660a083901b60ff60a01b16179055604051908152a180f35b5080fd5b50346101bb5760603660031901126101bb576020906001600160a01b03610da061108f565b168152600582526040812060243582528252604081206044358252825260ff604082205416159081610dd8575b506040519015158152f35b6001600160401b03915060409060068452205416151538610dcd565b50346101bb5760403660031901126101bb5760a051356024356001600160401b038116809103610c7057610e266110c8565b6301e133808111610e7a5760207f88f4a7c94dfd946495243620592cd833586e61db5178679e744266df9408d5aa918385526006825260408520816001600160401b0319825416179055604051908152a280f35b60249060405190637d62436760e11b825260a051820152fd5b50346101bb5760403660031901126101bb57610ead61108f565b6024359081151590818303610bd5577fdbf64749aa641b1006cabc509ae230bde7f2ab1b7505c3a69ece962719f3a8e991610f1860209285610eed6110c8565b610f22575b60018060a01b03169485875260a0518452604087209060ff801983541691151516179055565b604051908152a280f35b610f2b81611d0c565b610ef2565b50346101bb5760203660031901126101bb5733815260a05160205260ff6040822054161561064257610f6061167a565b61063a60a051356116e2565b50346101bb5760203660031901126101bb5760a0518035906001600160401b0390818311610bd55736602384011215610bd557820135908111610c70576024916005368484831b8401011161100b57610fc361167a565b845b838110610fd55785600160025580f35b610fe58582841b85010135611bb1565b6000198114610ff657600101610fc5565b634e487b7160e01b865260a051601190528486fd5b8480fd5b82346101bb5760c03660031901126101bb576001600160a01b036024358181168103610c70576064359182168203610c7057338352600460205260ff60408420541615611078579061063a9161106361167a565b60a43591608435916044359060a051356111a1565b630d0d1cd760e31b845260a0513390850152602484fd5b600435906001600160a01b038216820361065a57565b9060068210156110b25752565b634e487b7160e01b600052602160045260246000fd5b6000546001600160a01b031633036110dc57565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b6001600160401b03811161113357604052565b634e487b7160e01b600052604160045260246000fd5b604081019081106001600160401b0382111761113357604052565b61010081019081106001600160401b0382111761113357604052565b90601f801991011681019081106001600160401b0382111761113357604052565b92939094918160005260066020526001600160401b03604060002054169586156116715760ff60035460a01c1661165f5784600052600760205260ff6004604060002001541660068110156110b2576116465760018060a01b03169081600052600560205260406000208160005260205260406000208360005260205260ff60406000205416611623576040519182916313f3f72d60e31b835260048301528160246101409485935afa91821561156657600092611606575b505060405163051ed6a360e41b81526020816004817f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03165afa908115611566576000916115cc575b5060408201516001600160a01b0391821691168181036115ae575050604051638338bd4960e01b81526001600160a01b038681166004830152909190602090839060249082907f0000000000000000000000000000000000000000000000000000000000000000165afa91821561156657600092611572575b50516040516001600160a01b03909116969061133e81611164565b60018060a01b03871681526020810160018060a01b0384168152604082019089825260608301868152608084016001815260a085019186835260c08601946000865260e0870194600086528c600052600760205260406000209760018060a01b03905116906bffffffffffffffffffffffff60a01b91828a5416178955600189019060018060a01b0390511682825416179055600288019160018060a01b03905116908254161790555160038601556004850190519160068310156110b25760059461145d936001600160401b039260ff68ffffffffffffffff008654925160081b1692169068ffffffffffffffffff191617178355511667ffffffffffffffff60481b82549160481b169067ffffffffffffffff60481b1916179055565b519101557f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03163b1561065a576040516301767f3560e71b81526001600160a01b03838116600483015260248201879052604482018690526001600160401b0360648301529094906000908690608490829084907f0000000000000000000000000000000000000000000000000000000000000000165af1938415611566577fcda1ebed13163eb544e4364801d389fe0e3cb617c208891e412e84d2afffb2ea95608095611557575b506040519760018060a01b0316885260208801526040870152606086015260018060a01b031693a4565b61156090611120565b3861152d565b6040513d6000823e3d90fd5b9091506020813d6020116115a6575b8161158e60209383611180565b8101031261065a5761159f906116ce565b9038611323565b3d9150611581565b604492506040519163e953c29f60e01b835260048301526024820152fd5b90506020813d6020116115fe575b816115e760209383611180565b8101031261065a576115f8906116ce565b386112aa565b3d91506115da565b61161c9250803d106107b3576107a48183611180565b388061125a565b91606492604051926359a4de7560e11b8452600484015260248301526044820152fd5b604051632550ae0160e21b815260048101869052602490fd5b604051632e47300360e21b8152600490fd5b50505050505050565b60028054146116895760028055565b60405162461bcd60e51b815260206004820152601f60248201527f5265656e7472616e637947756172643a207265656e7472616e742063616c6c006044820152606490fd5b51906001600160a01b038216820361065a57565b6000908082526007602052604091828120600481019081549260ff8416600681101561187d57801561167157600181036118595750855163ed5e843760e01b815260048101869052936001600160a01b03937f0000000000000000000000000000000000000000000000000000000000000000851691606087602481865afa96871561184f5784976117fa575b5060ff19166002179055803b15610d7757818091602489518095819363722081d160e11b83528b60048401525af19081156117ef57507f7eea36af2cdbaa3fe67f3ebc8925cfba833a0b57bb621262a418f2c9c6d0d16c9492602094926001926117e0575b500154169451908152a3565b6117e990611120565b386117d4565b8751903d90823e3d90fd5b9096506060813d8211611847575b8161181560609383611180565b81010312610bd557611826816116ce565b508860208201519101516001600160401b03811603610bd55795600261176f565b3d9150611808565b89513d86823e3d90fd5b86516322f7db6160e11b815260048101879052604491610c5b9060248301906110a5565b634e487b7160e01b82526021600452602482fd5b9190916000928184526007602052604080852093600480860196875460ff81166006811015611a4e578015611a425760018103611a1f57506001600160401b03809160081c164201804211611a0c578181116119f657169785600589015561191c89829067ffffffffffffffff60481b82549160481b169067ffffffffffffffff60481b1916179055565b805460ff191660031790556001600160a01b03917f00000000000000000000000000000000000000000000000000000000000000008316803b15610c7057918760648293838d968a519788958694637b4ef94760e01b86528501528c602485015260448401525af19081156119eb5750917f0227207b39a65426fb0e783b25275318246fc306c6ea757ffa25c347104cbbd6959391606095936119dc575b5060028160018a015416980154169782519384526020840152151590820152a4565b6119e590611120565b386119ba565b8551903d90823e3d90fd5b8360249187519163013e408b60e61b8352820152fd5b634e487b7160e01b835260118452602483fd5b85516322f7db6160e11b8152808501899052604491610c5b9060248301906110a5565b50505050505050505050565b634e487b7160e01b835260218452602483fd5b908060209392818452848401376000828201840152601f01601f1916010190565b9035601e198236030181121561065a5701602081359101916001600160401b03821161065a57813603831361065a57565b805115611ac05760200190565b634e487b7160e01b600052603260045260246000fd5b5190811515820361065a57565b80910390610140821261065a57604080519261012090818501908582106001600160401b038311176111335783918252611b1c856116ce565b8652611b2a602086016116ce565b6020870152611b3a8286016116ce565b86830152605f19011261065a57611baa9151611b5581611149565b60608401518152608084015160208201526060850152611b7760a08401611ad6565b608085015260c083015160a085015260e083015160c085015261010092611b9f8482016116ce565b60e086015201611ad6565b9082015290565b6000908082526007602052604091828120906004918281019283549360ff85166006811015611cf95760038103611cd657506001600160401b03804211611cc057804216908660481c16808210611ca5575050600583015460ff19909516821790556001600160a01b03927f0000000000000000000000000000000000000000000000000000000000000000841691823b15610d77578660248392838b51968794859363722081d160e11b85528401525af19081156117ef57507fdb5b3a855555ee0079a1cdfba25ce0ff079419f20a4d0073150bdca65d06fdbb9492602094926001926117e057500154169451908152a3565b88516342a71a8960e01b815293840152602483015250604490fd5b875163013e408b60e61b81524281850152602490fd5b875163a0d595eb60e01b8152808401889052604491610c5b9060248301906110a5565b634e487b7160e01b855260218352602485fd5b6001600160a01b038116908115611d3e573b15611d265750565b60249060405190633b00592160e21b82526004820152fd5b60405163d92e233d60e01b8152600490fdfea2646970667358221220e8a0e63b5558bdc1c513e6e82c4ad40fd62595c4e16cbe95ceb135ab2490205464736f6c63430008120033",
+  "deployedBytecode": "0x60c080604052600460a052600436101561001857600080fd5b600090813560e01c90816304136c141461100f57508063045c2b6c14610f6c578063050a7dad14610f3057806307612cc214610e935780630aaaa5b414610df45780630c7ec89e14610d7b5780631500256614610d085780631e37557814610ce25780632d78833314610c9d57806332ba8d0714610c745780633dffe4601461080a57806341bbc083146107c5578063473623901461069357806354c5ad9a1461065f57806356de01b6146105ee5780636754a8b2146105cc578063715018a6146105a057806379ba5097146104e35780638d56535d146104c45780638da5cb5b1461049d57806396beda781461040f57806398d7424f146103cf578063a950051c1461035b578063ccdc8cc61461020d578063e30c3978146101e4578063e7a4e041146101be5763f2fde38b1461014f57600080fd5b346101bb5760203660031901126101bb5761016861108f565b6101706110c8565b600180546001600160a01b0319166001600160a01b0392831690811790915582549091167f38d16b8cac22d99fc7c124b9cd0de2d3fa1faef420bfe791d8c362d765e227008380a380f35b80fd5b50346101bb57806003193601126101bb57602060ff60035460a01c166040519015158152f35b50346101bb57806003193601126101bb576001546040516001600160a01b039091168152602090f35b50346101bb5760203660031901126101bb578060409160e0835161023081611164565b82815282602082015282858201528260608201528260808201528260a08201528260c0820152015260a05135815260076020522060405161027081611164565b81546001600160a01b0390811682526001830154811660208301908152600284015482166040840190815260038501546060850190815260a051808701549693946080870193909160ff8916906006821015610346575093879360c09693610330936101009b97845281600560a08901978a6001600160401b039c8d9b8c809360081c168c52019b60481c168b5201549a60e08d019b8c52816040519d51168d52511660208c0152511660408a01525160608901525160808801906110a5565b511660a0850152511660c08301525160e0820152f35b602190634e487b7160e01b6000525260246000fd5b50346101bb5760203660031901126101bb5761037561108f565b61037d6110c8565b61038681611d0c565b600380546001600160a01b039283166001600160a01b0319821681179092559091167ff770c25506cbd44ff51f586aa1c7b778e8cec717cf608e4241912547c8db36238380a380f35b50346101bb5760203660031901126101bb5760209060ff906040906001600160a01b036103fa61108f565b16815260a05184522054166040519015158152f35b50346101bb57806003193601126101bb576104286110c8565b807f00000000000000000000000000000000000000000000000000000000000000006001600160a01b0316803b1561049a578160405180926326f0870360e21b8252818360a051925af1801561048f5761047f5750f35b61048890611120565b6101bb5780f35b6040513d84823e3d90fd5b50fd5b50346101bb57806003193601126101bb57546040516001600160a01b039091168152602090f35b50346101bb57806003193601126101bb5760206040516301e133808152f35b50346101bb57806003193601126101bb576001546001600160a01b033381831603610549576001600160a01b031991821660015582543392811683178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b608460405162461bcd60e51b8152602060a051820152602960248201527f4f776e61626c6532537465703a2063616c6c6572206973206e6f7420746865206044820152683732bb9037bbb732b960b91b6064820152fd5b50346101bb57806003193601126101bb576105b96110c8565b6040516310e83c2760e21b815260a05190fd5b50346101bb57806003193601126101bb5760206040516001600160401b038152f35b50346101bb5760603660031901126101bb57604435801515810361065a5733825260a05160205260ff604083205416156106425761063a9061062e61167a565b60243560a05135611891565b600160025580f35b6024604051630d0d1cd760e31b81523360a051820152fd5b600080fd5b50346101bb5760203660031901126101bb576001600160401b03604060209260a05135815260068452205416604051908152f35b50346101bb5760803660031901126101bb576106ad61108f565b602435604435916064358015801580920361065a576040516313f3f72d60e31b815260a05181018590526001600160a01b039384169390610140908181602481895afa9182156107ba57899261078d575b505051163303610768577fa9fab060ed9cdb986a537f9069f6899f05d87ef070e5b4fca236042ad30cd2ab9161075e6020928589526005845260408920878a52845260408920888a528452604089209060ff801983541691151516179055565b604051908152a480f35b60648385604051916334633e4160e11b835260a0518301526024820152336044820152fd5b6107ac9250803d106107b3575b6107a48183611180565b810190611ae3565b38806106fe565b503d61079a565b6040513d8b823e3d90fd5b50346101bb57806003193601126101bb576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b50346101bb576020608052600319906020823601126101bb5760a051356001600160401b0390818111610c7057608081360394850112610c705761084c61167a565b8060a051013591828452600760805152604084209460a051928387019360ff855416906006821015610c5d575060038103610c35575060018060a01b03600354169160038801549160405194633fc1957d60e21b8652604060a05187015260c48601928860448801526024830135606488015260448301359060221901811215610c3157820160a051810135918211610c31578160051b938436036024830113610c2d5791808896959493608060848901525260e4808701948701019360248301928c905b838210610bec5750505050506040949261094b85936109398460648796019060a05101611a82565b8583036043190160a487015290611a61565b90602483015203915afa8015610be15784918591610ba3575b507f00000000000000000000000000000000000000000000000000000000000000006001600160a01b031690813b15610b9f578591602483926040519485938492632dea6f9960e11b845260a0518401525af18015610b9457610b81575b50600585015491600560ff19825416179055604051926109e184611149565b600192838552855b608051811015610a1a576040516109ff81611149565b878152876080518201526080518288010152608051016109e9565b50600287018054604051959694959194899290916001600160a01b0316610a4082611149565b815283608051820152610a5282611ab3565b52610a5c81611ab3565b507f00000000000000000000000000000000000000000000000000000000000000006001600160a01b0316803b15610b7d579088916040519163bcdded0b60e01b8352604483018760a05185015260406024850152815180915260648401916080510190855b8c828210610b4b57505050508391838381809403925af1801561048f57610b33575b50508501549254604080519283526080518301959095526001600160a01b03908116949316927f2ef030cd746710443538050b41d3d8ece075f969198285f7cb87fe5c5d63175891a460025580f35b610b3c90611120565b610b47578688610ae4565b8680fd5b835180516001600160a01b03168652608080519182015191870191909152518f98506040909501949093019201610ac2565b8880fd5b610b8d90949194611120565b92386109c2565b6040513d87823e3d90fd5b8580fd5b9150506040813d604011610bd9575b81610bbf60409383611180565b81010312610bd557805190608051015138610964565b8380fd5b3d9150610bb2565b6040513d86823e3d90fd5b9193969750919394610c1660019160e3198c8203018652610c108960248601611a82565b90611a61565b966080518091019401920189979695949291610911565b8a80fd5b8980fd5b60405163a0d595eb60e01b815260a0518101879052604491610c5b9060248301906110a5565bfd5b634e487b7160e01b885260219052602487fd5b8280fd5b50346101bb57806003193601126101bb576003546040516001600160a01b039091168152602090f35b50346101bb57806003193601126101bb576040517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b50346101bb5760203660031901126101bb57610cfc61167a565b61063a60a05135611bb1565b50346101bb5760203660031901126101bb5760a05135801515809103610d775760207fa0a549335afe2cd79039df3d4f13486d7cab3c53e9d3d3f75948b3343d78e22891610d546110c8565b6003805460ff60a01b191660a083901b60ff60a01b16179055604051908152a180f35b5080fd5b50346101bb5760603660031901126101bb576020906001600160a01b03610da061108f565b168152600582526040812060243582528252604081206044358252825260ff604082205416159081610dd8575b506040519015158152f35b6001600160401b03915060409060068452205416151538610dcd565b50346101bb5760403660031901126101bb5760a051356024356001600160401b038116809103610c7057610e266110c8565b6301e133808111610e7a5760207f88f4a7c94dfd946495243620592cd833586e61db5178679e744266df9408d5aa918385526006825260408520816001600160401b0319825416179055604051908152a280f35b60249060405190637d62436760e11b825260a051820152fd5b50346101bb5760403660031901126101bb57610ead61108f565b6024359081151590818303610bd5577fdbf64749aa641b1006cabc509ae230bde7f2ab1b7505c3a69ece962719f3a8e991610f1860209285610eed6110c8565b610f22575b60018060a01b03169485875260a0518452604087209060ff801983541691151516179055565b604051908152a280f35b610f2b81611d0c565b610ef2565b50346101bb5760203660031901126101bb5733815260a05160205260ff6040822054161561064257610f6061167a565b61063a60a051356116e2565b50346101bb5760203660031901126101bb5760a0518035906001600160401b0390818311610bd55736602384011215610bd557820135908111610c70576024916005368484831b8401011161100b57610fc361167a565b845b838110610fd55785600160025580f35b610fe58582841b85010135611bb1565b6000198114610ff657600101610fc5565b634e487b7160e01b865260a051601190528486fd5b8480fd5b82346101bb5760c03660031901126101bb576001600160a01b036024358181168103610c70576064359182168203610c7057338352600460205260ff60408420541615611078579061063a9161106361167a565b60a43591608435916044359060a051356111a1565b630d0d1cd760e31b845260a0513390850152602484fd5b600435906001600160a01b038216820361065a57565b9060068210156110b25752565b634e487b7160e01b600052602160045260246000fd5b6000546001600160a01b031633036110dc57565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b6001600160401b03811161113357604052565b634e487b7160e01b600052604160045260246000fd5b604081019081106001600160401b0382111761113357604052565b61010081019081106001600160401b0382111761113357604052565b90601f801991011681019081106001600160401b0382111761113357604052565b92939094918160005260066020526001600160401b03604060002054169586156116715760ff60035460a01c1661165f5784600052600760205260ff6004604060002001541660068110156110b2576116465760018060a01b03169081600052600560205260406000208160005260205260406000208360005260205260ff60406000205416611623576040519182916313f3f72d60e31b835260048301528160246101409485935afa91821561156657600092611606575b505060405163051ed6a360e41b81526020816004817f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03165afa908115611566576000916115cc575b5060408201516001600160a01b0391821691168181036115ae575050604051638338bd4960e01b81526001600160a01b038681166004830152909190602090839060249082907f0000000000000000000000000000000000000000000000000000000000000000165afa91821561156657600092611572575b50516040516001600160a01b03909116969061133e81611164565b60018060a01b03871681526020810160018060a01b0384168152604082019089825260608301868152608084016001815260a085019186835260c08601946000865260e0870194600086528c600052600760205260406000209760018060a01b03905116906bffffffffffffffffffffffff60a01b91828a5416178955600189019060018060a01b0390511682825416179055600288019160018060a01b03905116908254161790555160038601556004850190519160068310156110b25760059461145d936001600160401b039260ff68ffffffffffffffff008654925160081b1692169068ffffffffffffffffff191617178355511667ffffffffffffffff60481b82549160481b169067ffffffffffffffff60481b1916179055565b519101557f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03163b1561065a576040516301767f3560e71b81526001600160a01b03838116600483015260248201879052604482018690526001600160401b0360648301529094906000908690608490829084907f0000000000000000000000000000000000000000000000000000000000000000165af1938415611566577fcda1ebed13163eb544e4364801d389fe0e3cb617c208891e412e84d2afffb2ea95608095611557575b506040519760018060a01b0316885260208801526040870152606086015260018060a01b031693a4565b61156090611120565b3861152d565b6040513d6000823e3d90fd5b9091506020813d6020116115a6575b8161158e60209383611180565b8101031261065a5761159f906116ce565b9038611323565b3d9150611581565b604492506040519163e953c29f60e01b835260048301526024820152fd5b90506020813d6020116115fe575b816115e760209383611180565b8101031261065a576115f8906116ce565b386112aa565b3d91506115da565b61161c9250803d106107b3576107a48183611180565b388061125a565b91606492604051926359a4de7560e11b8452600484015260248301526044820152fd5b604051632550ae0160e21b815260048101869052602490fd5b604051632e47300360e21b8152600490fd5b50505050505050565b60028054146116895760028055565b60405162461bcd60e51b815260206004820152601f60248201527f5265656e7472616e637947756172643a207265656e7472616e742063616c6c006044820152606490fd5b51906001600160a01b038216820361065a57565b6000908082526007602052604091828120600481019081549260ff8416600681101561187d57801561167157600181036118595750855163ed5e843760e01b815260048101869052936001600160a01b03937f0000000000000000000000000000000000000000000000000000000000000000851691606087602481865afa96871561184f5784976117fa575b5060ff19166002179055803b15610d7757818091602489518095819363722081d160e11b83528b60048401525af19081156117ef57507f7eea36af2cdbaa3fe67f3ebc8925cfba833a0b57bb621262a418f2c9c6d0d16c9492602094926001926117e0575b500154169451908152a3565b6117e990611120565b386117d4565b8751903d90823e3d90fd5b9096506060813d8211611847575b8161181560609383611180565b81010312610bd557611826816116ce565b508860208201519101516001600160401b03811603610bd55795600261176f565b3d9150611808565b89513d86823e3d90fd5b86516322f7db6160e11b815260048101879052604491610c5b9060248301906110a5565b634e487b7160e01b82526021600452602482fd5b9190916000928184526007602052604080852093600480860196875460ff81166006811015611a4e578015611a425760018103611a1f57506001600160401b03809160081c164201804211611a0c578181116119f657169785600589015561191c89829067ffffffffffffffff60481b82549160481b169067ffffffffffffffff60481b1916179055565b805460ff191660031790556001600160a01b03917f00000000000000000000000000000000000000000000000000000000000000008316803b15610c7057918760648293838d968a519788958694637b4ef94760e01b86528501528c602485015260448401525af19081156119eb5750917f0227207b39a65426fb0e783b25275318246fc306c6ea757ffa25c347104cbbd6959391606095936119dc575b5060028160018a015416980154169782519384526020840152151590820152a4565b6119e590611120565b386119ba565b8551903d90823e3d90fd5b8360249187519163013e408b60e61b8352820152fd5b634e487b7160e01b835260118452602483fd5b85516322f7db6160e11b8152808501899052604491610c5b9060248301906110a5565b50505050505050505050565b634e487b7160e01b835260218452602483fd5b908060209392818452848401376000828201840152601f01601f1916010190565b9035601e198236030181121561065a5701602081359101916001600160401b03821161065a57813603831361065a57565b805115611ac05760200190565b634e487b7160e01b600052603260045260246000fd5b5190811515820361065a57565b80910390610140821261065a57604080519261012090818501908582106001600160401b038311176111335783918252611b1c856116ce565b8652611b2a602086016116ce565b6020870152611b3a8286016116ce565b86830152605f19011261065a57611baa9151611b5581611149565b60608401518152608084015160208201526060850152611b7760a08401611ad6565b608085015260c083015160a085015260e083015160c085015261010092611b9f8482016116ce565b60e086015201611ad6565b9082015290565b6000908082526007602052604091828120906004918281019283549360ff85166006811015611cf95760038103611cd657506001600160401b03804211611cc057804216908660481c16808210611ca5575050600583015460ff19909516821790556001600160a01b03927f0000000000000000000000000000000000000000000000000000000000000000841691823b15610d77578660248392838b51968794859363722081d160e11b85528401525af19081156117ef57507fdb5b3a855555ee0079a1cdfba25ce0ff079419f20a4d0073150bdca65d06fdbb9492602094926001926117e057500154169451908152a3565b88516342a71a8960e01b815293840152602483015250604490fd5b875163013e408b60e61b81524281850152602490fd5b875163a0d595eb60e01b8152808401889052604491610c5b9060248301906110a5565b634e487b7160e01b855260218352602485fd5b6001600160a01b038116908115611d3e573b15611d265750565b60249060405190633b00592160e21b82526004820152fd5b60405163d92e233d60e01b8152600490fdfea2646970667358221220e8a0e63b5558bdc1c513e6e82c4ad40fd62595c4e16cbe95ceb135ab2490205464736f6c63430008120033",
+  "devdoc": {
+    "details": "The policy owns no tokens. StakeVault is the source of truth for collateral locks, a dedicated `disputeNullifierRegistry` deployment is the source of truth for consumed dispute nullifiers, and the calling Orchestrator is the source of truth for valid escrows and intents. TRUST: Dispute protection intents are keyed by intent hash, which embeds the originating orchestrator (OrchestratorV3 hashes its own address into every intent hash), so identities do not collide across orchestrators. Lifecycle entrypoints trust every orchestrator admitted by OrchestratorRegistry to invoke callbacks only for intents it created and already validated against its EscrowRegistry. Registering an orchestrator is therefore a governance assertion about its callback behavior. Governance must authorize a lifecycle hook here before configuring it on an Orchestrator. Predecessor hooks must remain authorized until all intents snapshotted to them have been cancelled or settled. Likewise, an orchestrator must be drained before it is removed from OrchestratorRegistry. This policy must also drain every active dispute protection intent before StakeVault controller authority moves to a replacement policy unless that replacement explicitly adopts this policy's intent and lock state.",
+    "kind": "dev",
+    "methods": {
+      "acceptOwnership()": {
+        "details": "The new owner accepts the ownership transfer."
+      },
+      "acceptVaultController()": {
+        "details": "Before replacing another policy, governance must drain its active dispute protection intents or execute an explicit state-and-lock migration. Accepting controller authority alone cannot import the predecessor's intent state."
+      },
+      "constructor": {
+        "details": "After deployment, authorize this policy as the StakeVault controller and as a writer on the dedicated dispute nullifier registry before enabling deposits.",
+        "params": {
+          "_disputeNullifierRegistry": "Dedicated registry that rejects reused dispute nullifiers.",
+          "_disputeVerifier": "Verifier for signed dispute evidence.",
+          "_owner": "Governance owner for policy and dependency configuration.",
+          "_stakeVault": "Vault holding and locking taker collateral."
+        }
+      },
+      "getDisputeProtectionIntent(bytes32)": {
+        "params": {
+          "_intentHash": "Intent whose dispute protection state is queried."
+        }
+      },
+      "getRiskWindow(bytes32)": {
+        "params": {
+          "_paymentMethod": "Payment method whose configured risk window is queried."
+        }
+      },
+      "isDisputeProtectionEnabled(address,uint256,bytes32)": {
+        "details": "True when the depositor has not opted the tuple out and the payment method has a nonzero risk window. Performs no validation: any escrow, any deposit id (including nonexistent ones), and any payment method with a nonzero window read true.",
+        "params": {
+          "_depositId": "Deposit whose payment-method-specific configuration is queried.",
+          "_escrow": "Escrow containing the deposit.",
+          "_paymentMethod": "Payment method whose dispute protection configuration is queried."
+        }
+      },
+      "isLifecycleHookAuthorized(address)": {
+        "params": {
+          "_hook": "Lifecycle hook whose callback authorization is queried."
+        }
+      },
+      "onIntentCancelled(bytes32)": {
+        "details": "Missing dispute protection intents are ignored because payment methods with no risk window create no policy state.",
+        "params": {
+          "_intentHash": "Intent being cancelled or pruned by the orchestrator."
+        }
+      },
+      "onIntentSettled(bytes32,uint256,bool)": {
+        "details": "Missing dispute protection intents are ignored. The snapshotted risk window determines when collateral becomes release-eligible; it does not invalidate dispute evidence until release actually executes.",
+        "params": {
+          "_intentHash": "Intent completed by proof-based fulfillment or manual release.",
+          "_isManualRelease": "Whether the depositor used the manual-release path without an on-chain payment proof.",
+          "_releaseAmount": "Amount released from Escrow before protocol, referral, and manager fees."
+        }
+      },
+      "onIntentSignaled(bytes32,address,uint256,address,bytes32,uint256)": {
+        "details": "Called only by an authorized lifecycle hook. A zero configured risk window is an unrestricted pass-through for this direct policy callback; the canonical lifecycle hook never calls this function for a zero-window payment method and applies the whitelist instead. It creates no dispute protection intent. Otherwise the call validates deposit configuration and token compatibility, snapshots the risk configuration, and locks the taker's selected stake.",
+        "params": {
+          "_amount": "Full on-chain intent amount initially locked as collateral.",
+          "_depositId": "Deposit supplying the intent liquidity.",
+          "_escrow": "Escrow that owns the intent and deposit.",
+          "_intentHash": "Unique intent identifier assigned by the calling orchestrator.",
+          "_paymentMethod": "Payment method selected for the off-chain payment.",
+          "_taker": "Account that signaled the intent."
+        }
+      },
+      "owner()": {
+        "details": "Returns the address of the current owner."
+      },
+      "pendingOwner()": {
+        "details": "Returns the address of the pending owner."
+      },
+      "releaseMaturedDisputeProtectionIntent(bytes32)": {
+        "details": "Disputes remain valid after `releaseEligibleAt` until this release transaction executes.",
+        "params": {
+          "_intentHash": "Settled dispute protection intent whose collateral should be unlocked."
+        }
+      },
+      "releaseMaturedDisputeProtectionIntents(bytes32[])": {
+        "details": "The batch is atomic: one invalid or ineligible intent reverts every release in the call.",
+        "params": {
+          "_intentHashes": "Settled dispute protection intents whose collateral should be unlocked."
+        }
+      },
+      "setAdmissionsPaused(bool)": {
+        "details": "It rejects every non-whitelisted taker on every non-opted-out deposit payment method with a nonzero risk window. Whitelisted takers return from the lifecycle hook before this policy is reached, and payment methods with a zero risk window return before the pause check. Explicitly opted-out deposit payment methods and zero-window payment methods never reach this policy and stay gated by the whitelist or open. Cancellation, settlement, release, and dispute submission remain available while admissions are paused.",
+        "params": {
+          "_isPaused": "Whether new dispute protection admissions should revert."
+        }
+      },
+      "setDisputeProtectionEnabled(address,uint256,bytes32,bool)": {
+        "details": "Protection is enabled by default on every payment method with a nonzero risk window; passing false opts the tuple out and true undoes the opt-out. The requested value is emitted as-is; the effective state also depends on the payment method's current risk window. OrchestratorV3 validates Escrow registration before signaling an intent; this policy only verifies that the caller is the deposit's current depositor.",
+        "params": {
+          "_depositId": "Deposit whose payment-method-specific configuration is updated.",
+          "_escrow": "Escrow containing the deposit.",
+          "_isEnabled": "Whether non-whitelisted takers may use stake-backed dispute protection on this payment method; false opts out.",
+          "_paymentMethod": "Payment method whose dispute protection configuration is updated."
+        }
+      },
+      "setDisputeVerifier(address)": {
+        "params": {
+          "_verifier": "New non-zero deployed dispute verifier."
+        }
+      },
+      "setLifecycleHookAuthorization(address,bool)": {
+        "details": "Authorize a hook before configuring it on an Orchestrator. Revoke a predecessor only after every intent snapshotted to it has been cancelled or settled.",
+        "params": {
+          "_hook": "Lifecycle hook whose callback authority is updated.",
+          "_isAuthorized": "Whether the hook may mutate dispute protection intent state."
+        }
+      },
+      "setRiskWindow(bytes32,uint64)": {
+        "details": "A zero window means the payment method is never routed through dispute protection: the lifecycle hook then applies the deposit's whitelist (rejecting non-members when it is enabled) or admits openly when it is disabled. Changing the window affects future admissions only; admitted intents keep their snapshotted window.",
+        "params": {
+          "_paymentMethod": "Payment method whose future risk window is updated.",
+          "_riskWindow": "Minimum seconds collateral remains locked after settlement."
+        }
+      },
+      "submitDispute((bytes32,bytes32,bytes[],bytes))": {
+        "details": "A settled intent remains disputable until its collateral release executes, even after `releaseEligibleAt`. The dedicated dispute nullifier registry atomically rejects replayed disputes.",
+        "params": {
+          "_attestation": "Signed dispute evidence for a settled intent."
+        }
+      },
+      "transferOwnership(address)": {
+        "details": "Starts the ownership transfer of the contract to a new account. Replaces the pending transfer if there is one. Can only be called by the current owner."
+      }
+    },
+    "stateVariables": {
+      "disputeProtectionIntentByIntentHash": {
+        "details": "Dispute protection lifecycle state keyed by globally unique intent hash."
+      },
+      "isDisputeProtectionDisabledByPaymentMethod": {
+        "details": "Whether the depositor opted a deposit payment method out of default dispute protection."
+      },
+      "isLifecycleHookAuthorizedByHook": {
+        "details": "Lifecycle-hook authorization keyed by lifecycle hook address."
+      },
+      "paymentMethodRiskWindow": {
+        "details": "Minimum collateral lock window for each payment method."
+      }
+    },
+    "title": "DisputeProtectionPolicy",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "acceptVaultController()": {
+        "notice": "GOVERNANCE ONLY: Accepts this policy as StakeVault's controller after its handover delay."
+      },
+      "admissionsPaused()": {
+        "notice": "Whether new dispute-protection admissions are paused. Terminal transitions remain available."
+      },
+      "constructor": {
+        "notice": "Creates a dispute protection policy over one StakeVault and one dedicated dispute-nullifier registry."
+      },
+      "disputeNullifierRegistry()": {
+        "notice": "Dedicated replay registry for payment-method-scoped dispute nullifiers."
+      },
+      "disputeVerifier()": {
+        "notice": "Verifier used to validate signed dispute evidence."
+      },
+      "getDisputeProtectionIntent(bytes32)": {
+        "notice": "Returns the stored dispute protection state for an intent."
+      },
+      "getRiskWindow(bytes32)": {
+        "notice": "Returns the risk window applied to future intents for a payment method."
+      },
+      "isDisputeProtectionEnabled(address,uint256,bytes32)": {
+        "notice": "Returns the effective stake-backed dispute protection state for a deposit payment method."
+      },
+      "isLifecycleHookAuthorized(address)": {
+        "notice": "Returns whether a lifecycle hook may mutate dispute protection intent state."
+      },
+      "onIntentCancelled(bytes32)": {
+        "notice": "Cancels a pending dispute protection intent and unlocks its collateral."
+      },
+      "onIntentSettled(bytes32,uint256,bool)": {
+        "notice": "Marks a pending dispute protection intent as settled and resizes its collateral."
+      },
+      "onIntentSignaled(bytes32,address,uint256,address,bytes32,uint256)": {
+        "notice": "Admits a newly signaled intent into dispute coverage when its payment method has a risk window."
+      },
+      "releaseMaturedDisputeProtectionIntent(bytes32)": {
+        "notice": "Releases collateral for one settled intent once its minimum risk window has elapsed."
+      },
+      "releaseMaturedDisputeProtectionIntents(bytes32[])": {
+        "notice": "Releases collateral for a batch of settled intents whose minimum risk windows have elapsed."
+      },
+      "renounceOwnership()": {
+        "notice": "Disables ownership renunciation so governed safety controls cannot become unreachable."
+      },
+      "setAdmissionsPaused(bool)": {
+        "notice": "GOVERNANCE ONLY: Pauses or resumes new dispute-protection admissions."
+      },
+      "setDisputeProtectionEnabled(address,uint256,bytes32,bool)": {
+        "notice": "DEPOSITOR ONLY: Updates dispute protection for one deposit payment method."
+      },
+      "setDisputeVerifier(address)": {
+        "notice": "GOVERNANCE ONLY: Replaces the verifier used for future dispute submissions."
+      },
+      "setLifecycleHookAuthorization(address,bool)": {
+        "notice": "GOVERNANCE ONLY: Authorizes or revokes one lifecycle hook."
+      },
+      "setRiskWindow(bytes32,uint64)": {
+        "notice": "GOVERNANCE ONLY: Sets the minimum collateral lock window for future intents of a payment method."
+      },
+      "stakeVault()": {
+        "notice": "Stake custody and lock accounting controlled by this policy."
+      },
+      "submitDispute((bytes32,bytes32,bytes[],bytes))": {
+        "notice": "Resolves valid dispute evidence into an immediately claimable depositor award."
+      }
+    },
+    "notice": "Deposit-and-payment-method-scoped, stake-backed dispute protection that is on by default for every payment method with a nonzero risk window and can be opted out per deposit payment method by the depositor.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 7,
+        "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+        "label": "_owner",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_address"
+      },
+      {
+        "astId": 120,
+        "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+        "label": "_pendingOwner",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_address"
+      },
+      {
+        "astId": 353,
+        "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+        "label": "_status",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_uint256"
+      },
+      {
+        "astId": 22605,
+        "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+        "label": "disputeVerifier",
+        "offset": 0,
+        "slot": "3",
+        "type": "t_contract(IDisputeVerifier)26458"
+      },
+      {
+        "astId": 22608,
+        "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+        "label": "admissionsPaused",
+        "offset": 20,
+        "slot": "3",
+        "type": "t_bool"
+      },
+      {
+        "astId": 22613,
+        "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+        "label": "isLifecycleHookAuthorizedByHook",
+        "offset": 0,
+        "slot": "4",
+        "type": "t_mapping(t_address,t_bool)"
+      },
+      {
+        "astId": 22622,
+        "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+        "label": "isDisputeProtectionDisabledByPaymentMethod",
+        "offset": 0,
+        "slot": "5",
+        "type": "t_mapping(t_address,t_mapping(t_uint256,t_mapping(t_bytes32,t_bool)))"
+      },
+      {
+        "astId": 22627,
+        "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+        "label": "paymentMethodRiskWindow",
+        "offset": 0,
+        "slot": "6",
+        "type": "t_mapping(t_bytes32,t_uint64)"
+      },
+      {
+        "astId": 22633,
+        "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+        "label": "disputeProtectionIntentByIntentHash",
+        "offset": 0,
+        "slot": "7",
+        "type": "t_mapping(t_bytes32,t_struct(DisputeProtectionIntent)26193_storage)"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_bool": {
+        "encoding": "inplace",
+        "label": "bool",
+        "numberOfBytes": "1"
+      },
+      "t_bytes32": {
+        "encoding": "inplace",
+        "label": "bytes32",
+        "numberOfBytes": "32"
+      },
+      "t_contract(IDisputeVerifier)26458": {
+        "encoding": "inplace",
+        "label": "contract IDisputeVerifier",
+        "numberOfBytes": "20"
+      },
+      "t_enum(DisputeProtectionIntentStatus)26175": {
+        "encoding": "inplace",
+        "label": "enum IDisputeProtectionPolicy.DisputeProtectionIntentStatus",
+        "numberOfBytes": "1"
+      },
+      "t_mapping(t_address,t_bool)": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => bool)",
+        "numberOfBytes": "32",
+        "value": "t_bool"
+      },
+      "t_mapping(t_address,t_mapping(t_uint256,t_mapping(t_bytes32,t_bool)))": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => mapping(uint256 => mapping(bytes32 => bool)))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_uint256,t_mapping(t_bytes32,t_bool))"
+      },
+      "t_mapping(t_bytes32,t_bool)": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => bool)",
+        "numberOfBytes": "32",
+        "value": "t_bool"
+      },
+      "t_mapping(t_bytes32,t_struct(DisputeProtectionIntent)26193_storage)": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => struct IDisputeProtectionPolicy.DisputeProtectionIntent)",
+        "numberOfBytes": "32",
+        "value": "t_struct(DisputeProtectionIntent)26193_storage"
+      },
+      "t_mapping(t_bytes32,t_uint64)": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => uint64)",
+        "numberOfBytes": "32",
+        "value": "t_uint64"
+      },
+      "t_mapping(t_uint256,t_mapping(t_bytes32,t_bool))": {
+        "encoding": "mapping",
+        "key": "t_uint256",
+        "label": "mapping(uint256 => mapping(bytes32 => bool))",
+        "numberOfBytes": "32",
+        "value": "t_mapping(t_bytes32,t_bool)"
+      },
+      "t_struct(DisputeProtectionIntent)26193_storage": {
+        "encoding": "inplace",
+        "label": "struct IDisputeProtectionPolicy.DisputeProtectionIntent",
+        "members": [
+          {
+            "astId": 26177,
+            "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+            "label": "taker",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address"
+          },
+          {
+            "astId": 26179,
+            "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+            "label": "stakeOwner",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_address"
+          },
+          {
+            "astId": 26181,
+            "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+            "label": "depositor",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_address"
+          },
+          {
+            "astId": 26183,
+            "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+            "label": "paymentMethod",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_bytes32"
+          },
+          {
+            "astId": 26186,
+            "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+            "label": "status",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_enum(DisputeProtectionIntentStatus)26175"
+          },
+          {
+            "astId": 26188,
+            "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+            "label": "riskWindow",
+            "offset": 1,
+            "slot": "4",
+            "type": "t_uint64"
+          },
+          {
+            "astId": 26190,
+            "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+            "label": "releaseEligibleAt",
+            "offset": 9,
+            "slot": "4",
+            "type": "t_uint64"
+          },
+          {
+            "astId": 26192,
+            "contract": "contracts/hooks/DisputeProtectionPolicy.sol:DisputeProtectionPolicy",
+            "label": "releaseAmount",
+            "offset": 0,
+            "slot": "5",
+            "type": "t_uint256"
+          }
+        ],
+        "numberOfBytes": "192"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      },
+      "t_uint64": {
+        "encoding": "inplace",
+        "label": "uint64",
+        "numberOfBytes": "8"
+      }
+    }
+  }
+}
