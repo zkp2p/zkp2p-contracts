@@ -71,6 +71,12 @@ function contracts() {
     IntentLifecycleHookV1MethodScoped: deployment(
       "0x0000000000000000000000000000000000000033"
     ),
+    DisputeProtectionPolicyMethodScopedStaked: deployment(
+      "0x0000000000000000000000000000000000000034"
+    ),
+    IntentLifecycleHookV1MethodScopedStaked: deployment(
+      "0x0000000000000000000000000000000000000035"
+    ),
     WhitelistPolicy: deployment("0x0000000000000000000000000000000000000041"),
     WhitelistPolicyMethodScoped: deployment(
       "0x0000000000000000000000000000000000000042"
@@ -79,10 +85,23 @@ function contracts() {
 }
 
 test("strips passive internal policy records on every supported network", () => {
-  assert.deepEqual(INTERNAL_POLICY_RECORDS, ["WhitelistPolicyMethodScoped"]);
+  assert.deepEqual(INTERNAL_POLICY_RECORDS, [
+    "WhitelistPolicyMethodScoped",
+    "DisputeProtectionPolicyMethodScoped",
+    "IntentLifecycleHookV1MethodScoped",
+    "StakeVaultMethodScoped",
+    "DisputeProtectionPolicyMethodScopedStaked",
+    "IntentLifecycleHookV1MethodScopedStaked",
+  ]);
   for (const network of ["base", "base_staging", "localhost", "hardhat"]) {
     const resolved = resolveActiveDisputeAliases(network, contracts());
-    assert.equal("WhitelistPolicyMethodScoped" in resolved, false, network);
+    for (const internalName of INTERNAL_POLICY_RECORDS) {
+      assert.equal(
+        internalName in resolved,
+        false,
+        `${network}:${internalName}`
+      );
+    }
     assert.equal("WhitelistPolicy" in resolved, true, network);
   }
 });
@@ -126,18 +145,18 @@ test("resolves successor records locally and removes every internal deployment k
   );
   assert.equal(
     resolved.DisputeProtectionPolicy.address,
-    "0x0000000000000000000000000000000000000032"
+    "0x0000000000000000000000000000000000000034"
   );
   assert.equal(
     resolved.IntentLifecycleHookV1.address,
-    "0x0000000000000000000000000000000000000033"
+    "0x0000000000000000000000000000000000000035"
   );
   assert.equal(
     Object.keys(resolved).some((name) => name.endsWith("OptIn")),
     false
   );
   assert.equal(
-    Object.keys(resolved).some((name) => name.endsWith("MethodScoped")),
+    Object.keys(resolved).some((name) => name.includes("MethodScoped")),
     false
   );
 });
@@ -205,18 +224,18 @@ test("every deployment/package consumer exposes only canonical aliases", () => {
     );
     assert.equal(
       resolved.DisputeProtectionPolicy.address,
-      input.DisputeProtectionPolicyMethodScoped.address
+      input.DisputeProtectionPolicyMethodScopedStaked.address
     );
     assert.equal(
       resolved.IntentLifecycleHookV1.address,
-      input.IntentLifecycleHookV1MethodScoped.address
+      input.IntentLifecycleHookV1MethodScopedStaked.address
     );
     assert.equal(
       Object.keys(resolved).some((name) => name.endsWith("OptIn")),
       false
     );
     assert.equal(
-      Object.keys(resolved).some((name) => name.endsWith("MethodScoped")),
+      Object.keys(resolved).some((name) => name.includes("MethodScoped")),
       false
     );
   }

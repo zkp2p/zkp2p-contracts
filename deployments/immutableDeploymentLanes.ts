@@ -56,16 +56,26 @@ export const IMMUTABLE_DEPLOYMENT_LANES = {
       "MethodScopedWhitelistPolicy",
     ],
   },
-  // Executed on Base staging and Base 2026-08-27 (PRs #282/#284); retired for live networks; local networks deploy through the wrapper.
+  // Executed deploy-only on Base staging and Base 2026-08-27 (PRs #282/#284); superseded by the dedicated-vault lanes.
   "37_deploy_method_scoped_dispute_lifecycle_stack.ts": {
     deployedSourceSha: "de4a96a1039246a8eefdaeb6d7b643504f605fe6",
     sha256: "fb19ffe1724d34d95097bddc28d0068218e06346ff1e5ea5c4a6aedd7d8a40c6",
-    activeSource:
-      "deployments/activeDeploymentLanes/37_deploy_method_scoped_dispute_lifecycle_stack.ts",
+    activeSource: null,
     retired: true,
     tags: [
       "37_deploy_method_scoped_dispute_lifecycle_stack",
       "V3DisputeMethodScopedStack",
+    ],
+  },
+  // Executed steps 1-2 on Base staging 2026-08-27; retired unexecuted on Base and superseded by lanes 39/40.
+  "38_activate_method_scoped_dispute_lifecycle_stack.ts": {
+    deployedSourceSha: "98856d1dada04463e650a13fb990dd67a1299bf0",
+    sha256: "b278fd5d334301ca965fe603720f7e9fba1029f5e4af9e642e0e3befc46aef2e",
+    activeSource: null,
+    retired: true,
+    tags: [
+      "38_activate_method_scoped_dispute_lifecycle_stack",
+      "V3DisputeMethodScopedActivation",
     ],
   },
 } as const;
