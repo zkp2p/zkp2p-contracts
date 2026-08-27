@@ -28,8 +28,6 @@
     "deploy:mercury:base_staging": "EXECUTE_STAGING_MERCURY_PAYMENT_METHOD=true ts-node --transpile-only scripts/deployActive.ts base_staging 35_add_mercury_payment_method && hardhat export --network base_staging --export ./deployments/outputs/baseStagingContracts.ts && ts-node --transpile-only scripts/canonicalizeDeploymentOutput.ts base_staging ./deployments/outputs/baseStagingContracts.ts && yarn workspace @zkp2p/contracts-v2 extract",
     "deploy:method-scoped-policy:base_staging": "ts-node --transpile-only scripts/deployActive.ts base_staging 36_deploy_method_scoped_whitelist_policy",
     "deploy:method-scoped-policy:base": "ts-node --transpile-only scripts/deployActive.ts base 36_deploy_method_scoped_whitelist_policy",
-    "deploy:dispute-method-scoped:base_staging": "ts-node --transpile-only scripts/deployActive.ts base_staging 37_deploy_method_scoped_dispute_lifecycle_stack",
-    "deploy:dispute-method-scoped:base": "ts-node --transpile-only scripts/deployActive.ts base 37_deploy_method_scoped_dispute_lifecycle_stack",
     "deploy:dispute-method-scoped-activation:base_staging": "ts-node --transpile-only scripts/deployActive.ts base_staging 38_activate_method_scoped_dispute_lifecycle_stack",
     "deploy:dispute-method-scoped-activation:base": "ts-node --transpile-only scripts/deployActive.ts base 38_activate_method_scoped_dispute_lifecycle_stack",
     "whitelist:bootstrap": "ts-node --transpile-only scripts/bootstrapWhitelistPolicy.ts",

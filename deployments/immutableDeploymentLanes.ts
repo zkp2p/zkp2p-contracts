@@ -45,6 +45,29 @@ export const IMMUTABLE_DEPLOYMENT_LANES = {
     retired: true,
     tags: ["34_deploy_opt_in_dispute_lifecycle_stack", "V3DisputeOptInStack"],
   },
+  // PR #282 commit executed on Base; lane stays mounted, its skip canonical-checks the record.
+  "36_deploy_method_scoped_whitelist_policy.ts": {
+    deployedSourceSha: "7316a5ece51d56419d0b02c9cd3c29c8ff5ba4be",
+    sha256: "3bc01ba3e308a2d9cbaa58a95a7094c5ed2116df103ff6fbb997962cc9240fde",
+    activeSource: undefined,
+    retired: false,
+    tags: [
+      "36_deploy_method_scoped_whitelist_policy",
+      "MethodScopedWhitelistPolicy",
+    ],
+  },
+  // Executed on Base staging and Base 2026-08-27 (PRs #282/#284); retired for live networks; local networks deploy through the wrapper.
+  "37_deploy_method_scoped_dispute_lifecycle_stack.ts": {
+    deployedSourceSha: "de4a96a1039246a8eefdaeb6d7b643504f605fe6",
+    sha256: "fb19ffe1724d34d95097bddc28d0068218e06346ff1e5ea5c4a6aedd7d8a40c6",
+    activeSource:
+      "deployments/activeDeploymentLanes/37_deploy_method_scoped_dispute_lifecycle_stack.ts",
+    retired: true,
+    tags: [
+      "37_deploy_method_scoped_dispute_lifecycle_stack",
+      "V3DisputeMethodScopedStack",
+    ],
+  },
 } as const;
 
 export type DeploymentLanes = Readonly<
