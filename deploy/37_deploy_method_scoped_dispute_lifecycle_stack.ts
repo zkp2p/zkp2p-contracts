@@ -1,3 +1,4 @@
+import type { BigNumberish, providers, utils } from "ethers";
 import { ethers } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction, Deployment } from "hardhat-deploy/types";
@@ -148,20 +149,60 @@ const LIVE_FLAGS: Record<LiveNetwork, string> = {
   base: "ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_DEPLOYMENT",
 };
 
-const POLICY_ADMISSION_EVENTS = [
+export type FreshStackEvent = {
+  name: string;
+  blockNumber: number;
+  transactionIndex: number;
+  logIndex: number;
+  transactionHash: string;
+};
+
+export type FreshStackInput = {
+  controllerInitialized: FreshStackEvent | null;
+  policyEvents: FreshStackEvent[];
+  vaultEvents: FreshStackEvent[];
+  totalStaked: BigNumberish;
+  totalClaimable: BigNumberish;
+};
+
+export const ALLOWED_POLICY_CONFIGURATION_EVENTS = [
+  "DisputeProtectionEnabledUpdated",
+] as const;
+
+export const EXPECTED_POLICY_GOVERNANCE_EVENTS = [
+  "RiskWindowUpdated",
+  "DisputeVerifierUpdated",
+  "LifecycleHookAuthorizationUpdated",
+  "AdmissionsPausedUpdated",
+  "OwnershipTransferStarted",
+  "OwnershipTransferred",
+] as const;
+
+export const FORBIDDEN_POLICY_LIFECYCLE_EVENTS = [
   "DisputeProtectionIntentOpened",
   "DisputeProtectionIntentCancelled",
   "DisputeProtectionIntentSettled",
   "DisputeProtectionIntentReleased",
   "DisputeResolved",
-  "DisputeProtectionEnabledUpdated",
 ] as const;
 
-const VAULT_ADMISSION_EVENTS = [
+export const ALLOWED_VAULT_COLLATERAL_EVENTS = [
   "StakeDeposited",
   "StakeWithdrawn",
   "TakerAuthorizationUpdated",
   "StakeOwnerSelected",
+] as const;
+
+export const EXPECTED_VAULT_GOVERNANCE_EVENTS = [
+  "ControllerInitialized",
+  "ControllerProposed",
+  "ControllerAccepted",
+  "ControllerProposalCancelled",
+  "OwnershipTransferStarted",
+  "OwnershipTransferred",
+] as const;
+
+export const FORBIDDEN_VAULT_LOCK_EVENTS = [
   "StakeLocked",
   "LockFunded",
   "StakeLockIncreased",
@@ -171,6 +212,96 @@ const VAULT_ADMISSION_EVENTS = [
   "ClaimCreated",
   "ClaimWithdrawn",
 ] as const;
+
+function eventOrder(event: FreshStackEvent): [number, number, number] {
+  return [event.blockNumber, event.transactionIndex, event.logIndex];
+}
+
+function isBefore(left: FreshStackEvent, right: FreshStackEvent): boolean {
+  const [lb, lt, ll] = eventOrder(left);
+  const [rb, rt, rl] = eventOrder(right);
+  return lb !== rb ? lb < rb : lt !== rt ? lt < rt : ll < rl;
+}
+
+function includes(list: readonly string[], name: string): boolean {
+  return list.includes(name);
+}
+
+export function classifyFreshStackActivity(input: FreshStackInput): void {
+  for (const event of input.policyEvents) {
+    if (includes(FORBIDDEN_POLICY_LIFECYCLE_EVENTS, event.name)) {
+      throw new Error(
+        `Fresh DisputeProtectionPolicyMethodScoped has lifecycle activity: ${event.name} in ${event.transactionHash}`
+      );
+    }
+    if (
+      !includes(ALLOWED_POLICY_CONFIGURATION_EVENTS, event.name) &&
+      !includes(EXPECTED_POLICY_GOVERNANCE_EVENTS, event.name)
+    ) {
+      throw new Error(
+        `DisputeProtectionPolicyMethodScoped emitted an unclassified event: ${event.name} in ${event.transactionHash}`
+      );
+    }
+  }
+  for (const event of input.vaultEvents) {
+    if (includes(FORBIDDEN_VAULT_LOCK_EVENTS, event.name)) {
+      throw new Error(
+        `Fresh StakeVaultMethodScoped has lock or claim activity: ${event.name} in ${event.transactionHash}`
+      );
+    }
+    if (includes(ALLOWED_VAULT_COLLATERAL_EVENTS, event.name)) {
+      if (
+        !input.controllerInitialized ||
+        isBefore(event, input.controllerInitialized)
+      ) {
+        throw new Error(
+          `StakeVaultMethodScoped received collateral activity before controller initialization (${event.name} in ${event.transactionHash}); the lane cannot initialize the controller and must be superseded`
+        );
+      }
+    } else if (!includes(EXPECTED_VAULT_GOVERNANCE_EVENTS, event.name)) {
+      throw new Error(
+        `StakeVaultMethodScoped emitted an unclassified event: ${event.name} in ${event.transactionHash}`
+      );
+    }
+  }
+  if (!ethers.BigNumber.from(input.totalClaimable).isZero()) {
+    throw new Error(
+      "StakeVaultMethodScoped totalClaimable must be zero before activation"
+    );
+  }
+  if (
+    !input.controllerInitialized &&
+    !ethers.BigNumber.from(input.totalStaked).isZero()
+  ) {
+    throw new Error(
+      "StakeVaultMethodScoped totalStaked must be zero before controller initialization"
+    );
+  }
+}
+
+export function decodeFreshStackLogs(
+  contractInterface: utils.Interface,
+  logs: providers.Log[],
+  label: string
+): FreshStackEvent[] {
+  return logs.map((log) => {
+    let name: string;
+    try {
+      name = contractInterface.getEvent(log.topics[0]).name;
+    } catch {
+      throw new Error(
+        `${label} emitted a log this ABI cannot decode: ${log.topics[0]} in ${log.transactionHash}`
+      );
+    }
+    return {
+      name,
+      blockNumber: log.blockNumber,
+      transactionIndex: log.transactionIndex,
+      logIndex: log.logIndex,
+      transactionHash: log.transactionHash,
+    };
+  });
+}
 
 function isLiveNetwork(network: string): network is LiveNetwork {
   return network === "base" || network === "base_staging";
@@ -352,74 +483,77 @@ function deploymentBlock(deployment: Deployment, label: string): number {
   return blockNumber;
 }
 
-async function eventTopics(
-  hre: HardhatRuntimeEnvironment,
-  artifactName: string,
-  eventNames: readonly string[]
-): Promise<string[]> {
-  const artifact = await hre.deployments.getExtendedArtifact(artifactName);
-  const contractInterface = new ethers.utils.Interface(artifact.abi);
-  return eventNames.map((eventName) =>
-    contractInterface.getEventTopic(eventName)
-  );
-}
-
 async function assertFreshStackUnused(
   hre: HardhatRuntimeEnvironment,
   deployments: Array<Deployment | null>
 ): Promise<void> {
   const [vaultDeployment, policyDeployment] = deployments;
+  const latestBlock = await ethers.provider.getBlockNumber();
+  let controllerInitialized: FreshStackEvent | null = null;
+  let vaultEvents: FreshStackEvent[] = [];
+  let totalStaked: BigNumberish = 0;
+  let totalClaimable: BigNumberish = 0;
+
   if (vaultDeployment) {
     const vault = await ethers.getContractAt(
       "StakeVault",
       vaultDeployment.address
     );
-    const stakeToken = await ethers.getContractAt(
-      ["function balanceOf(address) view returns (uint256)"],
-      await vault.stakeToken()
-    );
-    const balances = await Promise.all([
+    [totalStaked, totalClaimable] = await Promise.all([
       vault.totalStaked(),
       vault.totalClaimable(),
-      vault.totalAccounted(),
-      vault.unaccountedBalance(),
-      stakeToken.balanceOf(vault.address),
     ]);
-    if (balances.some((balance) => !balance.isZero())) {
-      throw new Error("Fresh StakeVaultMethodScoped is not empty");
-    }
-    const vaultLogs = await ethers.provider.getLogs({
+    const vaultArtifact = await hre.deployments.getExtendedArtifact(
+      "StakeVault"
+    );
+    const logs = await ethers.provider.getLogs({
       address: vault.address,
       fromBlock: deploymentBlock(vaultDeployment, "StakeVaultMethodScoped"),
-      toBlock: await ethers.provider.getBlockNumber(),
-      topics: [await eventTopics(hre, "StakeVault", VAULT_ADMISSION_EVENTS)],
+      toBlock: latestBlock,
     });
-    if (vaultLogs.length !== 0) {
-      throw new Error("Fresh StakeVaultMethodScoped has admission activity");
+    vaultEvents = decodeFreshStackLogs(
+      new ethers.utils.Interface(vaultArtifact.abi),
+      logs,
+      "StakeVaultMethodScoped"
+    );
+    const controllerEvents = vaultEvents.filter(
+      (event) => event.name === "ControllerInitialized"
+    );
+    if (controllerEvents.length > 1) {
+      throw new Error(
+        "StakeVaultMethodScoped emitted more than one ControllerInitialized event"
+      );
     }
+    controllerInitialized = controllerEvents[0] ?? null;
   }
+
+  let policyEvents: FreshStackEvent[] = [];
   if (policyDeployment) {
-    const policyLogs = await ethers.provider.getLogs({
+    const policyArtifact = await hre.deployments.getExtendedArtifact(
+      "DisputeProtectionPolicy"
+    );
+    const logs = await ethers.provider.getLogs({
       address: policyDeployment.address,
       fromBlock: deploymentBlock(
         policyDeployment,
         "DisputeProtectionPolicyMethodScoped"
       ),
-      toBlock: await ethers.provider.getBlockNumber(),
-      topics: [
-        await eventTopics(
-          hre,
-          "DisputeProtectionPolicy",
-          POLICY_ADMISSION_EVENTS
-        ),
-      ],
+      toBlock: latestBlock,
     });
-    if (policyLogs.length !== 0) {
-      throw new Error(
-        "Fresh DisputeProtectionPolicyMethodScoped has admission activity"
-      );
-    }
+    policyEvents = decodeFreshStackLogs(
+      new ethers.utils.Interface(policyArtifact.abi),
+      logs,
+      "DisputeProtectionPolicyMethodScoped"
+    );
   }
+
+  classifyFreshStackActivity({
+    controllerInitialized,
+    policyEvents,
+    vaultEvents,
+    totalStaked,
+    totalClaimable,
+  });
 }
 
 async function assertWhitelistPolicy(
