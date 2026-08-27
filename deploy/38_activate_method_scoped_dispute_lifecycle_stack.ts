@@ -103,6 +103,67 @@ const expectedCache = new Map<ActivationNetwork, ExpectedActivationState>();
 const PAGE_SIZE = 10_000;
 const DEFAULT_READ_CONCURRENCY = 16;
 const MAX_READ_CONCURRENCY = 64;
+const DEFAULT_BLOCK_LAG_ATTEMPTS = 15;
+const DEFAULT_BLOCK_LAG_DELAY_MS = 2_000;
+const BLOCK_LAG_ERROR =
+  /unknown block|header not found|block not found|missing trie node/i;
+
+function blockLagSetting(
+  name: "METHOD_SCOPED_BLOCK_LAG_RETRIES" | "METHOD_SCOPED_BLOCK_LAG_DELAY_MS",
+  fallback: number,
+  allowZero: boolean
+): number {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  if (!/^(0|[1-9][0-9]*)$/.test(raw)) {
+    throw new Error(`${name} must be a non-negative safe integer`);
+  }
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || (!allowZero && value === 0)) {
+    throw new Error(
+      `${name} must be ${
+        allowZero ? "a non-negative" : "a positive"
+      } safe integer`
+    );
+  }
+  return value;
+}
+
+export async function withBlockLagRetry<T>(
+  label: string,
+  fn: () => Promise<T>,
+  retryResult: (result: T) => boolean = () => false
+): Promise<T> {
+  const attempts = blockLagSetting(
+    "METHOD_SCOPED_BLOCK_LAG_RETRIES",
+    DEFAULT_BLOCK_LAG_ATTEMPTS,
+    false
+  );
+  const delayMs = blockLagSetting(
+    "METHOD_SCOPED_BLOCK_LAG_DELAY_MS",
+    DEFAULT_BLOCK_LAG_DELAY_MS,
+    true
+  );
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const result = await fn();
+      if (!retryResult(result) || attempt === attempts) return result;
+      console.log(
+        `Retrying ${label} after block lag (${attempt}/${attempts}): empty result`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!BLOCK_LAG_ERROR.test(message) || attempt === attempts) throw error;
+      console.log(
+        `Retrying ${label} after block lag (${attempt}/${attempts}): ${message}`
+      );
+    }
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw new Error("Block lag retry attempts exhausted");
+}
 
 export async function mapWithConcurrency<T, R>(
   items: readonly T[],
@@ -1283,9 +1344,14 @@ export async function deployActivationContract(
   if (receipt.status !== 1 || !receipt.contractAddress) {
     throw new Error(`${artifactName} deployment did not succeed`);
   }
-  const runtimeCode = await hre.ethers.provider.getCode(
-    receipt.contractAddress,
-    receipt.blockNumber
+  const runtimeCode = await withBlockLagRetry(
+    `${artifactName} runtime code at block ${receipt.blockNumber}`,
+    () =>
+      hre.ethers.provider.getCode(
+        receipt.contractAddress as string,
+        receipt.blockNumber
+      ),
+    (code) => code === "0x"
   );
   if (runtimeCode === "0x") {
     throw new Error(`${artifactName} deployment has no runtime bytecode`);
@@ -1442,16 +1508,16 @@ async function prepareBaseBatch(
   if (simulationBlockNumber <= proofBlockNumber) {
     throw new Error("Simulation block must follow the proof block");
   }
-  const simulationBlock = await hre.ethers.provider.getBlock(
-    simulationBlockNumber
+  const simulationBlock = await withBlockLagRetry(
+    `Base simulation block ${simulationBlockNumber}`,
+    () => hre.ethers.provider.getBlock(simulationBlockNumber)
   );
   if (!simulationBlock?.hash) {
     throw new Error("Could not pin the simulation block");
   }
-  const simulationSnapshot = await readActivationSnapshot(
-    hre,
-    "base",
-    simulationBlockNumber
+  const simulationSnapshot = await withBlockLagRetry(
+    `Base simulation snapshot at block ${simulationBlockNumber}`,
+    () => readActivationSnapshot(hre, "base", simulationBlockNumber)
   );
   assertGuardExpectationsUnchanged(kind, proofSnapshot, simulationSnapshot);
   const transactions =
