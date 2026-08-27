@@ -363,6 +363,7 @@ export async function verifyActivationCandidate(
     throw new Error("Safe nonce drifted from the manifest");
   }
   const lane = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  await lane.loadActivationContext(verificationHre, "base");
   const expected = lane.expectedActivationState("base");
   if (
     manifest.proofSnapshot.inventory.escrow.toLowerCase() !==

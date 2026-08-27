@@ -2338,6 +2338,94 @@ test("artifact-child Git mode allows only the selected lane-38 pair and its supe
   );
 });
 
+test("artifact-child verifier loads Base activation records from a cold lane module", async () => {
+  const {
+    verifyActivationCandidate,
+  } = require("./verify-method-scoped-safe-batch.ts");
+  const { BASE_SAFE } = require("./simulate-dispute-opt-in-safe-batch.ts");
+  const lanePath = require.resolve(
+    "../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts"
+  );
+  delete require.cache[lanePath];
+
+  const repository = temporaryGitRepository("method-scoped-cold-child-");
+  const paths = ACTIVATION_BATCH_PATHS.rotation;
+  const manifest = manifestFixture();
+  manifest.safe = BASE_SAFE.toLowerCase();
+  manifest.sourceSha = repository.sourceSha;
+  manifest.proofSnapshot.inventory.escrow =
+    require("../deployments/base/EscrowV2.json").address.toLowerCase();
+  const { manifestSha256: _oldDigest, ...unsigned } = manifest;
+  manifest.manifestSha256 = computeManifestSha256(unsigned);
+  const batch = safeBatchJson("rotation", manifest.transactions, 1234);
+  const batchPath = join(repository.root, paths.batch);
+  const sidecarPath = join(repository.root, paths.sidecar);
+  mkdirSync(join(repository.root, "deployments/outputs/safe-batches"), {
+    recursive: true,
+  });
+  writeFileSync(batchPath, JSON.stringify(batch));
+  writeFileSync(sidecarPath, JSON.stringify(manifest));
+  execFileSync("git", ["add", "."], { cwd: repository.root });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=Task Four",
+      "-c",
+      "user.email=task4@example.invalid",
+      "commit",
+      "-qm",
+      "artifacts",
+    ],
+    { cwd: repository.root }
+  );
+
+  const provider = {
+    _isProvider: true,
+    getNetwork: async () => ({ chainId: 8453, name: "base" }),
+    /** @param {string | number} blockTag */
+    getBlock: async (blockTag) =>
+      blockTag === manifest.proofBlock.number
+        ? {
+            number: manifest.proofBlock.number,
+            hash: manifest.proofBlock.hash,
+            timestamp: manifest.proofBlock.number,
+          }
+        : { number: 300, hash: hash(300), timestamp: 300 },
+    /** @param {string} name */
+    resolveName: async (name) => name,
+    call: async () =>
+      utils.defaultAbiCoder.encode(["uint256"], [manifest.safeNonce]),
+  };
+  const hre = /** @type {any} */ ({
+    __methodScopedVerificationProvider: provider,
+    deployments: {
+      /** @param {string} name */
+      get: async (name) => require(`../deployments/base/${name}.json`),
+      getExtendedArtifact: async () => {
+        throw new Error("guard identity boundary reached");
+      },
+      getArtifact: async () => {
+        throw new Error("unexpected artifact lookup");
+      },
+    },
+    ethers: ethersPackage,
+  });
+
+  await assert.rejects(
+    verifyActivationCandidate(hre, {
+      kind: "rotation",
+      batch: undefined,
+      manifest: undefined,
+      mode: "artifact-child",
+      repositoryRoot: repository.root,
+      forkRpcUrl: "fake-rpc",
+      artifactPaths: { batch: batchPath, sidecar: sidecarPath },
+    }),
+    /guard identity boundary reached/
+  );
+});
+
 /**
  * @param {"rotation" | "cutover"} kind
  * @param {{ nonce?: string, proofBlockHash?: string, snapshotAtF?: import("../deployments/methodScopedActivation").ActivationSnapshot, simulationError?: Error }} [overrides]

@@ -341,6 +341,14 @@ async function resolveActivationContext(
   };
 }
 
+export async function loadActivationContext(
+  hre: HardhatRuntimeEnvironment,
+  network: ActivationNetwork
+): Promise<void> {
+  if (expectedCache.has(network)) return;
+  await resolveActivationContext(hre, network);
+}
+
 export function expectedActivationState(
   network: ActivationNetwork
 ): ExpectedActivationState {
