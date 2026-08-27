@@ -144,8 +144,12 @@ Current numbered lanes include:
 - `37`: method-scoped dispute lifecycle stack (immutable, executed on both
   networks; retired on live networks, mounted through a localhost-only
   wrapper);
-- `38`: method-scoped dispute activation (tag-only; staging EOA steps, two
-  guarded Base Safe batches).
+- `38`: method-scoped dispute activation via vault rotation (immutable,
+  retired unexecuted on Base; superseded by lanes 39/40);
+- `39`: method-scoped stack on a dedicated `StakeVaultMethodScoped`
+  (deploy-only on live networks; deploys and activates locally);
+- `40`: dedicated-vault activation (tag-only; staging EOA steps, one guarded
+  Base cutover batch, deferred predecessor writer removal).
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production

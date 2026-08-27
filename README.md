@@ -770,6 +770,21 @@ after each execution. Before lane 38 can run:
       `DisputeProtectionEnabledUpdated` events.
 - [ ] `@zkp2p/contracts-v2` publishes the tuple-scoped ABIs and replacement addresses, and its consumers upgrade.
 
+`deploy/39_deploy_method_scoped_vault_stack.ts` and `deploy/40_activate_method_scoped_vault_stack.ts` supersede
+lane 38 (retired unexecuted on Base on 2026-08-28). Lane 39 deploys a dedicated `StakeVaultMethodScoped` with
+`DisputeProtectionPolicyMethodScopedStaked` and `IntentLifecycleHookV1MethodScopedStaked` bound to it — controller
+set at deployment, so activation needs no two-day rotation — using `yarn deploy:dispute-method-scoped-vault:base_staging`
+/ `:base` with `ENABLE_{STAGING,BASE}_V3_DISPUTE_METHOD_SCOPED_VAULT_DEPLOYMENT=true` (deploy-only; Base initiates the
+vault and policy ownership transfers to the Safe). Lane 40 (`yarn deploy:dispute-method-scoped-vault-activation:*`,
+tag-only) advances Base staging one deployer step per run (add writer → set hook → remove the lane-32 writer) and on
+Base prepares one guarded cutover batch (guard → conditional `acceptOwnership` on vault and policy → add fresh writer →
+`setLifecycleHook`) plus a later guarded writer-removal batch that is only allowed once every OptIn-opened intent is
+terminal and `StakeVaultOptIn` holds no locks. Artifacts live at
+`deployments/outputs/safe-batches/base_method_scoped_vault_{cutover,writer_removal}.json`; run
+`yarn verify:method-scoped-safe-batch --batch vault-cutover|vault-writer-removal` immediately before the Safe executes.
+Stake in the old vaults is abandoned: stakers withdraw once their locks release and takers re-stake in the new vault
+before the cutover; that readiness is part of `CONFIRM_BASE_V3_DISPUTE_METHOD_SCOPED_VAULT_DOWNSTREAM_READY`.
+
 Dispute-evidence issuance in `attestation-service` remains a separate follow-up and is intentionally not implemented
 by these contract lanes. Only PayPal, Venmo, and Cash App receive non-zero onchain risk windows, matching the
 explicitly ratified chargebackable-platform set.
