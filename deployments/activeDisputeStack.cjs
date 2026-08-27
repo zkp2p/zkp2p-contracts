@@ -15,12 +15,28 @@ const CANONICAL_NAMES = [
   "DisputeProtectionPolicy",
   "IntentLifecycleHookV1",
 ];
-const INTERNAL_POLICY_RECORDS = ["WhitelistPolicyMethodScoped"];
+const INTERNAL_POLICY_RECORDS = [
+  "WhitelistPolicyMethodScoped",
+  "DisputeProtectionPolicyMethodScoped",
+  "IntentLifecycleHookV1MethodScoped",
+  "StakeVaultMethodScoped",
+  "DisputeProtectionPolicyMethodScopedStaked",
+  "IntentLifecycleHookV1MethodScopedStaked",
+];
 /** @type {Set<DisputeNetwork>} */
-const SUPPORTED_NETWORKS = new Set(["base", "base_staging", "localhost", "hardhat"]);
+const SUPPORTED_NETWORKS = new Set([
+  "base",
+  "base_staging",
+  "localhost",
+  "hardhat",
+]);
 
 function validateManifest() {
-  if (manifest.version !== 1 || !manifest.networks || typeof manifest.networks !== "object") {
+  if (
+    manifest.version !== 1 ||
+    !manifest.networks ||
+    typeof manifest.networks !== "object"
+  ) {
     throw new Error("Unsupported active dispute stack manifest");
   }
 
@@ -32,16 +48,24 @@ function validateManifest() {
     const keys = Object.keys(selection);
     if (
       keys.length !== CANONICAL_NAMES.length ||
-      keys.some((name) => !CANONICAL_NAMES.includes(/** @type {CanonicalName} */ (name)))
+      keys.some(
+        (name) => !CANONICAL_NAMES.includes(/** @type {CanonicalName} */ (name))
+      )
     ) {
       throw new Error(`Unknown canonical dispute deployment in ${network}`);
     }
     const internalNames = CANONICAL_NAMES.map((name) => selection[name]);
-    if (internalNames.some((name) => typeof name !== "string" || name.length === 0)) {
+    if (
+      internalNames.some(
+        (name) => typeof name !== "string" || name.length === 0
+      )
+    ) {
       throw new Error(`Invalid active dispute deployment name in ${network}`);
     }
     if (new Set(internalNames).size !== internalNames.length) {
-      throw new Error(`Active dispute deployment is exposed more than once in ${network}`);
+      throw new Error(
+        `Active dispute deployment is exposed more than once in ${network}`
+      );
     }
   }
 }
@@ -53,7 +77,8 @@ const SELECTED_INTERNAL_NAMES = new Set();
 for (const selection of Object.values(manifest.networks)) {
   for (const canonicalName of CANONICAL_NAMES) {
     const internalName = selection[canonicalName];
-    if (internalName !== canonicalName) SELECTED_INTERNAL_NAMES.add(internalName);
+    if (internalName !== canonicalName)
+      SELECTED_INTERNAL_NAMES.add(internalName);
   }
 }
 
@@ -79,7 +104,9 @@ function getActiveDisputeDeploymentName(network, canonicalName) {
   if (!CANONICAL_NAMES.includes(/** @type {CanonicalName} */ (canonicalName))) {
     throw new Error(`Unknown canonical dispute deployment ${canonicalName}`);
   }
-  return manifest.networks[normalized][/** @type {CanonicalName} */ (canonicalName)];
+  return manifest.networks[normalized][
+    /** @type {CanonicalName} */ (canonicalName)
+  ];
 }
 
 /**
@@ -152,8 +179,14 @@ function resolveActiveDisputeAliases(network, contracts, selectionStamp) {
       throw new Error(`Missing active dispute deployment ${internalName}`);
     }
     const existingPublic = contracts[canonicalName];
-    if (internalName !== canonicalName && existingPublic && !sameAbi(existingPublic.abi, selected.abi)) {
-      throw new Error(`Active dispute deployment ABI mismatch for ${canonicalName}`);
+    if (
+      internalName !== canonicalName &&
+      existingPublic &&
+      !sameAbi(existingPublic.abi, selected.abi)
+    ) {
+      throw new Error(
+        `Active dispute deployment ABI mismatch for ${canonicalName}`
+      );
     }
     resolved[canonicalName] = selected;
   }

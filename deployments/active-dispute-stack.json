@@ -13,13 +13,13 @@
     },
     "localhost": {
       "StakeVault": "StakeVaultMethodScoped",
-      "DisputeProtectionPolicy": "DisputeProtectionPolicyMethodScoped",
-      "IntentLifecycleHookV1": "IntentLifecycleHookV1MethodScoped"
+      "DisputeProtectionPolicy": "DisputeProtectionPolicyMethodScopedStaked",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1MethodScopedStaked"
     },
     "hardhat": {
       "StakeVault": "StakeVaultMethodScoped",
-      "DisputeProtectionPolicy": "DisputeProtectionPolicyMethodScoped",
-      "IntentLifecycleHookV1": "IntentLifecycleHookV1MethodScoped"
+      "DisputeProtectionPolicy": "DisputeProtectionPolicyMethodScopedStaked",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1MethodScopedStaked"
     }
   }
 }

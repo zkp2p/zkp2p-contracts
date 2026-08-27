@@ -55,6 +55,33 @@ const {
   canonicalTransactionHash,
 } = require("../deployments/safeBatchManifest.ts");
 
+test("vault activation modules expose the dedicated-vault surface", () => {
+  const activation = require("../deployments/vaultMethodScopedActivation.ts");
+  const manifest = require("../deployments/vaultActivationBatchManifest.ts");
+  assert.equal(typeof activation.reduceVaultActivation, "function");
+  assert.equal(typeof activation.buildVaultTrustSurface, "function");
+  assert.equal(typeof activation.buildVaultCutoverTransactions, "function");
+  assert.equal(
+    typeof activation.buildVaultWriterRemovalTransactions,
+    "function"
+  );
+  assert.equal(typeof activation.buildVaultStagingTransaction, "function");
+  assert.equal(
+    typeof activation.assertVaultGuardExpectationsUnchanged,
+    "function"
+  );
+  assert.equal(
+    typeof manifest.validateVaultActivationBatchManifest,
+    "function"
+  );
+  assert.equal(typeof manifest.computeVaultManifestSha256, "function");
+  assert.equal(typeof manifest.vaultSafeBatchJson, "function");
+  assert.equal(
+    typeof manifest.assertBatchMatchesVaultActivationManifest,
+    "function"
+  );
+});
+
 /** @param {number} value */
 const address = (value) => `0x${value.toString(16).padStart(40, "0")}`;
 /** @param {number} value */
@@ -2715,4 +2742,439 @@ test("artifact-child verifier refuses a sidecar transaction digest mismatch", as
     }),
     /incomplete artifact pair/
   );
+});
+
+const vaultAddresses = {
+  ...addresses,
+  predecessorVault: address(41),
+  freshVault: address(42),
+};
+
+/** @param {"base" | "base_staging"} network */
+function vaultExpected(network = "base") {
+  return {
+    ...expected(network),
+    addresses: vaultAddresses,
+    predecessorVaultPendingController:
+      network === "base" ? ZERO : "0x0173CaA95ecfC1c314C26766FB037d44cc71B42d",
+    predecessorAdmissionsPaused: network === "base_staging",
+  };
+}
+
+/** @param {"base" | "base_staging"} network */
+function vaultSnapshot(network = "base") {
+  const state = snapshot(network);
+  const wanted = vaultExpected(network);
+  const { vault: _oldVault, ...withoutVault } = state;
+  return {
+    ...withoutVault,
+    freshPolicy: {
+      ...state.freshPolicy,
+      owner: wanted.governance,
+      pendingOwner: ZERO,
+      stakeVault: vaultAddresses.freshVault,
+    },
+    predecessorPolicy: {
+      ...state.predecessorPolicy,
+      admissionsPaused: wanted.predecessorAdmissionsPaused,
+      stakeVault: vaultAddresses.predecessorVault,
+    },
+    freshVault: {
+      owner: wanted.governance,
+      pendingOwner: ZERO,
+      controller: vaultAddresses.freshPolicy,
+      pendingController: ZERO,
+      pendingControllerValidAt: "0",
+      controllerChangeDelay: wanted.controllerChangeDelay,
+      stakeToken: vaultAddresses.stakeToken,
+    },
+    predecessorVault: {
+      pendingController: wanted.predecessorVaultPendingController,
+    },
+  };
+}
+
+test("vault reducer recognizes both network phase tables and exact staging predecessor state", () => {
+  const {
+    reduceVaultActivation,
+  } = require("../deployments/vaultMethodScopedActivation.ts");
+  /** @type {Array<"base" | "base_staging">} */
+  const networks = ["base", "base_staging"];
+  for (const network of networks) {
+    const wanted = vaultExpected(network);
+    const deployed = vaultSnapshot(network);
+    const cutoverPending = structuredClone(deployed);
+    cutoverPending.registry.writers.push(vaultAddresses.freshPolicy);
+    const activeState = structuredClone(cutoverPending);
+    activeState.orchestrator.lifecycleHook = vaultAddresses.freshHook;
+    const removed = structuredClone(activeState);
+    removed.registry.writers = [vaultAddresses.freshPolicy];
+    assert.equal(reduceVaultActivation(deployed, wanted).phase, "deployed");
+    assert.equal(
+      reduceVaultActivation(deployed, wanted).nextStagingAction,
+      network === "base" ? null : "add-fresh-writer"
+    );
+    assert.equal(
+      reduceVaultActivation(cutoverPending, wanted).phase,
+      network === "base" ? "unrecognized" : "cutover-pending"
+    );
+    assert.equal(reduceVaultActivation(activeState, wanted).phase, "active");
+    assert.equal(
+      reduceVaultActivation(activeState, wanted).nextStagingAction,
+      network === "base" ? null : "remove-predecessor-writer"
+    );
+    assert.equal(
+      reduceVaultActivation(removed, wanted).phase,
+      "writer-removed"
+    );
+  }
+  const staging = vaultSnapshot("base_staging");
+  staging.predecessorVault.pendingController = ZERO;
+  assert.deepEqual(
+    reduceVaultActivation(staging, vaultExpected("base_staging")).violations,
+    ["predecessorVault.pendingController"]
+  );
+  staging.predecessorVault.pendingController =
+    vaultExpected("base_staging").predecessorVaultPendingController;
+  staging.predecessorPolicy.admissionsPaused = false;
+  assert.deepEqual(
+    reduceVaultActivation(staging, vaultExpected("base_staging")).violations,
+    ["predecessorPolicy.admissionsPaused"]
+  );
+});
+
+test("vault reducer binds independent Base ownership combinations and deferred drain", () => {
+  const {
+    reduceVaultActivation,
+  } = require("../deployments/vaultMethodScopedActivation.ts");
+  for (const vaultAccepted of [false, true]) {
+    for (const policyAccepted of [false, true]) {
+      const state = vaultSnapshot();
+      state.freshVault.owner = vaultAccepted
+        ? vaultAddresses.safe
+        : vaultAddresses.deployer;
+      state.freshVault.pendingOwner = vaultAccepted
+        ? ZERO
+        : vaultAddresses.safe;
+      state.freshPolicy.owner = policyAccepted
+        ? vaultAddresses.safe
+        : vaultAddresses.deployer;
+      state.freshPolicy.pendingOwner = policyAccepted
+        ? ZERO
+        : vaultAddresses.safe;
+      assert.equal(
+        reduceVaultActivation(state, vaultExpected()).phase,
+        "deployed"
+      );
+    }
+  }
+  const invalid = vaultSnapshot();
+  invalid.freshVault.owner = vaultAddresses.deployer;
+  invalid.freshVault.pendingOwner = ZERO;
+  assert.equal(
+    reduceVaultActivation(invalid, vaultExpected()).phase,
+    "unrecognized"
+  );
+  const activeState = vaultSnapshot();
+  activeState.registry.writers.push(vaultAddresses.freshPolicy);
+  activeState.orchestrator.lifecycleHook = vaultAddresses.freshHook;
+  activeState.lockProof = lockProof([
+    {
+      intentHash: hash(941),
+      status: 3,
+      lockAmount: "1",
+      maturesAt: "2000",
+      classification: "settled-unmatured",
+    },
+  ]);
+  const reduction = reduceVaultActivation(activeState, vaultExpected());
+  assert.equal(reduction.phase, "active");
+  assert.equal(reduction.waiting?.reason, "predecessor-drain");
+});
+
+test("vault transaction builders encode conditional acceptances and exact call order", () => {
+  const {
+    VAULT_ACTIVATION_INTERFACES,
+    buildVaultCutoverTransactions,
+    buildVaultStagingTransaction,
+    buildVaultWriterRemovalTransactions,
+  } = require("../deployments/vaultMethodScopedActivation.ts");
+  for (const includeVault of [false, true]) {
+    for (const includePolicy of [false, true]) {
+      const transactions = buildVaultCutoverTransactions({
+        addresses: vaultAddresses,
+        guard: address(943),
+        includeVaultAcceptOwnership: includeVault,
+        includePolicyAcceptOwnership: includePolicy,
+      });
+      assert.deepEqual(
+        transactions.map((transaction) => transaction.to),
+        [
+          address(943),
+          ...(includeVault ? [vaultAddresses.freshVault] : []),
+          ...(includePolicy ? [vaultAddresses.freshPolicy] : []),
+          vaultAddresses.registry,
+          vaultAddresses.orchestrator,
+        ].map((value) => value.toLowerCase())
+      );
+      assert.equal(
+        decode(VAULT_ACTIVATION_INTERFACES.guard, transactions[0]).name,
+        "assertReady"
+      );
+    }
+  }
+  const removal = buildVaultWriterRemovalTransactions({
+    addresses: vaultAddresses,
+    guard: address(944),
+  });
+  assert.deepEqual(
+    removal.map((transaction) => transaction.to),
+    [address(944).toLowerCase(), vaultAddresses.registry.toLowerCase()]
+  );
+  /** @type {import("../deployments/vaultMethodScopedActivation").VaultStagingAction[]} */
+  const actions = [
+    "add-fresh-writer",
+    "set-fresh-hook",
+    "remove-predecessor-writer",
+  ];
+  for (const action of actions) {
+    assert.doesNotThrow(() =>
+      buildVaultStagingTransaction(action, vaultAddresses, lockProof())
+    );
+  }
+  assert.throws(
+    () =>
+      buildVaultStagingTransaction(
+        "remove-predecessor-writer",
+        vaultAddresses,
+        lockProof([
+          {
+            ...terminalIntent(),
+            lockAmount: "1",
+            classification: "terminal-locked",
+          },
+        ])
+      ),
+    /not clean/
+  );
+});
+
+test("vault guard comparison binds cutover inventory and writer-removal intent proof", () => {
+  const {
+    assertVaultGuardExpectationsUnchanged,
+  } = require("../deployments/vaultMethodScopedActivation.ts");
+  const proof = vaultSnapshot();
+  const current = structuredClone(proof);
+  current.blockHash = hash(999);
+  assert.doesNotThrow(() =>
+    assertVaultGuardExpectationsUnchanged("vault-cutover", proof, current)
+  );
+  current.inventory.depositCounter = "2";
+  assert.throws(
+    () =>
+      assertVaultGuardExpectationsUnchanged("vault-cutover", proof, current),
+    /inventory.depositCounter/
+  );
+  const lockDrift = structuredClone(proof);
+  lockDrift.lockProof.intents[0].status = 5;
+  assert.throws(
+    () =>
+      assertVaultGuardExpectationsUnchanged(
+        "vault-writer-removal",
+        proof,
+        lockDrift
+      ),
+    /lockProof.intents.status/
+  );
+});
+
+/**
+ * @param {import("../deployments/vaultMethodScopedActivation").VaultActivationBatchKind} kind
+ * @returns {import("../deployments/vaultActivationBatchManifest").VaultActivationBatchManifest}
+ */
+function vaultManifestFixture(kind = "vault-cutover") {
+  const {
+    buildVaultCutoverTransactions,
+    buildVaultTrustSurface,
+    buildVaultWriterRemovalTransactions,
+  } = require("../deployments/vaultMethodScopedActivation.ts");
+  const {
+    computeVaultManifestSha256,
+  } = require("../deployments/vaultActivationBatchManifest.ts");
+  const proofSnapshot = vaultSnapshot();
+  if (kind === "vault-writer-removal") {
+    proofSnapshot.registry.writers.push(vaultAddresses.freshPolicy);
+    proofSnapshot.orchestrator.lifecycleHook = vaultAddresses.freshHook;
+  }
+  const guard = address(kind === "vault-cutover" ? 945 : 946);
+  const transactions =
+    kind === "vault-cutover"
+      ? buildVaultCutoverTransactions({
+          addresses: vaultAddresses,
+          guard,
+          includeVaultAcceptOwnership: false,
+          includePolicyAcceptOwnership: false,
+        })
+      : buildVaultWriterRemovalTransactions({
+          addresses: vaultAddresses,
+          guard,
+        });
+  const title =
+    kind === "vault-cutover" ? "VaultCutover" : "VaultWriterRemoval";
+  /** @type {Omit<import("../deployments/vaultActivationBatchManifest").VaultActivationBatchManifest, "manifestSha256">} */
+  const unsigned = {
+    version: 3,
+    kind,
+    chainId: 8453,
+    safe: vaultAddresses.safe.toLowerCase(),
+    safeNonce: "77",
+    sourceSha: "a".repeat(40),
+    proofBlock: { number: 200, hash: hash(200) },
+    simulationBlockNumber: 201,
+    simulationBlockHash: hash(201),
+    simulationResult: "success",
+    transactions,
+    transactionsSha256: canonicalTransactionHash(transactions),
+    guard: {
+      address: guard,
+      artifactName: `DisputeMethodScoped${title}Guard`,
+      constructorArgs: [],
+      deployTransactionHash: hash(947),
+      runtimeCodeHash: hash(948),
+    },
+    postcondition: {
+      address: address(949),
+      artifactName: `DisputeMethodScoped${title}Postcondition`,
+      constructorArgs: [],
+      deployTransactionHash: hash(950),
+      runtimeCodeHash: hash(951),
+    },
+    trustSurface: buildVaultTrustSurface(vaultExpected()),
+    proofSnapshot,
+  };
+  return { ...unsigned, manifestSha256: computeVaultManifestSha256(unsigned) };
+}
+
+test("vault manifest v3 validation and Safe digest bind both artifact kinds", () => {
+  const {
+    assertBatchMatchesVaultActivationManifest,
+    validateVaultActivationBatchManifest,
+    vaultSafeBatchJson,
+  } = require("../deployments/vaultActivationBatchManifest.ts");
+  /** @type {import("../deployments/vaultMethodScopedActivation").VaultActivationBatchKind[]} */
+  const kinds = ["vault-cutover", "vault-writer-removal"];
+  for (const kind of kinds) {
+    const manifest = vaultManifestFixture(kind);
+    assert.doesNotThrow(() =>
+      validateVaultActivationBatchManifest(manifest, { kind })
+    );
+    const batch = vaultSafeBatchJson(kind, manifest.transactions, 1234);
+    assert.doesNotThrow(() =>
+      assertBatchMatchesVaultActivationManifest(batch, manifest)
+    );
+    const tampered = structuredClone(manifest);
+    tampered.proofSnapshot.predecessorVault.pendingController = address(999);
+    assert.throws(() => validateVaultActivationBatchManifest(tampered));
+  }
+});
+
+test("vault constructor derivation independently binds both ownership acceptances and intent hashes", () => {
+  const {
+    deriveVaultActivationConstructorArgs,
+  } = require("./verify-method-scoped-safe-batch.ts");
+  for (const vaultAccepted of [false, true]) {
+    for (const policyAccepted of [false, true]) {
+      const manifest = vaultManifestFixture();
+      manifest.proofSnapshot.freshVault.owner = vaultAccepted
+        ? manifest.safe
+        : vaultAddresses.deployer;
+      manifest.proofSnapshot.freshVault.pendingOwner = vaultAccepted
+        ? ZERO
+        : manifest.safe;
+      manifest.proofSnapshot.freshPolicy.owner = policyAccepted
+        ? manifest.safe
+        : vaultAddresses.deployer;
+      manifest.proofSnapshot.freshPolicy.pendingOwner = policyAccepted
+        ? ZERO
+        : manifest.safe;
+      const args = deriveVaultActivationConstructorArgs(manifest, "guard");
+      assert.equal(args[1], !vaultAccepted);
+      assert.equal(args[2], !policyAccepted);
+    }
+  }
+  const removal = vaultManifestFixture("vault-writer-removal");
+  assert.deepEqual(
+    deriveVaultActivationConstructorArgs(removal, "guard")[1],
+    removal.proofSnapshot.lockProof.intents.map((intent) => intent.intentHash)
+  );
+});
+
+test("vault verifier branch uses injected lane-40 readers before artifact identity checks", async () => {
+  const {
+    computeVaultManifestSha256,
+    vaultSafeBatchJson,
+  } = require("../deployments/vaultActivationBatchManifest.ts");
+  const {
+    verifyVaultActivationCandidate,
+  } = require("./verify-method-scoped-safe-batch.ts");
+  const { BASE_SAFE } = require("./simulate-dispute-opt-in-safe-batch.ts");
+  const repository = temporaryGitRepository("method-scoped-vault-verify-");
+  const manifest = vaultManifestFixture();
+  manifest.safe = BASE_SAFE.toLowerCase();
+  manifest.sourceSha = repository.sourceSha;
+  const { manifestSha256: _digest, ...unsigned } = manifest;
+  manifest.manifestSha256 = computeVaultManifestSha256(unsigned);
+  const batch = vaultSafeBatchJson(
+    "vault-cutover",
+    manifest.transactions,
+    1234
+  );
+  const provider = {
+    _isProvider: true,
+    getNetwork: async () => ({ chainId: 8453, name: "base" }),
+    /** @param {string | number} blockTag */
+    getBlock: async (blockTag) =>
+      blockTag === manifest.proofBlock.number
+        ? { number: 200, hash: manifest.proofBlock.hash, timestamp: 200 }
+        : { number: 300, hash: hash(300), timestamp: 300 },
+    /** @param {string} name */
+    resolveName: async (name) => name,
+    call: async () =>
+      utils.defaultAbiCoder.encode(["uint256"], [manifest.safeNonce]),
+  };
+  const hre = {
+    __methodScopedVerificationProvider: provider,
+    deployments: {
+      getExtendedArtifact: async () => {
+        throw new Error("vault guard identity boundary reached");
+      },
+      getArtifact: async () => {
+        throw new Error("unexpected artifact lookup");
+      },
+    },
+    ethers: ethersPackage,
+  };
+  let loaded = false;
+  const lane = {
+    loadVaultActivationContext: async () => {
+      loaded = true;
+    },
+    expectedVaultActivationState: () => vaultExpected(),
+    readVaultActivationSnapshot: async () => vaultSnapshot(),
+    runPinnedSimulation: async () => {},
+  };
+  await assert.rejects(
+    verifyVaultActivationCandidate(/** @type {any} */ (hre), {
+      kind: "vault-cutover",
+      batch,
+      manifest,
+      mode: "generation",
+      repositoryRoot: repository.root,
+      forkRpcUrl: "fake-rpc",
+      artifactPaths: { batch: "unused", sidecar: "unused" },
+      lane,
+    }),
+    /vault guard identity boundary reached/
+  );
+  assert.equal(loaded, true);
 });

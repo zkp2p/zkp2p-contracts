@@ -78,6 +78,27 @@
   asserts the predecessor hook is still live), pin lane 38 after its first live transition, and keep the
   `active-dispute-stack.json` / `PREDECESSOR_DISPUTE_STACKS` / evidence flip and the `WhitelistPolicy`
   package alias in recording PRs after each execution — the lane itself flips nothing repo-side.
+  Lane 38 executed only its first two Base-staging steps (2026-08-27) and is retired unexecuted on Base: the reused
+  vault's two-day controller delay was abandoned in favour of a dedicated vault. Its staging side effects remain live
+  (lane-32 policy admissions paused; staging vault `pendingController` = the lane-37 policy) and lane 39 pins exactly
+  that state.
+- `deploy/39_deploy_method_scoped_vault_stack.ts` deploys `StakeVaultMethodScoped` (a fresh `StakeVault`, aliased to the
+  canonical `StakeVault` package key after activation), `DisputeProtectionPolicyMethodScopedStaked`, and
+  `IntentLifecycleHookV1MethodScopedStaked` against `WhitelistPolicyMethodScoped` and the pinned verifier/registry, sets
+  the vault controller with `initializeController` (no delay), authorizes the hook, applies the windowed-rail risk
+  windows, and on Base initiates two-step ownership transfers of vault and policy to the Safe. Flags
+  `ENABLE_{STAGING,BASE}_V3_DISPUTE_METHOD_SCOPED_VAULT_DEPLOYMENT=true` authorize deploy-only runs; local networks
+  deploy and activate. Old vaults and their stake are abandoned by decision (2026-08-28); the lane-37 policy/hook records
+  are immutable history that was never activated.
+- `deploy/40_activate_method_scoped_vault_stack.ts` activates the lane-39 stack without a rotation: Base staging runs
+  add-fresh-writer → set-fresh-hook → remove-predecessor-writer one deployer step per run; Base emits a single guarded
+  cutover batch (guard → conditional `acceptOwnership` on vault and policy → add fresh writer → `setLifecycleHook`) and,
+  later, a guarded writer-removal batch allowed only when every predecessor-opened intent is terminal and the
+  predecessor vault holds no locks. Snapshots carry `freshVault` and `predecessorVault` separately; guards, manifest
+  (v3), verifier kinds (`vault-cutover`, `vault-writer-removal`) and artifacts
+  (`deployments/outputs/safe-batches/base_method_scoped_vault_*`) are additive to lane 38's, which stay byte-identical.
+  Recording checkpoints: commit live records before any artifact generation, pin lanes 39/40 after their first live
+  execution, propose the Base cutover at the live Safe nonce, and flip manifests/package only after execution.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the
