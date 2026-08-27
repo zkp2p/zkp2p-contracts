@@ -131,12 +131,23 @@ Current numbered lanes include:
 - `25`: generic Zelle payment-method configuration;
 - `27`: legacy Zelle method removal;
 - `28`: `IntentGuardian`;
-- `29`: V2 whitelist policy.
-- `30`: V3 lifecycle stack for local, Hardhat, and Base staging only.
+- `29`: V2 whitelist policy (immutable, still mounted);
+- `30`: V3 lifecycle stack (immutable; mounted through its active wrapper);
+- `31`: V3 payment-binding stack and one-way verifier cutover;
+- `32`: dispute lifecycle stack (immutable, retired) and the unrelated
+  deposit-creation guard;
+- `33`: IntentGuardian fee update;
+- `34`: opt-in dispute stack (immutable, retired; its Base trio is live);
+- `35`: Mercury payment method (Base staging only);
+- `36`: `WhitelistPolicyMethodScoped` (deploy-only);
+- `37`: method-scoped dispute lifecycle stack (deploy-only).
 
 There is no `26` script. Numbered files are identities, not proof that every
-script should execute. Deployment is a separately approved mutation for the
-exact network, source SHA, and governance/deployer path.
+script should execute. A numbered script is immutable after any production
+execution; successors get the next unused lane and new deployment names, and
+retirement lives in `deployments/immutableDeploymentLanes.ts`. Deployment is a
+separately approved mutation for the exact network, source SHA, and
+governance/deployer path.
 
 Use:
 
