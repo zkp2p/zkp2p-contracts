@@ -119,8 +119,9 @@ latest block captured once per run on staging). Fails closed on drift:
   `DisputeProtectionPolicyMethodScoped`, `IntentLifecycleHookV1MethodScoped`
   present and verified against chain with `assertDeploymentMatchesChain`;
 - fresh policy: `stakeVault() == predecessorVault`, verifier/registry
-  dependencies as pinned, `isLifecycleHookAuthorized(freshHook)`, only the
-  fresh hook authorized (lane-37 event scan), risk windows equal
+  dependencies as pinned, `authorizedHooks == [freshHook]` (replay of
+  `LifecycleHookAuthorizationUpdated` from the record's deployment block;
+  pinned in the manifest and re-derived by the verifier), risk windows equal
   `DISPUTE_RISK_WINDOW[network]` for `DISPUTABLE_PAYMENT_METHODS` and zero for
   every other active method of that network, `admissionsPaused == false`,
   no lifecycle event since deployment (lane-37 `classifyFreshStackActivity`);
@@ -137,22 +138,29 @@ latest block captured once per run on staging). Fails closed on drift:
 
 ### Snapshot and reducer (pure, exported)
 
-`ActivationSnapshot` fields (all read at one `blockTag`): `network`,
-`freshPolicy.{owner, pendingOwner, admissionsPaused, disputeVerifier,
-freshHookAuthorized, predecessorHookAuthorized, riskWindows[]}`,
-`predecessorPolicy.{owner, pendingOwner, admissionsPaused}`,
-`predecessorPolicy.disputeVerifier`, `disputeVerifier.{owner, pendingOwner,
-attestationVerifier, nullifierRegistry}`, `vault.{controller,
-pendingController, pendingControllerValidAt, owner, pendingOwner}`,
-`registry.{owner, writers}`, `orchestrator.{hook, paused, owner,
-escrowRegistry, paymentVerifierRegistry, relayerRegistry, protocolFee,
-protocolFeeRecipient, allowMultipleIntents, registeredInOrchestratorRegistry}`,
-`freshHook.{orchestratorRegistry, whitelistPolicy, disputeProtectionPolicy}`,
-`whitelistPolicy.{owner, escrowRegistry, groupRegistry, orchestratorRegistry}`,
-`attestationVerifier.{owner, requiredSignatures, witnesses[]}`,
-`blockTimestamp`, and the lock proof and inventory as `{ok, detail}` values
-where `detail` distinguishes `pending`, `settled-unmatured`,
-`settled-matured` (releasable), and `terminal` intents. Every one of these
+`ActivationSnapshot` fields (all read at one `blockTag`; exact TypeScript
+shape in the implementation plan): `network`, `blockNumber`, `blockHash`,
+`blockTimestamp`; `freshPolicy.{owner, pendingOwner, admissionsPaused,
+disputeVerifier, disputeNullifierRegistry, stakeVault, authorizedHooks[],
+riskWindows{method → window}}` (`authorizedHooks` is the replay of
+`LifecycleHookAuthorizationUpdated` from the record's deployment block and
+must equal exactly `[freshHook]`); `predecessorPolicy.{owner, pendingOwner,
+admissionsPaused, disputeVerifier, disputeNullifierRegistry}`;
+`disputeVerifier.{owner, pendingOwner, attestationVerifier,
+nullifierRegistry}`; `vault.{controller, pendingController,
+pendingControllerValidAt, controllerChangeDelay, stakeToken, owner,
+pendingOwner}`; `registry.{owner, writers[]}`; `orchestrator.{lifecycleHook,
+paused, owner, escrowRegistry, paymentVerifierRegistry, relayerRegistry,
+protocolFee, protocolFeeRecipient, allowMultipleIntents, registered}`;
+`freshHook.{orchestratorRegistry, whitelistPolicy, disputeProtectionPolicy}`;
+`whitelistPolicy.{owner, escrowRegistry, groupRegistry, orchestratorRegistry}`;
+`attestationVerifier.{owner, requiredSignatures, witnesses[]}`; the full
+`lockProof` (`intents[{intentHash, status, lockAmount, maturesAt,
+classification}]`, `ok`, `releasable[]`, `blocking[]`, `earliestMaturity`)
+where `classification` distinguishes `pending`, `settled-unmatured`,
+`settled-matured` (releasable), `terminal`, and `terminal-locked`; and the
+full `inventory` (`escrow`, `depositCounter`, `block`, `tuples[]`,
+`violations[]`, `ok`). Every one of these
 is a governance-mutable trust input; the reducer treats any deviation from
 the pinned `EXPECTED_LIVE` / `DISPUTE_RISK_WINDOW` values as a violation,
 and both guards bind the same fields at execution (below).
@@ -231,7 +239,9 @@ recorded in the sidecar; they hold no funds and no privileges):
   == Safe` and `escrowRegistry` / `groupRegistry` / `orchestratorRegistry`
   == pinned; `MultiAttestationVerifier` `owner == Safe`,
   `requiredSignatures == 1`, `witnesses()` == pinned array in order;
-  predecessor policy `disputeVerifier() == pinned`.
+  predecessor policy `disputeVerifier() == pinned`; both policies'
+  immutable `disputeNullifierRegistry() == disputeRegistry` (the actual
+  dispute-write target).
 - `DisputeMethodScopedCutoverGuard(expected…)` — `assertReady()` reverts
   unless: vault pendingController == fresh policy and `block.timestamp >=
   pendingControllerValidAt`; controller still predecessor; vault owner ==
@@ -277,7 +287,9 @@ reducer phase `deployed`), ordered:
 
 Rotation postcondition: fresh policy owner == Safe, pendingOwner == 0;
 predecessor paused; vault pendingController == fresh policy,
-`pendingControllerValidAt >= simulationTimestamp + 172800`, controller ==
+`pendingControllerValidAt >= block.timestamp + controllerChangeDelay`
+(evaluated in the same call as the batch, where `proposeController` set
+`validAt = block.timestamp + delay`, so it is exact), controller ==
 predecessor, owner == Safe, pendingOwner == 0; writers == [predecessor];
 hook == predecessor hook.
 
@@ -320,12 +332,19 @@ exact calls; `txBuilderVersion 1.16.5`; `createdFromSafeAddress = BASE_SAFE`.
 
 **Sidecar manifest v2** (`deployments/activationBatchManifest.ts`, new;
 `safeBatchManifest.ts` is left unchanged for lane-34 tooling): the v1
-fields plus `guard: {address, constructorArgs, deployTransactionHash,
-runtimeCodeHash}`, `lockProof: {fromBlock, toBlock, intentHashes[],
-statuses[]}`, `inventory: {escrow, depositCounter, tuples[], sourceBlock}`,
-`postcondition: {address, constructorArgs, deployTransactionHash,
-runtimeCodeHash}` (identified exactly like the guard, so a wrong or no-op
-contract cannot stand in for it), `proofBlock: {number, hash}`; `manifestSha256`
+fields plus `guard: {address, artifactName, constructorArgs,
+deployTransactionHash, runtimeCodeHash}`, `trustSurface`, and
+`proofSnapshot` — the complete normalized `ActivationSnapshot` read at the
+proof block, which embeds `lockProof: {fromBlock, toBlock, intents[{intentHash,
+status, lockAmount, maturesAt, classification}], ok, releasable[],
+blocking[], earliestMaturity}` and `inventory: {escrow, depositCounter,
+block, tuples[], violations[], ok}` and the fresh policy's replayed
+`authorizedHooks[]`, so the verifier can reconstruct P without any other
+input;
+`postcondition: {address, artifactName, constructorArgs,
+deployTransactionHash, runtimeCodeHash}` (identified exactly like the guard,
+so a wrong or no-op contract cannot stand in for it), `proofBlock: {number,
+hash}`; `manifestSha256`
 covers the canonical JSON of **all** of these, and the verifier recomputes
 it. Refresh semantics: if a pair already exists and differs, the existing
 pair is moved to `…/superseded/<name>_<simulationBlock>_<manifestSha256[0:12]>.json`
@@ -416,8 +435,13 @@ exists so the cutover proof can pass without waiting for a third party.
      (active or not — an inactive method can be reactivated) whose
      successor risk window is nonzero;
   3. set A: extant deposits whose latest predecessor
-     `DisputeProtectionEnabledUpdated` (filtered by the canonical escrow
-     topic; ordered by block, tx index, log index) requested `false` —
+     `DisputeProtectionEnabledUpdated` — decoded with the **predecessor
+     deployment record's ABI**, where the event is the deposit-wide 3-arg
+     `(address indexed escrow, uint256 indexed depositId, bool)` with a
+     different topic hash from the current tuple-scoped event (decoding
+     with the compiled ABI would silently miss every opt-out); filtered by
+     the canonical escrow topic; ordered by block, tx index, log index —
+     requested `false` —
      expanded to every listed windowed method of that deposit, **minus any
      tuple whose latest successor `DisputeProtectionEnabledUpdated` is
      newer than the deposit's latest predecessor event** — ordering is
