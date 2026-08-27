@@ -106,8 +106,10 @@ interface IDisputeProtectionPolicy {
     /**
      * @notice Admits a newly signaled intent into dispute coverage when its payment method has a risk window.
      * @dev Called only by an authorized lifecycle hook. A zero configured risk window is an unrestricted pass-through
-     * and creates no dispute protection intent. Otherwise the call validates deposit configuration and token
-     * compatibility, snapshots the risk configuration, and locks the taker's selected stake.
+     * for this direct policy callback; the canonical lifecycle hook never calls this function for a zero-window payment
+     * method and applies the whitelist instead. It creates no dispute protection intent. Otherwise the call validates
+     * deposit configuration and token compatibility, snapshots the risk configuration, and locks the taker's selected
+     * stake.
      * @param _intentHash Unique intent identifier assigned by the calling orchestrator.
      * @param _escrow Escrow that owns the intent and deposit.
      * @param _depositId Deposit supplying the intent liquidity.
@@ -143,8 +145,10 @@ interface IDisputeProtectionPolicy {
     function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease) external;
 
     /**
-     * @notice Returns whether stake-backed dispute protection is enabled for a deposit payment method.
-     * @dev Returns false until the depositor explicitly opts in.
+     * @notice Returns the effective stake-backed dispute protection state for a deposit payment method.
+     * @dev True when the depositor has not opted the tuple out and the payment method has a nonzero risk window.
+     * Performs no validation: any escrow, any deposit id (including nonexistent ones), and any payment method with a
+     * nonzero window read true.
      * @param _escrow Escrow containing the deposit.
      * @param _depositId Deposit whose payment-method-specific configuration is queried.
      * @param _paymentMethod Payment method whose dispute protection configuration is queried.
