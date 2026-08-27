@@ -8,6 +8,11 @@ import {
   assertBatchMatchesActivationManifest,
   validateActivationBatchManifest,
 } from "../deployments/activationBatchManifest";
+import {
+  type VaultActivationBatchManifest,
+  assertBatchMatchesVaultActivationManifest,
+  validateVaultActivationBatchManifest,
+} from "../deployments/vaultActivationBatchManifest";
 import { assertSafeArtifactPairConsistent } from "../deployments/safeArtifacts";
 import {
   BASE_SAFE,
@@ -29,6 +34,15 @@ const safeInterface = new ethers.utils.Interface([
 const postconditionInterface = new ethers.utils.Interface([
   "function assertPostconditions()",
 ]);
+
+type MethodScopedActivationManifest =
+  | ActivationBatchManifest
+  | VaultActivationBatchManifest;
+
+function validateManifest(manifest: MethodScopedActivationManifest): void {
+  if (manifest.version === 3) validateVaultActivationBatchManifest(manifest);
+  else validateActivationBatchManifest(manifest);
+}
 
 export const decodeMethodScopedSafeSimulationEnvelope =
   decodeSafeSimulationEnvelope;
@@ -59,7 +73,7 @@ async function assertRuntime(
 
 export async function assertManifestContractRuntimeHashes(
   hre: HardhatRuntimeEnvironment,
-  manifest: ActivationBatchManifest
+  manifest: MethodScopedActivationManifest
 ): Promise<void> {
   await assertRuntime(
     hre,
@@ -77,10 +91,10 @@ export async function assertManifestContractRuntimeHashes(
 
 export async function simulateMethodScopedSafeBatch(
   hre: HardhatRuntimeEnvironment,
-  manifest: ActivationBatchManifest,
+  manifest: MethodScopedActivationManifest,
   forkRpcUrl: string
 ): Promise<void> {
-  validateActivationBatchManifest(manifest);
+  validateManifest(manifest);
   if (manifest.safe.toLowerCase() !== BASE_SAFE.toLowerCase()) {
     throw new Error("Safe manifest does not target the pinned ZKP2P Base Safe");
   }
@@ -168,9 +182,9 @@ async function main(): Promise<void> {
   const inlinePayload = process.env.METHOD_SCOPED_SAFE_SIMULATION_PAYLOAD;
   if (inlinePayload) {
     const payload = JSON.parse(inlinePayload) as {
-      manifest: ActivationBatchManifest;
+      manifest: MethodScopedActivationManifest;
     };
-    validateActivationBatchManifest(payload.manifest);
+    validateManifest(payload.manifest);
     await simulateMethodScopedSafeBatch(
       loadHardhatRuntime(),
       payload.manifest,
@@ -195,9 +209,13 @@ async function main(): Promise<void> {
   const pair = assertSafeArtifactPairConsistent(batchPath, sidecarPath);
   const manifest = JSON.parse(
     readFileSync(sidecarPath, "utf8")
-  ) as ActivationBatchManifest;
-  validateActivationBatchManifest(manifest);
-  assertBatchMatchesActivationManifest(pair.batch, manifest);
+  ) as MethodScopedActivationManifest;
+  validateManifest(manifest);
+  if (manifest.version === 3) {
+    assertBatchMatchesVaultActivationManifest(pair.batch, manifest);
+  } else {
+    assertBatchMatchesActivationManifest(pair.batch, manifest);
+  }
   await simulateMethodScopedSafeBatch(
     loadHardhatRuntime(),
     manifest,
