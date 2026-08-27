@@ -68,26 +68,24 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         assertEq(escrow.getDepositIntent(depositId, intentHash).intentHash, intentHash);
     }
 
-    function test_WhitelistOnNonMemberUntouchedRejectsBeforeEscrowLock() public {
+    function test_WhitelistOnNonMemberUntouchedRequiresStakeBeforeEscrowLock() public {
         _setWhitelist(true, false);
         uint256 counterBefore = orchestrator.intentCounter();
         uint256 remainingBefore = escrow.getDeposit(depositId).remainingDeposits;
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IntentLifecycleHookV1.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker
-            )
+            abi.encodeWithSelector(IStakeVault.InsufficientFreeStake.selector, other, uint256(0), INTENT_AMOUNT)
         );
-        _signalCall(taker, _defaultParams());
+        _signalCall(other, _paramsFor(other));
 
         assertEq(orchestrator.intentCounter(), counterBefore);
         assertEq(escrow.getDeposit(depositId).remainingDeposits, remainingBefore);
+        assertEq(vault.lockedStake(other), 0);
         assertEq(vault.lockedStake(taker), 0);
     }
 
-    function test_WhitelistOnNonMemberOptedInRejectsInsufficientStakeViaVault() public {
+    function test_WhitelistOnNonMemberUntouchedRejectsInsufficientStakeViaVault() public {
         _setWhitelist(true, false);
-        _setDisputeProtection(true);
         uint256 counterBefore = orchestrator.intentCounter();
         bytes32 rejectedIntent = _intentHash(counterBefore);
         uint256 remainingBefore = escrow.getDeposit(depositId).remainingDeposits;
@@ -100,9 +98,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         assertEq(escrow.getDeposit(depositId).remainingDeposits, remainingBefore);
     }
 
-    function test_WhitelistOnNonMemberOptedInLocksStakeBeforeEscrowLock() public {
+    function test_WhitelistOnNonMemberUntouchedLocksStakeBeforeEscrowLock() public {
         _setWhitelist(true, false);
-        _setDisputeProtection(true);
 
         bytes32 intentHash = _signalDefault();
 
@@ -114,28 +111,23 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         assertEq(escrow.getDepositIntent(depositId, intentHash).intentHash, intentHash);
     }
 
-    function test_WhitelistOnNonMemberOptedInWindowlessMethodGetsDirectAccess() public {
+    function test_WhitelistOnNonMemberWindowlessMethodRejectsEvenWhenOptedIn() public {
         _addPaymentMethod(WINDOWLESS_METHOD);
         _setWhitelist(true, false);
+        vm.prank(depositor);
+        whitelistPolicy.setEnabled(address(escrow), depositId, WINDOWLESS_METHOD, true);
         _setDisputeProtection(true);
+        vm.prank(depositor);
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, WINDOWLESS_METHOD, true);
         IOrchestratorV3.SignalIntentParams memory params = _paramsFor(other);
         params.paymentMethod = WINDOWLESS_METHOD;
 
-        bytes32 intentHash = _signal(other, params);
-
-        assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IntentLifecycleHookV1.TakerNotWhitelisted.selector, address(escrow), depositId, WINDOWLESS_METHOD, other
+            )
         );
-        assertEq(vault.lockedStake(other), 0);
-        assertEq(escrow.getDepositIntent(depositId, intentHash).intentHash, intentHash);
-
-        verifier.setShouldVerifyPayment(true);
-        _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
-        assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
-        );
+        _signalCall(other, params);
     }
 
     function test_WhitelistOnNonMemberOptedOutRejects() public {
@@ -149,50 +141,45 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         _signalCall(taker, _defaultParams());
     }
 
-    function test_WhitelistOffUntouchedIsOpenForEveryTaker() public {
+    function test_WhitelistOffUntouchedRequiresStakeFromEveryTaker() public {
         bytes32 takerIntent = _signalDefault();
-        bytes32 otherIntent = _signal(other, _paramsFor(other));
 
         assertEq(
             uint256(disputeProtectionPolicy.getDisputeProtectionIntent(takerIntent).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING)
         );
-        assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(otherIntent).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+        assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IStakeVault.InsufficientFreeStake.selector, other, uint256(0), INTENT_AMOUNT)
         );
-        assertEq(vault.lockedStake(taker), 0);
-        assertEq(vault.lockedStake(other), 0);
+        _signalCall(other, _paramsFor(other));
     }
 
-    function test_DisputeProtectionOptInIsScopedToPaymentMethod() public {
+    function test_DisputeProtectionOptOutIsScopedToPaymentMethod() public {
         _addPaymentMethod(OTHER_METHOD);
         disputeProtectionPolicy.setRiskWindow(OTHER_METHOD, RISK_WINDOW);
-        _setDisputeProtection(true);
+        _setDisputeProtection(false);
 
         IOrchestratorV3.SignalIntentParams memory otherMethodParams = _defaultParams();
         otherMethodParams.paymentMethod = OTHER_METHOD;
-        bytes32 openIntent = _signal(taker, otherMethodParams);
-        assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(openIntent).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
-        );
-
-        vm.prank(taker);
-        orchestrator.cancelIntent(openIntent);
-        vm.prank(depositor);
-        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, OTHER_METHOD, true);
-
         bytes32 protectedIntent = _signal(taker, otherMethodParams);
         assertEq(
             uint256(disputeProtectionPolicy.getDisputeProtectionIntent(protectedIntent).status),
             uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING)
         );
+        uint256 lockedAfterFirst = vault.lockedStake(taker);
+
+        bytes32 openIntent = _signalDefault();
+        assertEq(
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(openIntent).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+        );
+        assertEq(vault.lockedStake(taker), lockedAfterFirst);
     }
 
-    function test_WhitelistOffOptedInWindowlessMethodIsOpen() public {
+    function test_WhitelistOffWindowlessMethodIsOpenAndWindowedMethodRequiresStake() public {
         _addPaymentMethod(WINDOWLESS_METHOD);
-        _setDisputeProtection(true);
         IOrchestratorV3.SignalIntentParams memory params = _paramsFor(other);
         params.paymentMethod = WINDOWLESS_METHOD;
 
@@ -210,7 +197,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         _signalCall(other, _paramsFor(other));
     }
 
-    function test_WhitelistOffUntouchedCreatesNoDisputeProtectionIntent() public {
+    function test_WhitelistOffOptedOutCreatesNoDisputeProtectionIntent() public {
+        _setDisputeProtection(false);
         bytes32 intentHash = _signal(other, _paramsFor(other));
         assertEq(
             uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
@@ -220,7 +208,6 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_CancelIntentAndExpiryPruneUnlockStake() public {
-        _setDisputeProtection(true);
         bytes32 cancelledIntent = _signalDefault();
         vm.prank(taker);
         orchestrator.cancelIntent(cancelledIntent);
@@ -242,7 +229,6 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_SubMinimumFulfillResizesCoverageThenMaturityReleasesStake() public {
-        _setDisputeProtection(true);
         bytes32 intentHash = _signalDefault();
         uint256 releaseAmount = 5e6;
         uint256 releaseEligibleAt = vm.getBlockTimestamp() + RISK_WINDOW;
@@ -264,7 +250,6 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_ManualReleaseRetainsStakeButRejectsDisputeWithoutPaymentBinding() public {
-        _setDisputeProtection(true);
         bytes32 intentHash = _signalDefault();
         uint256 releaseEligibleAt = vm.getBlockTimestamp() + RISK_WINDOW;
         vm.prank(depositor);
@@ -290,7 +275,6 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_DisputeAfterFulfillPaysDepositorClaim() public {
-        _setDisputeProtection(true);
         bytes32 intentHash = _signalDefault();
         verifier.setShouldVerifyPayment(true);
         _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
@@ -310,7 +294,6 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_PolicyAdmissionRevertBubblesRawAndRollsBackSignal() public {
-        _setDisputeProtection(true);
         disputeProtectionPolicy.setAdmissionsPaused(true);
         uint256 counterBefore = orchestrator.intentCounter();
         bytes32 rejectedIntent = _intentHash(counterBefore);
@@ -325,7 +308,37 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         assertEq(escrow.getDeposit(depositId).remainingDeposits, remainingBefore);
     }
 
+    function test_OptedOutWhitelistOffStaysOpenWhilePaused() public {
+        _setDisputeProtection(false);
+        disputeProtectionPolicy.setAdmissionsPaused(true);
+
+        bytes32 intentHash = _signal(other, _paramsFor(other));
+
+        assertEq(
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+        );
+        assertEq(vault.lockedStake(other), 0);
+        assertEq(escrow.getDepositIntent(depositId, intentHash).intentHash, intentHash);
+    }
+
+    function test_PausedAdmissionsDoNotBlockWhitelistedOrWindowlessTakers() public {
+        disputeProtectionPolicy.setAdmissionsPaused(true);
+        _setWhitelist(true, true);
+        bytes32 whitelistedIntent = _signalDefault();
+        assertEq(vault.lockedStake(taker), 0);
+        assertEq(escrow.getDepositIntent(depositId, whitelistedIntent).intentHash, whitelistedIntent);
+
+        _addPaymentMethod(WINDOWLESS_METHOD);
+        IOrchestratorV3.SignalIntentParams memory params = _paramsFor(other);
+        params.paymentMethod = WINDOWLESS_METHOD;
+        bytes32 windowlessIntent = _signal(other, params);
+        assertEq(vault.lockedStake(other), 0);
+        assertEq(escrow.getDepositIntent(depositId, windowlessIntent).intentHash, windowlessIntent);
+    }
+
     function test_CancellationWithoutDisputeProtectionIntentLeavesVaultUntouched() public {
+        _setDisputeProtection(false);
         bytes32 intentHash = _signalDefault();
         uint256 totalBefore = vault.totalStaked();
         vm.prank(taker);
@@ -339,7 +352,6 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_LifecycleHookRotationPreservesOldIntentsAndRoutesNewIntentsToNewHook() public {
-        _setDisputeProtection(true);
         bytes32 oldCancelledIntent = _signalDefault();
         bytes32 oldSettledIntent = _signalDefault();
         IntentLifecycleHookV1 newLifecycleHook =
