@@ -40,6 +40,8 @@
     "scripts/test-dispute-lifecycle-deployment.cjs",
     "scripts/test-method-scoped-deployment.cjs",
     "scripts/test-method-scoped-activation.cjs",
+    "scripts/test-method-scoped-activation-rehearsal.cjs",
+    "scripts/test-method-scoped-runner.cjs",
     "scripts/test-opt-in-dispute-lifecycle-deployment.cjs",
     "scripts/test-v3-groups-base-deployment.cjs",
     "tasks/etherscanVerifyWithDelay.ts"

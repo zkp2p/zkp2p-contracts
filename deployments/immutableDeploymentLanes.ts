@@ -47,6 +47,17 @@ export const IMMUTABLE_DEPLOYMENT_LANES = {
   },
 } as const;
 
+export type DeploymentLanes = Readonly<
+  Record<
+    string,
+    {
+      activeSource?: string | null;
+      retired: boolean;
+      tags: readonly string[];
+    }
+  >
+>;
+
 export function assertImmutableDeploymentLanes(repositoryRoot: string): void {
   for (const [filename, evidence] of Object.entries(
     IMMUTABLE_DEPLOYMENT_LANES
@@ -63,13 +74,11 @@ export function assertImmutableDeploymentLanes(repositoryRoot: string): void {
 
 export function selectActiveDeploymentScripts(
   repositoryRoot: string,
-  filenames: readonly string[]
+  filenames: readonly string[],
+  lanes: DeploymentLanes = IMMUTABLE_DEPLOYMENT_LANES
 ): Array<{ filename: string; sourcePath: string }> {
   return filenames.flatMap((filename) => {
-    const immutableLane =
-      IMMUTABLE_DEPLOYMENT_LANES[
-        filename as keyof typeof IMMUTABLE_DEPLOYMENT_LANES
-      ];
+    const immutableLane = lanes[filename];
     if (immutableLane?.activeSource === null) return [];
     return [
       {
@@ -82,12 +91,15 @@ export function selectActiveDeploymentScripts(
   });
 }
 
-export function assertSupportedDeploymentTag(tag: string | undefined): void {
+export function assertSupportedDeploymentTag(
+  tag: string | undefined,
+  lanes: DeploymentLanes = IMMUTABLE_DEPLOYMENT_LANES
+): void {
   if (!tag) return;
   if (tag.includes(",")) {
     throw new Error("deployActive accepts exactly one deployment tag");
   }
-  const retiredTag = Object.values(IMMUTABLE_DEPLOYMENT_LANES).some(
+  const retiredTag = Object.values(lanes).some(
     (lane) => lane.retired && (lane.tags as readonly string[]).includes(tag)
   );
   if (retiredTag) {
