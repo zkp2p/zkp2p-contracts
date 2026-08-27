@@ -1179,6 +1179,159 @@ test("lane 38 exports its identity, Base helpers, and no dependencies", () => {
   assert.equal(typeof lane.runPinnedSimulation, "function");
 });
 
+test("deployActivationContract retries transient block lag and records the identity", async () => {
+  const lane = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  const runtimeCode = "0x6001";
+  const receipt = {
+    status: 1,
+    contractAddress: address(980),
+    blockNumber: 123,
+    transactionHash: hash(981),
+  };
+  let getCodeCalls = 0;
+  const hre = /** @type {any} */ ({
+    getUnnamedAccounts: async () => [addresses.deployer],
+    ethers: {
+      getSigner: async () => ({}),
+      getContractFactory: async () => ({
+        deploy: async () => ({
+          deployTransaction: { wait: async () => receipt },
+        }),
+      }),
+      provider: {
+        getCode: async () => {
+          getCodeCalls += 1;
+          if (getCodeCalls <= 2)
+            throw new Error("ProviderError: Unknown block");
+          return runtimeCode;
+        },
+      },
+      utils,
+    },
+  });
+  const savedRetries = process.env.METHOD_SCOPED_BLOCK_LAG_RETRIES;
+  const savedDelay = process.env.METHOD_SCOPED_BLOCK_LAG_DELAY_MS;
+  try {
+    process.env.METHOD_SCOPED_BLOCK_LAG_RETRIES = "3";
+    process.env.METHOD_SCOPED_BLOCK_LAG_DELAY_MS = "0";
+    const identity = await lane.deployActivationContract(hre, "Example", []);
+    assert.equal(getCodeCalls, 3);
+    assert.deepEqual(identity, {
+      address: receipt.contractAddress,
+      artifactName: "Example",
+      constructorArgs: [],
+      deployTransactionHash: receipt.transactionHash,
+      runtimeCodeHash: utils.keccak256(runtimeCode),
+    });
+  } finally {
+    if (savedRetries === undefined)
+      delete process.env.METHOD_SCOPED_BLOCK_LAG_RETRIES;
+    else process.env.METHOD_SCOPED_BLOCK_LAG_RETRIES = savedRetries;
+    if (savedDelay === undefined)
+      delete process.env.METHOD_SCOPED_BLOCK_LAG_DELAY_MS;
+    else process.env.METHOD_SCOPED_BLOCK_LAG_DELAY_MS = savedDelay;
+  }
+});
+
+test("deployActivationContract fails with the provider error after configured attempts", async () => {
+  const lane = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  const providerError = new Error("header not found");
+  let getCodeCalls = 0;
+  const hre = /** @type {any} */ ({
+    getUnnamedAccounts: async () => [addresses.deployer],
+    ethers: {
+      getSigner: async () => ({}),
+      getContractFactory: async () => ({
+        deploy: async () => ({
+          deployTransaction: {
+            wait: async () => ({
+              status: 1,
+              contractAddress: address(982),
+              blockNumber: 124,
+              transactionHash: hash(983),
+            }),
+          },
+        }),
+      }),
+      provider: {
+        getCode: async () => {
+          getCodeCalls += 1;
+          throw providerError;
+        },
+      },
+      utils,
+    },
+  });
+  const savedRetries = process.env.METHOD_SCOPED_BLOCK_LAG_RETRIES;
+  const savedDelay = process.env.METHOD_SCOPED_BLOCK_LAG_DELAY_MS;
+  try {
+    process.env.METHOD_SCOPED_BLOCK_LAG_RETRIES = "3";
+    process.env.METHOD_SCOPED_BLOCK_LAG_DELAY_MS = "0";
+    await assert.rejects(
+      lane.deployActivationContract(hre, "Example", []),
+      (error) => error === providerError
+    );
+    assert.equal(getCodeCalls, 3);
+  } finally {
+    if (savedRetries === undefined)
+      delete process.env.METHOD_SCOPED_BLOCK_LAG_RETRIES;
+    else process.env.METHOD_SCOPED_BLOCK_LAG_RETRIES = savedRetries;
+    if (savedDelay === undefined)
+      delete process.env.METHOD_SCOPED_BLOCK_LAG_DELAY_MS;
+    else process.env.METHOD_SCOPED_BLOCK_LAG_DELAY_MS = savedDelay;
+  }
+});
+
+test("withBlockLagRetry retries a lagging simulation block and empty deployment code", async () => {
+  const lane = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  const savedRetries = process.env.METHOD_SCOPED_BLOCK_LAG_RETRIES;
+  const savedDelay = process.env.METHOD_SCOPED_BLOCK_LAG_DELAY_MS;
+  let blockCalls = 0;
+  let codeCalls = 0;
+  try {
+    process.env.METHOD_SCOPED_BLOCK_LAG_RETRIES = "3";
+    process.env.METHOD_SCOPED_BLOCK_LAG_DELAY_MS = "0";
+    const block = await lane.withBlockLagRetry("simulation block", async () => {
+      blockCalls += 1;
+      if (blockCalls === 1) throw new Error("block not found");
+      return { number: 201, hash: hash(201) };
+    });
+    const code = await lane.withBlockLagRetry(
+      "deployment runtime code",
+      async () => {
+        codeCalls += 1;
+        return codeCalls === 1 ? "0x" : "0x6001";
+      },
+      (value) => value === "0x"
+    );
+    assert.equal(blockCalls, 2);
+    assert.equal(block.number, 201);
+    assert.equal(codeCalls, 2);
+    assert.equal(code, "0x6001");
+  } finally {
+    if (savedRetries === undefined)
+      delete process.env.METHOD_SCOPED_BLOCK_LAG_RETRIES;
+    else process.env.METHOD_SCOPED_BLOCK_LAG_RETRIES = savedRetries;
+    if (savedDelay === undefined)
+      delete process.env.METHOD_SCOPED_BLOCK_LAG_DELAY_MS;
+    else process.env.METHOD_SCOPED_BLOCK_LAG_DELAY_MS = savedDelay;
+  }
+});
+
+test("withBlockLagRetry does not retry unrelated provider errors", async () => {
+  const lane = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  const providerError = new Error("execution reverted");
+  let calls = 0;
+  await assert.rejects(
+    lane.withBlockLagRetry("simulation snapshot", async () => {
+      calls += 1;
+      throw providerError;
+    }),
+    (error) => error === providerError
+  );
+  assert.equal(calls, 1);
+});
+
 test("deploy summary includes both lane 38 tags without a dependency chain", () => {
   const summary = readTextFileSync("deploy/deploy_summary.ts", "utf8");
   assert.match(summary, /38_activate_method_scoped_dispute_lifecycle_stack/);
