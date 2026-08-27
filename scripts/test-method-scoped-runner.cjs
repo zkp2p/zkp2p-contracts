@@ -49,13 +49,22 @@ const lanesFixture = {
       "V3DisputeMethodScopedVaultStack",
     ],
   },
+  "40_activate_method_scoped_vault_stack.ts": {
+    activeSource: undefined,
+    retired: false,
+    tags: [
+      "40_activate_method_scoped_vault_stack",
+      "V3DisputeMethodScopedVaultActivation",
+    ],
+  },
 };
 
-test("runner fixture retires lanes 37/38 and mounts lane 39", () => {
+test("runner fixture retires lanes 37/38 and mounts lanes 39/40", () => {
   const filenames = [
     "37_deploy_method_scoped_dispute_lifecycle_stack.ts",
     "38_activate_method_scoped_dispute_lifecycle_stack.ts",
     "39_deploy_method_scoped_vault_stack.ts",
+    "40_activate_method_scoped_vault_stack.ts",
   ];
   const selected = selectActiveDeploymentScripts(
     process.cwd(),
@@ -64,7 +73,10 @@ test("runner fixture retires lanes 37/38 and mounts lane 39", () => {
   );
   assert.deepEqual(
     selected.map(({ filename }) => filename),
-    ["39_deploy_method_scoped_vault_stack.ts"]
+    [
+      "39_deploy_method_scoped_vault_stack.ts",
+      "40_activate_method_scoped_vault_stack.ts",
+    ]
   );
   assert.throws(
     () =>
@@ -85,6 +97,12 @@ test("runner fixture retires lanes 37/38 and mounts lane 39", () => {
   assert.doesNotThrow(() =>
     assertSupportedDeploymentTag(
       "39_deploy_method_scoped_vault_stack",
+      lanesFixture
+    )
+  );
+  assert.doesNotThrow(() =>
+    assertSupportedDeploymentTag(
+      "40_activate_method_scoped_vault_stack",
       lanesFixture
     )
   );
@@ -112,6 +130,10 @@ test("active runner threads the lane fixture into the mounted set", () => {
       );
       assert.equal(
         filenames.includes("39_deploy_method_scoped_vault_stack.ts"),
+        true
+      );
+      assert.equal(
+        filenames.includes("40_activate_method_scoped_vault_stack.ts"),
         true
       );
       assert.equal(
