@@ -2,7 +2,10 @@ import { ethers } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
 import { zeroImmutableValues } from "./canonicalDeployment";
-import { PREDECESSOR_DISPUTE_STACKS } from "./predecessorDisputeStack";
+import {
+  findPinnedLifecycleHookRuntimeHash,
+  PREDECESSOR_DISPUTE_STACKS,
+} from "./predecessorDisputeStack";
 
 const { getActiveDisputeDeploymentName } =
   require("./activeDisputeStack.cjs") as {
@@ -151,26 +154,42 @@ export async function guardManagedDisputeLifecycleHook(
     const artifact = await hre.deployments.getExtendedArtifact(
       "IntentLifecycleHookV1"
     );
-    const artifactDeployedBytecode = artifact.evm?.deployedBytecode;
-    if (!artifactDeployedBytecode) {
-      throw new Error(
-        "Managed successor lifecycle hook artifact lacks deployed bytecode metadata"
+    if (successorDeployment.solcInputHash === artifact.solcInputHash) {
+      const artifactDeployedBytecode = artifact.evm?.deployedBytecode;
+      if (!artifactDeployedBytecode) {
+        throw new Error(
+          "Managed successor lifecycle hook artifact lacks deployed bytecode metadata"
+        );
+      }
+      const immutableReferences =
+        artifactDeployedBytecode.immutableReferences || {};
+      successor = {
+        address: successorDeployment.address,
+        runtimeCodeHash: ethers.utils.keccak256(
+          zeroImmutableValues(
+            successorDeployment.deployedBytecode,
+            immutableReferences
+          )
+        ),
+      };
+      actualRuntimeCodeHash = ethers.utils.keccak256(
+        zeroImmutableValues(runtimeCode, immutableReferences)
       );
+    } else {
+      const pinnedRuntimeCodeHash = findPinnedLifecycleHookRuntimeHash(
+        network,
+        currentHook
+      );
+      if (!pinnedRuntimeCodeHash) {
+        throw new Error(
+          `Managed successor lifecycle hook ${currentHook} was built from a different source and has no pinned runtime hash`
+        );
+      }
+      successor = {
+        address: successorDeployment.address,
+        runtimeCodeHash: pinnedRuntimeCodeHash,
+      };
     }
-    const immutableReferences =
-      artifactDeployedBytecode.immutableReferences || {};
-    successor = {
-      address: successorDeployment.address,
-      runtimeCodeHash: ethers.utils.keccak256(
-        zeroImmutableValues(
-          successorDeployment.deployedBytecode,
-          immutableReferences
-        )
-      ),
-    };
-    actualRuntimeCodeHash = ethers.utils.keccak256(
-      zeroImmutableValues(runtimeCode, immutableReferences)
-    );
   }
   return validateManagedDisputeHookSnapshot({
     currentHook,

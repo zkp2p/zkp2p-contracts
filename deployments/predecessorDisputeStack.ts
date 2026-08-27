@@ -171,6 +171,28 @@ function sameAddress(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
 }
 
+export function findPinnedLifecycleHookRuntimeHash(
+  network: string,
+  address: string
+): string | undefined {
+  for (const stacks of [
+    PREDECESSOR_DISPUTE_STACKS,
+    METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS,
+  ]) {
+    const stack = stacks[network];
+    if (!stack) continue;
+    for (const lifecycleHook of [
+      stack.activeLifecycleHook,
+      stack.contracts.IntentLifecycleHookV1,
+    ]) {
+      if (lifecycleHook && sameAddress(address, lifecycleHook.address)) {
+        return lifecycleHook.runtimeCodeHash;
+      }
+    }
+  }
+  return undefined;
+}
+
 export async function assertHistoricalDisputeStack(
   hre: HistoricalRuntimeEnvironment,
   stacks: Record<string, HistoricalDisputeStack> = PREDECESSOR_DISPUTE_STACKS
