@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "chainId": "8453",
-  "createdAt": 1787856135000,
+  "createdAt": 1787854537000,
   "meta": {
     "name": "ZKP2P method-scoped dispute rotation - base",
     "description": "assertReady(); optionally acceptOwnership(); setAdmissionsPaused(true); proposeController(freshPolicy)",
@@ -11,7 +11,7 @@
   },
   "transactions": [
     {
-      "to": "0x467e53c185ac66c4a0232a79bc356528ee0d8bec",
+      "to": "0x4fe80b802a1899e8999cb57e3fb1ffb13017857b",
       "value": "0",
       "data": "0xbf9a61ac",
       "operation": 0,
