@@ -50,7 +50,8 @@
   OrchestratorV3 hook, the dispute-registry writer set, and every V2 deposit hook stay unchanged, and Base ownership
   handover is initiated for the Safe to accept later. Activation, the predecessor writer revoke, and the canonical
   selection flip belong to a future lane; never infer activation from source, tests, package ABIs, artifacts, or
-  deployment.
+  deployment. The lane-37 policy is default-on for windowed rails with a depositor opt-out (see the rail-aware
+  default design); pre-activation opt-outs and post-preparation staking are expected and do not invalidate the lane.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the
