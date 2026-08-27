@@ -1,10 +1,19 @@
+import { spawnSync } from "child_process";
+import { resolve } from "path";
 import type { BigNumber, Contract, providers, utils } from "ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import type { DeployFunction, Deployment } from "hardhat-deploy/types";
 
 import type {
+  ActivationBatchKind,
   ActivationBatchManifest,
   ContractIdentity,
+} from "../deployments/activationBatchManifest";
+import {
+  ACTIVATION_BATCH_PATHS,
+  computeManifestSha256,
+  safeBatchJson,
+  validateActivationBatchManifest,
 } from "../deployments/activationBatchManifest";
 import { assertDeploymentMatchesChain } from "../deployments/canonicalDeployment";
 import { waitForDeploymentDelay } from "../deployments/helpers";
@@ -18,11 +27,17 @@ import {
   type IntentLockState,
   type StagingAction,
   buildDepositorInventory,
+  buildCutoverTransactions,
+  buildRotationTransactions,
   buildStagingTransaction,
+  buildTrustSurface,
   classifyIntentLock,
+  assertGuardExpectationsUnchanged,
   proveNoLivePredecessorLocks,
   reduceActivation,
 } from "../deployments/methodScopedActivation";
+import { installSafeArtifactPair } from "../deployments/safeArtifacts";
+import { canonicalTransactionHash } from "../deployments/safeBatchManifest";
 import {
   METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS,
   assertHistoricalDisputeStack,
@@ -43,6 +58,11 @@ import {
   decodeFreshStackLogs,
   getRiskWindowPaymentMethods,
 } from "./37_deploy_method_scoped_dispute_lifecycle_stack";
+import { BASE_SAFE } from "../scripts/simulate-dispute-opt-in-safe-batch";
+import {
+  assertActivationArtifactGitState,
+  verifyActivationCandidate,
+} from "../scripts/verify-method-scoped-safe-batch";
 
 export const SUPPORTED_NETWORKS = new Set(["base_staging", "base"]);
 export const TAG = "38_activate_method_scoped_dispute_lifecycle_stack";
@@ -1113,31 +1133,258 @@ export async function releaseMaturedPredecessorIntents(
   await waitForDeploymentDelay(hre);
 }
 
-export function prepareBaseRotationBatch(
-  _hre: HardhatRuntimeEnvironment
-): never {
-  throw new Error("not implemented until Task 4");
-}
-
-export function prepareBaseCutoverBatch(
-  _hre: HardhatRuntimeEnvironment
-): never {
-  throw new Error("not implemented until Task 4");
-}
-
-export function deployActivationContract(
-  _hre: HardhatRuntimeEnvironment,
-  _artifactName: string,
-  _constructorArgs: unknown[]
+export async function deployActivationContract(
+  hre: HardhatRuntimeEnvironment,
+  artifactName: string,
+  constructorArgs: unknown[]
 ): Promise<ContractIdentity> {
-  throw new Error("not implemented until Task 4");
+  const [deployer] = await hre.getUnnamedAccounts();
+  const signer = await hre.ethers.getSigner(deployer);
+  const factory = await hre.ethers.getContractFactory(artifactName, signer);
+  const contract = await factory.deploy(...constructorArgs);
+  const receipt = await contract.deployTransaction.wait();
+  if (receipt.status !== 1 || !receipt.contractAddress) {
+    throw new Error(`${artifactName} deployment did not succeed`);
+  }
+  const runtimeCode = await hre.ethers.provider.getCode(
+    receipt.contractAddress,
+    receipt.blockNumber
+  );
+  if (runtimeCode === "0x") {
+    throw new Error(`${artifactName} deployment has no runtime bytecode`);
+  }
+  return {
+    address: normalizedAddress(receipt.contractAddress),
+    artifactName,
+    constructorArgs,
+    deployTransactionHash: normalizedHash(receipt.transactionHash),
+    runtimeCodeHash: normalizedHash(hre.ethers.utils.keccak256(runtimeCode)),
+  };
 }
 
-export function runPinnedSimulation(
-  _manifest: ActivationBatchManifest,
-  _forkRpcUrl: string
+export async function runPinnedSimulation(
+  manifest: ActivationBatchManifest,
+  forkRpcUrl: string
 ): Promise<void> {
-  throw new Error("not implemented until Task 4");
+  const repositoryRoot = resolve(__dirname, "..");
+  const hardhatCli = require.resolve("hardhat/internal/cli/cli");
+  const simulationScript = resolve(
+    repositoryRoot,
+    "scripts/simulate-method-scoped-safe-batch.ts"
+  );
+  const result = spawnSync(
+    process.execPath,
+    [
+      hardhatCli,
+      "run",
+      "--network",
+      "hardhat",
+      "--no-compile",
+      simulationScript,
+    ],
+    {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        BASE_FORK_RPC_URL: forkRpcUrl,
+        METHOD_SCOPED_SAFE_SIMULATION_PAYLOAD: JSON.stringify({ manifest }),
+      },
+    }
+  );
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      `Pinned Base Safe simulation failed:\n${result.stdout || ""}${
+        result.stderr || ""
+      }`
+    );
+  }
+}
+
+function trustSurfaceConstructorArg(
+  expected: ExpectedActivationState
+): ReturnType<typeof buildTrustSurface> {
+  return buildTrustSurface(expected);
+}
+
+async function prepareBaseBatch(
+  hre: HardhatRuntimeEnvironment,
+  kind: ActivationBatchKind
+): Promise<void> {
+  const sourceSha = (process.env[FLAGS.releaseReadySha] || "").toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(sourceSha)) {
+    throw new Error(
+      `Base batch preparation requires an exact ${FLAGS.releaseReadySha}`
+    );
+  }
+  const repositoryRoot = resolve(__dirname, "..");
+  assertActivationArtifactGitState(repositoryRoot, sourceSha, "generation", []);
+  const forkRpcUrl = process.env.BASE_FORK_RPC_URL || "";
+  if (!forkRpcUrl) {
+    throw new Error("BASE_FORK_RPC_URL is required for Base batch preparation");
+  }
+  const proofBlockNumber = await hre.ethers.provider.getBlockNumber();
+  await assertActivationSharedState(hre, "base", proofBlockNumber);
+  const proofSnapshot = await readActivationSnapshot(
+    hre,
+    "base",
+    proofBlockNumber
+  );
+  const expected = expectedActivationState("base");
+  const reduction = reduceActivation(proofSnapshot, expected);
+  const requiredPhase = kind === "rotation" ? "deployed" : "rotation-proposed";
+  if (reduction.phase !== requiredPhase || reduction.waiting !== null) {
+    throw new Error(
+      `${kind} batch requires ${requiredPhase} with no waiting condition`
+    );
+  }
+  const trustSurface = trustSurfaceConstructorArg(expected);
+  const includeAcceptOwnership =
+    !sameAddress(proofSnapshot.freshPolicy.owner, expected.addresses.safe) &&
+    sameAddress(
+      proofSnapshot.freshPolicy.pendingOwner,
+      expected.addresses.safe
+    );
+  const guardArgs: unknown[] =
+    kind === "rotation"
+      ? [trustSurface, includeAcceptOwnership, expected.deployer]
+      : [
+          trustSurface,
+          proofSnapshot.lockProof.intents.map((intent) => intent.intentHash),
+          proofSnapshot.inventory.tuples.map((tuple) => ({
+            escrow: tuple.escrow,
+            depositId: tuple.depositId,
+            paymentMethod: tuple.paymentMethod,
+          })),
+          proofSnapshot.inventory.escrow,
+          proofSnapshot.inventory.depositCounter,
+        ];
+  const guardArtifactName =
+    kind === "rotation"
+      ? "DisputeMethodScopedRotationGuard"
+      : "DisputeMethodScopedCutoverGuard";
+  const postconditionArtifactName =
+    kind === "rotation"
+      ? "DisputeMethodScopedRotationPostcondition"
+      : "DisputeMethodScopedCutoverPostcondition";
+  const guard = await deployActivationContract(
+    hre,
+    guardArtifactName,
+    guardArgs
+  );
+  const postconditionArgs: unknown[] =
+    kind === "rotation"
+      ? [trustSurface, expected.controllerChangeDelay]
+      : [trustSurface];
+  const postcondition = await deployActivationContract(
+    hre,
+    postconditionArtifactName,
+    postconditionArgs
+  );
+  const simulationBlockNumber = await hre.ethers.provider.getBlockNumber();
+  if (simulationBlockNumber <= proofBlockNumber) {
+    throw new Error("Simulation block must follow the proof block");
+  }
+  const simulationBlock = await hre.ethers.provider.getBlock(
+    simulationBlockNumber
+  );
+  if (!simulationBlock?.hash) {
+    throw new Error("Could not pin the simulation block");
+  }
+  const simulationSnapshot = await readActivationSnapshot(
+    hre,
+    "base",
+    simulationBlockNumber
+  );
+  assertGuardExpectationsUnchanged(kind, proofSnapshot, simulationSnapshot);
+  const transactions =
+    kind === "rotation"
+      ? buildRotationTransactions({
+          addresses: expected.addresses,
+          guard: guard.address,
+          includeAcceptOwnership,
+        })
+      : buildCutoverTransactions({
+          addresses: expected.addresses,
+          guard: guard.address,
+        });
+  const safe = await hre.ethers.getContractAt(
+    ["function nonce() view returns (uint256)"],
+    BASE_SAFE
+  );
+  const unsignedManifest: Omit<ActivationBatchManifest, "manifestSha256"> = {
+    version: 2,
+    kind,
+    chainId: 8453,
+    safe: BASE_SAFE.toLowerCase(),
+    safeNonce: decimal(
+      await taggedRead(safe, "nonce", [], simulationBlockNumber)
+    ),
+    sourceSha,
+    proofBlock: {
+      number: proofSnapshot.blockNumber,
+      hash: proofSnapshot.blockHash,
+    },
+    simulationBlockNumber,
+    simulationBlockHash: normalizedHash(simulationBlock.hash),
+    simulationResult: "success",
+    transactions,
+    transactionsSha256: canonicalTransactionHash(transactions),
+    guard,
+    postcondition,
+    trustSurface,
+    proofSnapshot,
+  };
+  const manifest: ActivationBatchManifest = {
+    ...unsignedManifest,
+    manifestSha256: computeManifestSha256(unsignedManifest),
+  };
+  validateActivationBatchManifest(manifest, manifest);
+  const batch = safeBatchJson(
+    kind,
+    transactions,
+    simulationBlock.timestamp * 1000
+  );
+  const paths = ACTIVATION_BATCH_PATHS[kind];
+  const artifactPaths = {
+    batch: resolve(repositoryRoot, paths.batch),
+    sidecar: resolve(repositoryRoot, paths.sidecar),
+  };
+  await verifyActivationCandidate(hre, {
+    kind,
+    batch,
+    manifest,
+    mode: "generation",
+    repositoryRoot,
+    forkRpcUrl,
+    artifactPaths,
+  });
+  installSafeArtifactPair({
+    batchPath: artifactPaths.batch,
+    sidecarPath: artifactPaths.sidecar,
+    supersededDir: resolve(repositoryRoot, paths.supersededDir),
+    batchContents: `${JSON.stringify(batch, null, 2)}\n`,
+    sidecarContents: `${JSON.stringify(manifest, null, 2)}\n`,
+    supersededSuffix: `${simulationBlockNumber}_${manifest.manifestSha256.slice(
+      0,
+      12
+    )}`,
+  });
+  console.log(`Prepared and simulated Base ${kind} Safe batch: ${paths.batch}`);
+  console.log("No Safe transaction was signed, proposed, or executed.");
+}
+
+export async function prepareBaseRotationBatch(
+  hre: HardhatRuntimeEnvironment
+): Promise<void> {
+  await prepareBaseBatch(hre, "rotation");
+}
+
+export async function prepareBaseCutoverBatch(
+  hre: HardhatRuntimeEnvironment
+): Promise<void> {
+  await prepareBaseBatch(hre, "cutover");
 }
 
 const actionFlags = [
@@ -1168,9 +1415,9 @@ const func: DeployFunction = async function (
   }
   requireActivationConfirmations("base");
   if (process.env[FLAGS.baseRotationPrepare] === "true") {
-    prepareBaseRotationBatch(hre);
+    await prepareBaseRotationBatch(hre);
   } else if (process.env[FLAGS.baseCutoverPrepare] === "true") {
-    prepareBaseCutoverBatch(hre);
+    await prepareBaseCutoverBatch(hre);
   } else if (process.env[FLAGS.baseReleaseMatured] === "true") {
     await releaseMaturedPredecessorIntents(hre, "base");
   } else {

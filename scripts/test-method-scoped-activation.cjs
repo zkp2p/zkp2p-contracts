@@ -13,6 +13,7 @@ moduleAlias.reset();
 moduleAlias.addAlias("@utils", process.cwd() + "/utils");
 
 const assert = require("node:assert/strict");
+const { execFileSync } = require("node:child_process");
 const {
   mkdtempSync,
   mkdirSync,
@@ -23,6 +24,7 @@ const { tmpdir } = require("node:os");
 const { basename, join } = require("node:path");
 const { test } = require("node:test");
 const { BigNumber, utils } = require("ethers");
+const ethersPackage = require("ethers");
 const { readFileSync: readTextFileSync } = require("node:fs");
 
 const {
@@ -981,7 +983,7 @@ test("assertSafeArtifactPairConsistent parses and verifies the transaction hash"
   );
 });
 
-test("lane 38 exports its identity, flags, stubs, and no dependencies", () => {
+test("lane 38 exports its identity, Base helpers, and no dependencies", () => {
   const lane = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
   assert.deepEqual([...lane.SUPPORTED_NETWORKS], ["base_staging", "base"]);
   assert.equal(lane.TAG, "38_activate_method_scoped_dispute_lifecycle_stack");
@@ -1022,22 +1024,10 @@ test("lane 38 exports its identity, flags, stubs, and no dependencies", () => {
     lane.FLAGS.releaseReadySha,
     "CONFIRM_BASE_V3_DISPUTE_METHOD_SCOPED_RELEASE_READY_SHA"
   );
-  assert.throws(
-    () => lane.prepareBaseRotationBatch(/** @type {any} */ ({})),
-    /not implemented until Task 4/
-  );
-  assert.throws(
-    () => lane.prepareBaseCutoverBatch(/** @type {any} */ ({})),
-    /not implemented until Task 4/
-  );
-  assert.throws(
-    () => lane.deployActivationContract(/** @type {any} */ ({}), "Guard", []),
-    /not implemented until Task 4/
-  );
-  assert.throws(
-    () => lane.runPinnedSimulation(/** @type {any} */ ({}), "rpc"),
-    /not implemented until Task 4/
-  );
+  assert.equal(typeof lane.prepareBaseRotationBatch, "function");
+  assert.equal(typeof lane.prepareBaseCutoverBatch, "function");
+  assert.equal(typeof lane.deployActivationContract, "function");
+  assert.equal(typeof lane.runPinnedSimulation, "function");
 });
 
 test("deploy summary includes both lane 38 tags without a dependency chain", () => {
@@ -1612,4 +1602,474 @@ test("staging flags are mutually exclusive and confirmations fail in order", asy
       else process.env[name] = saved[name];
     }
   }
+});
+
+test("Task 4 simulator and verifier expose the lane-38 verification surface", () => {
+  const simulator = require("./simulate-method-scoped-safe-batch.ts");
+  const verifier = require("./verify-method-scoped-safe-batch.ts");
+  assert.equal(typeof simulator.simulateMethodScopedSafeBatch, "function");
+  assert.equal(typeof verifier.verifyActivationCandidate, "function");
+  assert.equal(typeof verifier.verifyMethodScopedSafeArtifacts, "function");
+  assert.equal(typeof verifier.assertActivationArtifactGitState, "function");
+});
+
+test("Task 4 manifest digest binds guard, postcondition, trust surface, lock proof, and inventory", () => {
+  const manifest = manifestFixture();
+  /** @type {Array<(value: any) => unknown>} */
+  const mutations = [
+    (value) => (value.guard.runtimeCodeHash = hash(900)),
+    (value) => (value.postcondition.deployTransactionHash = hash(901)),
+    (value) => (value.trustSurface.vault = address(902)),
+    (value) => (value.proofSnapshot.lockProof.intents[0].status = 5),
+    (value) => (value.proofSnapshot.inventory.depositCounter = "5"),
+  ];
+  for (const mutate of mutations) {
+    const tampered = structuredClone(manifest);
+    mutate(tampered);
+    assert.throws(() => validateActivationBatchManifest(tampered));
+  }
+});
+
+test("Task 4 simulator rejects a wrong guard runtime hash", async () => {
+  const {
+    assertManifestContractRuntimeHashes,
+  } = require("./simulate-method-scoped-safe-batch.ts");
+  const manifest = manifestFixture();
+  const code = "0x6000";
+  manifest.guard.runtimeCodeHash = hash(999);
+  manifest.postcondition.runtimeCodeHash = utils.keccak256(code);
+  const hre = /** @type {any} */ ({
+    ethers: {
+      provider: {
+        getCode: async () => code,
+      },
+    },
+  });
+  await assert.rejects(
+    assertManifestContractRuntimeHashes(hre, manifest),
+    /Activation guard runtime bytecode hash mismatch/
+  );
+});
+
+test("Task 4 Safe simulation envelope decoder accepts a fake-provider success envelope", () => {
+  const {
+    decodeMethodScopedSafeSimulationEnvelope,
+  } = require("./simulate-method-scoped-safe-batch.ts");
+  const envelope = utils.hexConcat([
+    utils.hexZeroPad("0x01", 32),
+    utils.hexZeroPad("0x00", 32),
+  ]);
+  assert.deepEqual(decodeMethodScopedSafeSimulationEnvelope(envelope), {
+    success: true,
+    returnData: "0x",
+  });
+});
+
+/** @param {string} prefix */
+function temporaryGitRepository(prefix) {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  execFileSync("git", ["init", "-q"], { cwd: root });
+  writeFileSync(join(root, "tracked"), "base\n");
+  execFileSync("git", ["add", "tracked"], { cwd: root });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=Task Four",
+      "-c",
+      "user.email=task4@example.invalid",
+      "commit",
+      "-qm",
+      "base",
+    ],
+    { cwd: root }
+  );
+  return {
+    root,
+    sourceSha: execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim(),
+  };
+}
+
+test("generation Git mode requires a clean worktree and exact source HEAD", () => {
+  const {
+    assertActivationArtifactGitState,
+  } = require("./verify-method-scoped-safe-batch.ts");
+  const repository = temporaryGitRepository("method-scoped-generation-");
+  assert.doesNotThrow(() =>
+    assertActivationArtifactGitState(
+      repository.root,
+      repository.sourceSha,
+      "generation",
+      []
+    )
+  );
+  assert.throws(
+    () =>
+      assertActivationArtifactGitState(
+        repository.root,
+        "f".repeat(40),
+        "generation",
+        []
+      ),
+    /HEAD does not equal/
+  );
+  writeFileSync(join(repository.root, "tracked"), "dirty\n");
+  assert.throws(
+    () =>
+      assertActivationArtifactGitState(
+        repository.root,
+        repository.sourceSha,
+        "generation",
+        []
+      ),
+    /clean worktree/
+  );
+});
+
+test("artifact-child Git mode allows only the selected lane-38 pair and its superseded copies", () => {
+  const {
+    assertActivationArtifactGitState,
+  } = require("./verify-method-scoped-safe-batch.ts");
+  const repository = temporaryGitRepository("method-scoped-child-");
+  const allowed = ACTIVATION_BATCH_PATHS.rotation;
+  mkdirSync(join(repository.root, "deployments/outputs/safe-batches"), {
+    recursive: true,
+  });
+  writeFileSync(join(repository.root, allowed.batch), "{}\n");
+  writeFileSync(join(repository.root, allowed.sidecar), "{}\n");
+  execFileSync("git", ["add", "."], { cwd: repository.root });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=Task Four",
+      "-c",
+      "user.email=task4@example.invalid",
+      "commit",
+      "-qm",
+      "artifacts",
+    ],
+    { cwd: repository.root }
+  );
+  const allowlist = [
+    allowed.batch,
+    allowed.sidecar,
+    `${allowed.supersededDir}/base_method_scoped_rotation_*`,
+  ];
+  assert.doesNotThrow(() =>
+    assertActivationArtifactGitState(
+      repository.root,
+      repository.sourceSha,
+      "artifact-child",
+      allowlist
+    )
+  );
+  mkdirSync(
+    join(repository.root, "deployments/outputs/safe-batches/superseded"),
+    {
+      recursive: true,
+    }
+  );
+  const lane34Path =
+    "deployments/outputs/safe-batches/superseded/base_opt_in_dispute_lifecycle.json";
+  writeFileSync(join(repository.root, lane34Path), "{}\n");
+  execFileSync("git", ["add", "."], { cwd: repository.root });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=Task Four",
+      "-c",
+      "user.email=task4@example.invalid",
+      "commit",
+      "-qm",
+      "unrelated",
+    ],
+    { cwd: repository.root }
+  );
+  assert.throws(
+    () =>
+      assertActivationArtifactGitState(
+        repository.root,
+        repository.sourceSha,
+        "artifact-child",
+        allowlist
+      ),
+    /base_opt_in_dispute_lifecycle/
+  );
+});
+
+/**
+ * @param {"rotation" | "cutover"} kind
+ * @param {{ nonce?: string, snapshotAtF?: import("../deployments/methodScopedActivation").ActivationSnapshot, simulationError?: Error }} [overrides]
+ */
+function verificationFixture(kind, overrides = {}) {
+  const {
+    deriveActivationConstructorArgs,
+    verifyActivationCandidate,
+  } = require("./verify-method-scoped-safe-batch.ts");
+  const { BASE_SAFE } = require("./simulate-dispute-opt-in-safe-batch.ts");
+  const repository = temporaryGitRepository(`method-scoped-core-${kind}-`);
+  const proofSnapshot = kind === "rotation" ? snapshot() : proposed(snapshot());
+  const guardAddress = address(kind === "rotation" ? 950 : 960);
+  const postconditionAddress = address(kind === "rotation" ? 951 : 961);
+  const transactions =
+    kind === "rotation"
+      ? buildRotationTransactions({
+          addresses,
+          guard: guardAddress,
+          includeAcceptOwnership: false,
+        })
+      : buildCutoverTransactions({ addresses, guard: guardAddress });
+  const guardArtifactName = `DisputeMethodScoped${
+    kind === "rotation" ? "Rotation" : "Cutover"
+  }Guard`;
+  const postconditionArtifactName = `DisputeMethodScoped${
+    kind === "rotation" ? "Rotation" : "Cutover"
+  }Postcondition`;
+  const runtime = "0x6001";
+  const runtimeHash = utils.keccak256(runtime);
+  /** @type {any} */
+  const unsigned = {
+    version: 2,
+    kind,
+    chainId: 8453,
+    safe: BASE_SAFE.toLowerCase(),
+    safeNonce: "7",
+    sourceSha: repository.sourceSha,
+    proofBlock: { number: 200, hash: hash(200) },
+    simulationBlockNumber: 201,
+    simulationBlockHash: hash(201),
+    simulationResult: "success",
+    transactions,
+    transactionsSha256: canonicalTransactionHash(transactions),
+    guard: {
+      address: guardAddress,
+      artifactName: guardArtifactName,
+      constructorArgs: [],
+      deployTransactionHash: hash(952),
+      runtimeCodeHash: runtimeHash,
+    },
+    postcondition: {
+      address: postconditionAddress,
+      artifactName: postconditionArtifactName,
+      constructorArgs: [],
+      deployTransactionHash: hash(953),
+      runtimeCodeHash: runtimeHash,
+    },
+    trustSurface: buildTrustSurface(expected()),
+    proofSnapshot,
+  };
+  /** @type {any} */
+  const manifest = {
+    ...unsigned,
+    manifestSha256: computeManifestSha256(unsigned),
+  };
+  manifest.guard.constructorArgs = deriveActivationConstructorArgs(
+    manifest,
+    "guard"
+  );
+  manifest.postcondition.constructorArgs = deriveActivationConstructorArgs(
+    manifest,
+    "postcondition"
+  );
+  {
+    const { manifestSha256: _oldDigest, ...withConstructorArgs } = manifest;
+    manifest.manifestSha256 = computeManifestSha256(withConstructorArgs);
+  }
+  const forgeGuard = require(`../out/${guardArtifactName}.sol/${guardArtifactName}.json`);
+  const forgePostcondition = require(`../out/${postconditionArtifactName}.sol/${postconditionArtifactName}.json`);
+  /** @type {Record<string, any>} */
+  const artifacts = {
+    [guardArtifactName]: {
+      abi: forgeGuard.abi,
+      bytecode: "0x6000",
+      deployedBytecode: runtime,
+      evm: { deployedBytecode: { immutableReferences: {} } },
+    },
+    [postconditionArtifactName]: {
+      abi: forgePostcondition.abi,
+      bytecode: "0x6000",
+      deployedBytecode: runtime,
+      evm: { deployedBytecode: { immutableReferences: {} } },
+    },
+  };
+  /** @type {Record<string, {data: string}>} */
+  const deploymentTransactions = {};
+  /** @type {Record<string, {status: number, contractAddress: string}>} */
+  const receipts = {};
+  for (const [role, identity] of [
+    ["guard", manifest.guard],
+    ["postcondition", manifest.postcondition],
+  ]) {
+    const artifact = artifacts[identity.artifactName];
+    const encoded = new utils.Interface(artifact.abi).encodeDeploy(
+      deriveActivationConstructorArgs(
+        manifest,
+        /** @type {"guard" | "postcondition"} */ (role)
+      )
+    );
+    deploymentTransactions[identity.deployTransactionHash] = {
+      data: `${artifact.bytecode}${encoded.slice(2)}`,
+    };
+    receipts[identity.deployTransactionHash] = {
+      status: 1,
+      contractAddress: identity.address,
+    };
+  }
+  const provider = {
+    _isProvider: true,
+    getNetwork: async () => ({ chainId: 8453, name: "base" }),
+    getBlock: async () => ({ number: 300, hash: hash(300), timestamp: 300 }),
+    /** @param {string} name */
+    resolveName: async (name) => name,
+    call: async () =>
+      utils.defaultAbiCoder.encode(["uint256"], [overrides.nonce || "7"]),
+    /** @param {string} transactionHash */
+    getTransactionReceipt: async (transactionHash) =>
+      receipts[transactionHash] || null,
+    /** @param {string} transactionHash */
+    getTransaction: async (transactionHash) =>
+      deploymentTransactions[transactionHash] || null,
+    getCode: async () => runtime,
+  };
+  const hre = /** @type {any} */ ({
+    __methodScopedVerificationProvider: provider,
+    deployments: {
+      /** @param {string} name */
+      getExtendedArtifact: async (name) => artifacts[name],
+      /** @param {string} name */
+      getArtifact: async (name) => artifacts[name],
+    },
+    ethers: ethersPackage,
+  });
+  const batch = safeBatchJson(kind, transactions, 1234);
+  const lane = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  const originalRead = lane.readActivationSnapshot;
+  const originalSimulation = lane.runPinnedSimulation;
+  const originalExpected = lane.expectedActivationState;
+  lane.readActivationSnapshot = async () =>
+    overrides.snapshotAtF || structuredClone(proofSnapshot);
+  lane.runPinnedSimulation = async () => {
+    if (overrides.simulationError) throw overrides.simulationError;
+  };
+  lane.expectedActivationState = () => expected();
+  const run = async () => {
+    try {
+      await verifyActivationCandidate(hre, {
+        kind,
+        batch,
+        manifest,
+        mode: "generation",
+        repositoryRoot: repository.root,
+        forkRpcUrl: "fake-rpc",
+        artifactPaths: { batch: "unused", sidecar: "unused" },
+      });
+    } finally {
+      lane.readActivationSnapshot = originalRead;
+      lane.runPinnedSimulation = originalSimulation;
+      lane.expectedActivationState = originalExpected;
+    }
+  };
+  return { run, manifest, provider, receipts, deploymentTransactions };
+}
+
+test("verifier core rejects nonce, initcode, postcondition identity, and receipt-address drift", async () => {
+  await assert.rejects(
+    verificationFixture("rotation", { nonce: "8" }).run(),
+    /Safe nonce drifted/
+  );
+  {
+    const fixture = verificationFixture("rotation");
+    fixture.deploymentTransactions[
+      fixture.manifest.guard.deployTransactionHash
+    ].data = "0x6002";
+    await assert.rejects(fixture.run(), /guard deployment initcode mismatch/);
+  }
+  {
+    const fixture = verificationFixture("rotation");
+    fixture.deploymentTransactions[
+      fixture.manifest.postcondition.deployTransactionHash
+    ].data = "0x6002";
+    await assert.rejects(
+      fixture.run(),
+      /postcondition deployment initcode mismatch/
+    );
+  }
+  {
+    const fixture = verificationFixture("rotation");
+    fixture.receipts[
+      fixture.manifest.guard.deployTransactionHash
+    ].contractAddress = address(999);
+    await assert.rejects(fixture.run(), /contractAddress mismatch/);
+  }
+});
+
+test("verifier core rejects inventory, lock-proof, authorized-hook, and simulation drift", async () => {
+  /** @type {import("../deployments/methodScopedActivation").InventorySource[][]} */
+  const inventorySources = [["predecessor-opt-out"], ["token-mismatch"]];
+  for (const sources of inventorySources) {
+    const current = proposed(snapshot());
+    current.inventory.tuples.push({
+      escrow: addresses.escrow,
+      depositId: "2",
+      paymentMethod: METHOD_A,
+      sources,
+    });
+    await assert.rejects(
+      verificationFixture("cutover", { snapshotAtF: current }).run(),
+      /inventory\.tuples/
+    );
+  }
+  {
+    const current = proposed(snapshot());
+    current.lockProof.intents[0].status = 5;
+    await assert.rejects(
+      verificationFixture("cutover", { snapshotAtF: current }).run(),
+      /lockProof\.intents\.status/
+    );
+  }
+  {
+    const current = proposed(snapshot());
+    current.freshPolicy.authorizedHooks.push(address(998));
+    await assert.rejects(
+      verificationFixture("cutover", { snapshotAtF: current }).run(),
+      /authorizedHooks/
+    );
+  }
+  await assert.rejects(
+    verificationFixture("rotation", {
+      simulationError: new Error("simulation revert"),
+    }).run(),
+    /simulation revert/
+  );
+});
+
+test("artifact-child verifier refuses a sidecar transaction digest mismatch", async () => {
+  const {
+    verifyActivationCandidate,
+  } = require("./verify-method-scoped-safe-batch.ts");
+  const directory = mkdtempSync(join(tmpdir(), "method-scoped-sidecar-"));
+  const batchPath = join(directory, "batch.json");
+  const sidecarPath = join(directory, "batch.sha256.json");
+  const manifest = manifestFixture();
+  const batch = safeBatchJson("rotation", manifest.transactions, 1234);
+  manifest.transactionsSha256 = "0".repeat(64);
+  writeFileSync(batchPath, JSON.stringify(batch));
+  writeFileSync(sidecarPath, JSON.stringify(manifest));
+  await assert.rejects(
+    verifyActivationCandidate(/** @type {any} */ ({}), {
+      kind: "rotation",
+      batch: undefined,
+      manifest: undefined,
+      mode: "artifact-child",
+      repositoryRoot: directory,
+      forkRpcUrl: "fake-rpc",
+      artifactPaths: { batch: batchPath, sidecar: sidecarPath },
+    }),
+    /incomplete artifact pair/
+  );
 });
