@@ -180,15 +180,11 @@ yarn workspace @zkp2p/contracts-v2 verify:release
 ```
 
 Source ABI exports and network address/runtime exports are different contracts.
-The package intentionally exports V3 source ABIs and current Base-staging
-lifecycle addresses while Base production may have no corresponding active V3
-address. Never invent a zero address, copy a staging address into Base, publish
-an inactive address as active, or remove an ABI merely because the contract is
-not deployed on every network. One explicit exception (decided 2026-08-28): a
-release candidate may front-run an approved, already-queued governance cutover
-so clients can sync before it executes, provided the package's dispute-stack
-readiness metadata and README state that the cutover is pending and name the
-Safe transaction.
+The package exports the currently selected (latest) addresses for each network,
+and consumers treat them as the addresses to use. It does not export activation
+status or rollout timing; operators complete rollout only after every multisig
+executes. Never invent a zero address, copy a staging address into Base, or
+remove an ABI merely because the contract is not deployed on every network.
 
 Any publication must use
 `.agents/skills/zkp2p-contracts-publish/SKILL.md`; never publish locally or

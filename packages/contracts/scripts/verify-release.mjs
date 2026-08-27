@@ -240,8 +240,6 @@ for (const {
     fail(`${name} dispute stack selection differs from deployment output`);
   if (!sameJson(disputeStack.activeDisputeStack, networkEvidence.activeDisputeStack))
     fail(`${name} dispute stack selection differs from trusted evidence`);
-  if (!sameJson(disputeStack.activation, networkEvidence.activation))
-    fail(`${name} activation status differs from trusted evidence`);
   const expectedRuntimeIdentities = Object.fromEntries(
     [
       "Orchestrator",

@@ -11,9 +11,6 @@ import {
 } from "../../../../deployments/parameters";
 
 type ActiveDisputeStack = { version: number; selectionHash: string };
-type DisputeStackActivation =
-  | { status: "activated" }
-  | { status: "pending"; safe: string; nonce: number; safeTxHash: string };
 type DisputeStackPrerequisites = {
   orchestratorPaused: false;
   admissionsPaused: false;
@@ -69,7 +66,6 @@ type DisputeStackEvidence = {
     {
       governance: { owner: string; pendingOwner: string };
       attestationTrust: { requiredSignatures: string; witnesses: string[] };
-      activation: DisputeStackActivation;
       prerequisites: DisputeStackPrerequisites;
       activeDisputeStack: ActiveDisputeStack;
       recognizedPredecessorHook: RuntimeIdentity;
@@ -230,7 +226,6 @@ function validateEvidence(network: (typeof NETWORKS)[number], output: Deployment
     [
       "governance",
       "attestationTrust",
-      "activation",
       "prerequisites",
       "activeDisputeStack",
       "recognizedPredecessorHook",
@@ -248,20 +243,6 @@ function validateEvidence(network: (typeof NETWORKS)[number], output: Deployment
   }
   if (!sameJson(output.activeDisputeStack, expectedSelection)) {
     throw new Error(`${network.manifestName} deployment output selection stamp mismatch`);
-  }
-  if (
-    (evidence.activation.status === "activated" &&
-      Object.keys(evidence.activation).length !== 1) ||
-    (evidence.activation.status === "pending" &&
-      (!ADDRESS_PATTERN.test(evidence.activation.safe) ||
-        !Number.isSafeInteger(evidence.activation.nonce) ||
-        evidence.activation.nonce < 0 ||
-        !HASH_PATTERN.test(evidence.activation.safeTxHash) ||
-        Object.keys(evidence.activation).length !== 4)) ||
-    (evidence.activation.status !== "activated" &&
-      evidence.activation.status !== "pending")
-  ) {
-    throw new Error(`${network.manifestName} activation evidence is malformed`);
   }
   if ([evidence.recognizedPredecessorHook, evidence.recognizedPredecessorPolicy].some(
     (identity) =>
@@ -490,7 +471,6 @@ export function buildDisputeStackManifest(packageName: "base" | "baseStaging") {
     network: network.manifestName,
     chainId: Number(output.chainId),
     activeDisputeStack: networkEvidence.activeDisputeStack,
-    activation: networkEvidence.activation,
     runtimeIdentities,
     addressExpectations,
     expectedRelations: {
@@ -589,9 +569,6 @@ export type BasePaymentMethodHash = ${basePaymentMethodHashType};
 export type BaseStagingPaymentMethodHash = ${baseStagingPaymentMethodHashType};
 export type PaymentMethodHash<Network extends DisputeStackNetwork = DisputeStackNetwork> = Network extends 'base_staging' ? BaseStagingPaymentMethodHash : BasePaymentMethodHash;
 export type RiskWindowSeconds = ${riskWindowSecondsType};
-export type DisputeStackActivation =
-  | { status: 'activated' }
-  | { status: 'pending'; safe: Address; nonce: number; safeTxHash: Hash };
 export interface RuntimeIdentity { address: Address; runtimeCodeHash: RuntimeCodeHash; }
 export type RuntimeIdentityName = 'Orchestrator' | 'OrchestratorV2' | 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'IntentLifecycleHookV1' | 'RecognizedPredecessorHook' | 'RecognizedPredecessorPolicy' | 'OrchestratorRegistry' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry' | 'MultiAttestationVerifier';
 export type GovernedRuntimeIdentityName = 'OrchestratorRegistry' | 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry' | 'MultiAttestationVerifier';
@@ -601,7 +578,6 @@ export interface DisputeStackManifest<Network extends DisputeStackNetwork = Disp
   network: Network;
   chainId: 8453;
   activeDisputeStack: { version: 2; selectionHash: string };
-  activation: DisputeStackActivation;
   runtimeIdentities: Record<RuntimeIdentityName, RuntimeIdentity>;
   addressExpectations: {
     AddressGroupRegistry: Address;
@@ -672,7 +648,7 @@ export interface DisputeStackManifest<Network extends DisputeStackNetwork = Disp
 import baseData from './base.json';
 import baseStagingData from './baseStaging.json';
 import type { DisputeStackManifest } from './types';
-export type { Address, DisputeStackActivation, DisputeStackManifest, DisputeStackNetwork, GovernedRuntimeIdentityName, Hash, PaymentMethodHash, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName, TwoStepGovernedRuntimeIdentityName } from './types';
+export type { Address, DisputeStackManifest, DisputeStackNetwork, GovernedRuntimeIdentityName, Hash, PaymentMethodHash, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName, TwoStepGovernedRuntimeIdentityName } from './types';
 export { default as base } from './base.json';
 export { default as baseStaging } from './baseStaging.json';
 export const disputeStackByNetwork = {
@@ -683,7 +659,7 @@ export const disputeStackByNetwork = {
   );
   fs.writeFileSync(
     path.join(OUTPUT_DIRECTORY, "index.d.ts"),
-    `export type { Address, DisputeStackActivation, DisputeStackManifest, DisputeStackNetwork, GovernedRuntimeIdentityName, Hash, PaymentMethodHash, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName, TwoStepGovernedRuntimeIdentityName } from './types';\nexport { default as base } from './base';\nexport { default as baseStaging } from './baseStaging';\nexport declare const disputeStackByNetwork: { base: import('./types').DisputeStackManifest<'base'>; baseStaging: import('./types').DisputeStackManifest<'base_staging'> };\n`,
+    `export type { Address, DisputeStackManifest, DisputeStackNetwork, GovernedRuntimeIdentityName, Hash, PaymentMethodHash, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName, TwoStepGovernedRuntimeIdentityName } from './types';\nexport { default as base } from './base';\nexport { default as baseStaging } from './baseStaging';\nexport declare const disputeStackByNetwork: { base: import('./types').DisputeStackManifest<'base'>; baseStaging: import('./types').DisputeStackManifest<'base_staging'> };\n`,
   );
   console.log(`✅ Dispute stack metadata written to ${OUTPUT_DIRECTORY}`);
 }
