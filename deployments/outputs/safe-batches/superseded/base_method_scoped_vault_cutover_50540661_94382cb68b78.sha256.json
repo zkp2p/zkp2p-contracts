@@ -4,17 +4,17 @@
   "chainId": 8453,
   "safe": "0x0bc26ff515411396dd588abd6ef6846e04470227",
   "safeNonce": "77",
-  "sourceSha": "085ddaff34dcb3466ab21152b051d99a658e4a85",
+  "sourceSha": "0eeeb229b3dc28879fab845c990a6506bf0e8797",
   "proofBlock": {
-    "number": 50540547,
-    "hash": "0xbd7b31de2a030d4fbf106f5c8d7c1561e0b31957a7da6881f6bf0a7af098f991"
+    "number": 50537545,
+    "hash": "0x0642ac73daa7724767a629bee78d3239fe4a99e77e35c51498521393c9e08680"
   },
-  "simulationBlockNumber": 50540661,
-  "simulationBlockHash": "0xa2c0cf84b0fd7af1ee0aeee0d6ee26a217275bd458a40dc89f2fc3bc3cb92bac",
+  "simulationBlockNumber": 50537655,
+  "simulationBlockHash": "0x6adc00f09ee5fd7ed226eb55c0a8739a7bfc7dac2948822084bc3f68524bd171",
   "simulationResult": "success",
   "transactions": [
     {
-      "to": "0xabe4af70d90e07258bab8e6700718b11943eba2b",
+      "to": "0x4148f066aed55ae5fa80972749cdc179c937d7ca",
       "value": "0",
       "data": "0xbf9a61ac",
       "operation": 0
@@ -44,9 +44,9 @@
       "operation": 0
     }
   ],
-  "transactionsSha256": "042f81bc94ad709df53456ccabf57da2627dec22665e17d51b71d6441179b6ab",
+  "transactionsSha256": "e6e0a4f25d056dd24a7c700973b324fe29f822309c2f2f9167397e73d2763896",
   "guard": {
-    "address": "0xabe4af70d90e07258bab8e6700718b11943eba2b",
+    "address": "0x4148f066aed55ae5fa80972749cdc179c937d7ca",
     "artifactName": "DisputeMethodScopedVaultCutoverGuard",
     "constructorArgs": [
       {
@@ -105,13 +105,13 @@
       true,
       [],
       "0x777777779d229cdf3110e9de47943791c26300ef",
-      "4318"
+      "4317"
     ],
-    "deployTransactionHash": "0x61c46a1997a2f105e68d25811e348070e05754b7bc71c2d4964374d3ddd3f606",
-    "runtimeCodeHash": "0xca24843d625b7884e687d9716766a2c5766a38b97fb5f44464bec4b73b672592"
+    "deployTransactionHash": "0xb8f9b39920d4e80b578839d04558df23db08ac1c450951fe4d3f9e138c7d131f",
+    "runtimeCodeHash": "0x45194fafaba7badf8cb5dc2b5a58689ea47b2e5d8e190fb9233eed1103982d55"
   },
   "postcondition": {
-    "address": "0xf97f8350e236521ab047cbd547e2f9d51eeb013b",
+    "address": "0x8a4e38cc7d6962403fec11bef94f5d7125494902",
     "artifactName": "DisputeMethodScopedVaultCutoverPostcondition",
     "constructorArgs": [
       {
@@ -167,7 +167,7 @@
         ]
       }
     ],
-    "deployTransactionHash": "0xb1adc390de46e69d5b72b05f75214851e242a2e08dabf21b4cfec788feba8599",
+    "deployTransactionHash": "0xcfcc85e6e740cec31e5eb7bedf949667ead412f1529360b775cfdeea0ee92cee",
     "runtimeCodeHash": "0x926949086c4ccf18d63e66299a41ddf94b46e696f216e4552936e62bfea7a12f"
   },
   "trustSurface": {
@@ -224,9 +224,9 @@
   },
   "proofSnapshot": {
     "network": "base",
-    "blockNumber": 50540547,
-    "blockHash": "0xbd7b31de2a030d4fbf106f5c8d7c1561e0b31957a7da6881f6bf0a7af098f991",
-    "blockTimestamp": "1787870441",
+    "blockNumber": 50537545,
+    "blockHash": "0x0642ac73daa7724767a629bee78d3239fe4a99e77e35c51498521393c9e08680",
+    "blockTimestamp": "1787864437",
     "freshPolicy": {
       "owner": "0x84e113087c97cd80ea9d78983d4b8ff61eca1929",
       "pendingOwner": "0x0bc26ff515411396dd588abd6ef6846e04470227",
@@ -315,7 +315,7 @@
     },
     "lockProof": {
       "fromBlock": 50201693,
-      "toBlock": 50540547,
+      "toBlock": 50537545,
       "intents": [
         {
           "intentHash": "0x00f53cecf2ea9c6ac3af4876d3fc1abf4c9f2355efe032d8ce333ee3a6bd6f6b",
@@ -363,12 +363,12 @@
     },
     "inventory": {
       "escrow": "0x777777779d229cdf3110e9de47943791c26300ef",
-      "depositCounter": "4318",
-      "block": 50540547,
+      "depositCounter": "4317",
+      "block": 50537545,
       "tuples": [],
       "violations": [],
       "ok": true
     }
   },
-  "manifestSha256": "94382cb68b7850b5bc1c4734c36396f571e2f3dd11224c1c4d593f026ec44f6d"
+  "manifestSha256": "eed1a8374d7f232dfd663db45797025be9613f5b119e77a15b669b15befaafd0"
 }
