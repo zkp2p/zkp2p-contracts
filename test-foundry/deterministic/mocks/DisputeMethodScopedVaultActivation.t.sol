@@ -115,6 +115,24 @@ contract DisputeMethodScopedVaultActivationTest is OrchestratorV3Fixture {
         }
     }
 
+    function test_CutoverGuardPassesWhenDepositCounterAdvancesAboveProof() public {
+        _cutover(true, true, escrow.depositCounter() - 1).assertReady();
+    }
+
+    function test_CutoverGuardRejectsDepositCounterBelowProof() public {
+        uint256 actualCounter = escrow.depositCounter();
+        uint256 pinnedCounter = actualCounter + 1;
+        DisputeMethodScopedVaultCutoverGuard guard = _cutover(true, true, pinnedCounter);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                DisputeMethodScopedVaultTrustSurfaceChecks.DepositCounterBelowProof.selector,
+                actualCounter,
+                pinnedCounter
+            )
+        );
+        guard.assertReady();
+    }
+
     function test_CutoverGuardRejectsOwnershipPredicates() public {
         _expectCutover(
             _surface(),
@@ -206,13 +224,6 @@ contract DisputeMethodScopedVaultActivationTest is OrchestratorV3Fixture {
         );
         vm.prank(depositor);
         freshPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, false);
-        _expectCutover(
-            _surface(),
-            true,
-            true,
-            escrow.depositCounter() + 1,
-            DisputeMethodScopedVaultTrustSurfaceChecks.DepositCounterMismatch.selector
-        );
     }
 
     function test_CutoverGuardRejectsFreshPolicyAndSharedSurfaceDrift() public {

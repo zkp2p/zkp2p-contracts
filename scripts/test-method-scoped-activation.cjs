@@ -2959,7 +2959,7 @@ test("vault transaction builders encode conditional acceptances and exact call o
   );
 });
 
-test("vault guard comparison binds cutover inventory and writer-removal intent proof", () => {
+test("vault guard comparison floors the cutover counter and binds tuple and writer-removal proofs", () => {
   const {
     assertVaultGuardExpectationsUnchanged,
   } = require("../deployments/vaultMethodScopedActivation.ts");
@@ -2969,11 +2969,33 @@ test("vault guard comparison binds cutover inventory and writer-removal intent p
   assert.doesNotThrow(() =>
     assertVaultGuardExpectationsUnchanged("vault-cutover", proof, current)
   );
-  current.inventory.depositCounter = "2";
+  current.inventory.depositCounter = "5";
+  assert.doesNotThrow(() =>
+    assertVaultGuardExpectationsUnchanged("vault-cutover", proof, current)
+  );
+  current.inventory.depositCounter = "3";
   assert.throws(
     () =>
       assertVaultGuardExpectationsUnchanged("vault-cutover", proof, current),
-    /inventory.depositCounter/
+    /inventory.depositCounter regressed/
+  );
+  const proofWithTuple = structuredClone(proof);
+  proofWithTuple.inventory.tuples.push({
+    escrow: vaultAddresses.escrow,
+    depositId: "1",
+    paymentMethod: METHOD_A,
+    sources: ["predecessor-opt-out"],
+  });
+  const tupleDrift = structuredClone(proofWithTuple);
+  tupleDrift.inventory.tuples[0].depositId = "999";
+  assert.throws(
+    () =>
+      assertVaultGuardExpectationsUnchanged(
+        "vault-cutover",
+        proofWithTuple,
+        tupleDrift
+      ),
+    /inventory.tuples.depositId/
   );
   const lockDrift = structuredClone(proof);
   lockDrift.lockProof.intents[0].status = 5;
@@ -3109,12 +3131,16 @@ test("vault constructor derivation independently binds both ownership acceptance
   );
 });
 
-test("vault verifier branch uses injected lane-40 readers before artifact identity checks", async () => {
+/**
+ * @param {string} liveDepositCounter
+ */
+function vaultVerificationFixture(liveDepositCounter) {
   const {
     computeVaultManifestSha256,
     vaultSafeBatchJson,
   } = require("../deployments/vaultActivationBatchManifest.ts");
   const {
+    deriveVaultActivationConstructorArgs,
     verifyVaultActivationCandidate,
   } = require("./verify-method-scoped-safe-batch.ts");
   const { BASE_SAFE } = require("./simulate-dispute-opt-in-safe-batch.ts");
@@ -3122,6 +3148,17 @@ test("vault verifier branch uses injected lane-40 readers before artifact identi
   const manifest = vaultManifestFixture();
   manifest.safe = BASE_SAFE.toLowerCase();
   manifest.sourceSha = repository.sourceSha;
+  manifest.guard.constructorArgs = deriveVaultActivationConstructorArgs(
+    manifest,
+    "guard"
+  );
+  manifest.postcondition.constructorArgs = deriveVaultActivationConstructorArgs(
+    manifest,
+    "postcondition"
+  );
+  const runtime = "0x6001";
+  manifest.guard.runtimeCodeHash = utils.keccak256(runtime);
+  manifest.postcondition.runtimeCodeHash = utils.keccak256(runtime);
   const { manifestSha256: _digest, ...unsigned } = manifest;
   manifest.manifestSha256 = computeVaultManifestSha256(unsigned);
   const batch = vaultSafeBatchJson(
@@ -3129,6 +3166,39 @@ test("vault verifier branch uses injected lane-40 readers before artifact identi
     manifest.transactions,
     1234
   );
+  /** @type {Record<string, any>} */
+  const artifacts = {};
+  for (const identity of [manifest.guard, manifest.postcondition]) {
+    const hardhatArtifact = require(`../artifacts/contracts/mocks/${identity.artifactName}.sol/${identity.artifactName}.json`);
+    artifacts[identity.artifactName] = {
+      abi: hardhatArtifact.abi,
+      bytecode: "0x6000",
+      deployedBytecode: runtime,
+      evm: { deployedBytecode: { immutableReferences: {} } },
+    };
+  }
+  /** @type {Record<string, {data: string}>} */
+  const deploymentTransactions = {};
+  /** @type {Record<string, {status: number, contractAddress: string}>} */
+  const receipts = {};
+  const identities =
+    /** @type {Array<["guard" | "postcondition", import("../deployments/vaultActivationBatchManifest").ContractIdentity]>} */ ([
+      ["guard", manifest.guard],
+      ["postcondition", manifest.postcondition],
+    ]);
+  for (const [role, identity] of identities) {
+    const artifact = artifacts[identity.artifactName];
+    const encoded = new utils.Interface(artifact.abi).encodeDeploy(
+      deriveVaultActivationConstructorArgs(manifest, role)
+    );
+    deploymentTransactions[identity.deployTransactionHash] = {
+      data: `${artifact.bytecode}${encoded.slice(2)}`,
+    };
+    receipts[identity.deployTransactionHash] = {
+      status: 1,
+      contractAddress: identity.address,
+    };
+  }
   const provider = {
     _isProvider: true,
     getNetwork: async () => ({ chainId: 8453, name: "base" }),
@@ -3141,29 +3211,33 @@ test("vault verifier branch uses injected lane-40 readers before artifact identi
     resolveName: async (name) => name,
     call: async () =>
       utils.defaultAbiCoder.encode(["uint256"], [manifest.safeNonce]),
+    /** @param {string} transactionHash */
+    getTransactionReceipt: async (transactionHash) =>
+      receipts[transactionHash] || null,
+    /** @param {string} transactionHash */
+    getTransaction: async (transactionHash) =>
+      deploymentTransactions[transactionHash] || null,
+    getCode: async () => runtime,
   };
   const hre = {
     __methodScopedVerificationProvider: provider,
     deployments: {
-      getExtendedArtifact: async () => {
-        throw new Error("vault guard identity boundary reached");
-      },
-      getArtifact: async () => {
-        throw new Error("unexpected artifact lookup");
-      },
+      /** @param {string} name */
+      getExtendedArtifact: async (name) => artifacts[name],
+      /** @param {string} name */
+      getArtifact: async (name) => artifacts[name],
     },
     ethers: ethersPackage,
   };
-  let loaded = false;
+  const liveSnapshot = vaultSnapshot();
+  liveSnapshot.inventory.depositCounter = liveDepositCounter;
   const lane = {
-    loadVaultActivationContext: async () => {
-      loaded = true;
-    },
+    loadVaultActivationContext: async () => {},
     expectedVaultActivationState: () => vaultExpected(),
-    readVaultActivationSnapshot: async () => vaultSnapshot(),
+    readVaultActivationSnapshot: async () => liveSnapshot,
     runPinnedSimulation: async () => {},
   };
-  await assert.rejects(
+  const run = () =>
     verifyVaultActivationCandidate(/** @type {any} */ (hre), {
       kind: "vault-cutover",
       batch,
@@ -3173,8 +3247,14 @@ test("vault verifier branch uses injected lane-40 readers before artifact identi
       forkRpcUrl: "fake-rpc",
       artifactPaths: { batch: "unused", sidecar: "unused" },
       lane,
-    }),
-    /vault guard identity boundary reached/
+    });
+  return { run };
+}
+
+test("vault verifier fresh-block drift check accepts a higher counter and rejects a lower counter", async () => {
+  await assert.doesNotReject(vaultVerificationFixture("5").run());
+  await assert.rejects(
+    vaultVerificationFixture("3").run(),
+    /inventory.depositCounter regressed/
   );
-  assert.equal(loaded, true);
 });

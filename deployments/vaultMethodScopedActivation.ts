@@ -723,7 +723,6 @@ export const VAULT_GUARD_BOUND_FIELDS: Record<
     "registry.writers",
     "orchestrator.lifecycleHook",
     "inventory.escrow",
-    "inventory.depositCounter",
     "inventory.tuples.escrow",
     "inventory.tuples.depositId",
     "inventory.tuples.paymentMethod",
@@ -765,6 +764,13 @@ export function assertVaultGuardExpectationsUnchanged(
   proof: VaultActivationSnapshot,
   simulation: VaultActivationSnapshot
 ): void {
+  if (
+    kind === "vault-cutover" &&
+    BigInt(simulation.inventory.depositCounter) <
+      BigInt(proof.inventory.depositCounter)
+  ) {
+    throw new Error("inventory.depositCounter regressed");
+  }
   const changed = VAULT_GUARD_BOUND_FIELDS[kind].filter(
     (path) =>
       comparable(getPath(proof, path)) !== comparable(getPath(simulation, path))
