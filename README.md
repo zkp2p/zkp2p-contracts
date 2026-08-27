@@ -76,19 +76,20 @@ The deposit whitelist stack is available through the `OrchestratorV2` per-deposi
 
 - `AddressGroupRegistry`: anyone may create a curator-managed group. Curators can add or remove members,
   transfer control, configure an optional membership resolver, and opt into self-service membership.
-- `WhitelistPolicy`: each deposit owns an `enabled` switch, a direct address whitelist, and a bounded list of
-  up to 10 allowed groups. Only the escrow's recorded depositor may configure a deposit, and
-  `configureDeposit` sets all three in one transaction. The policy keeps this configuration independently of
-  the `OrchestratorV2` hook assignment.
+- `WhitelistPolicy`: each deposit payment method owns an `enabled` switch and a bounded list of up to 10 allowed
+  groups; direct taker addresses remain shared across all payment methods on the deposit. Only the escrow's
+  recorded depositor may configure a deposit payment method, and `configureDeposit` updates its switch and groups
+  while appending any direct takers to the deposit-wide whitelist. The policy keeps this configuration independently
+  of the `OrchestratorV2` hook assignment.
   A governance owner may rotate the escrow registry that gates those writes via `setEscrowRegistry`. The owner
   cannot admit or reject a taker: whitelist enforcement allows a taker when enforcement is disabled for the
-  intent's deposit, the taker is directly whitelisted on that deposit, or the taker belongs to at least one
-  group allowed by that deposit. Enabled policies with no matching address or group fail closed.
+  intent's `(deposit, paymentMethod)`, the taker is directly whitelisted on that deposit, or the taker belongs to
+  at least one group allowed by that tuple. Enabled policies with no matching address or group fail closed.
 
 Group IDs are derived from the curator and registry group counter, and offchain consumers must key them by
-chain, registry address, and group ID. All three admission settings are scoped to the `(escrow, depositId)`
-pair, so one maker can run gated and open deposits at the same time and nothing is shared across a maker's
-deposits.
+chain, registry address, and group ID. Enforcement and groups are scoped to
+`(escrow, depositId, paymentMethod)` while direct taker addresses are scoped to `(escrow, depositId)`, so a maker
+can independently gate each payment method without maintaining duplicate direct-address lists.
 
 ## V2 Contract Inventory
 
@@ -727,7 +728,7 @@ explicitly ratified chargebackable-platform set.
 
 `yarn whitelist:bootstrap` discovers active deposits from a configurable raw GraphQL endpoint and
 selects only deposits with an active Venmo, Cash App, or PayPal payment method. It deduplicates the
-matching method rows by deposit and simulates canonical `WhitelistPolicy.bootstrapDeposits` batches
+matching rows by deposit and payment method and simulates canonical `WhitelistPolicy.bootstrapDeposits` batches
 for the explicitly supplied PRO, PLUS, Peer Pay, and Peer Makers group IDs. It imports no indexer
 schema package, so the contracts and indexer packages remain acyclic. Discovery is a dry-run by
 default; mutation and Safe output require both the exact expected deposit count and the printed
@@ -740,8 +741,8 @@ selection digest, and all discovery modes enforce a configurable maximum.
   decoded and checked before either execution or file output.
 - Base execution is pinned to the canonical production indexer, deployment artifacts, and exact four
   production group IDs. It also requires `BOOTSTRAP_CONFIRM_PRODUCTION=true`.
-- `BOOTSTRAP_ALLOW_COMPLETED=true` resumes only batches whose deposits are still enabled and contain
-  every requested group. The script rechecks policy ownership before each submitted batch.
+- `BOOTSTRAP_ALLOW_COMPLETED=true` resumes only batches whose deposit/payment-method tuples are still enabled and
+  contain every requested group. The script rechecks policy ownership before each submitted batch.
 - Direct execution uses the receipt RPC for confirmation and bounded post-receipt state reads. It computes
   EIP-1559 fees from the latest base fee with a `0.001` gwei priority fee and refuses to submit above
   the `0.02` gwei default max-fee ceiling; both values are configurable through the documented env.

@@ -1263,7 +1263,7 @@ export async function assertFreshStackUnusedBeforeActivation(
     "DisputeProtectionIntentSettled(bytes32,address,address,uint256,uint64,bool)",
     "DisputeProtectionIntentReleased(bytes32,address,uint256)",
     "DisputeResolved(bytes32,address,address,uint256,bytes32)",
-    "DisputeProtectionEnabledUpdated(address,uint256,bool)",
+    "DisputeProtectionEnabledUpdated(address,uint256,bytes32,bool)",
   ].map(ethers.utils.id);
   const vaultFinancialTopics = [
     "StakeDeposited(address,uint256,uint256)",

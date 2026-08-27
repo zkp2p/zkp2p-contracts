@@ -43,12 +43,16 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
     event LifecycleHookAuthorizationUpdated(address indexed hook, bool authorized);
     event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
     event DisputeProtectionEnabledUpdated(
-        address indexed escrow, uint256 indexed depositId, bool isDisputeProtectionEnabled
+        address indexed escrow,
+        uint256 indexed depositId,
+        bytes32 indexed paymentMethod,
+        bool isDisputeProtectionEnabled
     );
 
     uint64 internal constant RISK_WINDOW = 30 days;
     uint256 internal constant STAKE_AMOUNT = 500e6;
     bytes32 internal constant INTENT = keccak256("intent");
+    bytes32 internal constant OTHER_METHOD = keccak256("zelle");
 
     StakeVault internal vault;
     NullifierRegistryV2 internal nullifierRegistry;
@@ -81,7 +85,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
     function test_onIntentSignaledRequiresExplicitOptInAndSnapshotsConfiguration() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                IDisputeProtectionPolicy.DisputeProtectionNotEnabled.selector, address(escrow), depositId
+                IDisputeProtectionPolicy.DisputeProtectionNotEnabled.selector, address(escrow), depositId, METHOD
             )
         );
         disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
@@ -120,7 +124,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IDisputeProtectionPolicy.DisputeProtectionNotEnabled.selector, address(escrow), depositId
+                IDisputeProtectionPolicy.DisputeProtectionNotEnabled.selector, address(escrow), depositId, METHOD
             )
         );
         disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
@@ -164,7 +168,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         USDCMock otherToken = new USDCMock(1_000e6, "Other", "OTHER");
         DisputeProtectionEscrowMock wrongTokenEscrow = new DisputeProtectionEscrowMock(depositor, otherToken);
         vm.prank(depositor);
-        disputeProtectionPolicy.setDisputeProtectionEnabled(address(wrongTokenEscrow), depositId, true);
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(wrongTokenEscrow), depositId, METHOD, true);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IDisputeProtectionPolicy.IntentTokenMismatch.selector, address(token), address(otherToken)
@@ -475,8 +479,9 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
     }
 
     function test_isDisputeProtectionEnabledDefaultsFalseForUntouchedAndMissingDeposits() public view {
-        assertFalse(disputeProtectionPolicy.isDisputeProtectionEnabled(address(escrow), depositId));
-        assertFalse(disputeProtectionPolicy.isDisputeProtectionEnabled(address(escrow), type(uint256).max));
+        assertFalse(disputeProtectionPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
+        assertFalse(disputeProtectionPolicy.isDisputeProtectionEnabled(address(escrow), depositId, OTHER_METHOD));
+        assertFalse(disputeProtectionPolicy.isDisputeProtectionEnabled(address(escrow), type(uint256).max, METHOD));
     }
 
     function test_SetDisputeProtectionEnabledEnforcesDepositorHandlesMissingDepositAndRoundTrips() public {
@@ -484,7 +489,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
             abi.encodeWithSelector(IDisputeProtectionPolicy.NotDepositor.selector, address(escrow), depositId, other)
         );
         vm.prank(other);
-        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, true);
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, true);
 
         uint256 missingDeposit = type(uint256).max;
         vm.expectRevert(
@@ -492,19 +497,20 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
                 IDisputeProtectionPolicy.NotDepositor.selector, address(escrow), missingDeposit, address(this)
             )
         );
-        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), missingDeposit, true);
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), missingDeposit, METHOD, true);
 
-        vm.expectEmit(true, true, false, true);
-        emit DisputeProtectionEnabledUpdated(address(escrow), depositId, true);
+        vm.expectEmit(true, true, true, true);
+        emit DisputeProtectionEnabledUpdated(address(escrow), depositId, METHOD, true);
         vm.prank(depositor);
-        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, true);
-        assertTrue(disputeProtectionPolicy.isDisputeProtectionEnabled(address(escrow), depositId));
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, true);
+        assertTrue(disputeProtectionPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
+        assertFalse(disputeProtectionPolicy.isDisputeProtectionEnabled(address(escrow), depositId, OTHER_METHOD));
 
-        vm.expectEmit(true, true, false, true);
-        emit DisputeProtectionEnabledUpdated(address(escrow), depositId, false);
+        vm.expectEmit(true, true, true, true);
+        emit DisputeProtectionEnabledUpdated(address(escrow), depositId, METHOD, false);
         vm.prank(depositor);
-        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, false);
-        assertFalse(disputeProtectionPolicy.isDisputeProtectionEnabled(address(escrow), depositId));
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, false);
+        assertFalse(disputeProtectionPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
     }
 
     function test_AcceptVaultControllerCompletesDelayedTwoStepHandover() public {
@@ -529,7 +535,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
 
     function _enableProtection() internal {
         vm.prank(depositor);
-        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, true);
+        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, true);
     }
 
     function _admitAndSettle(bytes32 intentHash, uint256 releaseAmount, bool manualRelease) internal {
