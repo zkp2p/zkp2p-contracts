@@ -15,6 +15,9 @@
     "deployments/canonicalDeployment.ts",
     "deployments/immutableDeploymentLanes.ts",
     "deployments/managedDisputeLifecycleHook.ts",
+    "deployments/methodScopedActivation.ts",
+    "deployments/activationBatchManifest.ts",
+    "deployments/safeArtifacts.ts",
     "deployments/predecessorDisputeStack.ts",
     "deployments/safeBatchManifest.ts",
     "deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts",
@@ -33,6 +36,7 @@
     "scripts/bootstrapWhitelistPolicy.ts",
     "scripts/test-dispute-lifecycle-deployment.cjs",
     "scripts/test-method-scoped-deployment.cjs",
+    "scripts/test-method-scoped-activation.cjs",
     "scripts/test-opt-in-dispute-lifecycle-deployment.cjs",
     "scripts/test-v3-groups-base-deployment.cjs",
     "tasks/etherscanVerifyWithDelay.ts"
