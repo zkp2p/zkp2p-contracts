@@ -726,14 +726,43 @@ preparation; the live vault is never inspected.
 `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS`; `PREDECESSOR_DISPUTE_STACKS` keeps describing the predecessor of
 the currently selected stack until activation.
 
-Activation of the method-scoped stack is not implemented by lanes 36 or 37. A future lane owns the
-Base-staging EOA transitions, the unsigned Base Safe batch (ownership acceptance, fresh writer grant,
-hook swap, and the lane-34 writer revoke once the predecessor policy is drained), preceded by
-pausing predecessor admissions and proposing the fresh policy as the vault controller so the delayed
-`acceptVaultController()` can run once no predecessor lock is open, the
-`active-dispute-stack.json` selection flip, and the evidence refresh. Before that lane can run:
+`deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts` activates the lane-37 stack. It is
+tag-only: `yarn deploy:dispute-method-scoped-activation:base_staging` and
+`yarn deploy:dispute-method-scoped-activation:base` run the lane under
+`DEPLOY_ACTIVE_TAG=38_activate_method_scoped_dispute_lifecycle_stack`; every untagged run skips it, a
+tagged local run throws because there is no predecessor stack, and a lane-38 flag without the tag throws
+before any chain read. Every read is pinned to one block and reduced into a single activation state
+(`deployed`, `rotation-proposed`, `active`, or `unrecognized`, which aborts). Base staging advances one
+deployer-EOA step per run with `PREPARE_STAGING_V3_DISPUTE_METHOD_SCOPED_ACTIVATION=true` (dry run) or
+`ENABLE_STAGING_V3_DISPUTE_METHOD_SCOPED_ACTIVATION=true`: pause predecessor admissions, propose the fresh
+policy as the vault controller, release matured predecessor intents, accept the controller once the delay
+has elapsed and no predecessor lock is open, add the fresh registry writer, set the O3 hook, and remove
+the predecessor writer; the lane reports `controller-delay` / `predecessor-drain` waiting states instead
+of guessing. Base produces two unsigned Safe batches, each headed by a freshly deployed on-chain guard
+contract that re-checks the whole trust surface inside the Safe transaction:
 
-- [ ] Lanes 36 and 37 have executed deploy-only on Base staging and Base and their records are committed.
+- `ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_ROTATION_PREPARATION=true` — guard, optional
+  `acceptOwnership()` on the fresh policy, `setAdmissionsPaused(true)` on the predecessor policy, and
+  `proposeController(freshPolicy)` on the reused vault.
+- `ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_CUTOVER_PREPARATION=true` — only after the controller delay with
+  zero live predecessor locks: guard, `acceptVaultController()`, `addWritePermission(freshPolicy)`,
+  `removeWritePermission(predecessorPolicy)`, and `setLifecycleHook(freshHook)`.
+- `ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_RELEASE_MATURED=true` — permissionless release of matured
+  predecessor intents from the deployer so the cutover precondition can be met.
+
+Each batch is simulated on a pinned Base fork with a postcondition contract appended, then written to
+`deployments/outputs/safe-batches/base_method_scoped_{rotation,cutover}.json` with a `.sha256.json`
+sidecar that pins the proof snapshot, guard identity, and source SHA. Run
+`yarn verify:method-scoped-safe-batch --batch rotation|cutover` immediately before the Safe executes;
+it re-derives the guard constructor arguments from the manifest, re-proves the guard and postcondition
+deployments, re-reads the chain at a fresh block, and re-runs the simulation. No script signs. Lane 37
+must be retired before activation (its skip asserts the predecessor hook is still live), lane 38 is
+pinned after its first live transition, and the `active-dispute-stack.json`,
+`PREDECESSOR_DISPUTE_STACKS`, evidence, and `WhitelistPolicy` package-alias flips land in recording PRs
+after each execution. Before lane 38 can run:
+
+- [ ] Lanes 36 and 37 have executed deploy-only on Base staging and Base and their records are committed,
+      and lane 37 is retired in `deployments/immutableDeploymentLanes.ts`.
 - [ ] `yarn whitelist:bootstrap` has populated `WhitelistPolicyMethodScoped` on each network.
 - [ ] `zkp2p-indexer` indexes the fresh addresses and the tuple-scoped `EnabledUpdated` /
       `DisputeProtectionEnabledUpdated` events.

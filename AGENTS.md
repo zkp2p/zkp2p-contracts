@@ -53,6 +53,27 @@
   selection flip belong to a future lane; never infer activation from source, tests, package ABIs, artifacts, or
   deployment. The lane-37 policy is default-on for windowed rails with a depositor opt-out (see the rail-aware
   default design); pre-activation opt-outs are expected and do not invalidate the lane; the live vault is never inspected by it.
+- `deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts` is the activation lane for the lane-37 stack. It
+  runs only under `DEPLOY_ACTIVE_TAG=38_activate_method_scoped_dispute_lifecycle_stack`; untagged runs skip on
+  every network, a tagged local run throws (there is no predecessor stack to activate), and any lane-38 flag
+  without the tag throws before the first chain read. Every read is pinned to one block and reduced by
+  `reduceActivation` (`deployments/methodScopedActivation.ts`) into `deployed` / `rotation-proposed` / `active`
+  or `unrecognized`; an unrecognized state aborts. Base staging advances one deployer-EOA step per run
+  (`PREPARE_`/`ENABLE_STAGING_V3_DISPUTE_METHOD_SCOPED_ACTIVATION=true`): pause predecessor admissions,
+  propose the fresh policy as vault controller, release matured predecessor intents, accept the controller
+  after the delay and only once no predecessor lock is open, add the fresh writer, set the O3 hook, remove the
+  predecessor writer. Base emits two unsigned Safe batches, each headed by a freshly deployed on-chain guard
+  that binds the full trust surface: rotation (`ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_ROTATION_PREPARATION`)
+  = guard, optional `acceptOwnership`, pause predecessor admissions, `proposeController`; cutover
+  (`ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_CUTOVER_PREPARATION`, only after the delay with zero live
+  predecessor locks and no successor-side violations) = guard, `acceptVaultController`, add fresh writer,
+  remove predecessor writer, `setLifecycleHook`. A postcondition contract is appended in the pinned fork
+  simulation only. Artifacts live at `deployments/outputs/safe-batches/base_method_scoped_{rotation,cutover}.json`
+  with `.sha256.json` sidecars; `yarn verify:method-scoped-safe-batch --batch rotation|cutover` must pass
+  immediately before the Safe executes, and no script ever signs. Retire lane 37 before activation (its skip
+  asserts the predecessor hook is still live), pin lane 38 after its first live transition, and keep the
+  `active-dispute-stack.json` / `PREDECESSOR_DISPUTE_STACKS` / evidence flip and the `WhitelistPolicy`
+  package alias in recording PRs after each execution — the lane itself flips nothing repo-side.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the

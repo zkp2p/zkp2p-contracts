@@ -295,7 +295,9 @@ equal to `IntentLifecycleHookV1MethodScoped`.
    sets the orchestrator hook, and revokes the lane-34 writer only once the
    predecessor policy is fully drained. Flip `active-dispute-stack.json`,
    `PREDECESSOR_DISPUTE_STACKS`, and `dispute-stack-evidence.json` at that
-   point, then publish the package.
+   point, then publish the package. Designed in
+   `docs/superpowers/specs/2026-08-27-method-scoped-dispute-activation-lane-design.md`
+   and implemented as lane 38 (the repo-side flips stay in recording PRs).
 4. In the activation PR, alias the canonical `WhitelistPolicy` package key to
    `WhitelistPolicyMethodScoped` per network (a manifest change that
    re-stamps the committed outputs' selection hash); until then the record is

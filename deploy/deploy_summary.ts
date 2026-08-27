@@ -96,6 +96,16 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 };
 
 func.runAtTheEnd = true;
-func.tags = ["V3PaymentBindingStack", "V3DisputeLifecycleStack", "V3DisputeOptInStack", "36_deploy_method_scoped_whitelist_policy", "MethodScopedWhitelistPolicy", "37_deploy_method_scoped_dispute_lifecycle_stack", "V3DisputeMethodScopedStack"];
+func.tags = [
+  "V3PaymentBindingStack",
+  "V3DisputeLifecycleStack",
+  "V3DisputeOptInStack",
+  "36_deploy_method_scoped_whitelist_policy",
+  "MethodScopedWhitelistPolicy",
+  "37_deploy_method_scoped_dispute_lifecycle_stack",
+  "V3DisputeMethodScopedStack",
+  "38_activate_method_scoped_dispute_lifecycle_stack",
+  "V3DisputeMethodScopedActivation",
+];
 
 export default func;

@@ -140,7 +140,9 @@ Current numbered lanes include:
 - `34`: opt-in dispute stack (immutable, retired; its Base trio is live);
 - `35`: Mercury payment method (Base staging only);
 - `36`: `WhitelistPolicyMethodScoped` (deploy-only);
-- `37`: method-scoped dispute lifecycle stack (deploy-only).
+- `37`: method-scoped dispute lifecycle stack (deploy-only);
+- `38`: method-scoped dispute activation (tag-only; staging EOA steps, two
+  guarded Base Safe batches).
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production
