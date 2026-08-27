@@ -122,8 +122,16 @@ Supported networks: `localhost`, `hardhat`, `base_staging`, `base`.
   hands ownership to `MULTI_SIG[network] || deployer` through `setNewOwner`
   (plain `Ownable`, so Base ownership moves in the deployment run itself,
   exactly as lane 29 did).
-- Existing record: assert canonical (`solcInputHash` and immutable-zeroed
-  runtime bytecode match the current build) and reuse; never redeploy.
+- Existing record: assert the on-chain code matches the record's
+  `deployedBytecode` (immutable-zeroed when the record was built from the
+  current source) and reuse; never redeploy. Amended 2026-08-27 after the
+  PR #278 post-merge review: an executed record is compared against the
+  chain, not against the current build, because hardhat-deploy's
+  `solcInputHash` covers the entire solc input and any later Solidity edit
+  would otherwise make the lane's `skip` abort every untagged run. The
+  three-way record/artifact/chain check (`assertCanonicalDeployment`) is
+  reserved for lane 37's partial prefix, where deploying more contracts with
+  a different build must fail closed.
 - Live gating mirrors lane 34: `ENABLE_STAGING_METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT=true`
   or `ENABLE_BASE_METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT=true`. Without
   the flag the lane skips, except that a tagged run
@@ -283,7 +291,17 @@ equal to `IntentLifecycleHookV1MethodScoped`.
    predecessor policy is fully drained. Flip `active-dispute-stack.json`,
    `PREDECESSOR_DISPUTE_STACKS`, and `dispute-stack-evidence.json` at that
    point, then publish the package.
-4. In the same activation PR, pin lane 37 in `immutableDeploymentLanes.ts`
+4. In the activation PR, alias the canonical `WhitelistPolicy` package key to
+   `WhitelistPolicyMethodScoped` per network (a manifest change that
+   re-stamps the committed outputs' selection hash); until then the record is
+   stripped from published output like the internal dispute names. Two
+   review findings are deliberately left as follow-ups: fake-HRE execution
+   tests for lanes 36/37's live paths (today only the pure helpers and the
+   localhost topology are exercised), and the tuple-scoping consequence that
+   a payment method added to a deposit after its whitelist bootstrap starts
+   ungated on zero-window rails (documented in the README; a contract-level
+   deposit-wide fallback would be a separate design).
+5. In the same activation PR, pin lane 37 in `immutableDeploymentLanes.ts`
    and retire it (`activeSource: null`, tags rejected), exactly as lane 34
    was retired here: lane 37's `skip` re-runs `assertLiveSharedState`, which
    requires the orchestrator to still be on the predecessor hook and the

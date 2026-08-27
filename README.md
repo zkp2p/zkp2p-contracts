@@ -88,6 +88,11 @@ The deposit whitelist stack is available through the `OrchestratorV2` per-deposi
   Under `IntentLifecycleHookV1` the no-stake fast lane requires the tuple's whitelist to be **enabled**: a directly
   whitelisted address on a tuple whose whitelist is disabled is treated like any other taker and, on a payment
   method with a nonzero risk window, is routed through stake-backed dispute protection.
+  Because enforcement is per tuple, a payment method the depositor adds to a deposit **after** its whitelist was
+  configured or bootstrapped starts with that method's whitelist disabled: on a payment method with a nonzero risk
+  window its takers are stake-backed by default, on a zero-window method it is open. Depositors configure the new
+  tuple themselves, and the whitelist bootstrap can be re-run with `BOOTSTRAP_ALLOW_COMPLETED=true` to pick up
+  new tuples of already-bootstrapped deposits.
 
 Group IDs are derived from the curator and registry group counter, and offchain consumers must key them by
 chain, registry address, and group ID. Enforcement and groups are scoped to
