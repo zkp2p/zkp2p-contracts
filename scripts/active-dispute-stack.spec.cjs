@@ -345,13 +345,6 @@ const DISPUTE_STACK_BY_NETWORK = {
     orchestratorAuthorizationFromBlock: "42878566",
     policyDeploymentBlock: "50537204",
     allowMultipleIntents: true,
-    activation: {
-      status: "pending",
-      safe: "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
-      nonce: 77,
-      safeTxHash:
-        "0x6dd4de20ac21ac2961653dd3ea07c3ab79281ce472dd5a74ec791f659620f3c9",
-    },
     attestationWitnesses: [
       "0xDB4Ed7FAF170F0f6493E3adaaCaaFaF47092c754",
       "0xE078D93bFdd87A8c5C5cCA5905DCbA0Dd7A1F0BD",
@@ -440,7 +433,6 @@ const DISPUTE_STACK_BY_NETWORK = {
     orchestratorAuthorizationFromBlock: "42614859",
     policyDeploymentBlock: "50536390",
     allowMultipleIntents: false,
-    activation: { status: "activated" },
     attestationWitnesses: [
       "0x66649F896521b0fb487fE2077b4FBDA283d7f19a",
       "0x4ab950AE1e3326578Bf7e643a2031E858aBa2927",
@@ -610,7 +602,7 @@ test("package extraction publishes the exact dispute stack manifest without inte
       requiredSignatures: "1",
       witnesses: expected.attestationWitnesses,
     });
-    assert.deepEqual(manifest.activation, expected.activation);
+    assert.equal("activation" in manifest, false);
     assert.deepEqual(manifest.exactAuthorizationSets, {
       orchestratorAuthorizationFromBlock:
         expected.orchestratorAuthorizationFromBlock,
@@ -667,7 +659,7 @@ test("package extraction publishes the exact dispute stack manifest without inte
     assert.equal(declarations.includes(`'${seconds}'`), true);
   }
   assert.match(declarations, /chainId: 8453;/);
-  assert.match(declarations, /activation: DisputeStackActivation;/);
+  assert.doesNotMatch(declarations, /DisputeStackActivation|activation:/);
   for (const paymentMethodHash of Object.keys(
     RISK_WINDOWS_BY_NETWORK.baseStaging
   )) {
@@ -688,6 +680,7 @@ test("package extraction publishes the exact dispute stack manifest without inte
   );
   assert.match(indexDeclarations, /from ['"]\.\/base['"]/);
   assert.match(indexDeclarations, /from ['"]\.\/baseStaging['"]/);
+  assert.doesNotMatch(indexDeclarations, /DisputeStackActivation/);
   assert.doesNotMatch(indexDeclarations, /\.json['"]/);
 });
 

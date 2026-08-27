@@ -46,12 +46,6 @@
           "0xE078D93bFdd87A8c5C5cCA5905DCbA0Dd7A1F0BD"
         ]
       },
-      "activation": {
-        "status": "pending",
-        "safe": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
-        "nonce": 77,
-        "safeTxHash": "0x6dd4de20ac21ac2961653dd3ea07c3ab79281ce472dd5a74ec791f659620f3c9"
-      },
       "prerequisites": {
         "orchestratorPaused": false,
         "admissionsPaused": false,
@@ -189,9 +183,6 @@
           "0x66649F896521b0fb487fE2077b4FBDA283d7f19a",
           "0x4ab950AE1e3326578Bf7e643a2031E858aBa2927"
         ]
-      },
-      "activation": {
-        "status": "activated"
       },
       "prerequisites": {
         "orchestratorPaused": false,
