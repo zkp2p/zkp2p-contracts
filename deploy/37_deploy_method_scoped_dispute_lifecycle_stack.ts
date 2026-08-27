@@ -19,6 +19,7 @@ import {
   MULTI_SIG,
   STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
   USDC,
+  getActivePaymentMethods,
 } from "../deployments/parameters";
 import { paymentBindingCutoverReady } from "./31_deploy_v3_payment_binding_stack";
 import { METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT_NAME } from "./36_deploy_method_scoped_whitelist_policy";
@@ -226,6 +227,12 @@ export function decodeFreshStackLogs(
 
 function isLiveNetwork(network: string): network is LiveNetwork {
   return network === "base" || network === "base_staging";
+}
+
+export function getRiskWindowPaymentMethods(network: string): string[] {
+  return isLiveNetwork(network)
+    ? getActivePaymentMethods(network)
+    : ACTIVE_PAYMENT_METHODS;
 }
 
 function sameAddress(left: string, right: string): boolean {
@@ -731,7 +738,7 @@ async function readLiveDeployOnlyPrefix(
       ) {
         throw new Error("Partial method-scoped policy state drifted");
       }
-      for (const method of ACTIVE_PAYMENT_METHODS) {
+      for (const method of getRiskWindowPaymentMethods(network)) {
         if (!(await policy.getRiskWindow(paymentMethodHash(method))).isZero()) {
           throw new Error(
             `Partial method-scoped risk window exists before hook deployment: ${method}`
@@ -825,7 +832,7 @@ async function readLiveDeployOnlyPrefix(
   );
 
   const disputableMethods = new Set(DISPUTABLE_PAYMENT_METHODS);
-  for (const method of ACTIVE_PAYMENT_METHODS) {
+  for (const method of getRiskWindowPaymentMethods(network)) {
     const actual = await policy.getRiskWindow(paymentMethodHash(method));
     const expectedWindow = disputableMethods.has(method)
       ? DISPUTE_RISK_WINDOW[network]

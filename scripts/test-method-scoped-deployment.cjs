@@ -33,6 +33,10 @@ const lane31Module = require("../deploy/31_deploy_v3_payment_binding_stack.ts");
 const lane36Module = require("../deploy/36_deploy_method_scoped_whitelist_policy.ts");
 const lane37Module = require("../deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts");
 const {
+  ACTIVE_PAYMENT_METHODS,
+  BASE_STAGING_ACTIVE_PAYMENT_METHODS,
+} = require("../deployments/parameters.ts");
+const {
   assertCanonicalDeployment,
   assertDeploymentMatchesChain,
 } = require("../deployments/canonicalDeployment.ts");
@@ -491,6 +495,21 @@ test("lane 37 exports the method-scoped dispute stack identity", () => {
     "V3DisputeMethodScopedStack",
   ]);
   assert.deepEqual(lane37Module.default.dependencies, []);
+});
+
+test("lane 37 checks risk windows against each network's active methods", () => {
+  assert.deepEqual(
+    lane37Module.getRiskWindowPaymentMethods("base_staging"),
+    BASE_STAGING_ACTIVE_PAYMENT_METHODS
+  );
+  assert.deepEqual(
+    lane37Module.getRiskWindowPaymentMethods("base"),
+    ACTIVE_PAYMENT_METHODS
+  );
+  assert.deepEqual(
+    lane37Module.getRiskWindowPaymentMethods("hardhat"),
+    ACTIVE_PAYMENT_METHODS
+  );
 });
 
 test("lane 37 skips unsupported and unflagged live runs but tagged runs fail", async () => {
