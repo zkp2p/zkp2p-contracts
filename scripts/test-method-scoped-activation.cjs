@@ -1751,6 +1751,76 @@ test("staging advance accepts the controller wait but rejects a two-step jump", 
   );
 });
 
+test("staging PREPARE preflight hex-encodes normalized transaction quantities", async () => {
+  const lane = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  const state = snapshot("base_staging");
+  const wanted = expected("base_staging");
+  const reduction = reduceActivation(state, wanted);
+  assert.equal(reduction.phase, "deployed");
+  assert.equal(reduction.nextStagingAction, "pause-predecessor-admissions");
+  const transaction = buildStagingTransaction(
+    reduction.nextStagingAction,
+    wanted.addresses,
+    state.lockProof
+  );
+  assert.equal(transaction.value, "0");
+
+  const quantity = /^0x([1-9a-f][0-9a-f]*|0)$/;
+  /** @param {unknown} value @param {string} argument */
+  const assertQuantity = (value, argument) => {
+    if (typeof value === "string" && quantity.test(value)) return;
+    throw Object.assign(
+      new Error(
+        `invalid hexlify value (argument="${argument}", value=${JSON.stringify(
+          value
+        )}, code=INVALID_ARGUMENT, version=bytes/5.7.0)`
+      ),
+      { code: "INVALID_ARGUMENT", argument, value }
+    );
+  };
+  /** @param {string} method @param {any[]} params */
+  const validateRpcQuantities = (method, params) => {
+    if (method !== "eth_estimateGas" && method !== "eth_call") return;
+    const request = params[0];
+    for (const field of ["value", "nonce", "gas"]) {
+      if (request[field] !== undefined) assertQuantity(request[field], field);
+    }
+    assertQuantity(params[1], "blockTag");
+  };
+  /** @type {any} */
+  const provider = {
+    getTransactionCount: async () => 0,
+    getBalance: async () => BigNumber.from(1_000_000),
+    getFeeData: async () => ({ gasPrice: BigNumber.from(1) }),
+    /** @param {any} request @param {string | number} blockTag */
+    call: async (request, blockTag) =>
+      provider.send("eth_call", [
+        {
+          ...request,
+          value: utils.hexValue(BigNumber.from(request.value)),
+          nonce: utils.hexValue(BigNumber.from(request.nonce)),
+        },
+        utils.hexValue(BigNumber.from(blockTag)),
+      ]),
+    /** @param {string} method @param {any[]} params */
+    send: async (method, params) => {
+      validateRpcQuantities(method, params);
+      return method === "eth_estimateGas" ? "0x5208" : "0x";
+    },
+  };
+  const hre = /** @type {any} */ ({
+    ethers: { provider, BigNumber, utils },
+  });
+
+  const result = await lane.preflightStagingTransaction(
+    hre,
+    transaction,
+    wanted.deployer,
+    state.blockNumber
+  );
+  assert.equal(result.gasLimit.toString(), "21000");
+});
+
 test("staging flags are mutually exclusive and confirmations fail in order", async () => {
   const lane = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
   const names = [

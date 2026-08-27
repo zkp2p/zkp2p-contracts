@@ -994,7 +994,7 @@ export function assertStagingAdvance(
   }
 }
 
-async function preflightStagingTransaction(
+export async function preflightStagingTransaction(
   hre: HardhatRuntimeEnvironment,
   transaction: NormalizedSafeBatchTransaction,
   deployer: string,
@@ -1024,7 +1024,9 @@ async function preflightStagingTransaction(
       {
         from: deployer,
         to: transaction.to,
-        value: hre.ethers.utils.hexValue(transaction.value),
+        value: hre.ethers.utils.hexValue(
+          hre.ethers.BigNumber.from(transaction.value)
+        ),
         data: transaction.data,
         nonce: hre.ethers.utils.hexValue(nonce),
       },
