@@ -15,6 +15,7 @@ const CANONICAL_NAMES = [
   "DisputeProtectionPolicy",
   "IntentLifecycleHookV1",
 ];
+const INTERNAL_POLICY_RECORDS = ["WhitelistPolicyMethodScoped"];
 /** @type {Set<DisputeNetwork>} */
 const SUPPORTED_NETWORKS = new Set(["base", "base_staging", "localhost", "hardhat"]);
 
@@ -158,12 +159,19 @@ function resolveActiveDisputeAliases(network, contracts, selectionStamp) {
   }
 
   for (const name of Object.keys(resolved)) {
-    if (name.endsWith("OptIn") || SELECTED_INTERNAL_NAMES.has(name)) delete resolved[name];
+    if (
+      name.endsWith("OptIn") ||
+      INTERNAL_POLICY_RECORDS.includes(name) ||
+      SELECTED_INTERNAL_NAMES.has(name)
+    ) {
+      delete resolved[name];
+    }
   }
   return resolved;
 }
 
 module.exports = {
+  INTERNAL_POLICY_RECORDS,
   getActiveDisputeDeploymentName,
   getActiveDisputeSelectionStamp,
   normalizeDisputeNetworkName,

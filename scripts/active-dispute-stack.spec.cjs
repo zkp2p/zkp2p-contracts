@@ -15,6 +15,7 @@ const { join } = require("node:path");
 const { test } = require("node:test");
 
 const {
+  INTERNAL_POLICY_RECORDS,
   getActiveDisputeDeploymentName,
   getActiveDisputeSelectionStamp,
   normalizeDisputeNetworkName,
@@ -70,8 +71,21 @@ function contracts() {
     IntentLifecycleHookV1MethodScoped: deployment(
       "0x0000000000000000000000000000000000000033"
     ),
+    WhitelistPolicy: deployment("0x0000000000000000000000000000000000000041"),
+    WhitelistPolicyMethodScoped: deployment(
+      "0x0000000000000000000000000000000000000042"
+    ),
   };
 }
+
+test("strips passive internal policy records on every supported network", () => {
+  assert.deepEqual(INTERNAL_POLICY_RECORDS, ["WhitelistPolicyMethodScoped"]);
+  for (const network of ["base", "base_staging", "localhost", "hardhat"]) {
+    const resolved = resolveActiveDisputeAliases(network, contracts());
+    assert.equal("WhitelistPolicyMethodScoped" in resolved, false, network);
+    assert.equal("WhitelistPolicy" in resolved, true, network);
+  }
+});
 
 test("normalizes Hardhat and package network names through one boundary", () => {
   assert.equal(normalizeDisputeNetworkName("base_staging"), "base_staging");
@@ -95,6 +109,7 @@ test("resolves successor records on live networks after the passive deployment",
     IntentLifecycleHookV1: deployment(
       "0x0000000000000000000000000000000000000023"
     ),
+    WhitelistPolicy: deployment("0x0000000000000000000000000000000000000041"),
   });
   assert.equal(
     resolveActiveDisputeAliases("base_staging", contracts()).StakeVault.address,

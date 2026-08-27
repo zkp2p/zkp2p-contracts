@@ -14,8 +14,23 @@ const packageRoot = path.resolve(
 const repoRoot = path.resolve(packageRoot, "..", "..");
 const requireFromRepo = createRequire(import.meta.url);
 const { ethers } = requireFromRepo("ethers");
-const { getActiveDisputeDeploymentName, resolveActiveDisputeAliases } =
-  requireFromRepo("../../../deployments/activeDisputeStack.cjs");
+const {
+  INTERNAL_POLICY_RECORDS,
+  getActiveDisputeDeploymentName,
+  resolveActiveDisputeAliases,
+} = requireFromRepo("../../../deployments/activeDisputeStack.cjs");
+const internalPolicyRecords = /** @type {string[]} */ (INTERNAL_POLICY_RECORDS);
+/** @param {string} name */
+const isInternalDeploymentName = (name) =>
+  name.endsWith("OptIn") || internalPolicyRecords.includes(name);
+/** @param {unknown} value */
+const containsInternalDeploymentName = (value) => {
+  const serialized = JSON.stringify(value);
+  return (
+    serialized.includes("OptIn") ||
+    internalPolicyRecords.some((recordName) => serialized.includes(recordName))
+  );
+};
 const args = process.argv.slice(2);
 const disputeStackEvidence = JSON.parse(
   fs.readFileSync(
@@ -387,15 +402,13 @@ for (const {
   };
   if (!sameJson(disputeStack.exactAuthorizationSets, expectedAuthorizationSets))
     fail(`${name} dispute stack authorization sets differ from trusted evidence`);
-  if (JSON.stringify(disputeStack).includes("OptIn"))
-    fail(`${name} dispute stack metadata exposes an internal OptIn name`);
+  if (containsInternalDeploymentName(disputeStack))
+    fail(`${name} dispute stack metadata exposes an internal deployment name`);
   if (
-    Object.keys(rawOutput.contracts || {}).some((contractName) =>
-      contractName.endsWith("OptIn")
-    )
+    Object.keys(rawOutput.contracts || {}).some(isInternalDeploymentName)
   ) {
     fail(
-      `${name} canonical deployment output exposes an internal OptIn record`
+      `${name} canonical deployment output exposes an internal deployment record`
     );
   }
   const output = {
@@ -416,8 +429,8 @@ for (const {
 
   const contracts = Object.entries(addresses.contracts || {});
   if (contracts.length === 0) fail(`${name} package has no contract addresses`);
-  if (contracts.some(([contractName]) => contractName.endsWith("OptIn"))) {
-    fail(`${name} package addresses expose an internal OptIn record`);
+  if (contracts.some(([contractName]) => isInternalDeploymentName(contractName))) {
+    fail(`${name} package addresses expose an internal deployment record`);
   }
   for (const contractName of requiredNetworkContracts[name] || []) {
     const address = addresses.contracts?.[contractName];
