@@ -708,7 +708,11 @@ lane-36 policy and the fresh dispute policy while reusing the network's pinned `
 controller, authorizes only the fresh hook, applies non-zero risk windows only to PayPal, Venmo, and Cash
 App, and on Base initiates the two-step ownership transfers for the Safe to accept later. It is
 transaction-by-transaction resumable and leaves the active O3 hook and the dispute-registry writer set
-unchanged. `deployments/predecessorDisputeStack.ts` pins what the lane replaces per network in
+unchanged. The method-scoped policy is on by default for every payment method with a nonzero risk window
+(paypal, venmo, cashapp) and can be opted out per deposit payment method by the depositor; depositor
+opt-outs and taker stake deposits are allowed on the passive stack once its vault controller is
+initialized, and only lifecycle, lock, or claim activity invalidates the deploy-only preparation.
+`deployments/predecessorDisputeStack.ts` pins what the lane replaces per network in
 `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS`; `PREDECESSOR_DISPUTE_STACKS` keeps describing the predecessor of
 the currently selected stack until activation.
 
