@@ -123,15 +123,20 @@ Supported networks: `localhost`, `hardhat`, `base_staging`, `base`.
   (plain `Ownable`, so Base ownership moves in the deployment run itself,
   exactly as lane 29 did).
 - Existing record: assert the on-chain code matches the record's
-  `deployedBytecode` (immutable-zeroed when the record was built from the
-  current source) and reuse; never redeploy. Amended 2026-08-27 after the
-  PR #278 post-merge review: an executed record is compared against the
-  chain, not against the current build, because hardhat-deploy's
-  `solcInputHash` covers the entire solc input and any later Solidity edit
-  would otherwise make the lane's `skip` abort every untagged run. The
-  three-way record/artifact/chain check (`assertCanonicalDeployment`) is
-  reserved for lane 37's partial prefix, where deploying more contracts with
-  a different build must fail closed.
+  `deployedBytecode` and reuse; never redeploy. Amended 2026-08-27 after the
+  PR #278 post-merge review and a Codex finding on #280: an executed record
+  is compared against the chain, not against the current build, because
+  hardhat-deploy's `solcInputHash` covers the entire solc input and any later
+  Solidity edit would otherwise make the lane's `skip` abort every untagged
+  run. When the record was built from the current source the comparison
+  zeroes the artifact's exact `immutableReferences`; otherwise (the record
+  does not carry its immutable offsets) it is equality modulo immutable
+  placeholders — every byte that differs between record and chain must be a
+  `0x00` placeholder in the record — which needs no pin and no recompilation
+  and is strictly stronger than the exact-offset check. The three-way
+  record/artifact/chain check (`assertCanonicalDeployment`) is reserved for
+  lane 37's partial prefix, where deploying more contracts with a different
+  build must fail closed.
 - Live gating mirrors lane 34: `ENABLE_STAGING_METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT=true`
   or `ENABLE_BASE_METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT=true`. Without
   the flag the lane skips, except that a tagged run
