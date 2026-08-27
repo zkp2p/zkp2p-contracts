@@ -237,7 +237,10 @@ recorded in the sidecar; they hold no funds and no privileges):
   in both guards): registry `owner == Safe`; orchestrator `owner == Safe`,
   `escrowRegistry` / `paymentVerifierRegistry` / `relayerRegistry` ==
   pinned, `protocolFee == 0`, `protocolFeeRecipient == pinned`,
-  `allowMultipleIntents == false`, `OrchestratorRegistry.isOrchestrator(orchestrator)`;
+  `allowMultipleIntents == EXPECTED_LIVE[network].allowMultipleIntents` (pinned per
+  network: Base `true` since governance enabled it on 2026-08-21, Base staging
+  `false`; the guard's `TrustSurface` carries the pinned value),
+  `OrchestratorRegistry.isOrchestrator(orchestrator)`;
   fresh hook `orchestratorRegistry` / `whitelistPolicy` /
   `disputeProtectionPolicy` == pinned; `WhitelistPolicyMethodScoped` `owner
   == Safe` and `escrowRegistry` / `groupRegistry` / `orchestratorRegistry`
