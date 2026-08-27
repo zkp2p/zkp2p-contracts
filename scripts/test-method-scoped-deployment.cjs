@@ -292,6 +292,75 @@ test("lane 36 skips unsupported and unflagged live runs but tagged runs fail", a
   }
 });
 
+test("lane 36 resumes only an incomplete deployer-to-governance handover", async () => {
+  const network = "base";
+  const expected = lane36Module.EXPECTED_LIVE[network];
+  const policyAddress = "0x0000000000000000000000000000000000000100";
+  const orchestratorV2 = "0x0000000000000000000000000000000000000200";
+  const escrowV2 = "0x0000000000000000000000000000000000000300";
+  const stranger = "0x0000000000000000000000000000000000000400";
+  const artifact = await require("hardhat").deployments.getExtendedArtifact(
+    "WhitelistPolicy"
+  );
+  const existing = {
+    address: policyAddress,
+    deployedBytecode: artifact.deployedBytecode,
+    solcInputHash: artifact.solcInputHash,
+  };
+  let owner = expected.deployer;
+  const dependencies = new Map([
+    ["AddressGroupRegistry", { address: expected.addressGroupRegistry }],
+    ["EscrowRegistry", { address: expected.escrowRegistry }],
+    ["OrchestratorRegistry", { address: expected.orchestratorRegistry }],
+    ["OrchestratorV2", { address: orchestratorV2 }],
+    ["EscrowV2", { address: escrowV2 }],
+  ]);
+  const fakeHre = /** @type {any} */ ({
+    deployments: {
+      getNetworkName: () => network,
+      getOrNull: async () => existing,
+      /** @param {string} name */
+      get: async (name) => dependencies.get(name),
+      getExtendedArtifact: async () => artifact,
+    },
+    ethers: {
+      provider: {
+        getCode: async () => artifact.deployedBytecode,
+      },
+    },
+    getUnnamedAccounts: async () => [expected.deployer],
+  });
+  const originalGetContractAt = ethers.getContractAt;
+  /** @type {any} */ (ethers).getContractAt = async (
+    /** @type {string} */ name
+  ) => {
+    if (name === "OrchestratorRegistry") {
+      return { isOrchestrator: async () => true };
+    }
+    if (name === "EscrowRegistry") {
+      return { isWhitelistedEscrow: async () => true };
+    }
+    if (name === "WhitelistPolicy") {
+      return {
+        groupRegistry: async () => expected.addressGroupRegistry,
+        escrowRegistry: async () => expected.escrowRegistry,
+        orchestratorRegistry: async () => expected.orchestratorRegistry,
+        owner: async () => owner,
+      };
+    }
+    throw new Error(`Unexpected contract ${name}`);
+  };
+  try {
+    assert.equal(await skipLane36(fakeHre), false);
+    owner = expected.governance;
+    assert.equal(await skipLane36(fakeHre), true);
+    owner = stranger;
+    await assert.rejects(skipLane36(fakeHre), /owner drifted/);
+  } finally {
+    /** @type {any} */ (ethers).getContractAt = originalGetContractAt;
+  }
+});
+
 test("lane 36 and lane 37 share every common live dependency pin", () => {
   for (const network of /** @type {Array<"base" | "base_staging">} */ ([
     "base",
