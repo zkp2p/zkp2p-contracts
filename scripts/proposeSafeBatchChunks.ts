@@ -12,6 +12,7 @@ import {
   BASE_SAFE,
   MULTI_SEND_CALL_ONLY,
   MULTI_SEND_CALL_ONLY_RUNTIME_HASH,
+  decodeSafeSimulationEnvelope,
   encodeMultiSendCalldata,
   packMultiSendTransactions,
 } from "./simulate-dispute-opt-in-safe-batch";
@@ -25,6 +26,8 @@ export {
 
 export const BASE_CHAIN_ID = 8453;
 export const DEFAULT_MAX_GAS = "30000000";
+export const DEFAULT_CALL_OVERHEAD = "60000";
+export const DEFAULT_CHUNK_OVERHEAD = "100000";
 export const SAFE_TRANSACTION_SERVICE_URL =
   "https://api.safe.global/tx-service/base/api/v1";
 export const SAFE_UI_BASE_URL = "https://app.safe.global/transactions/tx";
@@ -51,6 +54,7 @@ export const SAFE_TX_TYPES: Record<
 const safeInterface = new ethers.utils.Interface([
   "function VERSION() view returns (string)",
   "function nonce() view returns (uint256)",
+  "function simulateAndRevert(address targetContract,bytes calldataPayload)",
 ]);
 const whitelistPolicyInterface = new ethers.utils.Interface(
   whitelistPolicyDeployment.abi
@@ -71,6 +75,7 @@ export type SafeTransaction = {
 
 export type PlannedSafeChunk = {
   calls: NormalizedSafeBatchTransaction[];
+  callEstimatedGas: string[];
   estimatedGas: string;
   safeTx: SafeTransaction;
   safeTxHash: string;
@@ -85,6 +90,8 @@ export type TransactionBuilderBatch = {
 export type CliOptions = {
   file: string;
   maxGas?: string;
+  callOverhead?: string;
+  chunkOverhead?: string;
   chunkCalls?: number;
   propose?: boolean;
   startNonce?: number;
@@ -94,11 +101,16 @@ export type CliOptions = {
 type ProviderLike = {
   getNetwork?(): Promise<{ chainId: number }>;
   getCode(address: string): Promise<string>;
-  call(transaction: { to: string; data: string }): Promise<string>;
+  call(transaction: {
+    from?: string;
+    to: string;
+    data: string;
+  }): Promise<string>;
   estimateGas(transaction: {
     from: string;
     to: string;
     data: string;
+    value: string;
   }): Promise<ethers.BigNumber>;
 };
 
@@ -160,6 +172,16 @@ function parsePositiveBigNumber(
 ): ethers.BigNumber {
   if (!/^[1-9][0-9]*$/.test(value)) {
     throw new Error(`${label} must be a positive integer`);
+  }
+  return ethers.BigNumber.from(value);
+}
+
+function parseNonnegativeBigNumber(
+  value: string,
+  label: string
+): ethers.BigNumber {
+  if (!/^(?:0|[1-9][0-9]*)$/.test(value)) {
+    throw new Error(`${label} must be a non-negative integer`);
   }
   return ethers.BigNumber.from(value);
 }
@@ -335,21 +357,56 @@ function formatEstimateError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-async function estimateChunkGas(
+async function estimateInnerCallGas(
   provider: ProviderLike,
-  calls: readonly SafeBatchTransactionInput[]
+  call: NormalizedSafeBatchTransaction,
+  index: number
 ): Promise<ethers.BigNumber> {
   try {
     return await provider.estimateGas({
       from: BASE_SAFE,
-      to: MULTI_SEND_CALL_ONLY,
-      data: encodeMultiSendCalldata(calls),
+      to: call.to,
+      data: call.data,
+      value: call.value,
     });
   } catch (error) {
     throw new Error(
-      `MultiSend simulation reverted: ${formatEstimateError(error)}`
+      `Inner call ${index + 1} gas estimation reverted: ${formatEstimateError(
+        error
+      )}`
     );
   }
+}
+
+async function simulateChunk(
+  provider: ProviderLike,
+  calls: readonly SafeBatchTransactionInput[]
+): Promise<void> {
+  const simulationCalldata = safeInterface.encodeFunctionData(
+    "simulateAndRevert",
+    [MULTI_SEND_CALL_ONLY, encodeMultiSendCalldata(calls)]
+  );
+  let envelope: string | undefined;
+  try {
+    envelope = await provider.call({
+      to: BASE_SAFE,
+      data: simulationCalldata,
+    });
+  } catch (error) {
+    envelope = extractRevertData(error);
+  }
+  if (!envelope || envelope === "0x") {
+    throw new Error(
+      "Safe chunk simulation did not return its deliberate revert envelope"
+    );
+  }
+  const result = decodeSafeSimulationEnvelope(envelope);
+  if (result.success) return;
+  const decoded = formatDecodedError(result.returnData);
+  throw new Error(
+    `Safe chunk simulation failed: ${decoded || "unknown revert"}; ` +
+      `revert data ${result.returnData}`
+  );
 }
 
 export async function planSafeBatchChunks(
@@ -357,6 +414,8 @@ export async function planSafeBatchChunks(
   provider: ProviderLike,
   options: {
     maxGas: ethers.BigNumber;
+    callOverhead?: ethers.BigNumber;
+    chunkOverhead?: ethers.BigNumber;
     chunkCalls?: number;
     startNonce: number;
   }
@@ -368,57 +427,82 @@ export async function planSafeBatchChunks(
   if (options.chunkCalls !== undefined)
     requirePositiveInteger(options.chunkCalls, "chunkCalls");
   requireNonnegativeInteger(options.startNonce, "startNonce");
+  const callOverhead =
+    options.callOverhead || ethers.BigNumber.from(DEFAULT_CALL_OVERHEAD);
+  const chunkOverhead =
+    options.chunkOverhead || ethers.BigNumber.from(DEFAULT_CHUNK_OVERHEAD);
+  if (callOverhead.lt(0)) throw new Error("callOverhead must be non-negative");
+  if (chunkOverhead.lt(0))
+    throw new Error("chunkOverhead must be non-negative");
 
   const normalized = normalizeSafeTransactions(transactions);
+  const callGasEstimates: ethers.BigNumber[] = [];
+  for (let index = 0; index < normalized.length; index += 1) {
+    callGasEstimates.push(
+      await estimateInnerCallGas(provider, normalized[index], index)
+    );
+  }
   const chunks: Array<{
     calls: NormalizedSafeBatchTransaction[];
+    callEstimatedGas: ethers.BigNumber[];
     estimatedGas: ethers.BigNumber;
   }> = [];
   let current: NormalizedSafeBatchTransaction[] = [];
+  let currentCallEstimatedGas: ethers.BigNumber[] = [];
   let currentGas: ethers.BigNumber | undefined;
 
   const finishCurrent = () => {
     if (current.length === 0 || currentGas === undefined) return;
-    chunks.push({ calls: current, estimatedGas: currentGas });
+    chunks.push({
+      calls: current,
+      callEstimatedGas: currentCallEstimatedGas,
+      estimatedGas: currentGas,
+    });
     current = [];
+    currentCallEstimatedGas = [];
     currentGas = undefined;
   };
 
-  for (const transaction of normalized) {
+  for (let index = 0; index < normalized.length; index += 1) {
+    const transaction = normalized[index];
+    const callGas = callGasEstimates[index];
+    const singleGas = chunkOverhead.add(callOverhead).add(callGas);
+    if (singleGas.gt(options.maxGas)) {
+      throw new Error(
+        `A single call requires ${singleGas.toString()} gas, exceeding max-gas ${options.maxGas.toString()}`
+      );
+    }
     if (
       options.chunkCalls !== undefined &&
       current.length >= options.chunkCalls
     ) {
       finishCurrent();
     }
-    const candidate = [...current, transaction];
-    const candidateGas = await estimateChunkGas(provider, candidate);
+    const candidateGas = (currentGas || chunkOverhead)
+      .add(callOverhead)
+      .add(callGas);
     if (candidateGas.gt(options.maxGas)) {
-      if (current.length === 0) {
-        throw new Error(
-          `A single call requires ${candidateGas.toString()} gas, exceeding max-gas ${options.maxGas.toString()}`
-        );
-      }
       finishCurrent();
-      const singleGas = await estimateChunkGas(provider, [transaction]);
-      if (singleGas.gt(options.maxGas)) {
-        throw new Error(
-          `A single call requires ${singleGas.toString()} gas, exceeding max-gas ${options.maxGas.toString()}`
-        );
-      }
       current = [transaction];
+      currentCallEstimatedGas = [callGas];
       currentGas = singleGas;
       continue;
     }
-    current = candidate;
+    current.push(transaction);
+    currentCallEstimatedGas.push(callGas);
     currentGas = candidateGas;
   }
   finishCurrent();
 
-  return chunks.map(({ calls, estimatedGas }, index) => {
+  for (const chunk of chunks) {
+    await simulateChunk(provider, chunk.calls);
+  }
+
+  return chunks.map(({ calls, callEstimatedGas, estimatedGas }, index) => {
     const safeTx = buildSafeTransaction(calls, options.startNonce + index);
     return {
       calls,
+      callEstimatedGas: callEstimatedGas.map((gas) => gas.toString()),
       estimatedGas: estimatedGas.toString(),
       safeTx,
       safeTxHash: safeTransactionHash(safeTx),
@@ -654,6 +738,8 @@ function describeInnerCall(
 function sidecarPayload(
   inputFile: string,
   maxGas: ethers.BigNumber,
+  callOverhead: ethers.BigNumber,
+  chunkOverhead: ethers.BigNumber,
   chunks: readonly PlannedSafeChunk[]
 ) {
   return {
@@ -662,14 +748,23 @@ function sidecarPayload(
     safe: BASE_SAFE,
     sourceFile: resolve(inputFile),
     maxGas: maxGas.toString(),
-    chunks: chunks.map(({ calls, estimatedGas, safeTx, safeTxHash }) => ({
-      safeTx,
-      safeTxHash,
-      estimatedGas,
-      callCount: calls.length,
-      firstCall: describeInnerCall(calls[0]),
-      lastCall: describeInnerCall(calls[calls.length - 1]),
-    })),
+    callOverhead: callOverhead.toString(),
+    chunkOverhead: chunkOverhead.toString(),
+    chunks: chunks.map(
+      ({ calls, callEstimatedGas, estimatedGas, safeTx, safeTxHash }) => ({
+        safeTx,
+        safeTxHash,
+        estimatedGas,
+        callCount: calls.length,
+        calls: calls.map((call, index) => ({
+          target: call.to,
+          selector: call.data.slice(0, 10),
+          estimatedGas: callEstimatedGas[index],
+        })),
+        firstCall: describeInnerCall(calls[0]),
+        lastCall: describeInnerCall(calls[calls.length - 1]),
+      })
+    ),
   };
 }
 
@@ -690,6 +785,14 @@ export async function runProposeSafeBatchChunks(
   const maxGas = parsePositiveBigNumber(
     options.maxGas || DEFAULT_MAX_GAS,
     "max-gas"
+  );
+  const callOverhead = parseNonnegativeBigNumber(
+    options.callOverhead || DEFAULT_CALL_OVERHEAD,
+    "call-overhead"
+  );
+  const chunkOverhead = parseNonnegativeBigNumber(
+    options.chunkOverhead || DEFAULT_CHUNK_OVERHEAD,
+    "chunk-overhead"
   );
   const chunkCalls =
     options.chunkCalls === undefined
@@ -756,6 +859,8 @@ export async function runProposeSafeBatchChunks(
   );
   const chunks = await planSafeBatchChunks(batch.transactions, provider, {
     maxGas,
+    callOverhead,
+    chunkOverhead,
     chunkCalls,
     startNonce,
   });
@@ -774,12 +879,19 @@ export async function runProposeSafeBatchChunks(
         `first=${describeInnerCall(chunk.calls[0])} ` +
         `last=${describeInnerCall(chunk.calls[chunk.calls.length - 1])}`
     );
+    chunk.calls.forEach((call, callIndex) => {
+      log(
+        `  Call ${callIndex + 1}: estimatedGas=${
+          chunk.callEstimatedGas[callIndex]
+        } ${describeInnerCall(call)}`
+      );
+    });
   });
   const sidecarFile = `${resolve(options.file)}.chunks.json`;
   writeFileSync(
     sidecarFile,
     `${JSON.stringify(
-      sidecarPayload(options.file, maxGas, chunks),
+      sidecarPayload(options.file, maxGas, callOverhead, chunkOverhead, chunks),
       null,
       2
     )}\n`,
@@ -844,6 +956,8 @@ export function parseCliArguments(argv: readonly string[]): CliOptions {
     if (
       argument !== "--file" &&
       argument !== "--max-gas" &&
+      argument !== "--call-overhead" &&
+      argument !== "--chunk-overhead" &&
       argument !== "--chunk-calls" &&
       argument !== "--start-nonce" &&
       argument !== "--origin"
@@ -857,6 +971,8 @@ export function parseCliArguments(argv: readonly string[]): CliOptions {
     index += 1;
     if (argument === "--file") options.file = value;
     if (argument === "--max-gas") options.maxGas = value;
+    if (argument === "--call-overhead") options.callOverhead = value;
+    if (argument === "--chunk-overhead") options.chunkOverhead = value;
     if (argument === "--chunk-calls") {
       options.chunkCalls = requirePositiveInteger(value, "chunk-calls");
     }

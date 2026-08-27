@@ -15,6 +15,7 @@ const {
 const {
   SAFE_TX_TYPES,
   loadTransactionBuilderFile,
+  parseCliArguments,
   planSafeBatchChunks,
   runProposeSafeBatchChunks,
   selectStartNonce,
@@ -29,6 +30,10 @@ const targetC = "0x3000000000000000000000000000000000000003";
 const safeInterface = new ethers.utils.Interface([
   "function VERSION() view returns (string)",
   "function nonce() view returns (uint256)",
+  "function simulateAndRevert(address targetContract,bytes calldataPayload)",
+]);
+const whitelistPolicyInterface = new ethers.utils.Interface([
+  "error EmptyArray()",
 ]);
 const multiSendInterface = new ethers.utils.Interface([
   "function multiSend(bytes transactions)",
@@ -93,8 +98,31 @@ function jsonResponse(status, value) {
   };
 }
 
-function fakeProvider(gasPerCall = 10, onChainNonce = 7) {
+function safeSimulationEnvelope(success, returnData = "0x") {
+  return ethers.utils.hexConcat([
+    ethers.utils.hexZeroPad(success ? "0x01" : "0x00", 32),
+    ethers.utils.hexZeroPad(
+      ethers.utils.hexlify(ethers.utils.arrayify(returnData).length),
+      32
+    ),
+    returnData,
+  ]);
+}
+
+function fakeProvider({
+  gasByTarget = {
+    [targetA.toLowerCase()]: 10,
+    [targetB.toLowerCase()]: 10,
+    [targetC.toLowerCase()]: 10,
+  },
+  onChainNonce = 7,
+  simulationReturnData = "0x",
+} = {}) {
+  let simulationCount = 0;
   return {
+    get simulationCount() {
+      return simulationCount;
+    },
     async getCode(address) {
       assert.equal(address.toLowerCase(), MULTI_SEND_CALL_ONLY.toLowerCase());
       return "0x01";
@@ -107,17 +135,39 @@ function fakeProvider(gasPerCall = 10, onChainNonce = 7) {
       if (transaction.data === safeInterface.getSighash("nonce")) {
         return safeInterface.encodeFunctionResult("nonce", [onChainNonce]);
       }
+      if (
+        transaction.data.startsWith(
+          safeInterface.getSighash("simulateAndRevert")
+        )
+      ) {
+        simulationCount += 1;
+        const [targetContract, multiSendCalldata] =
+          safeInterface.decodeFunctionData(
+            "simulateAndRevert",
+            transaction.data
+          );
+        assert.equal(
+          targetContract.toLowerCase(),
+          MULTI_SEND_CALL_ONLY.toLowerCase()
+        );
+        assert.ok(decodePackedTransactions(multiSendCalldata).length > 0);
+        return safeSimulationEnvelope(
+          simulationReturnData === "0x",
+          simulationReturnData
+        );
+      }
       throw new Error(`Unexpected provider call ${transaction.data}`);
     },
     async estimateGas(transaction) {
       assert.equal(transaction.from.toLowerCase(), BASE_SAFE.toLowerCase());
-      assert.equal(
-        transaction.to.toLowerCase(),
-        MULTI_SEND_CALL_ONLY.toLowerCase()
+      assert.equal(transaction.value, "0");
+      const gas = gasByTarget[transaction.to.toLowerCase()];
+      assert.notEqual(
+        gas,
+        undefined,
+        `Unexpected gas target ${transaction.to}`
       );
-      return ethers.BigNumber.from(
-        decodePackedTransactions(transaction.data).length * gasPerCall
-      );
+      return ethers.BigNumber.from(gas);
     },
   };
 }
@@ -212,8 +262,17 @@ test("greedy chunking respects gas and call caps while preserving order", async 
     call(targetB, "0xbbbbbbbb"),
     call(targetC, "0xcccccccc"),
   ];
-  const chunks = await planSafeBatchChunks(transactions, fakeProvider(10), {
-    maxGas: ethers.BigNumber.from(25),
+  const provider = fakeProvider({
+    gasByTarget: {
+      [targetA.toLowerCase()]: 10,
+      [targetB.toLowerCase()]: 20,
+      [targetC.toLowerCase()]: 30,
+    },
+  });
+  const chunks = await planSafeBatchChunks(transactions, provider, {
+    maxGas: ethers.BigNumber.from(50),
+    callOverhead: ethers.BigNumber.from(5),
+    chunkOverhead: ethers.BigNumber.from(10),
     chunkCalls: 2,
     startNonce: 11,
   });
@@ -224,7 +283,11 @@ test("greedy chunking respects gas and call caps while preserving order", async 
   );
   assert.deepEqual(
     chunks.map(({ estimatedGas }) => estimatedGas),
-    ["20", "10"]
+    ["50", "45"]
+  );
+  assert.deepEqual(
+    chunks.map(({ callEstimatedGas }) => callEstimatedGas),
+    [["10", "20"], ["30"]]
   );
   assert.deepEqual(
     chunks.map(({ safeTx }) => safeTx.nonce),
@@ -236,27 +299,36 @@ test("greedy chunking respects gas and call caps while preserving order", async 
     ),
     transactions.map(({ data }) => data)
   );
+  assert.equal(provider.simulationCount, 2);
 });
 
-test("a reverted candidate chunk is fatal", async () => {
-  const provider = fakeProvider();
-  const originalEstimateGas = provider.estimateGas;
-  provider.estimateGas = async (transaction) => {
-    if (decodePackedTransactions(transaction.data).length > 1) {
-      throw new Error("combined simulation failed");
-    }
-    return originalEstimateGas(transaction);
-  };
+test("a single call whose estimate plus overhead exceeds the budget is fatal", async () => {
+  await assert.rejects(
+    planSafeBatchChunks([call(targetA, "0xaaaaaaaa")], fakeProvider(), {
+      maxGas: ethers.BigNumber.from(160_009),
+      callOverhead: ethers.BigNumber.from(60_000),
+      chunkOverhead: ethers.BigNumber.from(100_000),
+      startNonce: 4,
+    }),
+    /single call requires 160010 gas, exceeding max-gas 160009/
+  );
+});
+
+test("a failed Safe simulation envelope is fatal and decodes the inner revert", async () => {
+  const revertData = whitelistPolicyInterface.encodeErrorResult("EmptyArray");
+  const provider = fakeProvider({ simulationReturnData: revertData });
   await assert.rejects(
     planSafeBatchChunks(
       [call(targetA, "0xaaaaaaaa"), call(targetB, "0xbbbbbbbb")],
       provider,
       {
-        maxGas: ethers.BigNumber.from(100),
+        maxGas: ethers.BigNumber.from(1_000_000),
+        callOverhead: ethers.BigNumber.from(60_000),
+        chunkOverhead: ethers.BigNumber.from(100_000),
         startNonce: 4,
       }
     ),
-    /MultiSend simulation reverted: combined simulation failed/
+    new RegExp(`Safe chunk simulation failed: EmptyArray\\(\\).*${revertData}`)
   );
 });
 
@@ -267,6 +339,8 @@ test("chunks use DELEGATECALL and preserve the canonical MultiSend encoding", as
   ];
   const [chunk] = await planSafeBatchChunks(transactions, fakeProvider(), {
     maxGas: ethers.BigNumber.from(100),
+    callOverhead: ethers.BigNumber.from(0),
+    chunkOverhead: ethers.BigNumber.from(0),
     startNonce: 4,
   });
 
@@ -303,24 +377,54 @@ test("nonce selection ignores stale queued proposals", () => {
   assert.equal(selectStartNonce(7, [{ nonce: 99 }], 12), 12);
 });
 
+test("CLI accepts configurable gas overheads", () => {
+  assert.deepEqual(
+    parseCliArguments([
+      "--file",
+      "batch.json",
+      "--call-overhead",
+      "123",
+      "--chunk-overhead",
+      "456",
+    ]),
+    {
+      file: "batch.json",
+      propose: false,
+      callOverhead: "123",
+      chunkOverhead: "456",
+    }
+  );
+});
+
 test("dry-run writes the plan and never posts", async () => {
   const posts = [];
   const { directory, file } = writeBuilder(
     builder([call(targetA, "0xaaaaaaaa"), call(targetB, "0xbbbbbbbb")])
   );
   try {
+    const logs = [];
     const result = await runProposeSafeBatchChunks(
-      { file, maxGas: "100", propose: false },
+      {
+        file,
+        maxGas: "100",
+        callOverhead: "0",
+        chunkOverhead: "0",
+        propose: false,
+      },
       {
         provider: fakeProvider(),
         fetch: serviceFetch({ posts }),
         env: { SAFE_PROPOSER_PRIVATE_KEY: PROPOSER_PRIVATE_KEY },
         multiSendRuntimeHash: ethers.utils.keccak256("0x01"),
-        log: () => {},
+        log: (message) => logs.push(message),
       }
     );
     assert.equal(posts.length, 0);
     assert.equal(result.chunks.length, 1);
+    assert.equal(
+      logs.filter((message) => message.includes("estimatedGas=10")).length,
+      2
+    );
     assert.equal(fs.existsSync(`${file}.chunks.json`), true);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
@@ -338,7 +442,14 @@ test("--propose posts signed Safe transactions in nonce order", async () => {
   );
   try {
     const result = await runProposeSafeBatchChunks(
-      { file, maxGas: "15", propose: true, origin: "node:test" },
+      {
+        file,
+        maxGas: "15",
+        callOverhead: "0",
+        chunkOverhead: "0",
+        propose: true,
+        origin: "node:test",
+      },
       {
         provider: fakeProvider(),
         fetch: serviceFetch({ posts }),
@@ -390,7 +501,13 @@ test("--propose refuses a duplicate queued Safe transaction hash", async () => {
   );
   try {
     const first = await runProposeSafeBatchChunks(
-      { file, maxGas: "100", propose: false },
+      {
+        file,
+        maxGas: "100",
+        callOverhead: "0",
+        chunkOverhead: "0",
+        propose: false,
+      },
       {
         provider: fakeProvider(),
         fetch: serviceFetch(),
@@ -401,7 +518,13 @@ test("--propose refuses a duplicate queued Safe transaction hash", async () => {
     );
     await assert.rejects(
       runProposeSafeBatchChunks(
-        { file, maxGas: "100", propose: true },
+        {
+          file,
+          maxGas: "100",
+          callOverhead: "0",
+          chunkOverhead: "0",
+          propose: true,
+        },
         {
           provider: fakeProvider(),
           fetch: serviceFetch({
@@ -429,7 +552,13 @@ test("--propose stops on the first failed service response and surfaces its body
   try {
     await assert.rejects(
       runProposeSafeBatchChunks(
-        { file, maxGas: "15", propose: true },
+        {
+          file,
+          maxGas: "15",
+          callOverhead: "0",
+          chunkOverhead: "0",
+          propose: true,
+        },
         {
           provider: fakeProvider(),
           fetch: serviceFetch({
