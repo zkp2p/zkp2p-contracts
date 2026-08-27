@@ -712,9 +712,11 @@ and `IntentLifecycleHookV1MethodScoped`, wiring the hook to the lane-36 policy a
 while reusing the network's pinned `DisputeVerifier`, `DisputeNullifierRegistry`, and — because `StakeVault`
 is unchanged and holds live taker stake — the predecessor `StakeVault` itself (`StakeVaultOptIn` on Base, the
 lane-32 vault on Base staging). The fresh policy becomes that vault's controller only through the vault's
-delayed two-step handover in the activation lane; a `StakeVaultMethodScoped` record exists on localhost only. Use `yarn deploy:dispute-method-scoped:base_staging` or
-`yarn deploy:dispute-method-scoped:base` with `ENABLE_STAGING_V3_DISPUTE_METHOD_SCOPED_DEPLOYMENT=true` or
-`ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_DEPLOYMENT=true`. The deploy-only run authorizes only the
+delayed two-step handover in the activation lane; a `StakeVaultMethodScoped` record exists on localhost only. The lane
+executed deploy-only on Base staging and Base on 2026-08-27 and is immutable and retired for live networks: the runner
+refuses its tags, and `deployments/activeDeploymentLanes/37_deploy_method_scoped_dispute_lifecycle_stack.ts` mounts it
+only for `localhost`/`hardhat`, where it still deploys the local method-scoped stack. The historical deploy-only run
+authorized only the
 fresh hook, applies non-zero risk windows only to PayPal, Venmo, and Cash App, and on Base initiates the
 policy's two-step ownership transfer for the Safe to accept later. It is
 transaction-by-transaction resumable and leaves the active O3 hook and the dispute-registry writer set
@@ -761,7 +763,7 @@ pinned after its first live transition, and the `active-dispute-stack.json`,
 `PREDECESSOR_DISPUTE_STACKS`, evidence, and `WhitelistPolicy` package-alias flips land in recording PRs
 after each execution. Before lane 38 can run:
 
-- [ ] Lanes 36 and 37 have executed deploy-only on Base staging and Base and their records are committed,
+- [x] Lanes 36 and 37 have executed deploy-only on Base staging and Base and their records are committed,
       and lane 37 is retired in `deployments/immutableDeploymentLanes.ts`.
 - [ ] `yarn whitelist:bootstrap` has populated `WhitelistPolicyMethodScoped` on each network.
 - [ ] `zkp2p-indexer` indexes the fresh addresses and the tuple-scoped `EnabledUpdated` /

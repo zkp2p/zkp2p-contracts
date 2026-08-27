@@ -12,6 +12,7 @@
     "hardhat.config.ts",
     "deployments/activeDisputeStack.cjs",
     "deployments/activeDeploymentLanes/30_deploy_v3_lifecycle_stack.ts",
+    "deployments/activeDeploymentLanes/37_deploy_method_scoped_dispute_lifecycle_stack.ts",
     "deployments/canonicalDeployment.ts",
     "deployments/immutableDeploymentLanes.ts",
     "deployments/managedDisputeLifecycleHook.ts",

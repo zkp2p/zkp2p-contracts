@@ -139,8 +139,11 @@ Current numbered lanes include:
 - `33`: IntentGuardian fee update;
 - `34`: opt-in dispute stack (immutable, retired; its Base trio is live);
 - `35`: Mercury payment method (Base staging only);
-- `36`: `WhitelistPolicyMethodScoped` (deploy-only);
-- `37`: method-scoped dispute lifecycle stack (deploy-only);
+- `36`: `WhitelistPolicyMethodScoped` (immutable, executed on both networks,
+  still mounted behind its canonical-record skip);
+- `37`: method-scoped dispute lifecycle stack (immutable, executed on both
+  networks; retired on live networks, mounted through a localhost-only
+  wrapper);
 - `38`: method-scoped dispute activation (tag-only; staging EOA steps, two
   guarded Base Safe batches).
 

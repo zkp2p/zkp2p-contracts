@@ -15,6 +15,7 @@ moduleAlias.addAlias("@utils", process.cwd() + "/utils");
 const assert = require("node:assert/strict");
 const { createHash } = require("node:crypto");
 const {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -327,10 +328,16 @@ function emptyDeploymentHre(network) {
   });
 }
 
-test("immutable lanes 29 and 34 match their exact pinned source digests", () => {
+test("immutable deployment lanes match their exact pinned source digests", () => {
   const lane29 = IMMUTABLE_DEPLOYMENT_LANES["29_deploy_whitelist_policy.ts"];
   const lane34 =
     IMMUTABLE_DEPLOYMENT_LANES["34_deploy_opt_in_dispute_lifecycle_stack.ts"];
+  const lane36 =
+    IMMUTABLE_DEPLOYMENT_LANES["36_deploy_method_scoped_whitelist_policy.ts"];
+  const lane37 =
+    IMMUTABLE_DEPLOYMENT_LANES[
+      "37_deploy_method_scoped_dispute_lifecycle_stack.ts"
+    ];
   assert.deepEqual(
     {
       sha256: lane29.sha256,
@@ -369,13 +376,55 @@ test("immutable lanes 29 and 34 match their exact pinned source digests", () => 
       retired: true,
     }
   );
+  assert.deepEqual(
+    {
+      sha256: lane36.sha256,
+      actual: sha256(
+        join(
+          repositoryRoot,
+          "deploy",
+          "36_deploy_method_scoped_whitelist_policy.ts"
+        )
+      ),
+      activeSource: lane36.activeSource,
+      retired: lane36.retired,
+    },
+    {
+      sha256:
+        "3bc01ba3e308a2d9cbaa58a95a7094c5ed2116df103ff6fbb997962cc9240fde",
+      actual:
+        "3bc01ba3e308a2d9cbaa58a95a7094c5ed2116df103ff6fbb997962cc9240fde",
+      activeSource: undefined,
+      retired: false,
+    }
+  );
+  assert.deepEqual(
+    {
+      sha256: lane37.sha256,
+      actual: sha256(
+        join(
+          repositoryRoot,
+          "deploy",
+          "37_deploy_method_scoped_dispute_lifecycle_stack.ts"
+        )
+      ),
+      activeSource: lane37.activeSource,
+      retired: lane37.retired,
+    },
+    {
+      sha256:
+        "fb19ffe1724d34d95097bddc28d0068218e06346ff1e5ea5c4a6aedd7d8a40c6",
+      actual:
+        "fb19ffe1724d34d95097bddc28d0068218e06346ff1e5ea5c4a6aedd7d8a40c6",
+      activeSource:
+        "deployments/activeDeploymentLanes/37_deploy_method_scoped_dispute_lifecycle_stack.ts",
+      retired: true,
+    }
+  );
   assertImmutableDeploymentLanes(repositoryRoot);
 });
 
-for (const filename of [
-  "29_deploy_whitelist_policy.ts",
-  "34_deploy_opt_in_dispute_lifecycle_stack.ts",
-]) {
+for (const filename of Object.keys(IMMUTABLE_DEPLOYMENT_LANES)) {
   test(`immutable lane validation names a mutated ${filename}`, () => {
     const fixtureRoot = immutableFixture(filename);
     try {
@@ -408,7 +457,6 @@ test("active selection mounts successor lanes and excludes retired history", () 
   );
   for (const filename of [
     "36_deploy_method_scoped_whitelist_policy.ts",
-    "37_deploy_method_scoped_dispute_lifecycle_stack.ts",
     "32_deploy_deposit_creation_guard.ts",
   ]) {
     assert.equal(
@@ -416,6 +464,13 @@ test("active selection mounts successor lanes and excludes retired history", () 
       join(repositoryRoot, "deploy", filename)
     );
   }
+  assert.equal(
+    byName.get("37_deploy_method_scoped_dispute_lifecycle_stack.ts"),
+    join(
+      repositoryRoot,
+      "deployments/activeDeploymentLanes/37_deploy_method_scoped_dispute_lifecycle_stack.ts"
+    )
+  );
   assert.equal(
     byName.has("32_deploy_and_activate_dispute_lifecycle_stack.ts"),
     false
@@ -426,12 +481,14 @@ test("active selection mounts successor lanes and excludes retired history", () 
   );
 });
 
-test("deployment tags reject retired history and accept lanes 36 and 37", () => {
+test("deployment tags reject retired history and lane 37 but accept lane 36", () => {
   for (const tag of [
     "32_deploy_and_activate_dispute_lifecycle_stack",
     "V3DisputeLifecycleStack",
     "34_deploy_opt_in_dispute_lifecycle_stack",
     "V3DisputeOptInStack",
+    "37_deploy_method_scoped_dispute_lifecycle_stack",
+    "V3DisputeMethodScopedStack",
   ]) {
     assert.throws(() => assertSupportedDeploymentTag(tag), /Refusing retired/);
   }
@@ -446,10 +503,44 @@ test("deployment tags reject retired history and accept lanes 36 and 37", () => 
     assertSupportedDeploymentTag("36_deploy_method_scoped_whitelist_policy")
   );
   assert.doesNotThrow(() =>
-    assertSupportedDeploymentTag(
-      "37_deploy_method_scoped_dispute_lifecycle_stack"
-    )
+    assertSupportedDeploymentTag("MethodScopedWhitelistPolicy")
   );
+});
+
+test("lane 37 wrapper delegates only on local networks", async () => {
+  const wrapperPath = join(
+    repositoryRoot,
+    "deployments/activeDeploymentLanes/37_deploy_method_scoped_dispute_lifecycle_stack.ts"
+  );
+  assert.equal(existsSync(wrapperPath), true, "lane 37 wrapper must exist");
+  const historicalSkip = lane37Module.default.skip;
+  let historicalSkipCalls = 0;
+  lane37Module.default.skip = async () => {
+    historicalSkipCalls += 1;
+    return false;
+  };
+  try {
+    const lane37Wrapper = require(wrapperPath).default;
+    for (const network of ["base", "base_staging", "unknown"]) {
+      assert.equal(await lane37Wrapper.skip(emptyDeploymentHre(network)), true);
+    }
+    assert.equal(historicalSkipCalls, 0);
+    for (const network of ["localhost", "hardhat"]) {
+      assert.equal(
+        await lane37Wrapper.skip(emptyDeploymentHre(network)),
+        false
+      );
+    }
+    assert.equal(historicalSkipCalls, 2);
+    await assert.rejects(
+      lane37Wrapper(emptyDeploymentHre("base")),
+      /Lane 37 is retired on live networks; local networks only/
+    );
+    assert.deepEqual(lane37Wrapper.tags, lane37Module.default.tags);
+    assert.deepEqual(lane37Wrapper.dependencies, []);
+  } finally {
+    lane37Module.default.skip = historicalSkip;
+  }
 });
 
 test("lane 36 exports the method-scoped whitelist identity", () => {
@@ -1230,8 +1321,6 @@ test("summary and package wiring expose only the current deployment lanes", () =
   for (const script of [
     "deploy:method-scoped-policy:base_staging",
     "deploy:method-scoped-policy:base",
-    "deploy:dispute-method-scoped:base_staging",
-    "deploy:dispute-method-scoped:base",
     "verify:method-scoped:base_staging",
     "verify:method-scoped:base",
   ]) {
@@ -1241,6 +1330,16 @@ test("summary and package wiring expose only the current deployment lanes", () =
       ),
       "string",
       script
+    );
+  }
+  for (const script of [
+    "deploy:dispute-method-scoped:base_staging",
+    "deploy:dispute-method-scoped:base",
+  ]) {
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(packageJson.scripts, script),
+      false,
+      `${script} must be removed`
     );
   }
   assert.equal(

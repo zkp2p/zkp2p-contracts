@@ -42,7 +42,11 @@
   every supported run, and rejects both of its tags. Its Safe simulation and verification scripts remain as tooling
   for that executed history. The Base `*OptIn` trio is the live dispute stack until a later activation lane replaces
   it; the Base-staging `*OptIn` trio is deployed but was never activated.
-- Lanes `36` and `37` are the current, deploy-only successors for the payment-method-scoped policies. Lane `36`
+- Lanes `36` and `37` executed deploy-only on Base staging and Base on 2026-08-27 and are immutable (pinned in
+  `deployments/immutableDeploymentLanes.ts`). Lane `36` stays mounted behind its canonical-record skip; lane `37` is
+  retired for live networks (its preflight requires the predecessor hook, which lane 38 replaces) and is mounted through
+  `deployments/activeDeploymentLanes/37_…ts`, a wrapper that delegates to the pinned source only on `localhost`/`hardhat`
+  so local deployments keep the method-scoped stack; its tags are refused by the runner. Lane `36`
   deploys `WhitelistPolicyMethodScoped`; lane `37` deploys `DisputeProtectionPolicyMethodScoped` and
   `IntentLifecycleHookV1MethodScoped` against the lane-36 policy, the network's pinned verifier and dispute
   registry, and the pinned predecessor `StakeVault`, which is reused (controller rotation happens in the activation
