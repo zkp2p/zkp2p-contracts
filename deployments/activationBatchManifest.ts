@@ -205,6 +205,7 @@ function assertTrustSurface(value: unknown): void {
     "paymentVerifierRegistry",
     "relayerRegistry",
     "protocolFeeRecipient",
+    "allowMultipleIntents",
     "freshHook",
     "whitelistPolicy",
     "groupRegistry",
@@ -221,9 +222,18 @@ function assertTrustSurface(value: unknown): void {
   ];
   assertKeys(value, keys, "trustSurface");
   for (const key of keys.filter(
-    (key) => !["witnesses", "paymentMethods", "riskWindows"].includes(key)
+    (key) =>
+      ![
+        "allowMultipleIntents",
+        "witnesses",
+        "paymentMethods",
+        "riskWindows",
+      ].includes(key)
   )) {
     assertAddress(value[key], `trustSurface.${key}`);
+  }
+  if (typeof value.allowMultipleIntents !== "boolean") {
+    throw new Error("Invalid trustSurface.allowMultipleIntents");
   }
   assertStringArray(value.witnesses, assertAddress, "trustSurface.witnesses");
   assertStringArray(

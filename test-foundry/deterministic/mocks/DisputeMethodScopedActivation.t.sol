@@ -148,6 +148,12 @@ contract DisputeMethodScopedActivationTest is OrchestratorV3Fixture {
         new DisputeMethodScopedRotationGuard(_surface(), false, address(this)).assertReady();
     }
 
+    function test_RotationGuardPassesWhenAllowMultipleIntentsIsPinnedTrue() public {
+        vm.prank(safe);
+        orchestrator.setAllowMultipleIntents(true);
+        new DisputeMethodScopedRotationGuard(_surface(), true, address(this)).assertReady();
+    }
+
     function test_RotationGuardRejectsRegistryOwner() public {
         vm.prank(safe);
         disputeRegistry.transferOwnership(other);
@@ -223,10 +229,11 @@ contract DisputeMethodScopedActivationTest is OrchestratorV3Fixture {
     }
 
     function test_RotationGuardRejectsOrchestratorAllowMultipleIntents() public {
+        TrustSurface memory surface = _surface();
         vm.prank(safe);
-        orchestrator.setAllowMultipleIntents(true);
+        orchestrator.setAllowMultipleIntents(!surface.allowMultipleIntents);
         _expectRotationError(
-            _surface(), DisputeMethodScopedTrustSurfaceChecks.OrchestratorAllowMultipleIntentsMismatch.selector, true
+            surface, DisputeMethodScopedTrustSurfaceChecks.OrchestratorAllowMultipleIntentsMismatch.selector, true
         );
     }
 
@@ -637,14 +644,14 @@ contract DisputeMethodScopedActivationTest is OrchestratorV3Fixture {
 
     function test_CutoverGuardRejectsTrustSurfaceDrift() public {
         _prepareCutover(true);
+        TrustSurface memory surface = _surface();
         vm.prank(safe);
-        orchestrator.setAllowMultipleIntents(true);
-        _expectCutoverError(
-            _intentHashes(INTENT_HASH),
-            _inventory(),
-            escrow.depositCounter(),
-            DisputeMethodScopedTrustSurfaceChecks.OrchestratorAllowMultipleIntentsMismatch.selector
+        orchestrator.setAllowMultipleIntents(!surface.allowMultipleIntents);
+        DisputeMethodScopedCutoverGuard guard = new DisputeMethodScopedCutoverGuard(
+            surface, _intentHashes(INTENT_HASH), _inventory(), address(escrow), escrow.depositCounter()
         );
+        vm.expectPartialRevert(DisputeMethodScopedTrustSurfaceChecks.OrchestratorAllowMultipleIntentsMismatch.selector);
+        guard.assertReady();
     }
 
     function test_RotationPostconditionPassesWithoutWarpBetweenCalls() public {
@@ -748,9 +755,10 @@ contract DisputeMethodScopedActivationTest is OrchestratorV3Fixture {
     function test_CutoverPostconditionRejectsTrustSurfaceDrift() public {
         _prepareCutover(true);
         _executeCutover();
-        vm.prank(safe);
-        orchestrator.setAllowMultipleIntents(true);
         DisputeMethodScopedCutoverPostcondition postcondition = new DisputeMethodScopedCutoverPostcondition(_surface());
+        TrustSurface memory surface = _surface();
+        vm.prank(safe);
+        orchestrator.setAllowMultipleIntents(!surface.allowMultipleIntents);
         vm.expectPartialRevert(DisputeMethodScopedTrustSurfaceChecks.OrchestratorAllowMultipleIntentsMismatch.selector);
         postcondition.assertPostconditions();
     }
@@ -764,6 +772,7 @@ contract DisputeMethodScopedActivationTest is OrchestratorV3Fixture {
         surface.paymentVerifierRegistry = address(paymentVerifierRegistry);
         surface.relayerRegistry = address(relayerRegistry);
         surface.protocolFeeRecipient = protocolFeeRecipient;
+        surface.allowMultipleIntents = orchestrator.allowMultipleIntents();
         surface.freshHook = address(freshHook);
         surface.whitelistPolicy = address(whitelistPolicy);
         surface.groupRegistry = address(groupRegistry);

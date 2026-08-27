@@ -97,6 +97,7 @@ function expected(network = "base") {
     network,
     governance: network === "base" ? addresses.safe : addresses.deployer,
     deployer: addresses.deployer,
+    allowMultipleIntents: network === "base",
     addresses,
     riskWindows: { [METHOD_A]: "86400", [METHOD_B]: "172800" },
     witnesses: [address(31), address(32)],
@@ -179,7 +180,7 @@ function snapshot(network = "base") {
       relayerRegistry: addresses.relayerRegistry,
       protocolFee: "0",
       protocolFeeRecipient: addresses.protocolFeeRecipient,
-      allowMultipleIntents: false,
+      allowMultipleIntents: wanted.allowMultipleIntents,
       registered: true,
     },
     freshHook: {
@@ -707,6 +708,7 @@ test("buildTrustSurface maps addresses and preserves payment method and witness 
     paymentVerifierRegistry: addresses.paymentVerifierRegistry,
     relayerRegistry: addresses.relayerRegistry,
     protocolFeeRecipient: addresses.protocolFeeRecipient,
+    allowMultipleIntents: true,
     freshHook: addresses.freshHook,
     whitelistPolicy: addresses.whitelistPolicy,
     groupRegistry: addresses.groupRegistry,
@@ -947,6 +949,60 @@ test("manifest validation covers exact schema, transaction digest, full snapshot
   assert.throws(
     () => validateActivationBatchManifest(extra),
     /Invalid activation Safe batch manifest/
+  );
+  const missingAllowMultipleIntents = /** @type {any} */ (
+    structuredClone(manifest)
+  );
+  delete missingAllowMultipleIntents.trustSurface.allowMultipleIntents;
+  assert.throws(
+    () => validateActivationBatchManifest(missingAllowMultipleIntents),
+    /Invalid activation Safe batch manifest/
+  );
+});
+
+test("guard constructor tuple pins allowMultipleIntents in the compiled ABI order", () => {
+  const {
+    deriveActivationConstructorArgs,
+  } = require("./verify-method-scoped-safe-batch.ts");
+  const manifest = manifestFixture();
+  const artifact = require("../artifacts/contracts/mocks/DisputeMethodScopedRotationGuard.sol/DisputeMethodScopedRotationGuard.json");
+  const constructor = /** @type {any} */ (
+    artifact.abi.find((entry) => entry.type === "constructor")
+  );
+  assert.ok(constructor);
+  assert.deepEqual(
+    constructor.inputs[0].components.map(
+      (/** @type {{ name: string }} */ component) => component.name
+    ),
+    [
+      "safe",
+      "disputeRegistry",
+      "orchestrator",
+      "orchestratorRegistry",
+      "escrowRegistry",
+      "paymentVerifierRegistry",
+      "relayerRegistry",
+      "protocolFeeRecipient",
+      "allowMultipleIntents",
+      "freshHook",
+      "whitelistPolicy",
+      "groupRegistry",
+      "attestationVerifier",
+      "witnesses",
+      "disputeVerifier",
+      "nullifierRegistryV2",
+      "predecessorPolicy",
+      "freshPolicy",
+      "vault",
+      "predecessorHook",
+      "paymentMethods",
+      "riskWindows",
+    ]
+  );
+  assert.doesNotThrow(() =>
+    new utils.Interface(artifact.abi).encodeDeploy(
+      deriveActivationConstructorArgs(manifest, "guard")
+    )
   );
 });
 
@@ -1519,7 +1575,7 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
       relayerRegistry: live.relayerRegistry,
       protocolFee: BigNumber.from(0),
       protocolFeeRecipient: live.protocolFeeRecipient,
-      allowMultipleIntents: false,
+      allowMultipleIntents: live.allowMultipleIntents,
     })
   );
   contracts.set(

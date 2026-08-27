@@ -103,6 +103,7 @@ function trustSurfaceTuple(surface: TrustSurfaceInput): unknown[] {
     surface.paymentVerifierRegistry,
     surface.relayerRegistry,
     surface.protocolFeeRecipient,
+    surface.allowMultipleIntents,
     surface.freshHook,
     surface.whitelistPolicy,
     surface.groupRegistry,

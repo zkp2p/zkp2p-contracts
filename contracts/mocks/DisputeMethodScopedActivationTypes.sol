@@ -11,6 +11,7 @@ struct TrustSurface {
     address paymentVerifierRegistry;
     address relayerRegistry;
     address protocolFeeRecipient;
+    bool allowMultipleIntents;
     address freshHook;
     address whitelistPolicy;
     address groupRegistry;
@@ -214,7 +215,9 @@ abstract contract DisputeMethodScopedTrustSurfaceChecks {
             revert OrchestratorProtocolFeeRecipientMismatch(actualAddress);
         }
         actualBool = targetOrchestrator.allowMultipleIntents();
-        if (actualBool) revert OrchestratorAllowMultipleIntentsMismatch(actualBool);
+        if (actualBool != expected.allowMultipleIntents) {
+            revert OrchestratorAllowMultipleIntentsMismatch(actualBool);
+        }
         actualBool =
             IActivationOrchestratorRegistry(expected.orchestratorRegistry).isOrchestrator(expected.orchestrator);
         if (!actualBool) revert OrchestratorRegistrationMismatch(actualBool);
