@@ -28,6 +28,7 @@ const {
   validateManagedDisputeHookSnapshot,
 } = require("../deployments/managedDisputeLifecycleHook.ts");
 const {
+  findPinnedLifecycleHookRuntimeHash,
   PREDECESSOR_DISPUTE_STACKS,
 } = require("../deployments/predecessorDisputeStack.ts");
 const {
@@ -72,6 +73,7 @@ async function fixture() {
   await (await whitelistPolicy.transferOwnership(safe)).wait();
   await (await orchestratorRegistry.transferOwnership(safe)).wait();
 
+  /** @type {Map<string, any>} */
   const deployments = new Map([
     ["AddressGroupRegistry", { address: addressGroupRegistry.address }],
     ["EscrowRegistry", { address: escrowRegistry.address }],
@@ -237,7 +239,7 @@ async function installManagedHookState(state, networkName, options) {
       : ethers.utils.keccak256(await ethers.provider.getCode(currentHook));
   }
   if (options.kind === "successor") {
-    /** @type {{ address: string, args: string[], deployedBytecode?: string }} */
+    /** @type {{ address: string, args: string[], deployedBytecode?: string, solcInputHash?: string }} */
     const successor = {
       address: currentHook,
       args: [orchestratorRegistry.address, successorPolicy],
@@ -246,6 +248,7 @@ async function installManagedHookState(state, networkName, options) {
       const artifact = await state.fakeHre.deployments.getExtendedArtifact(
         "IntentLifecycleHookV1"
       );
+      successor.solcInputHash = artifact.solcInputHash;
       successor.deployedBytecode = options.corruptSuccessorBytecode
         ? `0x${
             artifact.deployedBytecode.slice(2, 4) === "00" ? "01" : "00"
@@ -542,6 +545,87 @@ async function run() {
       managed.restore();
     }
     process.stdout.write(rejected ? "0x01" : "0x00");
+    return;
+  }
+
+  if (scenario === "managed-hook-historical-successor") {
+    const historicalHookAddress = "0x71467dCac3B50eeED5A485aC6a70f27B1EAC1970";
+    const pinnedRuntimeCodeHash =
+      "0x35789014e608a248f3244b61210fa259fee3566c33f50fd0e3fa1f5ae22e370b";
+    const historicalDeployment = require("../deployments/base/IntentLifecycleHookV1OptIn.json");
+    let passed =
+      findPinnedLifecycleHookRuntimeHash("base", historicalHookAddress) ===
+        pinnedRuntimeCodeHash &&
+      ethers.utils.keccak256(historicalDeployment.deployedBytecode) !==
+        pinnedRuntimeCodeHash;
+
+    const historicalState = await fixture();
+    const historicalOrchestrator = await deployContract("OrchestratorV3", [
+      historicalState.deployer,
+      historicalState.network.chainId,
+      (await historicalState.fakeHre.deployments.get("EscrowRegistry")).address,
+      (
+        await historicalState.fakeHre.deployments.get("PaymentVerifierRegistry")
+      ).address,
+      (
+        await historicalState.fakeHre.deployments.get("RelayerRegistry")
+      ).address,
+      ORCHESTRATOR_V3_PROTOCOL_FEE.base,
+      ORCHESTRATOR_V3_PROTOCOL_FEE_RECIPIENT.base,
+    ]);
+    await ethers.provider.send("hardhat_setCode", [
+      historicalHookAddress,
+      historicalDeployment.deployedBytecode,
+    ]);
+    await (
+      await historicalOrchestrator.setLifecycleHook(historicalHookAddress)
+    ).wait();
+    historicalState.deployments.set("OrchestratorV3", {
+      address: historicalOrchestrator.address,
+    });
+    historicalState.deployments.set("IntentLifecycleHookV1OptIn", {
+      address: historicalDeployment.address,
+      args: historicalDeployment.args,
+      deployedBytecode: historicalDeployment.deployedBytecode,
+      solcInputHash: historicalDeployment.solcInputHash,
+    });
+    historicalState.deployments.set("WhitelistPolicyMethodScoped", {
+      address: historicalDeployment.args[1],
+    });
+    try {
+      await guardManagedDisputeLifecycleHook(historicalState.fakeHre);
+      passed = false;
+    } catch (error) {
+      passed =
+        passed &&
+        error instanceof Error &&
+        error.message.includes("runtime bytecode mismatch");
+    }
+
+    const foreignState = await fixture();
+    const foreign = await installManagedHookState(foreignState, "base", {
+      kind: "successor",
+    });
+    const successorName = getActiveDisputeDeploymentName(
+      "base",
+      "IntentLifecycleHookV1"
+    );
+    const foreignRecord = foreignState.deployments.get(successorName);
+    if (!foreignRecord) throw new Error("Missing foreign successor fixture");
+    foreignRecord.solcInputHash = "foreign-source";
+    try {
+      await guardManagedDisputeLifecycleHook(foreignState.fakeHre);
+      passed = false;
+    } catch (error) {
+      passed =
+        passed &&
+        error instanceof Error &&
+        error.message.includes("has no pinned runtime hash");
+    } finally {
+      foreign.restore();
+    }
+
+    process.stdout.write(passed ? "0x01" : "0x00");
     return;
   }
 
