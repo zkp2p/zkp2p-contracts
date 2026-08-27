@@ -88,6 +88,34 @@ const addresses = {
   stakeToken: address(21),
 };
 
+test("bounded concurrency preserves input order", async () => {
+  const {
+    mapWithConcurrency,
+  } = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const provider = {
+    /** @param {number} value */
+    read: async (value) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setImmediate(resolve));
+      inFlight -= 1;
+      return value * 2;
+    },
+  };
+  const items = [5, 4, 3, 2, 1];
+
+  const concurrent = await mapWithConcurrency(items, 3, provider.read);
+  assert.equal(maxInFlight, 3);
+  assert.deepEqual(concurrent, [10, 8, 6, 4, 2]);
+
+  maxInFlight = 0;
+  const sequential = await mapWithConcurrency(items, 1, provider.read);
+  assert.equal(maxInFlight, 1);
+  assert.deepEqual(concurrent, sequential);
+});
+
 /**
  * @param {import("../deployments/methodScopedActivation").ActivationNetwork} network
  * @returns {import("../deployments/methodScopedActivation").ExpectedActivationState}
@@ -1392,7 +1420,7 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
   const unlistedMethod = hash(705);
   /** @type {string[]} */
   const successorEnabledReads = [];
-  const intentHash = hash(700);
+  const intentHashes = [hash(700), hash(706), hash(707)];
   const predecessorInterface = new utils.Interface(predecessorRecord.abi);
   const successorInterface = new utils.Interface(compiledPolicy.abi);
 
@@ -1424,7 +1452,7 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
       predecessorInterface,
       "DisputeProtectionIntentOpened",
       [
-        intentHash,
+        intentHashes[0],
         address(701),
         address(702),
         address(703),
@@ -1435,6 +1463,38 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
       predecessor.contracts.DisputeProtectionPolicy.address,
       120,
       1
+    ),
+    rawLog(
+      predecessorInterface,
+      "DisputeProtectionIntentOpened",
+      [
+        intentHashes[1],
+        address(701),
+        address(702),
+        address(703),
+        listedMethod,
+        "5",
+        "100",
+      ],
+      predecessor.contracts.DisputeProtectionPolicy.address,
+      121,
+      7
+    ),
+    rawLog(
+      predecessorInterface,
+      "DisputeProtectionIntentOpened",
+      [
+        intentHashes[2],
+        address(701),
+        address(702),
+        address(703),
+        listedMethod,
+        "5",
+        "100",
+      ],
+      predecessor.contracts.DisputeProtectionPolicy.address,
+      122,
+      8
     ),
     rawLog(
       successorInterface,
@@ -1482,6 +1542,10 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
     successorInterface.getEventTopic("DisputeProtectionEnabledUpdated")
   );
 
+  const trackedMethods = new Set(["getDeposit", "getDisputeProtectionIntent"]);
+  /** @type {any} */
+  let provider;
+
   /** @param {Record<string, unknown>} methods */
   const taggedContract = (methods) =>
     new Proxy(
@@ -1495,9 +1559,11 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
             const override = args.at(-1);
             assert.deepEqual(override, { blockTag });
             const value = methods[property];
-            return typeof value === "function"
-              ? value(...args.slice(0, -1))
-              : value;
+            const readArgs = args.slice(0, -1);
+            if (trackedMethods.has(property)) {
+              await provider.recordTargetRead(property, String(readArgs[0]));
+            }
+            return typeof value === "function" ? value(...readArgs) : value;
           };
         },
       }
@@ -1532,7 +1598,7 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
       disputeVerifier: predecessor.contracts.DisputeVerifier.address,
       disputeNullifierRegistry:
         predecessor.contracts.DisputeNullifierRegistry.address,
-      getDisputeProtectionIntent: { status: 4 },
+      getDisputeProtectionIntent: () => ({ status: 4 }),
     })
   );
   contracts.set(
@@ -1554,7 +1620,7 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
       pendingControllerValidAt: BigNumber.from(0),
       controllerChangeDelay: BigNumber.from(172800),
       stakeToken: live.stakeToken,
-      locks: [address(701), BigNumber.from(0), BigNumber.from(0)],
+      locks: () => [address(701), BigNumber.from(0), BigNumber.from(0)],
     })
   );
   contracts.set(
@@ -1610,12 +1676,13 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
   contracts.set(
     escrow.toLowerCase(),
     taggedContract({
-      depositCounter: BigNumber.from(1),
-      getDeposit: {
-        depositor: address(900),
+      depositCounter: BigNumber.from(4),
+      /** @param {BigNumber} depositId */
+      getDeposit: (depositId) => ({
+        depositor: address(900 + depositId.toNumber()),
         token: live.stakeToken,
-      },
-      getDepositPaymentMethods: [listedMethod, unlistedMethod],
+      }),
+      getDepositPaymentMethods: () => [listedMethod, unlistedMethod],
     })
   );
 
@@ -1644,7 +1711,26 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
   };
   /** @type {any[]} */
   const logQueries = [];
-  const provider = {
+  provider = {
+    targetReadsInFlight: 0,
+    maxTargetReadsInFlight: 0,
+    targetReadStarts: [],
+    resetTargetReads() {
+      this.targetReadsInFlight = 0;
+      this.maxTargetReadsInFlight = 0;
+      this.targetReadStarts = [];
+    },
+    /** @param {string} method @param {string} id */
+    async recordTargetRead(method, id) {
+      this.targetReadsInFlight += 1;
+      this.maxTargetReadsInFlight = Math.max(
+        this.maxTargetReadsInFlight,
+        this.targetReadsInFlight
+      );
+      this.targetReadStarts.push({ method, id });
+      await new Promise((resolve) => setImmediate(resolve));
+      this.targetReadsInFlight -= 1;
+    },
     /** @param {string | number} requestedTag */
     getBlock: async (requestedTag) => {
       assert.equal(requestedTag, blockTag);
@@ -1694,13 +1780,55 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
       },
     },
   });
-  const result = await lane.readActivationSnapshot(
-    hre,
-    "base_staging",
-    blockTag
+  const savedConcurrency = process.env.METHOD_SCOPED_READ_CONCURRENCY;
+  let sequential;
+  let result;
+  try {
+    process.env.METHOD_SCOPED_READ_CONCURRENCY = "1";
+    provider.resetTargetReads();
+    sequential = await lane.readActivationSnapshot(
+      hre,
+      "base_staging",
+      blockTag
+    );
+    assert.equal(provider.maxTargetReadsInFlight, 1);
+
+    process.env.METHOD_SCOPED_READ_CONCURRENCY = "3";
+    successorEnabledReads.length = 0;
+    provider.resetTargetReads();
+    result = await lane.readActivationSnapshot(hre, "base_staging", blockTag);
+  } finally {
+    if (savedConcurrency === undefined) {
+      delete process.env.METHOD_SCOPED_READ_CONCURRENCY;
+    } else {
+      process.env.METHOD_SCOPED_READ_CONCURRENCY = savedConcurrency;
+    }
+  }
+  assert.deepEqual(result, sequential);
+  assert.equal(provider.maxTargetReadsInFlight, 3);
+  assert.deepEqual(
+    provider.targetReadStarts
+      .filter(
+        /** @param {{method: string}} read */ (read) =>
+          read.method === "getDisputeProtectionIntent"
+      )
+      .map(/** @param {{id: string}} read */ (read) => read.id),
+    intentHashes
+  );
+  assert.deepEqual(
+    provider.targetReadStarts
+      .filter(
+        /** @param {{method: string}} read */ (read) =>
+          read.method === "getDeposit"
+      )
+      .map(/** @param {{id: string}} read */ (read) => read.id),
+    ["0", "1", "2", "3"]
   );
   assert.equal(result.blockNumber, blockTag);
-  assert.equal(result.lockProof.intents[0].intentHash, intentHash);
+  assert.deepEqual(
+    result.lockProof.intents.map(({ intentHash }) => intentHash),
+    intentHashes
+  );
   assert.equal(result.lockProof.intents[0].classification, "terminal");
   assert.deepEqual(result.freshPolicy.authorizedHooks, [freshHook]);
   assert.deepEqual(result.inventory.tuples, [
@@ -1712,7 +1840,7 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
     },
   ]);
   assert.equal(result.inventory.ok, true);
-  assert.deepEqual(successorEnabledReads, [listedMethod]);
+  assert.deepEqual(successorEnabledReads, Array(4).fill(listedMethod));
   assert.ok(logQueries.some((query) => query.fromBlock >= 10000));
   assert.equal(
     lane.expectedActivationState("base_staging").addresses.freshPolicy,

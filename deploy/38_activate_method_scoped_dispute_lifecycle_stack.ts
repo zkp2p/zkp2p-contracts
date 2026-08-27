@@ -101,6 +101,55 @@ type ActivationContext = {
 
 const expectedCache = new Map<ActivationNetwork, ExpectedActivationState>();
 const PAGE_SIZE = 10_000;
+const DEFAULT_READ_CONCURRENCY = 16;
+const MAX_READ_CONCURRENCY = 64;
+
+export async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > MAX_READ_CONCURRENCY
+  ) {
+    throw new Error(
+      `Concurrency limit must be an integer from 1 to ${MAX_READ_CONCURRENCY}`
+    );
+  }
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await fn(items[index], index);
+      }
+    }
+  );
+  await Promise.all(workers);
+  return results;
+}
+
+function readConcurrency(): number {
+  const raw = process.env.METHOD_SCOPED_READ_CONCURRENCY;
+  if (raw === undefined) return DEFAULT_READ_CONCURRENCY;
+  if (!/^[1-9][0-9]*$/.test(raw)) {
+    throw new Error(
+      `METHOD_SCOPED_READ_CONCURRENCY must be an integer from 1 to ${MAX_READ_CONCURRENCY}`
+    );
+  }
+  const limit = Number(raw);
+  if (!Number.isSafeInteger(limit) || limit > MAX_READ_CONCURRENCY) {
+    throw new Error(
+      `METHOD_SCOPED_READ_CONCURRENCY must be an integer from 1 to ${MAX_READ_CONCURRENCY}`
+    );
+  }
+  return limit;
+}
 
 function sameAddress(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
@@ -352,30 +401,39 @@ async function enumeratePredecessorIntents(
     "StakeVault",
     context.expected.addresses.vault
   );
-  const intents: IntentLockState[] = [];
-  for (const intentHash of intentHashes) {
-    const [intent, lock] = await Promise.all([
-      taggedRead(policy, "getDisputeProtectionIntent", [intentHash], blockTag),
-      taggedRead(vault, "locks", [intentHash], blockTag),
-    ]);
-    const status = Number(
-      intent.status ?? intent[4]
-    ) as IntentLockState["status"];
-    const lockAmount = decimal(lock.amount ?? lock[1]);
-    const maturesAt = decimal(lock.maturesAt ?? lock[2]);
-    intents.push({
-      intentHash,
-      status,
-      lockAmount,
-      maturesAt,
-      classification: classifyIntentLock(
+  const concurrency = readConcurrency();
+  const intents = await mapWithConcurrency(
+    intentHashes,
+    concurrency,
+    async (intentHash): Promise<IntentLockState> => {
+      const [intent, lock] = await Promise.all([
+        taggedRead(
+          policy,
+          "getDisputeProtectionIntent",
+          [intentHash],
+          blockTag
+        ),
+        taggedRead(vault, "locks", [intentHash], blockTag),
+      ]);
+      const status = Number(
+        intent.status ?? intent[4]
+      ) as IntentLockState["status"];
+      const lockAmount = decimal(lock.amount ?? lock[1]);
+      const maturesAt = decimal(lock.maturesAt ?? lock[2]);
+      return {
+        intentHash,
         status,
         lockAmount,
         maturesAt,
-        blockTimestamp
-      ),
-    });
-  }
+        classification: classifyIntentLock(
+          status,
+          lockAmount,
+          maturesAt,
+          blockTimestamp
+        ),
+      };
+    }
+  );
   return proveNoLivePredecessorLocks(intents, fromBlock, blockNumber);
 }
 
@@ -432,37 +490,55 @@ async function readInventoryInputs(
     await taggedRead(escrow, "depositCounter", [], blockTag)
   );
   const depositCounter = decimal(depositCounterValue);
-  const deposits = [];
-  const enabledByTuple = new Map<string, boolean>();
+  const depositIds = [];
   for (
     let depositId = hre.ethers.BigNumber.from(0);
     depositId.lt(depositCounterValue);
     depositId = depositId.add(1)
   ) {
-    const depositIdString = depositId.toString();
-    const [deposit, listedPaymentMethods] = await Promise.all([
-      taggedRead(escrow, "getDeposit", [depositId], blockTag),
-      taggedRead(escrow, "getDepositPaymentMethods", [depositId], blockTag),
-    ]);
-    const normalizedMethods = (listedPaymentMethods as string[]).map(
-      normalizedHash
-    );
-    deposits.push({
-      depositId: depositIdString,
-      depositor: normalizedAddress(deposit.depositor ?? deposit[0]),
-      token: normalizedAddress((deposit.token ?? deposit[2]).toString()),
-      listedPaymentMethods: normalizedMethods,
-    });
-    for (const method of normalizedMethods) {
-      if ((successorRiskWindows[method] ?? "0") === "0") continue;
+    depositIds.push(depositId);
+  }
+  const concurrency = readConcurrency();
+  const deposits = await mapWithConcurrency(
+    depositIds,
+    concurrency,
+    async (depositId) => {
+      const [deposit, listedPaymentMethods] = await Promise.all([
+        taggedRead(escrow, "getDeposit", [depositId], blockTag),
+        taggedRead(escrow, "getDepositPaymentMethods", [depositId], blockTag),
+      ]);
+      return {
+        depositId: depositId.toString(),
+        depositor: normalizedAddress(deposit.depositor ?? deposit[0]),
+        token: normalizedAddress((deposit.token ?? deposit[2]).toString()),
+        listedPaymentMethods: (listedPaymentMethods as string[]).map(
+          normalizedHash
+        ),
+      };
+    }
+  );
+  const enabledByTuple = new Map<string, boolean>();
+  const successorTuples = deposits.flatMap((deposit) =>
+    deposit.listedPaymentMethods
+      .filter((method) => (successorRiskWindows[method] ?? "0") !== "0")
+      .map((method) => ({ depositId: deposit.depositId, method }))
+  );
+  const successorEnabled = await mapWithConcurrency(
+    successorTuples,
+    concurrency,
+    async ({ depositId, method }) => {
       const enabled = await taggedRead(
         successor,
         "isDisputeProtectionEnabled",
         [addresses.escrow, depositId, method],
         blockTag
       );
-      enabledByTuple.set(`${depositIdString}:${method}`, Boolean(enabled));
+      return Boolean(enabled);
     }
+  );
+  for (let index = 0; index < successorTuples.length; index += 1) {
+    const { depositId, method } = successorTuples[index];
+    enabledByTuple.set(`${depositId}:${method}`, successorEnabled[index]);
   }
 
   const predecessorInterface = new hre.ethers.utils.Interface(
@@ -534,6 +610,7 @@ export async function readActivationSnapshot(
   network: ActivationNetwork,
   blockTag: string | number
 ): Promise<ActivationSnapshot> {
+  const startedAt = Date.now();
   const context = await resolveActivationContext(hre, network);
   const block = await hre.ethers.provider.getBlock(blockTag);
   if (!block) throw new Error(`Activation block ${blockTag} is unavailable`);
@@ -684,7 +761,7 @@ export async function readActivationSnapshot(
     read(attestationVerifier, "witnesses"),
   ]);
   const addressValue = (value: string) => normalizedAddress(value);
-  return {
+  const snapshot: ActivationSnapshot = {
     network,
     blockNumber,
     blockHash: normalizedHash(block.hash),
@@ -756,6 +833,14 @@ export async function readActivationSnapshot(
     lockProof,
     inventory,
   };
+  console.log(
+    `snapshot ${network}@${blockNumber}: ${
+      inventory.depositCounter
+    } deposits, ${lockProof.intents.length} predecessor intents, ${
+      Date.now() - startedAt
+    } ms`
+  );
+  return snapshot;
 }
 
 export async function assertActivationSharedState(
