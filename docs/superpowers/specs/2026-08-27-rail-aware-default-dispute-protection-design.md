@@ -253,16 +253,23 @@ resolution order at activation is therefore fixed now:
     one-unit deposit before step four would brick the lane permanently:
     - while `controller == address(0)` (steps `deploy-vault` through
       `initialize-controller`): require `totalStaked == 0` and
-      `totalClaimable == 0`, and treat any stake-deposit event as a
-      non-contiguous, unrecoverable prefix (fail closed with a message that
-      names the depositor's transaction hash);
+      `totalClaimable == 0` **as current state**, which is exactly the
+      condition `initializeController` enforces. Collateral events are never
+      fatal on their own: `setTakerAuthorization` and `selectStakeOwner` are
+      permissionless and free, and a deposit followed by a withdrawal leaves
+      no liability, so a history-based rule would let anyone brick the lane
+      for nothing (Codex review finding on the PR, accepted). If stake is
+      present the run fails closed with a message telling the operator to
+      wait for (or ask) the staker to withdraw and resume; the lane resumes
+      from the same prefix once the state clears.
     - once `controller == policy`: allow `totalStaked > 0`; require
-      `totalClaimable == 0` and no lock or claim event. The helper classifies
-      each `StakeDeposited` / `TakerAuthorizationUpdated` /
-      `StakeOwnerSelected` event against the vault's `ControllerInitialized`
-      event by `(blockNumber, transactionIndex, logIndex)`: an event ordered
-      before it is the pre-controller failure above (named by transaction
-      hash), one after it is permitted.
+      `totalClaimable == 0` and no lock or claim event.
+    Residual, accepted: a griefer who keeps at least one unit staked blocks
+    `initialize-controller` until they withdraw. That is a property of
+    `StakeVault.initializeController`, shared with lane 34's identical step
+    order, and bounded by the fact that `deploy-vault` and
+    `initialize-controller` execute back-to-back in one run; it is not made
+    worse by this design.
     Drop the `totalAccounted`, `unaccountedBalance`, and raw `balanceOf` zero
     checks in both phases (griefable by a dust transfer and not load-bearing).
   Deployment, controller, and ownership events that lane 37 itself emits
@@ -277,10 +284,11 @@ resolution order at activation is therefore fixed now:
   is an error, so a future event cannot slip past the guard. A test
   derives the event names from the compiled artifacts and asserts the
   three lists partition them. Add deployment-helper tests proving: a configuration
-  event after deployment leaves the stack `prepared`; a stake deposit or
-  taker authorization **after** controller initialization leaves it
-  `prepared`; a stake deposit **before** controller initialization fails the
-  prefix; a lock or claim event fails it in either phase.
+  event after deployment leaves the stack `prepared`; collateral events in
+  either phase are ignored as history; nonzero `totalStaked` before
+  controller initialization fails the prefix while the same after
+  initialization is `prepared`; a lock or claim event fails it in either
+  phase.
   The staking window (see the activation gate) is published only after lane
   37 reports `prepared` on that network, i.e. after `controller == policy`.
   Pre-activation opt-outs and post-preparation staking are expected and
@@ -377,11 +385,12 @@ Test-first, smallest Foundry targets:
   rail reads `true`) is asserted once, as documentation of the API contract.
 
 `scripts/test-method-scoped-deployment.cjs`
-- a configuration event after deployment leaves lane 37 `prepared`; a stake
-  deposit or taker authorization after controller initialization leaves it
-  `prepared` (`totalStaked > 0`, `totalClaimable == 0`); a stake deposit
-  before controller initialization fails the prefix; a lifecycle, lock, or
-  claim event fails it in either phase.
+- a configuration event after deployment leaves lane 37 `prepared`;
+  collateral events (deposit, withdrawal, taker authorization, stake-owner
+  selection) never fail the prefix by themselves; nonzero `totalStaked`
+  before controller initialization fails it, nonzero `totalStaked` with
+  `totalClaimable == 0` after initialization is `prepared`; a lifecycle,
+  lock, or claim event fails it in either phase.
 
 Rename tests whose names encode "opt-in" (`test_onIntentSignaledRequiresExplicitOptIn…`,
 `test_isDisputeProtectionEnabledDefaultsFalse…`,

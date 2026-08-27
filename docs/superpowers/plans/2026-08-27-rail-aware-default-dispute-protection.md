@@ -3,6 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. In this repository every non-UI code step is written by Codex via the `/codex` skill; Claude orchestrates, reviews, and runs the verification commands.
 >
 > **Review:** Internal self-review ✅ | Codex convergence ✅ (2 rounds)
+>
+> **Amendment (post-implementation, Codex PR review P1):** Task 3's pre-controller rule is state-based, not history-based — `classifyFreshStackActivity` takes `controllerInitialized: boolean`, never fails on collateral events, and requires `totalStaked == 0 && totalClaimable == 0` only while the controller is unset. The ordering helpers and the "collateral activity before controller initialization" error in Task 3 Steps 1/3 are superseded; see the spec's phase-gating bullet.
 
 **Goal:** Make stake-backed dispute protection default-on for every `(deposit, paymentMethod)` tuple whose payment method has a nonzero risk window, with a depositor opt-out, while keeping the PR #278 ABI byte-for-byte and letting lane 37 tolerate pre-activation opt-outs and post-preparation staking.
 
