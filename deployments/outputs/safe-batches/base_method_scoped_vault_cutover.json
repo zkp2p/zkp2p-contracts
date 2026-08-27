@@ -1,0 +1,54 @@
+{
+  "version": "1.0",
+  "chainId": "8453",
+  "createdAt": 1787864657000,
+  "meta": {
+    "name": "ZKP2P method-scoped dedicated-vault cutover - base",
+    "description": "assertReady(); conditionally accept fresh vault and policy ownership; add fresh writer; set fresh lifecycle hook",
+    "txBuilderVersion": "1.16.5",
+    "createdFromSafeAddress": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+    "createdFromOwnerAddress": ""
+  },
+  "transactions": [
+    {
+      "to": "0x4148f066aed55ae5fa80972749cdc179c937d7ca",
+      "value": "0",
+      "data": "0xbf9a61ac",
+      "operation": 0,
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0x47c26258222e2f96424bd2b21bf173f0da5034c7",
+      "value": "0",
+      "data": "0x79ba5097",
+      "operation": 0,
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0xbf4b769db70dbec89b6b2c44988304a7ad2de4fc",
+      "value": "0",
+      "data": "0x79ba5097",
+      "operation": 0,
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0xa845615b5203f7a21321ddf5e3a1ca024d93a443",
+      "value": "0",
+      "data": "0xd6da0326000000000000000000000000bf4b769db70dbec89b6b2c44988304a7ad2de4fc",
+      "operation": 0,
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0x014025fde093f8701d86e9f38e2c3a9b779cb5c7",
+      "value": "0",
+      "data": "0xbb4995af0000000000000000000000005dd6c675a7406fe8c9f0d93394a36fd6e8c50031",
+      "operation": 0,
+      "contractMethod": null,
+      "contractInputsValues": null
+    }
+  ]
+}
