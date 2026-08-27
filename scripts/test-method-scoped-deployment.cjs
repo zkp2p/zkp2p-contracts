@@ -36,6 +36,7 @@ const lane37Module = require("../deploy/37_deploy_method_scoped_dispute_lifecycl
 const {
   ACTIVE_PAYMENT_METHODS,
   BASE_STAGING_ACTIVE_PAYMENT_METHODS,
+  MULTI_SIG,
 } = require("../deployments/parameters.ts");
 const {
   assertCanonicalDeployment,
@@ -647,6 +648,56 @@ test("lane 36 and lane 37 share every common live dependency pin", () => {
   }
 });
 
+/** @param {"base" | "base_staging"} network @param {boolean} allowMultipleIntents */
+function orchestratorGovernanceFixture(network, allowMultipleIntents) {
+  const expected = lane37Module.EXPECTED_LIVE[network];
+  const governance = MULTI_SIG[network] || expected.deployer;
+  return {
+    governance,
+    expected,
+    orchestrator: {
+      owner: async () => governance,
+      paused: async () => false,
+      chainId: async () => ethers.BigNumber.from(8453),
+      escrowRegistry: async () => expected.escrowRegistry,
+      paymentVerifierRegistry: async () => expected.paymentVerifierRegistry,
+      relayerRegistry: async () => expected.relayerRegistry,
+      protocolFee: async () => ethers.constants.Zero,
+      protocolFeeRecipient: async () => expected.protocolFeeRecipient,
+      allowMultipleIntents: async () => allowMultipleIntents,
+    },
+  };
+}
+
+test("lane 37 accepts Base with allowMultipleIntents enabled", async () => {
+  const { orchestrator, governance, expected } = orchestratorGovernanceFixture(
+    "base",
+    true
+  );
+  await assert.doesNotReject(
+    lane37Module.assertOrchestratorGovernanceState(
+      orchestrator,
+      governance,
+      expected
+    )
+  );
+});
+
+test("lane 37 rejects enabled allowMultipleIntents on Base staging", async () => {
+  const { orchestrator, governance, expected } = orchestratorGovernanceFixture(
+    "base_staging",
+    true
+  );
+  await assert.rejects(
+    lane37Module.assertOrchestratorGovernanceState(
+      orchestrator,
+      governance,
+      expected
+    ),
+    /OrchestratorV3 governance state drifted/
+  );
+});
+
 test("lane 37 exports the method-scoped dispute stack identity", () => {
   assert.deepEqual(lane37Module.LOCAL_DISPUTE_DEPLOYMENT_NAMES, [
     "DisputeNullifierRegistry",
@@ -961,6 +1012,7 @@ test("lane 37 reuses every shared lane 34 live pin without a whitelist pin", () 
     for (const [field, value] of Object.entries(
       lane37Module.EXPECTED_LIVE[network]
     )) {
+      if (field === "allowMultipleIntents") continue;
       assert.deepEqual(
         value,
         /** @type {Record<string, unknown>} */ (
@@ -969,6 +1021,10 @@ test("lane 37 reuses every shared lane 34 live pin without a whitelist pin", () 
         `${network}.${field}`
       );
     }
+    assert.equal(
+      lane37Module.EXPECTED_LIVE[network].allowMultipleIntents,
+      network === "base"
+    );
   }
 });
 

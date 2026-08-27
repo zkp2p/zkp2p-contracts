@@ -329,6 +329,7 @@ export type ExpectedActivationState = {
   riskWindows: Record<string, string>;
   witnesses: string[];
   controllerChangeDelay: string;
+  allowMultipleIntents: boolean;
 };
 export type ActivationAddresses = {
   safe: string;
@@ -547,7 +548,8 @@ function commonInvariants(
     ],
     [
       "orchestrator.allowMultipleIntents",
-      !snapshot.orchestrator.allowMultipleIntents,
+      snapshot.orchestrator.allowMultipleIntents ===
+        expected.allowMultipleIntents,
     ],
     ["orchestrator.registered", snapshot.orchestrator.registered],
     [
@@ -1071,6 +1073,7 @@ export type TrustSurfaceInput = {
   paymentVerifierRegistry: string;
   relayerRegistry: string;
   protocolFeeRecipient: string;
+  allowMultipleIntents: boolean;
   freshHook: string;
   whitelistPolicy: string;
   groupRegistry: string;
@@ -1100,6 +1103,7 @@ export function buildTrustSurface(
     paymentVerifierRegistry: addresses.paymentVerifierRegistry,
     relayerRegistry: addresses.relayerRegistry,
     protocolFeeRecipient: addresses.protocolFeeRecipient,
+    allowMultipleIntents: expected.allowMultipleIntents,
     freshHook: addresses.freshHook,
     whitelistPolicy: addresses.whitelistPolicy,
     groupRegistry: addresses.groupRegistry,

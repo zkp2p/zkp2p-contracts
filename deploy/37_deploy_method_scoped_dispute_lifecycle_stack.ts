@@ -86,6 +86,7 @@ export const EXPECTED_LIVE: Record<
     relayerRegistry: string;
     addressGroupRegistry: string;
     protocolFeeRecipient: string;
+    allowMultipleIntents: boolean;
     stakeToken: string;
   }
 > = {
@@ -112,6 +113,7 @@ export const EXPECTED_LIVE: Record<
     relayerRegistry: "0xEbA979889a9c97382A92472fF3703786fF180083",
     addressGroupRegistry: "0x39F80118f9eB619135f116171b6Cb91D372C5AF2",
     protocolFeeRecipient: "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+    allowMultipleIntents: true,
     stakeToken: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   },
   base_staging: {
@@ -137,6 +139,7 @@ export const EXPECTED_LIVE: Record<
     relayerRegistry: "0xB214650b424E6b5fdcB1259566eB7A512D8Bd25E",
     addressGroupRegistry: "0x54Ff7788Cb42B46FE2F016a65Fd0f654Bb9BcF3D",
     protocolFeeRecipient: "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    allowMultipleIntents: false,
     stakeToken: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   },
 };
@@ -658,6 +661,23 @@ async function assertLiveSharedState(
     throw new Error("Predecessor dispute registry owner or writer set drifted");
   }
 
+  await assertOrchestratorGovernanceState(orchestrator, governance, expected);
+  const orchestratorRegistry = await ethers.getContractAt(
+    "OrchestratorRegistry",
+    expected.orchestratorRegistry
+  );
+  if (!(await orchestratorRegistry.isOrchestrator(orchestrator.address))) {
+    throw new Error("OrchestratorV3 is not registered");
+  }
+
+  return assertWhitelistPolicy(hre, network, governance);
+}
+
+export async function assertOrchestratorGovernanceState(
+  orchestrator: any,
+  governance: string,
+  expected: (typeof EXPECTED_LIVE)[LiveNetwork]
+): Promise<void> {
   if (
     !sameAddress(await orchestrator.owner(), governance) ||
     (await orchestrator.paused()) ||
@@ -679,19 +699,11 @@ async function assertLiveSharedState(
       await orchestrator.protocolFeeRecipient(),
       expected.protocolFeeRecipient
     ) ||
-    (await orchestrator.allowMultipleIntents())
+    (await orchestrator.allowMultipleIntents()) !==
+      expected.allowMultipleIntents
   ) {
     throw new Error("OrchestratorV3 governance state drifted");
   }
-  const orchestratorRegistry = await ethers.getContractAt(
-    "OrchestratorRegistry",
-    expected.orchestratorRegistry
-  );
-  if (!(await orchestratorRegistry.isOrchestrator(orchestrator.address))) {
-    throw new Error("OrchestratorV3 is not registered");
-  }
-
-  return assertWhitelistPolicy(hre, network, governance);
 }
 
 async function readLiveDeployOnlyPrefix(

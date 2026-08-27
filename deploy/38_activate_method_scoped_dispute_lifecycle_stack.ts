@@ -216,6 +216,7 @@ async function resolveActivationContext(
     riskWindows,
     witnesses: live.attestationWitnesses.map(normalizedAddress),
     controllerChangeDelay: decimal(STAKE_VAULT_CONTROLLER_CHANGE_DELAY),
+    allowMultipleIntents: live.allowMultipleIntents,
   };
   expectedCache.set(network, expected);
   return {

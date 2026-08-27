@@ -422,6 +422,7 @@ async function fixture(network) {
     network,
     governance: governance.address.toLowerCase(),
     deployer: deployer.address.toLowerCase(),
+    allowMultipleIntents: await orchestrator.allowMultipleIntents(),
     addresses,
     riskWindows: { [METHOD.toLowerCase()]: RISK_WINDOW.toString() },
     witnesses: [witness.address.toLowerCase()],
