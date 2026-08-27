@@ -124,7 +124,11 @@ latest block captured once per run on staging). Fails closed on drift:
   pinned in the manifest and re-derived by the verifier), risk windows equal
   `DISPUTE_RISK_WINDOW[network]` for `DISPUTABLE_PAYMENT_METHODS` and zero for
   every other active method of that network, `admissionsPaused == false`,
-  no lifecycle event since deployment (lane-37 `classifyFreshStackActivity`);
+  no lifecycle event since deployment (lane-37 `classifyFreshStackActivity`)
+  — asserted only while the orchestrator's lifecycle hook at the pinned block
+  is still the predecessor hook; once the fresh hook is live (staging after
+  `set-fresh-hook`, Base after cutover) successor lifecycle activity is
+  expected and must not block the remaining steps (review finding, PR #281);
 - fresh hook: `orchestratorRegistry`, `whitelistPolicy ==
   WhitelistPolicyMethodScoped`, `disputeProtectionPolicy == freshPolicy`;
 - predecessor stack per `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS[network]`
@@ -483,10 +487,15 @@ proofs pass trivially there, but they run.
 
 ### After activation
 
-`skip` returns `true` when the reducer reports `active` and the cutover
-postcondition-equivalent checks pass; `false` when the lane has work under
-its tag and flags; throws on `unrecognized`. It never re-runs a completed
-transition.
+`skip` never reads the chain: it returns `true` for every untagged run and
+`false` only when the lane runs under its own tag with exactly one action
+flag (any lane-38 flag without the tag throws on every network). Completed
+activations are handled inside the entry point: when the pinned reducer
+reports `active`, a tagged re-run on either network logs that the stack is
+active and exits successfully without deploying, sending, or writing
+anything; any other unexpected phase throws. It never re-runs a completed
+transition. (Reconciled during PR #281 review: the earlier text had `skip`
+reduce chain state, which contradicted the plan's chain-free `skip`.)
 
 ## Repo-side sequencing (recording PRs, not this PR)
 
