@@ -274,3 +274,10 @@ equal to `IntentLifecycleHookV1MethodScoped`.
    `StakeVaultOptIn` accounting is zero. Flip `active-dispute-stack.json`,
    `PREDECESSOR_DISPUTE_STACKS`, and `dispute-stack-evidence.json` at that
    point, then publish the package.
+4. In the same activation PR, pin lane 37 in `immutableDeploymentLanes.ts`
+   and retire it (`activeSource: null`, tags rejected), exactly as lane 34
+   was retired here: lane 37's `skip` re-runs `assertLiveSharedState`, which
+   requires the orchestrator to still be on the predecessor hook and the
+   writer set to be exactly the predecessor policy, so after the flip every
+   untagged `yarn deploy:base` / `deploy:base_staging` would abort until it
+   is excluded from the runner.

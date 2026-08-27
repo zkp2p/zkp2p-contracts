@@ -85,6 +85,9 @@ The deposit whitelist stack is available through the `OrchestratorV2` per-deposi
   cannot admit or reject a taker: whitelist enforcement allows a taker when enforcement is disabled for the
   intent's `(deposit, paymentMethod)`, the taker is directly whitelisted on that deposit, or the taker belongs to
   at least one group allowed by that tuple. Enabled policies with no matching address or group fail closed.
+  Under `IntentLifecycleHookV1` the no-stake fast lane requires the tuple's whitelist to be **enabled**: a directly
+  whitelisted address on a tuple whose whitelist is disabled is treated like any other taker and, on a payment
+  method with a nonzero risk window, is routed through stake-backed dispute protection.
 
 Group IDs are derived from the curator and registry group counter, and offchain consumers must key them by
 chain, registry address, and group ID. Enforcement and groups are scoped to
