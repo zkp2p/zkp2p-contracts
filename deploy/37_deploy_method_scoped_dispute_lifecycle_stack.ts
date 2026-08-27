@@ -3,7 +3,10 @@ import { ethers } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction, Deployment } from "hardhat-deploy/types";
 
-import { assertCanonicalDeployment } from "../deployments/canonicalDeployment";
+import {
+  assertCanonicalDeployment,
+  assertDeploymentMatchesChain,
+} from "../deployments/canonicalDeployment";
 import { waitForDeploymentDelay } from "../deployments/helpers";
 import {
   METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS,
@@ -337,16 +340,25 @@ export async function getSuccessorDeployments(
       "Method-scoped successor deployment artifacts are not a contiguous prefix"
     );
   }
+  const isPartialPrefix = firstMissing > 0;
   for (let index = 0; index < deployments.length; index += 1) {
     const deployment = deployments[index];
     if (deployment) {
       const name = LIVE_SUCCESSOR_DEPLOYMENT_NAMES[index];
-      await assertCanonicalDeployment(
+      await assertDeploymentMatchesChain(
         hre,
         deployment,
         name,
         ARTIFACT_NAMES[name]
       );
+      if (isPartialPrefix) {
+        await assertCanonicalDeployment(
+          hre,
+          deployment,
+          name,
+          ARTIFACT_NAMES[name]
+        );
+      }
     }
   }
   return deployments;
@@ -439,7 +451,7 @@ async function assertWhitelistPolicy(
       "WhitelistPolicyMethodScoped record missing; run lane 36 first"
     );
   }
-  await assertCanonicalDeployment(
+  await assertDeploymentMatchesChain(
     hre,
     deployment,
     METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT_NAME,

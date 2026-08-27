@@ -33,6 +33,10 @@ const lane31Module = require("../deploy/31_deploy_v3_payment_binding_stack.ts");
 const lane36Module = require("../deploy/36_deploy_method_scoped_whitelist_policy.ts");
 const lane37Module = require("../deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts");
 const {
+  assertCanonicalDeployment,
+  assertDeploymentMatchesChain,
+} = require("../deployments/canonicalDeployment.ts");
+const {
   IMMUTABLE_DEPLOYMENT_LANES,
   assertImmutableDeploymentLanes,
   assertSupportedDeploymentTag,
@@ -56,6 +60,82 @@ const skipLane37 = lane37Module.default.skip;
 if (!skipLane36 || !skipLane37) {
   throw new Error("Method-scoped deployment lanes must define skip functions");
 }
+
+test("deployment record matching does not depend on the current solc input", async () => {
+  const artifact = {
+    solcInputHash: "current-input",
+    deployedBytecode: "0x60016002",
+    evm: { deployedBytecode: { immutableReferences: {} } },
+  };
+  const deployment = {
+    abi: [],
+    address: "0x0000000000000000000000000000000000000001",
+    solcInputHash: "executed-input",
+    deployedBytecode: "0x60036004",
+  };
+  const hre = /** @type {any} */ ({
+    deployments: { getExtendedArtifact: async () => artifact },
+    ethers: { provider: { getCode: async () => deployment.deployedBytecode } },
+  });
+
+  await assertDeploymentMatchesChain(hre, deployment, "Policy", "Policy");
+  await assert.rejects(
+    assertCanonicalDeployment(hre, deployment, "Policy", "Policy"),
+    /lacks canonical deployment evidence/
+  );
+});
+
+test("deployment record matching rejects chain bytecode drift", async () => {
+  const artifact = {
+    solcInputHash: "current-input",
+    deployedBytecode: "0x60016002",
+    evm: { deployedBytecode: { immutableReferences: {} } },
+  };
+  const deployment = {
+    abi: [],
+    address: "0x0000000000000000000000000000000000000001",
+    solcInputHash: "executed-input",
+    deployedBytecode: "0x60036004",
+  };
+  const hre = /** @type {any} */ ({
+    deployments: { getExtendedArtifact: async () => artifact },
+    ethers: { provider: { getCode: async () => "0x60056006" } },
+  });
+
+  await assert.rejects(
+    assertDeploymentMatchesChain(hre, deployment, "Policy", "Policy"),
+    /Policy on-chain code does not match its deployment record/
+  );
+  await assert.rejects(
+    assertCanonicalDeployment(hre, deployment, "Policy", "Policy"),
+    /Policy on-chain code does not match its deployment record/
+  );
+});
+
+test("canonical deployment matching ignores current immutable regions", async () => {
+  const artifact = {
+    solcInputHash: "shared-input",
+    deployedBytecode: "0x6001aa02",
+    evm: {
+      deployedBytecode: {
+        immutableReferences: { value: [{ start: 2, length: 1 }] },
+      },
+    },
+  };
+  const deployment = {
+    abi: [],
+    address: "0x0000000000000000000000000000000000000001",
+    solcInputHash: artifact.solcInputHash,
+    deployedBytecode: "0x6001bb02",
+  };
+  const hre = /** @type {any} */ ({
+    deployments: { getExtendedArtifact: async () => artifact },
+    ethers: { provider: { getCode: async () => "0x6001cc02" } },
+  });
+
+  await assertDeploymentMatchesChain(hre, deployment, "Policy", "Policy");
+  await assertCanonicalDeployment(hre, deployment, "Policy", "Policy");
+});
 
 /** @param {string} path */
 function sha256(path) {
@@ -305,7 +385,7 @@ test("lane 36 resumes only an incomplete deployer-to-governance handover", async
   const existing = {
     address: policyAddress,
     deployedBytecode: artifact.deployedBytecode,
-    solcInputHash: artifact.solcInputHash,
+    solcInputHash: "executed-input",
   };
   let owner = expected.deployer;
   const dependencies = new Map([
@@ -621,11 +701,19 @@ test("lane 37 local readiness and live successor records fail closed", async () 
   );
 
   records.clear();
+  policy.solcInputHash = "executed-input";
   records.set("DisputeProtectionPolicyMethodScoped", policy);
+  await assert.rejects(
+    lane37Module.getSuccessorDeployments(fakeHre),
+    /lacks canonical deployment evidence/
+  );
+  policy.solcInputHash = policyArtifact.solcInputHash;
   assert.deepEqual(await lane37Module.getSuccessorDeployments(fakeHre), [
     policy,
     null,
   ]);
+  policy.solcInputHash = "executed-policy-input";
+  hook.solcInputHash = "executed-hook-input";
   records.set("IntentLifecycleHookV1MethodScoped", hook);
   assert.deepEqual(await lane37Module.getSuccessorDeployments(fakeHre), [
     policy,

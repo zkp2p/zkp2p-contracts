@@ -4,7 +4,7 @@ import { ethers } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 
-import { assertCanonicalDeployment } from "../deployments/canonicalDeployment";
+import { assertDeploymentMatchesChain } from "../deployments/canonicalDeployment";
 import { setNewOwner, waitForDeploymentDelay } from "../deployments/helpers";
 import { MULTI_SIG } from "../deployments/parameters";
 import type { WhitelistPolicy__factory } from "../typechain";
@@ -214,7 +214,7 @@ const func: DeployFunction = async function (
     METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT_NAME
   );
   if (existing) {
-    await assertCanonicalDeployment(
+    await assertDeploymentMatchesChain(
       hre,
       existing,
       METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT_NAME,
@@ -279,7 +279,7 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
     METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT_NAME
   );
   if (existing) {
-    await assertCanonicalDeployment(
+    await assertDeploymentMatchesChain(
       hre,
       existing,
       METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT_NAME,

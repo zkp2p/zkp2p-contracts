@@ -25,7 +25,7 @@ export function zeroImmutableValues(
   return `0x${normalized}`;
 }
 
-export async function assertCanonicalDeployment(
+export async function assertDeploymentMatchesChain(
   hre: HardhatRuntimeEnvironment,
   deployment: Deployment,
   deploymentName: string,
@@ -33,8 +33,55 @@ export async function assertCanonicalDeployment(
 ): Promise<void> {
   const artifact = await hre.deployments.getExtendedArtifact(artifactName);
   const code = await hre.ethers.provider.getCode(deployment.address);
+  const deployedBytecode = deployment.deployedBytecode;
+  const immutableReferences =
+    typeof deployment.solcInputHash === "string" &&
+    deployment.solcInputHash === artifact.solcInputHash
+      ? (artifact.evm?.deployedBytecode?.immutableReferences as
+          | ImmutableReferences
+          | undefined) || {}
+      : {};
+  const normalizedRecord =
+    typeof deployedBytecode === "string"
+      ? zeroImmutableValues(deployedBytecode, immutableReferences)
+      : undefined;
+  const normalizedCode = zeroImmutableValues(code, immutableReferences);
+  let rawBytecodeMatches = false;
+  if (typeof deployedBytecode === "string" && code !== "0x") {
+    try {
+      rawBytecodeMatches =
+        hre.ethers.utils.keccak256(deployedBytecode) ===
+        hre.ethers.utils.keccak256(code);
+    } catch {
+      rawBytecodeMatches = false;
+    }
+  }
   if (
     code === "0x" ||
+    normalizedRecord === undefined ||
+    (normalizedRecord !== normalizedCode && !rawBytecodeMatches)
+  ) {
+    throw new Error(
+      `${deploymentName} on-chain code does not match its deployment record`
+    );
+  }
+}
+
+export async function assertCanonicalDeployment(
+  hre: HardhatRuntimeEnvironment,
+  deployment: Deployment,
+  deploymentName: string,
+  artifactName: string
+): Promise<void> {
+  await assertDeploymentMatchesChain(
+    hre,
+    deployment,
+    deploymentName,
+    artifactName
+  );
+  const artifact = await hre.deployments.getExtendedArtifact(artifactName);
+  const code = await hre.ethers.provider.getCode(deployment.address);
+  if (
     typeof deployment.deployedBytecode !== "string" ||
     typeof deployment.solcInputHash !== "string" ||
     typeof artifact.deployedBytecode !== "string" ||
