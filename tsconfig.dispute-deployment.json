@@ -32,6 +32,7 @@
     "packages/contracts/scripts/verify-release.mjs",
     "scripts/deployActive.ts",
     "scripts/canonicalizeDeploymentOutput.ts",
+    "scripts/proposeSafeBatchChunks.ts",
     "scripts/simulate-dispute-opt-in-safe-batch.ts",
     "scripts/simulate-method-scoped-safe-batch.ts",
     "scripts/verify-dispute-opt-in-safe-batch.ts",
