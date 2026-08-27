@@ -1007,6 +1007,7 @@ export const GUARD_BOUND_FIELDS: Record<
     "lockProof.intents.intentHash",
     "lockProof.intents.status",
     "lockProof.intents.lockAmount",
+    "inventory.escrow",
     "inventory.depositCounter",
     "inventory.tuples.escrow",
     "inventory.tuples.depositId",

@@ -592,6 +592,65 @@ test("reduceActivation recognizes the full staging action table and waiting stat
   });
 });
 
+test("lane 38 unrecognized-state errors identify offending inventory tuples", () => {
+  const {
+    assertRecognizedActivationState,
+  } = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  const state = proposed(snapshot("base_staging"));
+  state.inventory.ok = false;
+  state.inventory.violations = [
+    {
+      escrow: addresses.escrow,
+      depositId: "42",
+      paymentMethod: METHOD_A,
+      sources: ["predecessor-opt-out", "token-mismatch"],
+    },
+  ];
+  const result = reduceActivation(state, expected("base_staging"));
+  assert.equal(result.phase, "unrecognized");
+  assert.throws(
+    () => assertRecognizedActivationState("Base staging", state, result),
+    new RegExp(
+      `${addresses.escrow}:42:${METHOD_A}.*predecessor-opt-out.*token-mismatch`
+    )
+  );
+});
+
+test("fresh successor lifecycle activity is rejected only before the hook switch", () => {
+  const {
+    classifyActivationFreshStackActivity,
+  } = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  const fakeHre = {
+    predecessor: { lifecycleHook: addresses.predecessorHook },
+    successor: { lifecycleHook: addresses.freshHook },
+  };
+  const events = [
+    {
+      name: "DisputeProtectionIntentOpened",
+      blockNumber: 10,
+      transactionIndex: 0,
+      logIndex: 0,
+      transactionHash: hash(10),
+    },
+  ];
+  assert.doesNotThrow(() =>
+    classifyActivationFreshStackActivity(
+      events,
+      fakeHre.successor.lifecycleHook,
+      addresses.predecessorHook
+    )
+  );
+  assert.throws(
+    () =>
+      classifyActivationFreshStackActivity(
+        events,
+        fakeHre.predecessor.lifecycleHook,
+        addresses.predecessorHook
+      ),
+    /lifecycle activity/
+  );
+});
+
 test("guard expectation comparison ignores block metadata and reports changed writers", () => {
   const proof = snapshot();
   const current = structuredClone(proof);
@@ -629,6 +688,12 @@ test("cutover guard comparison binds only intent and inventory fields checked on
   assert.throws(
     () => assertGuardExpectationsUnchanged("cutover", proof, current),
     /lockProof\.intents\.status/
+  );
+  current.lockProof.intents[0].status = proof.lockProof.intents[0].status;
+  current.inventory.escrow = address(404);
+  assert.throws(
+    () => assertGuardExpectationsUnchanged("cutover", proof, current),
+    /inventory\.escrow/
   );
 });
 
@@ -1087,12 +1152,68 @@ test("lane 38 skip rejects unsafe selection before any chain read", async () => 
     assert.equal(await skip(hre("base")), true);
     process.env[lane.FLAGS.baseRotationPrepare] = "true";
     await assert.rejects(skip(hre("base")), /DEPLOY_ACTIVE_TAG/);
+    await assert.rejects(skip(hre("localhost")), /DEPLOY_ACTIVE_TAG/);
+    await assert.rejects(skip(hre("sepolia")), /DEPLOY_ACTIVE_TAG/);
   } finally {
     for (const name of envNames) {
       if (saved[name] === undefined) delete process.env[name];
       else process.env[name] = saved[name];
     }
   }
+});
+
+test("Base rotation, cutover, and release flags treat an active snapshot as a no-op", async () => {
+  const {
+    assertBaseActionPhase,
+    default: laneFunction,
+    FLAGS: laneFlags,
+    TAG: laneTag,
+  } = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  const fakeHre = /** @type {any} */ ({
+    deployments: { getNetworkName: () => "base" },
+    snapshot: active(snapshot()),
+  });
+  const skip = laneFunction.skip;
+  assert.ok(skip);
+  const cases = /** @type {const} */ ([
+    [laneFlags.baseRotationPrepare, "rotation"],
+    [laneFlags.baseCutoverPrepare, "cutover"],
+    [laneFlags.baseReleaseMatured, "release-matured"],
+  ]);
+  const savedTag = process.env.DEPLOY_ACTIVE_TAG;
+  const savedFlags = Object.fromEntries(
+    cases.map(([flag]) => [flag, process.env[flag]])
+  );
+  /** @type {string[]} */
+  const messages = [];
+  const originalLog = console.log;
+  console.log = (message) => messages.push(String(message));
+  try {
+    process.env.DEPLOY_ACTIVE_TAG = laneTag;
+    for (const [selectedFlag, action] of cases) {
+      for (const [flag] of cases) delete process.env[flag];
+      process.env[selectedFlag] = "true";
+      assert.equal(await skip(fakeHre), false);
+      assert.equal(
+        assertBaseActionPhase(action, fakeHre.snapshot, expected()),
+        false
+      );
+    }
+  } finally {
+    console.log = originalLog;
+    if (savedTag === undefined) delete process.env.DEPLOY_ACTIVE_TAG;
+    else process.env.DEPLOY_ACTIVE_TAG = savedTag;
+    for (const [flag] of cases) {
+      const saved = savedFlags[flag];
+      if (saved === undefined) delete process.env[flag];
+      else process.env[flag] = saved;
+    }
+  }
+  assert.deepEqual(messages, [
+    "=== Base method-scoped dispute stack is active; nothing to prepare ===",
+    "=== Base method-scoped dispute stack is active; nothing to prepare ===",
+    "=== Base method-scoped dispute stack is active; nothing to prepare ===",
+  ]);
 });
 
 test("canonical and predecessor helpers thread an optional block tag", async () => {
@@ -1212,6 +1333,9 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
   const listedMethod = utils
     .keccak256(utils.toUtf8Bytes("paypal"))
     .toLowerCase();
+  const unlistedMethod = hash(705);
+  /** @type {string[]} */
+  const successorEnabledReads = [];
   const intentHash = hash(700);
   const predecessorInterface = new utils.Interface(predecessorRecord.abi);
   const successorInterface = new utils.Interface(compiledPolicy.abi);
@@ -1336,7 +1460,11 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
       stakeVault: predecessor.contracts.StakeVault.address,
       /** @param {string} method */
       getRiskWindow: (method) => BigNumber.from(riskWindows[method]),
-      isDisputeProtectionEnabled: false,
+      /** @param {string} _escrow @param {BigNumber} _depositId @param {string} method */
+      isDisputeProtectionEnabled: (_escrow, _depositId, method) => {
+        successorEnabledReads.push(method);
+        return false;
+      },
     })
   );
   contracts.set(
@@ -1431,7 +1559,7 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
         depositor: address(900),
         token: live.stakeToken,
       },
-      getDepositPaymentMethods: [listedMethod],
+      getDepositPaymentMethods: [listedMethod, unlistedMethod],
     })
   );
 
@@ -1528,6 +1656,7 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
     },
   ]);
   assert.equal(result.inventory.ok, true);
+  assert.deepEqual(successorEnabledReads, [listedMethod]);
   assert.ok(logQueries.some((query) => query.fromBlock >= 10000));
   assert.equal(
     lane.expectedActivationState("base_staging").addresses.freshPolicy,
@@ -1804,7 +1933,7 @@ test("artifact-child Git mode allows only the selected lane-38 pair and its supe
 
 /**
  * @param {"rotation" | "cutover"} kind
- * @param {{ nonce?: string, snapshotAtF?: import("../deployments/methodScopedActivation").ActivationSnapshot, simulationError?: Error }} [overrides]
+ * @param {{ nonce?: string, proofBlockHash?: string, snapshotAtF?: import("../deployments/methodScopedActivation").ActivationSnapshot, simulationError?: Error }} [overrides]
  */
 function verificationFixture(kind, overrides = {}) {
   const {
@@ -1923,7 +2052,15 @@ function verificationFixture(kind, overrides = {}) {
   const provider = {
     _isProvider: true,
     getNetwork: async () => ({ chainId: 8453, name: "base" }),
-    getBlock: async () => ({ number: 300, hash: hash(300), timestamp: 300 }),
+    /** @param {string | number} blockTag */
+    getBlock: async (blockTag) =>
+      blockTag === manifest.proofBlock.number
+        ? {
+            number: manifest.proofBlock.number,
+            hash: overrides.proofBlockHash || manifest.proofBlock.hash,
+            timestamp: manifest.proofBlock.number,
+          }
+        : { number: 300, hash: hash(300), timestamp: 300 },
     /** @param {string} name */
     resolveName: async (name) => name,
     call: async () =>
@@ -1977,10 +2114,14 @@ function verificationFixture(kind, overrides = {}) {
   return { run, manifest, provider, receipts, deploymentTransactions };
 }
 
-test("verifier core rejects nonce, initcode, postcondition identity, and receipt-address drift", async () => {
+test("verifier core rejects nonce, proof-block hash, initcode, postcondition identity, and receipt-address drift", async () => {
   await assert.rejects(
     verificationFixture("rotation", { nonce: "8" }).run(),
     /Safe nonce drifted/
+  );
+  await assert.rejects(
+    verificationFixture("rotation", { proofBlockHash: hash(999) }).run(),
+    /proof block hash/i
   );
   {
     const fixture = verificationFixture("rotation");
@@ -2023,6 +2164,13 @@ test("verifier core rejects inventory, lock-proof, authorized-hook, and simulati
       verificationFixture("cutover", { snapshotAtF: current }).run(),
       /inventory\.tuples/
     );
+  }
+  {
+    const fixture = verificationFixture("cutover");
+    fixture.manifest.proofSnapshot.inventory.escrow = address(997);
+    const { manifestSha256: _digest, ...unsigned } = fixture.manifest;
+    fixture.manifest.manifestSha256 = computeManifestSha256(unsigned);
+    await assert.rejects(fixture.run(), /inventory escrow/i);
   }
   {
     const current = proposed(snapshot());

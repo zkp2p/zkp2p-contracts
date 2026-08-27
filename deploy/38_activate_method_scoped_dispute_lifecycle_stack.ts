@@ -54,6 +54,8 @@ import { METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT_NAME } from "./36_deploy_meth
 import {
   ARTIFACT_NAMES as SUCCESSOR_ARTIFACT_NAMES,
   EXPECTED_LIVE,
+  FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
+  type FreshStackEvent,
   classifyFreshStackActivity,
   decodeFreshStackLogs,
   getRiskWindowPaymentMethods,
@@ -242,18 +244,18 @@ export function expectedActivationState(
 
 async function contractAt(
   hre: HardhatRuntimeEnvironment,
-  artifactOrAbi: string | readonly unknown[],
+  artifactOrAbi: string | unknown[],
   address: string
 ): Promise<Contract> {
-  return hre.ethers.getContractAt(artifactOrAbi as any, address);
+  return hre.ethers.getContractAt(artifactOrAbi, address);
 }
 
-async function taggedRead(
+function taggedRead(
   contract: Contract,
   method: string,
   args: unknown[],
   blockTag: string | number
-): Promise<any> {
+): ReturnType<Contract["functions"][string]> {
   return contract[method](...args, { blockTag });
 }
 
@@ -451,7 +453,7 @@ async function readInventoryInputs(
       listedPaymentMethods: normalizedMethods,
     });
     for (const method of normalizedMethods) {
-      if (successorRiskWindows[method] === "0") continue;
+      if ((successorRiskWindows[method] ?? "0") === "0") continue;
       const enabled = await taggedRead(
         successor,
         "isDisputeProtectionEnabled",
@@ -838,6 +840,7 @@ export async function assertActivationSharedState(
       }
     })(),
   ]);
+  const snapshot = await readActivationSnapshot(hre, network, blockTag);
   const artifact = await hre.deployments.getExtendedArtifact(
     "DisputeProtectionPolicy"
   );
@@ -852,22 +855,58 @@ export async function assertActivationSharedState(
       await hre.ethers.provider.getBlock(blockTag)
     ).number
   );
-  classifyFreshStackActivity({
-    policyEvents: decodeFreshStackLogs(
+  classifyActivationFreshStackActivity(
+    decodeFreshStackLogs(
       new hre.ethers.utils.Interface(artifact.abi),
       logs,
       "DisputeProtectionPolicyMethodScoped"
     ),
-  });
-  const snapshot = await readActivationSnapshot(hre, network, blockTag);
+    snapshot.orchestrator.lifecycleHook,
+    context.expected.addresses.predecessorHook
+  );
   const reduction = reduceActivation(snapshot, context.expected);
   if (reduction.phase === "unrecognized") {
-    throw new Error(
-      `Method-scoped activation shared state drifted: ${reduction.violations.join(
-        ", "
-      )}`
+    assertRecognizedActivationState(
+      "Method-scoped activation shared state drifted",
+      snapshot,
+      reduction
     );
   }
+}
+
+export function classifyActivationFreshStackActivity(
+  policyEvents: FreshStackEvent[],
+  lifecycleHook: string,
+  predecessorHook: string
+): void {
+  const eventsToClassify = sameAddress(lifecycleHook, predecessorHook)
+    ? policyEvents
+    : policyEvents.filter(
+        (event) =>
+          !FORBIDDEN_POLICY_LIFECYCLE_EVENTS.some(
+            (eventName) => eventName === event.name
+          )
+      );
+  classifyFreshStackActivity({ policyEvents: eventsToClassify });
+}
+
+export function assertRecognizedActivationState(
+  label: string,
+  snapshot: ActivationSnapshot,
+  reduction: ActivationReduction
+): void {
+  if (reduction.phase !== "unrecognized") return;
+  const inventoryViolations = reduction.violations.includes("inventory.ok")
+    ? snapshot.inventory.violations.map(
+        (tuple) =>
+          `${tuple.escrow}:${tuple.depositId}:${
+            tuple.paymentMethod
+          } sources=${tuple.sources.join("+")}`
+      )
+    : [];
+  throw new Error(
+    `${label}: ${[...reduction.violations, ...inventoryViolations].join(", ")}`
+  );
 }
 
 export function activationConfirmation(
@@ -1025,10 +1064,10 @@ async function readPinnedStagingState(
   const expected = expectedActivationState("base_staging");
   const reduction = reduceActivation(snapshot, expected);
   if (reduction.phase === "unrecognized") {
-    throw new Error(
-      `Base staging activation state is unrecognized: ${reduction.violations.join(
-        ", "
-      )}`
+    assertRecognizedActivationState(
+      "Base staging activation state is unrecognized",
+      snapshot,
+      reduction
     );
   }
   const transaction = reduction.nextStagingAction
@@ -1113,6 +1152,16 @@ export async function releaseMaturedPredecessorIntents(
   const blockNumber = await hre.ethers.provider.getBlockNumber();
   await assertActivationSharedState(hre, network, blockNumber);
   const snapshot = await readActivationSnapshot(hre, network, blockNumber);
+  if (
+    network === "base" &&
+    !assertBaseActionPhase(
+      "release-matured",
+      snapshot,
+      expectedActivationState("base")
+    )
+  ) {
+    return;
+  }
   if (snapshot.lockProof.releasable.length === 0) {
     console.log(`No matured predecessor intents to release on ${network}`);
     return;
@@ -1208,10 +1257,44 @@ function trustSurfaceConstructorArg(
   return buildTrustSurface(expected);
 }
 
+type BaseAction = ActivationBatchKind | "release-matured";
+
+export function assertBaseActionPhase(
+  action: BaseAction,
+  snapshot: ActivationSnapshot,
+  expected: ExpectedActivationState
+): boolean {
+  const reduction = reduceActivation(snapshot, expected);
+  if (reduction.phase === "active") {
+    console.log(
+      "=== Base method-scoped dispute stack is active; nothing to prepare ==="
+    );
+    return false;
+  }
+  if (action === "release-matured") return true;
+  const requiredPhase =
+    action === "rotation" ? "deployed" : "rotation-proposed";
+  if (reduction.phase !== requiredPhase || reduction.waiting !== null) {
+    throw new Error(
+      `${action} batch requires ${requiredPhase} with no waiting condition`
+    );
+  }
+  return true;
+}
+
 async function prepareBaseBatch(
   hre: HardhatRuntimeEnvironment,
   kind: ActivationBatchKind
 ): Promise<void> {
+  const proofBlockNumber = await hre.ethers.provider.getBlockNumber();
+  await assertActivationSharedState(hre, "base", proofBlockNumber);
+  const proofSnapshot = await readActivationSnapshot(
+    hre,
+    "base",
+    proofBlockNumber
+  );
+  const expected = expectedActivationState("base");
+  if (!assertBaseActionPhase(kind, proofSnapshot, expected)) return;
   const sourceSha = (process.env[FLAGS.releaseReadySha] || "").toLowerCase();
   if (!/^[0-9a-f]{40}$/.test(sourceSha)) {
     throw new Error(
@@ -1223,21 +1306,6 @@ async function prepareBaseBatch(
   const forkRpcUrl = process.env.BASE_FORK_RPC_URL || "";
   if (!forkRpcUrl) {
     throw new Error("BASE_FORK_RPC_URL is required for Base batch preparation");
-  }
-  const proofBlockNumber = await hre.ethers.provider.getBlockNumber();
-  await assertActivationSharedState(hre, "base", proofBlockNumber);
-  const proofSnapshot = await readActivationSnapshot(
-    hre,
-    "base",
-    proofBlockNumber
-  );
-  const expected = expectedActivationState("base");
-  const reduction = reduceActivation(proofSnapshot, expected);
-  const requiredPhase = kind === "rotation" ? "deployed" : "rotation-proposed";
-  if (reduction.phase !== requiredPhase || reduction.waiting !== null) {
-    throw new Error(
-      `${kind} batch requires ${requiredPhase} with no waiting condition`
-    );
   }
   const trustSurface = trustSurfaceConstructorArg(expected);
   const includeAcceptOwnership =
@@ -1429,14 +1497,14 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   const network = hre.deployments.getNetworkName();
   const selected = selectedFlags();
   const tagged = process.env.DEPLOY_ACTIVE_TAG === TAG;
+  if (selected.length > 0 && !tagged) {
+    throw new Error(`Lane 38 flags require DEPLOY_ACTIVE_TAG=${TAG}`);
+  }
   if (network === "localhost" || network === "hardhat") {
     if (tagged) throw new Error("no predecessor stack on local networks");
     return true;
   }
   if (!SUPPORTED_NETWORKS.has(network)) return true;
-  if (selected.length > 0 && !tagged) {
-    throw new Error(`Lane 38 flags require DEPLOY_ACTIVE_TAG=${TAG}`);
-  }
   if (network === "base_staging") {
     const prepare = process.env[FLAGS.stagingPrepare] === "true";
     const execute = process.env[FLAGS.stagingExecute] === "true";

@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { ethers } from "ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
+import type { Deployment } from "hardhat-deploy/types";
 
 import {
   ACTIVATION_BATCH_PATHS,
@@ -25,6 +26,18 @@ import { EXPECTED_LIVE } from "../deploy/37_deploy_method_scoped_dispute_lifecyc
 import { BASE_SAFE } from "./simulate-dispute-opt-in-safe-batch";
 
 export type ActivationGitMode = "generation" | "artifact-child";
+type VerificationRuntimeEnvironment = HardhatRuntimeEnvironment & {
+  __methodScopedVerificationProvider?: ethers.providers.Provider;
+};
+
+function isMissingFileError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "ENOENT"
+  );
+}
 
 function git(repositoryRoot: string, args: string[]): string {
   return execFileSync("git", args, {
@@ -223,7 +236,7 @@ function liveHre(
   provider: ethers.providers.Provider
 ): HardhatRuntimeEnvironment {
   const original = hre.ethers;
-  const baseDeployment = async (name: string): Promise<any | null> => {
+  const baseDeployment = async (name: string): Promise<Deployment | null> => {
     try {
       return JSON.parse(
         readFileSync(
@@ -231,8 +244,8 @@ function liveHre(
           "utf8"
         )
       );
-    } catch (error: any) {
-      if (error?.code === "ENOENT") return null;
+    } catch (error: unknown) {
+      if (isMissingFileError(error)) return null;
       throw error;
     }
   };
@@ -255,7 +268,15 @@ function liveHre(
     ethers: {
       ...original,
       provider,
-      getContractAt: async (artifactOrAbi: any, address: string) => {
+      getContractAt: async (artifactOrAbi: unknown, address: string) => {
+        if (
+          typeof artifactOrAbi !== "string" &&
+          !Array.isArray(artifactOrAbi)
+        ) {
+          throw new Error(
+            "Contract identifier must be an artifact name or ABI"
+          );
+        }
         const abi =
           typeof artifactOrAbi === "string"
             ? (await hre.deployments.getArtifact(artifactOrAbi)).abi
@@ -267,7 +288,7 @@ function liveHre(
 }
 
 export async function verifyActivationCandidate(
-  hre: HardhatRuntimeEnvironment,
+  hre: VerificationRuntimeEnvironment,
   input: {
     kind: ActivationBatchKind;
     batch: unknown;
@@ -310,9 +331,7 @@ export async function verifyActivationCandidate(
       "BASE_FORK_RPC_URL is required for Safe artifact verification"
     );
   }
-  const injectedProvider = (hre as any).__methodScopedVerificationProvider as
-    | ethers.providers.Provider
-    | undefined;
+  const injectedProvider = hre.__methodScopedVerificationProvider;
   const provider =
     injectedProvider || new ethers.providers.JsonRpcProvider(input.forkRpcUrl);
   const verificationHre = liveHre(hre, provider);
@@ -325,6 +344,15 @@ export async function verifyActivationCandidate(
   if (block.number < manifest.simulationBlockNumber) {
     throw new Error("Verification block predates the simulation block");
   }
+  const proofBlock = await provider.getBlock(manifest.proofBlock.number);
+  if (!proofBlock?.hash) {
+    throw new Error("Manifest proof block is unavailable from the chain");
+  }
+  if (
+    proofBlock.hash.toLowerCase() !== manifest.proofBlock.hash.toLowerCase()
+  ) {
+    throw new Error("Manifest proof block hash does not match the chain");
+  }
   const safe = new ethers.Contract(
     BASE_SAFE,
     ["function nonce() view returns (uint256)"],
@@ -332,6 +360,16 @@ export async function verifyActivationCandidate(
   );
   if (!(await safe.nonce({ blockTag: block.number })).eq(manifest.safeNonce)) {
     throw new Error("Safe nonce drifted from the manifest");
+  }
+  const lane = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
+  const expected = lane.expectedActivationState("base");
+  if (
+    manifest.proofSnapshot.inventory.escrow.toLowerCase() !==
+    expected.addresses.escrow.toLowerCase()
+  ) {
+    throw new Error(
+      "Manifest inventory escrow does not match canonical Base escrow"
+    );
   }
   await assertContractIdentity(
     verificationHre,
@@ -347,13 +385,11 @@ export async function verifyActivationCandidate(
     "postcondition",
     block.number
   );
-  const lane = require("../deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts");
   const snapshot = await lane.readActivationSnapshot(
     verificationHre,
     "base",
     block.number
   );
-  const expected = lane.expectedActivationState("base");
   if (
     canonicalJson(buildTrustSurface(expected)) !==
     canonicalJson(manifest.trustSurface)

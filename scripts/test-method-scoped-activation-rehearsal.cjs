@@ -42,6 +42,9 @@ const INTENT_HASH = ethers.utils.keccak256(
 const LIVE_INTENT_HASH = ethers.utils.keccak256(
   ethers.utils.toUtf8Bytes("method-scoped-activation-live-lock")
 );
+const FRESH_INTENT_HASH = ethers.utils.keccak256(
+  ethers.utils.toUtf8Bytes("method-scoped-activation-fresh-intent")
+);
 const CONTROLLER_DELAY = 2 * 24 * 60 * 60;
 const RISK_WINDOW = 30 * 24 * 60 * 60;
 const STAKE_AMOUNT = ethers.utils.parseUnits("500", 6);
@@ -187,6 +190,34 @@ async function openIntent(state, intentHash, settle) {
   } finally {
     await ethers.provider.send("hardhat_stopImpersonatingAccount", [
       state.predecessorHook.address,
+    ]);
+  }
+}
+
+/** @param {any} state */
+async function openAndSettleFreshIntent(state) {
+  const hookSigner = await impersonatedSigner(state.freshHook.address);
+  try {
+    await (
+      await state.freshPolicy
+        .connect(hookSigner)
+        .onIntentSignaled(
+          FRESH_INTENT_HASH,
+          state.escrow.address,
+          0,
+          state.taker.address,
+          METHOD,
+          INTENT_AMOUNT
+        )
+    ).wait();
+    await (
+      await state.freshPolicy
+        .connect(hookSigner)
+        .onIntentSettled(FRESH_INTENT_HASH, RELEASE_AMOUNT, false)
+    ).wait();
+  } finally {
+    await ethers.provider.send("hardhat_stopImpersonatingAccount", [
+      state.freshHook.address,
     ]);
   }
 }
@@ -577,6 +608,14 @@ async function executeStagingStep(state, expectedAction) {
   ).wait();
 }
 
+/** @param {any} state */
+async function executeStagingRun(state) {
+  const current = await reduction(state);
+  if (!current.nextStagingAction) return false;
+  await executeStagingStep(state, current.nextStagingAction);
+  return true;
+}
+
 /** @param {number} timestamp */
 async function advanceTo(timestamp) {
   const current = (await ethers.provider.getBlock("latest")).timestamp;
@@ -627,20 +666,22 @@ test("staging rehearsal waits for controller delay and predecessor drain", async
     );
     await advanceTo(asNumber(intent.releaseEligibleAt));
     await executeStagingStep(state, "release-matured-predecessor-intents");
-    const remainingActions =
+    const beforeHookSwitch =
       /** @type {import("../deployments/methodScopedActivation").StagingAction[]} */ ([
         "accept-vault-controller",
         "add-fresh-writer",
         "set-fresh-hook",
-        "remove-predecessor-writer",
       ]);
-    for (const action of remainingActions) {
+    for (const action of beforeHookSwitch) {
       await executeStagingStep(state, action);
     }
+    await openAndSettleFreshIntent(state);
+    await executeStagingStep(state, "remove-predecessor-writer");
     current = await reduction(state);
     assert.equal(current.phase, "active");
     assert.equal(current.nextStagingAction, null);
     assert.equal(current.waiting, null);
+    assert.equal(await executeStagingRun(state), false);
   } finally {
     assert.equal(
       await ethers.provider.send("evm_revert", [initialSnapshot]),

@@ -105,7 +105,7 @@ test("active runner threads the lane fixture into the mounted set", () => {
   assert.equal(status, 0);
 });
 
-test("lane 38 rejects untagged activation flags and direct execution", async () => {
+test("lane 38 rejects untagged activation flags on every network and direct execution", async () => {
   const previousTag = process.env.DEPLOY_ACTIVE_TAG;
   const flag = lane38.FLAGS.baseRotationPrepare;
   const previousFlag = process.env[flag];
@@ -120,6 +120,14 @@ test("lane 38 rejects untagged activation flags and direct execution", async () 
       () => laneFunction.skip(fakeHre),
       /Lane 38 flags require DEPLOY_ACTIVE_TAG/
     );
+    for (const network of ["localhost", "hardhat", "sepolia"]) {
+      fakeHre.deployments.getNetworkName = () => network;
+      await assert.rejects(
+        () => laneFunction.skip(fakeHre),
+        /Lane 38 flags require DEPLOY_ACTIVE_TAG/
+      );
+    }
+    fakeHre.deployments.getNetworkName = () => "base";
     await assert.rejects(
       () => laneFunction(fakeHre),
       /Lane 38 activation requires DEPLOY_ACTIVE_TAG/
