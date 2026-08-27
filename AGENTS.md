@@ -43,14 +43,16 @@
   for that executed history. The Base `*OptIn` trio is the live dispute stack until a later activation lane replaces
   it; the Base-staging `*OptIn` trio is deployed but was never activated.
 - Lanes `36` and `37` are the current, deploy-only successors for the payment-method-scoped policies. Lane `36`
-  deploys `WhitelistPolicyMethodScoped`; lane `37` deploys `StakeVaultMethodScoped`,
-  `DisputeProtectionPolicyMethodScoped`, and `IntentLifecycleHookV1MethodScoped` against the lane-36 policy and the
-  network's pinned verifier and dispute registry. `ENABLE_{STAGING,BASE}_METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT=true`
+  deploys `WhitelistPolicyMethodScoped`; lane `37` deploys `DisputeProtectionPolicyMethodScoped` and
+  `IntentLifecycleHookV1MethodScoped` against the lane-36 policy, the network's pinned verifier and dispute
+  registry, and the pinned predecessor `StakeVault`, which is reused (controller rotation happens in the activation
+  lane through the vault's delayed two-step handover); `StakeVaultMethodScoped` is a localhost-only record. `ENABLE_{STAGING,BASE}_METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT=true`
   and `ENABLE_{STAGING,BASE}_V3_DISPUTE_METHOD_SCOPED_DEPLOYMENT=true` authorize passive deployment only: the
   OrchestratorV3 hook, the dispute-registry writer set, and every V2 deposit hook stay unchanged, and Base ownership
   handover is initiated for the Safe to accept later. Activation, the predecessor writer revoke, and the canonical
   selection flip belong to a future lane; never infer activation from source, tests, package ABIs, artifacts, or
-  deployment.
+  deployment. The lane-37 policy is default-on for windowed rails with a depositor opt-out (see the rail-aware
+  default design); pre-activation opt-outs are expected and do not invalidate the lane; the live vault is never inspected by it.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the

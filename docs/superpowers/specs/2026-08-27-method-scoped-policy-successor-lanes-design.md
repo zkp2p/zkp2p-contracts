@@ -57,8 +57,10 @@ already fixed by `b108135`. This design resolves the remaining three:
    - lane `36_deploy_method_scoped_whitelist_policy.ts` deploys
      `WhitelistPolicyMethodScoped` (contract `WhitelistPolicy`);
    - lane `37_deploy_method_scoped_dispute_lifecycle_stack.ts` deploys
-     `StakeVaultMethodScoped`, `DisputeProtectionPolicyMethodScoped`, and
-     `IntentLifecycleHookV1MethodScoped`.
+     `DisputeProtectionPolicyMethodScoped` and
+     `IntentLifecycleHookV1MethodScoped` against the **reused** predecessor
+     `StakeVault` (amended 2026-08-27 — see the lane-37 section);
+     `StakeVaultMethodScoped` is a localhost-only record.
    Deployment names never reach the package: `active-dispute-stack.json`
    maps the canonical `StakeVault` / `DisputeProtectionPolicy` /
    `IntentLifecycleHookV1` keys to whichever internal record is active.
@@ -120,8 +122,21 @@ Supported networks: `localhost`, `hardhat`, `base_staging`, `base`.
   hands ownership to `MULTI_SIG[network] || deployer` through `setNewOwner`
   (plain `Ownable`, so Base ownership moves in the deployment run itself,
   exactly as lane 29 did).
-- Existing record: assert canonical (`solcInputHash` and immutable-zeroed
-  runtime bytecode match the current build) and reuse; never redeploy.
+- Existing record: assert the on-chain code matches the record's
+  `deployedBytecode` and reuse; never redeploy. Amended 2026-08-27 after the
+  PR #278 post-merge review and a Codex finding on #280: an executed record
+  is compared against the chain, not against the current build, because
+  hardhat-deploy's `solcInputHash` covers the entire solc input and any later
+  Solidity edit would otherwise make the lane's `skip` abort every untagged
+  run. When the record was built from the current source the comparison
+  zeroes the artifact's exact `immutableReferences`; otherwise (the record
+  does not carry its immutable offsets) it is equality modulo immutable
+  placeholders — every byte that differs between record and chain must be a
+  `0x00` placeholder in the record — which needs no pin and no recompilation
+  and is strictly stronger than the exact-offset check. The three-way
+  record/artifact/chain check (`assertCanonicalDeployment`) is reserved for
+  lane 37's partial prefix, where deploying more contracts with a different
+  build must fail closed.
 - Live gating mirrors lane 34: `ENABLE_STAGING_METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT=true`
   or `ENABLE_BASE_METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT=true`. Without
   the flag the lane skips, except that a tagged run
@@ -146,20 +161,27 @@ deliberately absent.
   `IntentLifecycleHookV1MethodScoped` → `IntentLifecycleHookV1`. Local-only
   `DisputeNullifierRegistry` and `DisputeVerifier` records are created on
   `localhost`/`hardhat` exactly as lane 34 did.
-- Constructor wiring: vault `[deployer, stakeToken, address(0),
-  STAKE_VAULT_CONTROLLER_CHANGE_DELAY]`; policy `[deployer, freshVault,
-  DisputeVerifier, DisputeNullifierRegistry]` where the verifier and
-  registry are the network's pinned live pair (from the lane-37 predecessor
-  map) or the local records; hook `[OrchestratorRegistry,
-  WhitelistPolicyMethodScoped, freshPolicy]`. The whitelist policy is read
-  from the lane-36 record and canonical-checked, not address-pinned.
+- **Amended 2026-08-27 — the predecessor `StakeVault` is reused on live
+  networks**, replaced only on localhost/hardhat where none exists. See
+  `2026-08-27-rail-aware-default-dispute-protection-design.md` ("Deployment
+  and tooling" and the vault-controller-rotation activation gate) for the
+  rationale: `StakeVault` is unchanged, holds real taker state, and ships
+  its own delayed controller handover.
+- Constructor wiring: policy `[deployer, predecessorVault, DisputeVerifier,
+  DisputeNullifierRegistry]` where all three are the network's pinned live
+  contracts from `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` (on localhost the
+  lane deploys local `DisputeNullifierRegistry`, `DisputeVerifier`, and
+  `StakeVaultMethodScoped` `[deployer, stakeToken, address(0),
+  STAKE_VAULT_CONTROLLER_CHANGE_DELAY]` and initializes the controller
+  itself); hook `[OrchestratorRegistry, WhitelistPolicyMethodScoped,
+  freshPolicy]`. The whitelist policy is read from the lane-36 record and
+  canonical-checked, not address-pinned.
 - Live deploy-only step machine, resumable from chain reads:
-  `deploy-vault`, `deploy-policy`, `deploy-hook`, `initialize-controller`,
-  `authorize-hook`, `set-risk-window:<method>` for each disputable method;
-  Base adds `transfer-vault-owner` and `transfer-policy-owner`
-  (`Ownable2Step` transfer to the Safe; acceptance belongs to activation).
-  No predecessor cancellation steps: lane 34 already cleared the lane-32
-  pending transfers on Base.
+  `deploy-policy`, `deploy-hook`, `authorize-hook`,
+  `set-risk-window:<method>` for each disputable method; Base adds
+  `transfer-policy-owner` (`Ownable2Step` transfer to the Safe; acceptance
+  belongs to activation). No vault deployment, controller initialization,
+  vault ownership transfer, or predecessor cancellation steps.
 - Live preflight (`assertLiveSharedState`): deployer identity, stake token,
   controller delay, lane-37 predecessor map via
   `assertHistoricalDisputeStack(hre, METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS)`,
@@ -169,10 +191,14 @@ deliberately absent.
   `WhitelistPolicyMethodScoped` present, canonical, and pointing at the
   pinned registries. It does **not** require the predecessor vault to be
   empty (Base holds live stake); emptiness is an activation-lane gate.
-- Fresh-stack proof after deployment: controller is the fresh policy, only
-  the fresh hook is authorized, risk windows equal `DISPUTE_RISK_WINDOW`,
-  the fresh vault has zero accounting, and the fresh contracts emitted no
-  admission events.
+- Fresh-stack proof after deployment: the predecessor vault still reports
+  `controller == predecessorPolicy` with no pending controller, only the
+  fresh hook is authorized on the fresh policy, risk windows equal
+  `DISPUTE_RISK_WINDOW`, `policy.stakeVault()` is the pinned predecessor
+  vault, and the fresh policy emitted no lifecycle event (configuration and
+  governance events are allowed; anything else fails closed). No vault log
+  or accounting is inspected — the vault is live. **Amended 2026-08-27** by
+  `2026-08-27-rail-aware-default-dispute-protection-design.md`.
 - Live gating: `ENABLE_STAGING_V3_DISPUTE_METHOD_SCOPED_DEPLOYMENT=true` /
   `ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_DEPLOYMENT=true`, same skip and
   tagged-run semantics as lane 36. `paymentBindingCutoverReady` from lane 31
@@ -261,9 +287,29 @@ equal to `IntentLifecycleHookV1MethodScoped`.
    commit artifacts and regenerated outputs.
 2. Bootstrap the tuple policy on both networks with
    `yarn whitelist:bootstrap` (Base via Safe batch).
-3. Activation lane: staging EOA transitions; Base Safe batch that accepts the
-   fresh vault/policy ownership, grants the fresh policy writer permission,
-   sets the orchestrator hook, and revokes the lane-34 writer only once
-   `StakeVaultOptIn` accounting is zero. Flip `active-dispute-stack.json`,
+3. Activation lane: staging EOA transitions; on Base a first Safe batch that
+   pauses predecessor admissions and proposes the fresh policy as the reused
+   vault's controller, then (after the delay and once no predecessor lock is
+   open) a second batch that accepts the fresh policy's ownership, calls
+   `acceptVaultController()`, grants the fresh policy writer permission,
+   sets the orchestrator hook, and revokes the lane-34 writer only once the
+   predecessor policy is fully drained. Flip `active-dispute-stack.json`,
    `PREDECESSOR_DISPUTE_STACKS`, and `dispute-stack-evidence.json` at that
    point, then publish the package.
+4. In the activation PR, alias the canonical `WhitelistPolicy` package key to
+   `WhitelistPolicyMethodScoped` per network (a manifest change that
+   re-stamps the committed outputs' selection hash); until then the record is
+   stripped from published output like the internal dispute names. Two
+   review findings are deliberately left as follow-ups: fake-HRE execution
+   tests for lanes 36/37's live paths (today only the pure helpers and the
+   localhost topology are exercised), and the tuple-scoping consequence that
+   a payment method added to a deposit after its whitelist bootstrap starts
+   ungated on zero-window rails (documented in the README; a contract-level
+   deposit-wide fallback would be a separate design).
+5. In the same activation PR, pin lane 37 in `immutableDeploymentLanes.ts`
+   and retire it (`activeSource: null`, tags rejected), exactly as lane 34
+   was retired here: lane 37's `skip` re-runs `assertLiveSharedState`, which
+   requires the orchestrator to still be on the predecessor hook and the
+   writer set to be exactly the predecessor policy, so after the flip every
+   untagged `yarn deploy:base` / `deploy:base_staging` would abort until it
+   is excluded from the runner.

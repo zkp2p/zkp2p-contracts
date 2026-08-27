@@ -1,8 +1,12 @@
+import type { providers, utils } from "ethers";
 import { ethers } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction, Deployment } from "hardhat-deploy/types";
 
-import { assertCanonicalDeployment } from "../deployments/canonicalDeployment";
+import {
+  assertCanonicalDeployment,
+  assertDeploymentMatchesChain,
+} from "../deployments/canonicalDeployment";
 import { waitForDeploymentDelay } from "../deployments/helpers";
 import {
   METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS,
@@ -15,6 +19,7 @@ import {
   MULTI_SIG,
   STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
   USDC,
+  getActivePaymentMethods,
 } from "../deployments/parameters";
 import { paymentBindingCutoverReady } from "./31_deploy_v3_payment_binding_stack";
 import { METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT_NAME } from "./36_deploy_method_scoped_whitelist_policy";
@@ -35,7 +40,6 @@ export const LOCAL_DISPUTE_DEPLOYMENT_NAMES = [
 ] as const;
 
 export const LIVE_SUCCESSOR_DEPLOYMENT_NAMES = [
-  "StakeVaultMethodScoped",
   "DisputeProtectionPolicyMethodScoped",
   "IntentLifecycleHookV1MethodScoped",
 ] as const;
@@ -53,21 +57,15 @@ export const ARTIFACT_NAMES: Record<DeploymentName, string> = {
 };
 
 const COMMON_DEPLOY_ONLY_STEPS = [
-  "deploy-vault",
   "deploy-policy",
   "deploy-hook",
-  "initialize-controller",
   "authorize-hook",
   ...DISPUTABLE_PAYMENT_METHODS.map((method) => `set-risk-window:${method}`),
 ] as const;
 
 export const DEPLOY_ONLY_STEP_KINDS: Record<LiveNetwork, readonly string[]> = {
   base_staging: [...COMMON_DEPLOY_ONLY_STEPS],
-  base: [
-    ...COMMON_DEPLOY_ONLY_STEPS,
-    "transfer-vault-owner",
-    "transfer-policy-owner",
-  ],
+  base: [...COMMON_DEPLOY_ONLY_STEPS, "transfer-policy-owner"],
 };
 
 export const EXPECTED_LIVE: Record<
@@ -148,32 +146,93 @@ const LIVE_FLAGS: Record<LiveNetwork, string> = {
   base: "ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_DEPLOYMENT",
 };
 
-const POLICY_ADMISSION_EVENTS = [
+export type FreshStackEvent = {
+  name: string;
+  blockNumber: number;
+  transactionIndex: number;
+  logIndex: number;
+  transactionHash: string;
+};
+
+export type FreshStackInput = {
+  policyEvents: FreshStackEvent[];
+};
+
+export const ALLOWED_POLICY_CONFIGURATION_EVENTS = [
+  "DisputeProtectionEnabledUpdated",
+] as const;
+
+export const EXPECTED_POLICY_GOVERNANCE_EVENTS = [
+  "RiskWindowUpdated",
+  "DisputeVerifierUpdated",
+  "LifecycleHookAuthorizationUpdated",
+  "AdmissionsPausedUpdated",
+  "OwnershipTransferStarted",
+  "OwnershipTransferred",
+] as const;
+
+export const FORBIDDEN_POLICY_LIFECYCLE_EVENTS = [
   "DisputeProtectionIntentOpened",
   "DisputeProtectionIntentCancelled",
   "DisputeProtectionIntentSettled",
   "DisputeProtectionIntentReleased",
   "DisputeResolved",
-  "DisputeProtectionEnabledUpdated",
 ] as const;
 
-const VAULT_ADMISSION_EVENTS = [
-  "StakeDeposited",
-  "StakeWithdrawn",
-  "TakerAuthorizationUpdated",
-  "StakeOwnerSelected",
-  "StakeLocked",
-  "LockFunded",
-  "StakeLockIncreased",
-  "StakeLockResized",
-  "StakeUnlocked",
-  "StakeLockResolved",
-  "ClaimCreated",
-  "ClaimWithdrawn",
-] as const;
+function includes(list: readonly string[], name: string): boolean {
+  return list.includes(name);
+}
+
+export function classifyFreshStackActivity(input: FreshStackInput): void {
+  for (const event of input.policyEvents) {
+    if (includes(FORBIDDEN_POLICY_LIFECYCLE_EVENTS, event.name)) {
+      throw new Error(
+        `Fresh DisputeProtectionPolicyMethodScoped has lifecycle activity: ${event.name} in ${event.transactionHash}`
+      );
+    }
+    if (
+      !includes(ALLOWED_POLICY_CONFIGURATION_EVENTS, event.name) &&
+      !includes(EXPECTED_POLICY_GOVERNANCE_EVENTS, event.name)
+    ) {
+      throw new Error(
+        `DisputeProtectionPolicyMethodScoped emitted an unclassified event: ${event.name} in ${event.transactionHash}`
+      );
+    }
+  }
+}
+
+export function decodeFreshStackLogs(
+  contractInterface: utils.Interface,
+  logs: providers.Log[],
+  label: string
+): FreshStackEvent[] {
+  return logs.map((log) => {
+    let name: string;
+    try {
+      name = contractInterface.getEvent(log.topics[0]).name;
+    } catch {
+      throw new Error(
+        `${label} emitted a log this ABI cannot decode: ${log.topics[0]} in ${log.transactionHash}`
+      );
+    }
+    return {
+      name,
+      blockNumber: log.blockNumber,
+      transactionIndex: log.transactionIndex,
+      logIndex: log.logIndex,
+      transactionHash: log.transactionHash,
+    };
+  });
+}
 
 function isLiveNetwork(network: string): network is LiveNetwork {
   return network === "base" || network === "base_staging";
+}
+
+export function getRiskWindowPaymentMethods(network: string): string[] {
+  return isLiveNetwork(network)
+    ? getActivePaymentMethods(network)
+    : ACTIVE_PAYMENT_METHODS;
 }
 
 function sameAddress(left: string, right: string): boolean {
@@ -288,16 +347,25 @@ export async function getSuccessorDeployments(
       "Method-scoped successor deployment artifacts are not a contiguous prefix"
     );
   }
+  const isPartialPrefix = firstMissing > 0;
   for (let index = 0; index < deployments.length; index += 1) {
     const deployment = deployments[index];
     if (deployment) {
       const name = LIVE_SUCCESSOR_DEPLOYMENT_NAMES[index];
-      await assertCanonicalDeployment(
+      await assertDeploymentMatchesChain(
         hre,
         deployment,
         name,
         ARTIFACT_NAMES[name]
       );
+      if (isPartialPrefix) {
+        await assertCanonicalDeployment(
+          hre,
+          deployment,
+          name,
+          ARTIFACT_NAMES[name]
+        );
+      }
     }
   }
   return deployments;
@@ -352,74 +420,28 @@ function deploymentBlock(deployment: Deployment, label: string): number {
   return blockNumber;
 }
 
-async function eventTopics(
+async function assertFreshPolicyUnused(
   hre: HardhatRuntimeEnvironment,
-  artifactName: string,
-  eventNames: readonly string[]
-): Promise<string[]> {
-  const artifact = await hre.deployments.getExtendedArtifact(artifactName);
-  const contractInterface = new ethers.utils.Interface(artifact.abi);
-  return eventNames.map((eventName) =>
-    contractInterface.getEventTopic(eventName)
-  );
-}
-
-async function assertFreshStackUnused(
-  hre: HardhatRuntimeEnvironment,
-  deployments: Array<Deployment | null>
+  policyDeployment: Deployment | null
 ): Promise<void> {
-  const [vaultDeployment, policyDeployment] = deployments;
-  if (vaultDeployment) {
-    const vault = await ethers.getContractAt(
-      "StakeVault",
-      vaultDeployment.address
-    );
-    const stakeToken = await ethers.getContractAt(
-      ["function balanceOf(address) view returns (uint256)"],
-      await vault.stakeToken()
-    );
-    const balances = await Promise.all([
-      vault.totalStaked(),
-      vault.totalClaimable(),
-      vault.totalAccounted(),
-      vault.unaccountedBalance(),
-      stakeToken.balanceOf(vault.address),
-    ]);
-    if (balances.some((balance) => !balance.isZero())) {
-      throw new Error("Fresh StakeVaultMethodScoped is not empty");
-    }
-    const vaultLogs = await ethers.provider.getLogs({
-      address: vault.address,
-      fromBlock: deploymentBlock(vaultDeployment, "StakeVaultMethodScoped"),
-      toBlock: await ethers.provider.getBlockNumber(),
-      topics: [await eventTopics(hre, "StakeVault", VAULT_ADMISSION_EVENTS)],
-    });
-    if (vaultLogs.length !== 0) {
-      throw new Error("Fresh StakeVaultMethodScoped has admission activity");
-    }
-  }
-  if (policyDeployment) {
-    const policyLogs = await ethers.provider.getLogs({
-      address: policyDeployment.address,
-      fromBlock: deploymentBlock(
-        policyDeployment,
-        "DisputeProtectionPolicyMethodScoped"
-      ),
-      toBlock: await ethers.provider.getBlockNumber(),
-      topics: [
-        await eventTopics(
-          hre,
-          "DisputeProtectionPolicy",
-          POLICY_ADMISSION_EVENTS
-        ),
-      ],
-    });
-    if (policyLogs.length !== 0) {
-      throw new Error(
-        "Fresh DisputeProtectionPolicyMethodScoped has admission activity"
-      );
-    }
-  }
+  if (!policyDeployment) return;
+  const policyArtifact = await hre.deployments.getExtendedArtifact(
+    "DisputeProtectionPolicy"
+  );
+  const logs = await ethers.provider.getLogs({
+    address: policyDeployment.address,
+    fromBlock: deploymentBlock(
+      policyDeployment,
+      "DisputeProtectionPolicyMethodScoped"
+    ),
+    toBlock: await ethers.provider.getBlockNumber(),
+  });
+  const policyEvents = decodeFreshStackLogs(
+    new ethers.utils.Interface(policyArtifact.abi),
+    logs,
+    "DisputeProtectionPolicyMethodScoped"
+  );
+  classifyFreshStackActivity({ policyEvents });
 }
 
 async function assertWhitelistPolicy(
@@ -436,7 +458,7 @@ async function assertWhitelistPolicy(
       "WhitelistPolicyMethodScoped record missing; run lane 36 first"
     );
   }
-  await assertCanonicalDeployment(
+  await assertDeploymentMatchesChain(
     hre,
     deployment,
     METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT_NAME,
@@ -538,6 +560,28 @@ async function assertLiveSharedState(
   ]);
 
   const predecessor = METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS[network];
+  const predecessorVault = await ethers.getContractAt(
+    "StakeVault",
+    predecessor.contracts.StakeVault.address
+  );
+  if (
+    !sameAddress(
+      await predecessorVault.controller(),
+      predecessor.contracts.DisputeProtectionPolicy.address
+    ) ||
+    !sameAddress(
+      await predecessorVault.pendingController(),
+      ethers.constants.AddressZero
+    ) ||
+    !(await predecessorVault.pendingControllerValidAt()).isZero() ||
+    !sameAddress(await predecessorVault.owner(), governance) ||
+    !(await predecessorVault.controllerChangeDelay()).eq(
+      STAKE_VAULT_CONTROLLER_CHANGE_DELAY
+    ) ||
+    !sameAddress(await predecessorVault.stakeToken(), expected.stakeToken)
+  ) {
+    throw new Error("Predecessor StakeVault mutable configuration drifted");
+  }
   const verifier = await ethers.getContractAt(
     "DisputeVerifier",
     predecessor.contracts.DisputeVerifier.address
@@ -656,7 +700,7 @@ async function readLiveDeployOnlyPrefix(
 ): Promise<{
   completed: boolean[];
   deployments: Array<Deployment | null>;
-  contracts?: { vault: any; policy: any; hook: any };
+  contracts?: { policy: any; hook: any };
 }> {
   const successorDeployments = await getSuccessorDeployments(hre);
   const whitelistPolicy = await assertLiveSharedState(hre, network);
@@ -665,46 +709,21 @@ async function readLiveDeployOnlyPrefix(
   const governance = MULTI_SIG[network] || deployer;
   const expected = EXPECTED_LIVE[network];
   const predecessor = METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS[network];
+  const predecessorVault = predecessor.contracts.StakeVault.address;
 
-  await assertFreshStackUnused(hre, successorDeployments);
+  await assertFreshPolicyUnused(hre, successorDeployments[0]);
   if (successorDeployments.some((deployment) => deployment === null)) {
     completed.push(
-      ...DEPLOY_ONLY_STEP_KINDS[network].slice(3).map(() => false)
+      ...DEPLOY_ONLY_STEP_KINDS[network].slice(2).map(() => false)
     );
-    const [vaultDeployment, policyDeployment, hookDeployment] =
-      successorDeployments;
-    if (vaultDeployment) {
-      const vault = await ethers.getContractAt(
-        "StakeVault",
-        vaultDeployment.address
-      );
-      if (
-        !sameAddress(await vault.stakeToken(), expected.stakeToken) ||
-        !(await vault.controllerChangeDelay()).eq(
-          STAKE_VAULT_CONTROLLER_CHANGE_DELAY
-        ) ||
-        !sameAddress(await vault.controller(), ethers.constants.AddressZero) ||
-        !sameAddress(
-          await vault.pendingController(),
-          ethers.constants.AddressZero
-        ) ||
-        !(await vault.pendingControllerValidAt()).isZero() ||
-        !sameAddress(await vault.owner(), deployer) ||
-        !sameAddress(await vault.pendingOwner(), ethers.constants.AddressZero)
-      ) {
-        throw new Error("Partial method-scoped StakeVault state drifted");
-      }
-    }
+    const [policyDeployment, hookDeployment] = successorDeployments;
     if (policyDeployment) {
-      if (!vaultDeployment) {
-        throw new Error("Method-scoped policy exists before its vault");
-      }
       const policy = await ethers.getContractAt(
         "DisputeProtectionPolicy",
         policyDeployment.address
       );
       if (
-        !sameAddress(await policy.stakeVault(), vaultDeployment.address) ||
+        !sameAddress(await policy.stakeVault(), predecessorVault) ||
         !sameAddress(
           await policy.disputeVerifier(),
           predecessor.contracts.DisputeVerifier.address
@@ -719,7 +738,7 @@ async function readLiveDeployOnlyPrefix(
       ) {
         throw new Error("Partial method-scoped policy state drifted");
       }
-      for (const method of ACTIVE_PAYMENT_METHODS) {
+      for (const method of getRiskWindowPaymentMethods(network)) {
         if (!(await policy.getRiskWindow(paymentMethodHash(method))).isZero()) {
           throw new Error(
             `Partial method-scoped risk window exists before hook deployment: ${method}`
@@ -753,12 +772,8 @@ async function readLiveDeployOnlyPrefix(
     return { completed, deployments: successorDeployments };
   }
 
-  const [vaultDeployment, policyDeployment, hookDeployment] =
+  const [policyDeployment, hookDeployment] =
     successorDeployments as Deployment[];
-  const vault = await ethers.getContractAt(
-    "StakeVault",
-    vaultDeployment.address
-  );
   const policy = await ethers.getContractAt(
     "DisputeProtectionPolicy",
     policyDeployment.address
@@ -768,20 +783,7 @@ async function readLiveDeployOnlyPrefix(
     hookDeployment.address
   );
   if (
-    !sameAddress(await vault.stakeToken(), expected.stakeToken) ||
-    !(await vault.controllerChangeDelay()).eq(
-      STAKE_VAULT_CONTROLLER_CHANGE_DELAY
-    ) ||
-    !sameAddress(
-      await vault.pendingController(),
-      ethers.constants.AddressZero
-    ) ||
-    !(await vault.pendingControllerValidAt()).isZero()
-  ) {
-    throw new Error("Method-scoped StakeVault dependency state drifted");
-  }
-  if (
-    !sameAddress(await policy.stakeVault(), vault.address) ||
+    !sameAddress(await policy.stakeVault(), predecessorVault) ||
     !sameAddress(
       await policy.disputeVerifier(),
       predecessor.contracts.DisputeVerifier.address
@@ -820,14 +822,6 @@ async function readLiveDeployOnlyPrefix(
     throw new Error("Deploy-only dispute writer set drifted");
   }
 
-  const controller = await vault.controller();
-  if (
-    !sameAddress(controller, ethers.constants.AddressZero) &&
-    !sameAddress(controller, policy.address)
-  ) {
-    throw new Error("Method-scoped StakeVault controller drifted");
-  }
-  completed.push(sameAddress(controller, policy.address));
   completed.push(
     await assertOnlySuccessorHookAuthorization(
       policy,
@@ -838,7 +832,7 @@ async function readLiveDeployOnlyPrefix(
   );
 
   const disputableMethods = new Set(DISPUTABLE_PAYMENT_METHODS);
-  for (const method of ACTIVE_PAYMENT_METHODS) {
+  for (const method of getRiskWindowPaymentMethods(network)) {
     const actual = await policy.getRiskWindow(paymentMethodHash(method));
     const expectedWindow = disputableMethods.has(method)
       ? DISPUTE_RISK_WINDOW[network]
@@ -858,15 +852,6 @@ async function readLiveDeployOnlyPrefix(
   if (network === "base") {
     completed.push(
       ownershipStepState(
-        await vault.owner(),
-        await vault.pendingOwner(),
-        deployer,
-        governance,
-        "StakeVaultMethodScoped"
-      )
-    );
-    completed.push(
-      ownershipStepState(
         await policy.owner(),
         await policy.pendingOwner(),
         deployer,
@@ -875,8 +860,6 @@ async function readLiveDeployOnlyPrefix(
       )
     );
   } else if (
-    !sameAddress(await vault.owner(), deployer) ||
-    !sameAddress(await vault.pendingOwner(), ethers.constants.AddressZero) ||
     !sameAddress(await policy.owner(), deployer) ||
     !sameAddress(await policy.pendingOwner(), ethers.constants.AddressZero)
   ) {
@@ -887,7 +870,7 @@ async function readLiveDeployOnlyPrefix(
   return {
     completed,
     deployments: successorDeployments,
-    contracts: { vault, policy, hook },
+    contracts: { policy, hook },
   };
 }
 
@@ -909,7 +892,7 @@ async function deployLiveSuccessor(
     const state = await readLiveDeployOnlyPrefix(hre, network);
     const prefix = classifyDeployOnlyPrefix(network, state.completed);
     if (prefix.nextStep === null) {
-      await assertFreshStackUnused(hre, state.deployments);
+      await assertFreshPolicyUnused(hre, state.deployments[0]);
       console.log(`=== ${network} method-scoped dispute stack prepared ===`);
       return;
     }
@@ -917,31 +900,14 @@ async function deployLiveSuccessor(
     const predecessor = METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS[network];
     const expected = EXPECTED_LIVE[network];
 
-    if (step === "deploy-vault") {
-      const name = "StakeVaultMethodScoped";
-      const deployment = await hre.deployments.deploy(name, {
-        contract: ARTIFACT_NAMES[name],
-        from: deployer,
-        args: [
-          deployer,
-          expected.stakeToken,
-          ethers.constants.AddressZero,
-          STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
-        ],
-        log: true,
-      });
-      if (!deployment.newlyDeployed) {
-        throw new Error(`${name} was not freshly deployed`);
-      }
-    } else if (step === "deploy-policy") {
+    if (step === "deploy-policy") {
       const name = "DisputeProtectionPolicyMethodScoped";
-      const vault = await hre.deployments.get("StakeVaultMethodScoped");
       const deployment = await hre.deployments.deploy(name, {
         contract: ARTIFACT_NAMES[name],
         from: deployer,
         args: [
           deployer,
-          vault.address,
+          predecessor.contracts.StakeVault.address,
           predecessor.contracts.DisputeVerifier.address,
           predecessor.contracts.DisputeNullifierRegistry.address,
         ],
@@ -975,13 +941,7 @@ async function deployLiveSuccessor(
       if (!state.contracts) {
         throw new Error(`Missing method-scoped contracts for ${step}`);
       }
-      if (step === "initialize-controller") {
-        await (
-          await state.contracts.vault.initializeController(
-            state.contracts.policy.address
-          )
-        ).wait();
-      } else if (step === "authorize-hook") {
+      if (step === "authorize-hook") {
         await (
           await state.contracts.policy.setLifecycleHookAuthorization(
             state.contracts.hook.address,
@@ -996,10 +956,6 @@ async function deployLiveSuccessor(
             DISPUTE_RISK_WINDOW[network]
           )
         ).wait();
-      } else if (step === "transfer-vault-owner") {
-        await (
-          await state.contracts.vault.transferOwnership(governance)
-        ).wait();
       } else if (step === "transfer-policy-owner") {
         await (
           await state.contracts.policy.transferOwnership(governance)
@@ -1009,7 +965,7 @@ async function deployLiveSuccessor(
       }
     }
     await waitForDeploymentDelay(hre);
-    await assertFreshStackUnused(hre, await getSuccessorDeployments(hre));
+    await assertFreshPolicyUnused(hre, (await getSuccessorDeployments(hre))[0]);
   }
 }
 
@@ -1095,7 +1051,6 @@ async function deployLocalSuccessor(
     ],
     log: true,
   });
-  await assertFreshStackUnused(hre, [vaultDeployment, null, null]);
   const policyDeployment = await deploy("DisputeProtectionPolicyMethodScoped", {
     contract: ARTIFACT_NAMES.DisputeProtectionPolicyMethodScoped,
     from: deployer,
@@ -1107,7 +1062,7 @@ async function deployLocalSuccessor(
     ],
     log: true,
   });
-  await assertFreshStackUnused(hre, [vaultDeployment, policyDeployment, null]);
+  await assertFreshPolicyUnused(hre, policyDeployment);
   const hookDeployment = await deploy("IntentLifecycleHookV1MethodScoped", {
     contract: ARTIFACT_NAMES.IntentLifecycleHookV1MethodScoped,
     from: deployer,
@@ -1118,12 +1073,7 @@ async function deployLocalSuccessor(
     ],
     log: true,
   });
-  const successorDeployments = [
-    vaultDeployment,
-    policyDeployment,
-    hookDeployment,
-  ];
-  await assertFreshStackUnused(hre, successorDeployments);
+  await assertFreshPolicyUnused(hre, policyDeployment);
 
   const vault = await ethers.getContractAt(
     "StakeVault",
@@ -1199,7 +1149,7 @@ async function deployLocalSuccessor(
       "Local method-scoped dispute lifecycle activation verification failed"
     );
   }
-  await assertFreshStackUnused(hre, successorDeployments);
+  await assertFreshPolicyUnused(hre, policyDeployment);
 }
 
 export async function methodScopedDisputeStackPrepared(

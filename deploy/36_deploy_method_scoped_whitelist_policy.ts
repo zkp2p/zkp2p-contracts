@@ -4,7 +4,7 @@ import { ethers } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 
-import { assertCanonicalDeployment } from "../deployments/canonicalDeployment";
+import { assertDeploymentMatchesChain } from "../deployments/canonicalDeployment";
 import { setNewOwner, waitForDeploymentDelay } from "../deployments/helpers";
 import { MULTI_SIG } from "../deployments/parameters";
 import type { WhitelistPolicy__factory } from "../typechain";
@@ -151,11 +151,10 @@ async function assertLivePreconditions(
   await assertRegistryState(dependencies);
 }
 
-async function assertPolicyWiring(
+async function assertPolicyDependencies(
   policyAddress: string,
-  governance: string,
   dependencies: Awaited<ReturnType<typeof readDependencies>>
-): Promise<void> {
+): Promise<Awaited<ReturnType<typeof ethers.getContractAt>>> {
   const policy = await ethers.getContractAt("WhitelistPolicy", policyAddress);
   assertAddress(
     "WhitelistPolicyMethodScoped group registry",
@@ -172,6 +171,15 @@ async function assertPolicyWiring(
     await policy.orchestratorRegistry(),
     dependencies.orchestratorRegistry
   );
+  return policy;
+}
+
+async function assertPolicyWiring(
+  policyAddress: string,
+  governance: string,
+  dependencies: Awaited<ReturnType<typeof readDependencies>>
+): Promise<void> {
+  const policy = await assertPolicyDependencies(policyAddress, dependencies);
   assertAddress(
     "WhitelistPolicyMethodScoped owner",
     await policy.owner(),
@@ -206,7 +214,7 @@ const func: DeployFunction = async function (
     METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT_NAME
   );
   if (existing) {
-    await assertCanonicalDeployment(
+    await assertDeploymentMatchesChain(
       hre,
       existing,
       METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT_NAME,
@@ -271,7 +279,7 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
     METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT_NAME
   );
   if (existing) {
-    await assertCanonicalDeployment(
+    await assertDeploymentMatchesChain(
       hre,
       existing,
       METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT_NAME,
@@ -280,12 +288,17 @@ func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
     const dependencies = await readDependencies(hre);
     await assertLivePreconditions(hre, network, dependencies);
     const [deployer] = await hre.getUnnamedAccounts();
-    await assertPolicyWiring(
+    const governance = MULTI_SIG[network] || deployer;
+    const policy = await assertPolicyDependencies(
       existing.address,
-      MULTI_SIG[network] || deployer,
       dependencies
     );
-    return true;
+    const owner = await policy.owner();
+    if (sameAddress(owner, deployer) && !sameAddress(governance, deployer)) {
+      return false;
+    }
+    if (sameAddress(owner, governance)) return true;
+    throw new Error("WhitelistPolicyMethodScoped owner drifted");
   }
 
   const flag = LIVE_FLAGS[network];

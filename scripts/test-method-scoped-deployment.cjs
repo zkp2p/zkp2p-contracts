@@ -26,12 +26,22 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 const { test } = require("node:test");
 
-const { ethers } = require("hardhat");
+const hardhat = require("hardhat");
+const { ethers } = hardhat;
 const { ethers: ethersLibrary } = require("ethers");
 const lane34Module = require("../deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts");
 const lane31Module = require("../deploy/31_deploy_v3_payment_binding_stack.ts");
 const lane36Module = require("../deploy/36_deploy_method_scoped_whitelist_policy.ts");
 const lane37Module = require("../deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts");
+const {
+  ACTIVE_PAYMENT_METHODS,
+  BASE_STAGING_ACTIVE_PAYMENT_METHODS,
+} = require("../deployments/parameters.ts");
+const {
+  assertCanonicalDeployment,
+  assertDeploymentMatchesChain,
+  deploymentCodeMatchesRecord,
+} = require("../deployments/canonicalDeployment.ts");
 const {
   IMMUTABLE_DEPLOYMENT_LANES,
   assertImmutableDeploymentLanes,
@@ -56,6 +66,210 @@ const skipLane37 = lane37Module.default.skip;
 if (!skipLane36 || !skipLane37) {
   throw new Error("Method-scoped deployment lanes must define skip functions");
 }
+
+test("deployment record matching accepts identical bytecode", () => {
+  assert.equal(deploymentCodeMatchesRecord("0x60016002", "0x60016002"), true);
+});
+
+test("deployment record matching accepts values in zero placeholder slots", () => {
+  const recordBytes = Buffer.alloc(100, 0x60);
+  const offsets = [1, 34, 67];
+  for (const offset of offsets) recordBytes.fill(0, offset, offset + 32);
+  const chainBytes = Buffer.from(recordBytes);
+  chainBytes.fill(0x11, offsets[0], offsets[0] + 32);
+  Buffer.from("1234567890abcdef1234567890abcdef12345678", "hex").copy(
+    chainBytes,
+    offsets[1] + 12
+  );
+  assert.ok(
+    chainBytes.subarray(offsets[1], offsets[1] + 12).equals(Buffer.alloc(12))
+  );
+  chainBytes.fill(0x33, offsets[2], offsets[2] + 32);
+
+  assert.equal(
+    deploymentCodeMatchesRecord(
+      `0x${recordBytes.toString("hex")}`,
+      `0x${chainBytes.toString("hex")}`
+    ),
+    true
+  );
+});
+
+test("deployment record matching rejects drift at a nonzero record byte", () => {
+  assert.equal(deploymentCodeMatchesRecord("0x60016002", "0x60026002"), false);
+});
+
+test("deployment record matching rejects longer chain bytecode", () => {
+  assert.equal(deploymentCodeMatchesRecord("0x6001", "0x600100"), false);
+});
+
+test("deployment record matching rejects chain bytecode shorter by one byte", () => {
+  assert.equal(deploymentCodeMatchesRecord("0x600100", "0x6001"), false);
+});
+
+test("executed Base hook record matches chain code across build hashes", async () => {
+  const deployment = /** @type {any} */ (
+    require("../deployments/base/IntentLifecycleHookV1OptIn.json")
+  );
+  const artifact = await hardhat.deployments.getExtendedArtifact(
+    "IntentLifecycleHookV1"
+  );
+  assert.notEqual(deployment.solcInputHash, artifact.solcInputHash);
+
+  const immutableReferences = artifact.evm.deployedBytecode.immutableReferences;
+  const referencesByArgument = Object.values(immutableReferences);
+  assert.equal(referencesByArgument.length, deployment.args.length);
+  assert.deepEqual(
+    referencesByArgument.map((references) => references.length),
+    [4, 2, 4]
+  );
+  const currentReferences = referencesByArgument
+    .flatMap((references, argumentIndex) =>
+      references.map(
+        (/** @type {{ start: number; length: number }} */ reference) => ({
+          ...reference,
+          argumentIndex,
+        })
+      )
+    )
+    .sort((left, right) => left.start - right.start);
+  assert.equal(currentReferences.length, 10);
+  assert.ok(currentReferences.every(({ length }) => length === 32));
+
+  const recordHex = deployment.deployedBytecode.slice(2);
+  const recordOffsets = [];
+  for (let start = 0; start <= recordHex.length - 64; start += 2) {
+    if (recordHex.slice(start, start + 64) === "0".repeat(64)) {
+      recordOffsets.push(start / 2);
+    }
+  }
+  assert.equal(recordOffsets.length, currentReferences.length);
+
+  let chainHex = recordHex;
+  for (const [index, offset] of recordOffsets.entries()) {
+    const argument = deployment.args[currentReferences[index].argumentIndex]
+      .slice(2)
+      .toLowerCase()
+      .padStart(64, "0");
+    const start = offset * 2;
+    chainHex = `${chainHex.slice(0, start)}${argument}${chainHex.slice(
+      start + 64
+    )}`;
+  }
+  const chainCode = `0x${chainHex}`;
+  const hre = /** @type {any} */ ({
+    deployments: { getExtendedArtifact: async () => artifact },
+    ethers: { provider: { getCode: async () => chainCode } },
+  });
+
+  await assertDeploymentMatchesChain(
+    hre,
+    deployment,
+    "IntentLifecycleHookV1OptIn",
+    "IntentLifecycleHookV1"
+  );
+
+  const driftedChainCode = `0x61${chainHex.slice(2)}`;
+  await assert.rejects(
+    assertDeploymentMatchesChain(
+      {
+        ...hre,
+        ethers: {
+          provider: { getCode: async () => driftedChainCode },
+        },
+      },
+      deployment,
+      "IntentLifecycleHookV1OptIn",
+      "IntentLifecycleHookV1"
+    ),
+    /IntentLifecycleHookV1OptIn on-chain code does not match its deployment record/
+  );
+  await assert.rejects(
+    assertCanonicalDeployment(
+      hre,
+      deployment,
+      "IntentLifecycleHookV1OptIn",
+      "IntentLifecycleHookV1"
+    ),
+    /lacks canonical deployment evidence/
+  );
+});
+
+test("deployment record matching does not depend on the current solc input", async () => {
+  const artifact = {
+    solcInputHash: "current-input",
+    deployedBytecode: "0x60016002",
+    evm: { deployedBytecode: { immutableReferences: {} } },
+  };
+  const deployment = {
+    abi: [],
+    address: "0x0000000000000000000000000000000000000001",
+    solcInputHash: "executed-input",
+    deployedBytecode: "0x60036004",
+  };
+  const hre = /** @type {any} */ ({
+    deployments: { getExtendedArtifact: async () => artifact },
+    ethers: { provider: { getCode: async () => deployment.deployedBytecode } },
+  });
+
+  await assertDeploymentMatchesChain(hre, deployment, "Policy", "Policy");
+  await assert.rejects(
+    assertCanonicalDeployment(hre, deployment, "Policy", "Policy"),
+    /lacks canonical deployment evidence/
+  );
+});
+
+test("deployment record matching rejects chain bytecode drift", async () => {
+  const artifact = {
+    solcInputHash: "current-input",
+    deployedBytecode: "0x60016002",
+    evm: { deployedBytecode: { immutableReferences: {} } },
+  };
+  const deployment = {
+    abi: [],
+    address: "0x0000000000000000000000000000000000000001",
+    solcInputHash: "executed-input",
+    deployedBytecode: "0x60036004",
+  };
+  const hre = /** @type {any} */ ({
+    deployments: { getExtendedArtifact: async () => artifact },
+    ethers: { provider: { getCode: async () => "0x60056006" } },
+  });
+
+  await assert.rejects(
+    assertDeploymentMatchesChain(hre, deployment, "Policy", "Policy"),
+    /Policy on-chain code does not match its deployment record/
+  );
+  await assert.rejects(
+    assertCanonicalDeployment(hre, deployment, "Policy", "Policy"),
+    /Policy on-chain code does not match its deployment record/
+  );
+});
+
+test("canonical deployment matching ignores current immutable regions", async () => {
+  const artifact = {
+    solcInputHash: "shared-input",
+    deployedBytecode: "0x6001aa02",
+    evm: {
+      deployedBytecode: {
+        immutableReferences: { value: [{ start: 2, length: 1 }] },
+      },
+    },
+  };
+  const deployment = {
+    abi: [],
+    address: "0x0000000000000000000000000000000000000001",
+    solcInputHash: artifact.solcInputHash,
+    deployedBytecode: "0x6001bb02",
+  };
+  const hre = /** @type {any} */ ({
+    deployments: { getExtendedArtifact: async () => artifact },
+    ethers: { provider: { getCode: async () => "0x6001cc02" } },
+  });
+
+  await assertDeploymentMatchesChain(hre, deployment, "Policy", "Policy");
+  await assertCanonicalDeployment(hre, deployment, "Policy", "Policy");
+});
 
 /** @param {string} path */
 function sha256(path) {
@@ -292,6 +506,75 @@ test("lane 36 skips unsupported and unflagged live runs but tagged runs fail", a
   }
 });
 
+test("lane 36 resumes only an incomplete deployer-to-governance handover", async () => {
+  const network = "base";
+  const expected = lane36Module.EXPECTED_LIVE[network];
+  const policyAddress = "0x0000000000000000000000000000000000000100";
+  const orchestratorV2 = "0x0000000000000000000000000000000000000200";
+  const escrowV2 = "0x0000000000000000000000000000000000000300";
+  const stranger = "0x0000000000000000000000000000000000000400";
+  const artifact = await require("hardhat").deployments.getExtendedArtifact(
+    "WhitelistPolicy"
+  );
+  const existing = {
+    address: policyAddress,
+    deployedBytecode: artifact.deployedBytecode,
+    solcInputHash: "executed-input",
+  };
+  let owner = expected.deployer;
+  const dependencies = new Map([
+    ["AddressGroupRegistry", { address: expected.addressGroupRegistry }],
+    ["EscrowRegistry", { address: expected.escrowRegistry }],
+    ["OrchestratorRegistry", { address: expected.orchestratorRegistry }],
+    ["OrchestratorV2", { address: orchestratorV2 }],
+    ["EscrowV2", { address: escrowV2 }],
+  ]);
+  const fakeHre = /** @type {any} */ ({
+    deployments: {
+      getNetworkName: () => network,
+      getOrNull: async () => existing,
+      /** @param {string} name */
+      get: async (name) => dependencies.get(name),
+      getExtendedArtifact: async () => artifact,
+    },
+    ethers: {
+      provider: {
+        getCode: async () => artifact.deployedBytecode,
+      },
+    },
+    getUnnamedAccounts: async () => [expected.deployer],
+  });
+  const originalGetContractAt = ethers.getContractAt;
+  /** @type {any} */ (ethers).getContractAt = async (
+    /** @type {string} */ name
+  ) => {
+    if (name === "OrchestratorRegistry") {
+      return { isOrchestrator: async () => true };
+    }
+    if (name === "EscrowRegistry") {
+      return { isWhitelistedEscrow: async () => true };
+    }
+    if (name === "WhitelistPolicy") {
+      return {
+        groupRegistry: async () => expected.addressGroupRegistry,
+        escrowRegistry: async () => expected.escrowRegistry,
+        orchestratorRegistry: async () => expected.orchestratorRegistry,
+        owner: async () => owner,
+      };
+    }
+    throw new Error(`Unexpected contract ${name}`);
+  };
+  try {
+    assert.equal(await skipLane36(fakeHre), false);
+    owner = expected.governance;
+    assert.equal(await skipLane36(fakeHre), true);
+    owner = stranger;
+    await assert.rejects(skipLane36(fakeHre), /owner drifted/);
+  } finally {
+    /** @type {any} */ (ethers).getContractAt = originalGetContractAt;
+  }
+});
+
 test("lane 36 and lane 37 share every common live dependency pin", () => {
   for (const network of /** @type {Array<"base" | "base_staging">} */ ([
     "base",
@@ -321,10 +604,15 @@ test("lane 37 exports the method-scoped dispute stack identity", () => {
     "IntentLifecycleHookV1MethodScoped",
   ]);
   assert.deepEqual(lane37Module.LIVE_SUCCESSOR_DEPLOYMENT_NAMES, [
-    "StakeVaultMethodScoped",
     "DisputeProtectionPolicyMethodScoped",
     "IntentLifecycleHookV1MethodScoped",
   ]);
+  assert.equal(
+    lane37Module.LIVE_SUCCESSOR_DEPLOYMENT_NAMES.includes(
+      "StakeVaultMethodScoped"
+    ),
+    false
+  );
   assert.deepEqual(lane37Module.ARTIFACT_NAMES, {
     DisputeNullifierRegistry: "NullifierRegistry",
     DisputeVerifier: "DisputeVerifier",
@@ -337,6 +625,21 @@ test("lane 37 exports the method-scoped dispute stack identity", () => {
     "V3DisputeMethodScopedStack",
   ]);
   assert.deepEqual(lane37Module.default.dependencies, []);
+});
+
+test("lane 37 checks risk windows against each network's active methods", () => {
+  assert.deepEqual(
+    lane37Module.getRiskWindowPaymentMethods("base_staging"),
+    BASE_STAGING_ACTIVE_PAYMENT_METHODS
+  );
+  assert.deepEqual(
+    lane37Module.getRiskWindowPaymentMethods("base"),
+    ACTIVE_PAYMENT_METHODS
+  );
+  assert.deepEqual(
+    lane37Module.getRiskWindowPaymentMethods("hardhat"),
+    ACTIVE_PAYMENT_METHODS
+  );
 });
 
 test("lane 37 skips unsupported and unflagged live runs but tagged runs fail", async () => {
@@ -377,10 +680,8 @@ test("lane 37 skips unsupported and unflagged live runs but tagged runs fail", a
 
 test("lane 37 deploy-only steps are ordered contiguous prefixes", () => {
   const common = [
-    "deploy-vault",
     "deploy-policy",
     "deploy-hook",
-    "initialize-controller",
     "authorize-hook",
     "set-risk-window:paypal",
     "set-risk-window:venmo",
@@ -389,9 +690,20 @@ test("lane 37 deploy-only steps are ordered contiguous prefixes", () => {
   assert.deepEqual(lane37Module.DEPLOY_ONLY_STEP_KINDS.base_staging, common);
   assert.deepEqual(lane37Module.DEPLOY_ONLY_STEP_KINDS.base, [
     ...common,
-    "transfer-vault-owner",
     "transfer-policy-owner",
   ]);
+  assert.equal(
+    Object.values(lane37Module.DEPLOY_ONLY_STEP_KINDS)
+      .flat()
+      .some((step) =>
+        [
+          "deploy-vault",
+          "initialize-controller",
+          "transfer-vault-owner",
+        ].includes(step)
+      ),
+    false
+  );
   for (const network of /** @type {Array<"base_staging" | "base">} */ ([
     "base_staging",
     "base",
@@ -485,28 +797,77 @@ test("lane 37 ownership states distinguish complete, pending, absent, and drift"
   );
 });
 
-test("lane 37 local readiness and successor records fail closed", async () => {
+test("lane 37 local readiness and live successor records fail closed", async () => {
   assert.throws(
     () => lane37Module.requireLocalPaymentBindingReady(false),
     /must be fully cut over/
   );
-  const records = new Map([
-    [
-      "DisputeProtectionPolicyMethodScoped",
-      { address: "0x0000000000000000000000000000000000000001" },
-    ],
-  ]);
-  await assert.rejects(
-    lane37Module.getSuccessorDeployments(
-      /** @type {any} */ ({
-        deployments: {
-          /** @param {string} name */
-          getOrNull: async (name) => records.get(name) || null,
+
+  const policyArtifact =
+    await require("hardhat").deployments.getExtendedArtifact(
+      "DisputeProtectionPolicy"
+    );
+  const hookArtifact = await require("hardhat").deployments.getExtendedArtifact(
+    "IntentLifecycleHookV1"
+  );
+  const policy = {
+    address: "0x0000000000000000000000000000000000000001",
+    deployedBytecode: policyArtifact.deployedBytecode,
+    solcInputHash: policyArtifact.solcInputHash,
+  };
+  const hook = {
+    address: "0x0000000000000000000000000000000000000002",
+    deployedBytecode: hookArtifact.deployedBytecode,
+    solcInputHash: hookArtifact.solcInputHash,
+  };
+  const records = new Map([["IntentLifecycleHookV1MethodScoped", hook]]);
+  const fakeHre = /** @type {any} */ ({
+    deployments: {
+      getNetworkName: () => "base",
+      /** @param {string} name */
+      getOrNull: async (name) => records.get(name) || null,
+      /** @param {string} name */
+      getExtendedArtifact: async (name) => {
+        if (name === "DisputeProtectionPolicy") return policyArtifact;
+        if (name === "IntentLifecycleHookV1") return hookArtifact;
+        throw new Error(`Unexpected artifact ${name}`);
+      },
+    },
+    ethers: {
+      provider: {
+        /** @param {string} address */
+        getCode: async (address) => {
+          if (address === policy.address) return policy.deployedBytecode;
+          if (address === hook.address) return hook.deployedBytecode;
+          return "0x";
         },
-      })
-    ),
+      },
+    },
+  });
+  await assert.rejects(
+    lane37Module.getSuccessorDeployments(fakeHre),
     /not a contiguous prefix/
   );
+
+  records.clear();
+  policy.solcInputHash = "executed-input";
+  records.set("DisputeProtectionPolicyMethodScoped", policy);
+  await assert.rejects(
+    lane37Module.getSuccessorDeployments(fakeHre),
+    /lacks canonical deployment evidence/
+  );
+  policy.solcInputHash = policyArtifact.solcInputHash;
+  assert.deepEqual(await lane37Module.getSuccessorDeployments(fakeHre), [
+    policy,
+    null,
+  ]);
+  policy.solcInputHash = "executed-policy-input";
+  hook.solcInputHash = "executed-hook-input";
+  records.set("IntentLifecycleHookV1MethodScoped", hook);
+  assert.deepEqual(await lane37Module.getSuccessorDeployments(fakeHre), [
+    policy,
+    hook,
+  ]);
 });
 
 test("lane 37 local deployment requires the lane 36 policy record", async () => {
@@ -779,5 +1140,191 @@ test("summary and package wiring expose only the current deployment lanes", () =
       name.startsWith("deploy:dispute-opt-in:")
     ),
     false
+  );
+  const scripts = /** @type {Record<string, string>} */ (packageJson.scripts);
+  for (const network of ["base_staging", "base"]) {
+    assert.match(
+      scripts[`verify:method-scoped:${network}`],
+      /--contracts WhitelistPolicyMethodScoped,DisputeProtectionPolicyMethodScoped,IntentLifecycleHookV1MethodScoped /
+    );
+    assert.doesNotMatch(
+      scripts[`verify:method-scoped:${network}`],
+      /StakeVaultMethodScoped/
+    );
+  }
+});
+
+/**
+ * @param {string} name
+ * @param {number} blockNumber
+ * @param {number} logIndex
+ * @param {string} [transactionHash]
+ */
+function freshEvent(
+  name,
+  blockNumber,
+  logIndex,
+  transactionHash = "0x" + "ab".repeat(32)
+) {
+  return { name, blockNumber, transactionIndex: 0, logIndex, transactionHash };
+}
+
+test("fresh-policy classifier allows configuration events", () => {
+  assert.doesNotThrow(() =>
+    lane37Module.classifyFreshStackActivity({
+      policyEvents: [freshEvent("DisputeProtectionEnabledUpdated", 120, 0)],
+    })
+  );
+});
+
+test("fresh-policy classifier rejects every lifecycle event", () => {
+  for (const name of lane37Module.FORBIDDEN_POLICY_LIFECYCLE_EVENTS) {
+    assert.throws(
+      () =>
+        lane37Module.classifyFreshStackActivity({
+          policyEvents: [freshEvent(name, 150, 0)],
+        }),
+      new RegExp(name)
+    );
+  }
+});
+
+test("fresh-policy event lists partition the policy ABI exactly once", () => {
+  const artifactEvents =
+    /** @type {{ abi: Array<{ type: string, name: string }> }} */ (
+      JSON.parse(
+        readFileSync(
+          join(
+            repositoryRoot,
+            "artifacts",
+            "contracts",
+            "hooks",
+            "DisputeProtectionPolicy.sol",
+            "DisputeProtectionPolicy.json"
+          ),
+          "utf8"
+        )
+      )
+    ).abi
+      .filter((entry) => entry.type === "event")
+      .map((entry) => entry.name)
+      .sort();
+  const policyLists = [
+    lane37Module.ALLOWED_POLICY_CONFIGURATION_EVENTS,
+    lane37Module.EXPECTED_POLICY_GOVERNANCE_EVENTS,
+    lane37Module.FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
+  ];
+  const classified = policyLists.flat();
+  assert.equal(
+    new Set(classified).size,
+    classified.length,
+    "policy lists overlap"
+  );
+  assert.deepEqual(
+    [...classified].sort(),
+    artifactEvents,
+    "policy ABI events are not all classified"
+  );
+  assert.deepEqual(
+    [...lane37Module.ALLOWED_POLICY_CONFIGURATION_EVENTS],
+    ["DisputeProtectionEnabledUpdated"]
+  );
+  assert.deepEqual(
+    [...lane37Module.FORBIDDEN_POLICY_LIFECYCLE_EVENTS],
+    [
+      "DisputeProtectionIntentOpened",
+      "DisputeProtectionIntentCancelled",
+      "DisputeProtectionIntentSettled",
+      "DisputeProtectionIntentReleased",
+      "DisputeResolved",
+    ]
+  );
+});
+
+test("fresh-policy classifier allows every governance event", () => {
+  for (const name of lane37Module.EXPECTED_POLICY_GOVERNANCE_EVENTS) {
+    assert.doesNotThrow(() =>
+      lane37Module.classifyFreshStackActivity({
+        policyEvents: [freshEvent(name, 100, 0)],
+      })
+    );
+  }
+});
+
+test("fresh-policy classifier fails closed on an unclassified event", () => {
+  assert.throws(
+    () =>
+      lane37Module.classifyFreshStackActivity({
+        policyEvents: [freshEvent("SomeFutureEvent", 101, 0)],
+      }),
+    /unclassified.*SomeFutureEvent/
+  );
+});
+
+test("decodeFreshStackLogs maps raw logs to named events and rejects unknown topics", () => {
+  const policyInterface = new ethersLibrary.utils.Interface(
+    JSON.parse(
+      readFileSync(
+        join(
+          repositoryRoot,
+          "artifacts",
+          "contracts",
+          "hooks",
+          "DisputeProtectionPolicy.sol",
+          "DisputeProtectionPolicy.json"
+        ),
+        "utf8"
+      )
+    ).abi
+  );
+  const configurationTopic = policyInterface.getEventTopic(
+    "DisputeProtectionEnabledUpdated"
+  );
+  /**
+   * @param {string} topic
+   * @param {number} blockNumber
+   * @param {number} transactionIndex
+   * @param {number} logIndex
+   * @param {string} transactionHash
+   */
+  const rawLog = (
+    topic,
+    blockNumber,
+    transactionIndex,
+    logIndex,
+    transactionHash
+  ) => ({
+    address: "0x" + "11".repeat(20),
+    topics: [topic],
+    data: "0x",
+    blockNumber,
+    transactionIndex,
+    logIndex,
+    transactionHash,
+    blockHash: "0x" + "22".repeat(32),
+    removed: false,
+  });
+  const decoded = lane37Module.decodeFreshStackLogs(
+    policyInterface,
+    [rawLog(configurationTopic, 7, 3, 5, "0x" + "ee".repeat(32))],
+    "DisputeProtectionPolicyMethodScoped"
+  );
+  assert.deepEqual(decoded, [
+    {
+      name: "DisputeProtectionEnabledUpdated",
+      blockNumber: 7,
+      transactionIndex: 3,
+      logIndex: 5,
+      transactionHash: "0x" + "ee".repeat(32),
+    },
+  ]);
+  assert.throws(
+    () =>
+      lane37Module.decodeFreshStackLogs(
+        policyInterface,
+        [rawLog("0x" + "ff".repeat(32), 7, 0, 0, "0x" + "ee".repeat(32))],
+        "DisputeProtectionPolicyMethodScoped"
+      ),
+    /DisputeProtectionPolicyMethodScoped emitted a log this ABI cannot decode/
   );
 });

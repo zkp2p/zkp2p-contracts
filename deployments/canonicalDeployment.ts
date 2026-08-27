@@ -8,6 +8,27 @@ type ImmutableReference = {
 
 type ImmutableReferences = Record<string, ImmutableReference[]>;
 
+export function deploymentCodeMatchesRecord(
+  recordBytecode: string,
+  chainCode: string
+): boolean {
+  const bytecodePattern = /^0x(?:[0-9a-fA-F]{2})*$/;
+  if (
+    !bytecodePattern.test(recordBytecode) ||
+    !bytecodePattern.test(chainCode) ||
+    recordBytecode.length !== chainCode.length
+  ) {
+    return false;
+  }
+
+  for (let index = 2; index < recordBytecode.length; index += 2) {
+    const recordByte = recordBytecode.slice(index, index + 2).toLowerCase();
+    const chainByte = chainCode.slice(index, index + 2).toLowerCase();
+    if (recordByte !== chainByte && recordByte !== "00") return false;
+  }
+  return true;
+}
+
 export function zeroImmutableValues(
   bytecode: string,
   immutableReferences: ImmutableReferences
@@ -25,7 +46,7 @@ export function zeroImmutableValues(
   return `0x${normalized}`;
 }
 
-export async function assertCanonicalDeployment(
+export async function assertDeploymentMatchesChain(
   hre: HardhatRuntimeEnvironment,
   deployment: Deployment,
   deploymentName: string,
@@ -33,8 +54,51 @@ export async function assertCanonicalDeployment(
 ): Promise<void> {
   const artifact = await hre.deployments.getExtendedArtifact(artifactName);
   const code = await hre.ethers.provider.getCode(deployment.address);
+  const deployedBytecode = deployment.deployedBytecode;
+  if (code === "0x" || typeof deployedBytecode !== "string") {
+    throw new Error(
+      `${deploymentName} on-chain code does not match its deployment record`
+    );
+  }
+
+  if (deployment.solcInputHash === artifact.solcInputHash) {
+    const immutableReferences =
+      (artifact.evm?.deployedBytecode?.immutableReferences as
+        | ImmutableReferences
+        | undefined) || {};
+    if (
+      zeroImmutableValues(deployedBytecode, immutableReferences) !==
+      zeroImmutableValues(code, immutableReferences)
+    ) {
+      throw new Error(
+        `${deploymentName} on-chain code does not match its deployment record`
+      );
+    }
+    return;
+  }
+
+  if (!deploymentCodeMatchesRecord(deployedBytecode, code)) {
+    throw new Error(
+      `${deploymentName} on-chain code does not match its deployment record`
+    );
+  }
+}
+
+export async function assertCanonicalDeployment(
+  hre: HardhatRuntimeEnvironment,
+  deployment: Deployment,
+  deploymentName: string,
+  artifactName: string
+): Promise<void> {
+  await assertDeploymentMatchesChain(
+    hre,
+    deployment,
+    deploymentName,
+    artifactName
+  );
+  const artifact = await hre.deployments.getExtendedArtifact(artifactName);
+  const code = await hre.ethers.provider.getCode(deployment.address);
   if (
-    code === "0x" ||
     typeof deployment.deployedBytecode !== "string" ||
     typeof deployment.solcInputHash !== "string" ||
     typeof artifact.deployedBytecode !== "string" ||

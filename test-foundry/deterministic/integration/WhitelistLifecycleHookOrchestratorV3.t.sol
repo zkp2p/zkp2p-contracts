@@ -125,8 +125,6 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         assertEq(address(orchestrator.getIntentLifecycleHook(oldCancelledIntent)), address(whitelistHook));
         assertEq(address(orchestrator.getIntentLifecycleHook(oldSettledIntent)), address(whitelistHook));
 
-        vm.prank(depositor);
-        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, true);
         orchestrator.setLifecycleHook(combinedHook);
         bytes32 freshIntent = _signalDefault();
         assertEq(address(orchestrator.getIntentLifecycleHook(freshIntent)), address(combinedHook));

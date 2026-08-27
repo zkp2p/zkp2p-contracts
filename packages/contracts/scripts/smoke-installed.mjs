@@ -17,9 +17,20 @@ const repoRoot = path.resolve(
   "..",
   ".."
 );
-const { getActiveDisputeDeploymentName } = requireFromRepo(
-  "../../../deployments/activeDisputeStack.cjs"
-);
+const { INTERNAL_POLICY_RECORDS, getActiveDisputeDeploymentName } =
+  requireFromRepo("../../../deployments/activeDisputeStack.cjs");
+const internalPolicyRecords = /** @type {string[]} */ (INTERNAL_POLICY_RECORDS);
+/** @param {string} name */
+const isInternalDeploymentName = (name) =>
+  name.endsWith("OptIn") || internalPolicyRecords.includes(name);
+/** @param {unknown} value */
+const containsInternalDeploymentName = (value) => {
+  const serialized = JSON.stringify(value);
+  return (
+    serialized.includes("OptIn") ||
+    internalPolicyRecords.some((recordName) => serialized.includes(recordName))
+  );
+};
 
 /** @param {string} message */
 function fail(message) {
@@ -77,8 +88,8 @@ for (const [network, expectedRiskWindowCount] of [
       `${network} extensionless CommonJS dispute stack export differs from packaged JSON`
     );
   }
-  if (JSON.stringify(manifest).includes("OptIn"))
-    fail(`${network} dispute stack metadata exposes an internal OptIn name`);
+  if (containsInternalDeploymentName(manifest))
+    fail(`${network} dispute stack metadata exposes an internal deployment name`);
   if (
     JSON.stringify(disputeStackCjs[network]) !== JSON.stringify(manifest) ||
     JSON.stringify(disputeStackEsm[network]) !== JSON.stringify(manifest)
@@ -157,12 +168,10 @@ for (const { network, manifestNetwork, deploymentDirectory } of [
   const bundle = requireFromInstall(`@zkp2p/contracts-v2/networks/${network}`);
   const addresses = bundle.addresses?.default || bundle.addresses;
   if (
-    Object.keys(addresses?.contracts || {}).some((contractName) =>
-      contractName.endsWith("OptIn")
-    ) ||
-    Object.keys(bundle).some((contractName) => contractName.endsWith("OptIn"))
+    Object.keys(addresses?.contracts || {}).some(isInternalDeploymentName) ||
+    Object.keys(bundle).some(isInternalDeploymentName)
   ) {
-    fail(`${network} exposes an internal OptIn contract name`);
+    fail(`${network} exposes an internal deployment name`);
   }
   for (const contractName of ["IntentGuardian", "WhitelistPolicy"]) {
     const address = addresses?.contracts?.[contractName];
