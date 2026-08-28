@@ -74,7 +74,9 @@
   remove predecessor writer, `setLifecycleHook`. A postcondition contract is appended in the pinned fork
   simulation only. Artifacts live at `deployments/outputs/safe-batches/base_method_scoped_{rotation,cutover}.json`
   with `.sha256.json` sidecars; `yarn verify:method-scoped-safe-batch --batch rotation|cutover` must pass
-  immediately before the Safe executes, and no script ever signs. Retire lane 37 before activation (its skip
+  immediately before the Safe executes, and no script ever signs. Artifact-child verification permits unrelated
+  commits after the recorded source SHA only while every path in `ACTIVATION_PROTECTED_PATHS` remains unchanged.
+  Retire lane 37 before activation (its skip
   asserts the predecessor hook is still live), pin lane 38 after its first live transition, and keep the
   `active-dispute-stack.json` / `PREDECESSOR_DISPUTE_STACKS` / evidence flip and the `WhitelistPolicy`
   package alias in recording PRs after each execution — the lane itself flips nothing repo-side.
@@ -97,6 +99,8 @@
   predecessor vault holds no locks. Snapshots carry `freshVault` and `predecessorVault` separately; guards, manifest
   (v3), verifier kinds (`vault-cutover`, `vault-writer-removal`) and artifacts
   (`deployments/outputs/safe-batches/base_method_scoped_vault_*`) are additive to lane 38's, which stay byte-identical.
+  The same artifact-child protected-path rule applies to both lane-40 batch kinds; unrelated repository changes do not
+  require regeneration when the batch producers and verifiers are unchanged.
   Recording checkpoints: commit live records before any artifact generation, pin lanes 39/40 after their first live
   execution, propose the Base cutover at the live Safe nonce, and flip manifests/package only after execution.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the

@@ -21,7 +21,7 @@ const {
   writeFileSync,
 } = require("node:fs");
 const { tmpdir } = require("node:os");
-const { basename, join } = require("node:path");
+const { basename, dirname, join } = require("node:path");
 const { test } = require("node:test");
 const { BigNumber, utils } = require("ethers");
 const ethersPackage = require("ethers");
@@ -2256,6 +2256,28 @@ function temporaryGitRepository(prefix) {
   };
 }
 
+/** @param {{ root: string }} repository @param {string[]} paths */
+function commitRepositoryPaths(repository, paths) {
+  for (const path of paths) {
+    mkdirSync(dirname(join(repository.root, path)), { recursive: true });
+    writeFileSync(join(repository.root, path), `${path}\n`);
+  }
+  execFileSync("git", ["add", "."], { cwd: repository.root });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=Task Four",
+      "-c",
+      "user.email=task4@example.invalid",
+      "commit",
+      "-qm",
+      "fixture",
+    ],
+    { cwd: repository.root }
+  );
+}
+
 test("generation Git mode requires a clean worktree and exact source HEAD", () => {
   const {
     assertActivationArtifactGitState,
@@ -2265,8 +2287,7 @@ test("generation Git mode requires a clean worktree and exact source HEAD", () =
     assertActivationArtifactGitState(
       repository.root,
       repository.sourceSha,
-      "generation",
-      []
+      "generation"
     )
   );
   assert.throws(
@@ -2274,8 +2295,7 @@ test("generation Git mode requires a clean worktree and exact source HEAD", () =
       assertActivationArtifactGitState(
         repository.root,
         "f".repeat(40),
-        "generation",
-        []
+        "generation"
       ),
     /HEAD does not equal/
   );
@@ -2285,83 +2305,106 @@ test("generation Git mode requires a clean worktree and exact source HEAD", () =
       assertActivationArtifactGitState(
         repository.root,
         repository.sourceSha,
-        "generation",
-        []
+        "generation"
       ),
     /clean worktree/
   );
 });
 
-test("artifact-child Git mode allows only the selected lane-38 pair and its superseded copies", () => {
+test("artifact-child Git mode permits unrelated paths", () => {
   const {
     assertActivationArtifactGitState,
   } = require("./verify-method-scoped-safe-batch.ts");
   const repository = temporaryGitRepository("method-scoped-child-");
-  const allowed = ACTIVATION_BATCH_PATHS.rotation;
-  mkdirSync(join(repository.root, "deployments/outputs/safe-batches"), {
-    recursive: true,
-  });
-  writeFileSync(join(repository.root, allowed.batch), "{}\n");
-  writeFileSync(join(repository.root, allowed.sidecar), "{}\n");
-  execFileSync("git", ["add", "."], { cwd: repository.root });
-  execFileSync(
-    "git",
-    [
-      "-c",
-      "user.name=Task Four",
-      "-c",
-      "user.email=task4@example.invalid",
-      "commit",
-      "-qm",
-      "artifacts",
-    ],
-    { cwd: repository.root }
-  );
-  const allowlist = [
-    allowed.batch,
-    allowed.sidecar,
-    `${allowed.supersededDir}/base_method_scoped_rotation_*`,
-  ];
+  commitRepositoryPaths(repository, [
+    "README.md",
+    "deployments/outputs/safe-batches/base_optin_writer_removal.json",
+    ".github/workflows/x.yml",
+  ]);
   assert.doesNotThrow(() =>
     assertActivationArtifactGitState(
       repository.root,
       repository.sourceSha,
-      "artifact-child",
-      allowlist
+      "artifact-child"
     )
   );
-  mkdirSync(
-    join(repository.root, "deployments/outputs/safe-batches/superseded"),
-    {
-      recursive: true,
-    }
+});
+
+test("artifact-child Git mode rejects and names every protected path", () => {
+  const {
+    ACTIVATION_PROTECTED_PATHS,
+    assertActivationArtifactGitState,
+  } = require("./verify-method-scoped-safe-batch.ts");
+  assert.deepEqual(ACTIVATION_PROTECTED_PATHS, [
+    "deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts",
+    "deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts",
+    "deploy/39_deploy_method_scoped_vault_stack.ts",
+    "deploy/40_activate_method_scoped_vault_stack.ts",
+    "deployments/methodScopedActivation.ts",
+    "deployments/vaultMethodScopedActivation.ts",
+    "deployments/activationBatchManifest.ts",
+    "deployments/vaultActivationBatchManifest.ts",
+    "deployments/safeArtifacts.ts",
+    "deployments/safeBatchManifest.ts",
+    "deployments/predecessorDisputeStack.ts",
+    "deployments/canonicalDeployment.ts",
+    "deployments/parameters.ts",
+    "deployments/immutableDeploymentLanes.ts",
+    "deployments/base/",
+    "deployments/base_staging/",
+    "scripts/verify-method-scoped-safe-batch.ts",
+    "scripts/simulate-method-scoped-safe-batch.ts",
+    "scripts/simulate-dispute-opt-in-safe-batch.ts",
+    "contracts/",
+    "hardhat.config.ts",
+    "foundry.toml",
+    "package.json",
+    "yarn.lock",
+    "tsconfig*.json",
+  ]);
+  for (const protectedPath of [
+    "deploy/40_activate_method_scoped_vault_stack.ts",
+    "contracts/mocks/Protected.sol",
+    "scripts/verify-method-scoped-safe-batch.ts",
+    "deployments/base/StakeVaultMethodScoped.json",
+  ]) {
+    const repository = temporaryGitRepository("method-scoped-protected-");
+    commitRepositoryPaths(repository, [protectedPath]);
+    assert.throws(
+      () =>
+        assertActivationArtifactGitState(
+          repository.root,
+          repository.sourceSha,
+          "artifact-child"
+        ),
+      new RegExp(protectedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    );
+  }
+});
+
+test("artifact-child Git mode requires ancestry and a clean worktree", () => {
+  const {
+    assertActivationArtifactGitState,
+  } = require("./verify-method-scoped-safe-batch.ts");
+  const repository = temporaryGitRepository("method-scoped-child-state-");
+  assert.throws(
+    () =>
+      assertActivationArtifactGitState(
+        repository.root,
+        "f".repeat(40),
+        "artifact-child"
+      ),
+    /not an ancestor/
   );
-  const lane34Path =
-    "deployments/outputs/safe-batches/superseded/base_opt_in_dispute_lifecycle.json";
-  writeFileSync(join(repository.root, lane34Path), "{}\n");
-  execFileSync("git", ["add", "."], { cwd: repository.root });
-  execFileSync(
-    "git",
-    [
-      "-c",
-      "user.name=Task Four",
-      "-c",
-      "user.email=task4@example.invalid",
-      "commit",
-      "-qm",
-      "unrelated",
-    ],
-    { cwd: repository.root }
-  );
+  writeFileSync(join(repository.root, "tracked"), "dirty\n");
   assert.throws(
     () =>
       assertActivationArtifactGitState(
         repository.root,
         repository.sourceSha,
-        "artifact-child",
-        allowlist
+        "artifact-child"
       ),
-    /base_opt_in_dispute_lifecycle/
+    /clean worktree/
   );
 });
 

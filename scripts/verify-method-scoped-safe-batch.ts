@@ -43,6 +43,33 @@ import { EXPECTED_LIVE } from "../deploy/37_deploy_method_scoped_dispute_lifecyc
 import { BASE_SAFE } from "./simulate-dispute-opt-in-safe-batch";
 
 export type ActivationGitMode = "generation" | "artifact-child";
+export const ACTIVATION_PROTECTED_PATHS: readonly string[] = [
+  "deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts",
+  "deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts",
+  "deploy/39_deploy_method_scoped_vault_stack.ts",
+  "deploy/40_activate_method_scoped_vault_stack.ts",
+  "deployments/methodScopedActivation.ts",
+  "deployments/vaultMethodScopedActivation.ts",
+  "deployments/activationBatchManifest.ts",
+  "deployments/vaultActivationBatchManifest.ts",
+  "deployments/safeArtifacts.ts",
+  "deployments/safeBatchManifest.ts",
+  "deployments/predecessorDisputeStack.ts",
+  "deployments/canonicalDeployment.ts",
+  "deployments/parameters.ts",
+  "deployments/immutableDeploymentLanes.ts",
+  "deployments/base/",
+  "deployments/base_staging/",
+  "scripts/verify-method-scoped-safe-batch.ts",
+  "scripts/simulate-method-scoped-safe-batch.ts",
+  "scripts/simulate-dispute-opt-in-safe-batch.ts",
+  "contracts/",
+  "hardhat.config.ts",
+  "foundry.toml",
+  "package.json",
+  "yarn.lock",
+  "tsconfig*.json",
+];
 type VerificationRuntimeEnvironment = HardhatRuntimeEnvironment & {
   __methodScopedVerificationProvider?: ethers.providers.Provider;
 };
@@ -83,11 +110,12 @@ function git(repositoryRoot: string, args: string[]): string {
   }).trim();
 }
 
+/** The optional legacy paths preserve immutable generation-lane call sites; they do not define artifact-child policy. */
 export function assertActivationArtifactGitState(
   repositoryRoot: string,
   sourceSha: string,
   mode: ActivationGitMode,
-  allowedPaths: readonly string[]
+  _legacyArtifactPaths?: readonly string[]
 ): void {
   if (git(repositoryRoot, ["status", "--porcelain"]) !== "") {
     throw new Error("Safe artifact verification requires a clean worktree");
@@ -112,20 +140,25 @@ export function assertActivationArtifactGitState(
   const changed = git(repositoryRoot, [
     "diff",
     "--name-only",
+    "--no-renames",
     `${sourceSha}..${head}`,
   ])
     .split("\n")
     .filter(Boolean);
-  const allowed = (path: string): boolean =>
-    allowedPaths.some((candidate) =>
-      candidate.endsWith("*")
-        ? path.startsWith(candidate.slice(0, -1))
-        : path === candidate
-    );
-  const unexpected = changed.filter((path) => !allowed(path));
-  if (unexpected.length > 0) {
+  const isProtected = (path: string): boolean =>
+    ACTIVATION_PROTECTED_PATHS.some((candidate) => {
+      if (candidate.endsWith("/")) return path.startsWith(candidate);
+      const wildcard = candidate.indexOf("*");
+      if (wildcard === -1) return path === candidate;
+      return (
+        path.startsWith(candidate.slice(0, wildcard)) &&
+        path.endsWith(candidate.slice(wildcard + 1))
+      );
+    });
+  const protectedChanges = changed.filter(isProtected);
+  if (protectedChanges.length > 0) {
     throw new Error(
-      `Artifact child contains unrelated paths: ${unexpected.join(", ")}`
+      `Artifact child changes protected paths: ${protectedChanges.join(", ")}`
     );
   }
 }
@@ -498,16 +531,10 @@ export async function verifyActivationCandidate(
     throw new Error("Safe manifest does not target the pinned ZKP2P Base Safe");
   }
   assertBatchMatchesActivationManifest(batch, manifest);
-  const pathConfig = ACTIVATION_BATCH_PATHS[input.kind];
   assertActivationArtifactGitState(
     input.repositoryRoot,
     manifest.sourceSha,
-    input.mode,
-    [
-      pathConfig.batch,
-      pathConfig.sidecar,
-      `${pathConfig.supersededDir}/base_method_scoped_${input.kind}_*`,
-    ]
+    input.mode
   );
   if (!input.forkRpcUrl) {
     throw new Error(
@@ -625,19 +652,10 @@ export async function verifyVaultActivationCandidate(
     throw new Error("Safe manifest does not target the pinned ZKP2P Base Safe");
   }
   assertBatchMatchesVaultActivationManifest(batch, manifest);
-  const pathConfig = VAULT_ACTIVATION_BATCH_PATHS[input.kind];
   assertActivationArtifactGitState(
     input.repositoryRoot,
     manifest.sourceSha,
-    input.mode,
-    [
-      pathConfig.batch,
-      pathConfig.sidecar,
-      `${pathConfig.supersededDir}/base_method_scoped_${input.kind.replace(
-        /-/g,
-        "_"
-      )}_*`,
-    ]
+    input.mode
   );
   if (!input.forkRpcUrl) {
     throw new Error(

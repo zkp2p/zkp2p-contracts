@@ -13,6 +13,10 @@ moduleAlias.reset();
 moduleAlias.addAlias("@utils", process.cwd() + "/utils");
 
 const assert = require("node:assert/strict");
+const { execFileSync } = require("node:child_process");
+const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs");
+const { tmpdir } = require("node:os");
+const { dirname, join } = require("node:path");
 const { test } = require("node:test");
 const { utils } = require("ethers");
 
@@ -21,6 +25,99 @@ const address = (value) => `0x${value.toString(16).padStart(40, "0")}`;
 /** @param {number} value */
 const hash = (value) => `0x${value.toString(16).padStart(64, "0")}`;
 const ZERO = address(0);
+
+/** @param {string} prefix */
+function temporaryGitRepository(prefix) {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  execFileSync("git", ["init", "-q"], { cwd: root });
+  writeFileSync(join(root, "tracked"), "base\n");
+  execFileSync("git", ["add", "tracked"], { cwd: root });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=Vault Activation",
+      "-c",
+      "user.email=vault-activation@example.invalid",
+      "commit",
+      "-qm",
+      "base",
+    ],
+    { cwd: root }
+  );
+  return {
+    root,
+    sourceSha: execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim(),
+  };
+}
+
+/** @param {{ root: string }} repository @param {string[]} paths */
+function commitRepositoryPaths(repository, paths) {
+  for (const path of paths) {
+    mkdirSync(dirname(join(repository.root, path)), { recursive: true });
+    writeFileSync(join(repository.root, path), `${path}\n`);
+  }
+  execFileSync("git", ["add", "."], { cwd: repository.root });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=Vault Activation",
+      "-c",
+      "user.email=vault-activation@example.invalid",
+      "commit",
+      "-qm",
+      "fixture",
+    ],
+    { cwd: repository.root }
+  );
+}
+
+test("vault artifact-child verification permits unrelated changes", () => {
+  const {
+    assertActivationArtifactGitState,
+  } = require("./verify-method-scoped-safe-batch.ts");
+  const repository = temporaryGitRepository("vault-activation-unrelated-");
+  commitRepositoryPaths(repository, [
+    "README.md",
+    "deployments/outputs/safe-batches/base_optin_writer_removal.json",
+    ".github/workflows/x.yml",
+  ]);
+  assert.doesNotThrow(() =>
+    assertActivationArtifactGitState(
+      repository.root,
+      repository.sourceSha,
+      "artifact-child"
+    )
+  );
+});
+
+test("vault artifact-child verification rejects protected changes", () => {
+  const {
+    assertActivationArtifactGitState,
+  } = require("./verify-method-scoped-safe-batch.ts");
+  for (const protectedPath of [
+    "deploy/40_activate_method_scoped_vault_stack.ts",
+    "contracts/mocks/VaultProtected.sol",
+    "scripts/verify-method-scoped-safe-batch.ts",
+    "deployments/base/StakeVaultMethodScoped.json",
+  ]) {
+    const repository = temporaryGitRepository("vault-activation-protected-");
+    commitRepositoryPaths(repository, [protectedPath]);
+    assert.throws(
+      () =>
+        assertActivationArtifactGitState(
+          repository.root,
+          repository.sourceSha,
+          "artifact-child"
+        ),
+      new RegExp(protectedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    );
+  }
+});
 
 const vaultAddresses = {
   safe: address(1),
