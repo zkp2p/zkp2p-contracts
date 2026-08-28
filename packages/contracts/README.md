@@ -173,7 +173,7 @@ manifest pins:
 - A fail-closed sentinel probe and the active-successor prerequisites, including unpaused
   admission, an unpaused orchestrator, and `allowMultipleIntents = true`.
 - The approved risk window for every active payment-method bytes32 hash: 1,209,600 seconds for
-  PayPal, Venmo, and Cash App, and zero for all other active methods.
+  PayPal and Venmo, and zero for all other active methods, including Cash App.
 
 The package exports the currently selected (latest) addresses for each network, and consumers should
 treat them as the addresses to use.

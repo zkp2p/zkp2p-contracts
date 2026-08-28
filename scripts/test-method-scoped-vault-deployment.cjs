@@ -64,7 +64,6 @@ test("lane 39 orders every live operation as a resumable prefix", () => {
     "authorize-hook",
     "set-risk-window:paypal",
     "set-risk-window:venmo",
-    "set-risk-window:cashapp",
   ];
   assert.deepEqual(lane39.DEPLOY_ONLY_STEP_KINDS.base_staging, common);
   assert.deepEqual(lane39.DEPLOY_ONLY_STEP_KINDS.base, [
@@ -159,8 +158,8 @@ test("lane 39 pins the exact predecessor-vault state left by lane 38", () => {
   );
 });
 
-test("lane 39 configures only paypal, venmo, and cashapp risk windows", () => {
-  assert.deepEqual(DISPUTABLE_PAYMENT_METHODS, ["paypal", "venmo", "cashapp"]);
+test("lane 39 configures only paypal and venmo risk windows", () => {
+  assert.deepEqual(DISPUTABLE_PAYMENT_METHODS, ["paypal", "venmo"]);
   assert.deepEqual(
     lane39.getRiskWindowPaymentMethods("base"),
     ACTIVE_PAYMENT_METHODS
