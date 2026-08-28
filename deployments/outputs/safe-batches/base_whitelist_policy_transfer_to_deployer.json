@@ -1,10 +1,10 @@
 {
   "version": "1.0",
   "chainId": "8453",
-  "createdAt": 1787906773386,
+  "createdAt": 1787906999950,
   "meta": {
-    "name": "Base WhitelistPolicyMethodScoped ownership to deployer",
-    "description": "WhitelistPolicy (single-step Ownable) transferOwnership to the operations deployer so the Peer Pay bootstrap can be executed directly (Safe bootstrap batches 78-83 kept reverting as deposits changed between generation and signing)",
+    "name": "Base WhitelistPolicyMethodScoped ownership to the lane deployer",
+    "description": "WhitelistPolicy (single-step Ownable) transferOwnership to the pinned lane deployer 0x84e1…1929 so the Peer Pay bootstrap runs directly (Safe bootstrap batches 78-83 reverted as deposits changed before signatures landed)",
     "txBuilderVersion": "1.16.0",
     "createdFromSafeAddress": "0x0bC26FF515411396DD588Abd6Ef6846E04470227"
   },
@@ -12,7 +12,7 @@
     {
       "to": "0x389Cd9bA91FfFcd83d267B241E975541892759Ce",
       "value": "0",
-      "data": "0xf2fde38b000000000000000000000000e29a5bd4d0ceba6c125a0361e7d20ab4ea275c2f",
+      "data": "0xf2fde38b00000000000000000000000084e113087c97cd80ea9d78983d4b8ff61eca1929",
       "operation": 0,
       "contractMethod": {
         "name": "transferOwnership",
@@ -24,7 +24,7 @@
         ]
       },
       "contractInputsValues": {
-        "newOwner": "0xe29a5BD4D0CEbA6C125A0361E7D20ab4eA275C2f"
+        "newOwner": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929"
       }
     }
   ]
