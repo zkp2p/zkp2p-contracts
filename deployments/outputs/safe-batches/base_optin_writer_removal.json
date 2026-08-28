@@ -1,0 +1,31 @@
+{
+  "version": "1.0",
+  "chainId": "8453",
+  "createdAt": 1787875350980,
+  "meta": {
+    "name": "Base OptIn dispute policy writer removal",
+    "description": "DisputeNullifierRegistry.removeWritePermission(DisputeProtectionPolicyOptIn) — user decision 2026-08-28: remove immediately; the two settled OptIn locks lose their dispute path and release at maturity",
+    "txBuilderVersion": "1.16.0",
+    "createdFromSafeAddress": "0x0bC26FF515411396DD588Abd6Ef6846E04470227"
+  },
+  "transactions": [
+    {
+      "to": "0xA845615b5203F7a21321DdF5e3a1ca024D93a443",
+      "value": "0",
+      "data": "0x286f9201000000000000000000000000cec48f7242edbf02875bb4629115bd927e1287aa",
+      "operation": 0,
+      "contractMethod": {
+        "name": "removeWritePermission",
+        "inputs": [
+          {
+            "name": "_writer",
+            "type": "address"
+          }
+        ]
+      },
+      "contractInputsValues": {
+        "_writer": "0xcEc48F7242eDBf02875BB4629115Bd927e1287aA"
+      }
+    }
+  ]
+}
