@@ -60,7 +60,7 @@ Lane 38 without the rotation. Reuses lane 38's exported machinery by import wher
 ## Sequencing after merge (with recording checkpoints)
 
 1. Staging: lane 39 (deploy-only) → **recording PR #1** (staging records; pin lanes 39 and 40 at their executed digests — a lane is immutable after any live execution) → lane 40 steps (add writer → set hook → remove lane-32 writer; staging lane-32 has zero intents) — all deployer EOA; Basescan verify; on-chain reads; Slack.
-2. Base: lane 39 (deploy-only; vault + policy ownership transfers initiated) → **recording PR #2** (Base records; artifact generation requires a clean worktree at `HEAD == sourceSha`) → lane 40 cutover preparation → standalone verifier → propose at nonce 77 → owners execute on Kartik's go (then 78–83) → **recording PR #3** (execution evidence, `active-dispute-stack.json` / `PREDECESSOR_DISPUTE_STACKS` / evidence flips, package alias, RC).
+2. Base: lane 39 (deploy-only; vault + policy ownership transfers initiated) → **recording PR #2** (Base records; artifact generation requires a clean worktree at `HEAD == sourceSha`) → lane 40 cutover preparation → standalone verifier (artifact-child protected-path rule below) → propose at nonce 77 → owners execute on Kartik's go (then 78–83) → **recording PR #3** (execution evidence, `active-dispute-stack.json` / `PREDECESSOR_DISPUTE_STACKS` / evidence flips, package alias, RC).
 3. Fresh-vault readiness is a precondition of the Base cutover and is attested by `CONFIRM_BASE_…_DOWNSTREAM_READY`: indexer/curator on the new addresses, affected takers re-staked in `StakeVaultMethodScoped` (the fresh policy calls `lockStake` on admission; `stakeOwnerOf` falls back to the taker when no delegation exists), delegations/selections recreated, and any predecessor opt-outs that must persist recreated on the fresh policy (none exist today).
 4. Writer-removal batch once every predecessor intent is terminal and the predecessor vault holds no locks (earliest possible: after both OptIn locks are released, i.e. no sooner than 2026-09-10 11:30 UTC unless disputed/released earlier).
 
@@ -76,3 +76,11 @@ proof generation and Safe execution, so exact equality made an otherwise valid b
 pinned inventory tuple remains equality-bound and is re-checked on-chain against the fresh policy. Deposits created
 after the proof cannot carry predecessor opt-outs that the fresh default-on policy would honor; a depositor who needs
 an opt-out re-applies it on the fresh policy.
+
+## Amendment 2026-08-28: protected artifact paths
+
+Generation mode remains clean-worktree-only with `HEAD == sourceSha`. Artifact-child verification instead requires
+`sourceSha` to be an ancestor of `HEAD` and rejects changes only under `ACTIVATION_PROTECTED_PATHS`, which covers the
+lanes, activation and manifest modules, verifier and simulators, contracts, deployment records and pins, and toolchain
+configuration that produce or verify all four method-scoped batches. Unrelated CI, documentation, and other
+non-protected repository changes no longer force artifact regeneration or a replacement Safe proposal.

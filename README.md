@@ -757,7 +757,9 @@ Each batch is simulated on a pinned Base fork with a postcondition contract appe
 sidecar that pins the proof snapshot, guard identity, and source SHA. Run
 `yarn verify:method-scoped-safe-batch --batch rotation|cutover` immediately before the Safe executes;
 it re-derives the guard constructor arguments from the manifest, re-proves the guard and postcondition
-deployments, re-reads the chain at a fresh block, and re-runs the simulation. No script signs. Lane 37
+deployments, re-reads the chain at a fresh block, and re-runs the simulation. Artifact-child verification allows
+unrelated commits after the recorded source SHA only when every producer and verifier path in
+`ACTIVATION_PROTECTED_PATHS` is unchanged. No script signs. Lane 37
 must be retired before activation (its skip asserts the predecessor hook is still live), lane 38 is
 pinned after its first live transition, and the `active-dispute-stack.json`,
 `PREDECESSOR_DISPUTE_STACKS`, evidence, and `WhitelistPolicy` package-alias flips land in recording PRs
@@ -782,6 +784,8 @@ Base prepares one guarded cutover batch (guard → conditional `acceptOwnership`
 terminal and `StakeVaultOptIn` holds no locks. Artifacts live at
 `deployments/outputs/safe-batches/base_method_scoped_vault_{cutover,writer_removal}.json`; run
 `yarn verify:method-scoped-safe-batch --batch vault-cutover|vault-writer-removal` immediately before the Safe executes.
+The same protected-path rule keeps these batches valid across unrelated merges without weakening their source,
+artifact-pair, or live-chain checks.
 Stake in the old vaults is abandoned: stakers withdraw once their locks release and takers re-stake in the new vault
 before the cutover; that readiness is part of `CONFIRM_BASE_V3_DISPUTE_METHOD_SCOPED_VAULT_DOWNSTREAM_READY`.
 
