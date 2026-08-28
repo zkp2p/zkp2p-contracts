@@ -12,11 +12,12 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 
 /**
  * @title WhitelistPolicy
- * @notice Persistent deposit-scoped taker admission settings, independent from any lifecycle-hook deployment.
- * Each deposit carries its own enforcement switch, direct address whitelist, and bounded list of curated groups,
- * so one maker can run gated and open deposits side by side. The policy survives global hook replacement.
- * @dev Enabling a deposit with no groups and no whitelisted addresses is allowed and intentionally fails closed
- * when evaluated. Writes are authorized against the escrow's recorded depositor, so the deposit must already exist.
+ * @notice Persistent deposit-and-payment-method-scoped taker admission settings, independent from hook deployment.
+ * Each deposit payment method carries its own enforcement switch and bounded list of curated groups, while direct
+ * addresses remain trusted across every payment method on that deposit. The policy survives global hook replacement.
+ * @dev Enabling a deposit payment method with no groups and no deposit-wide whitelisted addresses is allowed and
+ * intentionally fails closed when evaluated. Writes are authorized against the escrow's recorded depositor, so the
+ * deposit must already exist.
  * While EscrowRegistry is in accept-all mode the registry check passes for any address, so passing an EOA or a
  * contract without `getDeposit` reverts inside the escrow call with no reason data rather than a policy error.
  * That path is a caller mistake on a governance-gated mode, and is not worth a per-write code-length check.
@@ -27,7 +28,7 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 contract WhitelistPolicy is Ownable, IWhitelistPolicy {
     /* ============ Constants ============ */
 
-    uint256 public constant MAX_GROUPS_PER_DEPOSIT = 10;
+    uint256 public constant MAX_GROUPS_PER_DEPOSIT_PAYMENT_METHOD = 10;
 
     /* ============ State Variables ============ */
 
@@ -35,18 +36,24 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
     IEscrowRegistry public override escrowRegistry;
     IOrchestratorRegistry public immutable override orchestratorRegistry;
 
-    mapping(address => mapping(uint256 => bool)) public override enabled;
-    mapping(address => mapping(uint256 => bool)) public override bootstrapped;
+    mapping(address => mapping(uint256 => mapping(bytes32 => bool))) public override enabled;
+    mapping(address => mapping(uint256 => mapping(bytes32 => bool))) public override bootstrapped;
     mapping(address => mapping(uint256 => mapping(address => bool))) public override isWhitelisted;
-    mapping(address => mapping(uint256 => bytes32[])) internal allowedGroups;
+    mapping(address => mapping(uint256 => mapping(bytes32 => bytes32[]))) internal allowedGroups;
 
     /* ============ Events ============ */
 
-    event EnabledUpdated(address indexed escrow, uint256 indexed depositId, bool enabled);
+    event EnabledUpdated(
+        address indexed escrow, uint256 indexed depositId, bytes32 indexed paymentMethod, bool enabled
+    );
     event AddressWhitelisted(address indexed escrow, uint256 indexed depositId, address indexed taker);
     event AddressRemovedFromWhitelist(address indexed escrow, uint256 indexed depositId, address indexed taker);
-    event AllowedGroupAdded(address indexed escrow, uint256 indexed depositId, bytes32 indexed groupId);
-    event AllowedGroupRemoved(address indexed escrow, uint256 indexed depositId, bytes32 indexed groupId);
+    event AllowedGroupAdded(
+        address indexed escrow, uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 groupId
+    );
+    event AllowedGroupRemoved(
+        address indexed escrow, uint256 indexed depositId, bytes32 indexed paymentMethod, bytes32 groupId
+    );
     event EscrowRegistryUpdated(address indexed escrowRegistry);
 
     /* ============ Errors ============ */
@@ -58,11 +65,11 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
     error TooManyGroups(uint256 attempted, uint256 maximum);
     error EscrowNotWhitelisted(address escrow);
     error DepositNotFound(address escrow, uint256 depositId);
-    error DepositAlreadyBootstrapped(address escrow, uint256 depositId);
-    error DepositAlreadyEnabled(address escrow, uint256 depositId);
+    error DepositPaymentMethodAlreadyBootstrapped(address escrow, uint256 depositId, bytes32 paymentMethod);
+    error DepositPaymentMethodAlreadyEnabled(address escrow, uint256 depositId, bytes32 paymentMethod);
     error NotDepositor(address escrow, uint256 depositId, address caller);
     error UnauthorizedOrchestratorCaller(address caller);
-    error TakerNotWhitelisted(address taker, address escrow, uint256 depositId);
+    error TakerNotWhitelisted(address taker, address escrow, uint256 depositId, bytes32 paymentMethod);
 
     /* ============ Constructor ============ */
 
@@ -103,22 +110,27 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function bootstrapDeposits(address _escrow, uint256[] calldata _depositIds, bytes32[] calldata _groupIds)
-        external
-        override
-        onlyOwner
-    {
+    function bootstrapDeposits(
+        address _escrow,
+        uint256[] calldata _depositIds,
+        bytes32 _paymentMethod,
+        bytes32[] calldata _groupIds
+    ) external override onlyOwner {
         if (_depositIds.length == 0 || _groupIds.length == 0) revert EmptyArray();
 
         for (uint256 i = 0; i < _depositIds.length; ++i) {
             uint256 depositId = _depositIds[i];
             _validateDeposit(_escrow, depositId);
-            if (bootstrapped[_escrow][depositId]) revert DepositAlreadyBootstrapped(_escrow, depositId);
-            if (enabled[_escrow][depositId]) revert DepositAlreadyEnabled(_escrow, depositId);
+            if (bootstrapped[_escrow][depositId][_paymentMethod]) {
+                revert DepositPaymentMethodAlreadyBootstrapped(_escrow, depositId, _paymentMethod);
+            }
+            if (enabled[_escrow][depositId][_paymentMethod]) {
+                revert DepositPaymentMethodAlreadyEnabled(_escrow, depositId, _paymentMethod);
+            }
 
-            bootstrapped[_escrow][depositId] = true;
-            _setEnabled(_escrow, depositId, true);
-            _addGroups(_escrow, depositId, _groupIds);
+            bootstrapped[_escrow][depositId][_paymentMethod] = true;
+            _setEnabled(_escrow, depositId, _paymentMethod, true);
+            _addGroups(_escrow, depositId, _paymentMethod, _groupIds);
         }
     }
 
@@ -130,24 +142,25 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
     function configureDeposit(
         address _escrow,
         uint256 _depositId,
+        bytes32 _paymentMethod,
         bool _enabled,
         bytes32[] calldata _groupIds,
         address[] calldata _takers
     ) external override onlyDepositor(_escrow, _depositId) {
-        _setEnabled(_escrow, _depositId, _enabled);
-        _addGroups(_escrow, _depositId, _groupIds);
+        _setEnabled(_escrow, _depositId, _paymentMethod, _enabled);
+        _addGroups(_escrow, _depositId, _paymentMethod, _groupIds);
         _addTakers(_escrow, _depositId, _takers);
     }
 
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function setEnabled(address _escrow, uint256 _depositId, bool _enabled)
+    function setEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod, bool _enabled)
         external
         override
         onlyDepositor(_escrow, _depositId)
     {
-        _setEnabled(_escrow, _depositId, _enabled);
+        _setEnabled(_escrow, _depositId, _paymentMethod, _enabled);
     }
 
     /**
@@ -184,34 +197,35 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function addAllowedGroups(address _escrow, uint256 _depositId, bytes32[] calldata _groupIds)
+    function addAllowedGroups(address _escrow, uint256 _depositId, bytes32 _paymentMethod, bytes32[] calldata _groupIds)
         external
         override
         onlyDepositor(_escrow, _depositId)
     {
         if (_groupIds.length == 0) revert EmptyArray();
-        _addGroups(_escrow, _depositId, _groupIds);
+        _addGroups(_escrow, _depositId, _paymentMethod, _groupIds);
     }
 
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function removeAllowedGroups(address _escrow, uint256 _depositId, bytes32[] calldata _groupIds)
-        external
-        override
-        onlyDepositor(_escrow, _depositId)
-    {
+    function removeAllowedGroups(
+        address _escrow,
+        uint256 _depositId,
+        bytes32 _paymentMethod,
+        bytes32[] calldata _groupIds
+    ) external override onlyDepositor(_escrow, _depositId) {
         if (_groupIds.length == 0) revert EmptyArray();
 
-        bytes32[] storage depositGroups = allowedGroups[_escrow][_depositId];
+        bytes32[] storage depositPaymentMethodGroups = allowedGroups[_escrow][_depositId][_paymentMethod];
         for (uint256 i = 0; i < _groupIds.length; ++i) {
             bytes32 groupId = _groupIds[i];
-            uint256 groupIndex = _findGroupIndex(depositGroups, groupId);
-            if (groupIndex == depositGroups.length) continue;
+            uint256 groupIndex = _findGroupIndex(depositPaymentMethodGroups, groupId);
+            if (groupIndex == depositPaymentMethodGroups.length) continue;
 
-            depositGroups[groupIndex] = depositGroups[depositGroups.length - 1];
-            depositGroups.pop();
-            emit AllowedGroupRemoved(_escrow, _depositId, groupId);
+            depositPaymentMethodGroups[groupIndex] = depositPaymentMethodGroups[depositPaymentMethodGroups.length - 1];
+            depositPaymentMethodGroups.pop();
+            emit AllowedGroupRemoved(_escrow, _depositId, _paymentMethod, groupId);
         }
     }
 
@@ -220,27 +234,37 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function getAllowedGroups(address _escrow, uint256 _depositId) external view override returns (bytes32[] memory) {
-        return allowedGroups[_escrow][_depositId];
+    function getAllowedGroups(address _escrow, uint256 _depositId, bytes32 _paymentMethod)
+        external
+        view
+        override
+        returns (bytes32[] memory)
+    {
+        return allowedGroups[_escrow][_depositId][_paymentMethod];
     }
 
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function isGroupAllowed(address _escrow, uint256 _depositId, bytes32 _groupId)
+    function isGroupAllowed(address _escrow, uint256 _depositId, bytes32 _paymentMethod, bytes32 _groupId)
         external
         view
         override
         returns (bool)
     {
-        return _containsGroup(allowedGroups[_escrow][_depositId], _groupId);
+        return _containsGroup(allowedGroups[_escrow][_depositId][_paymentMethod], _groupId);
     }
 
     /**
      * @inheritdoc IWhitelistPolicy
      */
-    function isTakerAllowed(address _escrow, uint256 _depositId, address _taker) external view override returns (bool) {
-        return _isTakerAllowed(_escrow, _depositId, _taker);
+    function isTakerAllowed(address _escrow, uint256 _depositId, bytes32 _paymentMethod, address _taker)
+        external
+        view
+        override
+        returns (bool)
+    {
+        return _isTakerAllowed(_escrow, _depositId, _paymentMethod, _taker);
     }
 
     /**
@@ -249,27 +273,31 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
      */
     function validateSignalIntent(PreIntentContext calldata _ctx) external view override {
         if (!orchestratorRegistry.isOrchestrator(msg.sender)) revert UnauthorizedOrchestratorCaller(msg.sender);
-        if (!_isTakerAllowed(_ctx.escrow, _ctx.depositId, _ctx.taker)) {
-            revert TakerNotWhitelisted(_ctx.taker, _ctx.escrow, _ctx.depositId);
+        if (!_isTakerAllowed(_ctx.escrow, _ctx.depositId, _ctx.paymentMethod, _ctx.taker)) {
+            revert TakerNotWhitelisted(_ctx.taker, _ctx.escrow, _ctx.depositId, _ctx.paymentMethod);
         }
     }
 
     /* ============ Internal Functions ============ */
 
-    function _isTakerAllowed(address _escrow, uint256 _depositId, address _taker) internal view returns (bool) {
-        if (!enabled[_escrow][_depositId]) return true;
+    function _isTakerAllowed(address _escrow, uint256 _depositId, bytes32 _paymentMethod, address _taker)
+        internal
+        view
+        returns (bool)
+    {
+        if (!enabled[_escrow][_depositId][_paymentMethod]) return true;
         if (isWhitelisted[_escrow][_depositId][_taker]) return true;
 
-        bytes32[] storage depositGroups = allowedGroups[_escrow][_depositId];
-        for (uint256 i = 0; i < depositGroups.length; ++i) {
-            if (groupRegistry.isMember(depositGroups[i], _taker)) return true;
+        bytes32[] storage depositPaymentMethodGroups = allowedGroups[_escrow][_depositId][_paymentMethod];
+        for (uint256 i = 0; i < depositPaymentMethodGroups.length; ++i) {
+            if (groupRegistry.isMember(depositPaymentMethodGroups[i], _taker)) return true;
         }
         return false;
     }
 
-    function _setEnabled(address _escrow, uint256 _depositId, bool _enabled) internal {
-        enabled[_escrow][_depositId] = _enabled;
-        emit EnabledUpdated(_escrow, _depositId, _enabled);
+    function _setEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod, bool _enabled) internal {
+        enabled[_escrow][_depositId][_paymentMethod] = _enabled;
+        emit EnabledUpdated(_escrow, _depositId, _paymentMethod, _enabled);
     }
 
     function _addTakers(address _escrow, uint256 _depositId, address[] calldata _takers) internal {
@@ -283,18 +311,20 @@ contract WhitelistPolicy is Ownable, IWhitelistPolicy {
         }
     }
 
-    function _addGroups(address _escrow, uint256 _depositId, bytes32[] calldata _groupIds) internal {
-        bytes32[] storage depositGroups = allowedGroups[_escrow][_depositId];
+    function _addGroups(address _escrow, uint256 _depositId, bytes32 _paymentMethod, bytes32[] calldata _groupIds)
+        internal
+    {
+        bytes32[] storage depositPaymentMethodGroups = allowedGroups[_escrow][_depositId][_paymentMethod];
         for (uint256 i = 0; i < _groupIds.length; ++i) {
             bytes32 groupId = _groupIds[i];
             if (!groupRegistry.groupExists(groupId)) revert GroupDoesNotExist(groupId);
-            if (_containsGroup(depositGroups, groupId)) continue;
-            if (depositGroups.length == MAX_GROUPS_PER_DEPOSIT) {
-                revert TooManyGroups(depositGroups.length + 1, MAX_GROUPS_PER_DEPOSIT);
+            if (_containsGroup(depositPaymentMethodGroups, groupId)) continue;
+            if (depositPaymentMethodGroups.length == MAX_GROUPS_PER_DEPOSIT_PAYMENT_METHOD) {
+                revert TooManyGroups(depositPaymentMethodGroups.length + 1, MAX_GROUPS_PER_DEPOSIT_PAYMENT_METHOD);
             }
 
-            depositGroups.push(groupId);
-            emit AllowedGroupAdded(_escrow, _depositId, groupId);
+            depositPaymentMethodGroups.push(groupId);
+            emit AllowedGroupAdded(_escrow, _depositId, _paymentMethod, groupId);
         }
     }
 

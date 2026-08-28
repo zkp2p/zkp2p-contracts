@@ -13,7 +13,7 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
 
 /**
  * @title DisputeProtectionPolicy
- * @notice Deposit-scoped, stake-backed dispute protection that requires explicit depositor opt-in.
+ * @notice Deposit-and-payment-method-scoped, stake-backed dispute protection that is on by default for every payment method with a nonzero risk window and can be opted out per deposit payment method by the depositor.
  * @dev The policy owns no tokens. StakeVault is the source of truth for collateral locks, a dedicated
  * `disputeNullifierRegistry` deployment is the source of truth for consumed dispute nullifiers, and the calling
  * Orchestrator is the source of truth for valid escrows and intents.
@@ -53,8 +53,9 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     /// @dev Lifecycle-hook authorization keyed by lifecycle hook address.
     mapping(address => bool) internal isLifecycleHookAuthorizedByHook;
 
-    /// @dev Whether stake-backed dispute protection is enabled for each escrow deposit.
-    mapping(address => mapping(uint256 => bool)) internal isDepositDisputeProtectionEnabled;
+    /// @dev Whether the depositor opted a deposit payment method out of default dispute protection.
+    mapping(address => mapping(uint256 => mapping(bytes32 => bool))) internal
+        isDisputeProtectionDisabledByPaymentMethod;
 
     /// @dev Minimum collateral lock window for each payment method.
     mapping(bytes32 => uint64) internal paymentMethodRiskWindow;
@@ -121,7 +122,8 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
         uint64 riskWindow = paymentMethodRiskWindow[_paymentMethod];
         if (riskWindow == 0) return;
 
-        (address stakeOwner, address depositor) = _validateIntentAdmission(_intentHash, _escrow, _depositId, _taker);
+        (address stakeOwner, address depositor) =
+            _validateIntentAdmission(_intentHash, _escrow, _depositId, _paymentMethod, _taker);
 
         disputeProtectionIntentByIntentHash[_intentHash] = DisputeProtectionIntent({
             taker: _taker,
@@ -245,28 +247,32 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     /* ============ Depositor Functions ============ */
 
     /**
-     * @notice DEPOSITOR ONLY: Updates the dispute protection setting for a deposit.
-     * @dev Protection is disabled until the depositor explicitly enables it. OrchestratorV3 validates Escrow
-     * registration before signaling an intent; this policy only verifies that the caller is the deposit's current
-     * depositor.
+     * @notice DEPOSITOR ONLY: Updates dispute protection for one deposit payment method.
+     * @dev Protection is enabled by default on every payment method with a nonzero risk window; passing false opts the
+     * tuple out and true undoes the opt-out. The requested value is emitted as-is; the effective state also depends on
+     * the payment method's current risk window. OrchestratorV3 validates Escrow registration before signaling an
+     * intent; this policy only verifies that the caller is the deposit's current depositor.
      * @param _escrow Escrow containing the deposit.
-     * @param _depositId Deposit whose dispute protection configuration is updated.
-     * @param _isEnabled Whether non-whitelisted takers may use stake-backed dispute protection.
+     * @param _depositId Deposit whose payment-method-specific configuration is updated.
+     * @param _paymentMethod Payment method whose dispute protection configuration is updated.
+     * @param _isEnabled Whether non-whitelisted takers may use stake-backed dispute protection on this payment method;
+     * false opts out.
      */
-    function setDisputeProtectionEnabled(address _escrow, uint256 _depositId, bool _isEnabled)
+    function setDisputeProtectionEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod, bool _isEnabled)
         external
         onlyDepositor(_escrow, _depositId)
     {
-        isDepositDisputeProtectionEnabled[_escrow][_depositId] = _isEnabled;
-        emit DisputeProtectionEnabledUpdated(_escrow, _depositId, _isEnabled);
+        isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod] = !_isEnabled;
+        emit DisputeProtectionEnabledUpdated(_escrow, _depositId, _paymentMethod, _isEnabled);
     }
 
     /* ============ Governance Functions ============ */
 
     /**
      * @notice GOVERNANCE ONLY: Sets the minimum collateral lock window for future intents of a payment method.
-     * @dev Zero disables dispute protection state and lets the lifecycle hook pass the payment method through without
-     * a lock. Existing dispute protection intents retain their snapshotted risk window.
+     * @dev A zero window means the payment method is never routed through dispute protection: the lifecycle hook then
+     * applies the deposit's whitelist (rejecting non-members when it is enabled) or admits openly when it is disabled.
+     * Changing the window affects future admissions only; admitted intents keep their snapshotted window.
      * @param _paymentMethod Payment method whose future risk window is updated.
      * @param _riskWindow Minimum seconds collateral remains locked after settlement.
      */
@@ -302,11 +308,11 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
 
     /**
      * @notice GOVERNANCE ONLY: Pauses or resumes new dispute-protection admissions.
-     * @dev It rejects every non-whitelisted taker on every opted-in deposit whose payment method has a nonzero risk
+     * @dev It rejects every non-whitelisted taker on every non-opted-out deposit payment method with a nonzero risk
      * window. Whitelisted takers return from the lifecycle hook before this policy is reached, and payment methods with
-     * a zero risk window return before the pause check. Deposits that remain disabled do not call this policy; when
-     * their whitelist is disabled, they remain open. Cancellation, settlement, release, and dispute submission remain
-     * available while admissions are paused.
+     * a zero risk window return before the pause check. Explicitly opted-out deposit payment methods and zero-window
+     * payment methods never reach this policy and stay gated by the whitelist or open. Cancellation, settlement,
+     * release, and dispute submission remain available while admissions are paused.
      * @param _isPaused Whether new dispute protection admissions should revert.
      */
     function setAdmissionsPaused(bool _isPaused) external onlyOwner {
@@ -342,13 +348,22 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     }
 
     /**
-     * @notice Returns whether stake-backed dispute protection is enabled for a deposit.
-     * @dev Returns false for untouched deposits until the depositor explicitly opts in.
+     * @notice Returns the effective stake-backed dispute protection state for a deposit payment method.
+     * @dev True when the depositor has not opted the tuple out and the payment method has a nonzero risk window.
+     * Performs no validation: any escrow, any deposit id (including nonexistent ones), and any payment method with a
+     * nonzero window read true.
      * @param _escrow Escrow containing the deposit.
-     * @param _depositId Deposit whose dispute protection configuration is queried.
+     * @param _depositId Deposit whose payment-method-specific configuration is queried.
+     * @param _paymentMethod Payment method whose dispute protection configuration is queried.
      */
-    function isDisputeProtectionEnabled(address _escrow, uint256 _depositId) external view override returns (bool) {
-        return isDepositDisputeProtectionEnabled[_escrow][_depositId];
+    function isDisputeProtectionEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod)
+        external
+        view
+        override
+        returns (bool)
+    {
+        return !isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod]
+            && paymentMethodRiskWindow[_paymentMethod] != 0;
     }
 
     /**
@@ -374,17 +389,19 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
      * StakeVault remains authoritative for collateral sufficiency and reverts from `lockStake` when free stake is
      * insufficient.
      */
-    function _validateIntentAdmission(bytes32 _intentHash, address _escrow, uint256 _depositId, address _taker)
-        internal
-        view
-        returns (address stakeOwner, address depositor)
-    {
+    function _validateIntentAdmission(
+        bytes32 _intentHash,
+        address _escrow,
+        uint256 _depositId,
+        bytes32 _paymentMethod,
+        address _taker
+    ) internal view returns (address stakeOwner, address depositor) {
         if (admissionsPaused) revert AdmissionsPaused();
         if (disputeProtectionIntentByIntentHash[_intentHash].status != DisputeProtectionIntentStatus.NONE) {
             revert DisputeProtectionIntentAlreadyExists(_intentHash);
         }
-        if (!isDepositDisputeProtectionEnabled[_escrow][_depositId]) {
-            revert DisputeProtectionNotEnabled(_escrow, _depositId);
+        if (isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod]) {
+            revert DisputeProtectionNotEnabled(_escrow, _depositId, _paymentMethod);
         }
 
         IEscrowV2.Deposit memory deposit = IEscrowV2(_escrow).getDeposit(_depositId);

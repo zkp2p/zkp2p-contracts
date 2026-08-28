@@ -81,6 +81,11 @@ const deterministicCoverageRuns = [
         test: "test-foundry/deterministic/libs",
     },
     {
+        name: "deterministic-mocks",
+        irMinimum: true,
+        test: "test-foundry/deterministic/mocks",
+    },
+    {
         name: "deterministic-oracles",
         irMinimum: true,
         test: "test-foundry/deterministic/oracles",
@@ -165,6 +170,7 @@ const coverageLanes = new Map([
             "deterministic-deployment",
             "deterministic-guardian",
             "deterministic-hooks",
+            "deterministic-mocks",
             "deterministic-oracles",
             "deterministic-periphery",
             "deterministic-registries",

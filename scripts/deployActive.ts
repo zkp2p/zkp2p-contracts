@@ -4,6 +4,7 @@ import { tmpdir } from "os";
 import { join, resolve } from "path";
 
 import {
+  type DeploymentLanes,
   assertImmutableDeploymentLanes,
   assertSupportedDeploymentTag,
   selectActiveDeploymentScripts,
@@ -37,6 +38,7 @@ type ActiveDeploymentOptions = {
   env?: NodeJS.ProcessEnv;
   spawnSync?: Spawn;
   temporaryRoot?: string;
+  lanes?: DeploymentLanes;
 };
 
 export function runActiveDeployment(
@@ -44,7 +46,7 @@ export function runActiveDeployment(
   tag?: string,
   options: ActiveDeploymentOptions = {}
 ): number {
-  assertSupportedDeploymentTag(tag);
+  assertSupportedDeploymentTag(tag, options.lanes);
   const repositoryRoot = options.repositoryRoot ?? resolve(__dirname, "..");
   assertImmutableDeploymentLanes(repositoryRoot);
   const hardhatCli =
@@ -62,7 +64,8 @@ export function runActiveDeployment(
     );
     for (const { filename, sourcePath } of selectActiveDeploymentScripts(
       repositoryRoot,
-      filenames
+      filenames,
+      options.lanes
     )) {
       symlinkSync(sourcePath, join(activeDirectory, filename), "file");
     }

@@ -379,7 +379,7 @@ contract WhitelistPreIntentHookTest is Test {
 
     function test_WhitelistPolicyCanBeUsedAsV2WhitelistHook() public {
         vm.prank(depositor);
-        policy.configureDeposit(address(escrow), 0, true, new bytes32[](0), _address(taker));
+        policy.configureDeposit(address(escrow), 0, METHOD, true, new bytes32[](0), _address(taker));
         _setWhitelistHook(depositor, address(escrow), policy);
 
         assertNotEq(_signal(), bytes32(0));
@@ -387,10 +387,12 @@ contract WhitelistPreIntentHookTest is Test {
 
     function test_WhitelistPolicyRejectsNonWhitelistedV2Taker() public {
         vm.prank(depositor);
-        policy.setEnabled(address(escrow), 0, true);
+        policy.setEnabled(address(escrow), 0, METHOD, true);
         _setWhitelistHook(depositor, address(escrow), policy);
 
-        vm.expectRevert(abi.encodeWithSelector(WhitelistPolicy.TakerNotWhitelisted.selector, taker, address(escrow), 0));
+        vm.expectRevert(
+            abi.encodeWithSelector(WhitelistPolicy.TakerNotWhitelisted.selector, taker, address(escrow), 0, METHOD)
+        );
         _signalCall();
         assertEq(orchestrator.getAccountIntents(taker).length, 0);
     }

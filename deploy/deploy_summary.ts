@@ -66,6 +66,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     IntentGuardian:                     ${tryGetAddress(network, "IntentGuardian")}
     AddressGroupRegistry:               ${tryGetAddress(network, "AddressGroupRegistry")}
     WhitelistPolicy:                    ${await liveAddress("WhitelistPolicy")}
+    WhitelistPolicyMethodScoped:        ${tryGetAddress(network, "WhitelistPolicyMethodScoped")}
     NullifierRegistryV2:                ${tryGetAddress(network, "NullifierRegistryV2")}
     UnifiedPaymentVerifierV3:           ${tryGetAddress(network, "UnifiedPaymentVerifierV3")}
     OrchestratorV3:                     ${await liveAddress("OrchestratorV3")}
@@ -95,6 +96,16 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 };
 
 func.runAtTheEnd = true;
-func.tags = ["V3PaymentBindingStack", "V3DisputeLifecycleStack", "V3DisputeOptInStack"];
+func.tags = [
+  "V3PaymentBindingStack",
+  "V3DisputeLifecycleStack",
+  "V3DisputeOptInStack",
+  "36_deploy_method_scoped_whitelist_policy",
+  "MethodScopedWhitelistPolicy",
+  "37_deploy_method_scoped_dispute_lifecycle_stack",
+  "V3DisputeMethodScopedStack",
+  "38_activate_method_scoped_dispute_lifecycle_stack",
+  "V3DisputeMethodScopedActivation",
+];
 
 export default func;

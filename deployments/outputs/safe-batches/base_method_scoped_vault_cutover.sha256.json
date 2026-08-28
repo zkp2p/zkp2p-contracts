@@ -1,0 +1,374 @@
+{
+  "version": 3,
+  "kind": "vault-cutover",
+  "chainId": 8453,
+  "safe": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+  "safeNonce": "77",
+  "sourceSha": "71113f2c16562140d110abd4ff5b696f4069975a",
+  "proofBlock": {
+    "number": 50544641,
+    "hash": "0x9a8e94f32a979ea152be9a532bbf8f97efcdb5e609a445633cdf0b9c014d5208"
+  },
+  "simulationBlockNumber": 50544749,
+  "simulationBlockHash": "0xe97a84189f752ff56a966a401ef1a330b69f6490f0c85005a2fc59a18baa62f3",
+  "simulationResult": "success",
+  "transactions": [
+    {
+      "to": "0xaa63a5a5aa8024f462590207ed2a6ddc9a824705",
+      "value": "0",
+      "data": "0xbf9a61ac",
+      "operation": 0
+    },
+    {
+      "to": "0x47c26258222e2f96424bd2b21bf173f0da5034c7",
+      "value": "0",
+      "data": "0x79ba5097",
+      "operation": 0
+    },
+    {
+      "to": "0xbf4b769db70dbec89b6b2c44988304a7ad2de4fc",
+      "value": "0",
+      "data": "0x79ba5097",
+      "operation": 0
+    },
+    {
+      "to": "0xa845615b5203f7a21321ddf5e3a1ca024d93a443",
+      "value": "0",
+      "data": "0xd6da0326000000000000000000000000bf4b769db70dbec89b6b2c44988304a7ad2de4fc",
+      "operation": 0
+    },
+    {
+      "to": "0x014025fde093f8701d86e9f38e2c3a9b779cb5c7",
+      "value": "0",
+      "data": "0xbb4995af0000000000000000000000005dd6c675a7406fe8c9f0d93394a36fd6e8c50031",
+      "operation": 0
+    }
+  ],
+  "transactionsSha256": "750b4e448ac3fb0ed4c9d2bfbe9fe05fbb3e3ce25c18bbd6d6e50ddbe63d5a62",
+  "guard": {
+    "address": "0xaa63a5a5aa8024f462590207ed2a6ddc9a824705",
+    "artifactName": "DisputeMethodScopedVaultCutoverGuard",
+    "constructorArgs": [
+      {
+        "safe": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+        "disputeRegistry": "0xa845615b5203f7a21321ddf5e3a1ca024d93a443",
+        "orchestrator": "0x014025fde093f8701d86e9f38e2c3a9b779cb5c7",
+        "orchestratorRegistry": "0xbe9fed15ed7a4b915c03efcecb9662739c3382a9",
+        "escrowRegistry": "0xed0e847b101abc96e796260ac358e12baa2f5b21",
+        "paymentVerifierRegistry": "0x2b82d24437ff66fb173eabdfd67ee2aceb8beb1e",
+        "relayerRegistry": "0xeba979889a9c97382a92472ff3703786ff180083",
+        "protocolFeeRecipient": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+        "allowMultipleIntents": true,
+        "freshHook": "0x5dd6c675a7406fe8c9f0d93394a36fd6e8c50031",
+        "whitelistPolicy": "0x389cd9ba91fffcd83d267b241e975541892759ce",
+        "groupRegistry": "0x39f80118f9eb619135f116171b6cb91d372c5af2",
+        "attestationVerifier": "0x9fe920b24e50e6a6362ba71a1beb502a99c402d5",
+        "witnesses": [
+          "0xdb4ed7faf170f0f6493e3adaacaafaf47092c754",
+          "0xe078d93bfdd87a8c5c5cca5905dcba0dd7a1f0bd"
+        ],
+        "disputeVerifier": "0x30d4947f005653637005eed991005119d9eb2f34",
+        "nullifierRegistryV2": "0x5455e761b866dfa6a2f5dc6d6525825bf9c09aeb",
+        "predecessorPolicy": "0xcec48f7242edbf02875bb4629115bd927e1287aa",
+        "freshPolicy": "0xbf4b769db70dbec89b6b2c44988304a7ad2de4fc",
+        "vaults": {
+          "freshVault": "0x47c26258222e2f96424bd2b21bf173f0da5034c7",
+          "predecessorVault": "0x4d16f4a9946cfc76b1c1a4b63aa9d94cda2dbceb"
+        },
+        "predecessorHook": "0x71467dcac3b50eeed5a485ac6a70f27b1eac1970",
+        "paymentMethods": [
+          "0xcac9daea62d7b89d75ac73af4ee14dcf25721012ae82b568c2ea5c808eaa04ff",
+          "0x5908bb0c9b87763ac6171d4104847667e7f02b4c47b574fe890c1f439ed128bb",
+          "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
+          "0x617f88ab82b5c1b014c539f7e75121427f0bb50a4c58b187a238531e7d58605d",
+          "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d",
+          "0x554a007c2217df766b977723b276671aee5ebb4adaea0edb6433c88b3e61dac5",
+          "0xa5418819c024239299ea32e09defae8ec412c03e58f5c75f1b2fe84c857f5483",
+          "0xf752c7d19698ecb0bb8988abf9b9a53a4c3657f3bc8850a6fb59fdf3e3ce8cd3",
+          "0x62c7ed738ad3e7618111348af32691b5767777fbaf46a2d8943237625552645c",
+          "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f"
+        ],
+        "riskWindows": [
+          "0",
+          "0",
+          "1209600",
+          "0",
+          "1209600",
+          "0",
+          "0",
+          "0",
+          "0",
+          "1209600"
+        ]
+      },
+      true,
+      true,
+      [],
+      "0x777777779d229cdf3110e9de47943791c26300ef",
+      "4320"
+    ],
+    "deployTransactionHash": "0x8a9e5a5237fb49e7a674608fa2f4ee9916f839e01681ab9911bdd34f898ed50e",
+    "runtimeCodeHash": "0x2a39eed4a1a4c2ae1ae126d8368cc70f225055f5dd8019257c00539e13de65bf"
+  },
+  "postcondition": {
+    "address": "0x57a0b93a1138bf1890fe3aa21bb6718e6209e2fa",
+    "artifactName": "DisputeMethodScopedVaultCutoverPostcondition",
+    "constructorArgs": [
+      {
+        "safe": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+        "disputeRegistry": "0xa845615b5203f7a21321ddf5e3a1ca024d93a443",
+        "orchestrator": "0x014025fde093f8701d86e9f38e2c3a9b779cb5c7",
+        "orchestratorRegistry": "0xbe9fed15ed7a4b915c03efcecb9662739c3382a9",
+        "escrowRegistry": "0xed0e847b101abc96e796260ac358e12baa2f5b21",
+        "paymentVerifierRegistry": "0x2b82d24437ff66fb173eabdfd67ee2aceb8beb1e",
+        "relayerRegistry": "0xeba979889a9c97382a92472ff3703786ff180083",
+        "protocolFeeRecipient": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+        "allowMultipleIntents": true,
+        "freshHook": "0x5dd6c675a7406fe8c9f0d93394a36fd6e8c50031",
+        "whitelistPolicy": "0x389cd9ba91fffcd83d267b241e975541892759ce",
+        "groupRegistry": "0x39f80118f9eb619135f116171b6cb91d372c5af2",
+        "attestationVerifier": "0x9fe920b24e50e6a6362ba71a1beb502a99c402d5",
+        "witnesses": [
+          "0xdb4ed7faf170f0f6493e3adaacaafaf47092c754",
+          "0xe078d93bfdd87a8c5c5cca5905dcba0dd7a1f0bd"
+        ],
+        "disputeVerifier": "0x30d4947f005653637005eed991005119d9eb2f34",
+        "nullifierRegistryV2": "0x5455e761b866dfa6a2f5dc6d6525825bf9c09aeb",
+        "predecessorPolicy": "0xcec48f7242edbf02875bb4629115bd927e1287aa",
+        "freshPolicy": "0xbf4b769db70dbec89b6b2c44988304a7ad2de4fc",
+        "vaults": {
+          "freshVault": "0x47c26258222e2f96424bd2b21bf173f0da5034c7",
+          "predecessorVault": "0x4d16f4a9946cfc76b1c1a4b63aa9d94cda2dbceb"
+        },
+        "predecessorHook": "0x71467dcac3b50eeed5a485ac6a70f27b1eac1970",
+        "paymentMethods": [
+          "0xcac9daea62d7b89d75ac73af4ee14dcf25721012ae82b568c2ea5c808eaa04ff",
+          "0x5908bb0c9b87763ac6171d4104847667e7f02b4c47b574fe890c1f439ed128bb",
+          "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
+          "0x617f88ab82b5c1b014c539f7e75121427f0bb50a4c58b187a238531e7d58605d",
+          "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d",
+          "0x554a007c2217df766b977723b276671aee5ebb4adaea0edb6433c88b3e61dac5",
+          "0xa5418819c024239299ea32e09defae8ec412c03e58f5c75f1b2fe84c857f5483",
+          "0xf752c7d19698ecb0bb8988abf9b9a53a4c3657f3bc8850a6fb59fdf3e3ce8cd3",
+          "0x62c7ed738ad3e7618111348af32691b5767777fbaf46a2d8943237625552645c",
+          "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f"
+        ],
+        "riskWindows": [
+          "0",
+          "0",
+          "1209600",
+          "0",
+          "1209600",
+          "0",
+          "0",
+          "0",
+          "0",
+          "1209600"
+        ]
+      }
+    ],
+    "deployTransactionHash": "0x671e33659882e0a69f1671b8d91a74527464715302d5ec9dc11d461dabb53ea3",
+    "runtimeCodeHash": "0xc5997d0747e0797d526245a5c6c3f76daf8271f4bdae0cd571dcde6385daafb6"
+  },
+  "trustSurface": {
+    "safe": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+    "disputeRegistry": "0xa845615b5203f7a21321ddf5e3a1ca024d93a443",
+    "orchestrator": "0x014025fde093f8701d86e9f38e2c3a9b779cb5c7",
+    "orchestratorRegistry": "0xbe9fed15ed7a4b915c03efcecb9662739c3382a9",
+    "escrowRegistry": "0xed0e847b101abc96e796260ac358e12baa2f5b21",
+    "paymentVerifierRegistry": "0x2b82d24437ff66fb173eabdfd67ee2aceb8beb1e",
+    "relayerRegistry": "0xeba979889a9c97382a92472ff3703786ff180083",
+    "protocolFeeRecipient": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+    "allowMultipleIntents": true,
+    "freshHook": "0x5dd6c675a7406fe8c9f0d93394a36fd6e8c50031",
+    "whitelistPolicy": "0x389cd9ba91fffcd83d267b241e975541892759ce",
+    "groupRegistry": "0x39f80118f9eb619135f116171b6cb91d372c5af2",
+    "attestationVerifier": "0x9fe920b24e50e6a6362ba71a1beb502a99c402d5",
+    "witnesses": [
+      "0xdb4ed7faf170f0f6493e3adaacaafaf47092c754",
+      "0xe078d93bfdd87a8c5c5cca5905dcba0dd7a1f0bd"
+    ],
+    "disputeVerifier": "0x30d4947f005653637005eed991005119d9eb2f34",
+    "nullifierRegistryV2": "0x5455e761b866dfa6a2f5dc6d6525825bf9c09aeb",
+    "predecessorPolicy": "0xcec48f7242edbf02875bb4629115bd927e1287aa",
+    "freshPolicy": "0xbf4b769db70dbec89b6b2c44988304a7ad2de4fc",
+    "vaults": {
+      "freshVault": "0x47c26258222e2f96424bd2b21bf173f0da5034c7",
+      "predecessorVault": "0x4d16f4a9946cfc76b1c1a4b63aa9d94cda2dbceb"
+    },
+    "predecessorHook": "0x71467dcac3b50eeed5a485ac6a70f27b1eac1970",
+    "paymentMethods": [
+      "0xcac9daea62d7b89d75ac73af4ee14dcf25721012ae82b568c2ea5c808eaa04ff",
+      "0x5908bb0c9b87763ac6171d4104847667e7f02b4c47b574fe890c1f439ed128bb",
+      "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
+      "0x617f88ab82b5c1b014c539f7e75121427f0bb50a4c58b187a238531e7d58605d",
+      "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d",
+      "0x554a007c2217df766b977723b276671aee5ebb4adaea0edb6433c88b3e61dac5",
+      "0xa5418819c024239299ea32e09defae8ec412c03e58f5c75f1b2fe84c857f5483",
+      "0xf752c7d19698ecb0bb8988abf9b9a53a4c3657f3bc8850a6fb59fdf3e3ce8cd3",
+      "0x62c7ed738ad3e7618111348af32691b5767777fbaf46a2d8943237625552645c",
+      "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f"
+    ],
+    "riskWindows": [
+      "0",
+      "0",
+      "1209600",
+      "0",
+      "1209600",
+      "0",
+      "0",
+      "0",
+      "0",
+      "1209600"
+    ]
+  },
+  "proofSnapshot": {
+    "network": "base",
+    "blockNumber": 50544641,
+    "blockHash": "0x9a8e94f32a979ea152be9a532bbf8f97efcdb5e609a445633cdf0b9c014d5208",
+    "blockTimestamp": "1787878629",
+    "freshPolicy": {
+      "owner": "0x84e113087c97cd80ea9d78983d4b8ff61eca1929",
+      "pendingOwner": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+      "admissionsPaused": false,
+      "disputeVerifier": "0x30d4947f005653637005eed991005119d9eb2f34",
+      "disputeNullifierRegistry": "0xa845615b5203f7a21321ddf5e3a1ca024d93a443",
+      "stakeVault": "0x47c26258222e2f96424bd2b21bf173f0da5034c7",
+      "authorizedHooks": [
+        "0x5dd6c675a7406fe8c9f0d93394a36fd6e8c50031"
+      ],
+      "riskWindows": {
+        "0xcac9daea62d7b89d75ac73af4ee14dcf25721012ae82b568c2ea5c808eaa04ff": "0",
+        "0x5908bb0c9b87763ac6171d4104847667e7f02b4c47b574fe890c1f439ed128bb": "0",
+        "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268": "1209600",
+        "0x617f88ab82b5c1b014c539f7e75121427f0bb50a4c58b187a238531e7d58605d": "0",
+        "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d": "1209600",
+        "0x554a007c2217df766b977723b276671aee5ebb4adaea0edb6433c88b3e61dac5": "0",
+        "0xa5418819c024239299ea32e09defae8ec412c03e58f5c75f1b2fe84c857f5483": "0",
+        "0xf752c7d19698ecb0bb8988abf9b9a53a4c3657f3bc8850a6fb59fdf3e3ce8cd3": "0",
+        "0x62c7ed738ad3e7618111348af32691b5767777fbaf46a2d8943237625552645c": "0",
+        "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f": "1209600"
+      }
+    },
+    "predecessorPolicy": {
+      "owner": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+      "pendingOwner": "0x0000000000000000000000000000000000000000",
+      "admissionsPaused": false,
+      "disputeVerifier": "0x30d4947f005653637005eed991005119d9eb2f34",
+      "disputeNullifierRegistry": "0xa845615b5203f7a21321ddf5e3a1ca024d93a443",
+      "stakeVault": "0x4d16f4a9946cfc76b1c1a4b63aa9d94cda2dbceb"
+    },
+    "disputeVerifier": {
+      "owner": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+      "pendingOwner": "0x0000000000000000000000000000000000000000",
+      "attestationVerifier": "0x9fe920b24e50e6a6362ba71a1beb502a99c402d5",
+      "nullifierRegistry": "0x5455e761b866dfa6a2f5dc6d6525825bf9c09aeb"
+    },
+    "freshVault": {
+      "owner": "0x84e113087c97cd80ea9d78983d4b8ff61eca1929",
+      "pendingOwner": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+      "controller": "0xbf4b769db70dbec89b6b2c44988304a7ad2de4fc",
+      "pendingController": "0x0000000000000000000000000000000000000000",
+      "pendingControllerValidAt": "0",
+      "controllerChangeDelay": "172800",
+      "stakeToken": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
+    },
+    "predecessorVault": {
+      "pendingController": "0x0000000000000000000000000000000000000000"
+    },
+    "registry": {
+      "owner": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+      "writers": [
+        "0xcec48f7242edbf02875bb4629115bd927e1287aa"
+      ]
+    },
+    "orchestrator": {
+      "owner": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+      "paused": false,
+      "lifecycleHook": "0x71467dcac3b50eeed5a485ac6a70f27b1eac1970",
+      "escrowRegistry": "0xed0e847b101abc96e796260ac358e12baa2f5b21",
+      "paymentVerifierRegistry": "0x2b82d24437ff66fb173eabdfd67ee2aceb8beb1e",
+      "relayerRegistry": "0xeba979889a9c97382a92472ff3703786ff180083",
+      "protocolFee": "0",
+      "protocolFeeRecipient": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+      "allowMultipleIntents": true,
+      "registered": true
+    },
+    "freshHook": {
+      "orchestratorRegistry": "0xbe9fed15ed7a4b915c03efcecb9662739c3382a9",
+      "whitelistPolicy": "0x389cd9ba91fffcd83d267b241e975541892759ce",
+      "disputeProtectionPolicy": "0xbf4b769db70dbec89b6b2c44988304a7ad2de4fc"
+    },
+    "whitelistPolicy": {
+      "owner": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+      "escrowRegistry": "0xed0e847b101abc96e796260ac358e12baa2f5b21",
+      "groupRegistry": "0x39f80118f9eb619135f116171b6cb91d372c5af2",
+      "orchestratorRegistry": "0xbe9fed15ed7a4b915c03efcecb9662739c3382a9"
+    },
+    "attestationVerifier": {
+      "owner": "0x0bc26ff515411396dd588abd6ef6846e04470227",
+      "requiredSignatures": "1",
+      "witnesses": [
+        "0xdb4ed7faf170f0f6493e3adaacaafaf47092c754",
+        "0xe078d93bfdd87a8c5c5cca5905dcba0dd7a1f0bd"
+      ]
+    },
+    "lockProof": {
+      "fromBlock": 50201693,
+      "toBlock": 50544641,
+      "intents": [
+        {
+          "intentHash": "0x00f53cecf2ea9c6ac3af4876d3fc1abf4c9f2355efe032d8ce333ee3a6bd6f6b",
+          "status": 2,
+          "lockAmount": "0",
+          "maturesAt": "0",
+          "classification": "terminal"
+        },
+        {
+          "intentHash": "0x133ab131e279bcda3e1cfad95780409aaf22ac32058effbdbb8373ad90f44d72",
+          "status": 2,
+          "lockAmount": "0",
+          "maturesAt": "0",
+          "classification": "terminal"
+        },
+        {
+          "intentHash": "0x2c5695a501b1566d8cd4fbd82dfad8496894cda6dc5c1255dcd00858e8e8b469",
+          "status": 3,
+          "lockAmount": "105263",
+          "maturesAt": "1788819021",
+          "classification": "settled-unmatured"
+        },
+        {
+          "intentHash": "0x027182217e9e0a1aebb196d4f635d5eabbee18161502f4a98eb9e50e9b40ba37",
+          "status": 2,
+          "lockAmount": "0",
+          "maturesAt": "0",
+          "classification": "terminal"
+        },
+        {
+          "intentHash": "0x1db13804a43460e863760372e1324662bd5375a424273396c3915ab18a7fe72d",
+          "status": 3,
+          "lockAmount": "1000000",
+          "maturesAt": "1789039859",
+          "classification": "settled-unmatured"
+        }
+      ],
+      "ok": false,
+      "releasable": [],
+      "blocking": [
+        "0x2c5695a501b1566d8cd4fbd82dfad8496894cda6dc5c1255dcd00858e8e8b469",
+        "0x1db13804a43460e863760372e1324662bd5375a424273396c3915ab18a7fe72d"
+      ],
+      "earliestMaturity": "1788819021"
+    },
+    "inventory": {
+      "escrow": "0x777777779d229cdf3110e9de47943791c26300ef",
+      "depositCounter": "4320",
+      "block": 50544641,
+      "tuples": [],
+      "violations": [],
+      "ok": true
+    }
+  },
+  "manifestSha256": "e929c363004d119f9ad6991d5697eccc91a993cc7bca641bca4d3ec94c9edd31"
+}

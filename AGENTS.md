@@ -34,13 +34,84 @@
   directly. Current read-only predecessor address and bytecode checks live in
   `deployments/predecessorDisputeStack.ts`.
 - Lane `33` is the independently owned IntentGuardian fee update.
-- Lane `34` is the only opt-in dispute successor lane. Its tag-scoped live commands deploy and configure a fresh
-  `StakeVault`, `DisputeProtectionPolicy`, and `IntentLifecycleHookV1` while reusing the pinned verifier and dispute
-  registry. `ENABLE_STAGING_V3_DISPUTE_OPT_IN_DEPLOYMENT=true` and
-  `ENABLE_BASE_V3_DISPUTE_OPT_IN_DEPLOYMENT=true` authorize passive deployment only; deployment leaves the current
-  writer set and OrchestratorV3 hook unchanged. Base activation is an unsigned, separately reviewed Safe batch that
-  the lane never signs, proposes, or executes. Base-staging activation advances separately confirmed EOA-owned
-  transitions one at a time. Never infer activation from source, tests, package ABIs, artifacts, or deployment.
+- `deploy/29_deploy_whitelist_policy.ts` is immutable production provenance for the deposit-scoped
+  `WhitelistPolicy`. It stays mounted because lane 30 depends on its tag and its `skip` already recognizes the wired
+  production policy; its digest is pinned in `deployments/immutableDeploymentLanes.ts`.
+- `deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts` is immutable and retired. It deployed and, on Base, activated
+  the `*OptIn` dispute stack built from the deposit-only interfaces; the runner verifies its digest, excludes it from
+  every supported run, and rejects both of its tags. Its Safe simulation and verification scripts remain as tooling
+  for that executed history. The Base `*OptIn` trio is the live dispute stack until a later activation lane replaces
+  it; the Base-staging `*OptIn` trio is deployed but was never activated.
+- Lanes `36` and `37` executed deploy-only on Base staging and Base on 2026-08-27 and are immutable (pinned in
+  `deployments/immutableDeploymentLanes.ts`). Lane `36` stays mounted behind its canonical-record skip; lane `37` is
+  retired for live networks (its preflight requires the predecessor hook, which lane 38 replaces) and is mounted through
+  `deployments/activeDeploymentLanes/37_…ts`, a wrapper that delegates to the pinned source only on `localhost`/`hardhat`
+  so local deployments keep the method-scoped stack; its tags are refused by the runner. Lane `36`
+  deploys `WhitelistPolicyMethodScoped`; lane `37` deploys `DisputeProtectionPolicyMethodScoped` and
+  `IntentLifecycleHookV1MethodScoped` against the lane-36 policy, the network's pinned verifier and dispute
+  registry, and the pinned predecessor `StakeVault`, which is reused (controller rotation happens in the activation
+  lane through the vault's delayed two-step handover); `StakeVaultMethodScoped` is a localhost-only record. `ENABLE_{STAGING,BASE}_METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT=true`
+  and `ENABLE_{STAGING,BASE}_V3_DISPUTE_METHOD_SCOPED_DEPLOYMENT=true` authorize passive deployment only: the
+  OrchestratorV3 hook, the dispute-registry writer set, and every V2 deposit hook stay unchanged, and Base ownership
+  handover is initiated for the Safe to accept later. Activation, the predecessor writer revoke, and the canonical
+  selection flip belong to a future lane; never infer activation from source, tests, package ABIs, artifacts, or
+  deployment. The lane-37 policy is default-on for windowed rails with a depositor opt-out (see the rail-aware
+  default design); pre-activation opt-outs are expected and do not invalidate the lane; the live vault is never inspected by it.
+- `deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts` is the activation lane for the lane-37 stack. It
+  runs only under `DEPLOY_ACTIVE_TAG=38_activate_method_scoped_dispute_lifecycle_stack`; untagged runs skip on
+  every network, a tagged local run throws (there is no predecessor stack to activate), and any lane-38 flag
+  without the tag throws before the first chain read. Every read is pinned to one block and reduced by
+  `reduceActivation` (`deployments/methodScopedActivation.ts`) into `deployed` / `rotation-proposed` / `active`
+  or `unrecognized`; an unrecognized state aborts. Base staging advances one deployer-EOA step per run
+  (`PREPARE_`/`ENABLE_STAGING_V3_DISPUTE_METHOD_SCOPED_ACTIVATION=true`): pause predecessor admissions,
+  propose the fresh policy as vault controller, release matured predecessor intents, accept the controller
+  after the delay and only once no predecessor lock is open, add the fresh writer, set the O3 hook, remove the
+  predecessor writer. Base emits two unsigned Safe batches, each headed by a freshly deployed on-chain guard
+  that binds the full trust surface: rotation (`ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_ROTATION_PREPARATION`)
+  = guard, optional `acceptOwnership`, pause predecessor admissions, `proposeController`; cutover
+  (`ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_CUTOVER_PREPARATION`, only after the delay with zero live
+  predecessor locks and no successor-side violations) = guard, `acceptVaultController`, add fresh writer,
+  remove predecessor writer, `setLifecycleHook`. A postcondition contract is appended in the pinned fork
+  simulation only. Artifacts live at `deployments/outputs/safe-batches/base_method_scoped_{rotation,cutover}.json`
+  with `.sha256.json` sidecars; `yarn verify:method-scoped-safe-batch --batch rotation|cutover` must pass
+  immediately before the Safe executes, and no script ever signs. Artifact-child verification permits unrelated
+  commits after the recorded source SHA only while every path in `ACTIVATION_PROTECTED_PATHS` remains unchanged.
+  Retire lane 37 before activation (its skip
+  asserts the predecessor hook is still live), pin lane 38 after its first live transition, and keep the
+  `active-dispute-stack.json` / `PREDECESSOR_DISPUTE_STACKS` / evidence flip and the `WhitelistPolicy`
+  package alias in recording PRs after each execution — the lane itself flips nothing repo-side.
+  Lane 38 executed only its first two Base-staging steps (2026-08-27) and is retired unexecuted on Base: the reused
+  vault's two-day controller delay was abandoned in favour of a dedicated vault. Its staging side effects remain live
+  (lane-32 policy admissions paused; staging vault `pendingController` = the lane-37 policy) and lane 39 pins exactly
+  that state.
+- `deploy/39_deploy_method_scoped_vault_stack.ts` deploys `StakeVaultMethodScoped` (a fresh `StakeVault`, aliased to the
+  canonical `StakeVault` package key after activation), `DisputeProtectionPolicyMethodScopedStaked`, and
+  `IntentLifecycleHookV1MethodScopedStaked` against `WhitelistPolicyMethodScoped` and the pinned verifier/registry, sets
+  the vault controller with `initializeController` (no delay), authorizes the hook, applies the windowed-rail risk
+  windows, and on Base initiates two-step ownership transfers of vault and policy to the Safe. Flags
+  `ENABLE_{STAGING,BASE}_V3_DISPUTE_METHOD_SCOPED_VAULT_DEPLOYMENT=true` authorize deploy-only runs; local networks
+  deploy and activate. Old vaults and their stake are abandoned by decision (2026-08-28); the lane-37 policy/hook records
+  are immutable history that was never activated.
+- `deploy/40_activate_method_scoped_vault_stack.ts` activates the lane-39 stack without a rotation: Base staging runs
+  add-fresh-writer → set-fresh-hook → remove-predecessor-writer one deployer step per run; Base emits a single guarded
+  cutover batch (guard → conditional `acceptOwnership` on vault and policy → add fresh writer → `setLifecycleHook`) and,
+  later, a guarded writer-removal batch allowed only when every predecessor-opened intent is terminal and the
+  predecessor vault holds no locks. Snapshots carry `freshVault` and `predecessorVault` separately; guards, manifest
+  (v3), verifier kinds (`vault-cutover`, `vault-writer-removal`) and artifacts
+  (`deployments/outputs/safe-batches/base_method_scoped_vault_*`) are additive to lane 38's, which stay byte-identical.
+  The same artifact-child protected-path rule applies to both lane-40 batch kinds; unrelated repository changes do not
+  require regeneration when the batch producers and verifiers are unchanged.
+  Recording checkpoints: commit live records before any artifact generation, pin lanes 39/40 after their first live
+  execution, propose the Base cutover at the live Safe nonce, and flip manifests/package only after execution.
+- `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
+  predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
+  identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the
+  Base `*OptIn` trio, the Base-staging lane-32 stack). Do not merge them until the method-scoped stack is activated.
+- `scripts/bootstrapWhitelistPolicy.ts` targets only `WhitelistPolicyMethodScoped` and refuses the lane-29 policy
+  address. Its required `WHITELIST_GROUP_IDS` is an ordered, non-empty, distinct list; on Base every ID must be one
+  of the known production groups. Withdrawn and inactive indexer rows are skipped and reported; the expected count
+  and selection digest cover only the eligible set. Until the lane-36 artifact exists for a network the script fails
+  closed on the missing artifact.
 - `IntentGuardian` and `WhitelistPolicy` remain part of the V2 policy history and are reused where the mounted V3
   lifecycle lane specifies. Do not redeploy a core stack merely to change an independently owned policy component.
 - The payment-verifier cutover is one-way. Before the governance batch, lane `31` must prove UPV3 is the sole

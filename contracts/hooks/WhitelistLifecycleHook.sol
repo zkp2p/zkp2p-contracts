@@ -9,7 +9,7 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 
 /**
  * @title WhitelistLifecycleHook
- * @notice Lifecycle hook enforcing persistent deposit-scoped whitelist admission without dispute coverage.
+ * @notice Lifecycle hook enforcing deposit-and-payment-method-scoped whitelist admission without dispute coverage.
  * Open deposits remain unrestricted, while enabled whitelist policies reject every taker not currently allowed.
  * @dev Reads canonical intent data from the calling orchestrator. Whitelist admission is evaluated only when an
  * intent is signaled; authorized cancellation and settlement callbacks are no-ops. All callbacks remain fail-closed.
@@ -28,7 +28,7 @@ contract WhitelistLifecycleHook is IIntentLifecycleHook {
     error InvalidDependency(address dependency);
     error UnauthorizedOrchestrator(address caller);
     error IntentNotFound(bytes32 intentHash);
-    error TakerNotWhitelisted(address escrow, uint256 depositId, address taker);
+    error TakerNotWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker);
 
     /* ============ Constructor ============ */
 
@@ -55,10 +55,10 @@ contract WhitelistLifecycleHook is IIntentLifecycleHook {
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
         if (
-            whitelistPolicy.enabled(intent.escrow, intent.depositId)
-                && !whitelistPolicy.isTakerAllowed(intent.escrow, intent.depositId, intent.owner)
+            whitelistPolicy.enabled(intent.escrow, intent.depositId, intent.paymentMethod)
+                && !whitelistPolicy.isTakerAllowed(intent.escrow, intent.depositId, intent.paymentMethod, intent.owner)
         ) {
-            revert TakerNotWhitelisted(intent.escrow, intent.depositId, intent.owner);
+            revert TakerNotWhitelisted(intent.escrow, intent.depositId, intent.paymentMethod, intent.owner);
         }
     }
 

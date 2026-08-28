@@ -76,7 +76,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
 
     function test_EnabledEmptyPolicyFailsClosedBeforeEscrowLock() public {
         vm.prank(depositor);
-        policy.setEnabled(address(escrow), depositId, true);
+        policy.setEnabled(address(escrow), depositId, METHOD, true);
 
         uint256 counterBefore = orchestrator.intentCounter();
         bytes32 rejectedIntent = _intentHash(counterBefore);
@@ -84,7 +84,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IntentLifecycleHookV1.TakerNotWhitelisted.selector, address(escrow), depositId, taker
+                IntentLifecycleHookV1.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker
             )
         );
         _signalCall(taker, _defaultParams());
@@ -97,11 +97,11 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
 
     function test_NonMemberRejectedAndMemberAccepted() public {
         vm.prank(depositor);
-        policy.configureDeposit(address(escrow), depositId, true, _groupIds(PEERS), new address[](0));
+        policy.configureDeposit(address(escrow), depositId, METHOD, true, _groupIds(PEERS), new address[](0));
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IntentLifecycleHookV1.TakerNotWhitelisted.selector, address(escrow), depositId, taker
+                IntentLifecycleHookV1.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker
             )
         );
         _signalCall(taker, _defaultParams());
@@ -113,7 +113,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
 
     function test_DirectAddressWhitelistAllowsTaker() public {
         vm.prank(depositor);
-        policy.configureDeposit(address(escrow), depositId, true, new bytes32[](0), _addresses(taker));
+        policy.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), _addresses(taker));
 
         assertNotEq(_signalDefault(), bytes32(0));
     }
@@ -123,21 +123,28 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
             abi.encodeWithSelector(WhitelistPolicy.NotDepositor.selector, address(escrow), depositId, delegate)
         );
         vm.prank(delegate);
-        policy.configureDeposit(address(escrow), depositId, true, new bytes32[](0), new address[](0));
+        policy.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), new address[](0));
 
         vm.prank(depositor);
-        policy.configureDeposit(address(escrow), depositId, true, new bytes32[](0), new address[](0));
-        assertTrue(policy.enabled(address(escrow), depositId));
+        policy.configureDeposit(address(escrow), depositId, METHOD, true, new bytes32[](0), new address[](0));
+        assertTrue(policy.enabled(address(escrow), depositId, METHOD));
     }
 
-    function test_DepositPolicyAppliesAcrossAllPaymentMethodsOfTheDeposit() public {
+    function test_DepositPolicyIsScopedToPaymentMethod() public {
         _addPaymentMethod(OTHER_METHOD);
 
         vm.prank(depositor);
-        policy.configureDeposit(address(escrow), depositId, true, _groupIds(PEERS), new address[](0));
+        policy.configureDeposit(address(escrow), depositId, METHOD, true, _groupIds(PEERS), new address[](0));
 
         IOrchestratorV3.SignalIntentParams memory otherMethodParams = _defaultParams();
         otherMethodParams.paymentMethod = OTHER_METHOD;
+
+        assertNotEq(_signal(taker, otherMethodParams), bytes32(0));
+        vm.expectPartialRevert(IntentLifecycleHookV1.TakerNotWhitelisted.selector);
+        _signalCall(taker, _defaultParams());
+
+        vm.prank(depositor);
+        policy.configureDeposit(address(escrow), depositId, OTHER_METHOD, true, _groupIds(PEERS), new address[](0));
         vm.expectPartialRevert(IntentLifecycleHookV1.TakerNotWhitelisted.selector);
         _signalCall(taker, otherMethodParams);
 
@@ -149,7 +156,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
     function test_MultipleGroupsUseOrSemantics() public {
         vm.prank(depositor);
         policy.configureDeposit(
-            address(escrow), depositId, true, _groupIds(PEERS, PEER_PLUSES, PEER_MERCHANTS), new address[](0)
+            address(escrow), depositId, METHOD, true, _groupIds(PEERS, PEER_PLUSES, PEER_MERCHANTS), new address[](0)
         );
 
         _addMembers(PEER_PLUSES, taker);
@@ -158,7 +165,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
 
     function test_PolicyIsScopedToDepositNotMaker() public {
         vm.startPrank(depositor);
-        policy.configureDeposit(address(escrow), depositId, true, _groupIds(PEERS), new address[](0));
+        policy.configureDeposit(address(escrow), depositId, METHOD, true, _groupIds(PEERS), new address[](0));
         uint256 secondDepositId = _createDeposit(address(0), delegate);
         vm.stopPrank();
 
@@ -170,7 +177,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
         assertNotEq(_signal(taker, secondDepositParams), bytes32(0));
 
         vm.startPrank(depositor);
-        policy.configureDeposit(address(escrow), secondDepositId, true, _groupIds(PEERS), new address[](0));
+        policy.configureDeposit(address(escrow), secondDepositId, METHOD, true, _groupIds(PEERS), new address[](0));
         vm.stopPrank();
         vm.expectPartialRevert(IntentLifecycleHookV1.TakerNotWhitelisted.selector);
         _signalCall(taker, secondDepositParams);
@@ -229,7 +236,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
         }
 
         vm.prank(depositor);
-        policy.configureDeposit(address(escrow), depositId, true, groups, new address[](0));
+        policy.configureDeposit(address(escrow), depositId, METHOD, true, groups, new address[](0));
         _addMembers(groups[groups.length - 1], taker);
 
         assertNotEq(_signalDefault(), bytes32(0));
@@ -267,7 +274,7 @@ contract IntentLifecycleHookV1OrchestratorV3Test is OrchestratorV3Fixture {
 
     function _enablePeerPolicyAndAddTaker() internal {
         vm.prank(depositor);
-        policy.configureDeposit(address(escrow), depositId, true, _groupIds(PEERS), new address[](0));
+        policy.configureDeposit(address(escrow), depositId, METHOD, true, _groupIds(PEERS), new address[](0));
         _addMembers(PEERS, taker);
     }
 

@@ -90,6 +90,10 @@ jobs:
           corepack yarn test:intent-guardian-fee-update
           corepack yarn test:v3-groups-deployment
           corepack yarn test:dispute-lifecycle-deployment
+          corepack yarn test:method-scoped-deployment
+          corepack yarn test:method-scoped-vault-deployment
+          corepack yarn test:method-scoped-activation
+          corepack yarn whitelist:bootstrap --self-test
       - name: Typecheck dispute deployment surface
         run: corepack yarn typecheck:dispute-deployment
       - name: Start local chain

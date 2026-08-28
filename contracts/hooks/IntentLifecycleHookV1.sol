@@ -10,12 +10,11 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 
 /**
  * @title IntentLifecycleHookV1
- * @notice Lifecycle hook combining a deposit-scoped whitelist fast lane with opt-in stake-backed dispute protection.
- * Whitelisted takers bypass staking. Non-whitelisted takers use stake-backed admission for disputable payment methods
- * only after the depositor opts in; otherwise an enabled whitelist rejects them while a whitelist-disabled deposit
- * stays open.
- * Non-disputable payment methods give every taker direct access without a dispute protection intent or stake lock,
- * regardless of whitelist or dispute protection configuration.
+ * @notice Lifecycle hook combining tuple-scoped whitelist admission with default-on, opt-out stake-backed dispute
+ * protection. Whitelisted takers bypass staking. Non-whitelisted takers use stake-backed admission on payment methods
+ * with a nonzero risk window unless the depositor opted the deposit payment method out; otherwise an enabled whitelist
+ * rejects them while a whitelist-disabled deposit stays open. A payment method with a zero risk window is never routed
+ * through dispute protection, so its whitelist remains the only gate.
  * @dev Reads canonical intent data from the calling orchestrator and forwards cancellation and settlement accounting
  * to DisputeProtectionPolicy. All callbacks remain fail-closed. This hook serves every registered orchestrator and
  * forwards lifecycle callbacks without provenance checks; the trust argument lives in DisputeProtectionPolicy's header.
@@ -35,7 +34,7 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     error InvalidDependency(address dependency);
     error UnauthorizedOrchestrator(address caller);
     error IntentNotFound(bytes32 intentHash);
-    error TakerNotWhitelisted(address escrow, uint256 depositId, address taker);
+    error TakerNotWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker);
 
     /* ============ Constructor ============ */
 
@@ -62,18 +61,21 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
         IOrchestratorV3.Intent memory intent = IOrchestratorV3(msg.sender).getIntent(_intentHash);
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
-        bool isWhitelistEnabled = whitelistPolicy.enabled(intent.escrow, intent.depositId);
-        if (isWhitelistEnabled && whitelistPolicy.isTakerAllowed(intent.escrow, intent.depositId, intent.owner)) {
+        bool isWhitelistEnabled = whitelistPolicy.enabled(intent.escrow, intent.depositId, intent.paymentMethod);
+        if (
+            isWhitelistEnabled
+                && whitelistPolicy.isTakerAllowed(intent.escrow, intent.depositId, intent.paymentMethod, intent.owner)
+        ) {
             return;
         }
         // Dispute protection admission is stateful, so the configuration query only selects the route.
         // onIntentSignaled remains authoritative for token compatibility, collateral, and pause checks.
-        if (disputeProtectionPolicy.isDisputeProtectionEnabled(intent.escrow, intent.depositId)) {
+        if (disputeProtectionPolicy.isDisputeProtectionEnabled(intent.escrow, intent.depositId, intent.paymentMethod)) {
             disputeProtectionPolicy.onIntentSignaled(
                 _intentHash, intent.escrow, intent.depositId, intent.owner, intent.paymentMethod, intent.amount
             );
         } else if (isWhitelistEnabled) {
-            revert TakerNotWhitelisted(intent.escrow, intent.depositId, intent.owner);
+            revert TakerNotWhitelisted(intent.escrow, intent.depositId, intent.paymentMethod, intent.owner);
         }
     }
 

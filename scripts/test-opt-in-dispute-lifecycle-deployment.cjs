@@ -29,9 +29,9 @@ const { dirname, join, resolve } = require("node:path");
 const { test } = require("node:test");
 
 const lane34Module = require("../deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts");
-const { PREDECESSOR_DISPUTE_STACKS } = require(
-  "../deployments/predecessorDisputeStack.ts"
-);
+const {
+  PREDECESSOR_DISPUTE_STACKS,
+} = require("../deployments/predecessorDisputeStack.ts");
 const disputeStackEvidence = require("../deployments/dispute-stack-evidence.json");
 const { MULTI_SIG } = require("../deployments/parameters.ts");
 const {
@@ -126,7 +126,7 @@ test("live dependency pins use deployed runtime hashes", () => {
   );
 });
 
-test("package dispute stack evidence stays pinned to the immutable predecessor and lane 34 live dependencies", () => {
+test("package dispute stack evidence stays pinned to the selected stack and recognized predecessor", () => {
   for (const network of /** @type {Array<"base" | "base_staging">} */ ([
     "base",
     "base_staging",
@@ -135,31 +135,51 @@ test("package dispute stack evidence stays pinned to the immutable predecessor a
     const predecessor = PREDECESSOR_DISPUTE_STACKS[network];
     const live = EXPECTED_LIVE[network];
 
-    assert.deepEqual(evidence.recognizedPredecessorHook, predecessor.activeLifecycleHook);
+    assert.deepEqual(
+      evidence.recognizedPredecessorHook,
+      predecessor.activeLifecycleHook
+    );
     assert.deepEqual(evidence.recognizedPredecessorPolicy, {
       address: predecessor.contracts.DisputeProtectionPolicy.address,
-      runtimeCodeHash: predecessor.contracts.DisputeProtectionPolicy.runtimeCodeHash,
+      runtimeCodeHash:
+        predecessor.contracts.DisputeProtectionPolicy.runtimeCodeHash,
     });
     for (const contractName of /** @type {Array<"DisputeVerifier" | "DisputeNullifierRegistry">} */ ([
       "DisputeVerifier",
       "DisputeNullifierRegistry",
     ])) {
-      assert.equal(evidence.addresses[contractName], predecessor.contracts[contractName].address);
+      assert.equal(
+        evidence.addresses[contractName],
+        predecessor.contracts[contractName].address
+      );
       assert.equal(
         evidence.runtimeCodeHashes[contractName],
         predecessor.contracts[contractName].runtimeCodeHash
       );
     }
     assert.equal(evidence.addresses.OrchestratorV3, live.orchestrator);
-    assert.equal(evidence.runtimeCodeHashes.OrchestratorV3, live.orchestratorCodeHash);
-    assert.equal(evidence.addresses.OrchestratorRegistry, live.orchestratorRegistry);
+    assert.equal(
+      evidence.runtimeCodeHashes.OrchestratorV3,
+      live.orchestratorCodeHash
+    );
+    assert.equal(
+      evidence.addresses.OrchestratorRegistry,
+      live.orchestratorRegistry
+    );
     assert.equal(
       evidence.runtimeCodeHashes.OrchestratorRegistry,
       live.orchestratorRegistryCodeHash
     );
-    assert.equal(evidence.addresses.WhitelistPolicy, live.whitelistPolicy);
-    assert.equal(evidence.runtimeCodeHashes.WhitelistPolicy, live.whitelistPolicyCodeHash);
-    assert.equal(evidence.addresses.MultiAttestationVerifier, live.attestationVerifier);
+    const selectedWhitelist = require(`../deployments/${network}/WhitelistPolicyMethodScoped.json`);
+    assert.equal(evidence.addresses.WhitelistPolicy, selectedWhitelist.address);
+    assert.equal(
+      evidence.deploymentEvidence.WhitelistPolicy.deploymentName,
+      "WhitelistPolicyMethodScoped"
+    );
+    assert.equal(
+      evidence.addresses.MultiAttestationVerifier,
+      live.attestationVerifier
+    );
     assert.equal(
       evidence.runtimeCodeHashes.MultiAttestationVerifier,
       live.attestationVerifierCodeHash
@@ -389,6 +409,18 @@ test("active deployment arguments always use the filtered deployment directory",
 
 test("immutable lane manifest pins the exact deployed sources", () => {
   assert.deepEqual(IMMUTABLE_DEPLOYMENT_LANES, {
+    "29_deploy_whitelist_policy.ts": {
+      deployedSourceSha: "3c4c1306dcce6693cf32300d8917d45c4604b84e",
+      sha256:
+        "95ee7660bdb069e1d31ea0e843f557b05f2ea76697766fec0d2146f8ec44d842",
+      activeSource: undefined,
+      retired: false,
+      tags: [
+        "29_deploy_whitelist_policy",
+        "V2WhitelistPolicy",
+        "WhitelistPolicy",
+      ],
+    },
     "30_deploy_v3_lifecycle_stack.ts": {
       deployedSourceSha: "3c4c1306dcce6693cf32300d8917d45c4604b84e",
       sha256:
@@ -413,11 +445,53 @@ test("immutable lane manifest pins the exact deployed sources", () => {
         "V3DisputeLifecycleStack",
       ],
     },
+    "34_deploy_opt_in_dispute_lifecycle_stack.ts": {
+      deployedSourceSha: "f0ec8b109c36d253486be072e910d54db2432f7e",
+      sha256:
+        "82562509fdf6acbf64c1fe6e1b7a39ff8d08ef324a680231e5b7b6a64243ba17",
+      activeSource: null,
+      retired: true,
+      tags: ["34_deploy_opt_in_dispute_lifecycle_stack", "V3DisputeOptInStack"],
+    },
+    "36_deploy_method_scoped_whitelist_policy.ts": {
+      deployedSourceSha: "7316a5ece51d56419d0b02c9cd3c29c8ff5ba4be",
+      sha256:
+        "3bc01ba3e308a2d9cbaa58a95a7094c5ed2116df103ff6fbb997962cc9240fde",
+      activeSource: undefined,
+      retired: false,
+      tags: [
+        "36_deploy_method_scoped_whitelist_policy",
+        "MethodScopedWhitelistPolicy",
+      ],
+    },
+    "37_deploy_method_scoped_dispute_lifecycle_stack.ts": {
+      deployedSourceSha: "de4a96a1039246a8eefdaeb6d7b643504f605fe6",
+      sha256:
+        "fb19ffe1724d34d95097bddc28d0068218e06346ff1e5ea5c4a6aedd7d8a40c6",
+      activeSource: null,
+      retired: true,
+      tags: [
+        "37_deploy_method_scoped_dispute_lifecycle_stack",
+        "V3DisputeMethodScopedStack",
+      ],
+    },
+    "38_activate_method_scoped_dispute_lifecycle_stack.ts": {
+      deployedSourceSha: "98856d1dada04463e650a13fb990dd67a1299bf0",
+      sha256:
+        "b278fd5d334301ca965fe603720f7e9fba1029f5e4af9e642e0e3befc46aef2e",
+      activeSource: null,
+      retired: true,
+      tags: [
+        "38_activate_method_scoped_dispute_lifecycle_stack",
+        "V3DisputeMethodScopedActivation",
+      ],
+    },
   });
 });
 
-test("active deployment selection replaces lane 30 and retires only historical lane 32", () => {
+test("active deployment selection mounts lane 29, replaces lane 30, and retires historical lanes 32 and 34", () => {
   const selected = selectActiveDeploymentScripts(process.cwd(), [
+    "29_deploy_whitelist_policy.ts",
     "30_deploy_v3_lifecycle_stack.ts",
     "32_deploy_and_activate_dispute_lifecycle_stack.ts",
     "32_deploy_deposit_creation_guard.ts",
@@ -426,39 +500,40 @@ test("active deployment selection replaces lane 30 and retires only historical l
   assert.deepEqual(
     selected.map(({ filename }) => filename),
     [
+      "29_deploy_whitelist_policy.ts",
       "30_deploy_v3_lifecycle_stack.ts",
       "32_deploy_deposit_creation_guard.ts",
-      "34_deploy_opt_in_dispute_lifecycle_stack.ts",
     ]
   );
   assert.equal(
     selected[0].sourcePath,
+    resolve(process.cwd(), "deploy/29_deploy_whitelist_policy.ts")
+  );
+  assert.equal(
+    selected[1].sourcePath,
     resolve(
       process.cwd(),
       "deployments/activeDeploymentLanes/30_deploy_v3_lifecycle_stack.ts"
     )
   );
   assert.equal(
-    selected[1].sourcePath,
+    selected[2].sourcePath,
     resolve(process.cwd(), "deploy/32_deploy_deposit_creation_guard.ts")
   );
 });
 
 test("retired and multi-tag deployment requests fail closed", () => {
-  assert.doesNotThrow(() =>
-    assertSupportedDeploymentTag("34_deploy_opt_in_dispute_lifecycle_stack")
-  );
-  assert.throws(
-    () =>
-      assertSupportedDeploymentTag(
-        "32_deploy_and_activate_dispute_lifecycle_stack"
-      ),
-    /retired deployment tag/
-  );
-  assert.throws(
-    () => assertSupportedDeploymentTag("V3DisputeLifecycleStack"),
-    /retired deployment tag/
-  );
+  for (const tag of [
+    "32_deploy_and_activate_dispute_lifecycle_stack",
+    "V3DisputeLifecycleStack",
+    "34_deploy_opt_in_dispute_lifecycle_stack",
+    "V3DisputeOptInStack",
+  ]) {
+    assert.throws(
+      () => assertSupportedDeploymentTag(tag),
+      new RegExp(`Refusing retired deployment tag: ${tag}`)
+    );
+  }
   assert.throws(
     () => assertSupportedDeploymentTag("OrchestratorV3,V3LifecycleStack"),
     /exactly one deployment tag/
@@ -485,30 +560,33 @@ function immutableLaneFixture() {
     join(repository, "deploy", "32_deploy_deposit_creation_guard.ts"),
     "export default async function () {}\n"
   );
-  writeFileSync(
-    join(repository, "deploy", "34_deploy_opt_in_dispute_lifecycle_stack.ts"),
-    "export default async function () {}\n"
-  );
   return repository;
 }
 
 test("immutable lane integrity detects a one-byte mutation", () => {
-  const repository = immutableLaneFixture();
-  try {
-    assert.doesNotThrow(() => assertImmutableDeploymentLanes(repository));
-    const lane = join(repository, "deploy/30_deploy_v3_lifecycle_stack.ts");
-    writeFileSync(lane, Buffer.concat([readFileSync(lane), Buffer.from(" ")]));
-    assert.throws(
-      () => assertImmutableDeploymentLanes(repository),
-      /30_deploy_v3_lifecycle_stack\.ts.*97ed83a35e91167186da7a1bde9d3534e6eced436a843a0afd07c0f055bf20fa/
-    );
-  } finally {
-    rmSync(repository, { recursive: true, force: true });
+  for (const [filename, evidence] of Object.entries(
+    IMMUTABLE_DEPLOYMENT_LANES
+  )) {
+    const repository = immutableLaneFixture();
+    try {
+      assert.doesNotThrow(() => assertImmutableDeploymentLanes(repository));
+      const lane = join(repository, "deploy", filename);
+      writeFileSync(
+        lane,
+        Buffer.concat([readFileSync(lane), Buffer.from(" ")])
+      );
+      assert.throws(
+        () => assertImmutableDeploymentLanes(repository),
+        new RegExp(`${filename.replace(/\./g, "\\.")}.*${evidence.sha256}`)
+      );
+    } finally {
+      rmSync(repository, { recursive: true, force: true });
+    }
   }
 });
 
 test("active runner mounts one filtered lane set for tagged and untagged runs", () => {
-  for (const tag of [undefined, "34_deploy_opt_in_dispute_lifecycle_stack"]) {
+  for (const tag of [undefined, "29_deploy_whitelist_policy"]) {
     let activeDirectory;
     const staleEnv = { ...process.env, DEPLOY_ACTIVE_TAG: "stale" };
     const status = runActiveDeployment("base", tag, {
@@ -520,15 +598,20 @@ test("active runner mounts one filtered lane set for tagged and untagged runs", 
         assert.notEqual(deployScriptsIndex, -1);
         activeDirectory = args[deployScriptsIndex + 1];
         const filenames = readdirSync(activeDirectory);
+        assert.ok(filenames.includes("29_deploy_whitelist_policy.ts"));
         assert.ok(filenames.includes("30_deploy_v3_lifecycle_stack.ts"));
         assert.ok(filenames.includes("32_deploy_deposit_creation_guard.ts"));
         assert.ok(
-          filenames.includes("34_deploy_opt_in_dispute_lifecycle_stack.ts")
+          !filenames.includes("34_deploy_opt_in_dispute_lifecycle_stack.ts")
         );
         assert.ok(
           !filenames.includes(
             "32_deploy_and_activate_dispute_lifecycle_stack.ts"
           )
+        );
+        assert.equal(
+          readlinkSync(join(activeDirectory, "29_deploy_whitelist_policy.ts")),
+          resolve(process.cwd(), "deploy/29_deploy_whitelist_policy.ts")
         );
         assert.equal(
           readlinkSync(
@@ -898,14 +981,62 @@ test("the obsolete Base lifecycle batch remains exact historical evidence", () =
       "utf8"
     )
   );
-  const transactions = lane34Module.assertObsoleteBaseBatchShape(obsoleteBatch);
+  assert.deepEqual(
+    obsoleteBatch.transactions.map(
+      (/** @type {{ to: string }} */ transaction) => transaction.to
+    ),
+    [
+      "0x30d4947f005653637005eed991005119D9eB2f34",
+      "0x8B8e853f47e6e0d3944e3689197B35216933dDea",
+      "0xc086b6120B5e61EF48221E6A78c69737c9948dF9",
+      "0x014025fDE093f8701d86e9f38e2C3a9b779cb5c7",
+    ]
+  );
+  assert.equal(
+    obsoleteBatch.transactions[3].data,
+    "0xbb4995af0000000000000000000000005b0017fca6a2131701ef718e470a3930c1b6c12c"
+  );
+
+  const ownershipData = "0x79ba5097";
+  const lifecycleInterface = new (require("ethers").utils.Interface)([
+    "function setLifecycleHook(address)",
+  ]);
+  const currentFixture = {
+    ...obsoleteBatch,
+    transactions: [
+      {
+        ...obsoleteBatch.transactions[0],
+        to: PREDECESSOR_DISPUTE_STACKS.base.contracts.DisputeVerifier.address,
+        data: ownershipData,
+      },
+      {
+        ...obsoleteBatch.transactions[1],
+        to: PREDECESSOR_DISPUTE_STACKS.base.contracts.StakeVault.address,
+        data: ownershipData,
+      },
+      {
+        ...obsoleteBatch.transactions[2],
+        to: PREDECESSOR_DISPUTE_STACKS.base.contracts.DisputeProtectionPolicy
+          .address,
+        data: ownershipData,
+      },
+      {
+        ...obsoleteBatch.transactions[3],
+        data: lifecycleInterface.encodeFunctionData("setLifecycleHook", [
+          PREDECESSOR_DISPUTE_STACKS.base.contracts.IntentLifecycleHookV1
+            .address,
+        ]),
+      },
+    ],
+  };
+  const transactions =
+    lane34Module.assertObsoleteBaseBatchShape(currentFixture);
   assert.equal(transactions.length, 4);
-  assert.equal(transactions[3].data.slice(0, 10), "0xbb4995af");
   assert.throws(
     () =>
       lane34Module.assertObsoleteBaseBatchShape({
-        ...obsoleteBatch,
-        transactions: obsoleteBatch.transactions.slice().reverse(),
+        ...currentFixture,
+        transactions: currentFixture.transactions.slice().reverse(),
       }),
     /transaction drifted/
   );

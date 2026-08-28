@@ -76,19 +76,28 @@ The deposit whitelist stack is available through the `OrchestratorV2` per-deposi
 
 - `AddressGroupRegistry`: anyone may create a curator-managed group. Curators can add or remove members,
   transfer control, configure an optional membership resolver, and opt into self-service membership.
-- `WhitelistPolicy`: each deposit owns an `enabled` switch, a direct address whitelist, and a bounded list of
-  up to 10 allowed groups. Only the escrow's recorded depositor may configure a deposit, and
-  `configureDeposit` sets all three in one transaction. The policy keeps this configuration independently of
-  the `OrchestratorV2` hook assignment.
+- `WhitelistPolicy`: each deposit payment method owns an `enabled` switch and a bounded list of up to 10 allowed
+  groups; direct taker addresses remain shared across all payment methods on the deposit. Only the escrow's
+  recorded depositor may configure a deposit payment method, and `configureDeposit` updates its switch and groups
+  while appending any direct takers to the deposit-wide whitelist. The policy keeps this configuration independently
+  of the `OrchestratorV2` hook assignment.
   A governance owner may rotate the escrow registry that gates those writes via `setEscrowRegistry`. The owner
   cannot admit or reject a taker: whitelist enforcement allows a taker when enforcement is disabled for the
-  intent's deposit, the taker is directly whitelisted on that deposit, or the taker belongs to at least one
-  group allowed by that deposit. Enabled policies with no matching address or group fail closed.
+  intent's `(deposit, paymentMethod)`, the taker is directly whitelisted on that deposit, or the taker belongs to
+  at least one group allowed by that tuple. Enabled policies with no matching address or group fail closed.
+  Under `IntentLifecycleHookV1` the no-stake fast lane requires the tuple's whitelist to be **enabled**: a directly
+  whitelisted address on a tuple whose whitelist is disabled is treated like any other taker and, on a payment
+  method with a nonzero risk window, is routed through stake-backed dispute protection.
+  Because enforcement is per tuple, a payment method the depositor adds to a deposit **after** its whitelist was
+  configured or bootstrapped starts with that method's whitelist disabled: on a payment method with a nonzero risk
+  window its takers are stake-backed by default, on a zero-window method it is open. Depositors configure the new
+  tuple themselves, and the whitelist bootstrap can be re-run with `BOOTSTRAP_ALLOW_COMPLETED=true` to pick up
+  new tuples of already-bootstrapped deposits.
 
 Group IDs are derived from the curator and registry group counter, and offchain consumers must key them by
-chain, registry address, and group ID. All three admission settings are scoped to the `(escrow, depositId)`
-pair, so one maker can run gated and open deposits at the same time and nothing is shared across a maker's
-deposits.
+chain, registry address, and group ID. Enforcement and groups are scoped to
+`(escrow, depositId, paymentMethod)` while direct taker addresses are scoped to `(escrow, depositId)`, so a maker
+can independently gate each payment method without maintaining duplicate direct-address lists.
 
 ## V2 Contract Inventory
 
@@ -653,8 +662,8 @@ These are the supported deployment entrypoints and all route through `scripts/de
 The lifecycle rollout is split into explicit lanes. Production-executed numbered scripts are immutable
 provenance: new behavior gets a new lane, while retirement and live-state checks stay in current helpers
 or runner metadata. Lane 31 verifies and cuts over the V3 payment-binding pair, lane 33 owns the
-IntentGuardian fee update, and lane 34 is the only supported lane allowed to deploy or prepare activation
-of the opt-in dispute/staking successor.
+IntentGuardian fee update, lane 34 is the immutable, retired lane that shipped the opt-in dispute/staking
+stack, and lanes 36 and 37 are the current deploy-only lanes for the payment-method-scoped policies.
 
 `deploy/30_deploy_v3_lifecycle_stack.ts` is the exact historical groups-only source used in production.
 Its original implementation deploys `WhitelistLifecycleHook` and `OrchestratorV3` with the lane-29
@@ -683,41 +692,105 @@ all tagged and untagged runs, and rejects both historical lane-32 tags. Never in
 `deployments/predecessorDisputeStack.ts` owns current read-only predecessor address, deployment-bytecode,
 and runtime-bytecode verification used by lane 34 and the Safe tooling.
 
-`deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts` owns the successor. Use only the dedicated
-`yarn deploy:dispute-opt-in:base_staging` or `yarn deploy:dispute-opt-in:base` command. With
-`ENABLE_STAGING_V3_DISPUTE_OPT_IN_DEPLOYMENT=true` or
-`ENABLE_BASE_V3_DISPUTE_OPT_IN_DEPLOYMENT=true`, it reuses the pinned `DisputeVerifier` and
-`DisputeNullifierRegistry`, deploys a fresh `StakeVault`, `DisputeProtectionPolicy`, and
-`IntentLifecycleHookV1`, applies non-zero risk windows only to PayPal, Venmo, and Cash App, authorizes
-the fresh hook, and initiates the required ownership handovers where the deployer is not governance.
-On Base it also clears the obsolete predecessor vault and policy pending-owner transfers after proving
-their exact expected state. The deploy-only run is transaction-by-transaction resumable and leaves the
-active O3 hook and dispute-registry writer set unchanged.
+`deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts` is the exact executable source that deployed the
+`StakeVaultOptIn`, `DisputeProtectionPolicyOptIn`, and `IntentLifecycleHookV1OptIn` records on both
+networks and, through its Safe batch, activated them on Base. It is immutable and retired: the supported
+runner verifies its digest, excludes it from every tagged and untagged run, and rejects both of its tags.
+`yarn verify:dispute-opt-in-safe-batch` and `yarn simulate:obsolete-dispute-safe-batch` remain as tooling
+for that executed history. The Base `*OptIn` trio is the live dispute stack until the method-scoped
+activation lane replaces it; the Base-staging `*OptIn` trio was deployed but never activated.
 
-Commit and propagate the three successor records before activation. Base governance is prepared only
-as a deterministic unsigned Safe batch after downstream readiness and exact fork simulation; the
-deployment lane never signs, proposes, or executes it. Base staging has no Safe artifact and advances
-its EOA-owned activation state only through separately confirmed, one-call transitions. Both paths
-must recheck the payment-binding cutover, predecessor drain, owners, writers, vault accounting, O3
-configuration, and current hook immediately before activation.
+`deploy/36_deploy_method_scoped_whitelist_policy.ts` deploys `WhitelistPolicyMethodScoped`, the
+payment-method-scoped `WhitelistPolicy`, against the existing `AddressGroupRegistry`, `EscrowRegistry`,
+and `OrchestratorRegistry`, and hands ownership to governance. Use `yarn deploy:method-scoped-policy:base_staging`
+or `yarn deploy:method-scoped-policy:base` with `ENABLE_STAGING_METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT=true`
+or `ENABLE_BASE_METHOD_SCOPED_WHITELIST_POLICY_DEPLOYMENT=true`. The lane never mutates the registries and
+never touches the lane-29 policy or any V2 deposit hook; an existing record is canonical-checked and reused.
 
-Use `PREPARE_STAGING_V3_DISPUTE_OPT_IN_ACTIVATION=true` for the read-only staging preflight or
-`ENABLE_STAGING_V3_DISPUTE_OPT_IN_ACTIVATION=true` for one approved staging transition. Either mode
-also requires all three `CONFIRM_STAGING_V3_DISPUTE_OPT_IN_{ACTIVATION,DOWNSTREAM_READY,PREDECESSOR_DRAINED}`
-confirmations. Base batch generation uses `ENABLE_BASE_V3_DISPUTE_OPT_IN_GOVERNANCE_PREPARATION=true`,
-the corresponding three `CONFIRM_BASE_V3_DISPUTE_OPT_IN_*` confirmations,
-`CONFIRM_BASE_V3_DISPUTE_OPT_IN_RELEASE_READY_SHA=<exact-green-sha>`, and `BASE_FORK_RPC_URL`.
-It writes only `base_opt_in_dispute_lifecycle.json` and its `.sha256.json` sidecar after the pinned
-atomic simulation passes. `yarn verify:dispute-opt-in-safe-batch` reruns the artifact-child checks;
-`yarn simulate:obsolete-dispute-safe-batch` proves the superseded four-call batch is invalid before archival.
+`deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts` deploys `DisputeProtectionPolicyMethodScoped`
+and `IntentLifecycleHookV1MethodScoped`, wiring the hook to the lane-36 policy and the fresh dispute policy
+while reusing the network's pinned `DisputeVerifier`, `DisputeNullifierRegistry`, and — because `StakeVault`
+is unchanged and holds live taker stake — the predecessor `StakeVault` itself (`StakeVaultOptIn` on Base, the
+lane-32 vault on Base staging). The fresh policy becomes that vault's controller only through the vault's
+delayed two-step handover in the activation lane; a `StakeVaultMethodScoped` record exists on localhost only. The lane
+executed deploy-only on Base staging and Base on 2026-08-27 and is immutable and retired for live networks: the runner
+refuses its tags, and `deployments/activeDeploymentLanes/37_deploy_method_scoped_dispute_lifecycle_stack.ts` mounts it
+only for `localhost`/`hardhat`, where it still deploys the local method-scoped stack. The historical deploy-only run
+authorized only the
+fresh hook, applies non-zero risk windows only to PayPal, Venmo, and Cash App, and on Base initiates the
+policy's two-step ownership transfer for the Safe to accept later. It is
+transaction-by-transaction resumable and leaves the active O3 hook and the dispute-registry writer set
+unchanged. The method-scoped policy is on by default for every payment method with a nonzero risk window
+(paypal, venmo, cashapp) and can be opted out per deposit payment method by the depositor; depositor
+opt-outs on the passive policy are expected, and only lifecycle activity on it invalidates the deploy-only
+preparation; the live vault is never inspected.
+`deployments/predecessorDisputeStack.ts` pins what the lane replaces per network in
+`METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS`; `PREDECESSOR_DISPUTE_STACKS` keeps describing the predecessor of
+the currently selected stack until activation.
 
-Production activation remains blocked until every compatible downstream release is deployed:
+`deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts` activates the lane-37 stack. It is
+tag-only: `yarn deploy:dispute-method-scoped-activation:base_staging` and
+`yarn deploy:dispute-method-scoped-activation:base` run the lane under
+`DEPLOY_ACTIVE_TAG=38_activate_method_scoped_dispute_lifecycle_stack`; every untagged run skips it, a
+tagged local run throws because there is no predecessor stack, and a lane-38 flag without the tag throws
+before any chain read. Every read is pinned to one block and reduced into a single activation state
+(`deployed`, `rotation-proposed`, `active`, or `unrecognized`, which aborts). Base staging advances one
+deployer-EOA step per run with `PREPARE_STAGING_V3_DISPUTE_METHOD_SCOPED_ACTIVATION=true` (dry run) or
+`ENABLE_STAGING_V3_DISPUTE_METHOD_SCOPED_ACTIVATION=true`: pause predecessor admissions, propose the fresh
+policy as the vault controller, release matured predecessor intents, accept the controller once the delay
+has elapsed and no predecessor lock is open, add the fresh registry writer, set the O3 hook, and remove
+the predecessor writer; the lane reports `controller-delay` / `predecessor-drain` waiting states instead
+of guessing. Base produces two unsigned Safe batches, each headed by a freshly deployed on-chain guard
+contract that re-checks the whole trust surface inside the Safe transaction:
 
-- [ ] `zkp2p-indexer` indexes the fresh contract addresses and the renamed `Dispute*` events.
-- [ ] `curator` recognizes `IntentLifecycleHookV1` as the enforcement hook and enables dispute enforcement.
-- [ ] `@zkp2p/contracts-v2` publishes the opt-in dispute ABI and replacement addresses, and its consumers upgrade.
-- [ ] The production `attestation-service` release remains on the ratified UPV3 address; do not promote an
-      independently diverged release branch that restores UPV2.
+- `ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_ROTATION_PREPARATION=true` — guard, optional
+  `acceptOwnership()` on the fresh policy, `setAdmissionsPaused(true)` on the predecessor policy, and
+  `proposeController(freshPolicy)` on the reused vault.
+- `ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_CUTOVER_PREPARATION=true` — only after the controller delay with
+  zero live predecessor locks: guard, `acceptVaultController()`, `addWritePermission(freshPolicy)`,
+  `removeWritePermission(predecessorPolicy)`, and `setLifecycleHook(freshHook)`.
+- `ENABLE_BASE_V3_DISPUTE_METHOD_SCOPED_RELEASE_MATURED=true` — permissionless release of matured
+  predecessor intents from the deployer so the cutover precondition can be met.
+
+Each batch is simulated on a pinned Base fork with a postcondition contract appended, then written to
+`deployments/outputs/safe-batches/base_method_scoped_{rotation,cutover}.json` with a `.sha256.json`
+sidecar that pins the proof snapshot, guard identity, and source SHA. Run
+`yarn verify:method-scoped-safe-batch --batch rotation|cutover` immediately before the Safe executes;
+it re-derives the guard constructor arguments from the manifest, re-proves the guard and postcondition
+deployments, re-reads the chain at a fresh block, and re-runs the simulation. Artifact-child verification allows
+unrelated commits after the recorded source SHA only when every producer and verifier path in
+`ACTIVATION_PROTECTED_PATHS` is unchanged. No script signs. Lane 37
+must be retired before activation (its skip asserts the predecessor hook is still live), lane 38 is
+pinned after its first live transition, and the `active-dispute-stack.json`,
+`PREDECESSOR_DISPUTE_STACKS`, evidence, and `WhitelistPolicy` package-alias flips land in recording PRs
+after each execution. Before lane 38 can run:
+
+- [x] Lanes 36 and 37 have executed deploy-only on Base staging and Base and their records are committed,
+      and lane 37 is retired in `deployments/immutableDeploymentLanes.ts`.
+- [ ] `yarn whitelist:bootstrap` has populated `WhitelistPolicyMethodScoped` on each network.
+- [ ] `zkp2p-indexer` indexes the fresh addresses and the tuple-scoped `EnabledUpdated` /
+      `DisputeProtectionEnabledUpdated` events.
+- [ ] `@zkp2p/contracts-v2` publishes the tuple-scoped ABIs and replacement addresses, and its consumers upgrade.
+
+`deploy/39_deploy_method_scoped_vault_stack.ts` and `deploy/40_activate_method_scoped_vault_stack.ts` supersede
+lane 38 (retired unexecuted on Base on 2026-08-28). Lane 39 deploys a dedicated `StakeVaultMethodScoped` with
+`DisputeProtectionPolicyMethodScopedStaked` and `IntentLifecycleHookV1MethodScopedStaked` bound to it — controller
+set at deployment, so activation needs no two-day rotation — using `yarn deploy:dispute-method-scoped-vault:base_staging`
+/ `:base` with `ENABLE_{STAGING,BASE}_V3_DISPUTE_METHOD_SCOPED_VAULT_DEPLOYMENT=true` (deploy-only; Base initiates the
+vault and policy ownership transfers to the Safe). Lane 40 (`yarn deploy:dispute-method-scoped-vault-activation:*`,
+tag-only) advances Base staging one deployer step per run (add writer → set hook → remove the lane-32 writer) and on
+Base prepares one guarded cutover batch (guard → conditional `acceptOwnership` on vault and policy → add fresh writer →
+`setLifecycleHook`) plus a later guarded writer-removal batch that is only allowed once every OptIn-opened intent is
+terminal and `StakeVaultOptIn` holds no locks. Artifacts live at
+`deployments/outputs/safe-batches/base_method_scoped_vault_{cutover,writer_removal}.json`; run
+`yarn verify:method-scoped-safe-batch --batch vault-cutover|vault-writer-removal` immediately before the Safe executes.
+The same protected-path rule keeps these batches valid across unrelated merges without weakening their source,
+artifact-pair, or live-chain checks.
+Stake in the old vaults is abandoned: stakers withdraw once their locks release and takers re-stake in the new vault
+before the cutover; that readiness is part of `CONFIRM_BASE_V3_DISPUTE_METHOD_SCOPED_VAULT_DOWNSTREAM_READY`.
+
+The package exports the currently selected (latest) addresses for each network, and consumers should treat them as
+the addresses to use.
 
 Dispute-evidence issuance in `attestation-service` remains a separate follow-up and is intentionally not implemented
 by these contract lanes. Only PayPal, Venmo, and Cash App receive non-zero onchain risk windows, matching the
@@ -727,21 +800,26 @@ explicitly ratified chargebackable-platform set.
 
 `yarn whitelist:bootstrap` discovers active deposits from a configurable raw GraphQL endpoint and
 selects only deposits with an active Venmo, Cash App, or PayPal payment method. It deduplicates the
-matching method rows by deposit and simulates canonical `WhitelistPolicy.bootstrapDeposits` batches
-for the explicitly supplied PRO, PLUS, Peer Pay, and Peer Makers group IDs. It imports no indexer
+matching rows by deposit and payment method and simulates canonical `bootstrapDeposits` batches against the
+lane-36 `WhitelistPolicyMethodScoped` record for the ordered, non-empty, distinct group list supplied through
+`WHITELIST_GROUP_IDS`. It refuses the lane-29 deposit-scoped policy address and fails closed on a network whose
+`WhitelistPolicyMethodScoped` artifact does not exist yet. It imports no indexer
 schema package, so the contracts and indexer packages remain acyclic. Discovery is a dry-run by
 default; mutation and Safe output require both the exact expected deposit count and the printed
-selection digest, and all discovery modes enforce a configurable maximum.
+selection digest, which bind the eligible onchain-filtered set and the ordered group IDs. Withdrawn deposits and
+inactive payment-method rows are skipped and reported; the count, digest, and generated batches cover only eligible
+tuples. All discovery modes enforce a configurable maximum.
 
 - Staging execution requires `BOOTSTRAP_EXECUTE=true` and the current policy owner's private key.
 - Production Safe preparation requires `BOOTSTRAP_SAFE_OUTPUT_FILE`; it emits unsigned Transaction
   Builder JSON owned by the policy's onchain owner, and never signs or submits it.
 - Direct execution and Safe output are mutually exclusive. Every batch is simulated and its calldata
   decoded and checked before either execution or file output.
-- Base execution is pinned to the canonical production indexer, deployment artifacts, and exact four
-  production group IDs. It also requires `BOOTSTRAP_CONFIRM_PRODUCTION=true`.
-- `BOOTSTRAP_ALLOW_COMPLETED=true` resumes only batches whose deposits are still enabled and contain
-  every requested group. The script rechecks policy ownership before each submitted batch.
+- Base execution is pinned to the canonical production indexer and deployment artifacts, and every configured
+  group ID must be one of the known production groups recorded by the Base `AddressGroupRegistry`. It also requires
+  `BOOTSTRAP_CONFIRM_PRODUCTION=true`.
+- `BOOTSTRAP_ALLOW_COMPLETED=true` resumes only batches whose deposit/payment-method tuples are still enabled and
+  contain every requested group. The script rechecks policy ownership before each submitted batch.
 - Direct execution uses the receipt RPC for confirmation and bounded post-receipt state reads. It computes
   EIP-1559 fees from the latest base fee with a `0.001` gwei priority fee and refuses to submit above
   the `0.02` gwei default max-fee ceiling; both values are configurable through the documented env.

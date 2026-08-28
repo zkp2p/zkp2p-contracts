@@ -33,9 +33,9 @@ const EXPECTED_RUNTIME_HASHES = {
     StakeVault:
       "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
     DisputeProtectionPolicy:
-      "0xf08bce9ad622b9d45ce310493627cbef3bf6c4ac915661d5bc572bb59b61e084",
+      "0x9c4be279da216021183638eaef79ebf98db248472685e9ecd0de3f24a513a641",
     IntentLifecycleHookV1:
-      "0xff9db07ce83908b7cedb31f8c085004aa78c91bb86e0565f11fad3e4bc36c5cb",
+      "0x35789014e608a248f3244b61210fa259fee3566c33f50fd0e3fa1f5ae22e370b",
     DisputeVerifier:
       "0x65246e11392befc33d92246cf3ac2467d1f338a8b73c6514b76fab0a70a01ead",
     DisputeNullifierRegistry:
@@ -74,14 +74,17 @@ function liveHre(network, { omit, addressDrift, codeDrift } = {}) {
     PREDECESSOR_DISPUTE_STACKS[network].contracts
   )) {
     if (name === omit) continue;
+    const evidence = PREDECESSOR_DISPUTE_STACKS[network].contracts[name];
+    const recordName = evidence.deploymentName || name;
     const artifact = require(path.join(
       process.cwd(),
       "deployments",
       network,
-      `${name}.json`
+      `${recordName}.json`
     ));
-    deployments.set(name, {
+    deployments.set(recordName, {
       ...artifact,
+      canonicalName: name,
       address:
         name === addressDrift
           ? "0x0000000000000000000000000000000000000001"
@@ -112,9 +115,11 @@ function liveHre(network, { omit, addressDrift, codeDrift } = {}) {
       ethers: {
         provider: {
           getCode: async (/** @type {string} */ address) => {
-            for (const [name, artifact] of deployments) {
+            for (const artifact of deployments.values()) {
               if (artifact.address.toLowerCase() === address.toLowerCase()) {
-                return name === codeDrift ? "0x00" : MOCK_RUNTIME_CODES[name];
+                return artifact.canonicalName === codeDrift
+                  ? "0x00"
+                  : MOCK_RUNTIME_CODES[artifact.canonicalName];
               }
             }
             return "0x";
@@ -131,6 +136,11 @@ async function run() {
     PREDECESSOR_DISPUTE_STACKS,
     "historical predecessor evidence is not exported"
   );
+  assert.deepEqual(PREDECESSOR_DISPUTE_STACKS.base.activeLifecycleHook, {
+    address: "0x71467dCac3B50eeED5A485aC6a70f27B1EAC1970",
+    runtimeCodeHash:
+      "0x35789014e608a248f3244b61210fa259fee3566c33f50fd0e3fa1f5ae22e370b",
+  });
   assert.deepEqual(
     PREDECESSOR_DISPUTE_STACKS.base_staging.activeLifecycleHook,
     {
@@ -149,7 +159,7 @@ async function run() {
         process.cwd(),
         "deployments",
         network,
-        `${name}.json`
+        `${evidence.deploymentName || name}.json`
       ));
       assert.equal(
         evidence.deploymentBytecodeHash,

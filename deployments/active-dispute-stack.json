@@ -1,25 +1,29 @@
 {
-  "version": 1,
+  "version": 2,
   "networks": {
     "base": {
-      "StakeVault": "StakeVaultOptIn",
-      "DisputeProtectionPolicy": "DisputeProtectionPolicyOptIn",
-      "IntentLifecycleHookV1": "IntentLifecycleHookV1OptIn"
+      "StakeVault": "StakeVaultMethodScoped",
+      "DisputeProtectionPolicy": "DisputeProtectionPolicyMethodScopedStaked",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1MethodScopedStaked",
+      "WhitelistPolicy": "WhitelistPolicyMethodScoped"
     },
     "base_staging": {
-      "StakeVault": "StakeVaultOptIn",
-      "DisputeProtectionPolicy": "DisputeProtectionPolicyOptIn",
-      "IntentLifecycleHookV1": "IntentLifecycleHookV1OptIn"
+      "StakeVault": "StakeVaultMethodScoped",
+      "DisputeProtectionPolicy": "DisputeProtectionPolicyMethodScopedStaked",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1MethodScopedStaked",
+      "WhitelistPolicy": "WhitelistPolicyMethodScoped"
     },
     "localhost": {
-      "StakeVault": "StakeVaultOptIn",
-      "DisputeProtectionPolicy": "DisputeProtectionPolicyOptIn",
-      "IntentLifecycleHookV1": "IntentLifecycleHookV1OptIn"
+      "StakeVault": "StakeVaultMethodScoped",
+      "DisputeProtectionPolicy": "DisputeProtectionPolicyMethodScopedStaked",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1MethodScopedStaked",
+      "WhitelistPolicy": "WhitelistPolicyMethodScoped"
     },
     "hardhat": {
-      "StakeVault": "StakeVaultOptIn",
-      "DisputeProtectionPolicy": "DisputeProtectionPolicyOptIn",
-      "IntentLifecycleHookV1": "IntentLifecycleHookV1OptIn"
+      "StakeVault": "StakeVaultMethodScoped",
+      "DisputeProtectionPolicy": "DisputeProtectionPolicyMethodScopedStaked",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1MethodScopedStaked",
+      "WhitelistPolicy": "WhitelistPolicyMethodScoped"
     }
   }
 }

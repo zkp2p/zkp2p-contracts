@@ -11,6 +11,18 @@ import {
 } from "../../../../deployments/parameters";
 
 type ActiveDisputeStack = { version: number; selectionHash: string };
+type DisputeStackPrerequisites = {
+  orchestratorPaused: false;
+  admissionsPaused: false;
+  allowMultipleIntents: boolean;
+  orchestratorRegistered: true;
+  lifecycleHookAuthorized: true;
+  disputeNullifierWriterAuthorized: true;
+  vaultControllerActivated: true;
+  vaultPendingController: string;
+  vaultPendingControllerValidAt: string;
+  pendingCoverageMaturity: string;
+};
 type DeploymentEntry = {
   address: string;
   deployedBytecode?: string;
@@ -49,23 +61,12 @@ type DisputeStackEvidence = {
   schemaVersion: number;
   riskWindowSecondsByPaymentMethod: Record<string, Record<string, string>>;
   sentinel: { escrow: string; depositId: string; expected: false };
-  prerequisites: {
-    orchestratorPaused: false;
-    admissionsPaused: false;
-    allowMultipleIntents: true;
-    orchestratorRegistered: true;
-    lifecycleHookAuthorized: true;
-    disputeNullifierWriterAuthorized: true;
-    vaultControllerActivated: true;
-    vaultPendingController: string;
-    vaultPendingControllerValidAt: string;
-    pendingCoverageMaturity: string;
-  };
   networks: Record<
     string,
     {
       governance: { owner: string; pendingOwner: string };
       attestationTrust: { requiredSignatures: string; witnesses: string[] };
+      prerequisites: DisputeStackPrerequisites;
       activeDisputeStack: ActiveDisputeStack;
       recognizedPredecessorHook: RuntimeIdentity;
       recognizedPredecessorPolicy: RuntimeIdentity;
@@ -199,17 +200,17 @@ function readDeployment(network: string, deploymentName: string): DeploymentEntr
 }
 
 function deploymentName(manifestNetwork: string, canonicalName: string): string {
-  if (["StakeVault", "DisputeProtectionPolicy", "IntentLifecycleHookV1"].includes(canonicalName)) {
+  if (["StakeVault", "DisputeProtectionPolicy", "IntentLifecycleHookV1", "WhitelistPolicy"].includes(canonicalName)) {
     return getActiveDisputeDeploymentName(manifestNetwork, canonicalName);
   }
   return canonicalName;
 }
 
 function validateEvidence(network: (typeof NETWORKS)[number], output: DeploymentOutput): void {
-  if (EVIDENCE.schemaVersion !== 1) throw new Error("Unsupported dispute stack evidence schema");
+  if (EVIDENCE.schemaVersion !== 2) throw new Error("Unsupported dispute stack evidence schema");
   requireExactKeys(
     EVIDENCE as unknown as Record<string, unknown>,
-    ["schemaVersion", "riskWindowSecondsByPaymentMethod", "sentinel", "prerequisites", "networks"],
+    ["schemaVersion", "riskWindowSecondsByPaymentMethod", "sentinel", "networks"],
     "Dispute stack evidence",
   );
   requireExactKeys(EVIDENCE.networks, ["base", "base_staging"], "Dispute stack evidence networks");
@@ -225,6 +226,7 @@ function validateEvidence(network: (typeof NETWORKS)[number], output: Deployment
     [
       "governance",
       "attestationTrust",
+      "prerequisites",
       "activeDisputeStack",
       "recognizedPredecessorHook",
       "recognizedPredecessorPolicy",
@@ -448,10 +450,10 @@ export function buildDisputeStackManifest(packageName: "base" | "baseStaging") {
     throw new Error("Dispute stack sentinel evidence mismatch");
   }
   if (
-    !sameJson(EVIDENCE.prerequisites, {
+    !sameJson(networkEvidence.prerequisites, {
       orchestratorPaused: false,
       admissionsPaused: false,
-      allowMultipleIntents: true,
+      allowMultipleIntents: network.manifestName === "base",
       orchestratorRegistered: true,
       lifecycleHookAuthorized: true,
       disputeNullifierWriterAuthorized: true,
@@ -465,7 +467,7 @@ export function buildDisputeStackManifest(packageName: "base" | "baseStaging") {
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     network: network.manifestName,
     chainId: Number(output.chainId),
     activeDisputeStack: networkEvidence.activeDisputeStack,
@@ -518,7 +520,7 @@ export function buildDisputeStackManifest(packageName: "base" | "baseStaging") {
     },
     riskWindowSecondsByPaymentMethod: evidenceWindows,
     sentinel: EVIDENCE.sentinel,
-    prerequisites: EVIDENCE.prerequisites,
+    prerequisites: networkEvidence.prerequisites,
   } as const;
 }
 
@@ -560,7 +562,8 @@ export async function extractDisputeStack(): Promise<void> {
   fs.writeFileSync(
     path.join(OUTPUT_DIRECTORY, "types.d.ts"),
     `export type Address = \`0x\${string}\`;
-export type RuntimeCodeHash = \`0x\${string}\`;
+export type Hash = \`0x\${string}\`;
+export type RuntimeCodeHash = Hash;
 export type DisputeStackNetwork = 'base' | 'base_staging';
 export type BasePaymentMethodHash = ${basePaymentMethodHashType};
 export type BaseStagingPaymentMethodHash = ${baseStagingPaymentMethodHashType};
@@ -571,10 +574,10 @@ export type RuntimeIdentityName = 'Orchestrator' | 'OrchestratorV2' | 'Orchestra
 export type GovernedRuntimeIdentityName = 'OrchestratorRegistry' | 'OrchestratorV3' | 'StakeVault' | 'DisputeProtectionPolicy' | 'WhitelistPolicy' | 'DisputeVerifier' | 'DisputeNullifierRegistry' | 'MultiAttestationVerifier';
 export type TwoStepGovernedRuntimeIdentityName = 'StakeVault' | 'DisputeProtectionPolicy' | 'DisputeVerifier';
 export interface DisputeStackManifest<Network extends DisputeStackNetwork = DisputeStackNetwork> {
-  schemaVersion: 1;
+  schemaVersion: 2;
   network: Network;
   chainId: 8453;
-  activeDisputeStack: { version: 1; selectionHash: string };
+  activeDisputeStack: { version: 2; selectionHash: string };
   runtimeIdentities: Record<RuntimeIdentityName, RuntimeIdentity>;
   addressExpectations: {
     AddressGroupRegistry: Address;
@@ -627,7 +630,7 @@ export interface DisputeStackManifest<Network extends DisputeStackNetwork = Disp
   prerequisites: {
     orchestratorPaused: false;
     admissionsPaused: false;
-    allowMultipleIntents: true;
+    allowMultipleIntents: boolean;
     orchestratorRegistered: true;
     lifecycleHookAuthorized: true;
     disputeNullifierWriterAuthorized: true;
@@ -645,7 +648,7 @@ export interface DisputeStackManifest<Network extends DisputeStackNetwork = Disp
 import baseData from './base.json';
 import baseStagingData from './baseStaging.json';
 import type { DisputeStackManifest } from './types';
-export type { Address, DisputeStackManifest, DisputeStackNetwork, GovernedRuntimeIdentityName, PaymentMethodHash, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName, TwoStepGovernedRuntimeIdentityName } from './types';
+export type { Address, DisputeStackManifest, DisputeStackNetwork, GovernedRuntimeIdentityName, Hash, PaymentMethodHash, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName, TwoStepGovernedRuntimeIdentityName } from './types';
 export { default as base } from './base.json';
 export { default as baseStaging } from './baseStaging.json';
 export const disputeStackByNetwork = {
@@ -656,7 +659,7 @@ export const disputeStackByNetwork = {
   );
   fs.writeFileSync(
     path.join(OUTPUT_DIRECTORY, "index.d.ts"),
-    `export type { Address, DisputeStackManifest, DisputeStackNetwork, GovernedRuntimeIdentityName, PaymentMethodHash, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName, TwoStepGovernedRuntimeIdentityName } from './types';\nexport { default as base } from './base';\nexport { default as baseStaging } from './baseStaging';\nexport declare const disputeStackByNetwork: { base: import('./types').DisputeStackManifest<'base'>; baseStaging: import('./types').DisputeStackManifest<'base_staging'> };\n`,
+    `export type { Address, DisputeStackManifest, DisputeStackNetwork, GovernedRuntimeIdentityName, Hash, PaymentMethodHash, RiskWindowSeconds, RuntimeCodeHash, RuntimeIdentity, RuntimeIdentityName, TwoStepGovernedRuntimeIdentityName } from './types';\nexport { default as base } from './base';\nexport { default as baseStaging } from './baseStaging';\nexport declare const disputeStackByNetwork: { base: import('./types').DisputeStackManifest<'base'>; baseStaging: import('./types').DisputeStackManifest<'base_staging'> };\n`,
   );
   console.log(`✅ Dispute stack metadata written to ${OUTPUT_DIRECTORY}`);
 }
