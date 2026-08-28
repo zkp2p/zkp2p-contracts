@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "riskWindowSecondsByPaymentMethod": {
     "base": {
-      "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d": "1209600",
+      "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d": "0",
       "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f": "1209600",
       "0x554a007c2217df766b977723b276671aee5ebb4adaea0edb6433c88b3e61dac5": "0",
       "0x5908bb0c9b87763ac6171d4104847667e7f02b4c47b574fe890c1f439ed128bb": "0",

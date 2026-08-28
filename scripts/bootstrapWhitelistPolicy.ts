@@ -100,10 +100,6 @@ const TARGET_PAYMENT_METHODS = [
     hash: "0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268",
   },
   {
-    name: "cashapp",
-    hash: "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d",
-  },
-  {
     name: "paypal",
     hash: "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f",
   },
@@ -900,7 +896,7 @@ async function runSelfTest(): Promise<void> {
     {
       escrowAddress,
       depositId: BigNumber.from(42),
-      paymentMethodHashes: [TARGET_PAYMENT_METHODS[1].hash, TARGET_PAYMENT_METHODS[2].hash],
+      paymentMethodHashes: [TARGET_PAYMENT_METHODS[1].hash],
     },
   ];
   const selectionDigest = buildSelectionDigest(selectionDeposits, groupIds);

@@ -165,7 +165,6 @@ export function getActivePaymentMethods(network: string): string[] {
 export const DISPUTABLE_PAYMENT_METHODS: string[] = [
   "paypal",
   "venmo",
-  "cashapp",
 ];
 
 export const ORCHESTRATOR_V3_PROTOCOL_FEE: any = {

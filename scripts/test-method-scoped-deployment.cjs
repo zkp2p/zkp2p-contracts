@@ -938,7 +938,6 @@ test("lane 37 deploy-only steps are ordered contiguous prefixes", () => {
     "authorize-hook",
     "set-risk-window:paypal",
     "set-risk-window:venmo",
-    "set-risk-window:cashapp",
   ];
   assert.deepEqual(lane37Module.DEPLOY_ONLY_STEP_KINDS.base_staging, common);
   assert.deepEqual(lane37Module.DEPLOY_ONLY_STEP_KINDS.base, [

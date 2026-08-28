@@ -794,13 +794,13 @@ The package exports the currently selected (latest) addresses for each network, 
 the addresses to use.
 
 Dispute-evidence issuance in `attestation-service` remains a separate follow-up and is intentionally not implemented
-by these contract lanes. Only PayPal, Venmo, and Cash App receive non-zero onchain risk windows, matching the
-explicitly ratified chargebackable-platform set.
+by these contract lanes. Only PayPal and Venmo receive non-zero onchain risk windows; Cash App and every other
+active payment method have a zero window and do not require stake.
 
 ### Whitelist Bootstrap
 
 `yarn whitelist:bootstrap` discovers active deposits from a configurable raw GraphQL endpoint and
-selects only deposits with an active Venmo, Cash App, or PayPal payment method. It deduplicates the
+selects only deposits with an active Venmo or PayPal payment method. It deduplicates the
 matching rows by deposit and payment method and simulates canonical `bootstrapDeposits` batches against the
 lane-36 `WhitelistPolicyMethodScoped` record for the ordered, non-empty, distinct group list supplied through
 `WHITELIST_GROUP_IDS`. It refuses the lane-29 deposit-scoped policy address and fails closed on a network whose
