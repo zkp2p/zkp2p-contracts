@@ -19,7 +19,7 @@ type BootstrapTarget = {
 
 type EvaluatedBootstrapTarget = {
   target: BootstrapTarget;
-  status: "withdrawn" | "methodInactive" | "completed" | "eligible";
+  status: "withdrawn" | "methodInactive" | "selfConfigured" | "alreadyBootstrapped" | "eligible";
 };
 
 type BootstrapTargetBatch = {
@@ -54,7 +54,6 @@ type BootstrapConfig = {
   maxFeePerGasCap: BigNumber;
   expectedDepositCount?: number;
   expectedSelectionDigest?: string;
-  allowCompleted: boolean;
   mode: "dry-run" | "execute" | "safe";
   privateKey?: string;
   safeOutputFile?: string;
@@ -251,7 +250,7 @@ Optional environment:
   BOOTSTRAP_MAX_PRIORITY_FEE_GWEI           (default: 0.001)
   BOOTSTRAP_MAX_FEE_PER_GAS_GWEI            (default: 0.02; hard execution ceiling)
   BOOTSTRAP_INDEXER_API_KEY                 (sent as x-api-key; never logged)
-  BOOTSTRAP_ALLOW_COMPLETED=true            (resume only verified prior bootstrap batches)
+  BOOTSTRAP_ALLOW_COMPLETED                 (obsolete; already-bootstrapped tuples are always skipped)
   BOOTSTRAP_EXECUTE=true                    (default: false/dry-run)
   BOOTSTRAP_CONFIRM_PRODUCTION=true         (required for direct execution on Base)
   BOOTSTRAP_OWNER_PRIVATE_KEY               (required only with BOOTSTRAP_EXECUTE=true)
@@ -451,7 +450,6 @@ function loadConfig(): BootstrapConfig {
     maxFeePerGasCap: parsePositiveGwei("BOOTSTRAP_MAX_FEE_PER_GAS_GWEI", "0.02"),
     expectedDepositCount,
     expectedSelectionDigest,
-    allowCompleted: process.env.BOOTSTRAP_ALLOW_COMPLETED === "true",
     mode,
     privateKey: execute
       ? normalizePrivateKey(requireEnvironment("BOOTSTRAP_OWNER_PRIVATE_KEY"))
@@ -637,8 +635,6 @@ async function evaluateBootstrapTargets(
   targets: BootstrapTarget[],
   escrows: Map<string, Contract>,
   policy: Contract,
-  groupIds: string[],
-  allowCompleted: boolean,
   readConcurrency: number,
   onProgress?: (evaluatedCount: number) => void,
 ): Promise<EvaluatedBootstrapTarget[]> {
@@ -665,39 +661,14 @@ async function evaluateBootstrapTargets(
         policy.enabled(target.escrowAddress, target.depositId, target.paymentMethodHash),
       ]);
       if (isBootstrapped) {
-        if (!allowCompleted) {
-          throw new Error(
-            `Active deposit ${target.depositId.toString()} payment method ${target.paymentMethodHash} `
-            + "is already bootstrapped; "
-            + "set BOOTSTRAP_ALLOW_COMPLETED=true only to resume a verified partial run",
-          );
-        }
-        if (!isEnabled) {
-          throw new Error(
-            `Previously bootstrapped deposit ${target.depositId.toString()} payment method `
-            + `${target.paymentMethodHash} is no longer enabled`,
-          );
-        }
-        const existingGroups = (await policy.getAllowedGroups(
-          target.escrowAddress,
-          target.depositId,
-          target.paymentMethodHash,
-        )).map((groupId: string) => groupId.toLowerCase());
-        if (!groupIds.every((groupId) => existingGroups.includes(groupId))) {
-          throw new Error(
-            `Previously bootstrapped deposit ${target.depositId.toString()} payment method `
-            + `${target.paymentMethodHash} lacks a requested group`,
-          );
-        }
         evaluatedCount += 1;
         onProgress?.(evaluatedCount);
-        return { target, status: "completed" };
+        return { target, status: "alreadyBootstrapped" };
       }
       if (isEnabled) {
-        throw new Error(
-          `Active deposit ${target.depositId.toString()} payment method ${target.paymentMethodHash} `
-          + "was enabled outside the one-time bootstrap",
-        );
+        evaluatedCount += 1;
+        onProgress?.(evaluatedCount);
+        return { target, status: "selfConfigured" };
       }
       evaluatedCount += 1;
       onProgress?.(evaluatedCount);
@@ -959,6 +930,16 @@ async function runSelfTest(): Promise<void> {
       depositId: BigNumber.from(100),
       paymentMethodHash: TARGET_PAYMENT_METHODS[1].hash,
     },
+    {
+      escrowAddress,
+      depositId: BigNumber.from(101),
+      paymentMethodHash: TARGET_PAYMENT_METHODS[0].hash,
+    },
+    {
+      escrowAddress,
+      depositId: BigNumber.from(102),
+      paymentMethodHash: TARGET_PAYMENT_METHODS[1].hash,
+    },
   ];
   const staleSelectionEscrow = {
     getDeposit: async (depositId: BigNumber) => ({
@@ -966,31 +947,41 @@ async function runSelfTest(): Promise<void> {
     }),
     getDepositPaymentMethodActive: async (depositId: BigNumber) => !depositId.eq(100),
   } as unknown as Contract;
-  const unconfiguredPolicy = {
-    bootstrapped: async () => false,
-    enabled: async () => false,
+  const partiallyConfiguredPolicy = {
+    bootstrapped: async (_escrow: string, depositId: BigNumber) => depositId.eq(102),
+    enabled: async (_escrow: string, depositId: BigNumber) => depositId.eq(101),
   } as unknown as Contract;
   const staleSelectionEvaluation = await evaluateBootstrapTargets(
     staleSelectionTargets,
     new Map([[escrowAddress.toLowerCase(), staleSelectionEscrow]]),
-    unconfiguredPolicy,
-    groupIds,
-    false,
+    partiallyConfiguredPolicy,
     2,
   );
   const staleEligibleTargets = staleSelectionEvaluation
     .filter(({ status }) => status === "eligible")
     .map(({ target }) => target);
+  const selfConfiguredTargets = staleSelectionEvaluation
+    .filter(({ status }) => status === "selfConfigured")
+    .map(({ target }) => target);
+  const alreadyBootstrappedTargets = staleSelectionEvaluation
+    .filter(({ status }) => status === "alreadyBootstrapped")
+    .map(({ target }) => target);
+  if (formatDepositIds(selfConfiguredTargets) !== "101") {
+    throw new Error("Self-test did not classify the self-configured tuple");
+  }
+  if (formatDepositIds(alreadyBootstrappedTargets) !== "102") {
+    throw new Error("Self-test did not classify the already-bootstrapped tuple");
+  }
   const staleSelectionDeposits = buildActiveDeposits(staleEligibleTargets);
   if (buildSelectionDigest(staleSelectionDeposits, groupIds) !== selectionDigest) {
-    throw new Error("Self-test included withdrawn or inactive rows in the selection digest");
+    throw new Error("Self-test included skipped rows in the selection digest");
   }
   const staleSelectionBatches = buildBootstrapBatches(staleEligibleTargets, 1);
   if (
     staleSelectionBatches.flatMap(({ targets }) => targets)
-      .some(({ depositId }) => depositId.eq(99) || depositId.eq(100))
+      .some(({ depositId }) => depositId.gte(99) && depositId.lte(102))
   ) {
-    throw new Error("Self-test included withdrawn or inactive rows in bootstrap batches");
+    throw new Error("Self-test included skipped rows in bootstrap batches");
   }
   const safeBatch = buildSafeBatch("base", 8453, policyAddress, safeAddress, 2, [transactions[1]]);
   if (safeBatch.chainId !== "8453" || !sameAddressForSelfTest(
@@ -1178,8 +1169,6 @@ async function main(): Promise<void> {
     discoveredTargets,
     escrows,
     policy,
-    config.groupIds,
-    config.allowCompleted,
     config.readConcurrency,
     (evaluatedCount) => {
       if (evaluatedCount % 100 === 0 || evaluatedCount === discoveredTargets.length) {
@@ -1194,7 +1183,8 @@ async function main(): Promise<void> {
   );
   const withdrawnTargets = targetsWithStatus("withdrawn");
   const methodInactiveTargets = targetsWithStatus("methodInactive");
-  const completedTargets = targetsWithStatus("completed");
+  const selfConfiguredTargets = targetsWithStatus("selfConfigured");
+  const alreadyBootstrappedTargets = targetsWithStatus("alreadyBootstrapped");
   const eligibleTargets = targetsWithStatus("eligible");
   const eligibleDeposits = buildActiveDeposits(eligibleTargets);
   const selectionDigest = buildSelectionDigest(eligibleDeposits, config.groupIds);
@@ -1223,7 +1213,14 @@ async function main(): Promise<void> {
   if (methodInactiveTargets.length > 0) {
     console.log(`    Deposit ids: ${formatDepositIds(methodInactiveTargets)}`);
   }
-  console.log(`  Already bootstrapped and enabled tuples: ${completedTargets.length}`);
+  console.log(`  Skipped self-configured tuples: ${selfConfiguredTargets.length}`);
+  if (selfConfiguredTargets.length > 0) {
+    console.log(`    Deposit ids: ${formatDepositIds(selfConfiguredTargets)}`);
+  }
+  console.log(`  Skipped already-bootstrapped tuples: ${alreadyBootstrappedTargets.length}`);
+  if (alreadyBootstrappedTargets.length > 0) {
+    console.log(`    Deposit ids: ${formatDepositIds(alreadyBootstrappedTargets)}`);
+  }
   console.log(`  Eligible tuples: ${eligibleTargets.length}`);
   console.log(`  Eligible distinct deposits: ${eligibleDeposits.length}`);
   console.log(
@@ -1410,7 +1407,7 @@ async function main(): Promise<void> {
       ? `Bootstrap complete: ${eligibleTargets.length}/${eligibleTargets.length} eligible tuples verified`
       : config.mode === "safe"
         ? `Safe batch validation passed: ${eligibleTargets.length} pending tuples in ${safeTransactions.length} transactions`
-        : `Dry-run simulation passed: ${eligibleTargets.length} eligible, ${completedTargets.length} already complete, ${withdrawnTargets.length + methodInactiveTargets.length} stale tuples skipped`,
+        : `Dry-run simulation passed: ${eligibleTargets.length} eligible, ${withdrawnTargets.length + methodInactiveTargets.length + selfConfiguredTargets.length + alreadyBootstrappedTargets.length} tuples skipped`,
   );
 }
 
