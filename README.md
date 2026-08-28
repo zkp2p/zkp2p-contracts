@@ -91,8 +91,8 @@ The deposit whitelist stack is available through the `OrchestratorV2` per-deposi
   Because enforcement is per tuple, a payment method the depositor adds to a deposit **after** its whitelist was
   configured or bootstrapped starts with that method's whitelist disabled: on a payment method with a nonzero risk
   window its takers are stake-backed by default, on a zero-window method it is open. Depositors configure the new
-  tuple themselves, and the whitelist bootstrap can be re-run with `BOOTSTRAP_ALLOW_COMPLETED=true` to pick up
-  new tuples of already-bootstrapped deposits.
+  tuple themselves, and the whitelist bootstrap can be re-run without a resume flag to pick up new unconfigured
+  tuples while skipping those already configured or bootstrapped.
 
 Group IDs are derived from the curator and registry group counter, and offchain consumers must key them by
 chain, registry address, and group ID. Enforcement and groups are scoped to
@@ -807,9 +807,9 @@ lane-36 `WhitelistPolicyMethodScoped` record for the ordered, non-empty, distinc
 `WhitelistPolicyMethodScoped` artifact does not exist yet. It imports no indexer
 schema package, so the contracts and indexer packages remain acyclic. Discovery is a dry-run by
 default; mutation and Safe output require both the exact expected deposit count and the printed
-selection digest, which bind the eligible onchain-filtered set and the ordered group IDs. Withdrawn deposits and
-inactive payment-method rows are skipped and reported; the count, digest, and generated batches cover only eligible
-tuples. All discovery modes enforce a configurable maximum.
+selection digest, which bind the eligible onchain-filtered set and the ordered group IDs. Withdrawn, method-inactive,
+self-configured, and already-bootstrapped tuples are skipped and reported; the count, digest, and generated batches
+cover only the eligible set. All discovery modes enforce a configurable maximum.
 
 - Staging execution requires `BOOTSTRAP_EXECUTE=true` and the current policy owner's private key.
 - Production Safe preparation requires `BOOTSTRAP_SAFE_OUTPUT_FILE`; it emits unsigned Transaction
@@ -819,8 +819,8 @@ tuples. All discovery modes enforce a configurable maximum.
 - Base execution is pinned to the canonical production indexer and deployment artifacts, and every configured
   group ID must be one of the known production groups recorded by the Base `AddressGroupRegistry`. It also requires
   `BOOTSTRAP_CONFIRM_PRODUCTION=true`.
-- `BOOTSTRAP_ALLOW_COMPLETED=true` resumes only batches whose deposit/payment-method tuples are still enabled and
-  contain every requested group. The script rechecks policy ownership before each submitted batch.
+- Already-bootstrapped tuples are always skipped, so `BOOTSTRAP_ALLOW_COMPLETED` is no longer required. The script
+  rechecks policy ownership and tuple state before each submitted batch.
 - Direct execution uses the receipt RPC for confirmation and bounded post-receipt state reads. It computes
   EIP-1559 fees from the latest base fee with a `0.001` gwei priority fee and refuses to submit above
   the `0.02` gwei default max-fee ceiling; both values are configurable through the documented env.
