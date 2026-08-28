@@ -342,6 +342,10 @@ test("immutable deployment lanes match their exact pinned source digests", () =>
     IMMUTABLE_DEPLOYMENT_LANES[
       "38_activate_method_scoped_dispute_lifecycle_stack.ts"
     ];
+  const lane39 =
+    IMMUTABLE_DEPLOYMENT_LANES["39_deploy_method_scoped_vault_stack.ts"];
+  const lane40 =
+    IMMUTABLE_DEPLOYMENT_LANES["40_activate_method_scoped_vault_stack.ts"];
   assert.deepEqual(
     {
       sha256: lane29.sha256,
@@ -446,6 +450,60 @@ test("immutable deployment lanes match their exact pinned source digests", () =>
         "b278fd5d334301ca965fe603720f7e9fba1029f5e4af9e642e0e3befc46aef2e",
       activeSource: null,
       retired: true,
+    }
+  );
+  assert.deepEqual(
+    {
+      deployedSourceSha: lane39.deployedSourceSha,
+      sha256: lane39.sha256,
+      actual: sha256(
+        join(repositoryRoot, "deploy", "39_deploy_method_scoped_vault_stack.ts")
+      ),
+      activeSource: lane39.activeSource,
+      retired: lane39.retired,
+      tags: lane39.tags,
+    },
+    {
+      deployedSourceSha: "ddb849496af0aead7caf32d645b03be9ec5e724b",
+      sha256:
+        "bb6357508883202604fef7adb28656b781b84d3cec9f3afb2fb20162419845cc",
+      actual:
+        "bb6357508883202604fef7adb28656b781b84d3cec9f3afb2fb20162419845cc",
+      activeSource: undefined,
+      retired: false,
+      tags: [
+        "39_deploy_method_scoped_vault_stack",
+        "V3DisputeMethodScopedVaultStack",
+      ],
+    }
+  );
+  assert.deepEqual(
+    {
+      deployedSourceSha: lane40.deployedSourceSha,
+      sha256: lane40.sha256,
+      actual: sha256(
+        join(
+          repositoryRoot,
+          "deploy",
+          "40_activate_method_scoped_vault_stack.ts"
+        )
+      ),
+      activeSource: lane40.activeSource,
+      retired: lane40.retired,
+      tags: lane40.tags,
+    },
+    {
+      deployedSourceSha: "71113f2c16562140d110abd4ff5b696f4069975a",
+      sha256:
+        "6816bcd307d36b7cb2df19663f8dba843fb4e8e376652d71f355fb9707ade253",
+      actual:
+        "6816bcd307d36b7cb2df19663f8dba843fb4e8e376652d71f355fb9707ade253",
+      activeSource: undefined,
+      retired: false,
+      tags: [
+        "40_activate_method_scoped_vault_stack",
+        "V3DisputeMethodScopedVaultActivation",
+      ],
     }
   );
   assertImmutableDeploymentLanes(repositoryRoot);

@@ -786,6 +786,7 @@ terminal and `StakeVaultOptIn` holds no locks. Artifacts live at
 `yarn verify:method-scoped-safe-batch --batch vault-cutover|vault-writer-removal` immediately before the Safe executes.
 The same protected-path rule keeps these batches valid across unrelated merges without weakening their source,
 artifact-pair, or live-chain checks.
+Both lanes are immutable and pinned after their 2026-08-28 Base execution.
 Stake in the old vaults is abandoned: stakers withdraw once their locks release and takers re-stake in the new vault
 before the cutover; that readiness is part of `CONFIRM_BASE_V3_DISPUTE_METHOD_SCOPED_VAULT_DOWNSTREAM_READY`.
 

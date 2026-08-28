@@ -78,6 +78,30 @@ export const IMMUTABLE_DEPLOYMENT_LANES = {
       "V3DisputeMethodScopedActivation",
     ],
   },
+  // Executed deploy-only on Base staging (bf9c609) and Base (ddb8494) 2026-08-28; lane stays mounted.
+  "39_deploy_method_scoped_vault_stack.ts": {
+    deployedSourceSha: "ddb849496af0aead7caf32d645b03be9ec5e724b",
+    sha256: "bb6357508883202604fef7adb28656b781b84d3cec9f3afb2fb20162419845cc",
+    activeSource: undefined,
+    retired: false,
+    tags: [
+      "39_deploy_method_scoped_vault_stack",
+      "V3DisputeMethodScopedVaultStack",
+    ],
+  },
+  // Staging activation 2026-08-28; Base cutover generated from 71113f2 and executed by the Safe at nonce 77
+  // (safeTxHash 0xf20c95170936bb975a2af1f30a9b5f18d34bb7985562119461ad1ef08d636d21,
+  // Base tx 0x19b78b621e09f04108b0f059f523e5d71eb07c7cdb699f57058fa66cf1c65873 at 2026-08-28 08:31:07 UTC); writer removal executed at nonce 84.
+  "40_activate_method_scoped_vault_stack.ts": {
+    deployedSourceSha: "71113f2c16562140d110abd4ff5b696f4069975a",
+    sha256: "6816bcd307d36b7cb2df19663f8dba843fb4e8e376652d71f355fb9707ade253",
+    activeSource: undefined,
+    retired: false,
+    tags: [
+      "40_activate_method_scoped_vault_stack",
+      "V3DisputeMethodScopedVaultActivation",
+    ],
+  },
 } as const;
 
 export type DeploymentLanes = Readonly<

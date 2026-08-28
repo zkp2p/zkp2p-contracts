@@ -91,7 +91,7 @@
   windows, and on Base initiates two-step ownership transfers of vault and policy to the Safe. Flags
   `ENABLE_{STAGING,BASE}_V3_DISPUTE_METHOD_SCOPED_VAULT_DEPLOYMENT=true` authorize deploy-only runs; local networks
   deploy and activate. Old vaults and their stake are abandoned by decision (2026-08-28); the lane-37 policy/hook records
-  are immutable history that was never activated.
+  are immutable history that was never activated. Lane 39 is immutable and pinned after its 2026-08-28 Base execution.
 - `deploy/40_activate_method_scoped_vault_stack.ts` activates the lane-39 stack without a rotation: Base staging runs
   add-fresh-writer → set-fresh-hook → remove-predecessor-writer one deployer step per run; Base emits a single guarded
   cutover batch (guard → conditional `acceptOwnership` on vault and policy → add fresh writer → `setLifecycleHook`) and,
@@ -102,7 +102,8 @@
   The same artifact-child protected-path rule applies to both lane-40 batch kinds; unrelated repository changes do not
   require regeneration when the batch producers and verifiers are unchanged.
   Recording checkpoints: commit live records before any artifact generation, pin lanes 39/40 after their first live
-  execution, propose the Base cutover at the live Safe nonce, and flip manifests/package only after execution.
+  execution, propose the Base cutover at the live Safe nonce, and flip manifests/package only after execution. Lane 40
+  is immutable and pinned after its 2026-08-28 Base execution.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the
