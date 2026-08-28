@@ -316,7 +316,7 @@ test("address extraction preserves the exact active dispute selection stamp", as
 
 const BASE_RISK_WINDOWS = {
   "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d":
-    "1209600",
+    "0",
   "0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f":
     "1209600",
   "0x554a007c2217df766b977723b276671aee5ebb4adaea0edb6433c88b3e61dac5": "0",
@@ -333,6 +333,8 @@ const RISK_WINDOWS_BY_NETWORK = {
   base: BASE_RISK_WINDOWS,
   baseStaging: {
     ...BASE_RISK_WINDOWS,
+    "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d":
+      "1209600",
     "0x1d966dbd6aeb8674d7c05174bd0ded7b56a798672bfb862ef20bbe8c2bbfce18": "0",
     "0xf81480907d808d639ad3230869e4b05a3b01b2d34e323af40f2efab807effd32": "0",
   },
