@@ -60,6 +60,8 @@ Map the exact changed or requested surface:
 - storage layout, authorization, accounting, settlement, replay, and
   reentrancy boundaries;
 - deploy scripts, governance batches, registries, permissions, and skip logic;
+- immutable executed deployment lanes, current runner wrappers, successor lanes,
+  and activation boundaries;
 - deployment artifacts, package extraction, ABIs, addresses, and consumers;
 - closest deterministic, fuzz, invariant, integration, and deployment tests.
 
@@ -140,6 +142,11 @@ Check the invariants relevant to the scope:
   expiration;
 - registry and verifier cutovers remove retired active paths;
 - deploy scripts are idempotent only for the exact intended state;
+- production-executed numbered lanes remain byte-for-byte immutable, the
+  supported runner verifies their source hashes, and retired direct lanes
+  cannot re-enter an active deployment path;
+- passive successor deployment cannot be treated as lifecycle-hook activation
+  or writer-set cutover without the separately authorized on-chain transition;
 - package ABIs and addresses match canonical source and deployment artifacts;
 - historical artifacts remain historical and cannot reactivate old semantics.
 
@@ -157,35 +164,40 @@ When either V2 or V3 source changes:
 
 1. Diff both implementations and interfaces against canonical current main.
 2. Derive the intended V3 deltas from current interfaces, lifecycle tests,
-   deployment tests, and deploy lanes `30`, `31`, and `32`; do not copy an
-   allowlist from an older review.
+   deployment tests, `AGENTS.md`, `deployments/immutableDeploymentLanes.ts`,
+   current active wrappers, and the selected deployment manifests. Do not copy
+   a lane list or intended-delta allowlist from an older review.
 3. Verify shared admission, fee, escrow, registry, payment-verifier, nullifier,
    replay, authorization, and settlement invariants semantically.
 4. Verify the V3 lifecycle-hook snapshot, callback ordering, fail-closed
    behavior, reentrancy protection, cancellation/pruning, and dispute/stake
    ownership boundaries with the closest deterministic, fuzz, invariant, and
    integration tests.
-5. Inspect `scripts/deployActive.ts`, the network guards, opt-in flags, `skip`
-   behavior, dependencies, and readiness checks in
-   `deploy/30_deploy_v3_lifecycle_stack.ts`,
-   `deploy/31_deploy_v3_payment_binding_stack.ts`, and
-   `deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts`. Lane `31` must
-   verify the bytecode-pinned payment-binding pair and refuse a non-atomic
-   Base-staging cutover. Its Base Safe batch must preserve audited method order
-   and currencies, route every active method to UPV3, and revoke every retired
-   legacy-registry writer. Lane `32` must deploy and verify
-   the dispute registry, verifier, vault, policy, hook authorization, writer
-   permission, payment-method risk windows, ownership handoff, and explicitly
-   gated hook activation as one resumable lane.
+5. Inspect `AGENTS.md`, `scripts/deployActive.ts`,
+   `deployments/immutableDeploymentLanes.ts`,
+   `deployments/activeDeploymentLanes/`, the selected deployment manifests,
+   and the exact active deploy/activation lanes. Verify source hashes for every
+   executed immutable lane, wrapper selection, retired-tag rejection, network
+   guards, opt-in flags, dependencies, and readiness checks. Keep passive
+   deployment, ownership handoff, writer-set changes, lifecycle-hook changes,
+   Safe proposal, Safe execution, and repository recording as distinct states.
+   A successor must not inherit authority merely because its source, artifact,
+   package address, or unsigned batch exists.
 6. Verify the dispute path binds the payment to the disputed intent and preserves
    stake-vault controller, verifier/nullifier, lifecycle-hook authorization,
-   risk-window, replay, and settlement invariants. Run
-   `scripts/test-dispute-lifecycle-deployment.cjs` when either lane changes.
+   payment-method policy scope, risk-window, replay, and settlement invariants.
+   Select the relevant deployment, vault, activation, Safe-artifact, and runner
+   checks from current `package.json`; do not reuse a retired lane's test command
+   by memory. Current examples include `yarn test:dispute-lifecycle-deployment`,
+   `yarn test:method-scoped-deployment`,
+   `yarn test:method-scoped-vault-deployment`, and
+   `yarn test:method-scoped-activation`.
 7. Inspect Base/Base-staging artifacts, package addresses, and live state
-   separately. Both lanes are network-gated; on Base lane `31` must verify the
-   existing pair and prepare exactly the atomic 22-call Safe cutover, while lane
-   `32` may only prepare an unexecuted Safe batch. A mounted script, checked-in
-   artifact, or packaged address is not activation evidence.
+   separately. For a Safe artifact, verify the exact calls, order, nonce,
+   protected-path/source fingerprint, on-chain guard, preconditions, and
+   postconditions with the current repository verifier immediately before
+   execution. A mounted wrapper, successor deployment, checked-in artifact,
+   packaged address, or selected manifest is not live activation evidence.
 
 Do not require the remaining V2/V3 source diff to be empty and do not normalize
 away a lifecycle, storage, governance, or settlement delta. If bytecode,
