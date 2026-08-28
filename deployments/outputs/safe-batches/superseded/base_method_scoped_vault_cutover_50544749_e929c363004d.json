@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "chainId": "8453",
-  "createdAt": 1787878845000,
+  "createdAt": 1787875993000,
   "meta": {
     "name": "ZKP2P method-scoped dedicated-vault cutover - base",
     "description": "assertReady(); conditionally accept fresh vault and policy ownership; add fresh writer; set fresh lifecycle hook",
@@ -11,7 +11,7 @@
   },
   "transactions": [
     {
-      "to": "0xaa63a5a5aa8024f462590207ed2a6ddc9a824705",
+      "to": "0x9b9792b54f77b8d2bb0e8be851e1052049e1b1ac",
       "value": "0",
       "data": "0xbf9a61ac",
       "operation": 0,
