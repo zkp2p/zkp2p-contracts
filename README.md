@@ -797,6 +797,15 @@ Dispute-evidence issuance in `attestation-service` remains a separate follow-up 
 by these contract lanes. Only PayPal and Venmo receive non-zero onchain risk windows; Cash App and every other
 active payment method have a zero window and do not require stake.
 
+`deploy/41_retire_dispute_risk_windows.ts` retires Cash App from that set (decided 2026-08-28). It zeroes the
+`RETIRED_DISPUTABLE_PAYMENT_METHODS` risk windows on `DisputeProtectionPolicyMethodScopedStaked`, which makes
+`onIntentSignaled` a no-op and `isDisputeProtectionEnabled` false for the method while PayPal and Venmo keep their
+14-day windows. Run `yarn deploy:dispute-risk-windows:base_staging` (deployer-EOA write) and
+`yarn deploy:dispute-risk-windows:base` (emits one `setRiskWindow(cashapp, 0)` Safe call under
+`deployments/outputs/safe-batches/`); until a network executes it, Cash App remains windowed there.
+`DISPUTABLE_PAYMENT_METHODS`, `dispute-stack-evidence.json`, and the package manifest flip in the recording PR after
+both networks execute, and the lane is pinned then.
+
 ### Whitelist Bootstrap
 
 `yarn whitelist:bootstrap` discovers active deposits from a configurable raw GraphQL endpoint and

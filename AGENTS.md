@@ -104,6 +104,16 @@
   Recording checkpoints: commit live records before any artifact generation, pin lanes 39/40 after their first live
   execution, propose the Base cutover at the live Safe nonce, and flip manifests/package only after execution. Lane 40
   is immutable and pinned after its 2026-08-28 Base execution.
+- `deploy/41_retire_dispute_risk_windows.ts` removes payment methods from dispute protection by zeroing their risk
+  windows on `DisputeProtectionPolicyMethodScopedStaked`: a zero window makes `onIntentSignaled` a no-op and
+  `isDisputeProtectionEnabled` false for that method, and PayPal/Venmo are untouched. Its target is
+  `RETIRED_DISPUTABLE_PAYMENT_METHODS` (`cashapp`, decided 2026-08-28), not `DISPUTABLE_PAYMENT_METHODS`: that list
+  and `deployments/dispute-stack-evidence.json` record what is live (the package extractor requires them to agree)
+  and flip in the recording PR after both networks execute. Live networks run only under
+  `DEPLOY_ACTIVE_TAG=41_retire_dispute_risk_windows` (`yarn deploy:dispute-risk-windows:base_staging` executes the
+  deployer-EOA write; `:base` queues one `setRiskWindow(cashapp, 0)` Safe call that `deploy_summary` writes under
+  `deployments/outputs/safe-batches/`); local networks zero the window right after lane 39. Pin the lane after its
+  first live execution.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the

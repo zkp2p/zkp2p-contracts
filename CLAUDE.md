@@ -149,8 +149,12 @@ Current numbered lanes include:
 - `39` (immutable): method-scoped stack on a dedicated `StakeVaultMethodScoped`
   (deploy-only on live networks; deploys and activates locally);
 - `40` (immutable): dedicated-vault activation (tag-only; staging EOA steps,
-  one guarded Base cutover batch, deferred predecessor writer removal).
-- `41`: generic UPI/INR payment method (tag-only, Base staging only).
+  one guarded Base cutover batch, deferred predecessor writer removal);
+- `41`: generic UPI/INR payment method (tag-only, Base staging only);
+- `42`: dispute risk-window retirement (tag-only on live networks; zeroes the
+  `RETIRED_DISPUTABLE_PAYMENT_METHODS` windows on the lane-39 policy through a
+  staging EOA write and one Base Safe call; `DISPUTABLE_PAYMENT_METHODS` and
+  the dispute-stack evidence flip in the recording PR after execution).
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production
