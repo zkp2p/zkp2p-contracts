@@ -152,9 +152,9 @@ Current numbered lanes include:
   one guarded Base cutover batch, deferred predecessor writer removal);
 - `41`: generic UPI/INR payment method (tag-only, Base staging only);
 - `42`: dispute risk-window retirement (tag-only on live networks; zeroes the
-  `RETIRED_DISPUTABLE_PAYMENT_METHODS` windows on the lane-39 policy through a
-  staging EOA write and one Base Safe call; `DISPUTABLE_PAYMENT_METHODS` and
-  the dispute-stack evidence flip in the recording PR after execution).
+  `RETIRED_DISPUTABLE_PAYMENT_METHODS` windows on the lane-39 policy; Base
+  executed at Safe nonce 80 on 2026-08-28, staging EOA write and its evidence
+  flip still pending; pin after that execution).
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production

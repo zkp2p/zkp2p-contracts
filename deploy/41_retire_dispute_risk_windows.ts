@@ -1,6 +1,6 @@
 // Lane 41 retires dispute protection for governance-selected payment methods by zeroing their risk windows.
 // Local and EOA-owned policies execute directly; Safe-owned policies emit queued governance calls.
-// DISPUTABLE_PAYMENT_METHODS and dispute-stack evidence flip only in a recording PR after every network executes.
+// The lane skips once every retired window reads zero; per-network evidence flips in recording PRs after each execution.
 
 import { ethers } from "ethers";
 import type { BigNumber, Contract } from "ethers";

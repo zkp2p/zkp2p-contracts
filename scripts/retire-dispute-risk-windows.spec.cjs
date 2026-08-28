@@ -116,8 +116,11 @@ test("exports its identity", () => {
     "39_deploy_method_scoped_vault_stack",
   ]);
   assert.deepEqual(RETIRED_DISPUTABLE_PAYMENT_METHODS, ["cashapp"]);
-  // This flips in the recording PR only after execution on every network.
-  assert.deepEqual(DISPUTABLE_PAYMENT_METHODS, ["paypal", "venmo", "cashapp"]);
+  // Main already excludes the retired methods; the lane must never target a disputable one.
+  assert.deepEqual(DISPUTABLE_PAYMENT_METHODS, ["paypal", "venmo"]);
+  for (const method of RETIRED_DISPUTABLE_PAYMENT_METHODS) {
+    assert.ok(!DISPUTABLE_PAYMENT_METHODS.includes(method), method);
+  }
 });
 
 test("retires only the retired window when a local account owns the policy", async () => {

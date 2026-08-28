@@ -107,13 +107,15 @@
 - `deploy/41_retire_dispute_risk_windows.ts` removes payment methods from dispute protection by zeroing their risk
   windows on `DisputeProtectionPolicyMethodScopedStaked`: a zero window makes `onIntentSignaled` a no-op and
   `isDisputeProtectionEnabled` false for that method, and PayPal/Venmo are untouched. Its target is
-  `RETIRED_DISPUTABLE_PAYMENT_METHODS` (`cashapp`, decided 2026-08-28), not `DISPUTABLE_PAYMENT_METHODS`: that list
-  and `deployments/dispute-stack-evidence.json` record what is live (the package extractor requires them to agree)
-  and flip in the recording PR after both networks execute. Live networks run only under
-  `DEPLOY_ACTIVE_TAG=41_retire_dispute_risk_windows` (`yarn deploy:dispute-risk-windows:base_staging` executes the
-  deployer-EOA write; `:base` queues one `setRiskWindow(cashapp, 0)` Safe call that `deploy_summary` writes under
-  `deployments/outputs/safe-batches/`); local networks zero the window right after lane 39. Pin the lane after its
-  first live execution.
+  `RETIRED_DISPUTABLE_PAYMENT_METHODS` (`cashapp`, decided 2026-08-28), not `DISPUTABLE_PAYMENT_METHODS`, which
+  #311 already trimmed to PayPal/Venmo. Live networks run only under `DEPLOY_ACTIVE_TAG=41_retire_dispute_risk_windows`
+  (`yarn deploy:dispute-risk-windows:base_staging` executes the deployer-EOA write; `:base` queues one
+  `setRiskWindow(cashapp, 0)` Safe call that `deploy_summary` writes under `deployments/outputs/safe-batches/`);
+  local networks zero the window right after lane 39, and the lane skips wherever every retired window already reads
+  zero. Base executed the call at Safe nonce 80 on 2026-08-28 (safeTxHash `0x16a7…4650`, tx `0x4824…6f8a`, artifacts
+  `base_retire_cashapp_risk_window*`), so Base evidence is already `0`. Base staging is still pending: the package
+  extractor's `LIVE_DISPUTABLE_PAYMENT_METHODS.base_staging` override, the staging evidence, and the spec's staging
+  window keep Cash App at 1209600 until the staging write executes, and that recording PR also pins lane 41.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the
