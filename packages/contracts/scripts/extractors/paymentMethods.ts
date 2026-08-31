@@ -43,6 +43,7 @@ const PUBLISHED_PAYMENT_METHOD_NAMES = new Set([
   'revolut',
   'venmo',
   'wise',
+  'xmoney',
   'zelle',
 ]);
 

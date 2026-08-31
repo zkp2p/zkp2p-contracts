@@ -149,7 +149,8 @@ Current numbered lanes include:
 - `39` (immutable): method-scoped stack on a dedicated `StakeVaultMethodScoped`
   (deploy-only on live networks; deploys and activates locally);
 - `40` (immutable): dedicated-vault activation (tag-only; staging EOA steps,
-  one guarded Base cutover batch, deferred predecessor writer removal).
+  one guarded Base cutover batch, deferred predecessor writer removal);
+- `41`: Base-staging-only X Money payment-method preparation and execution.
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production

@@ -104,6 +104,10 @@
   Recording checkpoints: commit live records before any artifact generation, pin lanes 39/40 after their first live
   execution, propose the Base cutover at the live Safe nonce, and flip manifests/package only after execution. Lane 40
   is immutable and pinned after its 2026-08-28 Base execution.
+- Lane `41` adds the X Money payment method on Base staging only. Untagged runs are inert; tagged preparation and
+  execution are mutually exclusive. Preparation proves the exact predecessor state and simulates the two writes,
+  while execution appends `xmoney` to `UnifiedPaymentVerifierV3` and `PaymentVerifierRegistry` before recording a
+  deployment snapshot. Production activation is intentionally outside this lane.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the
