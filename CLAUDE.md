@@ -150,6 +150,7 @@ Current numbered lanes include:
   (deploy-only on live networks; deploys and activates locally);
 - `40` (immutable): dedicated-vault activation (tag-only; staging EOA steps,
   one guarded Base cutover batch, deferred predecessor writer removal);
+- `41`: generic UPI/INR payment method (tag-only, Base staging only);
 - `42` (immutable): dispute risk-window retirement (tag-only on live networks;
   zeroes the `RETIRED_DISPUTABLE_PAYMENT_METHODS` windows on the lane-39
   policy; Base executed via the Safe 2026-08-28, staging via the deployer

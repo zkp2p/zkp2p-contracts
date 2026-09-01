@@ -334,6 +334,7 @@ const RISK_WINDOWS_BY_NETWORK = {
   baseStaging: {
     ...BASE_RISK_WINDOWS,
     "0x1d966dbd6aeb8674d7c05174bd0ded7b56a798672bfb862ef20bbe8c2bbfce18": "0",
+    "0xe99a5081226cbbff9440a63da5caa04fa30f210c12c4dd9976132ac075054cd9": "0",
     "0xf81480907d808d639ad3230869e4b05a3b01b2d34e323af40f2efab807effd32": "0",
   },
 };
