@@ -153,6 +153,7 @@ export const BASE_STAGING_ACTIVE_PAYMENT_METHODS: string[] = [
   ...ACTIVE_PAYMENT_METHODS,
   "monobank",
   "mercury",
+  "upi",
 ];
 
 export function getActivePaymentMethods(network: string): string[] {

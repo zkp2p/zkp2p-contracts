@@ -336,6 +336,7 @@ const RISK_WINDOWS_BY_NETWORK = {
     "0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d":
       "1209600",
     "0x1d966dbd6aeb8674d7c05174bd0ded7b56a798672bfb862ef20bbe8c2bbfce18": "0",
+    "0xe99a5081226cbbff9440a63da5caa04fa30f210c12c4dd9976132ac075054cd9": "0",
     "0xf81480907d808d639ad3230869e4b05a3b01b2d34e323af40f2efab807effd32": "0",
   },
 };

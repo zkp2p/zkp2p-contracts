@@ -150,6 +150,7 @@ Current numbered lanes include:
   (deploy-only on live networks; deploys and activates locally);
 - `40` (immutable): dedicated-vault activation (tag-only; staging EOA steps,
   one guarded Base cutover batch, deferred predecessor writer removal).
+- `41`: generic UPI/INR payment method (tag-only, Base staging only).
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production
