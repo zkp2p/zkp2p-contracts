@@ -99,6 +99,7 @@ export const RATIFIED_PAYMENT_METHOD_CURRENCIES: Record<string, string[]> = {
   paypal: ["USD", "EUR", "GBP", "SGD", "NZD", "AUD", "CAD"],
   monobank: ["UAH"],
   mercury: ["USD"],
+  upi: ["INR"],
 };
 
 export const RATIFIED_PAYMENT_METHOD_ORDER: Record<string, string[]> = {
@@ -131,6 +132,7 @@ export const RATIFIED_PAYMENT_METHOD_ORDER: Record<string, string[]> = {
     "paypal",
     "monobank",
     "mercury",
+    "upi",
   ],
 };
 
