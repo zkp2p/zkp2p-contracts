@@ -508,6 +508,17 @@ test("immutable lane manifest pins the exact deployed sources", () => {
         "V3DisputeMethodScopedVaultActivation",
       ],
     },
+    "42_retire_dispute_risk_windows.ts": {
+      deployedSourceSha: "dfe1060e09a5d7d9c1b57dbfd835ecf378e1e9f4",
+      sha256:
+        "5aeddc6c46ad489fefbe53cf537c0c70eefebf3ce531a56149a4f2e67e3ad014",
+      activeSource: undefined,
+      retired: false,
+      tags: [
+        "42_retire_dispute_risk_windows",
+        "DisputeRiskWindowRetirement",
+      ],
+    },
   });
 });
 
