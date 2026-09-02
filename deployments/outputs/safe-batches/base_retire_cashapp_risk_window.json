@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "chainId": "8453",
+  "createdAt": 1787912115441,
+  "meta": {
+    "name": "Base Cash App dispute risk-window retirement",
+    "description": "DisputeProtectionPolicyMethodScopedStaked.setRiskWindow(keccak256(\"cashapp\"), 0) — governance decision 2026-08-28: Cash App leaves the dispute-protected set (zero window = onIntentSignaled no-op, isDisputeProtectionEnabled false); PayPal and Venmo keep 1209600. Lane 41 (PR #310) encoding; simulated from the Safe at Base block 50561373.",
+    "txBuilderVersion": "1.16.5",
+    "createdFromSafeAddress": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+    "createdFromOwnerAddress": ""
+  },
+  "transactions": [
+    {
+      "to": "0xbF4B769dB70DBEc89b6b2c44988304a7aD2de4Fc",
+      "value": "0",
+      "data": "0x0aaaa5b410940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d0000000000000000000000000000000000000000000000000000000000000000",
+      "contractMethod": null,
+      "contractInputsValues": null
+    }
+  ]
+}

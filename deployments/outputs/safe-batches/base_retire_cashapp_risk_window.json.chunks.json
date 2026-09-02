@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "chainId": 8453,
+  "safe": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+  "sourceFile": "/Users/kartikeychauhan/Documents/zkp2p/zkp2p-contracts/deployments/outputs/safe-batches/base_retire_cashapp_risk_window.json",
+  "maxGas": "30000000",
+  "callOverhead": "60000",
+  "chunkOverhead": "100000",
+  "chunks": [
+    {
+      "safeTx": {
+        "to": "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
+        "value": "0",
+        "data": "0x8d80ff0a0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000009900bf4b769db70dbec89b6b2c44988304a7ad2de4fc000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000440aaaa5b410940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "operation": 1,
+        "safeTxGas": "0",
+        "baseGas": "0",
+        "gasPrice": "0",
+        "gasToken": "0x0000000000000000000000000000000000000000",
+        "refundReceiver": "0x0000000000000000000000000000000000000000",
+        "nonce": 80
+      },
+      "safeTxHash": "0x16a751458a0f011fecf113c6c8dbbf26eecd930a91c594c9f3ba66266e7a4650",
+      "estimatedGas": "190904",
+      "callCount": 1,
+      "calls": [
+        {
+          "target": "0xbf4b769db70dbec89b6b2c44988304a7ad2de4fc",
+          "selector": "0x0aaaa5b4",
+          "estimatedGas": "30904"
+        }
+      ],
+      "firstCall": "0x0aaaa5b4@0xbf4b769db70dbec89b6b2c44988304a7ad2de4fc",
+      "lastCall": "0x0aaaa5b4@0xbf4b769db70dbec89b6b2c44988304a7ad2de4fc"
+    }
+  ]
+}
