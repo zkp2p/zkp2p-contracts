@@ -114,19 +114,6 @@ const NETWORKS = [
   },
 ] as const;
 
-/**
- * The risk windows currently active on-chain. Staging still carries the legacy
- * Cash App window until its governed policy update is executed; deployment
- * parameters intentionally omit it from every future configuration.
- */
-const LIVE_DISPUTABLE_PAYMENT_METHODS: Record<
-  (typeof NETWORKS)[number]["manifestName"],
-  readonly string[]
-> = {
-  base: DISPUTABLE_PAYMENT_METHODS,
-  base_staging: [...DISPUTABLE_PAYMENT_METHODS, "cashapp"],
-};
-
 const RUNTIME_IDENTITY_NAMES: RuntimeIdentityName[] = [
   "Orchestrator",
   "OrchestratorV2",
@@ -425,16 +412,10 @@ function deploymentBlockNumber(
   return blockNumber.toString();
 }
 
-function configuredRiskWindows(
-  network: keyof typeof LIVE_DISPUTABLE_PAYMENT_METHODS,
-): Record<string, string> {
+function configuredRiskWindows(network: string): Record<string, string> {
   const activePaymentMethods = getActivePaymentMethods(network);
-  const liveDisputablePaymentMethods = LIVE_DISPUTABLE_PAYMENT_METHODS[network];
-  if (!liveDisputablePaymentMethods) {
-    throw new Error(`Unsupported dispute stack network ${network}`);
-  }
-  const configured = new Set(liveDisputablePaymentMethods);
-  if (liveDisputablePaymentMethods.some((method) => !activePaymentMethods.includes(method))) {
+  const configured = new Set(DISPUTABLE_PAYMENT_METHODS);
+  if (DISPUTABLE_PAYMENT_METHODS.some((method) => !activePaymentMethods.includes(method))) {
     throw new Error("Disputable payment methods must be active");
   }
   const entries = activePaymentMethods.map((method) => [
