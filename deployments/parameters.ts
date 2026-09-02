@@ -167,6 +167,13 @@ export const DISPUTABLE_PAYMENT_METHODS: string[] = [
   "venmo",
 ];
 
+// Payment methods governance removed from dispute protection after lane 39 configured them. Lane 42 zeroes
+// their risk windows wherever they are still set (Base executed at Safe nonce 80 on 2026-08-28; Base staging
+// pending). DISPUTABLE_PAYMENT_METHODS already excludes them; staging evidence flips after the staging write.
+export const RETIRED_DISPUTABLE_PAYMENT_METHODS: string[] = [
+  "cashapp",
+];
+
 export const ORCHESTRATOR_V3_PROTOCOL_FEE: any = {
   "localhost": ether(.001),
   "hardhat": ether(.001),

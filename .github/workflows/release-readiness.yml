@@ -88,6 +88,7 @@ jobs:
       - name: Test deployment lanes
         run: |
           corepack yarn test:intent-guardian-fee-update
+          corepack yarn test:retire-dispute-risk-windows
           corepack yarn test:v3-groups-deployment
           corepack yarn test:dispute-lifecycle-deployment
           corepack yarn test:method-scoped-deployment

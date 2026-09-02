@@ -106,6 +106,8 @@ func.tags = [
   "V3DisputeMethodScopedStack",
   "38_activate_method_scoped_dispute_lifecycle_stack",
   "V3DisputeMethodScopedActivation",
+  "42_retire_dispute_risk_windows",
+  "DisputeRiskWindowRetirement",
 ];
 
 export default func;
