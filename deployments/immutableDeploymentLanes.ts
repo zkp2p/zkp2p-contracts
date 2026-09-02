@@ -102,6 +102,18 @@ export const IMMUTABLE_DEPLOYMENT_LANES = {
       "V3DisputeMethodScopedVaultActivation",
     ],
   },
+  // Executed on Base staging 2026-09-02 from dfe1060 (tx 0x5cde17a0…4dc451); the Base window was zeroed by the
+  // Safe at nonce 80 on 2026-08-28 before this lane's first run. Lane stays mounted; its skip reads live windows.
+  "42_retire_dispute_risk_windows.ts": {
+    deployedSourceSha: "dfe1060e09a5d7d9c1b57dbfd835ecf378e1e9f4",
+    sha256: "5aeddc6c46ad489fefbe53cf537c0c70eefebf3ce531a56149a4f2e67e3ad014",
+    activeSource: undefined,
+    retired: false,
+    tags: [
+      "42_retire_dispute_risk_windows",
+      "DisputeRiskWindowRetirement",
+    ],
+  },
 } as const;
 
 export type DeploymentLanes = Readonly<

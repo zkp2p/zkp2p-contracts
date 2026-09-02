@@ -114,9 +114,10 @@
   local networks zero the window right after lane 39, and the lane skips wherever every retired window already reads
   zero. Base executed the call at Safe nonce 80 on 2026-08-28 (safeTxHash `0x16a7…4650`, tx `0x4824…6f8a`, artifacts
   `base_retire_cashapp_risk_window*`, whose Safe origin/description say "lane 41" — the retirement lane's number
-  before lane 41 was claimed by the UPI payment method), so Base evidence is already `0`. Base staging is still pending: the package
-  extractor's `LIVE_DISPUTABLE_PAYMENT_METHODS.base_staging` override, the staging evidence, and the spec's staging
-  window keep Cash App at 1209600 until the staging write executes, and that recording PR also pins lane 42.
+  before lane 41 was claimed by the UPI payment method). Base staging executed the deployer-EOA write on 2026-09-02
+  (tx `0x5cde17a0c59ba4b606b19b9d09b468af06cd283d256984160e9627aaff4dc451`), so Cash App reads a zero window on both
+  networks, the evidence and package manifest carry `0` everywhere, and the lane — immutable and pinned after that
+  first execution — stays mounted and skips wherever every retired window already reads zero.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the
