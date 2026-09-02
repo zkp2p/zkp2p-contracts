@@ -1,4 +1,4 @@
-// Lane 41 retires dispute protection for governance-selected payment methods by zeroing their risk windows.
+// Lane 42 retires dispute protection for governance-selected payment methods by zeroing their risk windows.
 // Local and EOA-owned policies execute directly; Safe-owned policies emit queued governance calls.
 // The lane skips once every retired window reads zero; per-network evidence flips in recording PRs after each execution.
 
@@ -18,7 +18,7 @@ import {
 } from "../deployments/helpers";
 import { safeBatchCollector } from "../deployments/safeBatchCollector";
 
-export const TAG = "41_retire_dispute_risk_windows";
+export const TAG = "42_retire_dispute_risk_windows";
 export const POLICY_DEPLOYMENT_NAME =
   "DisputeProtectionPolicyMethodScopedStaked";
 

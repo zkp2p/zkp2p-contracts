@@ -797,15 +797,16 @@ Dispute-evidence issuance in `attestation-service` remains a separate follow-up 
 by these contract lanes. Only PayPal and Venmo receive non-zero onchain risk windows; Cash App and every other
 active payment method have a zero window and do not require stake.
 
-`deploy/41_retire_dispute_risk_windows.ts` is the governed write behind that statement (decided 2026-08-28). It zeroes
+`deploy/42_retire_dispute_risk_windows.ts` is the governed write behind that statement (decided 2026-08-28). It zeroes
 the `RETIRED_DISPUTABLE_PAYMENT_METHODS` risk windows on `DisputeProtectionPolicyMethodScopedStaked`, which makes
 `onIntentSignaled` a no-op and `isDisputeProtectionEnabled` false for the method while PayPal and Venmo keep their
 14-day windows. Base executed it at Safe nonce 80 on 2026-08-28 (safeTxHash `0x16a7…4650`, tx
 `0x4824a78931e3785cd69e4aa1c669c2f86cf0ccbaf22066d54f7f7ace55156f8a`; batch and chunk plan under
-`deployments/outputs/safe-batches/base_retire_cashapp_risk_window*`), so the lane's tagged Base run now skips. Base
+`deployments/outputs/safe-batches/base_retire_cashapp_risk_window*`; their "lane 41" label predates the UPI
+payment method claiming that number), so the lane's tagged Base run now skips. Base
 staging still carries the 14-day Cash App window until `yarn deploy:dispute-risk-windows:base_staging` executes the
 deployer-EOA write; after that, the recording PR drops Cash App from the package extractor's staging
-`LIVE_DISPUTABLE_PAYMENT_METHODS` override, flips the staging evidence and spec windows, and pins lane 41.
+`LIVE_DISPUTABLE_PAYMENT_METHODS` override, flips the staging evidence and spec windows, and pins lane 42.
 
 ### Whitelist Bootstrap
 

@@ -26,7 +26,7 @@
     "deploy/38_activate_method_scoped_dispute_lifecycle_stack.ts",
     "deploy/39_deploy_method_scoped_vault_stack.ts",
     "deploy/40_activate_method_scoped_vault_stack.ts",
-    "deploy/41_retire_dispute_risk_windows.ts",
+    "deploy/42_retire_dispute_risk_windows.ts",
     "deploy/deploy_summary.ts",
     "packages/contracts/scripts/extractors/abis.ts",
     "packages/contracts/scripts/extractors/addresses.ts",

@@ -24,7 +24,7 @@ const {
   RETIRED_DISPUTABLE_PAYMENT_METHODS,
 } = require("../deployments/parameters.ts");
 const { safeBatchCollector } = require("../deployments/safeBatchCollector.ts");
-const lane41 = require("../deploy/41_retire_dispute_risk_windows.ts");
+const lane41 = require("../deploy/42_retire_dispute_risk_windows.ts");
 const skipLane41 = /** @type {(hre: any) => Promise<boolean>} */ (
   lane41.default.skip
 );
@@ -109,7 +109,7 @@ function fakePolicy(owner, overrides = {}) {
 
 test("exports its identity", () => {
   assert.deepEqual(lane41.default.tags, [
-    "41_retire_dispute_risk_windows",
+    "42_retire_dispute_risk_windows",
     "DisputeRiskWindowRetirement",
   ]);
   assert.deepEqual(lane41.default.dependencies, [
