@@ -7,6 +7,7 @@ import { IPostIntentHookV2 } from "./IPostIntentHookV2.sol";
 import { IIntentLifecycleHook } from "./IIntentLifecycleHook.sol";
 import { IPreIntentHook } from "./IPreIntentHook.sol";
 import { IReferralFee } from "./IReferralFee.sol";
+import { IStakeReferralLifecycleHook } from "./IStakeReferralLifecycleHook.sol";
 
 /**
  * @title IOrchestratorV3
@@ -16,6 +17,23 @@ import { IReferralFee } from "./IReferralFee.sol";
 interface IOrchestratorV3 {
 
     /* ============ Structs ============ */
+
+    struct StakeReferral {
+        address recipient;
+        address feeSource;
+        uint256 fee;
+    }
+
+    event StakeReferralConfigured(address indexed lifecycleHook, address indexed feeSource, uint256 l1ReferralFee);
+    event IntentStakeReferralSnapshotted(bytes32 indexed intentHash, address indexed recipient, address feeSource, uint256 fee);
+    error InvalidStakeReferralFee(uint256 fee);
+    error InsufficientStakeReferralBudget(address feeSource, uint256 availableFee, uint256 requiredFee);
+
+    /** @notice Configures the existing L1 rate and Peer fee source for a stake-backed lifecycle hook. */
+    function setStakeReferralConfig(IStakeReferralLifecycleHook _hook, address _feeSource, uint256 _l1ReferralFee) external;
+
+    /** @notice Returns the stake referral snapshotted at signal; pruned intents return an empty record. */
+    function getIntentStakeReferral(bytes32 _intentHash) external view returns (StakeReferral memory);
 
     struct Intent {
         address owner;                              // Address of the intent owner
