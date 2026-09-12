@@ -5,9 +5,9 @@ process.env.BASE_DEPLOY_PRIVATE_KEY ||=
   "1111111111111111111111111111111111111111111111111111111111111111";
 process.env.TESTNET_DEPLOY_PRIVATE_KEY ||=
   "2222222222222222222222222222222222222222222222222222222222222222";
-require("ts-node/register/transpile-only");
-require("module-alias/register");
-const moduleAlias = require("module-alias");
+require(require.resolve("ts-node/register/transpile-only"));
+require(require.resolve("module-alias/register"));
+const moduleAlias = require(require.resolve("module-alias"));
 moduleAlias.reset();
 moduleAlias.addAlias("@utils", process.cwd() + "/utils");
 
@@ -25,6 +25,8 @@ const {
 } = require("../deployments/unifiedVerifierV4Bootstrap.ts");
 const lane =
   require("../deploy/43_deploy_unified_payment_verifier_v4.ts").default;
+const deployLane = /** @type {(hre: any) => Promise<void>} */ (lane);
+const skipLane = /** @type {(hre: any) => Promise<boolean>} */ (lane.skip);
 
 test("bootstrap preserves every existing namespace and adds only the balance alias", () => {
   const methods = [utils.id("paypal"), VENMO_METHOD, utils.id("cashapp")];
@@ -169,8 +171,8 @@ test("untagged runs perform no reads and live runs require exactly one matching 
       "sepolia",
     ]) {
       const hre = { deployments: { getNetworkName: () => network } };
-      assert.equal(await lane.skip(hre), true);
-      await lane(hre); // No accounts, provider or deployment API is available.
+      assert.equal(await skipLane(hre), true);
+      await deployLane(hre); // No accounts, provider or deployment API is available.
     }
     process.env.ENABLE_BASE_UPV4_BOOTSTRAP = "true";
     assert.throws(() => bootstrapRequested("base"), /flags require/);
