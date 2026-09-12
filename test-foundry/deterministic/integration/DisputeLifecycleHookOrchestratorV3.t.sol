@@ -15,11 +15,15 @@ import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.s
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
+import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol";
+import {SimpleAttestationVerifier} from "contracts/unifiedVerifier/SimpleAttestationVerifier.sol";
 import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 
 contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
+    bytes32 internal constant BALANCE_METHOD = keccak256("venmo-balance");
+    uint256 internal constant PAYMENT_WITNESS_KEY = 0xBABA;
     uint64 internal constant RISK_WINDOW = 30 days;
     uint256 internal constant STAKE_AMOUNT = 500e6;
     bytes32 internal constant WINDOWLESS_METHOD = keccak256("windowless");
@@ -399,6 +403,163 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
             uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.CANCELLED)
         );
         assertEq(vault.lockedStake(taker), releaseAmount);
+    }
+
+    function test_Upv4BalanceSettlementHasNoStakeOrCoverageAndKeepsRegularDisputes() public {
+        UnifiedPaymentVerifierV4 unified = _installUnifiedVerifier();
+        IOrchestratorV3.SignalIntentParams memory params = _paramsFor(other);
+        params.paymentMethod = BALANCE_METHOD;
+        uint256 remainingBefore = escrow.getDeposit(depositId).remainingDeposits;
+        bytes32 balanceIntent = _signal(other, params);
+        bytes32 balancePayment = keccak256("balance-payment");
+        _fulfillUnified(unified, balanceIntent, balancePayment);
+
+        assertEq(vault.lockedStake(other), 0);
+        assertEq(
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(balanceIntent).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+        );
+        assertEq(
+            nullifierRegistry.nullifierByIntentHash(balanceIntent), keccak256(abi.encodePacked(METHOD, balancePayment))
+        );
+        assertEq(escrow.getDeposit(depositId).remainingDeposits, remainingBefore - INTENT_AMOUNT);
+
+        bytes32 regularIntent = _signalDefault();
+        bytes32 regularPayment = keccak256("regular-payment");
+        assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
+        _fulfillUnified(unified, regularIntent, regularPayment);
+        assertEq(
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(regularIntent).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED)
+        );
+        disputeProtectionPolicy.submitDispute(_attestation(regularIntent, regularPayment, keccak256("regular-dispute")));
+        assertEq(vault.claimable(depositor), INTENT_AMOUNT);
+        assertEq(vault.lockedStake(taker), 0);
+        assertEq(escrow.getDeposit(depositId).remainingDeposits, remainingBefore - 2 * INTENT_AMOUNT);
+    }
+
+    function test_Upv4BalanceWhitelistRejectsNonmembersRegardlessOfAvailableStake() public {
+        _installUnifiedVerifier();
+        address[] memory members = new address[](1);
+        members[0] = other;
+        vm.prank(depositor);
+        whitelistPolicy.configureDeposit(address(escrow), depositId, BALANCE_METHOD, true, new bytes32[](0), members);
+        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        params.paymentMethod = BALANCE_METHOD;
+        uint256 remainingBefore = escrow.getDeposit(depositId).remainingDeposits;
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IntentLifecycleHookV1.TakerNotWhitelisted.selector, address(escrow), depositId, BALANCE_METHOD, taker
+            )
+        );
+        _signalCall(taker, params);
+        assertEq(escrow.getDeposit(depositId).remainingDeposits, remainingBefore);
+        assertEq(vault.lockedStake(taker), 0);
+
+        params.to = other;
+        bytes32 intentHash = _signal(other, params);
+        assertEq(vault.lockedStake(other), 0);
+        assertEq(
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+        );
+    }
+
+    function test_Upv4SharedReplayRollsBackSettlementInBothDirections() public {
+        _upv4Replay(METHOD, BALANCE_METHOD);
+    }
+
+    function test_Upv4SharedReplayRollsBackBalanceToRegularSettlement() public {
+        _upv4Replay(BALANCE_METHOD, METHOD);
+    }
+
+    function _upv4Replay(bytes32 firstMethod, bytes32 secondMethod) internal {
+        UnifiedPaymentVerifierV4 unified = _installUnifiedVerifier();
+        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        params.paymentMethod = firstMethod;
+        bytes32 first = _signal(taker, params);
+        bytes32 paymentId = keccak256("one-original-payment");
+        _fulfillUnified(unified, first, paymentId);
+        params.paymentMethod = secondMethod;
+        bytes32 second = _signal(taker, params);
+        uint256 remainingBefore = escrow.getDeposit(depositId).remainingDeposits;
+        uint256 recipientBefore = token.balanceOf(taker);
+        bytes memory proof = _unifiedProof(unified, second, paymentId);
+        vm.expectRevert("Nullifier has already been used");
+        orchestrator.fulfillIntent(
+            IOrchestratorV3.FulfillIntentParams({
+                paymentProof: proof, intentHash: second, verificationData: "", postIntentHookData: ""
+            })
+        );
+        assertEq(escrow.getDeposit(depositId).remainingDeposits, remainingBefore);
+        assertEq(token.balanceOf(taker), recipientBefore);
+        assertEq(orchestrator.getIntent(second).owner, taker);
+        assertEq(nullifierRegistry.intentHashByNullifier(keccak256(abi.encodePacked(METHOD, paymentId))), first);
+        assertEq(nullifierRegistry.nullifierByIntentHash(second), bytes32(0));
+    }
+
+    function _installUnifiedVerifier() internal returns (UnifiedPaymentVerifierV4 unified) {
+        _addPaymentMethod(BALANCE_METHOD);
+        unified = new UnifiedPaymentVerifierV4(
+            orchestratorRegistry, nullifierRegistry, new SimpleAttestationVerifier(vm.addr(PAYMENT_WITNESS_KEY))
+        );
+        nullifierRegistry.addWritePermission(address(unified));
+        bytes32[] memory supportedCurrencies = new bytes32[](1);
+        supportedCurrencies[0] = USD;
+        for (uint256 i; i < 2; ++i) {
+            bytes32 method = i == 0 ? METHOD : BALANCE_METHOD;
+            unified.addPaymentMethod(method, METHOD);
+            paymentVerifierRegistry.removePaymentMethod(method);
+            paymentVerifierRegistry.addPaymentMethod(method, address(unified), supportedCurrencies);
+        }
+    }
+
+    function _fulfillUnified(UnifiedPaymentVerifierV4 unified, bytes32 intentHash, bytes32 paymentId) internal {
+        orchestrator.fulfillIntent(
+            IOrchestratorV3.FulfillIntentParams({
+                paymentProof: _unifiedProof(unified, intentHash, paymentId),
+                intentHash: intentHash,
+                verificationData: "",
+                postIntentHookData: ""
+            })
+        );
+    }
+
+    function _unifiedProof(UnifiedPaymentVerifierV4 unified, bytes32 intentHash, bytes32 paymentId)
+        internal
+        view
+        returns (bytes memory)
+    {
+        IOrchestratorV3.Intent memory intent = orchestrator.getIntent(intentHash);
+        bytes memory data = abi.encode(
+            UnifiedPaymentVerifierV4.PaymentDetails(
+                intent.paymentMethod, PAYEE, 5_000, USD, block.timestamp * 1000, paymentId
+            ),
+            UnifiedPaymentVerifierV4.IntentSnapshot(
+                intentHash, intent.amount, intent.paymentMethod, USD, PAYEE, intent.conversionRate, intent.timestamp, 30
+            )
+        );
+        bytes32 dataHash = keccak256(data);
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                unified.DOMAIN_SEPARATOR(),
+                keccak256(
+                    abi.encode(
+                        keccak256("PaymentAttestation(bytes32 intentHash,uint256 releaseAmount,bytes32 dataHash)"),
+                        intentHash,
+                        INTENT_AMOUNT,
+                        dataHash
+                    )
+                )
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYMENT_WITNESS_KEY, digest);
+        bytes[] memory signatures = new bytes[](1);
+        signatures[0] = abi.encodePacked(r, s, v);
+        return abi.encode(
+            UnifiedPaymentVerifierV4.PaymentAttestation(intentHash, INTENT_AMOUNT, dataHash, signatures, data, "")
+        );
     }
 
     function _setWhitelist(bool enabled, bool includeTaker) internal {
