@@ -94,6 +94,7 @@ jobs:
           corepack yarn test:method-scoped-deployment
           corepack yarn test:method-scoped-vault-deployment
           corepack yarn test:method-scoped-activation
+          corepack yarn test:upv4-bootstrap
           corepack yarn whitelist:bootstrap --self-test
       - name: Typecheck dispute deployment surface
         run: corepack yarn typecheck:dispute-deployment
@@ -110,6 +111,10 @@ jobs:
           exit 1
       - name: Deploy production scripts to localhost
         run: corepack yarn deploy:localhost
+      - name: Bootstrap and resume passive UPV4 against the local stack
+        run: |
+          corepack yarn deploy:upv4:localhost
+          corepack yarn deploy:upv4:localhost
 
   coverage-shards:
     name: Foundry coverage shard (${{ matrix.lane }})

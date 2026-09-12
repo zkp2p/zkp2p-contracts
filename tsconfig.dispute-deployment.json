@@ -52,7 +52,10 @@
     "scripts/test-method-scoped-runner.cjs",
     "scripts/test-opt-in-dispute-lifecycle-deployment.cjs",
     "scripts/test-v3-groups-base-deployment.cjs",
-    "tasks/etherscanVerifyWithDelay.ts"
+    "tasks/etherscanVerifyWithDelay.ts",
+    "deploy/43_deploy_unified_payment_verifier_v4.ts",
+    "deployments/unifiedVerifierV4Bootstrap.ts",
+    "scripts/upv4-bootstrap.spec.cjs"
   ],
   "include": []
 }

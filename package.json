@@ -67,7 +67,9 @@
     "test:release-policy": "node --test scripts/verify-github-environment.spec.mjs scripts/npm-release.spec.mjs",
     "typechain": "hardhat typechain",
     "transpile": "tsc",
-    "typecheck:dispute-deployment": "tsc -p tsconfig.dispute-deployment.json"
+    "typecheck:dispute-deployment": "tsc -p tsconfig.dispute-deployment.json",
+    "test:upv4-bootstrap": "node --test scripts/upv4-bootstrap.spec.cjs",
+    "deploy:upv4:localhost": "ts-node --transpile-only scripts/deployActive.ts localhost 43_deploy_unified_payment_verifier_v4"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-verify": "2.1.3",
