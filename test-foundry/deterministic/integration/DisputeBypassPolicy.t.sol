@@ -34,6 +34,15 @@ contract DisputeBypassPolicyTest is OrchestratorV3Fixture {
     SimpleAttestationVerifier internal signatures;
     UnifiedPaymentVerifierV3 internal upv;
 
+    event DisputeProtectionIntentSettled(
+        bytes32 indexed intentHash,
+        address indexed stakeOwner,
+        address indexed depositor,
+        uint256 releaseAmount,
+        uint64 releaseEligibleAt,
+        bool isManualRelease
+    );
+
     function setUp() public override {
         super.setUp();
         vm.warp(1_000_000);
@@ -63,15 +72,23 @@ contract DisputeBypassPolicyTest is OrchestratorV3Fixture {
 
     function test_BypassUsesExistingVerifierAndSharedPaymentBindingWithoutStake() public {
         bytes32 intentHash = _bypass();
+        _status(intentHash, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING);
+        assertEq(policy.getDisputeProtectionIntent(intentHash).riskWindow, 0);
+        assertEq(policy.getDisputeProtectionIntent(intentHash).stakeOwner, address(0));
         assertEq(vault.lockedStake(taker), 0);
-        _complete(intentHash, _attestation(intentHash, PAYMENT, POLICY, INTENT_AMOUNT));
-        _status(intentHash, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.BYPASS_SETTLED);
+        UnifiedPaymentVerifierV3.PaymentAttestation memory att =
+            _attestation(intentHash, PAYMENT, POLICY, INTENT_AMOUNT);
+        vm.expectEmit(true, true, true, true, address(policy));
+        emit DisputeProtectionIntentSettled(intentHash, address(0), depositor, INTENT_AMOUNT, 0, false);
+        _complete(intentHash, att);
+        _status(intentHash, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
         assertEq(vault.lockedStake(taker), 0);
         bytes32 nullifier = keccak256(abi.encodePacked(METHOD, PAYMENT));
         assertEq(payments.nullifierByIntentHash(intentHash), nullifier);
         assertEq(payments.intentHashByNullifier(nullifier), intentHash);
         assertEq(policy.getDisputeProtectionIntent(intentHash).releaseAmount, INTENT_AMOUNT);
+        assertEq(policy.getDisputeProtectionIntent(intentHash).releaseEligibleAt, 0);
     }
 
     function test_GenericRuleAppliesWithoutMakerConfiguration() public {
@@ -79,7 +96,7 @@ contract DisputeBypassPolicyTest is OrchestratorV3Fixture {
         _choose(SECOND_POLICY);
         bytes32 intentHash = _signalDefault();
         _complete(intentHash, _attestation(intentHash, PAYMENT, SECOND_POLICY, INTENT_AMOUNT));
-        _status(intentHash, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.BYPASS_SETTLED);
+        _status(intentHash, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED);
     }
 
     function test_OrdinaryAttestationCannotSettleBypass() public {
@@ -130,11 +147,16 @@ contract DisputeBypassPolicyTest is OrchestratorV3Fixture {
             abi.encodeWithSelector(IStakeVault.InsufficientFreeStake.selector, taker, uint256(0), INTENT_AMOUNT)
         );
         policy.convertBypassToProtected(intentHash);
-        _status(intentHash, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.BYPASS_PENDING);
+        _status(intentHash, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING);
         _stake(INTENT_AMOUNT);
         vm.prank(taker);
         policy.convertBypassToProtected(intentHash);
         assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
+        _status(intentHash, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING);
+        assertEq(policy.getDisputeProtectionIntent(intentHash).riskWindow, RISK);
+        vm.prank(taker);
+        vm.expectRevert("DPP: Bypass not pending");
+        policy.convertBypassToProtected(intentHash);
         UnifiedPaymentVerifierV3.PaymentAttestation memory att =
             _attestation(intentHash, PAYMENT, POLICY, INTENT_AMOUNT);
         vm.expectRevert("DPP: Bypass admission required");
@@ -177,15 +199,59 @@ contract DisputeBypassPolicyTest is OrchestratorV3Fixture {
         upv.setAttestationVerifier(address(signatures));
         vm.prank(taker);
         orchestrator.cancelIntent(cancelled);
-        _status(cancelled, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.BYPASS_CANCELLED);
+        _status(cancelled, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.CANCELLED);
         upv.setAttestationVerifier(address(policy));
         bytes32 manual = _bypass();
         upv.setAttestationVerifier(address(signatures));
+        vm.expectEmit(true, true, true, true, address(policy));
+        emit DisputeProtectionIntentSettled(manual, address(0), depositor, INTENT_AMOUNT, 0, true);
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(manual);
-        _status(manual, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.BYPASS_MANUAL_RELEASED);
+        _status(manual, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED);
         assertEq(payments.nullifierByIntentHash(manual), bytes32(0));
         assertEq(vault.lockedStake(taker), 0);
+    }
+
+    function test_ZeroIntentWindowHasNoCollateralReleasePath() public {
+        bytes32 intentHash = _bypass();
+        _complete(intentHash, _attestation(intentHash, PAYMENT, POLICY, INTENT_AMOUNT));
+        vm.warp(block.timestamp + RISK);
+        bytes memory expected =
+            abi.encodeWithSelector(IDisputeProtectionPolicy.DisputeProtectionIntentNotCovered.selector, intentHash);
+        vm.expectRevert(expected);
+        policy.releaseMaturedDisputeProtectionIntent(intentHash);
+        bytes32[] memory batch = new bytes32[](1);
+        batch[0] = intentHash;
+        vm.expectRevert(expected);
+        policy.releaseMaturedDisputeProtectionIntents(batch);
+        _status(intentHash, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED);
+        assertEq(vault.lockedStake(taker), 0);
+    }
+
+    function test_GlobalZeroWindowDoesNotCreateBypassAdmission() public {
+        _choose(POLICY);
+        policy.setRiskWindow(METHOD, 0);
+        bytes32 intentHash = _signalDefault();
+        _status(intentHash, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE);
+        assertEq(policy.getBypassAdmission(intentHash).policyId, bytes32(0));
+        UnifiedPaymentVerifierV3.PaymentAttestation memory att =
+            _attestation(intentHash, PAYMENT, POLICY, INTENT_AMOUNT);
+        vm.expectRevert("DPP: Bypass admission required");
+        _complete(intentHash, att);
+        _complete(intentHash, _attestation(intentHash, PAYMENT, bytes32(0), INTENT_AMOUNT));
+    }
+
+    function test_GlobalWindowChangeCannotRemovePendingCoverage() public {
+        _stake(INTENT_AMOUNT);
+        bytes32 intentHash = _signalDefault();
+        policy.setRiskWindow(METHOD, 0);
+        vm.prank(taker);
+        vm.expectRevert("DPP: Bypass not pending");
+        policy.convertBypassToProtected(intentHash);
+        _complete(intentHash, _attestation(intentHash, PAYMENT, bytes32(0), INTENT_AMOUNT));
+        assertEq(policy.getDisputeProtectionIntent(intentHash).riskWindow, RISK);
+        assertEq(policy.getDisputeProtectionIntent(intentHash).releaseEligibleAt, block.timestamp + RISK);
+        assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
     }
 
     function test_RemovedPolicyCheckerCannotSettleOrdinaryProofAndRollsBackBinding() public {
@@ -294,11 +360,7 @@ contract DisputeBypassPolicyTest is OrchestratorV3Fixture {
         _complete(bypass, _attestation(bypass, PAYMENT, POLICY, INTENT_AMOUNT));
         IDisputeVerifier.DisputeAttestation memory disputed = _dispute(bypass, PAYMENT);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IDisputeProtectionPolicy.DisputeProtectionIntentNotSettled.selector,
-                bypass,
-                IDisputeProtectionPolicy.DisputeProtectionIntentStatus.BYPASS_SETTLED
-            )
+            abi.encodeWithSelector(IDisputeProtectionPolicy.DisputeProtectionIntentNotCovered.selector, bypass)
         );
         policy.submitDispute(disputed);
         assertEq(vault.claimable(depositor), 0);
@@ -406,7 +468,7 @@ contract DisputeBypassPolicyTest is OrchestratorV3Fixture {
         assertEq(payments.nullifierByIntentHash(intentHash), bytes32(0));
         assertEq(orchestrator.getIntent(intentHash).owner, taker);
         assertEq(token.balanceOf(taker), 0);
-        _status(intentHash, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.BYPASS_PENDING);
+        _status(intentHash, IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING);
     }
 
     function _attestation(bytes32 intentHash, bytes32 paymentId, bytes32 policyId, uint256 releaseAmount)

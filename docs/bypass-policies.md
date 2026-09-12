@@ -2,12 +2,12 @@
 
 - Keep the existing payment method and payment nullifier. A bypass policy is an evidence rule, not another rail.
 - Approved rules apply globally. There is no maker bypass toggle or per-maker rule list.
-- The buyer saves a rule before creating an order. Admission records that rule for the order and locks no stake.
+- The buyer saves a rule before creating an order. Admission records that rule with a zero intent risk window and locks no stake.
 - Ordinary protected orders still lock their full stake at admission.
 - One payment attestation carries the signed rule. Fulfillment requires the admitted rule to match.
 - If funding does not qualify, the buyer can lock the full required stake and convert the same pending order to ordinary protection, then use a policy-zero attestation.
 
-This implementation changes `DisputeProtectionPolicy` and appends statuses to its interface. OrchestratorV3,
+This implementation changes `DisputeProtectionPolicy` and reuses the existing lifecycle statuses. OrchestratorV3,
 IntentLifecycleHookV1 and UnifiedPaymentVerifierV3 retain their existing code and interfaces. Positive Venmo balance
 issuance is not available in the paired attestation change yet; authenticated payer evidence remains a release blocker.
 
@@ -38,11 +38,19 @@ new choices/admissions without rewriting already admitted orders.
 - The choice persists for that buyer/deposit/method. Reading a preference is not proof that an order was admitted as bypass.
 - `getBypassAdmission(intentHash)` returns the original rule, hook, escrow, deposit and amount. Read the existing
   protection status as well: the origin remains stored after recovery.
-- `BYPASS_PENDING` closes as `BYPASS_CANCELLED`, `BYPASS_SETTLED`, or `BYPASS_MANUAL_RELEASED`. These appended enum values
-  do not renumber existing states. Bypass settlements never create collateral compensation or a releaseable stake lock.
+- Both admission paths use `PENDING`, followed by `CANCELLED` or `SETTLED`. The existing settlement event distinguishes
+  proof fulfillment from manual maker release with `isManualRelease`; separate bypass terminal states are unnecessary.
+- An admitted bypass has `riskWindow = 0` and no stake owner/lock. The recorded policy ID still identifies the required
+  signed evidence. Zero alone cannot grant bypass, and `NONE` remains the uninitialized/whitelisted/open-route sentinel.
+- A bypass settlement has no release maturity or collateral compensation. Dispute and collateral-release entrypoints
+  explicitly reject its zero window before touching the verifier, dispute registry or vault. Consumers must check the
+  intent's risk window to distinguish coverage; `SETTLED` alone does not imply a collateral lock.
+- This is a zero window on the individual intent. The global method risk window retains its existing meaning: setting
+  it to zero skips policy admission for new orders and cannot create a signed-policy bypass admission.
 - `convertBypassToProtected(intentHash)` is recorded-taker-only, pending-only and one-way. It checks the original active
   unexpired order, admission pause, current protection configuration and token, resolves current stake delegation, and
-  successfully locks the full original amount before becoming ordinary `PENDING`. Failed locking changes no state.
+  successfully locks the full original amount before setting a positive intent risk window. Status stays `PENDING`;
+  failed locking changes no state, and a positive-window order cannot convert again.
 - Recovered settlement resizes the lock and starts the ordinary risk window. Cancellation unlocks it; disputes work normally.
 - Current whitelist/open admission behavior remains. A nonmember cannot use no-stake bypass to evade an enabled whitelist.
 - A whitelisted/open order which skipped policy admission must use policy zero even if the buyer has saved a bypass choice.

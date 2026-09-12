@@ -113,7 +113,6 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
         bytes32 policyId
     );
     event BypassIntentOpened(bytes32 indexed intentHash, bytes32 indexed policyId, address indexed hook);
-    event BypassIntentClosed(bytes32 indexed intentHash, DisputeProtectionIntentStatus status, uint256 releaseAmount);
     event BypassIntentProtected(bytes32 indexed intentHash, address indexed stakeOwner, uint256 amount);
 
     /* ============ Constructor ============ */
@@ -197,10 +196,8 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
             stakeOwner: stakeOwner,
             depositor: depositor,
             paymentMethod: _paymentMethod,
-            status: policyId == bytes32(0)
-                ? DisputeProtectionIntentStatus.PENDING
-                : DisputeProtectionIntentStatus.BYPASS_PENDING,
-            riskWindow: riskWindow,
+            status: DisputeProtectionIntentStatus.PENDING,
+            riskWindow: policyId == bytes32(0) ? riskWindow : 0,
             releaseEligibleAt: 0,
             releaseAmount: 0
         });
@@ -222,19 +219,17 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
     function onIntentCancelled(bytes32 _intentHash) external override onlyLifecycleHook nonReentrant {
         DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];
         _assertAdmissionHook(_intentHash);
-        if (disputeProtectionIntent.status == DisputeProtectionIntentStatus.BYPASS_PENDING) {
-            disputeProtectionIntent.status = DisputeProtectionIntentStatus.BYPASS_CANCELLED;
-            emit BypassIntentClosed(_intentHash, disputeProtectionIntent.status, 0);
-            return;
-        }
         if (disputeProtectionIntent.status == DisputeProtectionIntentStatus.NONE) return;
         if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.PENDING) {
             revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);
         }
 
-        (, uint256 releasedAmount,) = stakeVault.locks(_intentHash);
+        uint256 releasedAmount;
+        if (disputeProtectionIntent.riskWindow != 0) {
+            (, releasedAmount,) = stakeVault.locks(_intentHash);
+        }
         disputeProtectionIntent.status = DisputeProtectionIntentStatus.CANCELLED;
-        stakeVault.unlockStake(_intentHash);
+        if (disputeProtectionIntent.riskWindow != 0) stakeVault.unlockStake(_intentHash);
         emit DisputeProtectionIntentCancelled(_intentHash, disputeProtectionIntent.stakeOwner, releasedAmount);
     }
 
@@ -249,12 +244,16 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
     {
         DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];
         _assertAdmissionHook(_intentHash);
-        if (disputeProtectionIntent.status == DisputeProtectionIntentStatus.BYPASS_PENDING) {
+        if (disputeProtectionIntent.status == DisputeProtectionIntentStatus.NONE) return;
+        if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.PENDING) {
+            revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);
+        }
+
+        uint64 releaseEligibleAt;
+        if (disputeProtectionIntent.riskWindow == 0) {
             BypassAdmission storage admission = bypassAdmissions[_intentHash];
             require(_releaseAmount != 0 && _releaseAmount <= admission.amount, "DPP: Invalid bypass amount");
-            if (_isManualRelease) {
-                disputeProtectionIntent.status = DisputeProtectionIntentStatus.BYPASS_MANUAL_RELEASED;
-            } else {
+            if (!_isManualRelease) {
                 _assertBypassRoute(admission.lifecycleHook, disputeProtectionIntent.paymentMethod);
                 INullifierRegistryV2 registry =
                     INullifierRegistryV2(bypassRoutes[admission.lifecycleHook].nullifierRegistry);
@@ -263,23 +262,17 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
                     nullifier != bytes32(0) && registry.intentHashByNullifier(nullifier) == _intentHash,
                     "DPP: Missing payment binding"
                 );
-                disputeProtectionIntent.status = DisputeProtectionIntentStatus.BYPASS_SETTLED;
             }
-            disputeProtectionIntent.releaseAmount = _releaseAmount;
-            emit BypassIntentClosed(_intentHash, disputeProtectionIntent.status, _releaseAmount);
-            return;
+        } else {
+            releaseEligibleAt = _calculateReleaseEligibleAt(disputeProtectionIntent.riskWindow);
         }
-        if (disputeProtectionIntent.status == DisputeProtectionIntentStatus.NONE) return;
-        if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.PENDING) {
-            revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);
-        }
-
-        uint64 releaseEligibleAt = _calculateReleaseEligibleAt(disputeProtectionIntent.riskWindow);
         disputeProtectionIntent.releaseAmount = _releaseAmount;
         disputeProtectionIntent.releaseEligibleAt = releaseEligibleAt;
         disputeProtectionIntent.status = DisputeProtectionIntentStatus.SETTLED;
 
-        stakeVault.resizeLock(_intentHash, _releaseAmount, releaseEligibleAt);
+        if (disputeProtectionIntent.riskWindow != 0) {
+            stakeVault.resizeLock(_intentHash, _releaseAmount, releaseEligibleAt);
+        }
         emit DisputeProtectionIntentSettled(
             _intentHash,
             disputeProtectionIntent.stakeOwner,
@@ -324,6 +317,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
         if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.SETTLED) {
             revert DisputeProtectionIntentNotSettled(_attestation.intentHash, disputeProtectionIntent.status);
         }
+        if (disputeProtectionIntent.riskWindow == 0) revert DisputeProtectionIntentNotCovered(_attestation.intentHash);
 
         (bytes32 disputeId, bytes32 disputeNullifier) =
             disputeVerifier.verifyDispute(_attestation, disputeProtectionIntent.paymentMethod);
@@ -427,7 +421,9 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
     /// @notice Locks collateral and irreversibly converts the caller's active bypass order to protected admission.
     function convertBypassToProtected(bytes32 _intentHash) external nonReentrant {
         DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
-        require(intent.status == DisputeProtectionIntentStatus.BYPASS_PENDING, "DPP: Bypass not pending");
+        require(
+            intent.status == DisputeProtectionIntentStatus.PENDING && intent.riskWindow == 0, "DPP: Bypass not pending"
+        );
         require(msg.sender == intent.taker, "DPP: Not bypass taker");
         if (admissionsPaused) revert AdmissionsPaused();
         _assertActiveBypassIntent(_intentHash);
@@ -446,7 +442,6 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
         intent.stakeOwner = stakeOwner;
         intent.depositor = depositor;
         intent.riskWindow = riskWindow;
-        intent.status = DisputeProtectionIntentStatus.PENDING;
         emit DisputeProtectionIntentOpened(
             _intentHash, stakeOwner, depositor, intent.taker, intent.paymentMethod, admission.amount, riskWindow
         );
@@ -474,7 +469,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
             _data, (UnifiedPaymentVerifierV3.PaymentDetails, UnifiedPaymentVerifierV3.IntentSnapshot, bytes32)
         );
         DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[snapshot.intentHash];
-        if (intent.status == DisputeProtectionIntentStatus.BYPASS_PENDING) {
+        if (intent.status == DisputeProtectionIntentStatus.PENDING && intent.riskWindow == 0) {
             BypassAdmission storage admission = bypassAdmissions[snapshot.intentHash];
             require(
                 policyId == admission.policyId && payment.method == intent.paymentMethod, "DPP: Bypass policy mismatch"
@@ -714,6 +709,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
         if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.SETTLED) {
             revert DisputeProtectionIntentNotSettled(_intentHash, disputeProtectionIntent.status);
         }
+        if (disputeProtectionIntent.riskWindow == 0) revert DisputeProtectionIntentNotCovered(_intentHash);
 
         uint64 currentTime = _currentTimestamp();
         uint64 releaseEligibleAt = disputeProtectionIntent.releaseEligibleAt;
