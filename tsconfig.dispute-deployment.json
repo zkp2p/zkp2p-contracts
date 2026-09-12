@@ -55,7 +55,9 @@
     "tasks/etherscanVerifyWithDelay.ts",
     "deploy/43_deploy_unified_payment_verifier_v4.ts",
     "deployments/unifiedVerifierV4Bootstrap.ts",
-    "scripts/upv4-bootstrap.spec.cjs"
+    "scripts/upv4-bootstrap.spec.cjs",
+    "scripts/inspect-upv4-callers.ts",
+    "scripts/upv4-caller-inventory.spec.cjs"
   ],
   "include": []
 }

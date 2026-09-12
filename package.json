@@ -69,7 +69,9 @@
     "transpile": "tsc",
     "typecheck:dispute-deployment": "tsc -p tsconfig.dispute-deployment.json",
     "test:upv4-bootstrap": "node --test scripts/upv4-bootstrap.spec.cjs",
-    "deploy:upv4:localhost": "ts-node --transpile-only scripts/deployActive.ts localhost 43_deploy_unified_payment_verifier_v4"
+    "deploy:upv4:localhost": "ts-node --transpile-only scripts/deployActive.ts localhost 43_deploy_unified_payment_verifier_v4",
+    "inspect:upv4-callers": "ts-node --transpile-only scripts/inspect-upv4-callers.ts",
+    "test:upv4-callers": "node --test scripts/upv4-caller-inventory.spec.cjs"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-verify": "2.1.3",

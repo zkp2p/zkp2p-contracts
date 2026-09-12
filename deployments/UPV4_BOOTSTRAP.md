@@ -63,6 +63,31 @@ add, mismatched getter, unknown caller or missing history aborts preparation.
 Do not infer that an authorized legacy caller is active without checking its
 pause state and reachable escrows.
 
+Generate the registry portion of this evidence from clean committed source
+using a trusted archive RPC selected by `UPV4_INVENTORY_RPC_URL`:
+
+```sh
+yarn inspect:upv4-callers base <pinned-block-number> /tmp/upv4-base-callers.json
+yarn inspect:upv4-callers base_staging <pinned-block-number> /tmp/upv4-staging-callers.json
+```
+
+The optional fourth argument selects the block span (default 2,000). Both
+deployments are on chain 8453. The tool checks the recorded direct creation
+transaction and exact registry runtime, scans contiguous Added/Removed ranges
+from creation, and reconciles the union of event-discovered and current
+artifact-known callers against getters at the pinned block. It rejects missing
+transitions, duplicate events, getter disagreement, RPC failures and detected
+reorgs. A new output file records source/record hashes, scan bounds, events,
+membership and caller runtime hashes; existing output files are never replaced.
+The RPC URL and raw provider errors are not written to the report or console.
+
+This inventory still trusts the RPC to return every matching log: a completely
+omitted unknown caller history cannot be detected from the non-enumerable
+registry. Runtime hashes need separate identification and review, including
+owners, pause state, registry pointers, escrow reachability and all paid-order
+obligations. The tool emits no activation-ready verdict and creates no
+governance transactions. A successful scan is one input to the full cutover.
+
 If legacy admissions remain possible, use a separately approved maintenance
 window before activation:
 
