@@ -21,7 +21,11 @@ interface IDisputeProtectionPolicy {
         CANCELLED,
         SETTLED,
         RELEASED,
-        DISPUTED
+        DISPUTED,
+        BYPASS_PENDING,
+        BYPASS_CANCELLED,
+        BYPASS_SETTLED,
+        BYPASS_MANUAL_RELEASED
     }
 
     /**
