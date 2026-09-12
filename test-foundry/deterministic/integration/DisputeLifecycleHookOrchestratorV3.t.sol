@@ -275,7 +275,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         vm.expectRevert(
             abi.encodeWithSelector(IDisputeVerifier.InvalidPaymentBinding.selector, intentHash, paymentNullifier)
         );
-        disputeProtectionPolicy.submitDispute(_attestation(intentHash, paymentId, keccak256("dispute")));
+        disputeProtectionPolicy.submitDispute(_attestation(intentHash, paymentId, keccak256("dispute"), 100));
     }
 
     function test_DisputeAfterFulfillPaysDepositorClaim() public {
@@ -287,7 +287,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         bytes32 paymentNullifier = keccak256(abi.encodePacked(METHOD, paymentId));
         nullifierRegistry.addWritePermission(address(this));
         nullifierRegistry.addNullifier(paymentNullifier, intentHash);
-        disputeProtectionPolicy.submitDispute(_attestation(intentHash, paymentId, keccak256("dispute")));
+        disputeProtectionPolicy.submitDispute(_attestation(intentHash, paymentId, keccak256("dispute"), 100));
 
         assertEq(vault.claimable(depositor), INTENT_AMOUNT);
         assertEq(vault.lockedStake(taker), 0);
@@ -432,7 +432,9 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
             uint256(disputeProtectionPolicy.getDisputeProtectionIntent(regularIntent).status),
             uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED)
         );
-        disputeProtectionPolicy.submitDispute(_attestation(regularIntent, regularPayment, keccak256("regular-dispute")));
+        disputeProtectionPolicy.submitDispute(
+            _attestation(regularIntent, regularPayment, keccak256("regular-dispute"), 5_000)
+        );
         assertEq(vault.claimable(depositor), INTENT_AMOUNT);
         assertEq(vault.lockedStake(taker), 0);
         assertEq(escrow.getDeposit(depositId).remainingDeposits, remainingBefore - 2 * INTENT_AMOUNT);
@@ -606,7 +608,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         params.to = recipient;
     }
 
-    function _attestation(bytes32 intentHash, bytes32 paymentId, bytes32 disputeId)
+    function _attestation(bytes32 intentHash, bytes32 paymentId, bytes32 disputeId, uint256 paymentAmount)
         internal
         pure
         returns (IDisputeVerifier.DisputeAttestation memory attestation)
@@ -615,7 +617,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
             paymentMethod: METHOD,
             originalPaymentId: paymentId,
             disputeId: disputeId,
-            paymentAmount: 100,
+            paymentAmount: paymentAmount,
             paymentCurrency: USD
         });
         bytes memory data = abi.encode(details);
