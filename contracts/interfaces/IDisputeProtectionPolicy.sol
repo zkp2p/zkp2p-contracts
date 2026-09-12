@@ -12,7 +12,8 @@ interface IDisputeProtectionPolicy {
     /**
      * @notice Lifecycle state of a dispute-protected intent.
      * @dev `NONE` is the required zero-value sentinel for an uninitialized mapping entry; it is not a live state.
-     *      `SETTLED` means the underlying intent completed and its collateral remains disputable.
+     *      `SETTLED` means the underlying intent completed. Collateral remains disputable only with a positive
+     *      snapshotted risk window; zero-window bypass intents have no collateral coverage.
      *      `RELEASED` means the collateral was returned and the intent is no longer disputable.
      */
     enum DisputeProtectionIntentStatus {
@@ -27,11 +28,11 @@ interface IDisputeProtectionPolicy {
     /**
      * @notice Dispute protection state retained after an intent is admitted by the lifecycle hook.
      * @param taker Account that signaled the intent.
-     * @param stakeOwner Account whose StakeVault balance collateralizes the intent.
+     * @param stakeOwner Account whose StakeVault balance collateralizes the intent; zero for bypass admission.
      * @param depositor Escrow depositor compensated by a successful dispute.
      * @param paymentMethod Payment method used to namespace risk configuration and dispute nullifiers.
      * @param status Current dispute protection lifecycle state.
-     * @param riskWindow Minimum time collateral must remain locked after intent settlement.
+     * @param riskWindow Minimum time collateral must remain locked after settlement; zero for an admitted bypass.
      * @param releaseEligibleAt Earliest timestamp at which collateral may be released. Dispute evidence remains
      * valid after this time until release actually executes.
      * @param releaseAmount Amount released from Escrow before fees and therefore collateralized after settlement.
@@ -96,6 +97,7 @@ interface IDisputeProtectionPolicy {
     error DisputeProtectionIntentAlreadyExists(bytes32 intentHash);
     error DisputeProtectionIntentNotPending(bytes32 intentHash, DisputeProtectionIntentStatus status);
     error DisputeProtectionIntentNotSettled(bytes32 intentHash, DisputeProtectionIntentStatus status);
+    error DisputeProtectionIntentNotCovered(bytes32 intentHash);
     error IntentTokenMismatch(address expectedToken, address actualToken);
     error DisputeProtectionIntentNotReleaseEligible(uint64 releaseEligibleAt, uint64 currentTime);
     error TimestampOverflow(uint256 timestamp);
@@ -108,8 +110,8 @@ interface IDisputeProtectionPolicy {
      * @dev Called only by an authorized lifecycle hook. A zero configured risk window is an unrestricted pass-through
      * for this direct policy callback; the canonical lifecycle hook never calls this function for a zero-window payment
      * method and applies the whitelist instead. It creates no dispute protection intent. Otherwise the call validates
-     * deposit configuration and token compatibility, snapshots the risk configuration, and locks the taker's selected
-     * stake.
+     * deposit configuration and token compatibility, and either locks stake with the configured risk window or
+     * records an approved buyer-selected bypass policy with a zero intent risk window and no stake.
      * @param _intentHash Unique intent identifier assigned by the calling orchestrator.
      * @param _escrow Escrow that owns the intent and deposit.
      * @param _depositId Deposit supplying the intent liquidity.
@@ -127,7 +129,7 @@ interface IDisputeProtectionPolicy {
     ) external;
 
     /**
-     * @notice Cancels a pending dispute protection intent and unlocks its collateral.
+     * @notice Cancels a pending intent and unlocks its collateral when it has protection.
      * @dev Missing dispute protection intents are ignored because payment methods with no risk window create no
      * policy state.
      * @param _intentHash Intent being cancelled or pruned by the orchestrator.
@@ -135,7 +137,7 @@ interface IDisputeProtectionPolicy {
     function onIntentCancelled(bytes32 _intentHash) external;
 
     /**
-     * @notice Marks a pending dispute protection intent as settled and resizes its collateral.
+     * @notice Marks a pending intent as settled and resizes collateral only when it has protection.
      * @dev Missing dispute protection intents are ignored. The snapshotted risk window determines when collateral
      * becomes release-eligible; it does not invalidate dispute evidence until release actually executes.
      * @param _intentHash Intent completed by proof-based fulfillment or manual release.
