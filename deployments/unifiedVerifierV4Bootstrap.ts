@@ -1,7 +1,7 @@
 import { BigNumber, constants, utils } from "ethers";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
-import { paymentBindingCutoverReady } from "../deploy/31_deploy_v3_payment_binding_stack";
+import predecessorEvidence from "./upv4-predecessor-evidence.json";
 import { assertDeploymentMatchesChain } from "./canonicalDeployment";
 
 export const UPV4_BOOTSTRAP_TAG = "43_deploy_unified_payment_verifier_v4";
@@ -101,26 +101,120 @@ export function assertNamespacePrefix(
   return methods.length;
 }
 
-// This is a passive-deployment snapshot, not an activation manifest. Lane 31's
-// ratified live identity checks are an additional preflight. All values below
-// are then read together at one block and must remain unchanged during bootstrap.
+type PredecessorEvidence = {
+  chainId: number;
+  governance: string;
+  contracts: Record<string, { address: string; runtimeCodeHash: string }>;
+  routes: { method: string; currencies: string[] }[];
+  predecessorMethods: string[];
+  witnesses: string[];
+  attestationThreshold: string;
+};
+
+export function pinnedBootstrapPredecessor(
+  network: string
+): PredecessorEvidence | undefined {
+  if (network === "hardhat" || network === "localhost") return undefined;
+  if (network !== "base" && network !== "base_staging") {
+    throw new Error(`Unsupported UPV4 predecessor network: ${network}`);
+  }
+  return predecessorEvidence[network];
+}
+
+export function assertPinnedBootstrapSurface(
+  expected: PredecessorEvidence,
+  methods: string[],
+  currencies: string[][],
+  predecessorMethods: string[]
+): void {
+  const routes = methods.map((method, index) => ({
+    method,
+    currencies: currencies[index],
+  }));
+  if (
+    currencies.length !== methods.length ||
+    JSON.stringify(routes) !== JSON.stringify(expected.routes) ||
+    JSON.stringify(predecessorMethods) !==
+      JSON.stringify(expected.predecessorMethods)
+  ) {
+    throw new Error("UPV4 predecessor method/currency surface changed");
+  }
+}
+
+export function assertPinnedBootstrapContract(
+  expected: { address: string; runtimeCodeHash: string },
+  address: string,
+  runtimeCodeHash: string
+): void {
+  if (
+    address.toLowerCase() !== expected.address.toLowerCase() ||
+    runtimeCodeHash !== expected.runtimeCodeHash
+  ) {
+    throw new Error("UPV4 predecessor contract identity mismatch");
+  }
+}
+
+export function assertBootstrapAttestationAuthority(
+  governance: string,
+  expected: PredecessorEvidence | undefined,
+  authority: {
+    owner: string;
+    witnesses: string[];
+    threshold: string;
+    witnessCount: string;
+  }
+): void {
+  const { owner, witnesses, threshold, witnessCount } = authority;
+  if (
+    owner.toLowerCase() !== governance.toLowerCase() ||
+    witnesses.length === 0 ||
+    !BigNumber.from(witnessCount).eq(witnesses.length) ||
+    BigNumber.from(threshold).isZero() ||
+    BigNumber.from(threshold).gt(witnesses.length) ||
+    (expected &&
+      (JSON.stringify(witnesses.map((address) => address.toLowerCase())) !==
+        JSON.stringify(
+          expected.witnesses.map((address) => address.toLowerCase())
+        ) ||
+        threshold !== expected.attestationThreshold))
+  ) {
+    throw new Error("UPV4 predecessor attestation authority mismatch");
+  }
+}
+
+// Current-owned passive preflight. Executed lane31 retains its historical
+// catalog; live Base now includes UPI, and staging has two distinct valid orders.
+// Every read below uses one block and is repeated during bootstrap/resume.
 export async function readBootstrapPredecessor(hre: HardhatRuntimeEnvironment) {
-  if (!(await paymentBindingCutoverReady(hre))) {
-    throw new Error(
-      "UPV4 bootstrap requires the intact UPV3 payment-binding cutover"
-    );
+  const expected = pinnedBootstrapPredecessor(hre.deployments.getNetworkName());
+  const chainId = (await hre.ethers.provider.getNetwork()).chainId;
+  if (expected && chainId !== expected.chainId) {
+    throw new Error("UPV4 predecessor chain mismatch");
   }
   const block = await hre.ethers.provider.getBlock("latest");
   const at = { blockTag: block.number };
   const getContract = async (name: string, artifact = name) => {
     const record = await hre.deployments.get(name);
-    await assertDeploymentMatchesChain(
-      hre,
-      record,
-      name,
-      artifact,
-      block.number
-    );
+    const pinned = expected?.contracts[name];
+    if (pinned) {
+      const code = await hre.ethers.provider.getCode(
+        record.address,
+        block.number
+      );
+      assertPinnedBootstrapContract(
+        pinned,
+        record.address,
+        utils.keccak256(code)
+      );
+    } else {
+      await assertDeploymentMatchesChain(
+        hre,
+        record,
+        name,
+        artifact,
+        block.number
+      );
+    }
     return hre.ethers.getContractAt(artifact, record.address);
   };
   const predecessor = await getContract("UnifiedPaymentVerifierV3");
@@ -137,14 +231,19 @@ export async function readBootstrapPredecessor(hre: HardhatRuntimeEnvironment) {
     "DisputeProtectionPolicyMethodScopedStaked",
     "DisputeProtectionPolicy"
   );
-  const governance = await predecessor.owner(at);
+  const attestation = await getContract("MultiAttestationVerifier");
+  const governance = expected?.governance ?? (await predecessor.owner(at));
   const same = (left: string, right: string) =>
     left.toLowerCase() === right.toLowerCase();
   if (
+    !same(await predecessor.owner(at), governance) ||
     !same(await predecessor.nullifierRegistry(at), registry.address) ||
     !same(await predecessor.orchestratorRegistry(at), orchestrators.address) ||
+    !same(await predecessor.attestationVerifier(at), attestation.address) ||
     !same(await registry.legacyNullifierRegistry(at), legacy.address) ||
     !same(await orchestrator.paymentVerifierRegistry(at), routes.address) ||
+    (await orchestrator.paused(at)) ||
+    !(await orchestrator.chainId(at)).eq(chainId) ||
     !same(await orchestrator.lifecycleHook(at), hook.address) ||
     !same(await hook.orchestratorRegistry(at), orchestrators.address) ||
     !same(await hook.disputeProtectionPolicy(at), policy.address) ||
@@ -200,19 +299,47 @@ export async function readBootstrapPredecessor(hre: HardhatRuntimeEnvironment) {
       throw new Error(`UPV4 predecessor has no currencies: ${method}`);
     currencies.push(configured);
   }
+  if (expected) {
+    assertPinnedBootstrapSurface(
+      expected,
+      methods,
+      currencies,
+      predecessorMethods
+    );
+  }
   const riskWindows: string[] = [];
   for (const { method } of entries)
     riskWindows.push((await policy.getRiskWindow(method, at)).toString());
   assertAliasRiskWindows(entries, riskWindows);
-  const attestationVerifier: string = await predecessor.attestationVerifier(at);
+  const attestationVerifier = attestation.address;
   const attestationCode = await hre.ethers.provider.getCode(
     attestationVerifier,
     block.number
   );
-  if (attestationCode === "0x")
-    throw new Error("UPV4 predecessor attestation verifier has no code");
+  const witnesses: string[] = await attestation.witnesses(at);
+  const attestationThreshold = (
+    await attestation.requiredSignatures(at)
+  ).toString();
+  assertBootstrapAttestationAuthority(governance, expected, {
+    owner: await attestation.owner(at),
+    witnesses,
+    threshold: attestationThreshold,
+    witnessCount: (await attestation.witnessCount(at)).toString(),
+  });
+  const predecessorDomain = utils._TypedDataEncoder.hashDomain({
+    name: "UnifiedPaymentVerifier",
+    version: "1",
+    chainId,
+    verifyingContract: predecessor.address,
+  });
+  if ((await predecessor.DOMAIN_SEPARATOR(at)) !== predecessorDomain) {
+    throw new Error("UPV4 predecessor signing domain mismatch");
+  }
+  const after = await hre.ethers.provider.getBlock(block.number);
+  if (after.hash !== block.hash)
+    throw new Error("UPV4 predecessor block changed");
   const state = {
-    chainId: (await hre.ethers.provider.getNetwork()).chainId,
+    chainId,
     predecessor: predecessor.address,
     nullifierRegistry: registry.address,
     legacyNullifierRegistry: legacy.address,
@@ -220,6 +347,8 @@ export async function readBootstrapPredecessor(hre: HardhatRuntimeEnvironment) {
     paymentVerifierRegistry: routes.address,
     attestationVerifier,
     attestationCodeHash: utils.keccak256(attestationCode),
+    witnesses,
+    attestationThreshold,
     governance,
     orchestrator: orchestrator.address,
     hook: hook.address,

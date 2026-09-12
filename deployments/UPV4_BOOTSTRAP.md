@@ -8,14 +8,25 @@ their existing replay namespaces, then registers `venmo-balance` with the
 writer permission, changes a live payment route, changes risk windows, or
 updates the active package addresses.
 
-The lane requires the intact lane-31 UPV3 cutover and the active method-scoped
-lifecycle stack. It validates the current O3 hook/policy pointers and refuses a
-nonzero risk window for any shared-namespace alias. Each operation checks a
-pinned predecessor snapshot, the current compiled successor runtime, dependency
-getters, signing domain and exact namespace prefix. Resume does not repair
-unexpected ownership, method removal, reordered methods or namespace changes.
-The additional historical lane-31 preflight reads latest state; these checks
-are passive-deployment checks, **not an atomic activation proof**.
+The lane requires the intact UPV3 routes/writer configuration and the active
+method-scoped lifecycle stack. Its current-owned predecessor evidence records
+Base's eleven methods, including UPI, and Base staging's thirteen methods at
+block 51,199,130. Staging's registry and UPV3 have different valid orders;
+both are checked against their own evidence arrays. Currency order, chain,
+governance, core deployed addresses/full runtime hashes, O3 pause/chain state,
+and MultiAttestationVerifier witnesses/threshold must match. Untagged runs
+remain inert. Executed lane31 retains its historical ten-method Base catalog;
+the new bootstrap does not call that obsolete catalog preflight.
+
+Every predecessor read uses one pinned block, whose hash is rechecked after
+collection. The lane validates the current O3 hook/policy pointers and refuses
+a nonzero risk window for any shared-namespace alias. Each operation rechecks
+the predecessor snapshot, current compiled successor runtime, dependencies,
+signing domain and exact namespace prefix. Resume does not repair unexpected
+ownership, method/currency/witness changes, disabled methods or reassigned
+namespaces. These remain passive-deployment checks, **not an atomic activation
+proof**. Updating the pinned evidence requires new deployed-state review;
+unknown catalog or authority drift is never silently accepted.
 
 Compile the reviewed source before running a tagged deployment; tagged runs use
 `--no-compile`. An ordinary untagged deployment skips this lane on every network.
@@ -109,6 +120,11 @@ window before activation:
    blocks UPV verification and EscrowV2 release. After drain, pause and
    deauthorize retired callers. V1's original Escrow uses a direct orchestrator
    pointer, so registry removal alone does not prevent new V1 locks there.
+   The original Escrow also lacks the effective-rate and manager-fee getters
+   required by O3. Changing its pointer to O3 is not a supported migration and
+   would disable V1 release. Keep it outside the restored admission list; from
+   the observed admitted Base pair, only EscrowV2 is O3-compatible. Escrow
+   pause itself leaves locking enabled and cannot replace admission closure.
 4. Keep admissions closed through the all-method UPV4 cutover. Preserve every
    existing method/currency order and replay namespace, add balance only when
    all issuer and consumer gates pass, and revoke UPV3's writer in the atomic
