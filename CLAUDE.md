@@ -155,6 +155,7 @@ Current numbered lanes include:
   zeroes the `RETIRED_DISPUTABLE_PAYMENT_METHODS` windows on the lane-39
   policy; Base executed via the Safe 2026-08-28, staging via the deployer
   2026-09-02; still mounted, skips while every retired window reads zero).
+- `43`: Base-staging-only X Money payment-method preparation and execution.
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production
