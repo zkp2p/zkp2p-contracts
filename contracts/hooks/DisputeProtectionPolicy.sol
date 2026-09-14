@@ -10,10 +10,16 @@ import {IDisputeVerifier} from "../interfaces/IDisputeVerifier.sol";
 import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 import {INullifierRegistry} from "../interfaces/INullifierRegistry.sol";
 import {IStakeVault} from "../interfaces/IStakeVault.sol";
+import {IAttestationVerifier} from "../interfaces/IAttestationVerifier.sol";
+import {INullifierRegistryV2} from "../interfaces/INullifierRegistryV2.sol";
+import {IOrchestratorV3} from "../interfaces/IOrchestratorV3.sol";
+import {OrchestratorV3} from "../OrchestratorV3.sol";
+import {IntentLifecycleHookV1} from "./IntentLifecycleHookV1.sol";
+import {UnifiedPaymentVerifierV3} from "../unifiedVerifier/UnifiedPaymentVerifierV3.sol";
 
 /**
  * @title DisputeProtectionPolicy
- * @notice Deposit-and-payment-method-scoped, stake-backed dispute protection that is on by default for every payment method with a nonzero risk window and can be opted out per deposit payment method by the depositor.
+ * @notice Method-scoped payment policies with signed eligibility and snapshotted collateral windows.
  * @dev The policy owns no tokens. StakeVault is the source of truth for collateral locks, a dedicated
  * `disputeNullifierRegistry` deployment is the source of truth for consumed dispute nullifiers, and the calling
  * Orchestrator is the source of truth for valid escrows and intents.
@@ -29,11 +35,16 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
  * must be drained before it is removed from OrchestratorRegistry. This policy must also drain every active dispute
  * protection intent before StakeVault controller authority moves to a replacement policy unless that replacement
  * explicitly adopts this policy's intent and lock state.
+ *
+ * Policy routes pin reviewed non-proxy dependencies. The payment verifier must remain the sole V2 payment-registry
+ * writer and must call this policy as its attestation checker. Runtime checks fail closed on route
+ * changes; they do not remove the existing trust in governance or registered orchestrators' callback behavior.
  */
-contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, ReentrancyGuard {
+contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifier, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
 
     uint64 public constant MAX_RISK_WINDOW = 365 days;
+
     uint64 public constant PENDING_COVERAGE_MATURITY = type(uint64).max;
 
     /* ============ State Variables ============ */
@@ -57,11 +68,38 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     mapping(address => mapping(uint256 => mapping(bytes32 => bool))) internal
         isDisputeProtectionDisabledByPaymentMethod;
 
-    /// @dev Minimum collateral lock window for each payment method.
-    mapping(bytes32 => uint64) internal paymentMethodRiskWindow;
-
     /// @dev Dispute protection lifecycle state keyed by globally unique intent hash.
     mapping(bytes32 => DisputeProtectionIntent) internal disputeProtectionIntentByIntentHash;
+
+    struct PolicyRule {
+        uint64 riskWindow;
+        bool registered;
+        bool enabled;
+    }
+
+    /// @dev A hook has one immutable policy route. A replacement route requires a new hook instance.
+    struct PolicyRoute {
+        address orchestrator;
+        address paymentVerifier;
+    }
+
+    /// @dev Effective evidence policy and original hook; adjustments preserve the original hook.
+    struct IntentPolicy {
+        bytes32 policyId;
+        address lifecycleHook;
+    }
+
+    mapping(bytes32 => mapping(bytes32 => PolicyRule)) public policyRules;
+    mapping(address => PolicyRoute) public policyRoutes;
+    mapping(address => address) public signatureVerifierByPaymentVerifier;
+    mapping(bytes32 => IntentPolicy) internal intentPolicies;
+
+    event PolicyUpdated(bytes32 indexed paymentMethod, bytes32 indexed policyId, uint64 riskWindow, bool enabled);
+    event PolicyRouteRegistered(address indexed hook, address indexed orchestrator, address indexed paymentVerifier);
+    event IntentPolicySelected(bytes32 indexed intentHash, bytes32 indexed policyId, address indexed hook);
+    event IntentPolicyAdjusted(
+        bytes32 indexed intentHash, bytes32 indexed previousPolicyId, bytes32 indexed policyId, uint64 riskWindow
+    );
 
     /* ============ Constructor ============ */
 
@@ -119,11 +157,21 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
         bytes32 _paymentMethod,
         uint256 _amount
     ) external override onlyLifecycleHook nonReentrant {
-        uint64 riskWindow = paymentMethodRiskWindow[_paymentMethod];
-        if (riskWindow == 0) return;
-
-        (address stakeOwner, address depositor) =
-            _validateIntentAdmission(_intentHash, _escrow, _depositId, _paymentMethod, _taker);
+        address depositor = _validateIntentAdmission(_intentHash, _escrow, _depositId, _paymentMethod);
+        _assertPolicyRoute(msg.sender, _paymentMethod);
+        IOrchestratorV3.Intent memory activeIntent =
+            _getActivePolicyIntent(_intentHash, msg.sender, _taker, _paymentMethod);
+        bytes32 policyId = activeIntent.data.length == 0 ? bytes32(0) : abi.decode(activeIntent.data, (bytes32));
+        uint64 riskWindow = _requireEnabledPolicy(policyId, _paymentMethod);
+        // A zero-window policy must not let a nonmember evade an enabled whitelist.
+        if (riskWindow == 0) {
+            require(
+                !IntentLifecycleHookV1(msg.sender).whitelistPolicy().enabled(_escrow, _depositId, _paymentMethod),
+                "DPP: Zero-window whitelist enabled"
+            );
+        }
+        intentPolicies[_intentHash] = IntentPolicy(policyId, msg.sender);
+        address stakeOwner = riskWindow == 0 ? address(0) : stakeVault.stakeOwnerOf(_taker);
 
         disputeProtectionIntentByIntentHash[_intentHash] = DisputeProtectionIntent({
             taker: _taker,
@@ -136,7 +184,8 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
             releaseAmount: 0
         });
 
-        stakeVault.lockStake(stakeOwner, _intentHash, _amount, PENDING_COVERAGE_MATURITY);
+        emit IntentPolicySelected(_intentHash, policyId, msg.sender);
+        if (riskWindow != 0) stakeVault.lockStake(stakeOwner, _intentHash, _amount, PENDING_COVERAGE_MATURITY);
         emit DisputeProtectionIntentOpened(
             _intentHash, stakeOwner, depositor, _taker, _paymentMethod, _amount, riskWindow
         );
@@ -147,14 +196,18 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
      */
     function onIntentCancelled(bytes32 _intentHash) external override onlyLifecycleHook nonReentrant {
         DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];
+        _assertAdmissionHook(_intentHash);
         if (disputeProtectionIntent.status == DisputeProtectionIntentStatus.NONE) return;
         if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.PENDING) {
             revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);
         }
 
-        (, uint256 releasedAmount,) = stakeVault.locks(_intentHash);
+        uint256 releasedAmount;
+        if (disputeProtectionIntent.riskWindow != 0) {
+            (, releasedAmount,) = stakeVault.locks(_intentHash);
+        }
         disputeProtectionIntent.status = DisputeProtectionIntentStatus.CANCELLED;
-        stakeVault.unlockStake(_intentHash);
+        if (disputeProtectionIntent.riskWindow != 0) stakeVault.unlockStake(_intentHash);
         emit DisputeProtectionIntentCancelled(_intentHash, disputeProtectionIntent.stakeOwner, releasedAmount);
     }
 
@@ -168,17 +221,30 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
         nonReentrant
     {
         DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];
+        _assertAdmissionHook(_intentHash);
         if (disputeProtectionIntent.status == DisputeProtectionIntentStatus.NONE) return;
         if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.PENDING) {
             revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);
         }
 
-        uint64 releaseEligibleAt = _calculateReleaseEligibleAt(disputeProtectionIntent.riskWindow);
+        IntentPolicy storage selected = intentPolicies[_intentHash];
+        if (!_isManualRelease) {
+            _assertPolicyRoute(selected.lifecycleHook, disputeProtectionIntent.paymentMethod);
+            INullifierRegistryV2 registry =
+                UnifiedPaymentVerifierV3(policyRoutes[selected.lifecycleHook].paymentVerifier).nullifierRegistry();
+            bytes32 nullifier = registry.nullifierByIntentHash(_intentHash);
+            require(nullifier != bytes32(0), "DPP: Missing payment binding");
+        }
+        uint64 releaseEligibleAt = disputeProtectionIntent.riskWindow == 0
+            ? 0
+            : _calculateReleaseEligibleAt(disputeProtectionIntent.riskWindow);
         disputeProtectionIntent.releaseAmount = _releaseAmount;
         disputeProtectionIntent.releaseEligibleAt = releaseEligibleAt;
         disputeProtectionIntent.status = DisputeProtectionIntentStatus.SETTLED;
 
-        stakeVault.resizeLock(_intentHash, _releaseAmount, releaseEligibleAt);
+        if (disputeProtectionIntent.riskWindow != 0) {
+            stakeVault.resizeLock(_intentHash, _releaseAmount, releaseEligibleAt);
+        }
         emit DisputeProtectionIntentSettled(
             _intentHash,
             disputeProtectionIntent.stakeOwner,
@@ -223,6 +289,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
         if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.SETTLED) {
             revert DisputeProtectionIntentNotSettled(_attestation.intentHash, disputeProtectionIntent.status);
         }
+        if (disputeProtectionIntent.riskWindow == 0) revert DisputeProtectionIntentNotCovered(_attestation.intentHash);
 
         (bytes32 disputeId, bytes32 disputeNullifier) =
             disputeVerifier.verifyDispute(_attestation, disputeProtectionIntent.paymentMethod);
@@ -244,13 +311,124 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
         );
     }
 
+    /* ============ Protection Policies ============ */
+
+    /// @notice Sets a method's policy terms for future admissions; admitted intents retain their snapshots.
+    /// @dev Register policy zero first to enroll the method. Registration persists even when all rules are disabled.
+    function setPolicy(bytes32 _paymentMethod, bytes32 _policyId, uint64 _riskWindow, bool _enabled)
+        external
+        onlyOwner
+    {
+        if (_riskWindow > MAX_RISK_WINDOW) revert InvalidRiskWindow(_riskWindow);
+        require(_paymentMethod != bytes32(0), "DPP: Zero method");
+        require(
+            _policyId == bytes32(0) || policyRules[_paymentMethod][bytes32(0)].registered, "DPP: Method not enrolled"
+        );
+        policyRules[_paymentMethod][_policyId] = PolicyRule(_riskWindow, true, _enabled);
+        emit PolicyUpdated(_paymentMethod, _policyId, _riskWindow, _enabled);
+    }
+
+    /// @notice Pins the reviewed non-proxy dependencies for a hook's policy admissions.
+    /// @dev Configure UPV's attestation verifier to this policy in the same governance cutover.
+    /// The hook omits its originating caller, so one originating orchestrator is registered per hook.
+    function registerPolicyRoute(
+        address _hook,
+        address _orchestrator,
+        address _paymentVerifier,
+        address _signatureVerifier
+    ) external onlyOwner {
+        require(isLifecycleHookAuthorizedByHook[_hook], "DPP: Unauthorized policy hook");
+        require(policyRoutes[_hook].orchestrator == address(0), "DPP: Route already registered");
+        _validateDependency(_orchestrator);
+        _validateDependency(_paymentVerifier);
+        _validateDependency(_signatureVerifier);
+        require(
+            _signatureVerifier != address(this) && _signatureVerifier != _paymentVerifier, "DPP: Recursive verifier"
+        );
+        IntentLifecycleHookV1 hook = IntentLifecycleHookV1(_hook);
+        UnifiedPaymentVerifierV3 paymentVerifier = UnifiedPaymentVerifierV3(_paymentVerifier);
+        require(address(hook.disputeProtectionPolicy()) == address(this), "DPP: Hook policy mismatch");
+        require(
+            address(hook.orchestratorRegistry()) == address(paymentVerifier.orchestratorRegistry())
+                && hook.orchestratorRegistry().isOrchestrator(_orchestrator),
+            "DPP: Orchestrator route mismatch"
+        );
+        address existingVerifier = signatureVerifierByPaymentVerifier[_paymentVerifier];
+        require(
+            existingVerifier == address(0) || existingVerifier == _signatureVerifier, "DPP: Signature route mismatch"
+        );
+        signatureVerifierByPaymentVerifier[_paymentVerifier] = _signatureVerifier;
+        policyRoutes[_hook] = PolicyRoute(_orchestrator, _paymentVerifier);
+        emit PolicyRouteRegistered(_hook, _orchestrator, _paymentVerifier);
+    }
+
+    /// @notice Returns the effective evidence policy and original hook; policy zero requires ordinary evidence.
+    function getIntentPolicy(bytes32 _intentHash) external view returns (IntentPolicy memory) {
+        return intentPolicies[_intentHash];
+    }
+
+    /// @notice Corrects the caller's pending order policy, locking any newly required collateral atomically.
+    /// @dev Existing stake ownership and collateral are preserved. The snapshotted risk window never decreases.
+    function adjustPolicy(bytes32 _intentHash, bytes32 _policyId) external nonReentrant {
+        DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
+        require(intent.status == DisputeProtectionIntentStatus.PENDING, "DPP: Admission not pending");
+        require(msg.sender == intent.taker, "DPP: Not policy taker");
+        if (admissionsPaused) revert AdmissionsPaused();
+        IntentPolicy storage selected = intentPolicies[_intentHash];
+        IOrchestratorV3.Intent memory activeIntent =
+            _getActivePolicyIntent(_intentHash, selected.lifecycleHook, intent.taker, intent.paymentMethod);
+        IEscrowV2.Intent memory escrowIntent =
+            IEscrowV2(activeIntent.escrow).getDepositIntent(activeIntent.depositId, _intentHash);
+        require(
+            escrowIntent.intentHash == _intentHash && block.timestamp < escrowIntent.expiryTime,
+            "DPP: Policy intent expired"
+        );
+        uint64 riskWindow = _requireEnabledPolicy(_policyId, intent.paymentMethod);
+        address depositor =
+            _validateProtectionConfiguration(activeIntent.escrow, activeIntent.depositId, intent.paymentMethod);
+        if (intent.riskWindow == 0 && riskWindow != 0) {
+            address stakeOwner = stakeVault.stakeOwnerOf(intent.taker);
+            stakeVault.lockStake(stakeOwner, _intentHash, activeIntent.amount, PENDING_COVERAGE_MATURITY);
+            intent.stakeOwner = stakeOwner;
+            intent.depositor = depositor;
+        }
+        if (riskWindow > intent.riskWindow) intent.riskWindow = riskWindow;
+        bytes32 previousPolicyId = selected.policyId;
+        selected.policyId = _policyId;
+        emit IntentPolicyAdjusted(_intentHash, previousPolicyId, _policyId, intent.riskWindow);
+    }
+
+    /// @notice Verifies signatures and the intent's signed policy through UPV's existing read-only extension point.
+    /// @dev Only approved UPVs may supply the digest/data pair: they hash all data and validate the intent snapshot.
+    /// The exact payload is PaymentDetails (6 words), IntentSnapshot (8 words), then policyId (1 word).
+    function verify(bytes32 _digest, bytes[] calldata _sigs, bytes calldata _data)
+        external
+        view
+        override
+        returns (bool)
+    {
+        address signatureVerifier = signatureVerifierByPaymentVerifier[msg.sender];
+        require(signatureVerifier != address(0), "DPP: Unauthorized payment verifier");
+        require(_data.length == 480, "DPP: Invalid policy payload");
+        require(IAttestationVerifier(signatureVerifier).verify(_digest, _sigs, _data), "DPP: Invalid signature");
+        (, UnifiedPaymentVerifierV3.IntentSnapshot memory snapshot, bytes32 policyId) = abi.decode(
+            _data, (UnifiedPaymentVerifierV3.PaymentDetails, UnifiedPaymentVerifierV3.IntentSnapshot, bytes32)
+        );
+        IntentPolicy storage selected = intentPolicies[snapshot.intentHash];
+        require(policyId == selected.policyId, "DPP: Policy mismatch");
+        if (selected.lifecycleHook != address(0)) {
+            require(msg.sender == policyRoutes[selected.lifecycleHook].paymentVerifier, "DPP: Wrong policy verifier");
+        }
+        return true;
+    }
+
     /* ============ Depositor Functions ============ */
 
     /**
      * @notice DEPOSITOR ONLY: Updates dispute protection for one deposit payment method.
-     * @dev Protection is enabled by default on every payment method with a nonzero risk window; passing false opts the
+     * @dev Policy admission is enabled by default on every enrolled method; passing false opts the
      * tuple out and true undoes the opt-out. The requested value is emitted as-is; the effective state also depends on
-     * the payment method's current risk window. OrchestratorV3 validates Escrow registration before signaling an
+     * payment method's enrollment. OrchestratorV3 validates Escrow registration before signaling an
      * intent; this policy only verifies that the caller is the deposit's current depositor.
      * @param _escrow Escrow containing the deposit.
      * @param _depositId Deposit whose payment-method-specific configuration is updated.
@@ -267,20 +445,6 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     }
 
     /* ============ Governance Functions ============ */
-
-    /**
-     * @notice GOVERNANCE ONLY: Sets the minimum collateral lock window for future intents of a payment method.
-     * @dev A zero window means the payment method is never routed through dispute protection: the lifecycle hook then
-     * applies the deposit's whitelist (rejecting non-members when it is enabled) or admits openly when it is disabled.
-     * Changing the window affects future admissions only; admitted intents keep their snapshotted window.
-     * @param _paymentMethod Payment method whose future risk window is updated.
-     * @param _riskWindow Minimum seconds collateral remains locked after settlement.
-     */
-    function setRiskWindow(bytes32 _paymentMethod, uint64 _riskWindow) external onlyOwner {
-        if (_riskWindow > MAX_RISK_WINDOW) revert InvalidRiskWindow(_riskWindow);
-        paymentMethodRiskWindow[_paymentMethod] = _riskWindow;
-        emit RiskWindowUpdated(_paymentMethod, _riskWindow);
-    }
 
     /**
      * @notice GOVERNANCE ONLY: Replaces the verifier used for future dispute submissions.
@@ -308,10 +472,9 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
 
     /**
      * @notice GOVERNANCE ONLY: Pauses or resumes new dispute-protection admissions.
-     * @dev It rejects every non-whitelisted taker on every non-opted-out deposit payment method with a nonzero risk
-     * window. Whitelisted takers return from the lifecycle hook before this policy is reached, and payment methods with
-     * a zero risk window return before the pause check. Explicitly opted-out deposit payment methods and zero-window
-     * payment methods never reach this policy and stay gated by the whitelist or open. Cancellation, settlement,
+     * @dev It rejects managed admissions, including zero-window rules. Whitelisted takers return from the lifecycle
+     * hook before this policy is reached. Opted-out and unenrolled methods remain gated by the whitelist or open.
+     * Cancellation, settlement,
      * release, and dispute submission remain available while admissions are paused.
      * @param _isPaused Whether new dispute protection admissions should revert.
      */
@@ -348,10 +511,10 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     }
 
     /**
-     * @notice Returns the effective stake-backed dispute protection state for a deposit payment method.
-     * @dev True when the depositor has not opted the tuple out and the payment method has a nonzero risk window.
+     * @notice Returns whether a deposit payment method routes through policy admission.
+     * @dev True when the depositor has not opted the tuple out and the default rule is registered.
      * Performs no validation: any escrow, any deposit id (including nonexistent ones), and any payment method with a
-     * nonzero window read true.
+     * registered default rule read true. Disabled selections reject during admission instead of opening the route.
      * @param _escrow Escrow containing the deposit.
      * @param _depositId Deposit whose payment-method-specific configuration is queried.
      * @param _paymentMethod Payment method whose dispute protection configuration is queried.
@@ -363,7 +526,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
         returns (bool)
     {
         return !isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod]
-            && paymentMethodRiskWindow[_paymentMethod] != 0;
+            && policyRules[_paymentMethod][bytes32(0)].registered;
     }
 
     /**
@@ -374,32 +537,30 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
         return isLifecycleHookAuthorizedByHook[_hook];
     }
 
-    /**
-     * @notice Returns the risk window applied to future intents for a payment method.
-     * @param _paymentMethod Payment method whose configured risk window is queried.
-     */
-    function getRiskWindow(bytes32 _paymentMethod) external view returns (uint64) {
-        return paymentMethodRiskWindow[_paymentMethod];
-    }
-
     /* ============ Internal Functions ============ */
 
     /**
-     * @dev Validates policy-owned admission requirements and returns the collateral owner and depositor to snapshot.
+     * @dev Validates policy-owned admission requirements and returns the depositor to snapshot.
      * StakeVault remains authoritative for collateral sufficiency and reverts from `lockStake` when free stake is
      * insufficient.
      */
-    function _validateIntentAdmission(
-        bytes32 _intentHash,
-        address _escrow,
-        uint256 _depositId,
-        bytes32 _paymentMethod,
-        address _taker
-    ) internal view returns (address stakeOwner, address depositor) {
+    function _validateIntentAdmission(bytes32 _intentHash, address _escrow, uint256 _depositId, bytes32 _paymentMethod)
+        internal
+        view
+        returns (address depositor)
+    {
         if (admissionsPaused) revert AdmissionsPaused();
         if (disputeProtectionIntentByIntentHash[_intentHash].status != DisputeProtectionIntentStatus.NONE) {
             revert DisputeProtectionIntentAlreadyExists(_intentHash);
         }
+        return _validateProtectionConfiguration(_escrow, _depositId, _paymentMethod);
+    }
+
+    function _validateProtectionConfiguration(address _escrow, uint256 _depositId, bytes32 _paymentMethod)
+        internal
+        view
+        returns (address depositor)
+    {
         if (isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod]) {
             revert DisputeProtectionNotEnabled(_escrow, _depositId, _paymentMethod);
         }
@@ -410,8 +571,48 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
             revert IntentTokenMismatch(expectedToken, address(deposit.token));
         }
 
-        stakeOwner = stakeVault.stakeOwnerOf(_taker);
         depositor = deposit.depositor;
+    }
+
+    function _requireEnabledPolicy(bytes32 _policyId, bytes32 _paymentMethod) internal view returns (uint64) {
+        PolicyRule storage rule = policyRules[_paymentMethod][_policyId];
+        require(rule.enabled, "DPP: Policy unavailable");
+        return rule.riskWindow;
+    }
+
+    function _assertAdmissionHook(bytes32 _intentHash) internal view {
+        address hook = intentPolicies[_intentHash].lifecycleHook;
+        require(hook == address(0) || msg.sender == hook, "DPP: Wrong admission hook");
+    }
+
+    function _getActivePolicyIntent(bytes32 _intentHash, address _hook, address _taker, bytes32 _paymentMethod)
+        internal
+        view
+        returns (IOrchestratorV3.Intent memory intent)
+    {
+        IOrchestratorV3 orchestrator = IOrchestratorV3(policyRoutes[_hook].orchestrator);
+        intent = orchestrator.getIntent(_intentHash);
+        require(
+            intent.owner != address(0) && intent.owner == _taker && intent.paymentMethod == _paymentMethod
+                && address(orchestrator.getIntentLifecycleHook(_intentHash)) == _hook,
+            "DPP: Policy intent mismatch"
+        );
+    }
+
+    function _assertPolicyRoute(address _hook, bytes32 _paymentMethod) internal view {
+        PolicyRoute storage route = policyRoutes[_hook];
+        require(route.orchestrator != address(0), "DPP: Missing policy route");
+        require(
+            OrchestratorV3(route.orchestrator).paymentVerifierRegistry().getVerifier(_paymentMethod)
+                == route.paymentVerifier,
+            "DPP: Payment route changed"
+        );
+        require(
+            address(UnifiedPaymentVerifierV3(route.paymentVerifier).attestationVerifier()) == address(this),
+            "DPP: Policy checker changed"
+        );
+        address[] memory writers = UnifiedPaymentVerifierV3(route.paymentVerifier).nullifierRegistry().getWriters();
+        require(writers.length == 1 && writers[0] == route.paymentVerifier, "DPP: Unsafe payment writers");
     }
 
     function _releaseMaturedDisputeProtectionIntent(bytes32 _intentHash) internal {
@@ -419,6 +620,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
         if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.SETTLED) {
             revert DisputeProtectionIntentNotSettled(_intentHash, disputeProtectionIntent.status);
         }
+        if (disputeProtectionIntent.riskWindow == 0) revert DisputeProtectionIntentNotCovered(_intentHash);
 
         uint64 currentTime = _currentTimestamp();
         uint64 releaseEligibleAt = disputeProtectionIntent.releaseEligibleAt;

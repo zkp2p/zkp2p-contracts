@@ -17,9 +17,9 @@ import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
 import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 
-import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
+import {PolicyVerifierFixture} from "../helpers/PolicyVerifierFixture.sol";
 
-contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
+contract WhitelistLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
     uint64 internal constant RISK_WINDOW = 30 days;
     uint256 internal constant STAKE_AMOUNT = 500e6;
 
@@ -135,8 +135,7 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
 
         vm.prank(taker);
         orchestrator.cancelIntent(oldCancelledIntent);
-        verifier.setShouldVerifyPayment(true);
-        _fulfill(oldSettledIntent, 40e6, CONVERSION_RATE);
+        _fulfillPolicy(oldSettledIntent, 40e6);
         assertEq(
             uint256(disputeProtectionPolicy.getDisputeProtectionIntent(oldCancelledIntent).status),
             uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
@@ -173,7 +172,13 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         disputeNullifierRegistry.addWritePermission(address(disputeProtectionPolicy));
         combinedHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, disputeProtectionPolicy);
         disputeProtectionPolicy.setLifecycleHookAuthorization(address(combinedHook), true);
-        disputeProtectionPolicy.setRiskWindow(METHOD, RISK_WINDOW);
+        disputeProtectionPolicy.setPolicy(METHOD, bytes32(0), RISK_WINDOW, true);
+        _configurePolicyVerifier(
+            disputeProtectionPolicy,
+            address(combinedHook),
+            new NullifierRegistryV2(new NullifierRegistry()),
+            new AttestationVerifierMock()
+        );
 
         token.transfer(taker, STAKE_AMOUNT);
         vm.startPrank(taker);

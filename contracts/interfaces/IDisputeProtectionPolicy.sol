@@ -12,7 +12,8 @@ interface IDisputeProtectionPolicy {
     /**
      * @notice Lifecycle state of a dispute-protected intent.
      * @dev `NONE` is the required zero-value sentinel for an uninitialized mapping entry; it is not a live state.
-     *      `SETTLED` means the underlying intent completed and its collateral remains disputable.
+     *      `SETTLED` means the underlying intent completed. Collateral remains disputable only with a positive
+     *      snapshotted risk window; zero-window intents have no collateral coverage.
      *      `RELEASED` means the collateral was returned and the intent is no longer disputable.
      */
     enum DisputeProtectionIntentStatus {
@@ -27,11 +28,11 @@ interface IDisputeProtectionPolicy {
     /**
      * @notice Dispute protection state retained after an intent is admitted by the lifecycle hook.
      * @param taker Account that signaled the intent.
-     * @param stakeOwner Account whose StakeVault balance collateralizes the intent.
+     * @param stakeOwner Account whose StakeVault balance collateralizes the intent; zero for zero-window admission.
      * @param depositor Escrow depositor compensated by a successful dispute.
      * @param paymentMethod Payment method used to namespace risk configuration and dispute nullifiers.
      * @param status Current dispute protection lifecycle state.
-     * @param riskWindow Minimum time collateral must remain locked after intent settlement.
+     * @param riskWindow Minimum time collateral must remain locked after settlement; zero for an admitted zero-window policy.
      * @param releaseEligibleAt Earliest timestamp at which collateral may be released. Dispute evidence remains
      * valid after this time until release actually executes.
      * @param releaseAmount Amount released from Escrow before fees and therefore collateralized after settlement.
@@ -83,7 +84,6 @@ interface IDisputeProtectionPolicy {
         bytes32 indexed paymentMethod,
         bool isDisputeProtectionEnabled
     );
-    event RiskWindowUpdated(bytes32 indexed paymentMethod, uint64 riskWindow);
     event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
     event LifecycleHookAuthorizationUpdated(address indexed hook, bool isAuthorized);
     event AdmissionsPausedUpdated(bool isPaused);
@@ -96,6 +96,7 @@ interface IDisputeProtectionPolicy {
     error DisputeProtectionIntentAlreadyExists(bytes32 intentHash);
     error DisputeProtectionIntentNotPending(bytes32 intentHash, DisputeProtectionIntentStatus status);
     error DisputeProtectionIntentNotSettled(bytes32 intentHash, DisputeProtectionIntentStatus status);
+    error DisputeProtectionIntentNotCovered(bytes32 intentHash);
     error IntentTokenMismatch(address expectedToken, address actualToken);
     error DisputeProtectionIntentNotReleaseEligible(uint64 releaseEligibleAt, uint64 currentTime);
     error TimestampOverflow(uint256 timestamp);
@@ -104,12 +105,11 @@ interface IDisputeProtectionPolicy {
     error OwnershipRenunciationDisabled();
 
     /**
-     * @notice Admits a newly signaled intent into dispute coverage when its payment method has a risk window.
-     * @dev Called only by an authorized lifecycle hook. A zero configured risk window is an unrestricted pass-through
-     * for this direct policy callback; the canonical lifecycle hook never calls this function for a zero-window payment
-     * method and applies the whitelist instead. It creates no dispute protection intent. Otherwise the call validates
-     * deposit configuration and token compatibility, snapshots the risk configuration, and locks the taker's selected
-     * stake.
+     * @notice Admits a newly signaled intent under the buyer's selected method-scoped policy.
+     * @dev Called only by an authorized lifecycle hook. Validates deposit configuration, token compatibility and the
+     * enabled policy, then snapshots its ID and window. Positive windows lock full stake; zero windows still record
+     * the intent and its evidence obligation without locking stake. Unconfigured methods never reach this callback
+     * through the canonical hook.
      * @param _intentHash Unique intent identifier assigned by the calling orchestrator.
      * @param _escrow Escrow that owns the intent and deposit.
      * @param _depositId Deposit supplying the intent liquidity.
@@ -127,15 +127,15 @@ interface IDisputeProtectionPolicy {
     ) external;
 
     /**
-     * @notice Cancels a pending dispute protection intent and unlocks its collateral.
-     * @dev Missing dispute protection intents are ignored because payment methods with no risk window create no
-     * policy state.
+     * @notice Cancels a pending intent and unlocks its collateral when it has protection.
+     * @dev Missing records are ignored for whitelist/open admissions. An admitted zero-window policy still has
+     * lifecycle state, but no collateral to unlock.
      * @param _intentHash Intent being cancelled or pruned by the orchestrator.
      */
     function onIntentCancelled(bytes32 _intentHash) external;
 
     /**
-     * @notice Marks a pending dispute protection intent as settled and resizes its collateral.
+     * @notice Marks a pending intent as settled and resizes collateral only when it has protection.
      * @dev Missing dispute protection intents are ignored. The snapshotted risk window determines when collateral
      * becomes release-eligible; it does not invalidate dispute evidence until release actually executes.
      * @param _intentHash Intent completed by proof-based fulfillment or manual release.
@@ -145,10 +145,10 @@ interface IDisputeProtectionPolicy {
     function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease) external;
 
     /**
-     * @notice Returns the effective stake-backed dispute protection state for a deposit payment method.
-     * @dev True when the depositor has not opted the tuple out and the payment method has a nonzero risk window.
+     * @notice Returns whether a deposit payment method routes through policy admission.
+     * @dev True when the depositor has not opted the tuple out and the method's default rule is registered.
      * Performs no validation: any escrow, any deposit id (including nonexistent ones), and any payment method with a
-     * nonzero window read true.
+     * registered default rule read true. The selected rule must separately be enabled at admission.
      * @param _escrow Escrow containing the deposit.
      * @param _depositId Deposit whose payment-method-specific configuration is queried.
      * @param _paymentMethod Payment method whose dispute protection configuration is queried.

@@ -2,7 +2,10 @@
 pragma solidity ^0.8.18;
 
 import {StakeVault} from "contracts/StakeVault.sol";
-import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
+import {
+    HistoricalDisputePolicy as DisputeProtectionPolicy,
+    HistoricalDisputePolicyDeployer
+} from "../helpers/HistoricalDisputePolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {InventoryTuple} from "contracts/mocks/DisputeMethodScopedActivationTypes.sol";
@@ -63,8 +66,9 @@ contract DisputeMethodScopedVaultActivationTest is OrchestratorV3Fixture {
         predecessorVault = new StakeVault(address(this), token, address(0), CONTROLLER_CHANGE_DELAY);
         freshVault = new StakeVault(address(this), token, address(0), CONTROLLER_CHANGE_DELAY);
         predecessorPolicy =
-            new DisputeProtectionPolicy(address(this), predecessorVault, disputeVerifier, disputeRegistry);
-        freshPolicy = new DisputeProtectionPolicy(address(this), freshVault, disputeVerifier, disputeRegistry);
+            HistoricalDisputePolicyDeployer.deploy(address(this), predecessorVault, disputeVerifier, disputeRegistry);
+        freshPolicy =
+            HistoricalDisputePolicyDeployer.deploy(address(this), freshVault, disputeVerifier, disputeRegistry);
         groupRegistry = new AddressGroupRegistry();
         whitelistPolicy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
         predecessorHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, predecessorPolicy);

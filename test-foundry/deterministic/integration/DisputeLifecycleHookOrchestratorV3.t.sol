@@ -17,9 +17,9 @@ import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
 import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 
-import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
+import {PolicyVerifierFixture} from "../helpers/PolicyVerifierFixture.sol";
 
-contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
+contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
     uint64 internal constant RISK_WINDOW = 30 days;
     uint256 internal constant STAKE_AMOUNT = 500e6;
     bytes32 internal constant WINDOWLESS_METHOD = keccak256("windowless");
@@ -50,7 +50,10 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         disputeNullifierRegistry.addWritePermission(address(disputeProtectionPolicy));
         lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, disputeProtectionPolicy);
         disputeProtectionPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
-        disputeProtectionPolicy.setRiskWindow(METHOD, RISK_WINDOW);
+        disputeProtectionPolicy.setPolicy(METHOD, bytes32(0), RISK_WINDOW, true);
+        _configurePolicyVerifier(
+            disputeProtectionPolicy, address(lifecycleHook), nullifierRegistry, new AttestationVerifierMock()
+        );
         orchestrator.setLifecycleHook(lifecycleHook);
         _stake(taker, STAKE_AMOUNT);
     }
@@ -158,7 +161,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
 
     function test_DisputeProtectionOptOutIsScopedToPaymentMethod() public {
         _addPaymentMethod(OTHER_METHOD);
-        disputeProtectionPolicy.setRiskWindow(OTHER_METHOD, RISK_WINDOW);
+        disputeProtectionPolicy.setPolicy(OTHER_METHOD, bytes32(0), RISK_WINDOW, true);
         _setDisputeProtection(false);
 
         IOrchestratorV3.SignalIntentParams memory otherMethodParams = _defaultParams();
@@ -232,8 +235,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         bytes32 intentHash = _signalDefault();
         uint256 releaseAmount = 5e6;
         uint256 releaseEligibleAt = vm.getBlockTimestamp() + RISK_WINDOW;
-        verifier.setShouldVerifyPayment(true);
-        _fulfill(intentHash, releaseAmount, CONVERSION_RATE);
+        _fulfillPolicy(intentHash, releaseAmount);
 
         IDisputeProtectionPolicy.DisputeProtectionIntent memory disputeProtectionIntent =
             disputeProtectionPolicy.getDisputeProtectionIntent(intentHash);
@@ -276,13 +278,11 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
 
     function test_DisputeAfterFulfillPaysDepositorClaim() public {
         bytes32 intentHash = _signalDefault();
-        verifier.setShouldVerifyPayment(true);
-        _fulfill(intentHash, INTENT_AMOUNT, CONVERSION_RATE);
+        _fulfillPolicy(intentHash, INTENT_AMOUNT);
 
         bytes32 paymentId = keccak256("payment");
         bytes32 paymentNullifier = keccak256(abi.encodePacked(METHOD, paymentId));
-        nullifierRegistry.addWritePermission(address(this));
-        nullifierRegistry.addNullifier(paymentNullifier, intentHash);
+        assertEq(nullifierRegistry.nullifierByIntentHash(intentHash), paymentNullifier);
         disputeProtectionPolicy.submitDispute(_attestation(intentHash, paymentId, keccak256("dispute")));
 
         assertEq(vault.claimable(depositor), INTENT_AMOUNT);
@@ -358,6 +358,12 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
             new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, disputeProtectionPolicy);
 
         disputeProtectionPolicy.setLifecycleHookAuthorization(address(newLifecycleHook), true);
+        disputeProtectionPolicy.registerPolicyRoute(
+            address(newLifecycleHook),
+            address(orchestrator),
+            address(policyVerifier),
+            disputeProtectionPolicy.signatureVerifierByPaymentVerifier(address(policyVerifier))
+        );
         orchestrator.setLifecycleHook(newLifecycleHook);
 
         disputeProtectionPolicy.setLifecycleHookAuthorization(address(lifecycleHook), false);
@@ -380,8 +386,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         );
 
         uint256 releaseAmount = 40e6;
-        verifier.setShouldVerifyPayment(true);
-        _fulfill(oldSettledIntent, releaseAmount, CONVERSION_RATE);
+        _fulfillPolicy(oldSettledIntent, releaseAmount);
         IDisputeProtectionPolicy.DisputeProtectionIntent memory oldSettledIntentState =
             disputeProtectionPolicy.getDisputeProtectionIntent(oldSettledIntent);
         assertEq(
@@ -416,7 +421,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     function _addPaymentMethod(bytes32 _paymentMethod) internal {
         bytes32[] memory supportedCurrencies = new bytes32[](1);
         supportedCurrencies[0] = USD;
-        paymentVerifierRegistry.addPaymentMethod(_paymentMethod, address(verifier), supportedCurrencies);
+        policyVerifier.addPaymentMethod(_paymentMethod);
+        paymentVerifierRegistry.addPaymentMethod(_paymentMethod, address(policyVerifier), supportedCurrencies);
 
         bytes32[] memory paymentMethods = new bytes32[](1);
         paymentMethods[0] = _paymentMethod;

@@ -13,7 +13,10 @@ import {DisputeMethodScopedCutoverGuard} from "contracts/mocks/DisputeMethodScop
 import {DisputeMethodScopedRotationPostcondition} from "contracts/mocks/DisputeMethodScopedRotationPostcondition.sol";
 import {DisputeMethodScopedCutoverPostcondition} from "contracts/mocks/DisputeMethodScopedCutoverPostcondition.sol";
 import {OrchestratorV3SurfaceMock} from "contracts/mocks/OrchestratorV3SurfaceMock.sol";
-import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
+import {
+    HistoricalDisputePolicy as DisputeProtectionPolicy,
+    HistoricalDisputePolicyDeployer
+} from "../helpers/HistoricalDisputePolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
@@ -106,8 +109,9 @@ contract DisputeMethodScopedActivationTest is OrchestratorV3Fixture {
         attestationVerifier = new MultiAttestationVerifier(witnesses, 1);
         disputeVerifier = new DisputeVerifier(address(this), nullifierRegistryV2, attestationVerifier);
         vault = new StakeVault(address(this), token, address(0), CONTROLLER_CHANGE_DELAY);
-        predecessorPolicy = new DisputeProtectionPolicy(address(this), vault, disputeVerifier, disputeRegistry);
-        freshPolicy = new DisputeProtectionPolicy(address(this), vault, disputeVerifier, disputeRegistry);
+        predecessorPolicy =
+            HistoricalDisputePolicyDeployer.deploy(address(this), vault, disputeVerifier, disputeRegistry);
+        freshPolicy = HistoricalDisputePolicyDeployer.deploy(address(this), vault, disputeVerifier, disputeRegistry);
 
         groupRegistry = new AddressGroupRegistry();
         whitelistPolicy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
@@ -595,8 +599,9 @@ contract DisputeMethodScopedActivationTest is OrchestratorV3Fixture {
         StakeVaultLocksMock mockVault = new StakeVaultLocksMock(
             safe, address(predecessorPolicy), address(0), uint64(block.timestamp), CONTROLLER_CHANGE_DELAY
         );
-        DisputeProtectionPolicy alternateFresh =
-            new DisputeProtectionPolicy(safe, IStakeVault(address(mockVault)), disputeVerifier, disputeRegistry);
+        DisputeProtectionPolicy alternateFresh = HistoricalDisputePolicyDeployer.deploy(
+            safe, IStakeVault(address(mockVault)), disputeVerifier, disputeRegistry
+        );
         mockVault.setPendingController(address(alternateFresh));
         IntentLifecycleHookV1 alternateFreshHook =
             new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, alternateFresh);
@@ -858,7 +863,7 @@ contract DisputeMethodScopedActivationTest is OrchestratorV3Fixture {
         DisputeVerifier policyVerifier,
         NullifierRegistry policyRegistry
     ) internal returns (TrustSurface memory surface) {
-        DisputeProtectionPolicy alternate = new DisputeProtectionPolicy(
+        DisputeProtectionPolicy alternate = HistoricalDisputePolicyDeployer.deploy(
             policyOwner, vault, policyVerifier, policyRegistry
         );
         if (pendingPolicyOwner != address(0)) {
@@ -874,7 +879,7 @@ contract DisputeMethodScopedActivationTest is OrchestratorV3Fixture {
         returns (TrustSurface memory surface)
     {
         DisputeProtectionPolicy alternate =
-            new DisputeProtectionPolicy(address(this), policyVault, policyVerifier, policyRegistry);
+            HistoricalDisputePolicyDeployer.deploy(address(this), policyVault, policyVerifier, policyRegistry);
         alternate.transferOwnership(safe);
         IntentLifecycleHookV1 alternateHook =
             new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, alternate);
