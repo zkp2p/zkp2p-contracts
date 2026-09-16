@@ -18,6 +18,7 @@ const { join } = require("node:path");
 const { test } = require("node:test");
 const hre = /** @type {any} */ (require("hardhat"));
 const { ethers } = hre;
+const { historicalDisputeArtifact, isHistoricalDisputeArtifact } = require("../deployments/historicalDisputeArtifacts");
 
 const {
   buildCutoverTransactions,
@@ -66,6 +67,9 @@ const foundryArtifacts = /** @type {Record<string, string>} */ ({
 
 /** @param {string} name @param {any=} signer */
 async function getContractFactory(name, signer) {
+  if (isHistoricalDisputeArtifact(name)) {
+    return ethers.getContractFactoryFromArtifact(historicalDisputeArtifact(name), signer);
+  }
   try {
     return await ethers.getContractFactory(name, signer);
   } catch (error) {

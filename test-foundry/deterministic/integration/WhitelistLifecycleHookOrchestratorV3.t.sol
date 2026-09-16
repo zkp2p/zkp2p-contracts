@@ -77,14 +77,14 @@ contract WhitelistLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         bytes32 unknownIntent = keccak256("unknown-intent");
         vm.expectRevert(abi.encodeWithSelector(WhitelistLifecycleHook.IntentNotFound.selector, unknownIntent));
         vm.prank(address(orchestrator));
-        whitelistHook.onIntentSignaled(unknownIntent);
+        whitelistHook.onIntentSignaled(unknownIntent, "");
     }
 
     function test_UnauthorizedLifecycleCallbacksRevert() public {
         bytes32 intentHash = keccak256("intent");
         vm.expectRevert(abi.encodeWithSelector(WhitelistLifecycleHook.UnauthorizedOrchestrator.selector, other));
         vm.prank(other);
-        whitelistHook.onIntentSignaled(intentHash);
+        whitelistHook.onIntentSignaled(intentHash, "");
 
         vm.expectRevert(abi.encodeWithSelector(WhitelistLifecycleHook.UnauthorizedOrchestrator.selector, other));
         vm.prank(other);
@@ -129,27 +129,27 @@ contract WhitelistLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         bytes32 freshIntent = _signalDefault();
         assertEq(address(orchestrator.getIntentLifecycleHook(freshIntent)), address(combinedHook));
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(freshIntent).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING)
+            uint256(disputeProtectionPolicy.getPolicyIntent(freshIntent).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.PENDING)
         );
 
         vm.prank(taker);
         orchestrator.cancelIntent(oldCancelledIntent);
         _fulfillPolicy(oldSettledIntent, 40e6);
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(oldCancelledIntent).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getPolicyIntent(oldCancelledIntent).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.NONE)
         );
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(oldSettledIntent).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getPolicyIntent(oldSettledIntent).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.NONE)
         );
 
         vm.prank(taker);
         orchestrator.cancelIntent(freshIntent);
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(freshIntent).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.CANCELLED)
+            uint256(disputeProtectionPolicy.getPolicyIntent(freshIntent).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.CANCELLED)
         );
         assertEq(vault.lockedStake(taker), 0);
     }
@@ -175,7 +175,6 @@ contract WhitelistLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         disputeProtectionPolicy.setPolicy(METHOD, bytes32(0), RISK_WINDOW, true);
         _configurePolicyVerifier(
             disputeProtectionPolicy,
-            address(combinedHook),
             new NullifierRegistryV2(new NullifierRegistry()),
             new AttestationVerifierMock()
         );

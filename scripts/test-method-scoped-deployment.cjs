@@ -12,6 +12,7 @@ const moduleAlias = require(require.resolve("module-alias"));
 moduleAlias.reset();
 moduleAlias.addAlias("@utils", process.cwd() + "/utils");
 
+const { historicalDisputeArtifact } = require("../deployments/historicalDisputeArtifacts");
 const assert = require("node:assert/strict");
 const { createHash } = require("node:crypto");
 const {
@@ -113,9 +114,7 @@ test("executed Base hook record matches chain code across build hashes", async (
   const deployment = /** @type {any} */ (
     require("../deployments/base/IntentLifecycleHookV1OptIn.json")
   );
-  const artifact = await hardhat.deployments.getExtendedArtifact(
-    "IntentLifecycleHookV1"
-  );
+  const artifact = historicalDisputeArtifact("IntentLifecycleHookV1");
   assert.notEqual(deployment.solcInputHash, artifact.solcInputHash);
 
   const immutableReferences = artifact.evm.deployedBytecode.immutableReferences;
@@ -469,7 +468,7 @@ test("immutable deployment lanes match their exact pinned source digests", () =>
         "bb6357508883202604fef7adb28656b781b84d3cec9f3afb2fb20162419845cc",
       actual:
         "bb6357508883202604fef7adb28656b781b84d3cec9f3afb2fb20162419845cc",
-      activeSource: undefined,
+      activeSource: "deployments/activeDeploymentLanes/39_deploy_method_scoped_vault_stack.ts",
       retired: false,
       tags: [
         "39_deploy_method_scoped_vault_stack",
@@ -498,7 +497,7 @@ test("immutable deployment lanes match their exact pinned source digests", () =>
         "6816bcd307d36b7cb2df19663f8dba843fb4e8e376652d71f355fb9707ade253",
       actual:
         "6816bcd307d36b7cb2df19663f8dba843fb4e8e376652d71f355fb9707ade253",
-      activeSource: undefined,
+      activeSource: "deployments/activeDeploymentLanes/40_activate_method_scoped_vault_stack.ts",
       retired: false,
       tags: [
         "40_activate_method_scoped_vault_stack",
@@ -559,7 +558,7 @@ test("active selection mounts successor lanes and excludes retired history", () 
   }
   assert.equal(
     byName.get("39_deploy_method_scoped_vault_stack.ts"),
-    join(repositoryRoot, "deploy", "39_deploy_method_scoped_vault_stack.ts")
+    join(repositoryRoot, "deployments/activeDeploymentLanes/39_deploy_method_scoped_vault_stack.ts")
   );
 });
 
@@ -1346,16 +1345,16 @@ test("active dispute manifest selects the dedicated-vault stack on every network
     "hardhat",
   ])) {
     assert.deepEqual(Object.values(activeDisputeManifest.networks[network]), [
-      "StakeVaultMethodScoped",
-      "DisputeProtectionPolicyMethodScopedStaked",
-      "IntentLifecycleHookV1MethodScopedStaked",
+      "PaymentPolicyStakeVault",
+      "PaymentPolicy",
+      "PaymentPolicyLifecycleHook",
       "WhitelistPolicyMethodScoped",
     ]);
   }
   const resolved = resolveActiveDisputeAliases("hardhat", {
-    StakeVaultMethodScoped: { address: "vault" },
-    DisputeProtectionPolicyMethodScopedStaked: { address: "policy" },
-    IntentLifecycleHookV1MethodScopedStaked: { address: "hook" },
+    PaymentPolicyStakeVault: { address: "vault" },
+    PaymentPolicy: { address: "policy" },
+    PaymentPolicyLifecycleHook: { address: "hook" },
     WhitelistPolicyMethodScoped: { address: "whitelist" },
   });
   assert.equal(
@@ -1476,22 +1475,7 @@ test("fresh-policy classifier rejects every lifecycle event", () => {
 });
 
 test("fresh-policy event lists partition the policy ABI exactly once", () => {
-  const artifactEvents =
-    /** @type {{ abi: Array<{ type: string, name: string }> }} */ (
-      JSON.parse(
-        readFileSync(
-          join(
-            repositoryRoot,
-            "artifacts",
-            "contracts",
-            "hooks",
-            "DisputeProtectionPolicy.sol",
-            "DisputeProtectionPolicy.json"
-          ),
-          "utf8"
-        )
-      )
-    ).abi
+  const artifactEvents = historicalDisputeArtifact("DisputeProtectionPolicy").abi
       .filter((entry) => entry.type === "event")
       .map((entry) => entry.name)
       .sort();
@@ -1549,19 +1533,7 @@ test("fresh-policy classifier fails closed on an unclassified event", () => {
 
 test("decodeFreshStackLogs maps raw logs to named events and rejects unknown topics", () => {
   const policyInterface = new ethersLibrary.utils.Interface(
-    JSON.parse(
-      readFileSync(
-        join(
-          repositoryRoot,
-          "artifacts",
-          "contracts",
-          "hooks",
-          "DisputeProtectionPolicy.sol",
-          "DisputeProtectionPolicy.json"
-        ),
-        "utf8"
-      )
-    ).abi
+    historicalDisputeArtifact("DisputeProtectionPolicy").abi
   );
   const configurationTopic = policyInterface.getEventTopic(
     "DisputeProtectionEnabledUpdated"

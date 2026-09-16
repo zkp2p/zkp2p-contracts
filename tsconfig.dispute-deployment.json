@@ -52,7 +52,12 @@
     "scripts/test-method-scoped-runner.cjs",
     "scripts/test-opt-in-dispute-lifecycle-deployment.cjs",
     "scripts/test-v3-groups-base-deployment.cjs",
-    "tasks/etherscanVerifyWithDelay.ts"
+    "tasks/etherscanVerifyWithDelay.ts",
+    "deploy/43_deploy_local_payment_policy_stack.ts",
+    "deployments/historicalDisputeArtifacts.ts",
+    "deployments/activeDeploymentLanes/39_deploy_method_scoped_vault_stack.ts",
+    "deployments/activeDeploymentLanes/42_retire_dispute_risk_windows.ts",
+    "deployments/activeDeploymentLanes/40_activate_method_scoped_vault_stack.ts"
   ],
   "include": []
 }

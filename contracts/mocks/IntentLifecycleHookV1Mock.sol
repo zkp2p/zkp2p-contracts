@@ -12,6 +12,7 @@ contract IntentLifecycleHookV1Mock is IIntentLifecycleHook {
     bool public revertOnSignal;
     bool public revertOnCallback;
     bytes32 public lastIntentHash;
+    bytes public lastAdmissionData;
     SettlementContext public lastSettlementContext;
     uint256 public signaledCalls;
     uint256 public cancelledCalls;
@@ -25,9 +26,10 @@ contract IntentLifecycleHookV1Mock is IIntentLifecycleHook {
         revertOnCallback = _shouldRevert;
     }
 
-    function onIntentSignaled(bytes32 _intentHash) external override {
+    function onIntentSignaled(bytes32 _intentHash, bytes calldata _data) external override {
         if (revertOnSignal) revert("risk admission failed");
         lastIntentHash = _intentHash;
+        lastAdmissionData = _data;
         signaledCalls++;
     }
 

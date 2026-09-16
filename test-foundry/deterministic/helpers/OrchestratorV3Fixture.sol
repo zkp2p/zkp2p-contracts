@@ -13,8 +13,6 @@ import {PostIntentHookV2Mock} from "contracts/mocks/PostIntentHookV2Mock.sol";
 import {PreIntentHookMock} from "contracts/mocks/PreIntentHookMock.sol";
 import {PushPostIntentHookV2Mock} from "contracts/mocks/PushPostIntentHookV2Mock.sol";
 import {ReentrantPostIntentHookV2} from "contracts/mocks/ReentrantPostIntentHookV2.sol";
-import {ReentrantPreIntentHookMock} from "contracts/mocks/ReentrantPreIntentHookMock.sol";
-import {ReentrantSignalIntentCallerV2Mock} from "contracts/mocks/ReentrantSignalIntentCallerV2Mock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
@@ -56,8 +54,6 @@ abstract contract OrchestratorV3Fixture is Test {
     PartialPullPostIntentHookV2Mock internal partialPostIntentHook;
     PushPostIntentHookV2Mock internal pushPostIntentHook;
     ReentrantPostIntentHookV2 internal reentrantPostIntentHook;
-    ReentrantSignalIntentCallerV2Mock internal reentrantSignalCaller;
-    ReentrantPreIntentHookMock internal reentrantPreIntentHook;
     OrchestratorMock internal orchestratorMock;
     uint256 internal depositId;
 
@@ -106,8 +102,6 @@ abstract contract OrchestratorV3Fixture is Test {
         partialPostIntentHook = new PartialPullPostIntentHookV2Mock(address(token), address(orchestrator));
         pushPostIntentHook = new PushPostIntentHookV2Mock(address(token), address(orchestrator));
         reentrantPostIntentHook = new ReentrantPostIntentHookV2(address(token), address(orchestrator));
-        reentrantSignalCaller = new ReentrantSignalIntentCallerV2Mock(address(orchestrator));
-        reentrantPreIntentHook = new ReentrantPreIntentHookMock(address(reentrantSignalCaller));
         orchestratorMock = new OrchestratorMock(address(escrow));
         token.transfer(address(pushPostIntentHook), 10e6);
 
@@ -183,6 +177,7 @@ abstract contract OrchestratorV3Fixture is Test {
             gatingServiceSignature: "",
             signatureExpiration: block.timestamp + 1 days,
             postIntentHook: hook,
+            lifecycleHookData: "",
             preIntentHookData: "",
             data: data
         });

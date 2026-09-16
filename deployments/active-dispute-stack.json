@@ -14,15 +14,15 @@
       "WhitelistPolicy": "WhitelistPolicyMethodScoped"
     },
     "localhost": {
-      "StakeVault": "StakeVaultMethodScoped",
-      "DisputeProtectionPolicy": "DisputeProtectionPolicyMethodScopedStaked",
-      "IntentLifecycleHookV1": "IntentLifecycleHookV1MethodScopedStaked",
+      "StakeVault": "PaymentPolicyStakeVault",
+      "DisputeProtectionPolicy": "PaymentPolicy",
+      "IntentLifecycleHookV1": "PaymentPolicyLifecycleHook",
       "WhitelistPolicy": "WhitelistPolicyMethodScoped"
     },
     "hardhat": {
-      "StakeVault": "StakeVaultMethodScoped",
-      "DisputeProtectionPolicy": "DisputeProtectionPolicyMethodScopedStaked",
-      "IntentLifecycleHookV1": "IntentLifecycleHookV1MethodScopedStaked",
+      "StakeVault": "PaymentPolicyStakeVault",
+      "DisputeProtectionPolicy": "PaymentPolicy",
+      "IntentLifecycleHookV1": "PaymentPolicyLifecycleHook",
       "WhitelistPolicy": "WhitelistPolicyMethodScoped"
     }
   }

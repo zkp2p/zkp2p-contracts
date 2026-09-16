@@ -14,7 +14,6 @@ abstract contract PolicyVerifierFixture is OrchestratorV3Fixture {
 
     function _configurePolicyVerifier(
         DisputeProtectionPolicy policy,
-        address hook,
         NullifierRegistryV2 payments,
         IAttestationVerifier signatures
     ) internal {
@@ -26,7 +25,7 @@ abstract contract PolicyVerifierFixture is OrchestratorV3Fixture {
         bytes32[] memory currencies = new bytes32[](1);
         currencies[0] = USD;
         paymentVerifierRegistry.addPaymentMethod(METHOD, address(policyVerifier), currencies);
-        policy.registerPolicyRoute(hook, address(orchestrator), address(policyVerifier), address(signatures));
+        policy.registerPolicyRoute(address(orchestrator), address(policyVerifier), address(signatures));
     }
 
     function _fulfillPolicy(bytes32 intentHash, uint256 releaseAmount) internal {

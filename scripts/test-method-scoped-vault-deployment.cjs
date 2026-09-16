@@ -20,6 +20,7 @@ const { test } = require("node:test");
 
 const hardhat = require("hardhat");
 const { ethers } = hardhat;
+const { historicalDisputeArtifact, isHistoricalDisputeArtifact, withHistoricalDisputeArtifacts } = require("../deployments/historicalDisputeArtifacts");
 const lane31 = require("../deploy/31_deploy_v3_payment_binding_stack.ts");
 const {
   ACTIVE_PAYMENT_METHODS,
@@ -255,7 +256,9 @@ test("lane 39 live path never mutates the writer set or active hook", () => {
 
 /** @param {string} name @param {unknown[]} [args] */
 async function deployContract(name, args = []) {
-  const factory = await ethers.getContractFactory(name);
+  const factory = isHistoricalDisputeArtifact(name)
+    ? await ethers.getContractFactoryFromArtifact(historicalDisputeArtifact(name))
+    : await ethers.getContractFactory(name);
   const contract = await factory.deploy(...args);
   await contract.deployed();
   return contract;
@@ -279,9 +282,9 @@ async function localhostFixture() {
     },
     /** @param {string} name */
     getOrNull: async (name) => records.get(name) || null,
-    getExtendedArtifact: hardhat.deployments.getExtendedArtifact.bind(
-      hardhat.deployments
-    ),
+    /** @param {string} name */
+    getExtendedArtifact: async (name) => isHistoricalDisputeArtifact(name)
+      ? historicalDisputeArtifact(name) : hardhat.deployments.getExtendedArtifact(name),
     /** @param {string} name @param {{contract?: string, args?: unknown[]}} options */
     deploy: async (name, options) => {
       const existing = records.get(name);
@@ -290,9 +293,7 @@ async function localhostFixture() {
       const artifactName = options.contract || name;
       const contract = await deployContract(artifactName, options.args || []);
       const receipt = await contract.deployTransaction.wait();
-      const artifact = await hardhat.deployments.getExtendedArtifact(
-        artifactName
-      );
+      const artifact = await deploymentApi.getExtendedArtifact(artifactName);
       const record = {
         address: contract.address,
         args: options.args || [],
@@ -365,7 +366,7 @@ test("lane 39 deploys and activates the dedicated-vault topology in-process", as
   lane31.paymentBindingCutoverReady = async () => true;
   try {
     const state = await localhostFixture();
-    await deployLane39(state.fakeHre);
+    await withHistoricalDisputeArtifacts(hardhat, () => deployLane39(state.fakeHre));
 
     const vaultRecord = state.records.get("StakeVaultMethodScoped");
     const policyRecord = state.records.get(
@@ -380,7 +381,7 @@ test("lane 39 deploys and activates the dedicated-vault topology in-process", as
 
     const vault = await ethers.getContractAt("StakeVault", vaultRecord.address);
     const policy = await ethers.getContractAt(
-      "DisputeProtectionPolicy",
+      historicalDisputeArtifact("DisputeProtectionPolicy").abi,
       policyRecord.address
     );
     const registry = await ethers.getContractAt(
@@ -416,7 +417,7 @@ test("lane 39 deploys and activates the dedicated-vault topology in-process", as
     }
 
     const callsAfterFirstRun = state.deployCalls();
-    await deployLane39(state.fakeHre);
+    await withHistoricalDisputeArtifacts(hardhat, () => deployLane39(state.fakeHre));
     assert.equal(state.deployCalls(), callsAfterFirstRun);
 
     const originalHash = vaultRecord.solcInputHash;

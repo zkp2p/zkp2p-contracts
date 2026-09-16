@@ -52,7 +52,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         disputeProtectionPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
         disputeProtectionPolicy.setPolicy(METHOD, bytes32(0), RISK_WINDOW, true);
         _configurePolicyVerifier(
-            disputeProtectionPolicy, address(lifecycleHook), nullifierRegistry, new AttestationVerifierMock()
+            disputeProtectionPolicy, nullifierRegistry, new AttestationVerifierMock()
         );
         orchestrator.setLifecycleHook(lifecycleHook);
         _stake(taker, STAKE_AMOUNT);
@@ -64,8 +64,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         bytes32 intentHash = _signalDefault();
 
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getPolicyIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.NONE)
         );
         assertEq(vault.lockedStake(taker), 0);
         assertEq(escrow.getDepositIntent(depositId, intentHash).intentHash, intentHash);
@@ -108,8 +108,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
 
         assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING)
+            uint256(disputeProtectionPolicy.getPolicyIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.PENDING)
         );
         assertEq(escrow.getDepositIntent(depositId, intentHash).intentHash, intentHash);
     }
@@ -121,7 +121,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         whitelistPolicy.setEnabled(address(escrow), depositId, WINDOWLESS_METHOD, true);
         _setDisputeProtection(true);
         vm.prank(depositor);
-        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, WINDOWLESS_METHOD, true);
+        disputeProtectionPolicy.setPolicyAdmissionEnabled(address(escrow), depositId, WINDOWLESS_METHOD, true);
         IOrchestratorV3.SignalIntentParams memory params = _paramsFor(other);
         params.paymentMethod = WINDOWLESS_METHOD;
 
@@ -148,8 +148,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         bytes32 takerIntent = _signalDefault();
 
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(takerIntent).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING)
+            uint256(disputeProtectionPolicy.getPolicyIntent(takerIntent).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.PENDING)
         );
         assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
 
@@ -168,15 +168,15 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         otherMethodParams.paymentMethod = OTHER_METHOD;
         bytes32 protectedIntent = _signal(taker, otherMethodParams);
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(protectedIntent).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING)
+            uint256(disputeProtectionPolicy.getPolicyIntent(protectedIntent).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.PENDING)
         );
         uint256 lockedAfterFirst = vault.lockedStake(taker);
 
         bytes32 openIntent = _signalDefault();
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(openIntent).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getPolicyIntent(openIntent).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.NONE)
         );
         assertEq(vault.lockedStake(taker), lockedAfterFirst);
     }
@@ -189,8 +189,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         bytes32 intentHash = _signal(other, params);
 
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getPolicyIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.NONE)
         );
         assertEq(vault.lockedStake(other), 0);
 
@@ -204,8 +204,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         _setDisputeProtection(false);
         bytes32 intentHash = _signal(other, _paramsFor(other));
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getPolicyIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.NONE)
         );
         assertEq(vault.lockedStake(other), 0);
     }
@@ -216,8 +216,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         orchestrator.cancelIntent(cancelledIntent);
         assertEq(vault.lockedStake(taker), 0);
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(cancelledIntent).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.CANCELLED)
+            uint256(disputeProtectionPolicy.getPolicyIntent(cancelledIntent).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.CANCELLED)
         );
 
         bytes32 expiredIntent = _signalDefault();
@@ -226,8 +226,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         escrow.pruneExpiredIntents(depositId);
         assertEq(vault.lockedStake(taker), 0);
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(expiredIntent).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.CANCELLED)
+            uint256(disputeProtectionPolicy.getPolicyIntent(expiredIntent).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.CANCELLED)
         );
     }
 
@@ -237,8 +237,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         uint256 releaseEligibleAt = vm.getBlockTimestamp() + RISK_WINDOW;
         _fulfillPolicy(intentHash, releaseAmount);
 
-        IDisputeProtectionPolicy.DisputeProtectionIntent memory disputeProtectionIntent =
-            disputeProtectionPolicy.getDisputeProtectionIntent(intentHash);
+        IDisputeProtectionPolicy.PolicyIntent memory disputeProtectionIntent =
+            disputeProtectionPolicy.getPolicyIntent(intentHash);
         assertEq(disputeProtectionIntent.releaseAmount, releaseAmount);
         assertEq(disputeProtectionIntent.releaseEligibleAt, releaseEligibleAt);
         (, uint256 lockedAmount, uint64 maturesAt) = vault.locks(intentHash);
@@ -257,13 +257,13 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash);
 
-        IDisputeProtectionPolicy.DisputeProtectionIntent memory disputeProtectionIntent =
-            disputeProtectionPolicy.getDisputeProtectionIntent(intentHash);
+        IDisputeProtectionPolicy.PolicyIntent memory disputeProtectionIntent =
+            disputeProtectionPolicy.getPolicyIntent(intentHash);
         assertEq(disputeProtectionIntent.releaseAmount, INTENT_AMOUNT);
         assertEq(disputeProtectionIntent.releaseEligibleAt, releaseEligibleAt);
         assertEq(
             uint256(disputeProtectionIntent.status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED)
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.SETTLED)
         );
         assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
         assertEq(vault.freeStake(taker), STAKE_AMOUNT - INTENT_AMOUNT);
@@ -288,8 +288,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         assertEq(vault.claimable(depositor), INTENT_AMOUNT);
         assertEq(vault.lockedStake(taker), 0);
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.DISPUTED)
+            uint256(disputeProtectionPolicy.getPolicyIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.DISPUTED)
         );
     }
 
@@ -315,8 +315,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         bytes32 intentHash = _signal(other, _paramsFor(other));
 
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getPolicyIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.NONE)
         );
         assertEq(vault.lockedStake(other), 0);
         assertEq(escrow.getDepositIntent(depositId, intentHash).intentHash, intentHash);
@@ -346,8 +346,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         assertEq(vault.totalStaked(), totalBefore);
         assertEq(vault.lockedStake(taker), 0);
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(intentHash).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+            uint256(disputeProtectionPolicy.getPolicyIntent(intentHash).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.NONE)
         );
     }
 
@@ -358,12 +358,6 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
             new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, disputeProtectionPolicy);
 
         disputeProtectionPolicy.setLifecycleHookAuthorization(address(newLifecycleHook), true);
-        disputeProtectionPolicy.registerPolicyRoute(
-            address(newLifecycleHook),
-            address(orchestrator),
-            address(policyVerifier),
-            disputeProtectionPolicy.signatureVerifierByPaymentVerifier(address(policyVerifier))
-        );
         orchestrator.setLifecycleHook(newLifecycleHook);
 
         disputeProtectionPolicy.setLifecycleHookAuthorization(address(lifecycleHook), false);
@@ -373,25 +367,25 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         vm.prank(taker);
         orchestrator.cancelIntent(oldCancelledIntent);
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(oldCancelledIntent).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING)
+            uint256(disputeProtectionPolicy.getPolicyIntent(oldCancelledIntent).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.PENDING)
         );
 
         disputeProtectionPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
         vm.prank(taker);
         orchestrator.cancelIntent(oldCancelledIntent);
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(oldCancelledIntent).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.CANCELLED)
+            uint256(disputeProtectionPolicy.getPolicyIntent(oldCancelledIntent).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.CANCELLED)
         );
 
         uint256 releaseAmount = 40e6;
         _fulfillPolicy(oldSettledIntent, releaseAmount);
-        IDisputeProtectionPolicy.DisputeProtectionIntent memory oldSettledIntentState =
-            disputeProtectionPolicy.getDisputeProtectionIntent(oldSettledIntent);
+        IDisputeProtectionPolicy.PolicyIntent memory oldSettledIntentState =
+            disputeProtectionPolicy.getPolicyIntent(oldSettledIntent);
         assertEq(
             uint256(oldSettledIntentState.status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED)
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.SETTLED)
         );
         assertEq(oldSettledIntentState.releaseAmount, releaseAmount);
 
@@ -400,8 +394,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
         vm.prank(taker);
         orchestrator.cancelIntent(newIntent);
         assertEq(
-            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(newIntent).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.CANCELLED)
+            uint256(disputeProtectionPolicy.getPolicyIntent(newIntent).status),
+            uint256(IDisputeProtectionPolicy.PolicyIntentStatus.CANCELLED)
         );
         assertEq(vault.lockedStake(taker), releaseAmount);
     }
@@ -415,7 +409,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is PolicyVerifierFixture {
 
     function _setDisputeProtection(bool enabled) internal {
         vm.prank(depositor);
-        disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, enabled);
+        disputeProtectionPolicy.setPolicyAdmissionEnabled(address(escrow), depositId, METHOD, enabled);
     }
 
     function _addPaymentMethod(bytes32 _paymentMethod) internal {

@@ -16,7 +16,7 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
  * admission. Outside that route an enabled whitelist rejects nonmembers, while a whitelist-disabled deposit stays open.
  * @dev Reads canonical intent data from the calling orchestrator and forwards cancellation and settlement accounting
  * to DisputeProtectionPolicy. All callbacks remain fail-closed. This hook serves every registered orchestrator and
- * forwards lifecycle callbacks without provenance checks; the trust argument lives in DisputeProtectionPolicy's header.
+ * forwards the authenticated caller so the policy can enforce each intent's original hook and orchestrator.
  * Deregistering an orchestrator with unresolved intents snapshotted to this hook permanently blocks their terminal
  * callbacks, so governance must drain its intents before removing it from OrchestratorRegistry.
  */
@@ -56,25 +56,39 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     /**
      * @inheritdoc IIntentLifecycleHook
      */
-    function onIntentSignaled(bytes32 _intentHash) external override onlyOrchestrator {
+    function onIntentSignaled(bytes32 _intentHash, bytes calldata _data) external override onlyOrchestrator {
         IOrchestratorV3.Intent memory intent = IOrchestratorV3(msg.sender).getIntent(_intentHash);
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
+        require(_data.length == 0 || _data.length == 32, "Hook: Invalid policy data");
+        bytes32 policyId = _data.length == 0 ? bytes32(0) : abi.decode(_data, (bytes32));
         bool isWhitelistEnabled = whitelistPolicy.enabled(intent.escrow, intent.depositId, intent.paymentMethod);
         if (
             isWhitelistEnabled
                 && whitelistPolicy.isTakerAllowed(intent.escrow, intent.depositId, intent.paymentMethod, intent.owner)
         ) {
+            require(policyId == bytes32(0), "Hook: Unmanaged policy");
             return;
         }
         // Dispute protection admission is stateful, so the configuration query only selects the route.
         // onIntentSignaled remains authoritative for token compatibility, collateral, and pause checks.
-        if (disputeProtectionPolicy.isDisputeProtectionEnabled(intent.escrow, intent.depositId, intent.paymentMethod)) {
-            disputeProtectionPolicy.onIntentSignaled(
-                _intentHash, intent.escrow, intent.depositId, intent.owner, intent.paymentMethod, intent.amount
-            );
-        } else if (isWhitelistEnabled) {
-            revert TakerNotWhitelisted(intent.escrow, intent.depositId, intent.paymentMethod, intent.owner);
+        if (disputeProtectionPolicy.isPolicyAdmissionEnabled(intent.escrow, intent.depositId, intent.paymentMethod)) {
+            disputeProtectionPolicy.onIntentSignaled(IDisputeProtectionPolicy.AdmissionContext({
+                intentHash: _intentHash,
+                orchestrator: msg.sender,
+                escrow: intent.escrow,
+                depositId: intent.depositId,
+                taker: intent.owner,
+                paymentMethod: intent.paymentMethod,
+                amount: intent.amount,
+                policyId: policyId,
+                whitelistEnabled: isWhitelistEnabled
+            }));
+        } else {
+            require(policyId == bytes32(0), "Hook: Unmanaged policy");
+            if (isWhitelistEnabled) {
+                revert TakerNotWhitelisted(intent.escrow, intent.depositId, intent.paymentMethod, intent.owner);
+            }
         }
     }
 
@@ -82,14 +96,14 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
      * @inheritdoc IIntentLifecycleHook
      */
     function onIntentCancelled(bytes32 _intentHash) external override onlyOrchestrator {
-        disputeProtectionPolicy.onIntentCancelled(_intentHash);
+        disputeProtectionPolicy.onIntentCancelled(msg.sender, _intentHash);
     }
 
     /**
      * @inheritdoc IIntentLifecycleHook
      */
     function settleIntent(SettlementContext calldata _context) external override onlyOrchestrator {
-        disputeProtectionPolicy.onIntentSettled(_context.intentHash, _context.releaseAmount, _context.isManualRelease);
+        disputeProtectionPolicy.onIntentSettled(msg.sender, _context.intentHash, _context.releaseAmount, _context.isManualRelease);
     }
 
     /* ============ Modifiers ============ */

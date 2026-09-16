@@ -50,7 +50,8 @@ contract WhitelistLifecycleHook is IIntentLifecycleHook {
     /**
      * @inheritdoc IIntentLifecycleHook
      */
-    function onIntentSignaled(bytes32 _intentHash) external view override onlyOrchestrator {
+    function onIntentSignaled(bytes32 _intentHash, bytes calldata _data) external view override onlyOrchestrator {
+        require(_data.length == 0, "Whitelist: Unexpected admission data");
         IOrchestratorV3.Intent memory intent = IOrchestratorV3(msg.sender).getIntent(_intentHash);
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 

@@ -82,7 +82,7 @@ export const IMMUTABLE_DEPLOYMENT_LANES = {
   "39_deploy_method_scoped_vault_stack.ts": {
     deployedSourceSha: "ddb849496af0aead7caf32d645b03be9ec5e724b",
     sha256: "bb6357508883202604fef7adb28656b781b84d3cec9f3afb2fb20162419845cc",
-    activeSource: undefined,
+    activeSource: "deployments/activeDeploymentLanes/39_deploy_method_scoped_vault_stack.ts",
     retired: false,
     tags: [
       "39_deploy_method_scoped_vault_stack",
@@ -95,7 +95,7 @@ export const IMMUTABLE_DEPLOYMENT_LANES = {
   "40_activate_method_scoped_vault_stack.ts": {
     deployedSourceSha: "71113f2c16562140d110abd4ff5b696f4069975a",
     sha256: "6816bcd307d36b7cb2df19663f8dba843fb4e8e376652d71f355fb9707ade253",
-    activeSource: undefined,
+    activeSource: "deployments/activeDeploymentLanes/40_activate_method_scoped_vault_stack.ts",
     retired: false,
     tags: [
       "40_activate_method_scoped_vault_stack",
@@ -107,7 +107,7 @@ export const IMMUTABLE_DEPLOYMENT_LANES = {
   "42_retire_dispute_risk_windows.ts": {
     deployedSourceSha: "dfe1060e09a5d7d9c1b57dbfd835ecf378e1e9f4",
     sha256: "5aeddc6c46ad489fefbe53cf537c0c70eefebf3ce531a56149a4f2e67e3ad014",
-    activeSource: undefined,
+    activeSource: "deployments/activeDeploymentLanes/42_retire_dispute_risk_windows.ts",
     retired: false,
     tags: [
       "42_retire_dispute_risk_windows",

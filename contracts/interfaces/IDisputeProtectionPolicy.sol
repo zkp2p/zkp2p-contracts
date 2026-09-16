@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 
 /**
  * @title IDisputeProtectionPolicy
- * @notice Lifecycle-hook integration surface for stake-backed dispute coverage.
+ * @notice Lifecycle-hook integration surface for payment policies and collateral coverage.
  * @dev The concrete policy exposes depositor, governance, dispute, and release functions directly.
  *      This interface intentionally contains only the functions consumed by IntentLifecycleHookV1.
  */
@@ -16,7 +16,7 @@ interface IDisputeProtectionPolicy {
      *      snapshotted risk window; zero-window intents have no collateral coverage.
      *      `RELEASED` means the collateral was returned and the intent is no longer disputable.
      */
-    enum DisputeProtectionIntentStatus {
+    enum PolicyIntentStatus {
         NONE,
         PENDING,
         CANCELLED,
@@ -30,6 +30,9 @@ interface IDisputeProtectionPolicy {
      * @param taker Account that signaled the intent.
      * @param stakeOwner Account whose StakeVault balance collateralizes the intent; zero for zero-window admission.
      * @param depositor Escrow depositor compensated by a successful dispute.
+     * @param lifecycleHook Authorized hook that admitted the intent and must deliver terminal callbacks.
+     * @param orchestrator Authenticated originating orchestrator that owns the intent.
+     * @param policyId Effective evidence policy, updated only by an authorized pending-order correction.
      * @param paymentMethod Payment method used to namespace risk configuration and dispute nullifiers.
      * @param status Current dispute protection lifecycle state.
      * @param riskWindow Minimum time collateral must remain locked after settlement; zero for an admitted zero-window policy.
@@ -37,14 +40,17 @@ interface IDisputeProtectionPolicy {
      * valid after this time until release actually executes.
      * @param releaseAmount Amount released from Escrow before fees and therefore collateralized after settlement.
      */
-    struct DisputeProtectionIntent {
+    struct PolicyIntent {
         address taker;
-        address stakeOwner;
-        address depositor;
-        bytes32 paymentMethod;
-        DisputeProtectionIntentStatus status;
         uint64 riskWindow;
+        PolicyIntentStatus status;
+        address stakeOwner;
         uint64 releaseEligibleAt;
+        address depositor;
+        address lifecycleHook;
+        address orchestrator;
+        bytes32 paymentMethod;
+        bytes32 policyId;
         uint256 releaseAmount;
     }
 
@@ -78,11 +84,11 @@ interface IDisputeProtectionPolicy {
         uint256 compensatedAmount,
         bytes32 disputeId
     );
-    event DisputeProtectionEnabledUpdated(
+    event PolicyAdmissionEnabledUpdated(
         address indexed escrow,
         uint256 indexed depositId,
         bytes32 indexed paymentMethod,
-        bool isDisputeProtectionEnabled
+        bool isPolicyAdmissionEnabled
     );
     event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
     event LifecycleHookAuthorizationUpdated(address indexed hook, bool isAuthorized);
@@ -92,10 +98,10 @@ interface IDisputeProtectionPolicy {
     error InvalidContract(address dependency);
     error UnauthorizedLifecycleHook(address caller);
     error AdmissionsPaused();
-    error DisputeProtectionNotEnabled(address escrow, uint256 depositId, bytes32 paymentMethod);
+    error PolicyAdmissionDisabled(address escrow, uint256 depositId, bytes32 paymentMethod);
     error DisputeProtectionIntentAlreadyExists(bytes32 intentHash);
-    error DisputeProtectionIntentNotPending(bytes32 intentHash, DisputeProtectionIntentStatus status);
-    error DisputeProtectionIntentNotSettled(bytes32 intentHash, DisputeProtectionIntentStatus status);
+    error DisputeProtectionIntentNotPending(bytes32 intentHash, PolicyIntentStatus status);
+    error DisputeProtectionIntentNotSettled(bytes32 intentHash, PolicyIntentStatus status);
     error DisputeProtectionIntentNotCovered(bytes32 intentHash);
     error IntentTokenMismatch(address expectedToken, address actualToken);
     error DisputeProtectionIntentNotReleaseEligible(uint64 releaseEligibleAt, uint64 currentTime);
@@ -104,45 +110,42 @@ interface IDisputeProtectionPolicy {
     error NotDepositor(address escrow, uint256 depositId, address caller);
     error OwnershipRenunciationDisabled();
 
-    /**
-     * @notice Admits a newly signaled intent under the buyer's selected method-scoped policy.
-     * @dev Called only by an authorized lifecycle hook. Validates deposit configuration, token compatibility and the
-     * enabled policy, then snapshots its ID and window. Positive windows lock full stake; zero windows still record
-     * the intent and its evidence obligation without locking stake. Unconfigured methods never reach this callback
-     * through the canonical hook.
-     * @param _intentHash Unique intent identifier assigned by the calling orchestrator.
-     * @param _escrow Escrow that owns the intent and deposit.
-     * @param _depositId Deposit supplying the intent liquidity.
-     * @param _taker Account that signaled the intent.
-     * @param _paymentMethod Payment method selected for the off-chain payment.
-     * @param _amount Full on-chain intent amount initially locked as collateral.
-     */
-    function onIntentSignaled(
-        bytes32 _intentHash,
-        address _escrow,
-        uint256 _depositId,
-        address _taker,
-        bytes32 _paymentMethod,
-        uint256 _amount
-    ) external;
+    /// @notice Canonical admission context supplied by an authorized hook after authenticating its caller.
+    struct AdmissionContext {
+        bytes32 intentHash;
+        address orchestrator;
+        address escrow;
+        uint256 depositId;
+        address taker;
+        bytes32 paymentMethod;
+        uint256 amount;
+        bytes32 policyId;
+        bool whitelistEnabled;
+    }
+
+    /// @notice Snapshots policy terms and locks collateral for an authenticated admission.
+    /// @param _context Intent fields, originating orchestrator, selected policy and whitelist admission result.
+    function onIntentSignaled(AdmissionContext calldata _context) external;
 
     /**
      * @notice Cancels a pending intent and unlocks its collateral when it has protection.
      * @dev Missing records are ignored for whitelist/open admissions. An admitted zero-window policy still has
      * lifecycle state, but no collateral to unlock.
+     * @param _orchestrator Authenticated lifecycle caller forwarded by the hook.
      * @param _intentHash Intent being cancelled or pruned by the orchestrator.
      */
-    function onIntentCancelled(bytes32 _intentHash) external;
+    function onIntentCancelled(address _orchestrator, bytes32 _intentHash) external;
 
     /**
      * @notice Marks a pending intent as settled and resizes collateral only when it has protection.
      * @dev Missing dispute protection intents are ignored. The snapshotted risk window determines when collateral
      * becomes release-eligible; it does not invalidate dispute evidence until release actually executes.
+     * @param _orchestrator Authenticated lifecycle caller forwarded by the hook.
      * @param _intentHash Intent completed by proof-based fulfillment or manual release.
      * @param _releaseAmount Amount released from Escrow before protocol, referral, and manager fees.
      * @param _isManualRelease Whether the depositor used the manual-release path without an on-chain payment proof.
      */
-    function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease) external;
+    function onIntentSettled(address _orchestrator, bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease) external;
 
     /**
      * @notice Returns whether a deposit payment method routes through policy admission.
@@ -153,7 +156,7 @@ interface IDisputeProtectionPolicy {
      * @param _depositId Deposit whose payment-method-specific configuration is queried.
      * @param _paymentMethod Payment method whose dispute protection configuration is queried.
      */
-    function isDisputeProtectionEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod)
+    function isPolicyAdmissionEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod)
         external
         view
         returns (bool);

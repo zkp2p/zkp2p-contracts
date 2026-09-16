@@ -6,6 +6,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IPostIntentHookV2 } from "./IPostIntentHookV2.sol";
 import { IIntentLifecycleHook } from "./IIntentLifecycleHook.sol";
 import { IPreIntentHook } from "./IPreIntentHook.sol";
+import { IPaymentVerifierRegistry } from "./IPaymentVerifierRegistry.sol";
 import { IReferralFee } from "./IReferralFee.sol";
 
 /**
@@ -45,6 +46,7 @@ interface IOrchestratorV3 {
         bytes gatingServiceSignature;               // Signature from the deposit's gating service
         uint256 signatureExpiration;                // Timestamp when the gating service signature expires
         IPostIntentHookV2 postIntentHook;           // Optional post-intent hook (address(0) for no hook)
+        bytes lifecycleHookData;                  // Ephemeral input passed only to lifecycle admission
         bytes preIntentHookData;                    // Ephemeral data passed only to the pre-intent hook during signalIntent
         bytes data;                                 // Signal data persisted in Intent and forwarded as post-intent hook signalHookData
     }
@@ -145,6 +147,7 @@ interface IOrchestratorV3 {
 
     /* ============ View Functions ============ */
 
+    function paymentVerifierRegistry() external view returns (IPaymentVerifierRegistry);
     function getIntent(bytes32 intentHash) external view returns (Intent memory);
     function getAccountIntents(address account) external view returns (bytes32[] memory);
     function getDepositPreIntentHook(address escrow, uint256 depositId) external view returns (IPreIntentHook);

@@ -22,6 +22,7 @@ import {
   canonicalJson as vaultCanonicalJson,
   validateVaultActivationBatchManifest,
 } from "../deployments/vaultActivationBatchManifest";
+import { historicalDisputeArtifact, isHistoricalDisputeArtifact } from "../deployments/historicalDisputeArtifacts";
 import { zeroImmutableValues } from "../deployments/canonicalDeployment";
 import {
   assertGuardExpectationsUnchanged,
@@ -470,10 +471,10 @@ function liveHre(
     getUnnamedAccounts: async () => [EXPECTED_LIVE.base.deployer],
     deployments: {
       ...hre.deployments,
-      getArtifact: hre.deployments.getArtifact.bind(hre.deployments),
-      getExtendedArtifact: hre.deployments.getExtendedArtifact.bind(
-        hre.deployments
-      ),
+      getArtifact: async (name: string) => isHistoricalDisputeArtifact(name)
+        ? historicalDisputeArtifact(name) : hre.deployments.getArtifact(name),
+      getExtendedArtifact: async (name: string) => isHistoricalDisputeArtifact(name)
+        ? historicalDisputeArtifact(name) : hre.deployments.getExtendedArtifact(name),
       getOrNull: baseDeployment,
       get: async (name: string) => {
         const deployment = await baseDeployment(name);
@@ -495,7 +496,9 @@ function liveHre(
         }
         const abi =
           typeof artifactOrAbi === "string"
-            ? (await hre.deployments.getArtifact(artifactOrAbi)).abi
+            ? (isHistoricalDisputeArtifact(artifactOrAbi)
+              ? historicalDisputeArtifact(artifactOrAbi)
+              : await hre.deployments.getArtifact(artifactOrAbi)).abi
             : artifactOrAbi;
         return new ethers.Contract(address, abi, provider);
       },

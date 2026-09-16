@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
+import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 
 import {StakeVault} from "contracts/StakeVault.sol";
 import {
     HistoricalDisputePolicy as DisputeProtectionPolicy,
     HistoricalDisputePolicyDeployer
 } from "../helpers/HistoricalDisputePolicy.sol";
-import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
+import {HistoricalLifecycleHook, HistoricalLifecycleHookDeployer} from "../helpers/HistoricalDisputePolicy.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {InventoryTuple} from "contracts/mocks/DisputeMethodScopedActivationTypes.sol";
 import {
@@ -49,8 +50,8 @@ contract DisputeMethodScopedVaultActivationTest is OrchestratorV3Fixture {
     DisputeProtectionPolicy internal freshPolicy;
     AddressGroupRegistry internal groupRegistry;
     WhitelistPolicy internal whitelistPolicy;
-    IntentLifecycleHookV1 internal predecessorHook;
-    IntentLifecycleHookV1 internal freshHook;
+    HistoricalLifecycleHook internal predecessorHook;
+    HistoricalLifecycleHook internal freshHook;
 
     function setUp() public override {
         super.setUp();
@@ -71,8 +72,8 @@ contract DisputeMethodScopedVaultActivationTest is OrchestratorV3Fixture {
             HistoricalDisputePolicyDeployer.deploy(address(this), freshVault, disputeVerifier, disputeRegistry);
         groupRegistry = new AddressGroupRegistry();
         whitelistPolicy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
-        predecessorHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, predecessorPolicy);
-        freshHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, freshPolicy);
+        predecessorHook = HistoricalLifecycleHookDeployer.deploy(orchestratorRegistry, whitelistPolicy, predecessorPolicy);
+        freshHook = HistoricalLifecycleHookDeployer.deploy(orchestratorRegistry, whitelistPolicy, freshPolicy);
         predecessorVault.initializeController(address(predecessorPolicy));
         freshVault.initializeController(address(freshPolicy));
         disputeRegistry.addWritePermission(address(predecessorPolicy));
@@ -80,7 +81,7 @@ contract DisputeMethodScopedVaultActivationTest is OrchestratorV3Fixture {
         freshPolicy.setLifecycleHookAuthorization(address(freshHook), true);
         predecessorPolicy.setRiskWindow(METHOD, RISK_WINDOW);
         freshPolicy.setRiskWindow(METHOD, RISK_WINDOW);
-        orchestrator.setLifecycleHook(predecessorHook);
+        orchestrator.setLifecycleHook(IIntentLifecycleHook(address(predecessorHook)));
         orchestrator.setAllowMultipleIntents(false);
         vm.prank(depositor);
         freshPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, false);
@@ -207,7 +208,7 @@ contract DisputeMethodScopedVaultActivationTest is OrchestratorV3Fixture {
         vm.prank(safe);
         disputeRegistry.removeWritePermission(address(freshPolicy));
         vm.prank(safe);
-        orchestrator.setLifecycleHook(freshHook);
+        orchestrator.setLifecycleHook(IIntentLifecycleHook(address(freshHook)));
         _expectCutover(
             _surface(),
             true,
@@ -216,7 +217,7 @@ contract DisputeMethodScopedVaultActivationTest is OrchestratorV3Fixture {
             DisputeMethodScopedVaultTrustSurfaceChecks.LifecycleHookMismatch.selector
         );
         vm.prank(safe);
-        orchestrator.setLifecycleHook(predecessorHook);
+        orchestrator.setLifecycleHook(IIntentLifecycleHook(address(predecessorHook)));
         vm.prank(depositor);
         freshPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, true);
         _expectCutover(
@@ -286,7 +287,7 @@ contract DisputeMethodScopedVaultActivationTest is OrchestratorV3Fixture {
         disputeRegistry.removeWritePermission(address(predecessorPolicy));
         disputeRegistry.addWritePermission(address(freshPolicy));
         disputeRegistry.addWritePermission(address(predecessorPolicy));
-        orchestrator.setLifecycleHook(freshHook);
+        orchestrator.setLifecycleHook(IIntentLifecycleHook(address(freshHook)));
         vm.stopPrank();
         DisputeMethodScopedVaultWriterRemovalGuard guard =
             new DisputeMethodScopedVaultWriterRemovalGuard(_surface(), new bytes32[](0));
@@ -295,7 +296,7 @@ contract DisputeMethodScopedVaultActivationTest is OrchestratorV3Fixture {
         setUp();
         _activateAndDrain();
         vm.prank(safe);
-        orchestrator.setLifecycleHook(predecessorHook);
+        orchestrator.setLifecycleHook(IIntentLifecycleHook(address(predecessorHook)));
         guard = new DisputeMethodScopedVaultWriterRemovalGuard(_surface(), _hashes(SETTLED_INTENT));
         vm.expectPartialRevert(DisputeMethodScopedVaultTrustSurfaceChecks.LifecycleHookMismatch.selector);
         guard.assertReady();
@@ -319,7 +320,7 @@ contract DisputeMethodScopedVaultActivationTest is OrchestratorV3Fixture {
         _acceptFresh();
         vm.startPrank(safe);
         disputeRegistry.addWritePermission(address(freshPolicy));
-        orchestrator.setLifecycleHook(freshHook);
+        orchestrator.setLifecycleHook(IIntentLifecycleHook(address(freshHook)));
         vm.stopPrank();
     }
 

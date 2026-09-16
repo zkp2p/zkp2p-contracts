@@ -115,6 +115,9 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         whenNotPaused
     {
         // Checks
+        if (address(lifecycleHook) == address(0) && _params.lifecycleHookData.length != 0) {
+            revert InvalidLifecycleHook(address(0));
+        }
         _validateSignalIntent(_params);
         _executeHookIfSet(depositPreIntentHooks[_params.escrow][_params.depositId], _params);
 
@@ -179,7 +182,7 @@ contract OrchestratorV3 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV3 {
         intentLifecycleHooks[intentHash] = snapshottedLifecycleHook;
 
         if (address(snapshottedLifecycleHook) != address(0)) {
-            snapshottedLifecycleHook.onIntentSignaled(intentHash);
+            snapshottedLifecycleHook.onIntentSignaled(intentHash, _params.lifecycleHookData);
         }
         emit IntentLifecycleHookSnapshotted(intentHash, address(snapshottedLifecycleHook));
 

@@ -34,8 +34,9 @@ interface IIntentLifecycleHook {
      * @dev The calling orchestrator stores the complete intent before invoking this callback, allowing the hook to
      * read canonical intent data through `getIntent`. A revert rolls back intent creation and Escrow locking.
      * @param _intentHash Identifier of the newly stored intent in the calling orchestrator.
+     * @param _data Ephemeral admission input; separate from the intent's persisted post-hook data.
      */
-    function onIntentSignaled(bytes32 _intentHash) external;
+    function onIntentSignaled(bytes32 _intentHash, bytes calldata _data) external;
 
     /**
      * @notice Resolves lifecycle-policy state for an intent being cancelled, expired, or pruned as an orphan.

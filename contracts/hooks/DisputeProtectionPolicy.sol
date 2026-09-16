@@ -13,8 +13,6 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
 import {IAttestationVerifier} from "../interfaces/IAttestationVerifier.sol";
 import {INullifierRegistryV2} from "../interfaces/INullifierRegistryV2.sol";
 import {IOrchestratorV3} from "../interfaces/IOrchestratorV3.sol";
-import {OrchestratorV3} from "../OrchestratorV3.sol";
-import {IntentLifecycleHookV1} from "./IntentLifecycleHookV1.sol";
 import {UnifiedPaymentVerifierV3} from "../unifiedVerifier/UnifiedPaymentVerifierV3.sol";
 
 /**
@@ -26,9 +24,9 @@ import {UnifiedPaymentVerifierV3} from "../unifiedVerifier/UnifiedPaymentVerifie
  *
  * TRUST: Dispute protection intents are keyed by intent hash, which embeds the originating orchestrator
  * (OrchestratorV3 hashes its own address into every intent hash), so identities do not collide across orchestrators.
- * Lifecycle entrypoints trust every orchestrator admitted by OrchestratorRegistry to invoke callbacks only for
- * intents it created and already validated against its EscrowRegistry. Registering an orchestrator is therefore a
- * governance assertion about its callback behavior.
+ * Authorized hooks authenticate the orchestrator, read its intent once, and supply the admission context.
+ * Terminal callbacks must match the snapshotted hook and originating orchestrator. Registering an orchestrator
+ * remains a governance assertion about its admission data and settlement accounting.
  *
  * Governance must authorize a lifecycle hook here before configuring it on an Orchestrator. Predecessor hooks must
  * remain authorized until all intents snapshotted to them have been cancelled or settled. Likewise, an orchestrator
@@ -66,10 +64,10 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
 
     /// @dev Whether the depositor opted a deposit payment method out of default dispute protection.
     mapping(address => mapping(uint256 => mapping(bytes32 => bool))) internal
-        isDisputeProtectionDisabledByPaymentMethod;
+        isPolicyAdmissionDisabledByPaymentMethod;
 
     /// @dev Dispute protection lifecycle state keyed by globally unique intent hash.
-    mapping(bytes32 => DisputeProtectionIntent) internal disputeProtectionIntentByIntentHash;
+    mapping(bytes32 => PolicyIntent) internal policyIntents;
 
     struct PolicyRule {
         uint64 riskWindow;
@@ -77,25 +75,12 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
         bool enabled;
     }
 
-    /// @dev A hook has one immutable policy route. A replacement route requires a new hook instance.
-    struct PolicyRoute {
-        address orchestrator;
-        address paymentVerifier;
-    }
-
-    /// @dev Effective evidence policy and original hook; adjustments preserve the original hook.
-    struct IntentPolicy {
-        bytes32 policyId;
-        address lifecycleHook;
-    }
-
     mapping(bytes32 => mapping(bytes32 => PolicyRule)) public policyRules;
-    mapping(address => PolicyRoute) public policyRoutes;
+    mapping(address => address) public paymentVerifierByOrchestrator;
     mapping(address => address) public signatureVerifierByPaymentVerifier;
-    mapping(bytes32 => IntentPolicy) internal intentPolicies;
 
     event PolicyUpdated(bytes32 indexed paymentMethod, bytes32 indexed policyId, uint64 riskWindow, bool enabled);
-    event PolicyRouteRegistered(address indexed hook, address indexed orchestrator, address indexed paymentVerifier);
+    event PolicyRouteRegistered(address indexed orchestrator, address indexed paymentVerifier);
     event IntentPolicySelected(bytes32 indexed intentHash, bytes32 indexed policyId, address indexed hook);
     event IntentPolicyAdjusted(
         bytes32 indexed intentHash, bytes32 indexed previousPolicyId, bytes32 indexed policyId, uint64 riskWindow
@@ -149,106 +134,95 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
     /**
      * @inheritdoc IDisputeProtectionPolicy
      */
-    function onIntentSignaled(
-        bytes32 _intentHash,
-        address _escrow,
-        uint256 _depositId,
-        address _taker,
-        bytes32 _paymentMethod,
-        uint256 _amount
-    ) external override onlyLifecycleHook nonReentrant {
-        address depositor = _validateIntentAdmission(_intentHash, _escrow, _depositId, _paymentMethod);
-        _assertPolicyRoute(msg.sender, _paymentMethod);
-        IOrchestratorV3.Intent memory activeIntent =
-            _getActivePolicyIntent(_intentHash, msg.sender, _taker, _paymentMethod);
-        bytes32 policyId = activeIntent.data.length == 0 ? bytes32(0) : abi.decode(activeIntent.data, (bytes32));
-        uint64 riskWindow = _requireEnabledPolicy(policyId, _paymentMethod);
-        // A zero-window policy must not let a nonmember evade an enabled whitelist.
-        if (riskWindow == 0) {
-            require(
-                !IntentLifecycleHookV1(msg.sender).whitelistPolicy().enabled(_escrow, _depositId, _paymentMethod),
-                "DPP: Zero-window whitelist enabled"
-            );
-        }
-        intentPolicies[_intentHash] = IntentPolicy(policyId, msg.sender);
-        address stakeOwner = riskWindow == 0 ? address(0) : stakeVault.stakeOwnerOf(_taker);
-
-        disputeProtectionIntentByIntentHash[_intentHash] = DisputeProtectionIntent({
-            taker: _taker,
+    function onIntentSignaled(AdmissionContext calldata _context)
+        external override onlyLifecycleHook nonReentrant
+    {
+        address depositor = _validateIntentAdmission(
+            _context.intentHash, _context.escrow, _context.depositId, _context.paymentMethod
+        );
+        _assertPolicyRoute(_context.orchestrator, _context.paymentMethod);
+        uint64 riskWindow = _requireEnabledPolicy(_context.policyId, _context.paymentMethod);
+        require(riskWindow != 0 || !_context.whitelistEnabled, "DPP: Zero-window whitelist enabled");
+        address stakeOwner = riskWindow == 0 ? address(0) : stakeVault.stakeOwnerOf(_context.taker);
+        policyIntents[_context.intentHash] = PolicyIntent({
+            taker: _context.taker,
             stakeOwner: stakeOwner,
             depositor: depositor,
-            paymentMethod: _paymentMethod,
-            status: DisputeProtectionIntentStatus.PENDING,
+            paymentMethod: _context.paymentMethod,
+            status: PolicyIntentStatus.PENDING,
             riskWindow: riskWindow,
             releaseEligibleAt: 0,
-            releaseAmount: 0
+            releaseAmount: 0,
+            policyId: _context.policyId,
+            lifecycleHook: msg.sender,
+            orchestrator: _context.orchestrator
         });
-
-        emit IntentPolicySelected(_intentHash, policyId, msg.sender);
-        if (riskWindow != 0) stakeVault.lockStake(stakeOwner, _intentHash, _amount, PENDING_COVERAGE_MATURITY);
+        emit IntentPolicySelected(_context.intentHash, _context.policyId, msg.sender);
+        if (riskWindow != 0) {
+            stakeVault.lockStake(stakeOwner, _context.intentHash, _context.amount, PENDING_COVERAGE_MATURITY);
+        }
         emit DisputeProtectionIntentOpened(
-            _intentHash, stakeOwner, depositor, _taker, _paymentMethod, _amount, riskWindow
+            _context.intentHash, stakeOwner, depositor, _context.taker, _context.paymentMethod, _context.amount, riskWindow
         );
     }
 
     /**
      * @inheritdoc IDisputeProtectionPolicy
      */
-    function onIntentCancelled(bytes32 _intentHash) external override onlyLifecycleHook nonReentrant {
-        DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];
-        _assertAdmissionHook(_intentHash);
-        if (disputeProtectionIntent.status == DisputeProtectionIntentStatus.NONE) return;
-        if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.PENDING) {
-            revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);
+    function onIntentCancelled(address _orchestrator, bytes32 _intentHash) external override onlyLifecycleHook nonReentrant {
+        PolicyIntent storage intent = policyIntents[_intentHash];
+        _assertAdmissionOrigin(intent, _orchestrator);
+        if (intent.status == PolicyIntentStatus.NONE) return;
+        if (intent.status != PolicyIntentStatus.PENDING) {
+            revert DisputeProtectionIntentNotPending(_intentHash, intent.status);
         }
 
         uint256 releasedAmount;
-        if (disputeProtectionIntent.riskWindow != 0) {
+        if (intent.riskWindow != 0) {
             (, releasedAmount,) = stakeVault.locks(_intentHash);
         }
-        disputeProtectionIntent.status = DisputeProtectionIntentStatus.CANCELLED;
-        if (disputeProtectionIntent.riskWindow != 0) stakeVault.unlockStake(_intentHash);
-        emit DisputeProtectionIntentCancelled(_intentHash, disputeProtectionIntent.stakeOwner, releasedAmount);
+        intent.status = PolicyIntentStatus.CANCELLED;
+        if (intent.riskWindow != 0) stakeVault.unlockStake(_intentHash);
+        emit DisputeProtectionIntentCancelled(_intentHash, intent.stakeOwner, releasedAmount);
     }
 
     /**
      * @inheritdoc IDisputeProtectionPolicy
      */
-    function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease)
+    function onIntentSettled(address _orchestrator, bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease)
         external
         override
         onlyLifecycleHook
         nonReentrant
     {
-        DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];
-        _assertAdmissionHook(_intentHash);
-        if (disputeProtectionIntent.status == DisputeProtectionIntentStatus.NONE) return;
-        if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.PENDING) {
-            revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);
+        PolicyIntent storage intent = policyIntents[_intentHash];
+        _assertAdmissionOrigin(intent, _orchestrator);
+        if (intent.status == PolicyIntentStatus.NONE) return;
+        if (intent.status != PolicyIntentStatus.PENDING) {
+            revert DisputeProtectionIntentNotPending(_intentHash, intent.status);
         }
 
-        IntentPolicy storage selected = intentPolicies[_intentHash];
         if (!_isManualRelease) {
-            _assertPolicyRoute(selected.lifecycleHook, disputeProtectionIntent.paymentMethod);
+            _assertPolicyRoute(intent.orchestrator, intent.paymentMethod);
             INullifierRegistryV2 registry =
-                UnifiedPaymentVerifierV3(policyRoutes[selected.lifecycleHook].paymentVerifier).nullifierRegistry();
+                UnifiedPaymentVerifierV3(paymentVerifierByOrchestrator[intent.orchestrator]).nullifierRegistry();
             bytes32 nullifier = registry.nullifierByIntentHash(_intentHash);
             require(nullifier != bytes32(0), "DPP: Missing payment binding");
         }
-        uint64 releaseEligibleAt = disputeProtectionIntent.riskWindow == 0
+        uint64 releaseEligibleAt = intent.riskWindow == 0
             ? 0
-            : _calculateReleaseEligibleAt(disputeProtectionIntent.riskWindow);
-        disputeProtectionIntent.releaseAmount = _releaseAmount;
-        disputeProtectionIntent.releaseEligibleAt = releaseEligibleAt;
-        disputeProtectionIntent.status = DisputeProtectionIntentStatus.SETTLED;
+            : _calculateReleaseEligibleAt(intent.riskWindow);
+        intent.releaseAmount = _releaseAmount;
+        intent.releaseEligibleAt = releaseEligibleAt;
+        intent.status = PolicyIntentStatus.SETTLED;
 
-        if (disputeProtectionIntent.riskWindow != 0) {
+        if (intent.riskWindow != 0) {
             stakeVault.resizeLock(_intentHash, _releaseAmount, releaseEligibleAt);
         }
         emit DisputeProtectionIntentSettled(
             _intentHash,
-            disputeProtectionIntent.stakeOwner,
-            disputeProtectionIntent.depositor,
+            intent.stakeOwner,
+            intent.depositor,
             _releaseAmount,
             releaseEligibleAt,
             _isManualRelease
@@ -284,28 +258,28 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
      * @param _attestation Signed dispute evidence for a settled intent.
      */
     function submitDispute(IDisputeVerifier.DisputeAttestation calldata _attestation) external nonReentrant {
-        DisputeProtectionIntent storage disputeProtectionIntent =
-            disputeProtectionIntentByIntentHash[_attestation.intentHash];
-        if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.SETTLED) {
-            revert DisputeProtectionIntentNotSettled(_attestation.intentHash, disputeProtectionIntent.status);
+        PolicyIntent storage intent =
+            policyIntents[_attestation.intentHash];
+        if (intent.status != PolicyIntentStatus.SETTLED) {
+            revert DisputeProtectionIntentNotSettled(_attestation.intentHash, intent.status);
         }
-        if (disputeProtectionIntent.riskWindow == 0) revert DisputeProtectionIntentNotCovered(_attestation.intentHash);
+        if (intent.riskWindow == 0) revert DisputeProtectionIntentNotCovered(_attestation.intentHash);
 
         (bytes32 disputeId, bytes32 disputeNullifier) =
-            disputeVerifier.verifyDispute(_attestation, disputeProtectionIntent.paymentMethod);
+            disputeVerifier.verifyDispute(_attestation, intent.paymentMethod);
         disputeNullifierRegistry.addNullifier(disputeNullifier);
 
-        uint256 compensatedAmount = disputeProtectionIntent.releaseAmount;
-        disputeProtectionIntent.status = DisputeProtectionIntentStatus.DISPUTED;
+        uint256 compensatedAmount = intent.releaseAmount;
+        intent.status = PolicyIntentStatus.DISPUTED;
 
         IStakeVault.Claim[] memory claims = new IStakeVault.Claim[](1);
-        claims[0] = IStakeVault.Claim({beneficiary: disputeProtectionIntent.depositor, amount: compensatedAmount});
+        claims[0] = IStakeVault.Claim({beneficiary: intent.depositor, amount: compensatedAmount});
         stakeVault.resolveLock(_attestation.intentHash, claims);
 
         emit DisputeResolved(
             _attestation.intentHash,
-            disputeProtectionIntent.stakeOwner,
-            disputeProtectionIntent.depositor,
+            intent.stakeOwner,
+            intent.depositor,
             compensatedAmount,
             disputeId
         );
@@ -328,29 +302,20 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
         emit PolicyUpdated(_paymentMethod, _policyId, _riskWindow, _enabled);
     }
 
-    /// @notice Pins the reviewed non-proxy dependencies for a hook's policy admissions.
-    /// @dev Configure UPV's attestation verifier to this policy in the same governance cutover.
-    /// The hook omits its originating caller, so one originating orchestrator is registered per hook.
-    function registerPolicyRoute(
-        address _hook,
-        address _orchestrator,
-        address _paymentVerifier,
-        address _signatureVerifier
-    ) external onlyOwner {
-        require(isLifecycleHookAuthorizedByHook[_hook], "DPP: Unauthorized policy hook");
-        require(policyRoutes[_hook].orchestrator == address(0), "DPP: Route already registered");
+    /// @notice Pins one orchestrator's payment verifier and its underlying signature checker.
+    /// @dev The same authorized lifecycle hook may serve every registered orchestrator.
+    function registerPolicyRoute(address _orchestrator, address _paymentVerifier, address _signatureVerifier)
+        external onlyOwner
+    {
+        require(paymentVerifierByOrchestrator[_orchestrator] == address(0), "DPP: Route already registered");
         _validateDependency(_orchestrator);
         _validateDependency(_paymentVerifier);
         _validateDependency(_signatureVerifier);
         require(
             _signatureVerifier != address(this) && _signatureVerifier != _paymentVerifier, "DPP: Recursive verifier"
         );
-        IntentLifecycleHookV1 hook = IntentLifecycleHookV1(_hook);
-        UnifiedPaymentVerifierV3 paymentVerifier = UnifiedPaymentVerifierV3(_paymentVerifier);
-        require(address(hook.disputeProtectionPolicy()) == address(this), "DPP: Hook policy mismatch");
         require(
-            address(hook.orchestratorRegistry()) == address(paymentVerifier.orchestratorRegistry())
-                && hook.orchestratorRegistry().isOrchestrator(_orchestrator),
+            UnifiedPaymentVerifierV3(_paymentVerifier).orchestratorRegistry().isOrchestrator(_orchestrator),
             "DPP: Orchestrator route mismatch"
         );
         address existingVerifier = signatureVerifierByPaymentVerifier[_paymentVerifier];
@@ -358,25 +323,19 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
             existingVerifier == address(0) || existingVerifier == _signatureVerifier, "DPP: Signature route mismatch"
         );
         signatureVerifierByPaymentVerifier[_paymentVerifier] = _signatureVerifier;
-        policyRoutes[_hook] = PolicyRoute(_orchestrator, _paymentVerifier);
-        emit PolicyRouteRegistered(_hook, _orchestrator, _paymentVerifier);
-    }
-
-    /// @notice Returns the effective evidence policy and original hook; policy zero requires ordinary evidence.
-    function getIntentPolicy(bytes32 _intentHash) external view returns (IntentPolicy memory) {
-        return intentPolicies[_intentHash];
+        paymentVerifierByOrchestrator[_orchestrator] = _paymentVerifier;
+        emit PolicyRouteRegistered(_orchestrator, _paymentVerifier);
     }
 
     /// @notice Corrects the caller's pending order policy, locking any newly required collateral atomically.
     /// @dev Existing stake ownership and collateral are preserved. The snapshotted risk window never decreases.
     function adjustPolicy(bytes32 _intentHash, bytes32 _policyId) external nonReentrant {
-        DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
-        require(intent.status == DisputeProtectionIntentStatus.PENDING, "DPP: Admission not pending");
+        PolicyIntent storage intent = policyIntents[_intentHash];
+        require(intent.status == PolicyIntentStatus.PENDING, "DPP: Admission not pending");
         require(msg.sender == intent.taker, "DPP: Not policy taker");
         if (admissionsPaused) revert AdmissionsPaused();
-        IntentPolicy storage selected = intentPolicies[_intentHash];
         IOrchestratorV3.Intent memory activeIntent =
-            _getActivePolicyIntent(_intentHash, selected.lifecycleHook, intent.taker, intent.paymentMethod);
+            IOrchestratorV3(intent.orchestrator).getIntent(_intentHash);
         IEscrowV2.Intent memory escrowIntent =
             IEscrowV2(activeIntent.escrow).getDepositIntent(activeIntent.depositId, _intentHash);
         require(
@@ -393,8 +352,8 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
             intent.depositor = depositor;
         }
         if (riskWindow > intent.riskWindow) intent.riskWindow = riskWindow;
-        bytes32 previousPolicyId = selected.policyId;
-        selected.policyId = _policyId;
+        bytes32 previousPolicyId = intent.policyId;
+        intent.policyId = _policyId;
         emit IntentPolicyAdjusted(_intentHash, previousPolicyId, _policyId, intent.riskWindow);
     }
 
@@ -414,10 +373,10 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
         (, UnifiedPaymentVerifierV3.IntentSnapshot memory snapshot, bytes32 policyId) = abi.decode(
             _data, (UnifiedPaymentVerifierV3.PaymentDetails, UnifiedPaymentVerifierV3.IntentSnapshot, bytes32)
         );
-        IntentPolicy storage selected = intentPolicies[snapshot.intentHash];
+        PolicyIntent storage selected = policyIntents[snapshot.intentHash];
         require(policyId == selected.policyId, "DPP: Policy mismatch");
         if (selected.lifecycleHook != address(0)) {
-            require(msg.sender == policyRoutes[selected.lifecycleHook].paymentVerifier, "DPP: Wrong policy verifier");
+            require(msg.sender == paymentVerifierByOrchestrator[selected.orchestrator], "DPP: Wrong policy verifier");
         }
         return true;
     }
@@ -425,7 +384,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
     /* ============ Depositor Functions ============ */
 
     /**
-     * @notice DEPOSITOR ONLY: Updates dispute protection for one deposit payment method.
+     * @notice DEPOSITOR ONLY: Updates policy admission for one deposit payment method.
      * @dev Policy admission is enabled by default on every enrolled method; passing false opts the
      * tuple out and true undoes the opt-out. The requested value is emitted as-is; the effective state also depends on
      * payment method's enrollment. OrchestratorV3 validates Escrow registration before signaling an
@@ -433,15 +392,15 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
      * @param _escrow Escrow containing the deposit.
      * @param _depositId Deposit whose payment-method-specific configuration is updated.
      * @param _paymentMethod Payment method whose dispute protection configuration is updated.
-     * @param _isEnabled Whether non-whitelisted takers may use stake-backed dispute protection on this payment method;
+     * @param _isEnabled Whether non-whitelisted takers may use configured policies on this payment method;
      * false opts out.
      */
-    function setDisputeProtectionEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod, bool _isEnabled)
+    function setPolicyAdmissionEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod, bool _isEnabled)
         external
         onlyDepositor(_escrow, _depositId)
     {
-        isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod] = !_isEnabled;
-        emit DisputeProtectionEnabledUpdated(_escrow, _depositId, _paymentMethod, _isEnabled);
+        isPolicyAdmissionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod] = !_isEnabled;
+        emit PolicyAdmissionEnabledUpdated(_escrow, _depositId, _paymentMethod, _isEnabled);
     }
 
     /* ============ Governance Functions ============ */
@@ -506,8 +465,8 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
      * @notice Returns the stored dispute protection state for an intent.
      * @param _intentHash Intent whose dispute protection state is queried.
      */
-    function getDisputeProtectionIntent(bytes32 _intentHash) external view returns (DisputeProtectionIntent memory) {
-        return disputeProtectionIntentByIntentHash[_intentHash];
+    function getPolicyIntent(bytes32 _intentHash) external view returns (PolicyIntent memory) {
+        return policyIntents[_intentHash];
     }
 
     /**
@@ -519,13 +478,13 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
      * @param _depositId Deposit whose payment-method-specific configuration is queried.
      * @param _paymentMethod Payment method whose dispute protection configuration is queried.
      */
-    function isDisputeProtectionEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod)
+    function isPolicyAdmissionEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod)
         external
         view
         override
         returns (bool)
     {
-        return !isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod]
+        return !isPolicyAdmissionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod]
             && policyRules[_paymentMethod][bytes32(0)].registered;
     }
 
@@ -550,7 +509,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
         returns (address depositor)
     {
         if (admissionsPaused) revert AdmissionsPaused();
-        if (disputeProtectionIntentByIntentHash[_intentHash].status != DisputeProtectionIntentStatus.NONE) {
+        if (policyIntents[_intentHash].status != PolicyIntentStatus.NONE) {
             revert DisputeProtectionIntentAlreadyExists(_intentHash);
         }
         return _validateProtectionConfiguration(_escrow, _depositId, _paymentMethod);
@@ -561,8 +520,8 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
         view
         returns (address depositor)
     {
-        if (isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod]) {
-            revert DisputeProtectionNotEnabled(_escrow, _depositId, _paymentMethod);
+        if (isPolicyAdmissionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod]) {
+            revert PolicyAdmissionDisabled(_escrow, _depositId, _paymentMethod);
         }
 
         IEscrowV2.Deposit memory deposit = IEscrowV2(_escrow).getDeposit(_depositId);
@@ -580,58 +539,44 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IAttestationVerifi
         return rule.riskWindow;
     }
 
-    function _assertAdmissionHook(bytes32 _intentHash) internal view {
-        address hook = intentPolicies[_intentHash].lifecycleHook;
-        require(hook == address(0) || msg.sender == hook, "DPP: Wrong admission hook");
+    function _assertAdmissionOrigin(PolicyIntent storage _intent, address _orchestrator) internal view {
+        if (_intent.status == PolicyIntentStatus.NONE) return;
+        require(msg.sender == _intent.lifecycleHook, "DPP: Wrong admission hook");
+        require(_orchestrator == _intent.orchestrator, "DPP: Wrong admission orchestrator");
     }
 
-    function _getActivePolicyIntent(bytes32 _intentHash, address _hook, address _taker, bytes32 _paymentMethod)
-        internal
-        view
-        returns (IOrchestratorV3.Intent memory intent)
-    {
-        IOrchestratorV3 orchestrator = IOrchestratorV3(policyRoutes[_hook].orchestrator);
-        intent = orchestrator.getIntent(_intentHash);
+    function _assertPolicyRoute(address _orchestrator, bytes32 _paymentMethod) internal view {
+        address paymentVerifier = paymentVerifierByOrchestrator[_orchestrator];
+        require(paymentVerifier != address(0), "DPP: Missing policy route");
         require(
-            intent.owner != address(0) && intent.owner == _taker && intent.paymentMethod == _paymentMethod
-                && address(orchestrator.getIntentLifecycleHook(_intentHash)) == _hook,
-            "DPP: Policy intent mismatch"
-        );
-    }
-
-    function _assertPolicyRoute(address _hook, bytes32 _paymentMethod) internal view {
-        PolicyRoute storage route = policyRoutes[_hook];
-        require(route.orchestrator != address(0), "DPP: Missing policy route");
-        require(
-            OrchestratorV3(route.orchestrator).paymentVerifierRegistry().getVerifier(_paymentMethod)
-                == route.paymentVerifier,
+            IOrchestratorV3(_orchestrator).paymentVerifierRegistry().getVerifier(_paymentMethod) == paymentVerifier,
             "DPP: Payment route changed"
         );
         require(
-            address(UnifiedPaymentVerifierV3(route.paymentVerifier).attestationVerifier()) == address(this),
+            address(UnifiedPaymentVerifierV3(paymentVerifier).attestationVerifier()) == address(this),
             "DPP: Policy checker changed"
         );
-        address[] memory writers = UnifiedPaymentVerifierV3(route.paymentVerifier).nullifierRegistry().getWriters();
-        require(writers.length == 1 && writers[0] == route.paymentVerifier, "DPP: Unsafe payment writers");
+        address[] memory writers = UnifiedPaymentVerifierV3(paymentVerifier).nullifierRegistry().getWriters();
+        require(writers.length == 1 && writers[0] == paymentVerifier, "DPP: Unsafe payment writers");
     }
 
     function _releaseMaturedDisputeProtectionIntent(bytes32 _intentHash) internal {
-        DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];
-        if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.SETTLED) {
-            revert DisputeProtectionIntentNotSettled(_intentHash, disputeProtectionIntent.status);
+        PolicyIntent storage intent = policyIntents[_intentHash];
+        if (intent.status != PolicyIntentStatus.SETTLED) {
+            revert DisputeProtectionIntentNotSettled(_intentHash, intent.status);
         }
-        if (disputeProtectionIntent.riskWindow == 0) revert DisputeProtectionIntentNotCovered(_intentHash);
+        if (intent.riskWindow == 0) revert DisputeProtectionIntentNotCovered(_intentHash);
 
         uint64 currentTime = _currentTimestamp();
-        uint64 releaseEligibleAt = disputeProtectionIntent.releaseEligibleAt;
+        uint64 releaseEligibleAt = intent.releaseEligibleAt;
         if (currentTime < releaseEligibleAt) {
             revert DisputeProtectionIntentNotReleaseEligible(releaseEligibleAt, currentTime);
         }
 
-        uint256 releasedAmount = disputeProtectionIntent.releaseAmount;
-        disputeProtectionIntent.status = DisputeProtectionIntentStatus.RELEASED;
+        uint256 releasedAmount = intent.releaseAmount;
+        intent.status = PolicyIntentStatus.RELEASED;
         stakeVault.unlockStake(_intentHash);
-        emit DisputeProtectionIntentReleased(_intentHash, disputeProtectionIntent.stakeOwner, releasedAmount);
+        emit DisputeProtectionIntentReleased(_intentHash, intent.stakeOwner, releasedAmount);
     }
 
     function _calculateReleaseEligibleAt(uint64 _riskWindow) internal view returns (uint64) {

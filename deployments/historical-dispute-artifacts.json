@@ -1,0 +1,112 @@
+{
+  "DisputeProtectionPolicy": {
+    "file": "DisputeProtectionPolicyMethodScopedStaked.json",
+    "bytecodeHash": "0x41b843daa1ae91f90b5fdaa4f176f4c3c378c21cc14e0707781a2a01a85bf1ee",
+    "immutableReferences": {
+      "397": [
+        {
+          "length": 32,
+          "start": 1067
+        },
+        {
+          "length": 32,
+          "start": 2655
+        },
+        {
+          "length": 32,
+          "start": 3251
+        },
+        {
+          "length": 32,
+          "start": 4721
+        },
+        {
+          "length": 32,
+          "start": 4850
+        },
+        {
+          "length": 32,
+          "start": 5219
+        },
+        {
+          "length": 32,
+          "start": 5338
+        },
+        {
+          "length": 32,
+          "start": 5942
+        },
+        {
+          "length": 32,
+          "start": 6450
+        },
+        {
+          "length": 32,
+          "start": 7198
+        }
+      ],
+      "401": [
+        {
+          "length": 32,
+          "start": 2011
+        },
+        {
+          "length": 32,
+          "start": 2407
+        }
+      ]
+    }
+  },
+  "IntentLifecycleHookV1": {
+    "file": "IntentLifecycleHookV1MethodScopedStaked.json",
+    "bytecodeHash": "0x12ec49473d7731f08afb54f75792d27255ea0dec86bfdf252874b150ba8e874b",
+    "immutableReferences": {
+      "1432": [
+        {
+          "length": 32,
+          "start": 294
+        },
+        {
+          "length": 32,
+          "start": 600
+        },
+        {
+          "length": 32,
+          "start": 692
+        },
+        {
+          "length": 32,
+          "start": 883
+        }
+      ],
+      "1435": [
+        {
+          "length": 32,
+          "start": 122
+        },
+        {
+          "length": 32,
+          "start": 1303
+        }
+      ],
+      "1438": [
+        {
+          "length": 32,
+          "start": 193
+        },
+        {
+          "length": 32,
+          "start": 355
+        },
+        {
+          "length": 32,
+          "start": 942
+        },
+        {
+          "length": 32,
+          "start": 1511
+        }
+      ]
+    }
+  }
+}

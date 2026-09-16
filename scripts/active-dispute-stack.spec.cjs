@@ -77,6 +77,9 @@ function contracts() {
     IntentLifecycleHookV1MethodScopedStaked: deployment(
       "0x0000000000000000000000000000000000000035"
     ),
+    PaymentPolicyStakeVault: deployment("0x0000000000000000000000000000000000000051"),
+    PaymentPolicy: deployment("0x0000000000000000000000000000000000000052"),
+    PaymentPolicyLifecycleHook: deployment("0x0000000000000000000000000000000000000053"),
     WhitelistPolicy: deployment("0x0000000000000000000000000000000000000041"),
     WhitelistPolicyMethodScoped: deployment(
       "0x0000000000000000000000000000000000000042"
@@ -146,15 +149,15 @@ test("resolves successor records locally and removes every internal deployment k
 
   assert.equal(
     resolved.StakeVault.address,
-    "0x0000000000000000000000000000000000000031"
+    "0x0000000000000000000000000000000000000051"
   );
   assert.equal(
     resolved.DisputeProtectionPolicy.address,
-    "0x0000000000000000000000000000000000000034"
+    "0x0000000000000000000000000000000000000052"
   );
   assert.equal(
     resolved.IntentLifecycleHookV1.address,
-    "0x0000000000000000000000000000000000000035"
+    "0x0000000000000000000000000000000000000053"
   );
   assert.equal(
     resolved.WhitelistPolicy.address,
@@ -181,7 +184,7 @@ test("returns only known canonical deployment names", () => {
   );
   assert.equal(
     getActiveDisputeDeploymentName("hardhat", "StakeVault"),
-    "StakeVaultMethodScoped"
+    "PaymentPolicyStakeVault"
   );
   assert.throws(
     () => getActiveDisputeDeploymentName("base", "UnknownPolicy"),
@@ -191,7 +194,7 @@ test("returns only known canonical deployment names", () => {
 
 test("fails closed on missing records and lets the selected hard cut replace a legacy ABI", () => {
   const missing = contracts();
-  delete missing.StakeVaultMethodScoped;
+  delete missing.PaymentPolicyStakeVault;
   assert.throws(
     () => resolveActiveDisputeAliases("localhost", missing),
     /Missing active dispute deployment/
@@ -203,7 +206,7 @@ test("fails closed on missing records and lets the selected hard cut replace a l
   ];
   assert.deepEqual(
     resolveActiveDisputeAliases("localhost", drifted).StakeVault.abi,
-    contracts().StakeVaultMethodScoped.abi
+    contracts().PaymentPolicyStakeVault.abi
   );
 });
 
@@ -233,15 +236,15 @@ test("every deployment/package consumer exposes only canonical aliases", () => {
     const resolved = resolveContracts(input);
     assert.equal(
       resolved.StakeVault.address,
-      input.StakeVaultMethodScoped.address
+      input.PaymentPolicyStakeVault.address
     );
     assert.equal(
       resolved.DisputeProtectionPolicy.address,
-      input.DisputeProtectionPolicyMethodScopedStaked.address
+      input.PaymentPolicy.address
     );
     assert.equal(
       resolved.IntentLifecycleHookV1.address,
-      input.IntentLifecycleHookV1MethodScopedStaked.address
+      input.PaymentPolicyLifecycleHook.address
     );
     assert.equal(
       resolved.WhitelistPolicy.address,
@@ -739,7 +742,7 @@ test("canonical deployment-output rewriting is deterministic and leaves deployme
     assert.equal(first.includes("StakeVaultMethodScoped"), false);
     assert.match(
       first,
-      new RegExp(inputAddressFor("StakeVaultMethodScoped"), "i")
+      new RegExp(inputAddressFor("PaymentPolicyStakeVault"), "i")
     );
   } finally {
     rmSync(directory, { recursive: true, force: true });

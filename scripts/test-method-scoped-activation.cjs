@@ -1573,7 +1573,8 @@ test("readActivationSnapshot pins every read and decodes both policy event signa
     DISPUTABLE_PAYMENT_METHODS,
     DISPUTE_RISK_WINDOW,
   } = require("../deployments/parameters.ts");
-  const compiledPolicy = require("../artifacts/contracts/hooks/DisputeProtectionPolicy.sol/DisputeProtectionPolicy.json");
+  const { historicalDisputeArtifact } = require("../deployments/historicalDisputeArtifacts");
+  const compiledPolicy = historicalDisputeArtifact("DisputeProtectionPolicy");
   const predecessorRecord = require("../deployments/base_staging/DisputeProtectionPolicy.json");
   const predecessor = METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS.base_staging;
   const live = EXPECTED_LIVE.base_staging;
