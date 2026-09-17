@@ -1,6 +1,6 @@
 ---
 name: upi-catalog-qa
-description: Verify UPI/INR registry registration and published contracts catalogs before downstream HDFC email UPI rollout.
+description: Verify UPI/INR registry registration and published contracts catalogs for the Amazon Pay UPI buyer flow.
 ---
 
 # UPI catalog QA

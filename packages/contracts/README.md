@@ -5,8 +5,8 @@ Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, an
 ## Release 0.4.2 RC
 
 - Includes the registered UPI/INR method in both Base and Base staging catalogs
-  and cross-network hash lookups. HDFC Gmail is the buyer proof flow selected
-  by clients; this package does not enable WhatsApp UPI.
+  and cross-network hash lookups. The catalog identifies generic UPI; clients
+  select Amazon Pay for buyer payment verification.
 - Published on the `rc` tag for preproduction validation; `latest` stays at 0.4.1.
 
 ## Release 0.4.1
