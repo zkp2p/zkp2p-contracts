@@ -63,8 +63,11 @@ keccak256("venmo_balance") (32 bytes)
 The attestor must append the word before computing `dataHash` and signing the
 existing `PaymentAttestation`. It may issue the balance tag only after authenticating
 complete per-payment funding evidence tied to the same canonical payment ID,
-payer, recipient, amount and currency. A client flag, account balance, missing
-funding fields or unsigned attestation metadata is not funding evidence.
+payer, recipient, amount and currency. The accepted Venmo representation is a
+complete payer-scoped `TransactionDetails` response whose `transactionFields`
+array omits the `fundingSource` key. Any present source, including null or split
+funding, does not qualify. Missing data, GraphQL errors, a client flag, current
+account balance or unsigned attestation metadata cannot establish eligibility.
 
 For a frozen balance intent, the module requires exactly 480 bytes and the exact
 tag, then delegates the full digest, signatures and data to the original witness
