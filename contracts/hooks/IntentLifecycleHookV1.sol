@@ -57,7 +57,7 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     /**
      * @inheritdoc IIntentLifecycleHook
      */
-    function onIntentSignaled(bytes32 _intentHash) external override onlyOrchestrator {
+    function onIntentSignaled(bytes32 _intentHash) public virtual override onlyOrchestrator {
         IOrchestratorV3.Intent memory intent = IOrchestratorV3(msg.sender).getIntent(_intentHash);
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
@@ -82,14 +82,14 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     /**
      * @inheritdoc IIntentLifecycleHook
      */
-    function onIntentCancelled(bytes32 _intentHash) external override onlyOrchestrator {
+    function onIntentCancelled(bytes32 _intentHash) public virtual override onlyOrchestrator {
         disputeProtectionPolicy.onIntentCancelled(_intentHash);
     }
 
     /**
      * @inheritdoc IIntentLifecycleHook
      */
-    function settleIntent(SettlementContext calldata _context) external override onlyOrchestrator {
+    function settleIntent(SettlementContext calldata _context) public virtual override onlyOrchestrator {
         disputeProtectionPolicy.onIntentSettled(_context.intentHash, _context.releaseAmount, _context.isManualRelease);
     }
 
