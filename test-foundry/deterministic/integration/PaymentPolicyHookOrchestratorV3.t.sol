@@ -5,9 +5,11 @@ pragma solidity ^0.8.18;
 import {StakeVault} from "contracts/StakeVault.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
-import {VenmoBalancePolicy} from "contracts/hooks/VenmoBalancePolicy.sol";
+import {PaymentPolicyHook} from "contracts/hooks/PaymentPolicyHook.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
+import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
+import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
@@ -17,9 +19,13 @@ import {MultiAttestationVerifier} from "contracts/unifiedVerifier/MultiAttestati
 import {UnifiedPaymentVerifierV3} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol";
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 
-contract VenmoBalancePolicyOrchestratorV3Test is OrchestratorV3Fixture {
+contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     uint256 internal constant WITNESS_KEY = 0xA11CE;
+    bytes32 internal constant MARKER = keccak256("payment_policy");
     bytes32 internal constant POLICY = keccak256("venmo_balance");
+    bytes32 internal constant GOODS_POLICY = keccak256("venmo_goods_and_services");
+    bytes32 internal constant PAYPAL_POLICY = keccak256("paypal_balance");
+    bytes32 internal constant PAYPAL = keccak256("paypal");
     bytes32 internal constant PAYMENT_ID = keccak256("canonical-venmo-payment-id");
     uint64 internal constant RISK_WINDOW = 14 days;
 
@@ -29,7 +35,7 @@ contract VenmoBalancePolicyOrchestratorV3Test is OrchestratorV3Fixture {
     MultiAttestationVerifier internal witnesses;
     UnifiedPaymentVerifierV3 internal upv;
     NullifierRegistryV2 internal nullifiers;
-    VenmoBalancePolicy internal policy;
+    PaymentPolicyHook internal policy;
     IntentLifecycleHookV1 internal oldHook;
 
     function setUp() public override {
@@ -59,7 +65,9 @@ contract VenmoBalancePolicyOrchestratorV3Test is OrchestratorV3Fixture {
         oldHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelist, protection);
         protection.setLifecycleHookAuthorization(address(oldHook), true);
 
-        policy = new VenmoBalancePolicy(upv, whitelist, protection);
+        policy = new PaymentPolicyHook(upv, whitelist, protection);
+        policy.setPolicy(POLICY, METHOD, true);
+        policy.setPolicy(GOODS_POLICY, METHOD, true);
         protection.setLifecycleHookAuthorization(address(policy), true);
         upv.setAttestationVerifier(address(policy));
         orchestrator.setLifecycleHook(policy);
@@ -69,13 +77,13 @@ contract VenmoBalancePolicyOrchestratorV3Test is OrchestratorV3Fixture {
         _enable(true);
         bytes32 intentHash = _signalBalance();
         assertEq(vault.lockedStake(taker), 0);
-        assertEq(policy.balanceIntentOrchestrator(intentHash), address(orchestrator));
+        assertEq(_intentOrchestrator(intentHash), address(orchestrator));
         assertEq(orchestrator.getIntent(intentHash).paymentMethod, METHOD);
         _settle(intentHash, _proof(intentHash, PAYMENT_ID, abi.encode(POLICY)));
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
         assertEq(vault.lockedStake(taker), 0);
         assertTrue(nullifiers.isNullified(keccak256(abi.encodePacked(METHOD, PAYMENT_ID))));
-        assertEq(policy.balanceIntentOrchestrator(intentHash), address(0));
+        assertEq(_intentOrchestrator(intentHash), address(0));
         assertEq(uint256(protection.getDisputeProtectionIntent(intentHash).status), 0);
     }
 
@@ -102,20 +110,20 @@ contract VenmoBalancePolicyOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_BalanceDisabledByDefaultAndOnlyDepositorCanEnable() public {
-        vm.expectRevert("VBP: Balance disabled");
+        vm.expectRevert("PPH: Deposit policy disabled");
         _signalCall(taker, _balanceParams());
         vm.prank(delegate);
-        vm.expectRevert("VBP: Only depositor");
-        policy.setBalanceEnabled(address(escrow), depositId, true);
-        vm.expectRevert("VBP: Invalid escrow");
-        policy.setBalanceEnabled(address(0xBAD), depositId, true);
+        vm.expectRevert("PPH: Only depositor");
+        policy.setDepositPolicyEnabled(address(escrow), depositId, POLICY, true);
+        vm.expectRevert("PPH: Invalid escrow");
+        policy.setDepositPolicyEnabled(address(0xBAD), depositId, POLICY, true);
     }
 
     function test_DisablingOfferDoesNotChangePendingIntent() public {
         _enable(true);
         bytes32 intentHash = _signalBalance();
         _enable(false);
-        vm.expectRevert("VBP: Balance disabled");
+        vm.expectRevert("PPH: Deposit policy disabled");
         _signalCall(taker, _balanceParams());
         _settle(intentHash, _proof(intentHash, PAYMENT_ID, abi.encode(POLICY)));
     }
@@ -127,7 +135,7 @@ contract VenmoBalancePolicyOrchestratorV3Test is OrchestratorV3Fixture {
         vm.expectRevert("UPV: Invalid attestation");
         _settle(intentHash, proof);
         assertFalse(nullifiers.isNullified(keccak256(abi.encodePacked(METHOD, PAYMENT_ID))));
-        assertEq(policy.balanceIntentOrchestrator(intentHash), address(orchestrator));
+        assertEq(_intentOrchestrator(intentHash), address(orchestrator));
     }
 
     function test_UnknownOrOversizedSignedPolicyRejected() public {
@@ -193,7 +201,7 @@ contract VenmoBalancePolicyOrchestratorV3Test is OrchestratorV3Fixture {
         bytes32 intentHash = _signalBalance();
         vm.prank(taker);
         orchestrator.cancelIntent(intentHash);
-        assertEq(policy.balanceIntentOrchestrator(intentHash), address(0));
+        assertEq(_intentOrchestrator(intentHash), address(0));
         assertEq(escrow.getDeposit(depositId).remainingDeposits, 500e6);
         assertEq(vault.lockedStake(taker), 0);
     }
@@ -202,24 +210,24 @@ contract VenmoBalancePolicyOrchestratorV3Test is OrchestratorV3Fixture {
         _enable(true);
         bytes32 intentHash = _signalBalance();
         upv.setAttestationVerifier(address(witnesses));
-        vm.expectRevert("VBP: Verifier not installed");
+        vm.expectRevert("PPH: Verifier not installed");
         _signalCall(taker, _balanceParams());
         bytes memory ordinaryProof = _proof(intentHash, PAYMENT_ID, "");
-        vm.expectRevert("VBP: Verifier not installed");
+        vm.expectRevert("PPH: Verifier not installed");
         _settle(intentHash, ordinaryProof);
         assertFalse(nullifiers.isNullified(keccak256(abi.encodePacked(METHOD, PAYMENT_ID))));
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
-        assertEq(policy.balanceIntentOrchestrator(intentHash), address(0));
+        assertEq(_intentOrchestrator(intentHash), address(0));
     }
 
     function test_BalanceRequiresDirectPayoutAndPreservesWhitelist() public {
         _enable(true);
         IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
-        params.data = abi.encode(POLICY);
+        params.data = abi.encode(MARKER, POLICY);
         params.postIntentHook = postIntentHook;
-        vm.expectRevert("VBP: Only direct payout");
+        vm.expectRevert("PPH: Only direct payout");
         _signalCall(taker, params);
         vm.prank(depositor);
         whitelist.setEnabled(address(escrow), depositId, METHOD, true);
@@ -253,16 +261,203 @@ contract VenmoBalancePolicyOrchestratorV3Test is OrchestratorV3Fixture {
         _enable(true);
         bytes32 intentHash = _signalBalance();
         vm.prank(address(orchestratorMock));
-        vm.expectRevert("VBP: Foreign intent");
+        vm.expectRevert("PPH: Foreign intent");
         policy.onIntentCancelled(intentHash);
         vm.prank(other);
         vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.UnauthorizedOrchestrator.selector, other));
         policy.onIntentCancelled(intentHash);
     }
 
+    function test_OnlyCurrentVerifierGovernanceConfiguresPermanentlyBoundPolicies() public {
+        vm.prank(other);
+        vm.expectRevert("PPH: Only governance");
+        policy.setPolicy(PAYPAL_POLICY, PAYPAL, true);
+        vm.expectRevert("PPH: Zero policy or method");
+        policy.setPolicy(bytes32(0), METHOD, true);
+        vm.expectRevert("PPH: Zero policy or method");
+        policy.setPolicy(PAYPAL_POLICY, bytes32(0), true);
+        policy.setPolicy(POLICY, METHOD, false);
+        (bytes32 method, bool enabled) = policy.policies(POLICY);
+        assertEq(method, METHOD);
+        assertFalse(enabled);
+        vm.expectRevert("PPH: Policy method immutable");
+        policy.setPolicy(POLICY, PAYPAL, true);
+        upv.transferOwnership(other);
+        vm.expectRevert("PPH: Only governance");
+        policy.setPolicy(POLICY, METHOD, true);
+        vm.prank(other);
+        policy.setPolicy(POLICY, METHOD, true);
+    }
+
+    function test_GlobalDisableOnlyStopsNewAdmissions() public {
+        _enable(true);
+        bytes32 intentHash = _signalBalance();
+        policy.setPolicy(POLICY, METHOD, false);
+        vm.expectRevert("PPH: Admissions disabled");
+        _signalCall(taker, _balanceParams());
+        _settle(intentHash, _proof(intentHash, PAYMENT_ID, abi.encode(POLICY)));
+    }
+
+    function test_PolicyMarkerRejectsMalformedUnknownAndZeroSelections() public {
+        _enable(true);
+        bytes32 marker = MARKER;
+        bytes[] memory malformed = new bytes[](4);
+        malformed[0] = abi.encode(marker);
+        malformed[1] = abi.encodePacked(marker, bytes31(0));
+        malformed[2] = abi.encodePacked(marker, POLICY, bytes1(0));
+        malformed[3] = abi.encode(marker, POLICY, POLICY);
+        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        for (uint256 index = 0; index < malformed.length; index++) {
+            params.data = malformed[index];
+            vm.expectRevert("PPH: Invalid policy envelope");
+            _signalCall(taker, params);
+        }
+        params.data = abi.encode(marker, keccak256("unknown_policy"));
+        vm.expectRevert("PPH: Unknown policy");
+        _signalCall(taker, params);
+        params.data = abi.encode(marker, bytes32(0));
+        vm.expectRevert("PPH: Unknown policy");
+        _signalCall(taker, params);
+        vm.prank(depositor);
+        vm.expectRevert("PPH: Unknown policy");
+        policy.setDepositPolicyEnabled(address(escrow), depositId, keccak256("unknown_policy"), true);
+        assertEq(orchestrator.getAccountIntents(taker).length, 0);
+    }
+
+    function test_TwoVenmoPoliciesRequireTheirOwnSignedTagAndMakerOptIn() public {
+        _enable(true);
+        IOrchestratorV3.SignalIntentParams memory goodsParams = _defaultParams();
+        goodsParams.data = abi.encode(MARKER, GOODS_POLICY);
+        vm.expectRevert("PPH: Deposit policy disabled");
+        _signalCall(taker, goodsParams);
+        vm.prank(depositor);
+        policy.setDepositPolicyEnabled(address(escrow), depositId, GOODS_POLICY, true);
+        bytes32 balance = _signalBalance();
+        bytes32 goods = _signal(taker, goodsParams);
+        (bytes32 requiredPolicy,) = policy.policyIntents(goods);
+        assertEq(requiredPolicy, GOODS_POLICY);
+        bytes memory proof = _proof(goods, PAYMENT_ID, abi.encode(POLICY));
+        vm.expectRevert("UPV: Invalid attestation");
+        _settle(goods, proof);
+        proof = _proof(balance, PAYMENT_ID, abi.encode(GOODS_POLICY));
+        vm.expectRevert("UPV: Invalid attestation");
+        _settle(balance, proof);
+        _settle(goods, _proof(goods, PAYMENT_ID, abi.encode(GOODS_POLICY)));
+        proof = _proof(balance, PAYMENT_ID, abi.encode(POLICY));
+        vm.expectRevert("Nullifier has already been used");
+        _settle(balance, proof);
+        bytes32 nextPayment = keccak256("another-policy-payment");
+        _settle(balance, _proof(balance, nextPayment, abi.encode(POLICY)));
+        goods = _signal(taker, goodsParams);
+        proof = _proof(goods, nextPayment, abi.encode(GOODS_POLICY));
+        vm.expectRevert("Nullifier has already been used");
+        _settle(goods, proof);
+        assertEq(vault.lockedStake(taker), 0);
+    }
+
+    function test_MakerOptInIsScopedToEachDeposit() public {
+        _enable(true);
+        vm.startPrank(depositor);
+        uint256 anotherDeposit = _createDeposit(address(0), delegate);
+        vm.stopPrank();
+        IOrchestratorV3.SignalIntentParams memory params = _balanceParams();
+        params.depositId = anotherDeposit;
+        vm.expectRevert("PPH: Deposit policy disabled");
+        _signalCall(taker, params);
+    }
+
+    function test_FuturePayPalPolicyIsIsolatedFromVenmoAndReusesItsOwnMethod() public {
+        _addPaymentMethod(PAYPAL);
+        policy.setPolicy(PAYPAL_POLICY, PAYPAL, true);
+        vm.prank(depositor);
+        policy.setDepositPolicyEnabled(address(escrow), depositId, PAYPAL_POLICY, true);
+        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        params.data = abi.encode(MARKER, PAYPAL_POLICY);
+        vm.expectRevert("PPH: Policy method mismatch");
+        _signalCall(taker, params);
+        params.paymentMethod = PAYPAL;
+        params.data = abi.encode(MARKER, POLICY);
+        vm.expectRevert("PPH: Policy method mismatch");
+        _signalCall(taker, params);
+        params.data = abi.encode(MARKER, PAYPAL_POLICY);
+        bytes32 intentHash = _signal(taker, params);
+        _settle(intentHash, _proof(intentHash, PAYMENT_ID, abi.encode(PAYPAL_POLICY)));
+        assertTrue(nullifiers.isNullified(keccak256(abi.encodePacked(PAYPAL, PAYMENT_ID))));
+        assertFalse(nullifiers.isNullified(keccak256(abi.encodePacked(METHOD, PAYMENT_ID))));
+        assertEq(vault.lockedStake(taker), 0);
+    }
+
+    function test_ChangedMethodRouteBlocksPolicySignalAndSettlementButAllowsCancellation() public {
+        _enable(true);
+        bytes32 intentHash = _signalBalance();
+        _setMethodVerifier(METHOD, address(verifier));
+        vm.expectRevert("PPH: Wrong payment verifier");
+        _signalCall(taker, _balanceParams());
+        bytes memory uncheckedProof = abi.encode(INTENT_AMOUNT, block.timestamp, PAYEE, USD, intentHash);
+        vm.expectRevert("PPH: Wrong payment verifier");
+        _settle(intentHash, uncheckedProof);
+        assertEq(orchestrator.getIntent(intentHash).owner, taker);
+        assertEq(token.balanceOf(taker), 0);
+        assertEq(escrow.getDeposit(depositId).outstandingIntentAmount, INTENT_AMOUNT);
+        vm.prank(taker);
+        orchestrator.cancelIntent(intentHash);
+        assertEq(_intentOrchestrator(intentHash), address(0));
+        assertEq(escrow.getDeposit(depositId).remainingDeposits, 500e6);
+    }
+
+    function test_ChangedMethodRouteStillAllowsMakerManualRelease() public {
+        _enable(true);
+        bytes32 intentHash = _signalBalance();
+        _setMethodVerifier(METHOD, address(verifier));
+        vm.prank(depositor);
+        orchestrator.releaseFundsToPayer(intentHash);
+        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
+        assertEq(_intentOrchestrator(intentHash), address(0));
+    }
+
+    function test_ForeignOrchestratorCannotSettlePolicyIntent() public {
+        _enable(true);
+        bytes32 intentHash = _signalBalance();
+        vm.prank(address(orchestratorMock));
+        vm.expectRevert("PPH: Foreign intent");
+        policy.settleIntent(
+            IIntentLifecycleHook.SettlementContext(
+                intentHash, address(token), taker, INTENT_AMOUNT, INTENT_AMOUNT, false
+            )
+        );
+        assertEq(_intentOrchestrator(intentHash), address(orchestrator));
+    }
+
+    function _setMethodVerifier(bytes32 method, address newVerifier) internal {
+        paymentVerifierRegistry.removePaymentMethod(method);
+        bytes32[] memory currencies = new bytes32[](1);
+        currencies[0] = USD;
+        paymentVerifierRegistry.addPaymentMethod(method, newVerifier, currencies);
+    }
+
+    function _addPaymentMethod(bytes32 method) internal {
+        upv.addPaymentMethod(method);
+        bytes32[] memory supportedCurrencies = new bytes32[](1);
+        supportedCurrencies[0] = USD;
+        paymentVerifierRegistry.addPaymentMethod(method, address(upv), supportedCurrencies);
+        bytes32[] memory methods = new bytes32[](1);
+        methods[0] = method;
+        IEscrowV2.DepositPaymentMethodData[] memory methodData = new IEscrowV2.DepositPaymentMethodData[](1);
+        methodData[0] = IEscrowV2.DepositPaymentMethodData(address(0), PAYEE, "");
+        IEscrowV2.Currency[][] memory currencies = new IEscrowV2.Currency[][](1);
+        currencies[0] = new IEscrowV2.Currency[](1);
+        currencies[0][0] = IEscrowV2.Currency(USD, CONVERSION_RATE, _emptyOracle());
+        vm.prank(depositor);
+        escrow.addPaymentMethods(depositId, methods, methodData, currencies);
+    }
+
+    function _intentOrchestrator(bytes32 intentHash) internal view returns (address origin) {
+        (, origin) = policy.policyIntents(intentHash);
+    }
+
     function _enable(bool enabled) internal {
         vm.prank(depositor);
-        policy.setBalanceEnabled(address(escrow), depositId, enabled);
+        policy.setDepositPolicyEnabled(address(escrow), depositId, POLICY, enabled);
     }
 
     function _stake() internal {
@@ -279,16 +474,18 @@ contract VenmoBalancePolicyOrchestratorV3Test is OrchestratorV3Fixture {
 
     function _balanceParams() internal view returns (IOrchestratorV3.SignalIntentParams memory params) {
         params = _defaultParams();
-        params.data = abi.encode(POLICY);
+        params.data = abi.encode(MARKER, POLICY);
     }
 
     function _data(bytes32 intentHash, bytes32 paymentId, bytes memory suffix) internal view returns (bytes memory) {
         IOrchestratorV3.Intent memory intent = orchestrator.getIntent(intentHash);
         return bytes.concat(
             abi.encode(
-                UnifiedPaymentVerifierV3.PaymentDetails(METHOD, PAYEE, 5000, USD, block.timestamp * 1000, paymentId),
+                UnifiedPaymentVerifierV3.PaymentDetails(
+                    intent.paymentMethod, PAYEE, 5000, USD, block.timestamp * 1000, paymentId
+                ),
                 UnifiedPaymentVerifierV3.IntentSnapshot(
-                    intentHash, intent.amount, METHOD, USD, PAYEE, CONVERSION_RATE, intent.timestamp, 0
+                    intentHash, intent.amount, intent.paymentMethod, USD, PAYEE, CONVERSION_RATE, intent.timestamp, 0
                 )
             ),
             suffix
