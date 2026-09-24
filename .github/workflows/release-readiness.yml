@@ -80,6 +80,8 @@ jobs:
         run: cp .env.default .env
       - name: Test release environment policy
         run: corepack yarn test:release-policy
+      - name: Test sponsor fee economics
+        run: node --test scripts/model-sponsor-fees.spec.mjs
       - name: Compile deployment contracts and package
         run: |
           corepack yarn compile

@@ -343,7 +343,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
      * @notice Returns the stored dispute protection state for an intent.
      * @param _intentHash Intent whose dispute protection state is queried.
      */
-    function getDisputeProtectionIntent(bytes32 _intentHash) external view returns (DisputeProtectionIntent memory) {
+    function getDisputeProtectionIntent(bytes32 _intentHash) external view override returns (DisputeProtectionIntent memory) {
         return disputeProtectionIntentByIntentHash[_intentHash];
     }
 
