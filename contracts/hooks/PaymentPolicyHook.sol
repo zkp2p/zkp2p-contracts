@@ -6,14 +6,13 @@ import {IntentLifecycleHookV1} from "./IntentLifecycleHookV1.sol";
 import {OrchestratorV3} from "../OrchestratorV3.sol";
 import {IAttestationVerifier} from "../interfaces/IAttestationVerifier.sol";
 import {IDisputeProtectionPolicy} from "../interfaces/IDisputeProtectionPolicy.sol";
-import {IEscrow} from "../interfaces/IEscrow.sol";
 import {IOrchestratorV3} from "../interfaces/IOrchestratorV3.sol";
 import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 import {UnifiedPaymentVerifierV3} from "../unifiedVerifier/UnifiedPaymentVerifierV3.sol";
 
 /**
  * @title PaymentPolicyHook
- * @notice Maker-approved payment policies admit direct-payout intents without dispute staking and require signed policy evidence.
+ * @notice Enabled payment policies admit direct-payout intents on protected deposits without staking and require signed evidence.
  * @dev Install as both the existing UPV3's attestation verifier and O3's lifecycle hook. Each policy is permanently
  * bound to one payment method. Policy proofs append the required policy ID to the existing 448-byte signed payload;
  * the original witness verifier authenticates the complete digest. Ordinary intents retain V1 admission and proofs.
@@ -35,13 +34,9 @@ contract PaymentPolicyHook is IntentLifecycleHookV1, IAttestationVerifier {
     IAttestationVerifier public immutable signatureVerifier;
 
     mapping(bytes32 => PaymentPolicy) public policies;
-    mapping(address => mapping(uint256 => mapping(bytes32 => bool))) public depositPolicyEnabled;
     mapping(bytes32 => PolicyIntent) public policyIntents;
 
     event PolicyUpdated(bytes32 indexed policyId, bytes32 indexed paymentMethod, bool admissionEnabled);
-    event DepositPolicyEnabled(
-        address indexed escrow, uint256 indexed depositId, bytes32 indexed policyId, bool enabled
-    );
     event PolicyIntentSignaled(bytes32 indexed intentHash, bytes32 indexed policyId, address indexed orchestrator);
 
     constructor(
@@ -69,18 +64,6 @@ contract PaymentPolicyHook is IntentLifecycleHookV1, IAttestationVerifier {
         emit PolicyUpdated(_policyId, _paymentMethod, _admissionEnabled);
     }
 
-    /**
-     * @notice DEPOSITOR ONLY: Offers a registered policy on an existing deposit, reusing its payment method and rates.
-     * @dev Disabled by default. Both maker and governance changes affect future admissions only.
-     */
-    function setDepositPolicyEnabled(address _escrow, uint256 _depositId, bytes32 _policyId, bool _enabled) external {
-        require(policies[_policyId].paymentMethod != bytes32(0), "PPH: Unknown policy");
-        require(whitelistPolicy.escrowRegistry().isWhitelistedEscrow(_escrow), "PPH: Invalid escrow");
-        require(IEscrow(_escrow).getDeposit(_depositId).depositor == msg.sender, "PPH: Only depositor");
-        depositPolicyEnabled[_escrow][_depositId][_policyId] = _enabled;
-        emit DepositPolicyEnabled(_escrow, _depositId, _policyId, _enabled);
-    }
-
     /// @inheritdoc IntentLifecycleHookV1
     function onIntentSignaled(bytes32 _intentHash) public override onlyOrchestrator {
         IOrchestratorV3.Intent memory intent = IOrchestratorV3(msg.sender).getIntent(_intentHash);
@@ -96,7 +79,10 @@ contract PaymentPolicyHook is IntentLifecycleHookV1, IAttestationVerifier {
         require(policy.admissionEnabled, "PPH: Admissions disabled");
         require(intent.paymentMethod == policy.paymentMethod, "PPH: Policy method mismatch");
         require(address(intent.postIntentHook) == address(0), "PPH: Only direct payout");
-        require(depositPolicyEnabled[intent.escrow][intent.depositId][policyId], "PPH: Deposit policy disabled");
+        require(
+            disputeProtectionPolicy.isDisputeProtectionEnabled(intent.escrow, intent.depositId, policy.paymentMethod),
+            "PPH: Dispute protection disabled"
+        );
         _requireVerifierInstalled(msg.sender, policy.paymentMethod);
         if (
             whitelistPolicy.enabled(intent.escrow, intent.depositId, policy.paymentMethod)

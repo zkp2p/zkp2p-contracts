@@ -1,8 +1,8 @@
 # Payment policies with existing payment methods
 
-`PaymentPolicyHook` lets governance register evidence policies and makers opt
-individual deposits into zero-stake, direct-payout intents. It serves as both the
-OrchestratorV3 lifecycle hook and the existing UnifiedPaymentVerifierV3's
+`PaymentPolicyHook` lets governance register evidence policies for zero-stake,
+direct-payout intents on deposits with dispute protection enabled. It serves as
+both the OrchestratorV3 lifecycle hook and the existing UnifiedPaymentVerifierV3's
 attestation verifier. It reuses the current whitelist, dispute policy, witness
 verifier and stake vault.
 
@@ -24,7 +24,7 @@ Ordinary intents retain V1 whitelist/staking admission. Pending intents retain
 the lifecycle hook already snapshotted by O3. This module does not change the
 ordinary Venmo or PayPal dispute risk windows.
 
-## Policy registration and maker consent
+## Policy registration and existing deposit eligibility
 
 Only the configured UPV3's current owner can call:
 
@@ -48,16 +48,26 @@ ordinary Venmo method. A future `paypal_balance` policy must bind to
 The PayPal integration test is synthetic evidence of method isolation, not a
 claim that PayPal balance proof support exists.
 
-The depositor then calls:
+Deposit eligibility reads the existing dispute policy directly:
 
 ```solidity
-setDepositPolicyEnabled(escrow, depositId, policyId, true);
+disputeProtectionPolicy.isDisputeProtectionEnabled(escrow, depositId, paymentMethod);
 ```
 
-Opt-in defaults to false for each deposit and policy. Delegates cannot make this
-risk decision. Existing payment-method identity, rates, currencies and liquidity
-are reused. Governance and maker configuration changes affect future admissions
-only; a pending intent keeps its required policy and originating orchestrator.
+Every deposit with effective dispute protection enabled automatically supports
+all governance-enabled policies for that method. This includes existing deposits
+and new deposits, since protection defaults on for methods with a nonzero risk
+window unless the maker opts out. There is no separate policy opt-in, per-policy
+deposit setting, backfill or maker migration transaction.
+
+The existing depositor-only `setDisputeProtectionEnabled` control remains
+authoritative. Opting out disables future policy admissions for that deposit and
+method; a zero method risk window also makes it ineligible. Enabling protection
+therefore permits ordinary stake-backed payments and qualifying policy payments
+without stake-backed compensation. Governance can disable each policy globally.
+Existing payment-method identity, rates, currencies and liquidity are reused.
+Governance, maker and risk-window changes affect future admissions only; a
+pending intent keeps its required policy and originating orchestrator.
 
 ## Selecting a policy
 
@@ -70,8 +80,8 @@ data = abi.encode(keccak256("payment_policy"), policyId);
 
 The policy envelope is exactly 64 bytes. Data beginning with the full 32-byte
 marker is reserved: malformed lengths, zero or unknown policies, disabled
-admissions, wrong payment methods and missing maker consent revert. Other data
-continues through ordinary admission without reinterpretation.
+admissions, wrong payment methods and disabled dispute protection revert. Other
+data continues through ordinary admission without reinterpretation.
 
 An enabled whitelist still requires the taker to be allowed. Escrow,
 pre-intent-hook, gating-service and other O3 checks continue to apply. Policy
@@ -140,8 +150,9 @@ live verifier. Prepare these governance calls as one reviewed batch:
 2. `UnifiedPaymentVerifierV3.setAttestationVerifier(module)`.
 3. `OrchestratorV3.setLifecycleHook(module)`.
 
-Governance must separately register/enable the reviewed policies. Retain the
-previous hook's DPP authorization while its intents remain pending. Keep the
+Governance must separately register/enable the reviewed policies. Existing
+protected deposits then become eligible without per-deposit transactions. Retain
+the previous hook's DPP authorization while its intents remain pending. Keep the
 current UPV3, O3, DPP, vault, method routes and nullifier permissions. Update
 current readiness checks for the new checker/hook pairing; historical deployment
 lanes and records remain immutable.
@@ -150,30 +161,37 @@ At admission and proof settlement, the module verifies both that it remains
 UPV3's checker and that the originating O3's registry routes the bound payment
 method to that UPV3. Replacing either dependency therefore cannot settle a pending
 policy intent with an ordinary proof. Cancellation and maker-authorized manual
-release remain available. To stop new policy intents, disable admissions or
-maker offers while retaining the checker until pending policy intents resolve.
+release remain available. To stop new policy intents, disable the policy globally
+or opt the deposit method out of dispute protection while retaining the checker
+until pending policy intents resolve.
 
 ## Direct consumers
 
 - Attestor: validate the exact requested policy, authenticate its evidence and
   append the signed word. Ordinary issuance remains unchanged; do not fall back
   between policy choices.
-- Indexer: project `PolicyUpdated`, `DepositPolicyEnabled` and
-  `PolicyIntentSignaled`, using O3 terminal events for intent status. Configuration
-  changes affect future quotes; pending intent policy remains frozen.
+- Indexer: project `PolicyUpdated` and `PolicyIntentSignaled`, using O3 terminal
+  events for intent status. Reuse existing dispute-protection configuration and
+  risk-window projections for deposit eligibility; there is no new deposit
+  opt-in entity or backfill. Configuration changes affect future quotes; pending
+  intent policy remains frozen.
 - Curator: recognize the active hook and quote policies only when governance,
-  maker, whitelist and direct-payout requirements hold. Ordinary stake quotes
-  remain unchanged.
+  effective dispute protection, whitelist and direct-payout requirements hold.
+  Keep ordinary stake quotes unchanged; a policy quote separately carries its
+  required evidence and zero-stake admission.
 - SDK/client: carry the selected policy through quote, signal, proof and recovery
   using the original payment method and account identity. Do not expose offers
-  until the policy, attestor and consumer path are active.
+  until the policy, attestor and consumer path are active. No additional maker
+  opt-in screen or transaction is needed.
 
 ## Verification
 
 `PaymentPolicyHookOrchestratorV3.t.sol` exercises real O3, EscrowV2, UPV3,
 witness signatures, replay registries, DPP and StakeVault. It covers zero-stake
 policy settlement, ordinary 14-day staking and old pending proofs, governance
-and maker authorization, permanent policy identity, frozen admissions, malformed
-envelopes, exact signed policy matching, cross-policy replay, synthetic PayPal
+authorization, automatic eligibility of existing protected deposits,
+deposit/method opt-out isolation, risk-window changes, permanent policy identity,
+frozen admissions, malformed envelopes, exact signed policy matching,
+cross-policy replay, synthetic PayPal
 method isolation, whitelist/custom-hook boundaries, witness thresholds,
 cancellation, manual release, checker rollback and verifier-route replacement.

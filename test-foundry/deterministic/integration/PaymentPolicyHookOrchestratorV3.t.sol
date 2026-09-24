@@ -74,7 +74,6 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_BalanceSettlesWithoutStakeUsingSameVerifierAndNullifier() public {
-        _enable(true);
         bytes32 intentHash = _signalBalance();
         assertEq(vault.lockedStake(taker), 0);
         assertEq(_intentOrchestrator(intentHash), address(orchestrator));
@@ -109,27 +108,43 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
         assertEq(protection.getDisputeProtectionIntent(intentHash).releaseEligibleAt, block.timestamp + RISK_WINDOW);
     }
 
-    function test_BalanceDisabledByDefaultAndOnlyDepositorCanEnable() public {
-        vm.expectRevert("PPH: Deposit policy disabled");
+    function test_ExistingDisputeProtectionOptOutBlocksBothPoliciesUntilReenabled() public {
+        orchestrator.setLifecycleHook(oldHook);
+        _setDisputeProtection(false);
+        orchestrator.setLifecycleHook(policy);
+        vm.expectRevert("PPH: Dispute protection disabled");
         _signalCall(taker, _balanceParams());
-        vm.prank(delegate);
-        vm.expectRevert("PPH: Only depositor");
-        policy.setDepositPolicyEnabled(address(escrow), depositId, POLICY, true);
-        vm.expectRevert("PPH: Invalid escrow");
-        policy.setDepositPolicyEnabled(address(0xBAD), depositId, POLICY, true);
+        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        params.data = abi.encode(MARKER, GOODS_POLICY);
+        vm.expectRevert("PPH: Dispute protection disabled");
+        _signalCall(taker, params);
+        _setDisputeProtection(true);
+        bytes32 intentHash = _signal(taker, params);
+        _settle(intentHash, _proof(intentHash, PAYMENT_ID, abi.encode(GOODS_POLICY)));
+        assertEq(vault.lockedStake(taker), 0);
     }
 
-    function test_DisablingOfferDoesNotChangePendingIntent() public {
-        _enable(true);
+    function test_DisablingDisputeProtectionDoesNotChangePendingIntent() public {
         bytes32 intentHash = _signalBalance();
-        _enable(false);
-        vm.expectRevert("PPH: Deposit policy disabled");
+        _setDisputeProtection(false);
+        vm.expectRevert("PPH: Dispute protection disabled");
         _signalCall(taker, _balanceParams());
+        bytes memory ordinaryProof = _proof(intentHash, PAYMENT_ID, "");
+        vm.expectRevert("UPV: Invalid attestation");
+        _settle(intentHash, ordinaryProof);
         _settle(intentHash, _proof(intentHash, PAYMENT_ID, abi.encode(POLICY)));
     }
 
+    function test_ZeroRiskWindowStopsNewPoliciesWithoutChangingPendingIntent() public {
+        bytes32 intentHash = _signalBalance();
+        protection.setRiskWindow(METHOD, 0);
+        vm.expectRevert("PPH: Dispute protection disabled");
+        _signalCall(taker, _balanceParams());
+        _settle(intentHash, _proof(intentHash, PAYMENT_ID, abi.encode(POLICY)));
+        assertEq(vault.lockedStake(taker), 0);
+    }
+
     function test_OrdinaryProofCannotSettleBalanceIntentOrConsumeNullifier() public {
-        _enable(true);
         bytes32 intentHash = _signalBalance();
         bytes memory proof = _proof(intentHash, PAYMENT_ID, "");
         vm.expectRevert("UPV: Invalid attestation");
@@ -139,7 +154,6 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_UnknownOrOversizedSignedPolicyRejected() public {
-        _enable(true);
         bytes32 intentHash = _signalBalance();
         bytes memory proof = _proof(intentHash, PAYMENT_ID, abi.encode(keccak256("other-policy")));
         vm.expectRevert("UPV: Invalid attestation");
@@ -150,7 +164,6 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_UnsignedPolicyAppendAndRemovalRejected() public {
-        _enable(true);
         bytes32 intentHash = _signalBalance();
         UnifiedPaymentVerifierV3.PaymentAttestation memory attestation =
             abi.decode(_proof(intentHash, PAYMENT_ID, ""), (UnifiedPaymentVerifierV3.PaymentAttestation));
@@ -170,7 +183,6 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_ReplayBetweenOrdinaryAndBalanceRejectedBothDirections() public {
-        _enable(true);
         _stake();
         bytes32 ordinary = _signalDefault();
         _settle(ordinary, _proof(ordinary, PAYMENT_ID, ""));
@@ -187,7 +199,6 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_OriginalWitnessThresholdStillApplies() public {
-        _enable(true);
         bytes32 intentHash = _signalBalance();
         witnesses.addWitness(vm.addr(0xB0B));
         witnesses.setRequiredSignatures(2);
@@ -197,7 +208,6 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_CancellationClearsBalanceEnrollmentAndUnlocksEscrow() public {
-        _enable(true);
         bytes32 intentHash = _signalBalance();
         vm.prank(taker);
         orchestrator.cancelIntent(intentHash);
@@ -207,7 +217,6 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_VerifierRollbackBlocksBalanceSignalAndSettlementButAllowsManualRelease() public {
-        _enable(true);
         bytes32 intentHash = _signalBalance();
         upv.setAttestationVerifier(address(witnesses));
         vm.expectRevert("PPH: Verifier not installed");
@@ -223,7 +232,6 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_BalanceRequiresDirectPayoutAndPreservesWhitelist() public {
-        _enable(true);
         IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
         params.data = abi.encode(MARKER, POLICY);
         params.postIntentHook = postIntentHook;
@@ -258,7 +266,6 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_ForeignOrchestratorCannotClearBalanceEnrollment() public {
-        _enable(true);
         bytes32 intentHash = _signalBalance();
         vm.prank(address(orchestratorMock));
         vm.expectRevert("PPH: Foreign intent");
@@ -290,7 +297,6 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_GlobalDisableOnlyStopsNewAdmissions() public {
-        _enable(true);
         bytes32 intentHash = _signalBalance();
         policy.setPolicy(POLICY, METHOD, false);
         vm.expectRevert("PPH: Admissions disabled");
@@ -299,7 +305,6 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_PolicyMarkerRejectsMalformedUnknownAndZeroSelections() public {
-        _enable(true);
         bytes32 marker = MARKER;
         bytes[] memory malformed = new bytes[](4);
         malformed[0] = abi.encode(marker);
@@ -318,20 +323,12 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
         params.data = abi.encode(marker, bytes32(0));
         vm.expectRevert("PPH: Unknown policy");
         _signalCall(taker, params);
-        vm.prank(depositor);
-        vm.expectRevert("PPH: Unknown policy");
-        policy.setDepositPolicyEnabled(address(escrow), depositId, keccak256("unknown_policy"), true);
         assertEq(orchestrator.getAccountIntents(taker).length, 0);
     }
 
-    function test_TwoVenmoPoliciesRequireTheirOwnSignedTagAndMakerOptIn() public {
-        _enable(true);
+    function test_TwoVenmoPoliciesRequireTheirOwnSignedTagWithoutNewOptIn() public {
         IOrchestratorV3.SignalIntentParams memory goodsParams = _defaultParams();
         goodsParams.data = abi.encode(MARKER, GOODS_POLICY);
-        vm.expectRevert("PPH: Deposit policy disabled");
-        _signalCall(taker, goodsParams);
-        vm.prank(depositor);
-        policy.setDepositPolicyEnabled(address(escrow), depositId, GOODS_POLICY, true);
         bytes32 balance = _signalBalance();
         bytes32 goods = _signal(taker, goodsParams);
         (bytes32 requiredPolicy,) = policy.policyIntents(goods);
@@ -355,22 +352,25 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
         assertEq(vault.lockedStake(taker), 0);
     }
 
-    function test_MakerOptInIsScopedToEachDeposit() public {
-        _enable(true);
+    function test_DisputeProtectionOptOutIsScopedToEachDeposit() public {
+        _setDisputeProtection(false);
         vm.startPrank(depositor);
         uint256 anotherDeposit = _createDeposit(address(0), delegate);
         vm.stopPrank();
+        vm.expectRevert("PPH: Dispute protection disabled");
+        _signalCall(taker, _balanceParams());
         IOrchestratorV3.SignalIntentParams memory params = _balanceParams();
         params.depositId = anotherDeposit;
-        vm.expectRevert("PPH: Deposit policy disabled");
-        _signalCall(taker, params);
+        bytes32 intentHash = _signal(taker, params);
+        _settle(intentHash, _proof(intentHash, PAYMENT_ID, abi.encode(POLICY)));
+        assertEq(vault.lockedStake(taker), 0);
     }
 
     function test_FuturePayPalPolicyIsIsolatedFromVenmoAndReusesItsOwnMethod() public {
         _addPaymentMethod(PAYPAL);
+        protection.setRiskWindow(PAYPAL, RISK_WINDOW);
+        _setDisputeProtection(false);
         policy.setPolicy(PAYPAL_POLICY, PAYPAL, true);
-        vm.prank(depositor);
-        policy.setDepositPolicyEnabled(address(escrow), depositId, PAYPAL_POLICY, true);
         IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
         params.data = abi.encode(MARKER, PAYPAL_POLICY);
         vm.expectRevert("PPH: Policy method mismatch");
@@ -388,7 +388,6 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_ChangedMethodRouteBlocksPolicySignalAndSettlementButAllowsCancellation() public {
-        _enable(true);
         bytes32 intentHash = _signalBalance();
         _setMethodVerifier(METHOD, address(verifier));
         vm.expectRevert("PPH: Wrong payment verifier");
@@ -406,7 +405,6 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_ChangedMethodRouteStillAllowsMakerManualRelease() public {
-        _enable(true);
         bytes32 intentHash = _signalBalance();
         _setMethodVerifier(METHOD, address(verifier));
         vm.prank(depositor);
@@ -416,7 +414,6 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     }
 
     function test_ForeignOrchestratorCannotSettlePolicyIntent() public {
-        _enable(true);
         bytes32 intentHash = _signalBalance();
         vm.prank(address(orchestratorMock));
         vm.expectRevert("PPH: Foreign intent");
@@ -455,9 +452,9 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
         (, origin) = policy.policyIntents(intentHash);
     }
 
-    function _enable(bool enabled) internal {
+    function _setDisputeProtection(bool enabled) internal {
         vm.prank(depositor);
-        policy.setDepositPolicyEnabled(address(escrow), depositId, POLICY, enabled);
+        protection.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, enabled);
     }
 
     function _stake() internal {
