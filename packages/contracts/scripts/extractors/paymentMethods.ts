@@ -44,6 +44,7 @@ const PUBLISHED_PAYMENT_METHOD_NAMES = new Set([
   'upi',
   'venmo',
   'wise',
+  'xmoney',
   'zelle',
 ]);
 
