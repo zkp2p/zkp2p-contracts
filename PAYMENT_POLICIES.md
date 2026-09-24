@@ -1,13 +1,15 @@
 # Payment policies with existing payment methods
 
-`PaymentPolicyHook` lets governance register evidence policies for zero-stake,
+`IntentLifecycleHookV1` gains evidence policies for zero-stake,
 direct-payout intents on deposits with dispute protection enabled. It serves as
 both the OrchestratorV3 lifecycle hook and the existing UnifiedPaymentVerifierV3's
 attestation verifier. It reuses the current whitelist, dispute policy, witness
 verifier and stake vault.
 
-This contract is not deployed or activated. Each policy needs authenticated
-attestor evidence and quote/client support before governance enables admissions.
+The policy changes are made directly in the existing hook source; there is no
+separate policy-hook contract. The updated hook is not deployed or activated.
+Each policy needs authenticated attestor evidence and quote/client support
+before governance enables admissions.
 Registering a policy is an explicit decision to offer it without stake-backed
 dispute protection; a policy name does not establish payment irreversibility.
 
@@ -21,7 +23,7 @@ liquidity transfer or historical nullifier migration is required.
 
 Ordinary 448-byte proofs and opaque post-intent hook data remain unchanged.
 Ordinary intents retain V1 whitelist/staking admission. Pending intents retain
-the lifecycle hook already snapshotted by O3. This module does not change the
+the lifecycle hook already snapshotted by O3. The hook does not change the
 ordinary Venmo or PayPal dispute risk windows.
 
 ## Policy registration and existing deposit eligibility
@@ -88,7 +90,7 @@ pre-intent-hook, gating-service and other O3 checks continue to apply. Policy
 admission skips DPP, so there is no collateral lock, post-settlement risk window
 or stake-backed dispute compensation for that intent.
 
-Policies support direct payouts only. The module does not overwrite or envelope
+Policies support direct payouts only. The hook does not overwrite or envelope
 existing bridge/custom-hook data; supplying the policy envelope together with a
 post-intent hook reverts. A failed proof leaves the intent in the same policy.
 It never changes to ordinary or another policy. The buyer must prove the original
@@ -136,19 +138,33 @@ no deployment lane, live configuration, deployment artifact or package-address
 update.
 
 Before activation, complete the attestor and direct-consumer integration and
-update canonical hook recognition/configuration to accept this module. Curator's
+update canonical hook recognition/configuration to accept the replacement hook.
+Curator's
 `src/api/v3/eligibility/lifecycleHookGate.ts` recognizes the configured lifecycle
 hook address exactly; an unknown replacement causes protected quote rows to be
 excluded, including ordinary quotes. Its recognition/configuration and any
 consumed contract-package address must be ready before changing O3's hook.
 
-Deploy one module with the current UPV3, whitelist policy and DPP. Its constructor
-captures UPV3's current witness verifier; verify that dependency is the intended
-live verifier. Prepare these governance calls as one reviewed batch:
+Deploy the updated `IntentLifecycleHookV1` with its unchanged constructor:
+current orchestrator registry, whitelist policy and DPP. Deployed bytecode cannot
+be overwritten; this is a fresh hook address, with existing intents retaining
+their snapshotted hook. No core contract or deposit is replaced.
 
-1. `DisputeProtectionPolicy.setLifecycleHookAuthorization(module, true)`.
-2. `UnifiedPaymentVerifierV3.setAttestationVerifier(module)`.
-3. `OrchestratorV3.setLifecycleHook(module)`.
+Prepare these governance calls as one reviewed batch, using the respective
+contracts' owners:
+
+1. `hook.initializePaymentVerifier(currentUPV3)`, called by the DPP owner. This
+   permanently binds the existing UPV3 and captures its current witness verifier;
+   verify that checker is the intended witness verifier. The registry must match.
+2. `DisputeProtectionPolicy.setLifecycleHookAuthorization(hook, true)`.
+3. `UnifiedPaymentVerifierV3.setAttestationVerifier(hook)`.
+4. `OrchestratorV3.setLifecycleHook(hook)`.
+
+Verifier binding is one-time and must precede installing the hook as UPV3's
+checker; self-verification is rejected. Ordinary lifecycle behavior remains
+available without this binding, while no policy can be registered until it is
+bound. There is no duplicate governance owner on the hook. The original
+constructor and historical deployment scripts remain unchanged.
 
 Governance must separately register/enable the reviewed policies. Existing
 protected deposits then become eligible without per-deposit transactions. Retain
@@ -157,7 +173,7 @@ current UPV3, O3, DPP, vault, method routes and nullifier permissions. Update
 current readiness checks for the new checker/hook pairing; historical deployment
 lanes and records remain immutable.
 
-At admission and proof settlement, the module verifies both that it remains
+At admission and proof settlement, the hook verifies both that it remains
 UPV3's checker and that the originating O3's registry routes the bound payment
 method to that UPV3. Replacing either dependency therefore cannot settle a pending
 policy intent with an ordinary proof. Cancellation and maker-authorized manual
@@ -186,12 +202,13 @@ until pending policy intents resolve.
 
 ## Verification
 
-`PaymentPolicyHookOrchestratorV3.t.sol` exercises real O3, EscrowV2, UPV3,
+`IntentLifecycleHookV1PaymentPolicies.t.sol` exercises real O3, EscrowV2, UPV3,
 witness signatures, replay registries, DPP and StakeVault. It covers zero-stake
 policy settlement, ordinary 14-day staking and old pending proofs, governance
-authorization, automatic eligibility of existing protected deposits,
+authorization, one-time verifier binding and installation order, automatic
+eligibility of existing protected deposits,
 deposit/method opt-out isolation, risk-window changes, permanent policy identity,
 frozen admissions, malformed envelopes, exact signed policy matching,
-cross-policy replay, synthetic PayPal
-method isolation, whitelist/custom-hook boundaries, witness thresholds,
+cross-policy replay, synthetic PayPal method isolation, whitelist/custom-hook
+boundaries, witness thresholds,
 cancellation, manual release, checker rollback and verifier-route replacement.

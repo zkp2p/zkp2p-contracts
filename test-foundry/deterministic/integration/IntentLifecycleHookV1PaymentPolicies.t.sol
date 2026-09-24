@@ -5,7 +5,6 @@ pragma solidity ^0.8.18;
 import {StakeVault} from "contracts/StakeVault.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
-import {PaymentPolicyHook} from "contracts/hooks/PaymentPolicyHook.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
@@ -14,12 +13,13 @@ import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
+import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {MultiAttestationVerifier} from "contracts/unifiedVerifier/MultiAttestationVerifier.sol";
 import {UnifiedPaymentVerifierV3} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol";
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 
-contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
+contract IntentLifecycleHookV1PaymentPoliciesTest is OrchestratorV3Fixture {
     uint256 internal constant WITNESS_KEY = 0xA11CE;
     bytes32 internal constant MARKER = keccak256("payment_policy");
     bytes32 internal constant POLICY = keccak256("venmo_balance");
@@ -35,7 +35,7 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     MultiAttestationVerifier internal witnesses;
     UnifiedPaymentVerifierV3 internal upv;
     NullifierRegistryV2 internal nullifiers;
-    PaymentPolicyHook internal policy;
+    IntentLifecycleHookV1 internal policy;
     IntentLifecycleHookV1 internal oldHook;
 
     function setUp() public override {
@@ -65,12 +65,58 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
         oldHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelist, protection);
         protection.setLifecycleHookAuthorization(address(oldHook), true);
 
-        policy = new PaymentPolicyHook(upv, whitelist, protection);
+        policy = new IntentLifecycleHookV1(orchestratorRegistry, whitelist, protection);
+        policy.initializePaymentVerifier(upv);
         policy.setPolicy(POLICY, METHOD, true);
         policy.setPolicy(GOODS_POLICY, METHOD, true);
         protection.setLifecycleHookAuthorization(address(policy), true);
         upv.setAttestationVerifier(address(policy));
         orchestrator.setLifecycleHook(policy);
+    }
+
+    function test_VerifierBindingRequiresCurrentDisputeGovernanceAndCapturesWitnesses() public {
+        IntentLifecycleHookV1 hook = new IntentLifecycleHookV1(orchestratorRegistry, whitelist, protection);
+        vm.prank(other);
+        vm.expectRevert("ILH: Only dispute governance");
+        hook.initializePaymentVerifier(upv);
+        protection.transferOwnership(other);
+        vm.prank(other);
+        protection.acceptOwnership();
+        vm.expectRevert("ILH: Only dispute governance");
+        hook.initializePaymentVerifier(upv);
+        upv.setAttestationVerifier(address(witnesses));
+        vm.prank(other);
+        hook.initializePaymentVerifier(upv);
+        assertEq(address(hook.paymentVerifier()), address(upv));
+        assertEq(address(hook.signatureVerifier()), address(witnesses));
+    }
+
+    function test_VerifierBindingCannotBeChanged() public {
+        vm.expectRevert("ILH: Verifier already bound");
+        policy.initializePaymentVerifier(upv);
+        assertEq(address(policy.paymentVerifier()), address(upv));
+        assertEq(address(policy.signatureVerifier()), address(witnesses));
+    }
+
+    function test_VerifierBindingRejectsInvalidDependenciesAndDifferentRegistry() public {
+        IntentLifecycleHookV1 hook = new IntentLifecycleHookV1(orchestratorRegistry, whitelist, protection);
+        vm.expectRevert(IntentLifecycleHookV1.ZeroAddress.selector);
+        hook.initializePaymentVerifier(UnifiedPaymentVerifierV3(address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.InvalidDependency.selector, other));
+        hook.initializePaymentVerifier(UnifiedPaymentVerifierV3(other));
+        UnifiedPaymentVerifierV3 foreignVerifier =
+            new UnifiedPaymentVerifierV3(new OrchestratorRegistry(), nullifiers, witnesses);
+        vm.expectRevert("ILH: Registry mismatch");
+        hook.initializePaymentVerifier(foreignVerifier);
+        assertEq(address(hook.paymentVerifier()), address(0));
+    }
+
+    function test_VerifierBindingRejectsInstallationBeforeBinding() public {
+        IntentLifecycleHookV1 hook = new IntentLifecycleHookV1(orchestratorRegistry, whitelist, protection);
+        upv.setAttestationVerifier(address(hook));
+        vm.expectRevert("ILH: Cannot verify own signatures");
+        hook.initializePaymentVerifier(upv);
+        assertEq(address(hook.paymentVerifier()), address(0));
     }
 
     function test_BalanceSettlesWithoutStakeUsingSameVerifierAndNullifier() public {
@@ -96,7 +142,7 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
         assertEq(protection.getDisputeProtectionIntent(intentHash).releaseEligibleAt, block.timestamp + RISK_WINDOW);
     }
 
-    function test_ExistingIntentRetainsOldHookAndProofAfterInstallation() public {
+    function test_PendingOrdinaryIntentRetainsOriginalHookAndProofAfterReplacement() public {
         orchestrator.setLifecycleHook(oldHook);
         upv.setAttestationVerifier(address(witnesses));
         _stake();
@@ -112,11 +158,11 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
         orchestrator.setLifecycleHook(oldHook);
         _setDisputeProtection(false);
         orchestrator.setLifecycleHook(policy);
-        vm.expectRevert("PPH: Dispute protection disabled");
+        vm.expectRevert("ILH: Dispute protection disabled");
         _signalCall(taker, _balanceParams());
         IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
         params.data = abi.encode(MARKER, GOODS_POLICY);
-        vm.expectRevert("PPH: Dispute protection disabled");
+        vm.expectRevert("ILH: Dispute protection disabled");
         _signalCall(taker, params);
         _setDisputeProtection(true);
         bytes32 intentHash = _signal(taker, params);
@@ -127,7 +173,7 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     function test_DisablingDisputeProtectionDoesNotChangePendingIntent() public {
         bytes32 intentHash = _signalBalance();
         _setDisputeProtection(false);
-        vm.expectRevert("PPH: Dispute protection disabled");
+        vm.expectRevert("ILH: Dispute protection disabled");
         _signalCall(taker, _balanceParams());
         bytes memory ordinaryProof = _proof(intentHash, PAYMENT_ID, "");
         vm.expectRevert("UPV: Invalid attestation");
@@ -138,7 +184,7 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     function test_ZeroRiskWindowStopsNewPoliciesWithoutChangingPendingIntent() public {
         bytes32 intentHash = _signalBalance();
         protection.setRiskWindow(METHOD, 0);
-        vm.expectRevert("PPH: Dispute protection disabled");
+        vm.expectRevert("ILH: Dispute protection disabled");
         _signalCall(taker, _balanceParams());
         _settle(intentHash, _proof(intentHash, PAYMENT_ID, abi.encode(POLICY)));
         assertEq(vault.lockedStake(taker), 0);
@@ -219,10 +265,10 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     function test_VerifierRollbackBlocksBalanceSignalAndSettlementButAllowsManualRelease() public {
         bytes32 intentHash = _signalBalance();
         upv.setAttestationVerifier(address(witnesses));
-        vm.expectRevert("PPH: Verifier not installed");
+        vm.expectRevert("ILH: Verifier not installed");
         _signalCall(taker, _balanceParams());
         bytes memory ordinaryProof = _proof(intentHash, PAYMENT_ID, "");
-        vm.expectRevert("PPH: Verifier not installed");
+        vm.expectRevert("ILH: Verifier not installed");
         _settle(intentHash, ordinaryProof);
         assertFalse(nullifiers.isNullified(keccak256(abi.encodePacked(METHOD, PAYMENT_ID))));
         vm.prank(depositor);
@@ -235,7 +281,7 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
         IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
         params.data = abi.encode(MARKER, POLICY);
         params.postIntentHook = postIntentHook;
-        vm.expectRevert("PPH: Only direct payout");
+        vm.expectRevert("ILH: Only direct payout");
         _signalCall(taker, params);
         vm.prank(depositor);
         whitelist.setEnabled(address(escrow), depositId, METHOD, true);
@@ -268,7 +314,7 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     function test_ForeignOrchestratorCannotClearBalanceEnrollment() public {
         bytes32 intentHash = _signalBalance();
         vm.prank(address(orchestratorMock));
-        vm.expectRevert("PPH: Foreign intent");
+        vm.expectRevert("ILH: Foreign intent");
         policy.onIntentCancelled(intentHash);
         vm.prank(other);
         vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV1.UnauthorizedOrchestrator.selector, other));
@@ -277,20 +323,20 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
 
     function test_OnlyCurrentVerifierGovernanceConfiguresPermanentlyBoundPolicies() public {
         vm.prank(other);
-        vm.expectRevert("PPH: Only governance");
+        vm.expectRevert("ILH: Only governance");
         policy.setPolicy(PAYPAL_POLICY, PAYPAL, true);
-        vm.expectRevert("PPH: Zero policy or method");
+        vm.expectRevert("ILH: Zero policy or method");
         policy.setPolicy(bytes32(0), METHOD, true);
-        vm.expectRevert("PPH: Zero policy or method");
+        vm.expectRevert("ILH: Zero policy or method");
         policy.setPolicy(PAYPAL_POLICY, bytes32(0), true);
         policy.setPolicy(POLICY, METHOD, false);
         (bytes32 method, bool enabled) = policy.policies(POLICY);
         assertEq(method, METHOD);
         assertFalse(enabled);
-        vm.expectRevert("PPH: Policy method immutable");
+        vm.expectRevert("ILH: Policy method immutable");
         policy.setPolicy(POLICY, PAYPAL, true);
         upv.transferOwnership(other);
-        vm.expectRevert("PPH: Only governance");
+        vm.expectRevert("ILH: Only governance");
         policy.setPolicy(POLICY, METHOD, true);
         vm.prank(other);
         policy.setPolicy(POLICY, METHOD, true);
@@ -299,7 +345,7 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     function test_GlobalDisableOnlyStopsNewAdmissions() public {
         bytes32 intentHash = _signalBalance();
         policy.setPolicy(POLICY, METHOD, false);
-        vm.expectRevert("PPH: Admissions disabled");
+        vm.expectRevert("ILH: Admissions disabled");
         _signalCall(taker, _balanceParams());
         _settle(intentHash, _proof(intentHash, PAYMENT_ID, abi.encode(POLICY)));
     }
@@ -314,14 +360,14 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
         IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
         for (uint256 index = 0; index < malformed.length; index++) {
             params.data = malformed[index];
-            vm.expectRevert("PPH: Invalid policy envelope");
+            vm.expectRevert("ILH: Invalid policy envelope");
             _signalCall(taker, params);
         }
         params.data = abi.encode(marker, keccak256("unknown_policy"));
-        vm.expectRevert("PPH: Unknown policy");
+        vm.expectRevert("ILH: Unknown policy");
         _signalCall(taker, params);
         params.data = abi.encode(marker, bytes32(0));
-        vm.expectRevert("PPH: Unknown policy");
+        vm.expectRevert("ILH: Unknown policy");
         _signalCall(taker, params);
         assertEq(orchestrator.getAccountIntents(taker).length, 0);
     }
@@ -357,7 +403,7 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
         vm.startPrank(depositor);
         uint256 anotherDeposit = _createDeposit(address(0), delegate);
         vm.stopPrank();
-        vm.expectRevert("PPH: Dispute protection disabled");
+        vm.expectRevert("ILH: Dispute protection disabled");
         _signalCall(taker, _balanceParams());
         IOrchestratorV3.SignalIntentParams memory params = _balanceParams();
         params.depositId = anotherDeposit;
@@ -373,11 +419,11 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
         policy.setPolicy(PAYPAL_POLICY, PAYPAL, true);
         IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
         params.data = abi.encode(MARKER, PAYPAL_POLICY);
-        vm.expectRevert("PPH: Policy method mismatch");
+        vm.expectRevert("ILH: Policy method mismatch");
         _signalCall(taker, params);
         params.paymentMethod = PAYPAL;
         params.data = abi.encode(MARKER, POLICY);
-        vm.expectRevert("PPH: Policy method mismatch");
+        vm.expectRevert("ILH: Policy method mismatch");
         _signalCall(taker, params);
         params.data = abi.encode(MARKER, PAYPAL_POLICY);
         bytes32 intentHash = _signal(taker, params);
@@ -390,10 +436,10 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     function test_ChangedMethodRouteBlocksPolicySignalAndSettlementButAllowsCancellation() public {
         bytes32 intentHash = _signalBalance();
         _setMethodVerifier(METHOD, address(verifier));
-        vm.expectRevert("PPH: Wrong payment verifier");
+        vm.expectRevert("ILH: Wrong payment verifier");
         _signalCall(taker, _balanceParams());
         bytes memory uncheckedProof = abi.encode(INTENT_AMOUNT, block.timestamp, PAYEE, USD, intentHash);
-        vm.expectRevert("PPH: Wrong payment verifier");
+        vm.expectRevert("ILH: Wrong payment verifier");
         _settle(intentHash, uncheckedProof);
         assertEq(orchestrator.getIntent(intentHash).owner, taker);
         assertEq(token.balanceOf(taker), 0);
@@ -416,7 +462,7 @@ contract PaymentPolicyHookOrchestratorV3Test is OrchestratorV3Fixture {
     function test_ForeignOrchestratorCannotSettlePolicyIntent() public {
         bytes32 intentHash = _signalBalance();
         vm.prank(address(orchestratorMock));
-        vm.expectRevert("PPH: Foreign intent");
+        vm.expectRevert("ILH: Foreign intent");
         policy.settleIntent(
             IIntentLifecycleHook.SettlementContext(
                 intentHash, address(token), taker, INTENT_AMOUNT, INTENT_AMOUNT, false
