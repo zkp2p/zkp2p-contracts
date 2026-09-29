@@ -356,9 +356,9 @@ test('derives a future RC release line from the package version', () => {
   );
 });
 
-test('commits the X Money RC candidate while preserving stable release support', () => {
+test('commits the X Money stable release candidate', () => {
   const packageManifest = JSON.parse(fs.readFileSync(packageManifestPath, 'utf8'));
-  assert.equal(packageManifest.version, '0.4.2-rc.3');
+  assert.equal(packageManifest.version, '0.4.2');
   assert.deepEqual(
     resolveReleasePolicy({
       release: '0.4.1',

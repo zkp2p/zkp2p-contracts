@@ -23,11 +23,11 @@
 - Base staging removes only the explicitly drained staging predecessors. Base keeps the existing orchestrators
   registered and queues exactly one Safe call to register the fresh O3. Base execution requires
   `ENABLE_BASE_V3_GROUPS_CUTOVER=true`, a separately approved exact source SHA, and the production governance path.
-- Lane `31` is the state-aware V3 payment-binding lane. On Base staging and Base it must verify and reuse the
-  bytecode-pinned `NullifierRegistryV2` and `UnifiedPaymentVerifierV3`; missing production-like artifacts fail
-  closed. Base staging is verification-only because its EOA-owned registries cannot provide an atomic cutover.
-  On Base, the explicit cutover opt-in preserves the audited method order and currencies while atomically routing
-  all active methods to UPV3 and revoking both retired verifiers from the legacy registry.
+- Lane `31` is frozen at the PR #313 reconciliation checkpoint and hash-pinned. The runner mounts its current
+  wrapper, which verifies the active payment catalog, bytecode-pinned binding, governance, witnesses, and replay
+  permissions on Base and Base staging without invoking the historical cutover. Missing artifacts or drift fail
+  closed. Local networks retain the historical deployment path. Update live checks in the wrapper, never the
+  historical file.
 - `deploy/32_deploy_and_activate_dispute_lifecycle_stack.ts` is executable immutable production history, not current
   read-only logic. `scripts/deployActive.ts` verifies its deployed-source hash and excludes the exact file from every
   supported tagged and untagged run; both historical lane-32 tags are rejected. Never invoke the historical file
