@@ -434,6 +434,15 @@ test("immutable lane manifest pins the exact deployed sources", () => {
         "OrchestratorV3",
       ],
     },
+    "31_deploy_v3_payment_binding_stack.ts": {
+      deployedSourceSha: "73e41a14fb588f16c95fcf1e7d2cbc10a11fa730",
+      sha256:
+        "b5cfd4f040089976f5f5b69b1b5ceb49d3a4673c7eb8d7177d9e6d00cf58cdab",
+      activeSource:
+        "deployments/activeDeploymentLanes/31_deploy_v3_payment_binding_stack.ts",
+      retired: false,
+      tags: ["31_deploy_v3_payment_binding_stack", "V3PaymentBindingStack"],
+    },
     "32_deploy_and_activate_dispute_lifecycle_stack.ts": {
       deployedSourceSha: "d5558c2888c9246448e1926135fd0c2cbeceb3e4",
       sha256:

@@ -156,6 +156,13 @@
         "0xaad766fbc07fb357bed9fd8b03b935f2f71fe29fc48f08274bc2a01d7f642afc"
       ],
       "updatedAt": "2026-09-10T05:56:00.000Z"
+    },
+    "xmoney": {
+      "paymentMethodHash": "0x790dd0cc68b6e7f474649a6c0a5463a964be9d2589e2076b6dc99f5701543f51",
+      "currencies": [
+        "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e"
+      ],
+      "updatedAt": "2026-09-29T17:14:25.000Z"
     }
   }
 }

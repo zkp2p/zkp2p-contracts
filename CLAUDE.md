@@ -15,7 +15,7 @@ Read `AGENTS.md` before acting. Treat deployment status as network-scoped:
   `scripts/deployActive.ts` for `localhost`, `hardhat`, Base staging, and Base.
   Base execution is a separately approved whitelist-only deployment that queues
   one Safe registration for the fresh O3 and leaves existing orchestrators in
-  place. Lane `31` remains staging-only.
+  place. Lane `31` is frozen; its mounted wrapper is verification-only on live networks.
 - Source, tests, package ABIs, a mounted script, and checked-in artifacts are not
   proof of live state. Resolve registries, permissions, ownership, deployed
   bytecode, and on-chain wiring before stating what is active on either network.
@@ -133,7 +133,7 @@ Current numbered lanes include:
 - `28`: `IntentGuardian`;
 - `29`: V2 whitelist policy (immutable, still mounted);
 - `30`: V3 lifecycle stack (immutable; mounted through its active wrapper);
-- `31`: V3 payment-binding stack and one-way verifier cutover;
+- `31`: immutable V3 payment-binding history; mounted wrapper verifies live networks and delegates local deployment;
 - `32`: dispute lifecycle stack (immutable, retired) and the unrelated
   deposit-creation guard;
 - `33`: IntentGuardian fee update;

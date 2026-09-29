@@ -75,8 +75,8 @@ function harness({ mode = "execute", selectedTag = tag, network = "base_staging"
   };
   // Exercise the real readiness logic with deterministic bytecode fixtures.
   const { binding, pinned } = loadLane("31_deploy_v3_payment_binding_stack.ts", dependencies, env,
-    "({ binding: exports, pinned: EXISTING_PAYMENT_BINDING.base_staging })");
-  const names = binding.RATIFIED_PAYMENT_METHOD_ORDER.base_staging;
+    `({ binding: exports, pinned: EXISTING_PAYMENT_BINDING.${network} })`);
+  const names = network === "base" ? parameters.getActivePaymentMethods(network) : binding.RATIFIED_PAYMENT_METHOD_ORDER[network];
   const predecessor = names.filter((name) => name !== "xmoney").map(hash);
   const registryMethods = [...predecessor, ...(registryHas ? [method] : [])];
   const verifierMethods = [...predecessor, ...(verifierHas ? [method] : [])];
@@ -138,19 +138,83 @@ function harness({ mode = "execute", selectedTag = tag, network = "base_staging"
   };
   dependencies["./31_deploy_v3_payment_binding_stack"] = binding;
   const lane = loadLane("43_add_xmoney_payment_method.ts", dependencies, env).default;
+  const liveLane = loadLane("../deployments/activeDeploymentLanes/31_deploy_v3_payment_binding_stack.ts", {
+    "node:assert/strict": assert,
+    hardhat: dependencies.hardhat,
+    "../../deploy/31_deploy_v3_payment_binding_stack": binding,
+    "../parameters": parameters,
+  }, env).default;
   return {
     run: () => lane(hre), ready: () => binding.paymentBindingCutoverReady(hre),
+    runLive: () => liveLane(hre), skipLive: () => liveLane.skip(hre),
     calls, contracts, provider, hre, registryMethods, verifierMethods,
     actions: () => calls.filter((call) => call !== "read"),
   };
 }
 
-test("X Money extends only the staging catalog with USD and a zero risk window", () => {
+test("X Money is active on Base and staging with USD and a zero risk window", () => {
   assert.deepEqual(XMONEY_PROVIDER_CONFIG, { paymentMethodHash: method, currencies: [hash("USD")] });
-  assert.equal(parameters.getActivePaymentMethods("base").includes("xmoney"), false);
-  assert.equal(parameters.getActivePaymentMethods("base_staging").at(-1), "xmoney");
-  assert.equal(evidence.riskWindowSecondsByPaymentMethod.base[method], undefined);
-  assert.equal(evidence.riskWindowSecondsByPaymentMethod.base_staging[method], "0");
+  for (const network of ["base", "base_staging"]) {
+    assert.equal(parameters.getActivePaymentMethods(network).at(-1), "xmoney");
+    assert.equal(evidence.riskWindowSecondsByPaymentMethod[network][method], "0");
+  }
+  assert.equal(parameters.getActivePaymentMethods("hardhat").includes("xmoney"), false);
+});
+
+test("the mounted live lane verifies Base and staging without invoking the historical cutover", async () => {
+  for (const network of ["base", "base_staging"]) {
+    const h = harness({ network, registryHas: true, verifierHas: true });
+    assert.equal(await h.skipLive(), true);
+    await h.runLive();
+    assert.deepEqual(h.actions(), []);
+  }
+});
+
+test("the mounted live lane rejects missing artifacts and registry drift without writes", async () => {
+  const mutations = [
+    [(h) => { h.hre.deployments.getOrNull = async () => null; }, /artifacts are missing/],
+    [(h) => { h.contracts.PaymentVerifierRegistry.owner = async () => ethers.constants.AddressZero; }, /Payment registry owner mismatch/],
+    [(h) => { h.contracts.NullifierRegistry.owner = async () => ethers.constants.AddressZero; }, /Legacy nullifier registry owner mismatch/],
+    [(h) => { h.contracts.PaymentVerifierRegistry.getPaymentMethods = async () => [...h.registryMethods].reverse(); }, /method order mismatch/],
+    [(h) => { h.contracts.PaymentVerifierRegistry.getCurrencies = async () => [hash("EUR")]; }, /currencies mismatch/],
+    [(h) => { h.contracts.PaymentVerifierRegistry.getVerifier = async () => ethers.constants.AddressZero; }, /verifier route mismatch/],
+    [(h) => { h.contracts.NullifierRegistry.getWriters = async () => [ethers.constants.AddressZero]; }, /legacy nullifier writers remain/],
+  ];
+  for (const [mutate, expected] of mutations) {
+    const h = harness({ network: "base", registryHas: true, verifierHas: true });
+    mutate(h);
+    await assert.rejects(h.skipLive(), expected);
+    await assert.rejects(h.runLive(), expected);
+    assert.deepEqual(h.actions(), []);
+  }
+});
+
+test("the mounted lane preserves local deployment and skip behavior", async () => {
+  const calls = [];
+  const historical = async (hre) => calls.push(["deploy", hre]);
+  historical.skip = async (hre) => { calls.push(["skip", hre]); return false; };
+  historical.tags = ["31_deploy_v3_payment_binding_stack", "V3PaymentBindingStack"];
+  const lane = loadLane("../deployments/activeDeploymentLanes/31_deploy_v3_payment_binding_stack.ts", {
+    "node:assert/strict": assert,
+    hardhat: { ethers },
+    "../../deploy/31_deploy_v3_payment_binding_stack": { default: historical },
+    "../parameters": parameters,
+  }, {}).default;
+  const hre = { deployments: { getNetworkName: () => "localhost" } };
+  assert.equal(await lane.skip(hre), false);
+  await lane(hre);
+  assert.deepEqual(calls, [["skip", hre], ["deploy", hre]]);
+  assert.deepEqual(lane.tags, historical.tags);
+});
+
+test("lane 31 source is pinned and the runner selects the live wrapper", () => {
+  const { assertImmutableDeploymentLanes, selectActiveDeploymentScripts } = require("../deployments/immutableDeploymentLanes");
+  const root = require("node:path").resolve(__dirname, "..");
+  const filename = "31_deploy_v3_payment_binding_stack.ts";
+  assertImmutableDeploymentLanes(root);
+  assert.deepEqual(selectActiveDeploymentScripts(root, [filename]), [{
+    filename, sourcePath: `${root}/deployments/activeDeploymentLanes/${filename}`,
+  }]);
 });
 
 test("untagged and non-staging invocations are inert", async () => {
