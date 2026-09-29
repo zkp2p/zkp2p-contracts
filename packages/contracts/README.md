@@ -4,6 +4,8 @@ Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, an
 
 ## Release 0.4.2 RC
 
+- RC.3 adds the registered X Money/USD method to Base and Base staging catalogs
+  and cross-network hash lookups, with a zero dispute risk window.
 - Includes the registered UPI/INR method in both Base and Base staging catalogs
   and cross-network hash lookups. The catalog identifies generic UPI; clients
   select Amazon Pay for buyer payment verification.

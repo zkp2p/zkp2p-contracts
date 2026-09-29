@@ -105,6 +105,7 @@ export const RATIFIED_PAYMENT_METHOD_CURRENCIES: Record<string, string[]> = {
 
 export const RATIFIED_PAYMENT_METHOD_ORDER: Record<string, string[]> = {
   // Base block 49,791,973; UPI appended by Safe nonce 83 at block 51,114,743.
+  // X Money appended by Safe nonce 84 at block 51,956,359.
   base: [
     "alipay",
     "chime",
@@ -117,6 +118,7 @@ export const RATIFIED_PAYMENT_METHOD_ORDER: Record<string, string[]> = {
     "monzo",
     "paypal",
     "upi",
+    "xmoney",
   ],
   // Staging was already hard-cut to UPV3 before this lane was introduced.
   // Method-addition lanes activate subsequent entries; lane 31 only verifies.

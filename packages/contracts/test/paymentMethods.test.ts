@@ -17,19 +17,20 @@ describe("payment method package extraction", () => {
     await extractPaymentMethods();
   });
 
-  it("publishes registered UPI/INR on Base and Base staging in every module format", () => {
-    const methodHash = "0xe99a5081226cbbff9440a63da5caa04fa30f210c12c4dd9976132ac075054cd9";
-    const currencyHash = "0xaad766fbc07fb357bed9fd8b03b935f2f71fe29fc48f08274bc2a01d7f642afc";
+  it.each([
+    ["upi", "0xe99a5081226cbbff9440a63da5caa04fa30f210c12c4dd9976132ac075054cd9", "0xaad766fbc07fb357bed9fd8b03b935f2f71fe29fc48f08274bc2a01d7f642afc"],
+    ["xmoney", "0x790dd0cc68b6e7f474649a6c0a5463a964be9d2589e2076b6dc99f5701543f51", "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e"],
+  ])("publishes registered %s on Base and Base staging in every module format", (method, methodHash, currencyHash) => {
     for (const format of ["", "_cjs", "_esm"]) {
       const directory = path.resolve(__dirname, "..", format, "paymentMethods");
       for (const network of ["base", "baseStaging"]) {
         const data = JSON.parse(fs.readFileSync(path.join(directory, `${network}.json`), "utf8"));
-        expect(data.methods.upi.paymentMethodHash).toBe(methodHash);
-        expect(data.methods.upi.currencies).toEqual([currencyHash]);
+        expect(data.methods[method].paymentMethodHash).toBe(methodHash);
+        expect(data.methods[method].currencies).toEqual([currencyHash]);
       }
       const lookups = JSON.parse(fs.readFileSync(path.join(directory, "lookups.json"), "utf8"));
-      expect(lookups.nameToHash.upi).toBe(methodHash);
-      expect(lookups.hashToName[methodHash]).toBe("upi");
+      expect(lookups.nameToHash[method]).toBe(methodHash);
+      expect(lookups.hashToName[methodHash]).toBe(method);
     }
   });
 

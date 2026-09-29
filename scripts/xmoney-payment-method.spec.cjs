@@ -75,8 +75,8 @@ function harness({ mode = "execute", selectedTag = tag, network = "base_staging"
   };
   // Exercise the real readiness logic with deterministic bytecode fixtures.
   const { binding, pinned } = loadLane("31_deploy_v3_payment_binding_stack.ts", dependencies, env,
-    "({ binding: exports, pinned: EXISTING_PAYMENT_BINDING.base_staging })");
-  const names = binding.RATIFIED_PAYMENT_METHOD_ORDER.base_staging;
+    `({ binding: exports, pinned: EXISTING_PAYMENT_BINDING.${network} })`);
+  const names = binding.RATIFIED_PAYMENT_METHOD_ORDER[network];
   const predecessor = names.filter((name) => name !== "xmoney").map(hash);
   const registryMethods = [...predecessor, ...(registryHas ? [method] : [])];
   const verifierMethods = [...predecessor, ...(verifierHas ? [method] : [])];
@@ -145,12 +145,19 @@ function harness({ mode = "execute", selectedTag = tag, network = "base_staging"
   };
 }
 
-test("X Money extends only the staging catalog with USD and a zero risk window", () => {
+test("X Money is active on Base and staging with USD and a zero risk window", () => {
   assert.deepEqual(XMONEY_PROVIDER_CONFIG, { paymentMethodHash: method, currencies: [hash("USD")] });
-  assert.equal(parameters.getActivePaymentMethods("base").includes("xmoney"), false);
-  assert.equal(parameters.getActivePaymentMethods("base_staging").at(-1), "xmoney");
-  assert.equal(evidence.riskWindowSecondsByPaymentMethod.base[method], undefined);
-  assert.equal(evidence.riskWindowSecondsByPaymentMethod.base_staging[method], "0");
+  for (const network of ["base", "base_staging"]) {
+    assert.equal(parameters.getActivePaymentMethods(network).at(-1), "xmoney");
+    assert.equal(evidence.riskWindowSecondsByPaymentMethod[network][method], "0");
+  }
+  assert.equal(parameters.getActivePaymentMethods("hardhat").includes("xmoney"), false);
+});
+
+test("the executed Base registration passes ordinary payment-binding readiness", async () => {
+  const h = harness({ network: "base", registryHas: true, verifierHas: true });
+  assert.equal(await h.ready(), true);
+  assert.deepEqual(h.actions(), []);
 });
 
 test("untagged and non-staging invocations are inert", async () => {

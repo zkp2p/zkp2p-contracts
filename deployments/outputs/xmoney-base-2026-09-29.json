@@ -1,0 +1,35 @@
+{
+  "network": "base",
+  "chainId": 8453,
+  "proposal": "deployments/outputs/safe-batches/base_xmoney_payment_method.json",
+  "safe": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+  "safeNonce": 84,
+  "safeTransactionHash": "0xb0059120f133f570c4b2748c0f8d6ae123289f01622c1acf2fca001e766386c9",
+  "transactionHash": "0x550868ee038f3ffe2a56da61ba0e1e2cf9c5a8a200d92dada348b130ee068860",
+  "executionBlock": 51956359,
+  "executionBlockHash": "0x2c72d2bc5af7b6ce65af984a73ea526c4a1144c45969d1154046003903337677",
+  "executedAt": "2026-09-29T17:14:25.000Z",
+  "receiptStatus": 1,
+  "safeExecutionSuccess": true,
+  "snapshot": "deployments/outputs/platforms/snapshots/base/xmoney_2026-09-29T17-14-25.json",
+  "paymentMethod": "xmoney",
+  "paymentMethodHash": "0x790dd0cc68b6e7f474649a6c0a5463a964be9d2589e2076b6dc99f5701543f51",
+  "currencies": [
+    "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e"
+  ],
+  "unifiedPaymentVerifier": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+  "paymentVerifierRegistry": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+  "verification": {
+    "block": 51958092,
+    "blockHash": "0x9084ea7e7fcaafd6844ad433fb0d431ea6befee0ed28e3e5876c138cc68a139d",
+    "registryRegistered": true,
+    "verifierRegistered": true,
+    "routedVerifier": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+    "registryMethodCount": 12,
+    "verifierMethodCount": 12,
+    "soleNullifierWriter": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+    "disputeProtectionPolicy": "0xbF4B769dB70DBEc89b6b2c44988304a7aD2de4Fc",
+    "xmoneyRiskWindowSeconds": "0"
+  },
+  "scope": "Read-only reconciliation of the executed production Safe proposal. No new transactions or contract deployments."
+}

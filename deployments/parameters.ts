@@ -149,6 +149,7 @@ export const ACTIVE_PAYMENT_METHODS: string[] = [
 export const BASE_ACTIVE_PAYMENT_METHODS: string[] = [
   ...ACTIVE_PAYMENT_METHODS,
   "upi",
+  "xmoney",
 ];
 
 // Base staging can carry a reviewed payment-method candidate before the
