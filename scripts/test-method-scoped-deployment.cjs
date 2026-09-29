@@ -36,6 +36,7 @@ const lane36Module = require("../deploy/36_deploy_method_scoped_whitelist_policy
 const lane37Module = require("../deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts");
 const {
   ACTIVE_PAYMENT_METHODS,
+  BASE_ACTIVE_PAYMENT_METHODS,
   BASE_STAGING_ACTIVE_PAYMENT_METHODS,
   MULTI_SIG,
 } = require("../deployments/parameters.ts");
@@ -887,7 +888,7 @@ test("lane 37 checks risk windows against each network's active methods", () => 
   );
   assert.deepEqual(
     lane37Module.getRiskWindowPaymentMethods("base"),
-    ACTIVE_PAYMENT_METHODS
+    BASE_ACTIVE_PAYMENT_METHODS
   );
   assert.deepEqual(
     lane37Module.getRiskWindowPaymentMethods("hardhat"),

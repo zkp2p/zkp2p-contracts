@@ -1,0 +1,73 @@
+{
+  "network": "base_staging",
+  "chainId": 8453,
+  "sourceCommit": "4be5affea95c023e1e95039bcdd6f9926c2f83fe",
+  "deploymentLane": "43_add_xmoney_payment_method",
+  "canonicalPostconditionCheck": "passed",
+  "snapshot": "deployments/outputs/platforms/snapshots/base_staging/xmoney_2026-09-29T14-08-04.json",
+  "releaseChecks": {
+    "foundry": "https://github.com/zkp2p/zkp2p-contracts/actions/runs/36577269235",
+    "releaseReadiness": "https://github.com/zkp2p/zkp2p-contracts/actions/runs/36578218984",
+    "conclusion": "success"
+  },
+  "deployer": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+  "paymentMethod": "xmoney",
+  "paymentMethodHash": "0x790dd0cc68b6e7f474649a6c0a5463a964be9d2589e2076b6dc99f5701543f51",
+  "currencies": [
+    "0xc4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e"
+  ],
+  "unifiedPaymentVerifier": "0x4c62E99649c8Ba745E67018f5c8a483D77c429C4",
+  "paymentVerifierRegistry": "0x2261416DA54C85f975C73FA56EF4D2D6b0aEF7Cc",
+  "transactions": [
+    {
+      "action": "UnifiedPaymentVerifierV3.addPaymentMethod",
+      "hash": "0x34423a649cc23737d498e73b53f32ad60ff0861aaad9aba0ae8eca53da80374b",
+      "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+      "to": "0x4c62E99649c8Ba745E67018f5c8a483D77c429C4",
+      "nonce": 14817,
+      "data": "0x3992eaf6790dd0cc68b6e7f474649a6c0a5463a964be9d2589e2076b6dc99f5701543f51",
+      "block": 51950497,
+      "status": 1,
+      "gasUsed": "74836",
+      "effectiveGasPrice": "6000000"
+    },
+    {
+      "action": "PaymentVerifierRegistry.addPaymentMethod",
+      "hash": "0x87378bc87af0470f5f46584606c3c33e752f956b0abc893c90d11882199af01d",
+      "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+      "to": "0x2261416DA54C85f975C73FA56EF4D2D6b0aEF7Cc",
+      "nonce": 14818,
+      "data": "0xdbcb3005790dd0cc68b6e7f474649a6c0a5463a964be9d2589e2076b6dc99f5701543f510000000000000000000000004c62e99649c8ba745e67018f5c8a483d77c429c400000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000001c4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e",
+      "block": 51950615,
+      "status": 1,
+      "gasUsed": "145296",
+      "effectiveGasPrice": "6112576"
+    }
+  ],
+  "verification": {
+    "beforeBlock": 51950378,
+    "beforeBlockHash": "0xdc69cdf7714506f7b12062f84e204f83d63928156a86d306557a88e9946c9c49",
+    "afterBlock": 51950677,
+    "afterBlockHash": "0x160d6468db170a9f26eb01bcec47613528178cb4714e75912535d2935e268b76",
+    "registryMethodCountBefore": 13,
+    "registryMethodCountAfter": 14,
+    "verifierMethodCountAfter": 14,
+    "originalMethodsAndCurrenciesUnchanged": true,
+    "originalVerifierMethodsUnchanged": true,
+    "unchanged": [
+      "addresses",
+      "owners",
+      "lifecycle",
+      "runtimeHashes",
+      "orchestrators",
+      "nullifierWriters",
+      "legacyWriters",
+      "witnesses",
+      "threshold"
+    ],
+    "soleNullifierWriter": "0x4c62E99649c8Ba745E67018f5c8a483D77c429C4",
+    "legacyNullifierWriters": [],
+    "xmoneyRiskWindowSeconds": "0"
+  },
+  "scope": "Staging registration only. No new contracts, ownership or permission changes, production activation, package export or publication."
+}

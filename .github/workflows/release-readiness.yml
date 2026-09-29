@@ -87,6 +87,8 @@ jobs:
           corepack yarn pkg:test
       - name: Test deployment lanes
         run: |
+          corepack yarn test:xmoney-payment-method
+          corepack yarn test:upi-payment-method
           corepack yarn test:intent-guardian-fee-update
           corepack yarn test:retire-dispute-risk-windows
           corepack yarn test:v3-groups-deployment

@@ -5,11 +5,13 @@ const test = require("node:test");
 
 require("ts-node/register/transpile-only");
 require("module-alias/register");
+require("module-alias").addAlias("hardhat", "ethers");
 
 const { ethers } = require("ethers");
 const disputeEvidence = require("../deployments/dispute-stack-evidence.json");
 const packageJson = require("../package.json");
 const upi = require("../deployments/verifiers/upi.ts");
+const { getActivePaymentMethods } = require("../deployments/parameters.ts");
 
 const laneSource = fs.readFileSync(
   path.resolve(__dirname, "../deploy/41_add_upi_payment_method.ts"),
@@ -17,10 +19,6 @@ const laneSource = fs.readFileSync(
 );
 const bindingSource = fs.readFileSync(
   path.resolve(__dirname, "../deploy/31_deploy_v3_payment_binding_stack.ts"),
-  "utf8"
-);
-const parametersSource = fs.readFileSync(
-  path.resolve(__dirname, "../deployments/parameters.ts"),
   "utf8"
 );
 
@@ -38,27 +36,26 @@ test("generic UPI uses the canonical hash and only INR", () => {
   });
 });
 
-test("UPI extends Base staging without changing the production method set", () => {
-  const productionMethods = parametersSource.match(
-    /export const ACTIVE_PAYMENT_METHODS: string\[\] = \[([\s\S]*?)\];/u
-  );
-  const stagingMethods = parametersSource.match(
-    /export const BASE_STAGING_ACTIVE_PAYMENT_METHODS: string\[\] = \[([\s\S]*?)\];/u
-  );
-  assert.ok(productionMethods);
-  assert.ok(stagingMethods);
-  assert.doesNotMatch(productionMethods[1], /"upi"/u);
-  assert.match(
-    stagingMethods[1],
-    /\.\.\.ACTIVE_PAYMENT_METHODS,\s*"monobank",\s*"mercury",\s*"upi",/u
-  );
+test("UPI catalogs reflect the executed production registration without staging duplicates", () => {
+  const productionMethods = [
+    "alipay", "chime", "venmo", "revolut", "cashapp", "wise",
+    "mercadopago", "zelle", "monzo", "paypal", "upi",
+  ];
+  assert.deepEqual(getActivePaymentMethods("base"), productionMethods);
+  assert.deepEqual(getActivePaymentMethods("base_staging"), [
+    ...productionMethods.slice(0, -1), "monobank", "mercury", "upi", "xmoney",
+  ]);
+  for (const network of ["localhost", "hardhat"]) {
+    assert.deepEqual(getActivePaymentMethods(network), productionMethods.slice(0, -1));
+  }
   assert.match(bindingSource, /upi:\s*\["INR"\]/u);
-  assert.match(bindingSource, /"mercury",\s*"upi",\s*\],/u);
+  assert.match(bindingSource, /"paypal",\s*"upi",/u);
+  assert.match(bindingSource, /"mercury",\s*"upi",/u);
   assert.equal(
     disputeEvidence.riskWindowSecondsByPaymentMethod.base[
       upi.UPI_PAYMENT_METHOD_HASH
     ],
-    undefined
+    "0"
   );
   assert.equal(
     disputeEvidence.riskWindowSecondsByPaymentMethod.base_staging[

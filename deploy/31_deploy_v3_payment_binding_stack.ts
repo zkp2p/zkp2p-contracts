@@ -100,10 +100,11 @@ export const RATIFIED_PAYMENT_METHOD_CURRENCIES: Record<string, string[]> = {
   monobank: ["UAH"],
   mercury: ["USD"],
   upi: ["INR"],
+  xmoney: ["USD"],
 };
 
 export const RATIFIED_PAYMENT_METHOD_ORDER: Record<string, string[]> = {
-  // Base block 49,791,973.
+  // Base block 49,791,973; UPI appended by Safe nonce 83 at block 51,114,743.
   base: [
     "alipay",
     "chime",
@@ -115,10 +116,10 @@ export const RATIFIED_PAYMENT_METHOD_ORDER: Record<string, string[]> = {
     "zelle",
     "monzo",
     "paypal",
+    "upi",
   ],
-  // Base staging block 50,211,289. Staging was already hard-cut to UPV3 before
-  // this lane was introduced, so lane 31 verifies this live order and never
-  // attempts an unsafe multi-transaction EOA cutover there.
+  // Staging was already hard-cut to UPV3 before this lane was introduced.
+  // Method-addition lanes activate subsequent entries; lane 31 only verifies.
   base_staging: [
     "zelle",
     "monzo",
@@ -133,6 +134,7 @@ export const RATIFIED_PAYMENT_METHOD_ORDER: Record<string, string[]> = {
     "monobank",
     "mercury",
     "upi",
+    "xmoney",
   ],
 };
 
@@ -320,8 +322,21 @@ async function getRetiredVerifierAddresses(
   );
 }
 
+// A method-addition lane may verify the predecessor or verifier-only state.
+// Ordinary readiness checks require every configured method to be present.
+function expectedMethodNames(
+  names: string[],
+  actualMethods: string[],
+  pendingMethod: string | undefined
+): string[] {
+  return names.filter(
+    (name) => name !== pendingMethod || actualMethods.includes(paymentMethodHash(name))
+  );
+}
+
 export async function assertPaymentBindingReady(
-  hre: HardhatRuntimeEnvironment
+  hre: HardhatRuntimeEnvironment,
+  pendingMethod?: string
 ): Promise<boolean> {
   const network = hre.deployments.getNetworkName();
   const [deployer] = await hre.getUnnamedAccounts();
@@ -549,10 +564,11 @@ export async function assertPaymentBindingReady(
     throw new Error("UnifiedPaymentVerifierV3 owner mismatch");
   }
 
-  const expectedPaymentMethods =
-    getActivePaymentMethods(network).map(paymentMethodHash);
-  const actualPaymentMethods =
+  const actualPaymentMethods: string[] =
     await unifiedPaymentVerifierV3.getPaymentMethods();
+  const expectedPaymentMethods = expectedMethodNames(
+    getActivePaymentMethods(network), actualPaymentMethods, pendingMethod
+  ).map(paymentMethodHash);
   if (!sameStringSet(actualPaymentMethods, expectedPaymentMethods)) {
     throw new Error(
       "UnifiedPaymentVerifierV3 payment methods do not match the active method set"
@@ -574,7 +590,8 @@ export async function assertPaymentBindingReady(
 async function assertRegistrySurface(
   hre: HardhatRuntimeEnvironment,
   paymentVerifierRegistry: any,
-  legacyNullifierRegistry: any
+  legacyNullifierRegistry: any,
+  pendingMethod?: string
 ): Promise<void> {
   const network = hre.deployments.getNetworkName();
   const [deployer] = await hre.getUnnamedAccounts();
@@ -602,14 +619,19 @@ async function assertRegistrySurface(
   }
   const actualMethods: string[] =
     await paymentVerifierRegistry.getPaymentMethods();
-  const activePaymentMethods = getActivePaymentMethods(network);
+  const activePaymentMethods = expectedMethodNames(
+    getActivePaymentMethods(network), actualMethods, pendingMethod
+  );
   const expectedMethods = activePaymentMethods.map(paymentMethodHash);
   if (!sameStringSet(actualMethods, expectedMethods)) {
     throw new Error(
       "PaymentVerifierRegistry methods do not match the active method set"
     );
   }
-  const ratifiedOrder = RATIFIED_PAYMENT_METHOD_ORDER[network];
+  const configuredOrder = RATIFIED_PAYMENT_METHOD_ORDER[network];
+  const ratifiedOrder = configuredOrder && expectedMethodNames(
+    configuredOrder, actualMethods, pendingMethod
+  );
   if (
     network === "base" &&
     !sameStringArray(activePaymentMethods, ratifiedOrder)
@@ -649,9 +671,10 @@ async function assertRegistrySurface(
 }
 
 export async function paymentBindingCutoverReady(
-  hre: HardhatRuntimeEnvironment
+  hre: HardhatRuntimeEnvironment,
+  pendingMethod?: string
 ): Promise<boolean> {
-  if (!(await assertPaymentBindingReady(hre))) return false;
+  if (!(await assertPaymentBindingReady(hre, pendingMethod))) return false;
   const paymentVerifierRegistry = await ethers.getContractAt(
     "PaymentVerifierRegistry",
     (
@@ -667,13 +690,19 @@ export async function paymentBindingCutoverReady(
   await assertRegistrySurface(
     hre,
     paymentVerifierRegistry,
-    legacyNullifierRegistry
+    legacyNullifierRegistry,
+    pendingMethod
   );
   const unifiedPaymentVerifierV3Address = (
     await hre.deployments.get("UnifiedPaymentVerifierV3")
   ).address;
+  const unifiedPaymentVerifierV3 = await ethers.getContractAt(
+    "UnifiedPaymentVerifierV3", unifiedPaymentVerifierV3Address
+  );
+  const verifierMethods: string[] = await unifiedPaymentVerifierV3.getPaymentMethods();
   for (const method of await paymentVerifierRegistry.getPaymentMethods()) {
     if (
+      !verifierMethods.includes(method) ||
       !sameAddress(
         await paymentVerifierRegistry.getVerifier(method),
         unifiedPaymentVerifierV3Address
