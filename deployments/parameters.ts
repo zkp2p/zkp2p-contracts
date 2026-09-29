@@ -146,6 +146,11 @@ export const ACTIVE_PAYMENT_METHODS: string[] = [
   "paypal",
 ];
 
+export const BASE_ACTIVE_PAYMENT_METHODS: string[] = [
+  ...ACTIVE_PAYMENT_METHODS,
+  "upi",
+];
+
 // Base staging can carry a reviewed payment-method candidate before the
 // separately approved production activation. Keep the production list above
 // unchanged until that boundary is explicitly authorized.
@@ -158,9 +163,9 @@ export const BASE_STAGING_ACTIVE_PAYMENT_METHODS: string[] = [
 ];
 
 export function getActivePaymentMethods(network: string): string[] {
-  return network === "base_staging"
-    ? BASE_STAGING_ACTIVE_PAYMENT_METHODS
-    : ACTIVE_PAYMENT_METHODS;
+  if (network === "base_staging") return BASE_STAGING_ACTIVE_PAYMENT_METHODS;
+  if (network === "base") return BASE_ACTIVE_PAYMENT_METHODS;
+  return ACTIVE_PAYMENT_METHODS;
 }
 
 // Only payment methods with a chargeback mechanism receive dispute protection.

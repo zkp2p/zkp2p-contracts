@@ -23,6 +23,7 @@ const { ethers } = hardhat;
 const lane31 = require("../deploy/31_deploy_v3_payment_binding_stack.ts");
 const {
   ACTIVE_PAYMENT_METHODS,
+  BASE_ACTIVE_PAYMENT_METHODS,
   BASE_STAGING_ACTIVE_PAYMENT_METHODS,
   DISPUTABLE_PAYMENT_METHODS,
 } = require("../deployments/parameters.ts");
@@ -162,7 +163,7 @@ test("lane 39 configures only paypal and venmo risk windows", () => {
   assert.deepEqual(DISPUTABLE_PAYMENT_METHODS, ["paypal", "venmo"]);
   assert.deepEqual(
     lane39.getRiskWindowPaymentMethods("base"),
-    ACTIVE_PAYMENT_METHODS
+    BASE_ACTIVE_PAYMENT_METHODS
   );
   assert.deepEqual(
     lane39.getRiskWindowPaymentMethods("base_staging"),
