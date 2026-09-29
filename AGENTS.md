@@ -119,9 +119,9 @@
   networks, the evidence and package manifest carry `0` everywhere, and the lane — immutable and pinned after that
   first execution — stays mounted and skips wherever every retired window already reads zero.
 - Lane `43` adds the X Money payment method on Base staging only. Untagged runs are inert; tagged preparation and
-  execution are mutually exclusive. Preparation proves the exact predecessor state and simulates the two writes,
-  while execution appends `xmoney` to `UnifiedPaymentVerifierV3` and `PaymentVerifierRegistry` before recording a
-  deployment snapshot. Production activation is intentionally outside this lane.
+  execution are mutually exclusive. It reuses lane 31's payment-binding checks, permitting only the pending
+  `xmoney` entry to be absent during preparation. Execution registers it in UPV3 before the registry, requires full
+  readiness, then records the snapshot. Production activation is intentionally outside this lane.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the

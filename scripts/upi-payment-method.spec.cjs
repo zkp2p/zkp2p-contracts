@@ -53,7 +53,7 @@ test("UPI extends Base staging without changing the production method set", () =
     /\.\.\.ACTIVE_PAYMENT_METHODS,\s*"monobank",\s*"mercury",\s*"upi",/u
   );
   assert.match(bindingSource, /upi:\s*\["INR"\]/u);
-  assert.match(bindingSource, /"mercury",\s*"upi",\s*\],/u);
+  assert.match(bindingSource, /"mercury",\s*"upi",/u);
   assert.equal(
     disputeEvidence.riskWindowSecondsByPaymentMethod.base[
       upi.UPI_PAYMENT_METHOD_HASH
