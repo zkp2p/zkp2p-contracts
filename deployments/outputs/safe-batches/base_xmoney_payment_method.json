@@ -1,0 +1,28 @@
+{
+  "version": "1.0",
+  "chainId": "8453",
+  "createdAt": 1790691339758,
+  "meta": {
+    "name": "Base X Money / USD payment method",
+    "description": "Proposal only: add X Money to existing production UPV3, then register USD in PaymentVerifierRegistry. No funds, ownership, permissions, risk windows or other payment methods change. Source 14414d87c4e5707dcb243da513991cfdc2d90bc3 reconciles the already-executed UPI Safe nonce 83 and records X Money staging activation. Production X Money remains inactive until Safe execution.",
+    "txBuilderVersion": "1.16.5",
+    "createdFromSafeAddress": "0x0bC26FF515411396DD588Abd6Ef6846E04470227",
+    "createdFromOwnerAddress": ""
+  },
+  "transactions": [
+    {
+      "to": "0xC6F4a193576C60892a47e111Bb5706c30162502B",
+      "value": "0",
+      "data": "0x3992eaf6790dd0cc68b6e7f474649a6c0a5463a964be9d2589e2076b6dc99f5701543f51",
+      "contractMethod": null,
+      "contractInputsValues": null
+    },
+    {
+      "to": "0x2b82D24437ff66Fb173eabDfD67ee2ACeb8bEb1e",
+      "value": "0",
+      "data": "0xdbcb3005790dd0cc68b6e7f474649a6c0a5463a964be9d2589e2076b6dc99f5701543f51000000000000000000000000c6f4a193576c60892a47e111bb5706c30162502b00000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000001c4ae21aac0c6549d71dd96035b7e0bdb6c79ebdba8891b666115bc976d16a29e",
+      "contractMethod": null,
+      "contractInputsValues": null
+    }
+  ]
+}
