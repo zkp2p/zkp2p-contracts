@@ -528,6 +528,14 @@ test("immutable lane manifest pins the exact deployed sources", () => {
         "DisputeRiskWindowRetirement",
       ],
     },
+    "44_deploy_fx_rate_feeds.ts": {
+      deployedSourceSha: "88be796937a974297302e16e22a4cd7011707b2b",
+      sha256:
+        "47946f3aea90c8aae1a2715dc49c4aa8d62b7ce393942a09f382ca27eef07dfe",
+      activeSource: undefined,
+      retired: false,
+      tags: ["44_deploy_fx_rate_feeds", "FxRateFeeds"],
+    },
   });
 });
 

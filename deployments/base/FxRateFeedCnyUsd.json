@@ -1,0 +1,472 @@
+{
+  "address": "0xc034d806DbeA6b13980D94174eA5FF83E1C191C3",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "store",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "string",
+          "name": "feedDescription",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint80",
+          "name": "requestedRoundId",
+          "type": "uint80"
+        }
+      ],
+      "name": "NoDataPresent",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint8",
+          "name": "sourceDecimals",
+          "type": "uint8"
+        }
+      ],
+      "name": "UnsupportedDecimals",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint80",
+          "name": "roundId",
+          "type": "uint80"
+        },
+        {
+          "internalType": "int256",
+          "name": "answer",
+          "type": "int256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "updatedAt",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint80",
+          "name": "answeredInRound",
+          "type": "uint80"
+        }
+      ],
+      "name": "UnusableSourceRound",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroFeedId",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroSource",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "source",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "sourceFeedId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "SourceUpdated",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "decimals",
+      "outputs": [
+        {
+          "internalType": "uint8",
+          "name": "",
+          "type": "uint8"
+        }
+      ],
+      "stateMutability": "pure",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "description",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint80",
+          "name": "requestedRoundId",
+          "type": "uint80"
+        }
+      ],
+      "name": "getRoundData",
+      "outputs": [
+        {
+          "internalType": "uint80",
+          "name": "roundId",
+          "type": "uint80"
+        },
+        {
+          "internalType": "int256",
+          "name": "answer",
+          "type": "int256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "startedAt",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "updatedAt",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint80",
+          "name": "answeredInRound",
+          "type": "uint80"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "latestRoundData",
+      "outputs": [
+        {
+          "internalType": "uint80",
+          "name": "roundId",
+          "type": "uint80"
+        },
+        {
+          "internalType": "int256",
+          "name": "answer",
+          "type": "int256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "startedAt",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "updatedAt",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint80",
+          "name": "answeredInRound",
+          "type": "uint80"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newSource",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "newSourceFeedId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "setSource",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "source",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "sourceFeedId",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "version",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "pure",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0x7333c47815d86f95c3d32237bcf14c034ca5e5fdb8e3e060a7d913f2d6444b2f",
+  "receipt": {
+    "to": null,
+    "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "contractAddress": "0xc034d806DbeA6b13980D94174eA5FF83E1C191C3",
+    "transactionIndex": 23,
+    "gasUsed": "662172",
+    "logsBloom": "0x00000000000000000000000000000000000000000000004000800000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000020000000000000000000800000000000000000000000400000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000001000000000000000000000800000000000000000000020000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "transactionHash": "0x7333c47815d86f95c3d32237bcf14c034ca5e5fdb8e3e060a7d913f2d6444b2f",
+    "logs": [
+      {
+        "transactionIndex": 23,
+        "blockNumber": 52038385,
+        "transactionHash": "0x7333c47815d86f95c3d32237bcf14c034ca5e5fdb8e3e060a7d913f2d6444b2f",
+        "address": "0xc034d806DbeA6b13980D94174eA5FF83E1C191C3",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x00000000000000000000000084e113087c97cd80ea9d78983d4b8ff61eca1929"
+        ],
+        "data": "0x",
+        "logIndex": 25,
+        "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "blockNumber": 52038385,
+    "cumulativeGasUsed": "2764626",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [
+    "0x389206956C57bdB5d07FF78AB3D1e1DEED070b9c",
+    "0x8cffa6f0645c5375a6d6df0f3ed8d7fa41c48a22e7914a0e5de77e84901bb5d2",
+    "CNY / USD"
+  ],
+  "numDeployments": 1,
+  "solcInputHash": "c3205da23c27a7bcc8d331845ba87adc",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"store\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"},{\"internalType\":\"string\",\"name\":\"feedDescription\",\"type\":\"string\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"uint80\",\"name\":\"requestedRoundId\",\"type\":\"uint80\"}],\"name\":\"NoDataPresent\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint8\",\"name\":\"sourceDecimals\",\"type\":\"uint8\"}],\"name\":\"UnsupportedDecimals\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint80\",\"name\":\"roundId\",\"type\":\"uint80\"},{\"internalType\":\"int256\",\"name\":\"answer\",\"type\":\"int256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint80\",\"name\":\"answeredInRound\",\"type\":\"uint80\"}],\"name\":\"UnusableSourceRound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroFeedId\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroSource\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"source\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"sourceFeedId\",\"type\":\"bytes32\"}],\"name\":\"SourceUpdated\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"decimals\",\"outputs\":[{\"internalType\":\"uint8\",\"name\":\"\",\"type\":\"uint8\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"description\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint80\",\"name\":\"requestedRoundId\",\"type\":\"uint80\"}],\"name\":\"getRoundData\",\"outputs\":[{\"internalType\":\"uint80\",\"name\":\"roundId\",\"type\":\"uint80\"},{\"internalType\":\"int256\",\"name\":\"answer\",\"type\":\"int256\"},{\"internalType\":\"uint256\",\"name\":\"startedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint80\",\"name\":\"answeredInRound\",\"type\":\"uint80\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"latestRoundData\",\"outputs\":[{\"internalType\":\"uint80\",\"name\":\"roundId\",\"type\":\"uint80\"},{\"internalType\":\"int256\",\"name\":\"answer\",\"type\":\"int256\"},{\"internalType\":\"uint256\",\"name\":\"startedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint80\",\"name\":\"answeredInRound\",\"type\":\"uint80\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newSource\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"newSourceFeedId\",\"type\":\"bytes32\"}],\"name\":\"setSource\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"source\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"sourceFeedId\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"version\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"pure\",\"type\":\"function\"}],\"devdoc\":{\"kind\":\"dev\",\"methods\":{\"constructor\":{\"params\":{\"feedDescription\":\"Human-readable currency pair description.\",\"feedId\":\"Nonzero identifier of the store feed.\",\"store\":\"Initial rate store.\"}},\"getRoundData(uint80)\":{\"params\":{\"requestedRoundId\":\"Round identifier that must match the current source's latest round.\"}},\"owner()\":{\"details\":\"Returns the address of the current owner.\"},\"renounceOwnership()\":{\"details\":\"Leaves the contract without owner. It will not be possible to call `onlyOwner` functions. Can only be called by the current owner. NOTE: Renouncing ownership will leave the contract without an owner, thereby disabling any functionality that is only available to the owner.\"},\"setSource(address,bytes32)\":{\"params\":{\"newSource\":\"Replacement rate store or external aggregator.\",\"newSourceFeedId\":\"Store feed identifier, or zero for an external aggregator.\"}},\"transferOwnership(address)\":{\"details\":\"Transfers ownership of the contract to a new account (`newOwner`). Can only be called by the current owner.\"}},\"title\":\"FxRateFeed\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"constructor\":{\"notice\":\"Initialize a store-backed feed without requiring a live source round.\"},\"decimals()\":{\"notice\":\"Return the fixed precision of the fiat/USD answer.\"},\"description()\":{\"notice\":\"Human-readable currency pair description.\"},\"getRoundData(uint80)\":{\"notice\":\"Return the latest tuple only; historical rounds are not served.\"},\"latestRoundData()\":{\"notice\":\"Return the source's latest tuple unchanged, including invalid or stale rounds.\"},\"setSource(address,bytes32)\":{\"notice\":\"Switch to an eight-decimal source with a usable round no older than one day.\"},\"source()\":{\"notice\":\"Store or external aggregator supplying the latest round.\"},\"sourceFeedId()\":{\"notice\":\"Store feed identifier, or zero when the source is an external aggregator.\"},\"version()\":{\"notice\":\"Return the facade version.\"}},\"notice\":\"Chainlink-compatible facade for a fiat/USD feed with an owner-controlled source.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/oracles/FxRateFeed.sol\":\"FxRateFeed\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"@openzeppelin/contracts/access/Ownable.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (access/Ownable.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"../utils/Context.sol\\\";\\n\\n/**\\n * @dev Contract module which provides a basic access control mechanism, where\\n * there is an account (an owner) that can be granted exclusive access to\\n * specific functions.\\n *\\n * By default, the owner account will be the one that deploys the contract. This\\n * can later be changed with {transferOwnership}.\\n *\\n * This module is used through inheritance. It will make available the modifier\\n * `onlyOwner`, which can be applied to your functions to restrict their use to\\n * the owner.\\n */\\nabstract contract Ownable is Context {\\n    address private _owner;\\n\\n    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);\\n\\n    /**\\n     * @dev Initializes the contract setting the deployer as the initial owner.\\n     */\\n    constructor() {\\n        _transferOwnership(_msgSender());\\n    }\\n\\n    /**\\n     * @dev Throws if called by any account other than the owner.\\n     */\\n    modifier onlyOwner() {\\n        _checkOwner();\\n        _;\\n    }\\n\\n    /**\\n     * @dev Returns the address of the current owner.\\n     */\\n    function owner() public view virtual returns (address) {\\n        return _owner;\\n    }\\n\\n    /**\\n     * @dev Throws if the sender is not the owner.\\n     */\\n    function _checkOwner() internal view virtual {\\n        require(owner() == _msgSender(), \\\"Ownable: caller is not the owner\\\");\\n    }\\n\\n    /**\\n     * @dev Leaves the contract without owner. It will not be possible to call\\n     * `onlyOwner` functions. Can only be called by the current owner.\\n     *\\n     * NOTE: Renouncing ownership will leave the contract without an owner,\\n     * thereby disabling any functionality that is only available to the owner.\\n     */\\n    function renounceOwnership() public virtual onlyOwner {\\n        _transferOwnership(address(0));\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Can only be called by the current owner.\\n     */\\n    function transferOwnership(address newOwner) public virtual onlyOwner {\\n        require(newOwner != address(0), \\\"Ownable: new owner is the zero address\\\");\\n        _transferOwnership(newOwner);\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Internal function without access restriction.\\n     */\\n    function _transferOwnership(address newOwner) internal virtual {\\n        address oldOwner = _owner;\\n        _owner = newOwner;\\n        emit OwnershipTransferred(oldOwner, newOwner);\\n    }\\n}\\n\",\"keccak256\":\"0xba43b97fba0d32eb4254f6a5a297b39a19a247082a02d6e69349e071e2946218\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/Context.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts v4.4.1 (utils/Context.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Provides information about the current execution context, including the\\n * sender of the transaction and its data. While these are generally available\\n * via msg.sender and msg.data, they should not be accessed in such a direct\\n * manner, since when dealing with meta-transactions the account sending and\\n * paying for execution may not be the actual sender (as far as an application\\n * is concerned).\\n *\\n * This contract is only required for intermediate, library-like contracts.\\n */\\nabstract contract Context {\\n    function _msgSender() internal view virtual returns (address) {\\n        return msg.sender;\\n    }\\n\\n    function _msgData() internal view virtual returns (bytes calldata) {\\n        return msg.data;\\n    }\\n}\\n\",\"keccak256\":\"0xe2e337e6dde9ef6b680e07338c493ebea1b5fd09b43424112868e9cc1706bca7\",\"license\":\"MIT\"},\"contracts/interfaces/IChainlinkAggregatorV3.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.18;\\n\\n/**\\n * @title IChainlinkAggregatorV3\\n * @notice Minimal interface for Chainlink AggregatorV3-style feeds.\\n */\\ninterface IChainlinkAggregatorV3 {\\n    function decimals() external view returns (uint8);\\n\\n    function latestRoundData()\\n        external\\n        view\\n        returns (\\n            uint80 roundId,\\n            int256 answer,\\n            uint256 startedAt,\\n            uint256 updatedAt,\\n            uint80 answeredInRound\\n        );\\n}\\n\\n\",\"keccak256\":\"0x7bbc892da78d5d0be8306d52b5b784c009a676d90d73fdeb07d1af2578900bda\",\"license\":\"MIT\"},\"contracts/interfaces/IFxRateStore.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity ^0.8.18;\\n\\n/// @title IFxRateStore\\n/// @notice Shared store for eight-decimal USD prices per unit of fiat.\\ninterface IFxRateStore {\\n    /// @notice Limits, registration, admission status and provenance of the latest round.\\n    struct FeedConfig {\\n        uint64 minAnswer;\\n        uint64 maxAnswer;\\n        bool registered;\\n        bool locked;\\n        bool latestIsSeed;\\n    }\\n\\n    /// @notice Emitted when the updater changes; zero disables updates.\\n    event UpdaterSet(address indexed previousUpdater, address indexed newUpdater);\\n    /// @notice Emitted when a feed is registered in a locked state.\\n    event FeedAdded(bytes32 indexed feedId, uint64 minAnswer, uint64 maxAnswer);\\n    /// @notice Emitted when the owner changes a feed's inclusive limits.\\n    event FeedLimitsSet(bytes32 indexed feedId, uint64 minAnswer, uint64 maxAnswer);\\n    /// @notice Emitted when the owner seeds and unlocks a feed.\\n    event FeedSeeded(bytes32 indexed feedId, uint64 answer, uint64 roundId);\\n    /// @notice Emitted for each seed or updater round.\\n    event AnswerUpdated(bytes32 indexed feedId, uint64 answer, uint64 indexed roundId, uint64 updatedAt);\\n    /// @notice Emitted when updates are disabled and the listed feeds are locked.\\n    event EmergencyStopped(address indexed previousUpdater, bytes32[] feedIds);\\n\\n    /// @notice The caller is not the configured updater.\\n    error NotUpdater(address caller);\\n    /// @notice An updater assignment cannot use the zero address.\\n    error ZeroUpdater();\\n    /// @notice An update batch must contain at least one feed.\\n    error EmptyBatch();\\n    /// @notice Feed and answer array lengths differ.\\n    error LengthMismatch(uint256 feedIds, uint256 answers);\\n    /// @notice The requested feed has not been registered.\\n    error FeedNotRegistered(bytes32 feedId);\\n    /// @notice The requested feed is already registered.\\n    error FeedAlreadyRegistered(bytes32 feedId);\\n    /// @notice The feed must be seeded before accepting updater writes.\\n    error FeedLocked(bytes32 feedId);\\n    /// @notice Limits must satisfy zero < minimum <= maximum.\\n    error InvalidLimits(uint64 minAnswer, uint64 maxAnswer);\\n    /// @notice The answer is outside the feed's inclusive limits.\\n    error AnswerOutOfLimits(bytes32 feedId, uint64 answer);\\n    /// @notice The answer is outside the available rolling band.\\n    error AnswerOutOfBand(bytes32 feedId, uint64 answer, uint64 lower, uint64 upper);\\n    /// @notice The provider observation is later than the current block.\\n    error ObservedAtInFuture(uint64 observedAt);\\n    /// @notice The provider observation must be strictly newer than the latest round.\\n    error ObservationNotNewer(bytes32 feedId, uint64 observedAt, uint64 updatedAt);\\n    /// @notice Ownership cannot be renounced.\\n    error RenounceDisabled();\\n\\n    /// @notice Returns the fixed answer precision of eight decimals.\\n    function decimals() external pure returns (uint8);\\n    /// @notice Returns the authorized updater, or zero when updates are disabled.\\n    function updater() external view returns (address);\\n    /// @notice Atomically publishes answers for registered, unlocked feeds as the updater.\\n    /// @param feedIds Feed identifiers, conventionally keccak256 of the pair (e.g. \\\"INR/USD\\\").\\n    /// @param answers Eight-decimal answers corresponding to feedIds.\\n    /// @param observedAt Provider observation time, strictly newer per feed and not in the future.\\n    function updateRates(bytes32[] calldata feedIds, uint64[] calldata answers, uint64 observedAt) external;\\n    /// @notice Registers a locked feed with positive inclusive limits; owner only.\\n    function addFeed(bytes32 feedId, uint64 minAnswer, uint64 maxAnswer) external;\\n    /// @notice Changes inclusive limits without changing the latest round; owner only.\\n    function setFeedLimits(bytes32 feedId, uint64 minAnswer, uint64 maxAnswer) external;\\n    /// @notice Publishes an in-limit seed at block time and unlocks the feed; owner only.\\n    function seedFeed(bytes32 feedId, uint64 answer) external;\\n    /// @notice Disables the updater and clears prices/timestamps of listed feeds, retaining round ids; owner only.\\n    /// @dev An empty list only disables updates. An unregistered id reverts the whole call.\\n    function emergencyStop(bytes32[] calldata feedIds) external;\\n    /// @notice Assigns a nonzero updater; owner only.\\n    function setUpdater(address newUpdater) external;\\n    /// @notice Returns the latest Chainlink-shaped tuple, with both timestamps equal and answeredInRound = roundId.\\n    /// @dev Unknown feeds return all zeros; stopped feeds retain round ids but have zero answer and timestamps.\\n    function latestRoundData(bytes32 feedId)\\n        external\\n        view\\n        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);\\n    /// @notice Returns stored configuration; unknown feeds return the zero-valued struct.\\n    function getFeedConfig(bytes32 feedId) external view returns (FeedConfig memory);\\n    /// @notice Returns band availability and inclusive bounds, excluding observation-time eligibility.\\n    function getBand(bytes32 feedId) external view returns (bool available, uint64 lower, uint64 upper);\\n}\\n\",\"keccak256\":\"0xca9fc5f12fe99865bf46e6b40bdf0dbbedbf6637d3c646e1a60282e13cf50389\",\"license\":\"MIT\"},\"contracts/oracles/FxRateFeed.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity ^0.8.18;\\n\\nimport {Ownable} from \\\"@openzeppelin/contracts/access/Ownable.sol\\\";\\nimport {IChainlinkAggregatorV3} from \\\"../interfaces/IChainlinkAggregatorV3.sol\\\";\\nimport {IFxRateStore} from \\\"../interfaces/IFxRateStore.sol\\\";\\n\\n/// @title FxRateFeed\\n/// @notice Chainlink-compatible facade for a fiat/USD feed with an owner-controlled source.\\ncontract FxRateFeed is IChainlinkAggregatorV3, Ownable {\\n    event SourceUpdated(address indexed source, bytes32 indexed sourceFeedId);\\n\\n    error ZeroSource();\\n    error ZeroFeedId();\\n    error UnsupportedDecimals(uint8 sourceDecimals);\\n    error UnusableSourceRound(uint80 roundId, int256 answer, uint256 updatedAt, uint80 answeredInRound);\\n    error NoDataPresent(uint80 requestedRoundId);\\n\\n    /// @notice Store or external aggregator supplying the latest round.\\n    address public source;\\n\\n    /// @notice Store feed identifier, or zero when the source is an external aggregator.\\n    bytes32 public sourceFeedId;\\n\\n    /// @notice Human-readable currency pair description.\\n    string public description;\\n\\n    /// @notice Initialize a store-backed feed without requiring a live source round.\\n    /// @param store Initial rate store.\\n    /// @param feedId Nonzero identifier of the store feed.\\n    /// @param feedDescription Human-readable currency pair description.\\n    constructor(address store, bytes32 feedId, string memory feedDescription) {\\n        if (store == address(0)) revert ZeroSource();\\n        if (feedId == bytes32(0)) revert ZeroFeedId();\\n        source = store;\\n        sourceFeedId = feedId;\\n        description = feedDescription;\\n    }\\n\\n    /// @notice Return the facade version.\\n    function version() external pure returns (uint256) {\\n        return 1;\\n    }\\n\\n    /// @notice Return the fixed precision of the fiat/USD answer.\\n    function decimals() external pure override returns (uint8) {\\n        return 8;\\n    }\\n\\n    /// @notice Return the source's latest tuple unchanged, including invalid or stale rounds.\\n    function latestRoundData()\\n        public\\n        view\\n        override\\n        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)\\n    {\\n        if (sourceFeedId != bytes32(0)) {\\n            return IFxRateStore(source).latestRoundData(sourceFeedId);\\n        }\\n        return IChainlinkAggregatorV3(source).latestRoundData();\\n    }\\n\\n    /// @notice Return the latest tuple only; historical rounds are not served.\\n    /// @param requestedRoundId Round identifier that must match the current source's latest round.\\n    function getRoundData(uint80 requestedRoundId)\\n        external\\n        view\\n        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)\\n    {\\n        (roundId, answer, startedAt, updatedAt, answeredInRound) = latestRoundData();\\n        if (requestedRoundId != roundId) revert NoDataPresent(requestedRoundId);\\n    }\\n\\n    /// @notice Switch to an eight-decimal source with a usable round no older than one day.\\n    /// @param newSource Replacement rate store or external aggregator.\\n    /// @param newSourceFeedId Store feed identifier, or zero for an external aggregator.\\n    function setSource(address newSource, bytes32 newSourceFeedId) external onlyOwner {\\n        if (newSource == address(0)) revert ZeroSource();\\n        uint8 sourceDecimals = IChainlinkAggregatorV3(newSource).decimals();\\n        if (sourceDecimals != 8) revert UnsupportedDecimals(sourceDecimals);\\n\\n        (uint80 roundId, int256 answer,, uint256 updatedAt, uint80 answeredInRound) = newSourceFeedId != bytes32(0)\\n            ? IFxRateStore(newSource).latestRoundData(newSourceFeedId)\\n            : IChainlinkAggregatorV3(newSource).latestRoundData();\\n        if (\\n            answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp || block.timestamp - updatedAt > 1 days\\n                || answeredInRound < roundId\\n        ) {\\n            revert UnusableSourceRound(roundId, answer, updatedAt, answeredInRound);\\n        }\\n\\n        source = newSource;\\n        sourceFeedId = newSourceFeedId;\\n        emit SourceUpdated(newSource, newSourceFeedId);\\n    }\\n}\\n\",\"keccak256\":\"0x9455450ab4a494054088343a05aba0264768e5010f11fa6c430f54d68b1d546c\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x608060405234620002ac5762000bfc803803806200001d81620002b1565b9283398101606082820312620002ac5781516001600160a01b038082169391849003620002ac576020938483015193604084015160018060401b0394858211620002ac570194601f92828488011215620002ac578651968688116200026157601f1997620000918682018a168b01620002b1565b948186528a8284010111620002ac57899160005b8281106200029857505090600091850101526000549460018060a01b0319953387821617600055604051913391167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0600080a38115620002895750811562000277576001948554161784556002558051938411620002615760039586548481811c9116801562000256575b828210146200024057838111620001f5575b50809285116001146200018d57508394509083929160009462000181575b50501b9160001990841b1c19161790555b6040516109249081620002d88239f35b01519250388062000160565b9294849081168760005284600020946000905b88838310620001da5750505010620001c1575b505050811b01905562000171565b015160001983861b60f8161c19169055388080620001b3565b858701518855909601959485019487935090810190620001a0565b87600052816000208480880160051c82019284891062000236575b0160051c019085905b8281106200022957505062000142565b6000815501859062000219565b9250819262000210565b634e487b7160e01b600052602260045260246000fd5b90607f169062000130565b634e487b7160e01b600052604160045260246000fd5b604051632a94114160e21b8152600490fd5b636a17d9b960e01b8152600490fd5b8181018401518782018501528301620000a5565b600080fd5b6040519190601f01601f191682016001600160401b03811183821017620002615760405256fe608060408181526004918236101561001657600080fd5b600092833560e01c918263313ce567146107105750816354fd4d50146106f457816367e828bf146106cb578163694fb81d14610435578163715018a6146103db5781637284e416146102975781638da5cb5b1461026f5781639a6fc8f5146101dd578163c3df3654146101be578163f2fde38b146100f7575063feaf968c1461009e57600080fd5b346100f357816003193601126100f3576100ef906100ba61081f565b94516001600160501b0394851681526020810193909352604083019190915260608201529116608082015290819060a0820190565b0390f35b5080fd5b9050346101ba5760203660031901126101ba5761011261072b565b9061011b61077e565b6001600160a01b0391821692831561016857505082546001600160a01b0319811683178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b906020608492519162461bcd60e51b8352820152602660248201527f4f776e61626c653a206e6577206f776e657220697320746865207a65726f206160448201526564647265737360d01b6064820152fd5b8280fd5b5050346100f357816003193601126100f3576020906002549051908152f35b9050823461026c57602036600319011261026c578135916001600160501b039182841680940361026c575061021061081f565b949192969093958616810361025657505094516001600160501b03938416815260208101949094526040840194909452606083019390935291909116608082015260a090f35b875163ebb8bb1f60e01b81529182015260249150fd5b80fd5b5050346100f357816003193601126100f357905490516001600160a01b039091168152602090f35b82843461026c578060031936011261026c5781519080600354600181811c9181811680156103d1575b60209889851082146103be575091839189959388958652908160001461039d5750600114610341575b50506102fb9250959392950382610746565b82519382859384528251928382860152825b84811061032b57505050828201840152601f01601f19168101030190f35b818101830151888201880152879550820161030d565b600386527fc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b9492508591905b8183106103855750889450508201016102fb886102e9565b8554888401850152948501948794509183019161036d565b9150506102fb94925060ff191682840152151560051b8201018692886102e9565b634e487b7160e01b875260229052602486fd5b92607f16926102c0565b833461026c578060031936011261026c576103f461077e565b80546001600160a01b03198116825581906001600160a01b03167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08280a380f35b919050346101ba57806003193601126101ba5761045061072b565b916024359261045d61077e565b6001600160a01b03169182156106be57805163313ce56760e01b81526020818481875afa80156106b4578690610674575b60ff9150166008810361065f5750831561060457805163427aac3560e01b81528281018590529060a082602481875afa80156105fa5786928793889189936105c1575b50939091925b8882138015906105b9575b80156105b0575b8015610588575b8015610573575b61054257888888806bffffffffffffffffffffffff60a01b6001541617600155816002557f1be6679d97e1b0b0670fb0521dcf38297d03e4100bef973706a768b573fa4ab88380a380f35b608496505194636c44f19560e01b86526001600160501b038095169086015260248501526044840152166064820152fd5b506001600160501b03808616908516106104f7565b5082420342811161059d5762015180106104f0565b634e487b7160e01b8a526011875260248afd5b504283116104e9565b5082156104e2565b925050506105e791925060a03d81116105f3575b6105df8183610746565b8101906107ea565b929493909150386104d1565b503d6105d5565b81513d88823e3d90fd5b8051633fabe5a360e21b81529060a0828481875afa80156105fa578692879388918993610636575b50939091926104d7565b9250505061065391925060a03d81116105f3576105df8183610746565b9294939091503861062c565b905163fd91cbed60e01b815291820152602490fd5b506020813d82116106ac575b8161068d60209383610746565b810103126106a8575160ff811681036106a85760ff9061048e565b8580fd5b3d9150610680565b82513d88823e3d90fd5b51636a17d9b960e01b8152fd5b5050346100f357816003193601126100f35760015490516001600160a01b039091168152602090f35b5050346100f357816003193601126100f3576020905160018152f35b8490346100f357816003193601126100f35780600860209252f35b600435906001600160a01b038216820361074157565b600080fd5b90601f8019910116810190811067ffffffffffffffff82111761076857604052565b634e487b7160e01b600052604160045260246000fd5b6000546001600160a01b0316330361079257565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b51906001600160501b038216820361074157565b908160a0910312610741576107fe816107d6565b9160208201519160408101519161081c6080606084015193016107d6565b90565b600254806108a45750600154604051633fabe5a360e21b81529060a090829060049082906001600160a01b03165afa908115610898576000918293838093819361086c575b509493929190565b93505093505061088a915060a03d81116105f3576105df8183610746565b929491939092919038610864565b6040513d6000823e3d90fd5b60015460405163427aac3560e01b8152600481019290925260a090829060249082906001600160a01b03165afa908115610898576000918293838093819361086c5750949392919056fea26469706673582212207d5a000c387c8c2b0ad5a3ad8672530b369ad3f7fdf3c2bffd5786270e09911664736f6c63430008120033",
+  "deployedBytecode": "0x608060408181526004918236101561001657600080fd5b600092833560e01c918263313ce567146107105750816354fd4d50146106f457816367e828bf146106cb578163694fb81d14610435578163715018a6146103db5781637284e416146102975781638da5cb5b1461026f5781639a6fc8f5146101dd578163c3df3654146101be578163f2fde38b146100f7575063feaf968c1461009e57600080fd5b346100f357816003193601126100f3576100ef906100ba61081f565b94516001600160501b0394851681526020810193909352604083019190915260608201529116608082015290819060a0820190565b0390f35b5080fd5b9050346101ba5760203660031901126101ba5761011261072b565b9061011b61077e565b6001600160a01b0391821692831561016857505082546001600160a01b0319811683178455167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08380a380f35b906020608492519162461bcd60e51b8352820152602660248201527f4f776e61626c653a206e6577206f776e657220697320746865207a65726f206160448201526564647265737360d01b6064820152fd5b8280fd5b5050346100f357816003193601126100f3576020906002549051908152f35b9050823461026c57602036600319011261026c578135916001600160501b039182841680940361026c575061021061081f565b949192969093958616810361025657505094516001600160501b03938416815260208101949094526040840194909452606083019390935291909116608082015260a090f35b875163ebb8bb1f60e01b81529182015260249150fd5b80fd5b5050346100f357816003193601126100f357905490516001600160a01b039091168152602090f35b82843461026c578060031936011261026c5781519080600354600181811c9181811680156103d1575b60209889851082146103be575091839189959388958652908160001461039d5750600114610341575b50506102fb9250959392950382610746565b82519382859384528251928382860152825b84811061032b57505050828201840152601f01601f19168101030190f35b818101830151888201880152879550820161030d565b600386527fc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b9492508591905b8183106103855750889450508201016102fb886102e9565b8554888401850152948501948794509183019161036d565b9150506102fb94925060ff191682840152151560051b8201018692886102e9565b634e487b7160e01b875260229052602486fd5b92607f16926102c0565b833461026c578060031936011261026c576103f461077e565b80546001600160a01b03198116825581906001600160a01b03167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08280a380f35b919050346101ba57806003193601126101ba5761045061072b565b916024359261045d61077e565b6001600160a01b03169182156106be57805163313ce56760e01b81526020818481875afa80156106b4578690610674575b60ff9150166008810361065f5750831561060457805163427aac3560e01b81528281018590529060a082602481875afa80156105fa5786928793889189936105c1575b50939091925b8882138015906105b9575b80156105b0575b8015610588575b8015610573575b61054257888888806bffffffffffffffffffffffff60a01b6001541617600155816002557f1be6679d97e1b0b0670fb0521dcf38297d03e4100bef973706a768b573fa4ab88380a380f35b608496505194636c44f19560e01b86526001600160501b038095169086015260248501526044840152166064820152fd5b506001600160501b03808616908516106104f7565b5082420342811161059d5762015180106104f0565b634e487b7160e01b8a526011875260248afd5b504283116104e9565b5082156104e2565b925050506105e791925060a03d81116105f3575b6105df8183610746565b8101906107ea565b929493909150386104d1565b503d6105d5565b81513d88823e3d90fd5b8051633fabe5a360e21b81529060a0828481875afa80156105fa578692879388918993610636575b50939091926104d7565b9250505061065391925060a03d81116105f3576105df8183610746565b9294939091503861062c565b905163fd91cbed60e01b815291820152602490fd5b506020813d82116106ac575b8161068d60209383610746565b810103126106a8575160ff811681036106a85760ff9061048e565b8580fd5b3d9150610680565b82513d88823e3d90fd5b51636a17d9b960e01b8152fd5b5050346100f357816003193601126100f35760015490516001600160a01b039091168152602090f35b5050346100f357816003193601126100f3576020905160018152f35b8490346100f357816003193601126100f35780600860209252f35b600435906001600160a01b038216820361074157565b600080fd5b90601f8019910116810190811067ffffffffffffffff82111761076857604052565b634e487b7160e01b600052604160045260246000fd5b6000546001600160a01b0316330361079257565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b51906001600160501b038216820361074157565b908160a0910312610741576107fe816107d6565b9160208201519160408101519161081c6080606084015193016107d6565b90565b600254806108a45750600154604051633fabe5a360e21b81529060a090829060049082906001600160a01b03165afa908115610898576000918293838093819361086c575b509493929190565b93505093505061088a915060a03d81116105f3576105df8183610746565b929491939092919038610864565b6040513d6000823e3d90fd5b60015460405163427aac3560e01b8152600481019290925260a090829060249082906001600160a01b03165afa908115610898576000918293838093819361086c5750949392919056fea26469706673582212207d5a000c387c8c2b0ad5a3ad8672530b369ad3f7fdf3c2bffd5786270e09911664736f6c63430008120033",
+  "devdoc": {
+    "kind": "dev",
+    "methods": {
+      "constructor": {
+        "params": {
+          "feedDescription": "Human-readable currency pair description.",
+          "feedId": "Nonzero identifier of the store feed.",
+          "store": "Initial rate store."
+        }
+      },
+      "getRoundData(uint80)": {
+        "params": {
+          "requestedRoundId": "Round identifier that must match the current source's latest round."
+        }
+      },
+      "owner()": {
+        "details": "Returns the address of the current owner."
+      },
+      "renounceOwnership()": {
+        "details": "Leaves the contract without owner. It will not be possible to call `onlyOwner` functions. Can only be called by the current owner. NOTE: Renouncing ownership will leave the contract without an owner, thereby disabling any functionality that is only available to the owner."
+      },
+      "setSource(address,bytes32)": {
+        "params": {
+          "newSource": "Replacement rate store or external aggregator.",
+          "newSourceFeedId": "Store feed identifier, or zero for an external aggregator."
+        }
+      },
+      "transferOwnership(address)": {
+        "details": "Transfers ownership of the contract to a new account (`newOwner`). Can only be called by the current owner."
+      }
+    },
+    "title": "FxRateFeed",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "constructor": {
+        "notice": "Initialize a store-backed feed without requiring a live source round."
+      },
+      "decimals()": {
+        "notice": "Return the fixed precision of the fiat/USD answer."
+      },
+      "description()": {
+        "notice": "Human-readable currency pair description."
+      },
+      "getRoundData(uint80)": {
+        "notice": "Return the latest tuple only; historical rounds are not served."
+      },
+      "latestRoundData()": {
+        "notice": "Return the source's latest tuple unchanged, including invalid or stale rounds."
+      },
+      "setSource(address,bytes32)": {
+        "notice": "Switch to an eight-decimal source with a usable round no older than one day."
+      },
+      "source()": {
+        "notice": "Store or external aggregator supplying the latest round."
+      },
+      "sourceFeedId()": {
+        "notice": "Store feed identifier, or zero when the source is an external aggregator."
+      },
+      "version()": {
+        "notice": "Return the facade version."
+      }
+    },
+    "notice": "Chainlink-compatible facade for a fiat/USD feed with an owner-controlled source.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 7,
+        "contract": "contracts/oracles/FxRateFeed.sol:FxRateFeed",
+        "label": "_owner",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_address"
+      },
+      {
+        "astId": 39491,
+        "contract": "contracts/oracles/FxRateFeed.sol:FxRateFeed",
+        "label": "source",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_address"
+      },
+      {
+        "astId": 39494,
+        "contract": "contracts/oracles/FxRateFeed.sol:FxRateFeed",
+        "label": "sourceFeedId",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_bytes32"
+      },
+      {
+        "astId": 39497,
+        "contract": "contracts/oracles/FxRateFeed.sol:FxRateFeed",
+        "label": "description",
+        "offset": 0,
+        "slot": "3",
+        "type": "t_string_storage"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_bytes32": {
+        "encoding": "inplace",
+        "label": "bytes32",
+        "numberOfBytes": "32"
+      },
+      "t_string_storage": {
+        "encoding": "bytes",
+        "label": "string",
+        "numberOfBytes": "32"
+      }
+    }
+  }
+}

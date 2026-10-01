@@ -1,0 +1,1049 @@
+{
+  "address": "0x389206956C57bdB5d07FF78AB3D1e1DEED070b9c",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "initialUpdater",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "answer",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "lower",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "upper",
+          "type": "uint64"
+        }
+      ],
+      "name": "AnswerOutOfBand",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "answer",
+          "type": "uint64"
+        }
+      ],
+      "name": "AnswerOutOfLimits",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "EmptyBatch",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "FeedAlreadyRegistered",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "FeedLocked",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "FeedNotRegistered",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint64",
+          "name": "minAnswer",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "maxAnswer",
+          "type": "uint64"
+        }
+      ],
+      "name": "InvalidLimits",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "feedIds",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "answers",
+          "type": "uint256"
+        }
+      ],
+      "name": "LengthMismatch",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "caller",
+          "type": "address"
+        }
+      ],
+      "name": "NotUpdater",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "observedAt",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "updatedAt",
+          "type": "uint64"
+        }
+      ],
+      "name": "ObservationNotNewer",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint64",
+          "name": "observedAt",
+          "type": "uint64"
+        }
+      ],
+      "name": "ObservedAtInFuture",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "RenounceDisabled",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroUpdater",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "answer",
+          "type": "uint64"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint64",
+          "name": "roundId",
+          "type": "uint64"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "updatedAt",
+          "type": "uint64"
+        }
+      ],
+      "name": "AnswerUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousUpdater",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32[]",
+          "name": "feedIds",
+          "type": "bytes32[]"
+        }
+      ],
+      "name": "EmergencyStopped",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "minAnswer",
+          "type": "uint64"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "maxAnswer",
+          "type": "uint64"
+        }
+      ],
+      "name": "FeedAdded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "minAnswer",
+          "type": "uint64"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "maxAnswer",
+          "type": "uint64"
+        }
+      ],
+      "name": "FeedLimitsSet",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "answer",
+          "type": "uint64"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "roundId",
+          "type": "uint64"
+        }
+      ],
+      "name": "FeedSeeded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousUpdater",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newUpdater",
+          "type": "address"
+        }
+      ],
+      "name": "UpdaterSet",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "minAnswer",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "maxAnswer",
+          "type": "uint64"
+        }
+      ],
+      "name": "addFeed",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "decimals",
+      "outputs": [
+        {
+          "internalType": "uint8",
+          "name": "",
+          "type": "uint8"
+        }
+      ],
+      "stateMutability": "pure",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32[]",
+          "name": "feedIds",
+          "type": "bytes32[]"
+        }
+      ],
+      "name": "emergencyStop",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getBand",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "available",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint64",
+          "name": "lower",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "upper",
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "getFeedConfig",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "uint64",
+              "name": "minAnswer",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint64",
+              "name": "maxAnswer",
+              "type": "uint64"
+            },
+            {
+              "internalType": "bool",
+              "name": "registered",
+              "type": "bool"
+            },
+            {
+              "internalType": "bool",
+              "name": "locked",
+              "type": "bool"
+            },
+            {
+              "internalType": "bool",
+              "name": "latestIsSeed",
+              "type": "bool"
+            }
+          ],
+          "internalType": "struct IFxRateStore.FeedConfig",
+          "name": "",
+          "type": "tuple"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "latestRoundData",
+      "outputs": [
+        {
+          "internalType": "uint80",
+          "name": "roundId",
+          "type": "uint80"
+        },
+        {
+          "internalType": "int256",
+          "name": "answer",
+          "type": "int256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "startedAt",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "updatedAt",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint80",
+          "name": "answeredInRound",
+          "type": "uint80"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "pure",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "answer",
+          "type": "uint64"
+        }
+      ],
+      "name": "seedFeed",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "feedId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "minAnswer",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "maxAnswer",
+          "type": "uint64"
+        }
+      ],
+      "name": "setFeedLimits",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newUpdater",
+          "type": "address"
+        }
+      ],
+      "name": "setUpdater",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32[]",
+          "name": "feedIds",
+          "type": "bytes32[]"
+        },
+        {
+          "internalType": "uint64[]",
+          "name": "answers",
+          "type": "uint64[]"
+        },
+        {
+          "internalType": "uint64",
+          "name": "observedAt",
+          "type": "uint64"
+        }
+      ],
+      "name": "updateRates",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "updater",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0x4d9d5c054edf74c06216e45164d3b76e61b4808903e50b1d2da98178e04ce10d",
+  "receipt": {
+    "to": null,
+    "from": "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
+    "contractAddress": "0x389206956C57bdB5d07FF78AB3D1e1DEED070b9c",
+    "transactionIndex": 127,
+    "gasUsed": "1242215",
+    "logsBloom": "0x00000000000000000000000000000000000000000000004000800000000000000000000000000010000000000000000000000000010000000081000000000000000000000000000000000000000000000001000000000000000000000000000000000000020000000000000000000800000000000000000000000000000000400000010000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000200000000001000000001000200000000000000000000000000000020000000000000000000000000000000000000000000200000000000000000000000",
+    "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "transactionHash": "0x4d9d5c054edf74c06216e45164d3b76e61b4808903e50b1d2da98178e04ce10d",
+    "logs": [
+      {
+        "transactionIndex": 127,
+        "blockNumber": 52038355,
+        "transactionHash": "0x4d9d5c054edf74c06216e45164d3b76e61b4808903e50b1d2da98178e04ce10d",
+        "address": "0x389206956C57bdB5d07FF78AB3D1e1DEED070b9c",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x00000000000000000000000084e113087c97cd80ea9d78983d4b8ff61eca1929"
+        ],
+        "data": "0x",
+        "logIndex": 748,
+        "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      {
+        "transactionIndex": 127,
+        "blockNumber": 52038355,
+        "transactionHash": "0x4d9d5c054edf74c06216e45164d3b76e61b4808903e50b1d2da98178e04ce10d",
+        "address": "0x389206956C57bdB5d07FF78AB3D1e1DEED070b9c",
+        "topics": [
+          "0xa8c0cdc0ca6ce2a25306126b347225be9da35eaf6ef6d8fc1d90360b7bdbe006",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x00000000000000000000000081630fb1ab2a7eab137888b9746b66889f78f091"
+        ],
+        "data": "0x",
+        "logIndex": 749,
+        "blockHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "blockNumber": 52038355,
+    "cumulativeGasUsed": "26597972",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [
+    "0x81630fb1ab2A7Eab137888b9746b66889f78F091"
+  ],
+  "numDeployments": 1,
+  "solcInputHash": "939277a825afd925c5075d60cda075db",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.18+commit.87f61d96\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"initialUpdater\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"},{\"internalType\":\"uint64\",\"name\":\"answer\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"lower\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"upper\",\"type\":\"uint64\"}],\"name\":\"AnswerOutOfBand\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"},{\"internalType\":\"uint64\",\"name\":\"answer\",\"type\":\"uint64\"}],\"name\":\"AnswerOutOfLimits\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"EmptyBatch\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"}],\"name\":\"FeedAlreadyRegistered\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"}],\"name\":\"FeedLocked\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"}],\"name\":\"FeedNotRegistered\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"minAnswer\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"maxAnswer\",\"type\":\"uint64\"}],\"name\":\"InvalidLimits\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"feedIds\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"answers\",\"type\":\"uint256\"}],\"name\":\"LengthMismatch\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"}],\"name\":\"NotUpdater\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"},{\"internalType\":\"uint64\",\"name\":\"observedAt\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"updatedAt\",\"type\":\"uint64\"}],\"name\":\"ObservationNotNewer\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"observedAt\",\"type\":\"uint64\"}],\"name\":\"ObservedAtInFuture\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"RenounceDisabled\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroUpdater\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"answer\",\"type\":\"uint64\"},{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"roundId\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"updatedAt\",\"type\":\"uint64\"}],\"name\":\"AnswerUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousUpdater\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bytes32[]\",\"name\":\"feedIds\",\"type\":\"bytes32[]\"}],\"name\":\"EmergencyStopped\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"minAnswer\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"maxAnswer\",\"type\":\"uint64\"}],\"name\":\"FeedAdded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"minAnswer\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"maxAnswer\",\"type\":\"uint64\"}],\"name\":\"FeedLimitsSet\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"answer\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"roundId\",\"type\":\"uint64\"}],\"name\":\"FeedSeeded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousUpdater\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newUpdater\",\"type\":\"address\"}],\"name\":\"UpdaterSet\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"},{\"internalType\":\"uint64\",\"name\":\"minAnswer\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"maxAnswer\",\"type\":\"uint64\"}],\"name\":\"addFeed\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"decimals\",\"outputs\":[{\"internalType\":\"uint8\",\"name\":\"\",\"type\":\"uint8\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"feedIds\",\"type\":\"bytes32[]\"}],\"name\":\"emergencyStop\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"}],\"name\":\"getBand\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"available\",\"type\":\"bool\"},{\"internalType\":\"uint64\",\"name\":\"lower\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"upper\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"}],\"name\":\"getFeedConfig\",\"outputs\":[{\"components\":[{\"internalType\":\"uint64\",\"name\":\"minAnswer\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"maxAnswer\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"registered\",\"type\":\"bool\"},{\"internalType\":\"bool\",\"name\":\"locked\",\"type\":\"bool\"},{\"internalType\":\"bool\",\"name\":\"latestIsSeed\",\"type\":\"bool\"}],\"internalType\":\"struct IFxRateStore.FeedConfig\",\"name\":\"\",\"type\":\"tuple\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"}],\"name\":\"latestRoundData\",\"outputs\":[{\"internalType\":\"uint80\",\"name\":\"roundId\",\"type\":\"uint80\"},{\"internalType\":\"int256\",\"name\":\"answer\",\"type\":\"int256\"},{\"internalType\":\"uint256\",\"name\":\"startedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"uint80\",\"name\":\"answeredInRound\",\"type\":\"uint80\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"},{\"internalType\":\"uint64\",\"name\":\"answer\",\"type\":\"uint64\"}],\"name\":\"seedFeed\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"feedId\",\"type\":\"bytes32\"},{\"internalType\":\"uint64\",\"name\":\"minAnswer\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"maxAnswer\",\"type\":\"uint64\"}],\"name\":\"setFeedLimits\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newUpdater\",\"type\":\"address\"}],\"name\":\"setUpdater\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32[]\",\"name\":\"feedIds\",\"type\":\"bytes32[]\"},{\"internalType\":\"uint64[]\",\"name\":\"answers\",\"type\":\"uint64[]\"},{\"internalType\":\"uint64\",\"name\":\"observedAt\",\"type\":\"uint64\"}],\"name\":\"updateRates\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"updater\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"}],\"devdoc\":{\"kind\":\"dev\",\"methods\":{\"emergencyStop(bytes32[])\":{\"details\":\"An empty list only disables updates. An unregistered id reverts the whole call.\"},\"latestRoundData(bytes32)\":{\"details\":\"Unknown feeds return all zeros; stopped feeds retain round ids but have zero answer and timestamps.\"},\"owner()\":{\"details\":\"Returns the address of the current owner.\"},\"transferOwnership(address)\":{\"details\":\"Transfers ownership of the contract to a new account (`newOwner`). Can only be called by the current owner.\"},\"updateRates(bytes32[],uint64[],uint64)\":{\"params\":{\"answers\":\"Eight-decimal answers corresponding to feedIds.\",\"feedIds\":\"Feed identifiers, conventionally keccak256 of the pair (e.g. \\\"INR/USD\\\").\",\"observedAt\":\"Provider observation time, strictly newer per feed and not in the future.\"}}},\"title\":\"FxRateStore\",\"version\":1},\"userdoc\":{\"errors\":{\"AnswerOutOfBand(bytes32,uint64,uint64,uint64)\":[{\"notice\":\"The answer is outside the available rolling band.\"}],\"AnswerOutOfLimits(bytes32,uint64)\":[{\"notice\":\"The answer is outside the feed's inclusive limits.\"}],\"EmptyBatch()\":[{\"notice\":\"An update batch must contain at least one feed.\"}],\"FeedAlreadyRegistered(bytes32)\":[{\"notice\":\"The requested feed is already registered.\"}],\"FeedLocked(bytes32)\":[{\"notice\":\"The feed must be seeded before accepting updater writes.\"}],\"FeedNotRegistered(bytes32)\":[{\"notice\":\"The requested feed has not been registered.\"}],\"InvalidLimits(uint64,uint64)\":[{\"notice\":\"Limits must satisfy zero < minimum <= maximum.\"}],\"LengthMismatch(uint256,uint256)\":[{\"notice\":\"Feed and answer array lengths differ.\"}],\"NotUpdater(address)\":[{\"notice\":\"The caller is not the configured updater.\"}],\"ObservationNotNewer(bytes32,uint64,uint64)\":[{\"notice\":\"The provider observation must be strictly newer than the latest round.\"}],\"ObservedAtInFuture(uint64)\":[{\"notice\":\"The provider observation is later than the current block.\"}],\"RenounceDisabled()\":[{\"notice\":\"Ownership cannot be renounced.\"}],\"ZeroUpdater()\":[{\"notice\":\"An updater assignment cannot use the zero address.\"}]},\"events\":{\"AnswerUpdated(bytes32,uint64,uint64,uint64)\":{\"notice\":\"Emitted for each seed or updater round.\"},\"EmergencyStopped(address,bytes32[])\":{\"notice\":\"Emitted when updates are disabled and the listed feeds are locked.\"},\"FeedAdded(bytes32,uint64,uint64)\":{\"notice\":\"Emitted when a feed is registered in a locked state.\"},\"FeedLimitsSet(bytes32,uint64,uint64)\":{\"notice\":\"Emitted when the owner changes a feed's inclusive limits.\"},\"FeedSeeded(bytes32,uint64,uint64)\":{\"notice\":\"Emitted when the owner seeds and unlocks a feed.\"},\"UpdaterSet(address,address)\":{\"notice\":\"Emitted when the updater changes; zero disables updates.\"}},\"kind\":\"user\",\"methods\":{\"addFeed(bytes32,uint64,uint64)\":{\"notice\":\"Registers a locked feed with positive inclusive limits; owner only.\"},\"constructor\":{\"notice\":\"Initializes the store with the deployer as owner and a nonzero updater.\"},\"decimals()\":{\"notice\":\"Returns the fixed answer precision of eight decimals.\"},\"emergencyStop(bytes32[])\":{\"notice\":\"Disables the updater and clears prices/timestamps of listed feeds, retaining round ids; owner only.\"},\"getBand(bytes32)\":{\"notice\":\"Returns band availability and inclusive bounds, excluding observation-time eligibility.\"},\"getFeedConfig(bytes32)\":{\"notice\":\"Returns stored configuration; unknown feeds return the zero-valued struct.\"},\"latestRoundData(bytes32)\":{\"notice\":\"Returns the latest Chainlink-shaped tuple, with both timestamps equal and answeredInRound = roundId.\"},\"renounceOwnership()\":{\"notice\":\"Always reverts to preserve owner access to seeding and emergency controls.\"},\"seedFeed(bytes32,uint64)\":{\"notice\":\"Publishes an in-limit seed at block time and unlocks the feed; owner only.\"},\"setFeedLimits(bytes32,uint64,uint64)\":{\"notice\":\"Changes inclusive limits without changing the latest round; owner only.\"},\"setUpdater(address)\":{\"notice\":\"Assigns a nonzero updater; owner only.\"},\"updateRates(bytes32[],uint64[],uint64)\":{\"notice\":\"Atomically publishes answers for registered, unlocked feeds as the updater.\"},\"updater()\":{\"notice\":\"Returns the authorized updater, or zero when updates are disabled.\"}},\"notice\":\"Owner-configured FX rounds published by a single updater.\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/oracles/FxRateStore.sol\":\"FxRateStore\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":200},\"remappings\":[],\"viaIR\":true},\"sources\":{\"@openzeppelin/contracts/access/Ownable.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts (last updated v4.9.0) (access/Ownable.sol)\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"../utils/Context.sol\\\";\\n\\n/**\\n * @dev Contract module which provides a basic access control mechanism, where\\n * there is an account (an owner) that can be granted exclusive access to\\n * specific functions.\\n *\\n * By default, the owner account will be the one that deploys the contract. This\\n * can later be changed with {transferOwnership}.\\n *\\n * This module is used through inheritance. It will make available the modifier\\n * `onlyOwner`, which can be applied to your functions to restrict their use to\\n * the owner.\\n */\\nabstract contract Ownable is Context {\\n    address private _owner;\\n\\n    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);\\n\\n    /**\\n     * @dev Initializes the contract setting the deployer as the initial owner.\\n     */\\n    constructor() {\\n        _transferOwnership(_msgSender());\\n    }\\n\\n    /**\\n     * @dev Throws if called by any account other than the owner.\\n     */\\n    modifier onlyOwner() {\\n        _checkOwner();\\n        _;\\n    }\\n\\n    /**\\n     * @dev Returns the address of the current owner.\\n     */\\n    function owner() public view virtual returns (address) {\\n        return _owner;\\n    }\\n\\n    /**\\n     * @dev Throws if the sender is not the owner.\\n     */\\n    function _checkOwner() internal view virtual {\\n        require(owner() == _msgSender(), \\\"Ownable: caller is not the owner\\\");\\n    }\\n\\n    /**\\n     * @dev Leaves the contract without owner. It will not be possible to call\\n     * `onlyOwner` functions. Can only be called by the current owner.\\n     *\\n     * NOTE: Renouncing ownership will leave the contract without an owner,\\n     * thereby disabling any functionality that is only available to the owner.\\n     */\\n    function renounceOwnership() public virtual onlyOwner {\\n        _transferOwnership(address(0));\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Can only be called by the current owner.\\n     */\\n    function transferOwnership(address newOwner) public virtual onlyOwner {\\n        require(newOwner != address(0), \\\"Ownable: new owner is the zero address\\\");\\n        _transferOwnership(newOwner);\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Internal function without access restriction.\\n     */\\n    function _transferOwnership(address newOwner) internal virtual {\\n        address oldOwner = _owner;\\n        _owner = newOwner;\\n        emit OwnershipTransferred(oldOwner, newOwner);\\n    }\\n}\\n\",\"keccak256\":\"0xba43b97fba0d32eb4254f6a5a297b39a19a247082a02d6e69349e071e2946218\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/Context.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n// OpenZeppelin Contracts v4.4.1 (utils/Context.sol)\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Provides information about the current execution context, including the\\n * sender of the transaction and its data. While these are generally available\\n * via msg.sender and msg.data, they should not be accessed in such a direct\\n * manner, since when dealing with meta-transactions the account sending and\\n * paying for execution may not be the actual sender (as far as an application\\n * is concerned).\\n *\\n * This contract is only required for intermediate, library-like contracts.\\n */\\nabstract contract Context {\\n    function _msgSender() internal view virtual returns (address) {\\n        return msg.sender;\\n    }\\n\\n    function _msgData() internal view virtual returns (bytes calldata) {\\n        return msg.data;\\n    }\\n}\\n\",\"keccak256\":\"0xe2e337e6dde9ef6b680e07338c493ebea1b5fd09b43424112868e9cc1706bca7\",\"license\":\"MIT\"},\"contracts/interfaces/IFxRateStore.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity ^0.8.18;\\n\\n/// @title IFxRateStore\\n/// @notice Shared store for eight-decimal USD prices per unit of fiat.\\ninterface IFxRateStore {\\n    /// @notice Limits, registration, admission status and provenance of the latest round.\\n    struct FeedConfig {\\n        uint64 minAnswer;\\n        uint64 maxAnswer;\\n        bool registered;\\n        bool locked;\\n        bool latestIsSeed;\\n    }\\n\\n    /// @notice Emitted when the updater changes; zero disables updates.\\n    event UpdaterSet(address indexed previousUpdater, address indexed newUpdater);\\n    /// @notice Emitted when a feed is registered in a locked state.\\n    event FeedAdded(bytes32 indexed feedId, uint64 minAnswer, uint64 maxAnswer);\\n    /// @notice Emitted when the owner changes a feed's inclusive limits.\\n    event FeedLimitsSet(bytes32 indexed feedId, uint64 minAnswer, uint64 maxAnswer);\\n    /// @notice Emitted when the owner seeds and unlocks a feed.\\n    event FeedSeeded(bytes32 indexed feedId, uint64 answer, uint64 roundId);\\n    /// @notice Emitted for each seed or updater round.\\n    event AnswerUpdated(bytes32 indexed feedId, uint64 answer, uint64 indexed roundId, uint64 updatedAt);\\n    /// @notice Emitted when updates are disabled and the listed feeds are locked.\\n    event EmergencyStopped(address indexed previousUpdater, bytes32[] feedIds);\\n\\n    /// @notice The caller is not the configured updater.\\n    error NotUpdater(address caller);\\n    /// @notice An updater assignment cannot use the zero address.\\n    error ZeroUpdater();\\n    /// @notice An update batch must contain at least one feed.\\n    error EmptyBatch();\\n    /// @notice Feed and answer array lengths differ.\\n    error LengthMismatch(uint256 feedIds, uint256 answers);\\n    /// @notice The requested feed has not been registered.\\n    error FeedNotRegistered(bytes32 feedId);\\n    /// @notice The requested feed is already registered.\\n    error FeedAlreadyRegistered(bytes32 feedId);\\n    /// @notice The feed must be seeded before accepting updater writes.\\n    error FeedLocked(bytes32 feedId);\\n    /// @notice Limits must satisfy zero < minimum <= maximum.\\n    error InvalidLimits(uint64 minAnswer, uint64 maxAnswer);\\n    /// @notice The answer is outside the feed's inclusive limits.\\n    error AnswerOutOfLimits(bytes32 feedId, uint64 answer);\\n    /// @notice The answer is outside the available rolling band.\\n    error AnswerOutOfBand(bytes32 feedId, uint64 answer, uint64 lower, uint64 upper);\\n    /// @notice The provider observation is later than the current block.\\n    error ObservedAtInFuture(uint64 observedAt);\\n    /// @notice The provider observation must be strictly newer than the latest round.\\n    error ObservationNotNewer(bytes32 feedId, uint64 observedAt, uint64 updatedAt);\\n    /// @notice Ownership cannot be renounced.\\n    error RenounceDisabled();\\n\\n    /// @notice Returns the fixed answer precision of eight decimals.\\n    function decimals() external pure returns (uint8);\\n    /// @notice Returns the authorized updater, or zero when updates are disabled.\\n    function updater() external view returns (address);\\n    /// @notice Atomically publishes answers for registered, unlocked feeds as the updater.\\n    /// @param feedIds Feed identifiers, conventionally keccak256 of the pair (e.g. \\\"INR/USD\\\").\\n    /// @param answers Eight-decimal answers corresponding to feedIds.\\n    /// @param observedAt Provider observation time, strictly newer per feed and not in the future.\\n    function updateRates(bytes32[] calldata feedIds, uint64[] calldata answers, uint64 observedAt) external;\\n    /// @notice Registers a locked feed with positive inclusive limits; owner only.\\n    function addFeed(bytes32 feedId, uint64 minAnswer, uint64 maxAnswer) external;\\n    /// @notice Changes inclusive limits without changing the latest round; owner only.\\n    function setFeedLimits(bytes32 feedId, uint64 minAnswer, uint64 maxAnswer) external;\\n    /// @notice Publishes an in-limit seed at block time and unlocks the feed; owner only.\\n    function seedFeed(bytes32 feedId, uint64 answer) external;\\n    /// @notice Disables the updater and clears prices/timestamps of listed feeds, retaining round ids; owner only.\\n    /// @dev An empty list only disables updates. An unregistered id reverts the whole call.\\n    function emergencyStop(bytes32[] calldata feedIds) external;\\n    /// @notice Assigns a nonzero updater; owner only.\\n    function setUpdater(address newUpdater) external;\\n    /// @notice Returns the latest Chainlink-shaped tuple, with both timestamps equal and answeredInRound = roundId.\\n    /// @dev Unknown feeds return all zeros; stopped feeds retain round ids but have zero answer and timestamps.\\n    function latestRoundData(bytes32 feedId)\\n        external\\n        view\\n        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);\\n    /// @notice Returns stored configuration; unknown feeds return the zero-valued struct.\\n    function getFeedConfig(bytes32 feedId) external view returns (FeedConfig memory);\\n    /// @notice Returns band availability and inclusive bounds, excluding observation-time eligibility.\\n    function getBand(bytes32 feedId) external view returns (bool available, uint64 lower, uint64 upper);\\n}\\n\",\"keccak256\":\"0xca9fc5f12fe99865bf46e6b40bdf0dbbedbf6637d3c646e1a60282e13cf50389\",\"license\":\"MIT\"},\"contracts/oracles/FxRateStore.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity ^0.8.18;\\n\\nimport {Ownable} from \\\"@openzeppelin/contracts/access/Ownable.sol\\\";\\nimport {IFxRateStore} from \\\"../interfaces/IFxRateStore.sol\\\";\\n\\n/// @title FxRateStore\\n/// @notice Owner-configured FX rounds published by a single updater.\\ncontract FxRateStore is IFxRateStore, Ownable {\\n    struct Round {\\n        uint64 answer;\\n        uint64 updatedAt;\\n        uint64 roundId;\\n    }\\n\\n    struct BandBucket {\\n        uint32 hourIndex;\\n        uint64 minAnswer;\\n        uint64 maxAnswer;\\n    }\\n\\n    uint256 internal constant MAX_BAND_BPS = 500;\\n    uint256 internal constant BPS = 10_000;\\n    uint256 internal constant BAND_BUCKET_SECONDS = 1 hours;\\n    uint256 internal constant BAND_BUCKET_COUNT = 25;\\n\\n    /// @inheritdoc IFxRateStore\\n    address public override updater;\\n    mapping(bytes32 => FeedConfig) internal feedConfigs;\\n    mapping(bytes32 => Round) internal rounds;\\n    mapping(bytes32 => BandBucket[25]) internal bandBuckets;\\n\\n    /// @notice Initializes the store with the deployer as owner and a nonzero updater.\\n    constructor(address initialUpdater) Ownable() {\\n        if (initialUpdater == address(0)) revert ZeroUpdater();\\n        updater = initialUpdater;\\n        emit UpdaterSet(address(0), initialUpdater);\\n    }\\n\\n    /// @inheritdoc IFxRateStore\\n    function decimals() external pure override returns (uint8) {\\n        return 8;\\n    }\\n\\n    /// @inheritdoc IFxRateStore\\n    function updateRates(bytes32[] calldata feedIds, uint64[] calldata answers, uint64 observedAt) external override {\\n        if (msg.sender != updater) revert NotUpdater(msg.sender);\\n        if (feedIds.length == 0) revert EmptyBatch();\\n        if (feedIds.length != answers.length) revert LengthMismatch(feedIds.length, answers.length);\\n        if (observedAt > block.timestamp) revert ObservedAtInFuture(observedAt);\\n\\n        for (uint256 index = 0; index < feedIds.length; ++index) {\\n            _updateFeed(feedIds[index], answers[index], observedAt);\\n        }\\n    }\\n\\n    /// @inheritdoc IFxRateStore\\n    function addFeed(bytes32 feedId, uint64 minAnswer, uint64 maxAnswer) external override onlyOwner {\\n        if (minAnswer == 0 || minAnswer > maxAnswer) revert InvalidLimits(minAnswer, maxAnswer);\\n        if (feedConfigs[feedId].registered) revert FeedAlreadyRegistered(feedId);\\n        feedConfigs[feedId] = FeedConfig({\\n            minAnswer: minAnswer, maxAnswer: maxAnswer, registered: true, locked: true, latestIsSeed: false\\n        });\\n        emit FeedAdded(feedId, minAnswer, maxAnswer);\\n    }\\n\\n    /// @inheritdoc IFxRateStore\\n    function setFeedLimits(bytes32 feedId, uint64 minAnswer, uint64 maxAnswer) external override onlyOwner {\\n        if (minAnswer == 0 || minAnswer > maxAnswer) revert InvalidLimits(minAnswer, maxAnswer);\\n        FeedConfig storage config = feedConfigs[feedId];\\n        if (!config.registered) revert FeedNotRegistered(feedId);\\n        config.minAnswer = minAnswer;\\n        config.maxAnswer = maxAnswer;\\n        emit FeedLimitsSet(feedId, minAnswer, maxAnswer);\\n    }\\n\\n    /// @inheritdoc IFxRateStore\\n    function seedFeed(bytes32 feedId, uint64 answer) external override onlyOwner {\\n        FeedConfig storage config = feedConfigs[feedId];\\n        if (!config.registered) revert FeedNotRegistered(feedId);\\n        if (answer < config.minAnswer || answer > config.maxAnswer) revert AnswerOutOfLimits(feedId, answer);\\n        uint64 nextRoundId = rounds[feedId].roundId + 1;\\n        uint64 updatedAt = uint64(block.timestamp);\\n        rounds[feedId] = Round({answer: answer, updatedAt: updatedAt, roundId: nextRoundId});\\n        delete bandBuckets[feedId];\\n        uint256 currentHour = block.timestamp / BAND_BUCKET_SECONDS;\\n        bandBuckets[feedId][currentHour % BAND_BUCKET_COUNT] =\\n            BandBucket({hourIndex: uint32(currentHour), minAnswer: answer, maxAnswer: answer});\\n        config.locked = false;\\n        config.latestIsSeed = true;\\n        emit FeedSeeded(feedId, answer, nextRoundId);\\n        emit AnswerUpdated(feedId, answer, nextRoundId, updatedAt);\\n    }\\n\\n    /// @inheritdoc IFxRateStore\\n    function emergencyStop(bytes32[] calldata feedIds) external override onlyOwner {\\n        address previousUpdater = updater;\\n        emit UpdaterSet(previousUpdater, address(0));\\n        updater = address(0);\\n        for (uint256 index = 0; index < feedIds.length; ++index) {\\n            bytes32 feedId = feedIds[index];\\n            FeedConfig storage config = feedConfigs[feedId];\\n            if (!config.registered) revert FeedNotRegistered(feedId);\\n            Round storage round = rounds[feedId];\\n            round.answer = 0;\\n            round.updatedAt = 0;\\n            config.locked = true;\\n            config.latestIsSeed = false;\\n        }\\n        emit EmergencyStopped(previousUpdater, feedIds);\\n    }\\n\\n    /// @inheritdoc IFxRateStore\\n    function setUpdater(address newUpdater) external override onlyOwner {\\n        if (newUpdater == address(0)) revert ZeroUpdater();\\n        address previousUpdater = updater;\\n        updater = newUpdater;\\n        emit UpdaterSet(previousUpdater, newUpdater);\\n    }\\n\\n    /// @notice Always reverts to preserve owner access to seeding and emergency controls.\\n    function renounceOwnership() public pure override {\\n        revert RenounceDisabled();\\n    }\\n\\n    /// @inheritdoc IFxRateStore\\n    function latestRoundData(bytes32 feedId)\\n        external\\n        view\\n        override\\n        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)\\n    {\\n        Round memory round = rounds[feedId];\\n        return\\n            (\\n                uint80(round.roundId),\\n                int256(uint256(round.answer)),\\n                round.updatedAt,\\n                round.updatedAt,\\n                uint80(round.roundId)\\n            );\\n    }\\n\\n    /// @inheritdoc IFxRateStore\\n    function getFeedConfig(bytes32 feedId) external view override returns (FeedConfig memory) {\\n        return feedConfigs[feedId];\\n    }\\n\\n    /// @inheritdoc IFxRateStore\\n    function getBand(bytes32 feedId) external view override returns (bool available, uint64 lower, uint64 upper) {\\n        FeedConfig memory config = feedConfigs[feedId];\\n        if (!config.registered || config.locked) return (false, 0, 0);\\n        return _band(feedId, config, rounds[feedId]);\\n    }\\n\\n    function _updateFeed(bytes32 feedId, uint64 answer, uint64 observedAt) internal {\\n        FeedConfig storage config = feedConfigs[feedId];\\n        if (!config.registered) revert FeedNotRegistered(feedId);\\n        if (config.locked) revert FeedLocked(feedId);\\n        if (answer < config.minAnswer || answer > config.maxAnswer) revert AnswerOutOfLimits(feedId, answer);\\n        Round memory round = rounds[feedId];\\n        (bool available, uint64 lower, uint64 upper) = _band(feedId, config, round);\\n        if (!available || answer < lower || answer > upper) revert AnswerOutOfBand(feedId, answer, lower, upper);\\n        if (observedAt <= round.updatedAt) revert ObservationNotNewer(feedId, observedAt, round.updatedAt);\\n\\n        uint64 nextRoundId = round.roundId + 1;\\n        rounds[feedId] = Round({answer: answer, updatedAt: observedAt, roundId: nextRoundId});\\n        uint256 currentHour = block.timestamp / BAND_BUCKET_SECONDS;\\n        BandBucket storage bucket = bandBuckets[feedId][currentHour % BAND_BUCKET_COUNT];\\n        uint64 minimum = round.answer < answer ? round.answer : answer;\\n        uint64 maximum = round.answer > answer ? round.answer : answer;\\n        if (bucket.hourIndex != currentHour || bucket.maxAnswer == 0) {\\n            bucket.hourIndex = uint32(currentHour);\\n            bucket.minAnswer = minimum;\\n            bucket.maxAnswer = maximum;\\n        } else {\\n            if (minimum < bucket.minAnswer) bucket.minAnswer = minimum;\\n            if (maximum > bucket.maxAnswer) bucket.maxAnswer = maximum;\\n        }\\n        config.latestIsSeed = false;\\n        emit AnswerUpdated(feedId, answer, nextRoundId, observedAt);\\n    }\\n\\n    function _band(bytes32 feedId, FeedConfig memory config, Round memory round)\\n        internal\\n        view\\n        returns (bool available, uint64 lower, uint64 upper)\\n    {\\n        uint256 currentHour = block.timestamp / BAND_BUCKET_SECONDS;\\n        uint256 low = type(uint256).max;\\n        uint256 high = 0;\\n        for (uint256 index = 0; index < BAND_BUCKET_COUNT; ++index) {\\n            BandBucket memory bucket = bandBuckets[feedId][index];\\n            if (bucket.maxAnswer != 0 && uint256(bucket.hourIndex) + 24 >= currentHour) {\\n                if (bucket.minAnswer < low) low = bucket.minAnswer;\\n                if (bucket.maxAnswer > high) high = bucket.maxAnswer;\\n            }\\n        }\\n        // The latest answer anchors even an outage longer than the bucket window.\\n        if (round.answer != 0) {\\n            if (round.answer < low) low = round.answer;\\n            if (round.answer > high) high = round.answer;\\n        }\\n        uint256 lowerBound = (high * BPS + (BPS + MAX_BAND_BPS) - 1) / (BPS + MAX_BAND_BPS);\\n        uint256 upperBound = low * (BPS + MAX_BAND_BPS) / BPS;\\n        if (lowerBound < config.minAnswer) lowerBound = config.minAnswer;\\n        if (upperBound > config.maxAnswer) upperBound = config.maxAnswer;\\n        return (lowerBound <= upperBound, uint64(lowerBound), uint64(upperBound));\\n    }\\n}\\n\",\"keccak256\":\"0x1751ac07ae51a9b97d9baf5c090de29be75a680d7232b4e57cdf68bf316ff938\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x6080346100ec57601f61159838819003918201601f19168301916001600160401b038311848410176100f1578084926020946040528339810103126100ec57516001600160a01b0390818116908190036100ec5760008054336001600160a01b0319808316821784556040519395909392167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08680a382156100da575081906001541617600155604051917fa8c0cdc0ca6ce2a25306126b347225be9da35eaf6ef6d8fc1d90360b7bdbe0068180a361149090816101088239f35b60016279c35d60e01b03198152600490fd5b600080fd5b634e487b7160e01b600052604160045260246000fdfe6080604052600436101561001257600080fd5b60003560e01c80632521adbd14610fb0578063313ce56714610f94578063427aac3514610f225780635ea5bfb414610ee4578063715018a614610ec15780638da5cb5b14610e985780639d54f41914610e0c578063ad99f83114610caf578063bd02358914610980578063c3a97dc714610422578063df034cd0146103f9578063f2fde38b1461032e578063f9c056be146102315763fdb8942c146100b657600080fd5b3461022c576100c436611070565b6100cf9291926110a5565b6001600160401b039283811680158015610221575b6101f75783600052600260205260ff60406000205460801c166101de577fe577d004c4dca015fb888392f3b25afd4fb60504d22a2d97e48be2bf06153baf939461012c611148565b918252602082018185168152604083016001815261017e6060850193600185526080860193600085528a60005260026020528160406000209751166001600160401b031988541617875551168561119c565b5183549251915162ffffff60801b1990931690151560801b60ff60801b161790151560881b60ff60881b161790151560901b60ff60901b16179055604080516001600160401b03928316815291909216602082015290819081015b0390a2005b60405163d09bc9e160e01b815260048101859052602490fd5b50604051635f5a7bad60e11b81526001600160401b03918216600482015291166024820152604490fd5b5084831681116100e4565b600080fd5b3461022c5761023f36611070565b61024a9291926110a5565b6001600160401b0392838116938415908115610322575b506102f957826000526002602052604060002093845460ff8160801c16156102e0577ee6f07a040ab1a0cb71b151dc0ad0f1f46dea8bce84e425c4e9c129867538a194956102bd9285926001600160401b03191617815561119c565b604080516001600160401b039283168152929091166020830152819081016101d9565b604051631e59ac5160e21b815260048101869052602490fd5b604051635f5a7bad60e11b81526001600160401b03918216600482015291166024820152604490fd5b90508216841185610261565b3461022c57602036600319011261022c576004356001600160a01b038181169182900361022c5761035d6110a5565b81156103a557600054826bffffffffffffffffffffffff60a01b821617600055167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0600080a3005b60405162461bcd60e51b815260206004820152602660248201527f4f776e61626c653a206e6577206f776e657220697320746865207a65726f206160448201526564647265737360d01b6064820152608490fd5b3461022c57600036600319011261022c576001546040516001600160a01b039091168152602090f35b3461022c57606036600319011261022c576004356001600160401b03811161022c57610452903690600401611040565b6024356001600160401b03811161022c57610471903690600401611040565b9190926001600160401b03604435166044350361022c576001546001600160a01b031633036109685781156109565782820361093857426001600160401b0360443516116109155760005b8281106104c557005b6104d0818484611122565b356104dc828688611122565b35906001600160401b038216820361022c578060005260026020526040600020805460ff808260801c16156108fc578160881c166108e3576001600160401b0381166001600160401b038516109081156108c4575b50610898578160005260036020526040600020906001600160401b0361055561117d565b92548181168452818160401c16602085015260801c1660408301526105838261057d836111ec565b856112bc565b9115801561087d575b8015610862575b61082a5750506001600160401b03602083015116806001600160401b036044351611156107fb57506001600160401b03827f4baf833597ee5b59b8d34bfc364b514966e63497fe25e6022cce93b172e93aae926105fb8360406107579a9998970151166111c4565b9161060461117d565b8488168152846044351660208201526040810185851681528760005260036020526106468660206040600020948281511683198754161786550151168361119c565b518154908660801b9060801b16908660801b19161790556004602052836106786019610e1042040660406000206111dc565b509151168785168110156107f457805b8886168111156107ec57905b825463ffffffff90610e104204828216148015906107df575b1561075c575083546bffffffffffffffff0000000019610e104204909216919091166bffffffffffffffffffffffff199091161760209190911b6bffffffffffffffff000000001617825561072791805467ffffffffffffffff60601b191660609290921b67ffffffffffffffff60601b16919091179055565b805460ff60901b19169055604080516001600160401b0396871681526044359096166020870152911693a36110fd565b6104bc565b87915060201c16868216106107b1575b5084825460601c1685821611610784575b5050610727565b815467ffffffffffffffff60601b191660609190911b67ffffffffffffffff60601b161790558c8061077d565b82546bffffffffffffffff00000000191660209190911b6bffffffffffffffff00000000161782558e61076c565b50878160601c16156106ad565b508790610694565b8790610688565b8360649160405191631859e56560e21b835260048301526001600160401b036044351660248301526044820152fd5b60405163787b446160e01b8152600481018690526001600160401b038781166024830152918216604482015291166064820152608490fd5b506001600160401b0382166001600160401b03871611610593565b506001600160401b0381166001600160401b0387161061058c565b5060405163046489df60e01b815260048101919091526001600160401b03919091166024820152604490fd5b6001600160401b03915060401c166001600160401b0384161189610531565b604051631977377960e11b815260048101849052602490fd5b604051631e59ac5160e21b815260048101859052602490fd5b604051630d80e26560e41b81526044356001600160401b03166004820152602490fd5b50604491604051916355c5b3e360e11b835260048301526024820152fd5b60405163c2e5347d60e01b8152600490fd5b60405163d7041e1160e01b8152336004820152602490fd5b3461022c57604036600319011261022c576001600160401b03602435166024350361022c576109ad6110a5565b60043560005260026020526040600020805460ff8160801c1615610c96576001600160401b0381166001600160401b036024351610908115610c75575b50610c4a576004356000526003602052610a146001600160401b0360406000205460801c166111c4565b90610a1d61117d565b6001600160401b03602435168152602081016001600160401b0342168152610a746001600160401b03604084019281871684526004356000526003602052816040600020955116821986541617855551168361119c565b51815467ffffffffffffffff60801b191660809190911b67ffffffffffffffff60801b161790556004602052604060002060198101905b818110610c3e575050610e104204610ac161117d565b9063ffffffff90818116835260208301906001600160401b03602435168252610b1060408501916001600160401b036024351683526004356000526004602052601960406000209106906111dc565b939093610c28576001600160401b038093610b6492610b8c97511663ffffffff19875416178655511684906bffffffffffffffff0000000082549160201b16906bffffffffffffffff000000001916179055565b51825467ffffffffffffffff60601b1916911660601b67ffffffffffffffff60601b16179055565b805461ffff60881b1916600160901b179055604080516001600160401b036024358116825283166020820152600435917ff559a84af7f253fb958da162b9eb4b85897716ee00eb0a41a8c59d315e418d6191a2604080516001600160401b036024358116825242811660208301529290921691600435917f4baf833597ee5b59b8d34bfc364b514966e63497fe25e6022cce93b172e93aae91a3005b634e487b7160e01b600052600060045260246000fd5b60008155600101610aab565b60405163046489df60e01b81526004803590820152602480356001600160401b031690820152604490fd5b6001600160401b03915060401c166001600160401b036024351611826109ea565b6024604051631e59ac5160e21b81526004356004820152fd5b3461022c5760208060031936011261022c576004356001600160401b03811161022c57610ce0903690600401611040565b9091610cea6110a5565b6001546001600160a01b03811693906000857fa8c0cdc0ca6ce2a25306126b347225be9da35eaf6ef6d8fc1d90360b7bdbe0068280a36001600160a01b03191660015560005b838110610d8957506040518281529182018390526001600160fb1b03831161022c57816040917fa8de8e7278c093977613a6f8f5b12f8c09a9aa89dad1fac0f26f319887aa7ca39460051b8091848401378101030190a2005b610d94818584611122565b35806000526002845260406000209060ff825460801c1615610df4576000908152600385526040902080546fffffffffffffffffffffffffffffffff19169055805461ffff60881b1916600160881b179055610def906110fd565b610d30565b60249060405190631e59ac5160e21b82526004820152fd5b3461022c57602036600319011261022c576004356001600160a01b038181169182900361022c57610e3b6110a5565b8115610e8357600154826bffffffffffffffffffffffff60a01b821617600155167fa8c0cdc0ca6ce2a25306126b347225be9da35eaf6ef6d8fc1d90360b7bdbe006600080a3005b60405160016279c35d60e01b03198152600490fd5b3461022c57600036600319011261022c576000546040516001600160a01b039091168152602090f35b3461022c57600036600319011261022c57604051638905116560e01b8152600490fd5b3461022c57602036600319011261022c576060610f02600435611237565b60405192151583526001600160401b038092166020840152166040820152f35b3461022c57602036600319011261022c57600435600052600360205260a060406000206040610f4f61117d565b91546001600160401b0392838216938482528083851c169283602084015260801c16928391015260405192828452602084015280604084015260608301526080820152f35b3461022c57600036600319011261022c57602060405160088152f35b3461022c57602036600319011261022c5760006080610fcd611148565b8281528260208201528260408201528260608201520152600435600052600260205260a0610ffe60406000206111ec565b6080604051916001600160401b038082511684526020820151166020840152604081015115156040840152606081015115156060840152015115156080820152f35b9181601f8401121561022c578235916001600160401b03831161022c576020808501948460051b01011161022c57565b606090600319011261022c57600435906001600160401b0390602435828116810361022c5791604435908116810361022c5790565b6000546001600160a01b031633036110b957565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b600019811461110c5760010190565b634e487b7160e01b600052601160045260246000fd5b91908110156111325760051b0190565b634e487b7160e01b600052603260045260246000fd5b6040519060a082018281106001600160401b0382111761116757604052565b634e487b7160e01b600052604160045260246000fd5b60405190606082018281106001600160401b0382111761116757604052565b9067ffffffffffffffff60401b82549160401b169067ffffffffffffffff60401b1916179055565b9060016001600160401b038093160191821161110c57565b6019821015611132570190600090565b9060ff6111f7611148565b92546001600160401b0380821685528160401c166020850152818160801c1615156040850152818160881c161515606085015260901c1615156080830152565b600090808252600260205261124e604083206111ec565b60408101511580156112af575b6112a757604083836112a095526003602052209161127761117d565b92546001600160401b03908181168552818160401c16602086015260801c1660408401526112bc565b9192909190565b505080918190565b506060810151151561125b565b60001993919290600090610e104204825b60198110611389575050506001600160401b038092511680611369575b50612710908181029080820483149015171561110c57612904908181019081811161110c576129030190811161110c578190049581810291818304149015171561110c57049281815116808610611360575b50602001518116808411611358575b5080838511159416921690565b92503861134b565b9450602061133c565b858110611381575b818111156112ea579050386112ea565b945084611371565b8260005260046020908082526040916113a584846000206111dc565b50916113af61117d565b92549363ffffffff85169081855283850193866001600160401b03809881931c16865260601c169401938085521515918261142c575b50506113fd575b5050506113f8906110fd565b6112cd565b5182168a8110611424575b50511684811161141a575b80806113ec565b93506113f8611413565b995038611408565b90915060188201809211611445575085111538806113e5565b601190634e487b7160e01b6000525260246000fdfea2646970667358221220663f8d7c98ccba272d5b265fef6500c3b4e4a129cbaf24101dcc857b660fb3a364736f6c63430008120033",
+  "deployedBytecode": "0x6080604052600436101561001257600080fd5b60003560e01c80632521adbd14610fb0578063313ce56714610f94578063427aac3514610f225780635ea5bfb414610ee4578063715018a614610ec15780638da5cb5b14610e985780639d54f41914610e0c578063ad99f83114610caf578063bd02358914610980578063c3a97dc714610422578063df034cd0146103f9578063f2fde38b1461032e578063f9c056be146102315763fdb8942c146100b657600080fd5b3461022c576100c436611070565b6100cf9291926110a5565b6001600160401b039283811680158015610221575b6101f75783600052600260205260ff60406000205460801c166101de577fe577d004c4dca015fb888392f3b25afd4fb60504d22a2d97e48be2bf06153baf939461012c611148565b918252602082018185168152604083016001815261017e6060850193600185526080860193600085528a60005260026020528160406000209751166001600160401b031988541617875551168561119c565b5183549251915162ffffff60801b1990931690151560801b60ff60801b161790151560881b60ff60881b161790151560901b60ff60901b16179055604080516001600160401b03928316815291909216602082015290819081015b0390a2005b60405163d09bc9e160e01b815260048101859052602490fd5b50604051635f5a7bad60e11b81526001600160401b03918216600482015291166024820152604490fd5b5084831681116100e4565b600080fd5b3461022c5761023f36611070565b61024a9291926110a5565b6001600160401b0392838116938415908115610322575b506102f957826000526002602052604060002093845460ff8160801c16156102e0577ee6f07a040ab1a0cb71b151dc0ad0f1f46dea8bce84e425c4e9c129867538a194956102bd9285926001600160401b03191617815561119c565b604080516001600160401b039283168152929091166020830152819081016101d9565b604051631e59ac5160e21b815260048101869052602490fd5b604051635f5a7bad60e11b81526001600160401b03918216600482015291166024820152604490fd5b90508216841185610261565b3461022c57602036600319011261022c576004356001600160a01b038181169182900361022c5761035d6110a5565b81156103a557600054826bffffffffffffffffffffffff60a01b821617600055167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0600080a3005b60405162461bcd60e51b815260206004820152602660248201527f4f776e61626c653a206e6577206f776e657220697320746865207a65726f206160448201526564647265737360d01b6064820152608490fd5b3461022c57600036600319011261022c576001546040516001600160a01b039091168152602090f35b3461022c57606036600319011261022c576004356001600160401b03811161022c57610452903690600401611040565b6024356001600160401b03811161022c57610471903690600401611040565b9190926001600160401b03604435166044350361022c576001546001600160a01b031633036109685781156109565782820361093857426001600160401b0360443516116109155760005b8281106104c557005b6104d0818484611122565b356104dc828688611122565b35906001600160401b038216820361022c578060005260026020526040600020805460ff808260801c16156108fc578160881c166108e3576001600160401b0381166001600160401b038516109081156108c4575b50610898578160005260036020526040600020906001600160401b0361055561117d565b92548181168452818160401c16602085015260801c1660408301526105838261057d836111ec565b856112bc565b9115801561087d575b8015610862575b61082a5750506001600160401b03602083015116806001600160401b036044351611156107fb57506001600160401b03827f4baf833597ee5b59b8d34bfc364b514966e63497fe25e6022cce93b172e93aae926105fb8360406107579a9998970151166111c4565b9161060461117d565b8488168152846044351660208201526040810185851681528760005260036020526106468660206040600020948281511683198754161786550151168361119c565b518154908660801b9060801b16908660801b19161790556004602052836106786019610e1042040660406000206111dc565b509151168785168110156107f457805b8886168111156107ec57905b825463ffffffff90610e104204828216148015906107df575b1561075c575083546bffffffffffffffff0000000019610e104204909216919091166bffffffffffffffffffffffff199091161760209190911b6bffffffffffffffff000000001617825561072791805467ffffffffffffffff60601b191660609290921b67ffffffffffffffff60601b16919091179055565b805460ff60901b19169055604080516001600160401b0396871681526044359096166020870152911693a36110fd565b6104bc565b87915060201c16868216106107b1575b5084825460601c1685821611610784575b5050610727565b815467ffffffffffffffff60601b191660609190911b67ffffffffffffffff60601b161790558c8061077d565b82546bffffffffffffffff00000000191660209190911b6bffffffffffffffff00000000161782558e61076c565b50878160601c16156106ad565b508790610694565b8790610688565b8360649160405191631859e56560e21b835260048301526001600160401b036044351660248301526044820152fd5b60405163787b446160e01b8152600481018690526001600160401b038781166024830152918216604482015291166064820152608490fd5b506001600160401b0382166001600160401b03871611610593565b506001600160401b0381166001600160401b0387161061058c565b5060405163046489df60e01b815260048101919091526001600160401b03919091166024820152604490fd5b6001600160401b03915060401c166001600160401b0384161189610531565b604051631977377960e11b815260048101849052602490fd5b604051631e59ac5160e21b815260048101859052602490fd5b604051630d80e26560e41b81526044356001600160401b03166004820152602490fd5b50604491604051916355c5b3e360e11b835260048301526024820152fd5b60405163c2e5347d60e01b8152600490fd5b60405163d7041e1160e01b8152336004820152602490fd5b3461022c57604036600319011261022c576001600160401b03602435166024350361022c576109ad6110a5565b60043560005260026020526040600020805460ff8160801c1615610c96576001600160401b0381166001600160401b036024351610908115610c75575b50610c4a576004356000526003602052610a146001600160401b0360406000205460801c166111c4565b90610a1d61117d565b6001600160401b03602435168152602081016001600160401b0342168152610a746001600160401b03604084019281871684526004356000526003602052816040600020955116821986541617855551168361119c565b51815467ffffffffffffffff60801b191660809190911b67ffffffffffffffff60801b161790556004602052604060002060198101905b818110610c3e575050610e104204610ac161117d565b9063ffffffff90818116835260208301906001600160401b03602435168252610b1060408501916001600160401b036024351683526004356000526004602052601960406000209106906111dc565b939093610c28576001600160401b038093610b6492610b8c97511663ffffffff19875416178655511684906bffffffffffffffff0000000082549160201b16906bffffffffffffffff000000001916179055565b51825467ffffffffffffffff60601b1916911660601b67ffffffffffffffff60601b16179055565b805461ffff60881b1916600160901b179055604080516001600160401b036024358116825283166020820152600435917ff559a84af7f253fb958da162b9eb4b85897716ee00eb0a41a8c59d315e418d6191a2604080516001600160401b036024358116825242811660208301529290921691600435917f4baf833597ee5b59b8d34bfc364b514966e63497fe25e6022cce93b172e93aae91a3005b634e487b7160e01b600052600060045260246000fd5b60008155600101610aab565b60405163046489df60e01b81526004803590820152602480356001600160401b031690820152604490fd5b6001600160401b03915060401c166001600160401b036024351611826109ea565b6024604051631e59ac5160e21b81526004356004820152fd5b3461022c5760208060031936011261022c576004356001600160401b03811161022c57610ce0903690600401611040565b9091610cea6110a5565b6001546001600160a01b03811693906000857fa8c0cdc0ca6ce2a25306126b347225be9da35eaf6ef6d8fc1d90360b7bdbe0068280a36001600160a01b03191660015560005b838110610d8957506040518281529182018390526001600160fb1b03831161022c57816040917fa8de8e7278c093977613a6f8f5b12f8c09a9aa89dad1fac0f26f319887aa7ca39460051b8091848401378101030190a2005b610d94818584611122565b35806000526002845260406000209060ff825460801c1615610df4576000908152600385526040902080546fffffffffffffffffffffffffffffffff19169055805461ffff60881b1916600160881b179055610def906110fd565b610d30565b60249060405190631e59ac5160e21b82526004820152fd5b3461022c57602036600319011261022c576004356001600160a01b038181169182900361022c57610e3b6110a5565b8115610e8357600154826bffffffffffffffffffffffff60a01b821617600155167fa8c0cdc0ca6ce2a25306126b347225be9da35eaf6ef6d8fc1d90360b7bdbe006600080a3005b60405160016279c35d60e01b03198152600490fd5b3461022c57600036600319011261022c576000546040516001600160a01b039091168152602090f35b3461022c57600036600319011261022c57604051638905116560e01b8152600490fd5b3461022c57602036600319011261022c576060610f02600435611237565b60405192151583526001600160401b038092166020840152166040820152f35b3461022c57602036600319011261022c57600435600052600360205260a060406000206040610f4f61117d565b91546001600160401b0392838216938482528083851c169283602084015260801c16928391015260405192828452602084015280604084015260608301526080820152f35b3461022c57600036600319011261022c57602060405160088152f35b3461022c57602036600319011261022c5760006080610fcd611148565b8281528260208201528260408201528260608201520152600435600052600260205260a0610ffe60406000206111ec565b6080604051916001600160401b038082511684526020820151166020840152604081015115156040840152606081015115156060840152015115156080820152f35b9181601f8401121561022c578235916001600160401b03831161022c576020808501948460051b01011161022c57565b606090600319011261022c57600435906001600160401b0390602435828116810361022c5791604435908116810361022c5790565b6000546001600160a01b031633036110b957565b606460405162461bcd60e51b815260206004820152602060248201527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e65726044820152fd5b600019811461110c5760010190565b634e487b7160e01b600052601160045260246000fd5b91908110156111325760051b0190565b634e487b7160e01b600052603260045260246000fd5b6040519060a082018281106001600160401b0382111761116757604052565b634e487b7160e01b600052604160045260246000fd5b60405190606082018281106001600160401b0382111761116757604052565b9067ffffffffffffffff60401b82549160401b169067ffffffffffffffff60401b1916179055565b9060016001600160401b038093160191821161110c57565b6019821015611132570190600090565b9060ff6111f7611148565b92546001600160401b0380821685528160401c166020850152818160801c1615156040850152818160881c161515606085015260901c1615156080830152565b600090808252600260205261124e604083206111ec565b60408101511580156112af575b6112a757604083836112a095526003602052209161127761117d565b92546001600160401b03908181168552818160401c16602086015260801c1660408401526112bc565b9192909190565b505080918190565b506060810151151561125b565b60001993919290600090610e104204825b60198110611389575050506001600160401b038092511680611369575b50612710908181029080820483149015171561110c57612904908181019081811161110c576129030190811161110c578190049581810291818304149015171561110c57049281815116808610611360575b50602001518116808411611358575b5080838511159416921690565b92503861134b565b9450602061133c565b858110611381575b818111156112ea579050386112ea565b945084611371565b8260005260046020908082526040916113a584846000206111dc565b50916113af61117d565b92549363ffffffff85169081855283850193866001600160401b03809881931c16865260601c169401938085521515918261142c575b50506113fd575b5050506113f8906110fd565b6112cd565b5182168a8110611424575b50511684811161141a575b80806113ec565b93506113f8611413565b995038611408565b90915060188201809211611445575085111538806113e5565b601190634e487b7160e01b6000525260246000fdfea2646970667358221220663f8d7c98ccba272d5b265fef6500c3b4e4a129cbaf24101dcc857b660fb3a364736f6c63430008120033",
+  "devdoc": {
+    "kind": "dev",
+    "methods": {
+      "emergencyStop(bytes32[])": {
+        "details": "An empty list only disables updates. An unregistered id reverts the whole call."
+      },
+      "latestRoundData(bytes32)": {
+        "details": "Unknown feeds return all zeros; stopped feeds retain round ids but have zero answer and timestamps."
+      },
+      "owner()": {
+        "details": "Returns the address of the current owner."
+      },
+      "transferOwnership(address)": {
+        "details": "Transfers ownership of the contract to a new account (`newOwner`). Can only be called by the current owner."
+      },
+      "updateRates(bytes32[],uint64[],uint64)": {
+        "params": {
+          "answers": "Eight-decimal answers corresponding to feedIds.",
+          "feedIds": "Feed identifiers, conventionally keccak256 of the pair (e.g. \"INR/USD\").",
+          "observedAt": "Provider observation time, strictly newer per feed and not in the future."
+        }
+      }
+    },
+    "title": "FxRateStore",
+    "version": 1
+  },
+  "userdoc": {
+    "errors": {
+      "AnswerOutOfBand(bytes32,uint64,uint64,uint64)": [
+        {
+          "notice": "The answer is outside the available rolling band."
+        }
+      ],
+      "AnswerOutOfLimits(bytes32,uint64)": [
+        {
+          "notice": "The answer is outside the feed's inclusive limits."
+        }
+      ],
+      "EmptyBatch()": [
+        {
+          "notice": "An update batch must contain at least one feed."
+        }
+      ],
+      "FeedAlreadyRegistered(bytes32)": [
+        {
+          "notice": "The requested feed is already registered."
+        }
+      ],
+      "FeedLocked(bytes32)": [
+        {
+          "notice": "The feed must be seeded before accepting updater writes."
+        }
+      ],
+      "FeedNotRegistered(bytes32)": [
+        {
+          "notice": "The requested feed has not been registered."
+        }
+      ],
+      "InvalidLimits(uint64,uint64)": [
+        {
+          "notice": "Limits must satisfy zero < minimum <= maximum."
+        }
+      ],
+      "LengthMismatch(uint256,uint256)": [
+        {
+          "notice": "Feed and answer array lengths differ."
+        }
+      ],
+      "NotUpdater(address)": [
+        {
+          "notice": "The caller is not the configured updater."
+        }
+      ],
+      "ObservationNotNewer(bytes32,uint64,uint64)": [
+        {
+          "notice": "The provider observation must be strictly newer than the latest round."
+        }
+      ],
+      "ObservedAtInFuture(uint64)": [
+        {
+          "notice": "The provider observation is later than the current block."
+        }
+      ],
+      "RenounceDisabled()": [
+        {
+          "notice": "Ownership cannot be renounced."
+        }
+      ],
+      "ZeroUpdater()": [
+        {
+          "notice": "An updater assignment cannot use the zero address."
+        }
+      ]
+    },
+    "events": {
+      "AnswerUpdated(bytes32,uint64,uint64,uint64)": {
+        "notice": "Emitted for each seed or updater round."
+      },
+      "EmergencyStopped(address,bytes32[])": {
+        "notice": "Emitted when updates are disabled and the listed feeds are locked."
+      },
+      "FeedAdded(bytes32,uint64,uint64)": {
+        "notice": "Emitted when a feed is registered in a locked state."
+      },
+      "FeedLimitsSet(bytes32,uint64,uint64)": {
+        "notice": "Emitted when the owner changes a feed's inclusive limits."
+      },
+      "FeedSeeded(bytes32,uint64,uint64)": {
+        "notice": "Emitted when the owner seeds and unlocks a feed."
+      },
+      "UpdaterSet(address,address)": {
+        "notice": "Emitted when the updater changes; zero disables updates."
+      }
+    },
+    "kind": "user",
+    "methods": {
+      "addFeed(bytes32,uint64,uint64)": {
+        "notice": "Registers a locked feed with positive inclusive limits; owner only."
+      },
+      "constructor": {
+        "notice": "Initializes the store with the deployer as owner and a nonzero updater."
+      },
+      "decimals()": {
+        "notice": "Returns the fixed answer precision of eight decimals."
+      },
+      "emergencyStop(bytes32[])": {
+        "notice": "Disables the updater and clears prices/timestamps of listed feeds, retaining round ids; owner only."
+      },
+      "getBand(bytes32)": {
+        "notice": "Returns band availability and inclusive bounds, excluding observation-time eligibility."
+      },
+      "getFeedConfig(bytes32)": {
+        "notice": "Returns stored configuration; unknown feeds return the zero-valued struct."
+      },
+      "latestRoundData(bytes32)": {
+        "notice": "Returns the latest Chainlink-shaped tuple, with both timestamps equal and answeredInRound = roundId."
+      },
+      "renounceOwnership()": {
+        "notice": "Always reverts to preserve owner access to seeding and emergency controls."
+      },
+      "seedFeed(bytes32,uint64)": {
+        "notice": "Publishes an in-limit seed at block time and unlocks the feed; owner only."
+      },
+      "setFeedLimits(bytes32,uint64,uint64)": {
+        "notice": "Changes inclusive limits without changing the latest round; owner only."
+      },
+      "setUpdater(address)": {
+        "notice": "Assigns a nonzero updater; owner only."
+      },
+      "updateRates(bytes32[],uint64[],uint64)": {
+        "notice": "Atomically publishes answers for registered, unlocked feeds as the updater."
+      },
+      "updater()": {
+        "notice": "Returns the authorized updater, or zero when updates are disabled."
+      }
+    },
+    "notice": "Owner-configured FX rounds published by a single updater.",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 7,
+        "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+        "label": "_owner",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_address"
+      },
+      {
+        "astId": 420,
+        "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+        "label": "updater",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_address"
+      },
+      {
+        "astId": 425,
+        "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+        "label": "feedConfigs",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_mapping(t_bytes32,t_struct(FeedConfig)148_storage)"
+      },
+      {
+        "astId": 430,
+        "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+        "label": "rounds",
+        "offset": 0,
+        "slot": "3",
+        "type": "t_mapping(t_bytes32,t_struct(Round)397_storage)"
+      },
+      {
+        "astId": 437,
+        "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+        "label": "bandBuckets",
+        "offset": 0,
+        "slot": "4",
+        "type": "t_mapping(t_bytes32,t_array(t_struct(BandBucket)404_storage)25_storage)"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_array(t_struct(BandBucket)404_storage)25_storage": {
+        "base": "t_struct(BandBucket)404_storage",
+        "encoding": "inplace",
+        "label": "struct FxRateStore.BandBucket[25]",
+        "numberOfBytes": "800"
+      },
+      "t_bool": {
+        "encoding": "inplace",
+        "label": "bool",
+        "numberOfBytes": "1"
+      },
+      "t_bytes32": {
+        "encoding": "inplace",
+        "label": "bytes32",
+        "numberOfBytes": "32"
+      },
+      "t_mapping(t_bytes32,t_array(t_struct(BandBucket)404_storage)25_storage)": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => struct FxRateStore.BandBucket[25])",
+        "numberOfBytes": "32",
+        "value": "t_array(t_struct(BandBucket)404_storage)25_storage"
+      },
+      "t_mapping(t_bytes32,t_struct(FeedConfig)148_storage)": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => struct IFxRateStore.FeedConfig)",
+        "numberOfBytes": "32",
+        "value": "t_struct(FeedConfig)148_storage"
+      },
+      "t_mapping(t_bytes32,t_struct(Round)397_storage)": {
+        "encoding": "mapping",
+        "key": "t_bytes32",
+        "label": "mapping(bytes32 => struct FxRateStore.Round)",
+        "numberOfBytes": "32",
+        "value": "t_struct(Round)397_storage"
+      },
+      "t_struct(BandBucket)404_storage": {
+        "encoding": "inplace",
+        "label": "struct FxRateStore.BandBucket",
+        "members": [
+          {
+            "astId": 399,
+            "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+            "label": "hourIndex",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint32"
+          },
+          {
+            "astId": 401,
+            "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+            "label": "minAnswer",
+            "offset": 4,
+            "slot": "0",
+            "type": "t_uint64"
+          },
+          {
+            "astId": 403,
+            "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+            "label": "maxAnswer",
+            "offset": 12,
+            "slot": "0",
+            "type": "t_uint64"
+          }
+        ],
+        "numberOfBytes": "32"
+      },
+      "t_struct(FeedConfig)148_storage": {
+        "encoding": "inplace",
+        "label": "struct IFxRateStore.FeedConfig",
+        "members": [
+          {
+            "astId": 139,
+            "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+            "label": "minAnswer",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint64"
+          },
+          {
+            "astId": 141,
+            "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+            "label": "maxAnswer",
+            "offset": 8,
+            "slot": "0",
+            "type": "t_uint64"
+          },
+          {
+            "astId": 143,
+            "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+            "label": "registered",
+            "offset": 16,
+            "slot": "0",
+            "type": "t_bool"
+          },
+          {
+            "astId": 145,
+            "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+            "label": "locked",
+            "offset": 17,
+            "slot": "0",
+            "type": "t_bool"
+          },
+          {
+            "astId": 147,
+            "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+            "label": "latestIsSeed",
+            "offset": 18,
+            "slot": "0",
+            "type": "t_bool"
+          }
+        ],
+        "numberOfBytes": "32"
+      },
+      "t_struct(Round)397_storage": {
+        "encoding": "inplace",
+        "label": "struct FxRateStore.Round",
+        "members": [
+          {
+            "astId": 392,
+            "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+            "label": "answer",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint64"
+          },
+          {
+            "astId": 394,
+            "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+            "label": "updatedAt",
+            "offset": 8,
+            "slot": "0",
+            "type": "t_uint64"
+          },
+          {
+            "astId": 396,
+            "contract": "contracts/oracles/FxRateStore.sol:FxRateStore",
+            "label": "roundId",
+            "offset": 16,
+            "slot": "0",
+            "type": "t_uint64"
+          }
+        ],
+        "numberOfBytes": "32"
+      },
+      "t_uint32": {
+        "encoding": "inplace",
+        "label": "uint32",
+        "numberOfBytes": "4"
+      },
+      "t_uint64": {
+        "encoding": "inplace",
+        "label": "uint64",
+        "numberOfBytes": "8"
+      }
+    }
+  }
+}

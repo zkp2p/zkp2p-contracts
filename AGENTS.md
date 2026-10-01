@@ -140,6 +140,16 @@
     outside the band. Its `emergencyStop` zeroes the updater and locks the feeds.
   - **Package:** feed addresses join `oracleFeeds` (`provider: "zkp2p"`) only in release B, after keeper rounds
     land.
+  - **Base execution (2026-10-01):** run from `88be796` (#325 + #326) by deployer `0x84e1…1929` (nonces
+    15421–15430, all successful). Addresses:
+    - `FxRateStore` `0x389206956C57bdB5d07FF78AB3D1e1DEED070b9c`
+    - `FxRateFeedInrUsd` `0x053A03F1704aE3F71082D3cDFD50BC830415A326`
+    - `FxRateFeedCnyUsd` `0xc034d806DbeA6b13980D94174eA5FF83E1C191C3`
+
+    Seeds came from the ExchangeRate-API snapshot at 14:45:02 UTC: INR/USD `1038964` and CNY/USD `14889617`. Both
+    were written before the three `transferOwnership` calls to `MULTI_SIG.base`. The updater is
+    `0x81630fb1ab2A7Eab137888b9746b66889f78F091`. All three contracts are Basescan-verified. The lane is immutable
+    and pinned in `deployments/immutableDeploymentLanes.ts`.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the
