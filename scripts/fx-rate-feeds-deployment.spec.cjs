@@ -9,8 +9,12 @@ const moduleAlias = require(require.resolve("module-alias"));
 moduleAlias.reset();
 moduleAlias.addAlias("@utils", process.cwd() + "/utils");
 const assert = require("node:assert/strict");
+const { createHash } = require("node:crypto");
+const { readFileSync } = require("node:fs");
+const { resolve } = require("node:path");
 const { test, beforeEach, afterEach } = require("node:test");
 const { BigNumber, utils, constants } = require("ethers");
+const { IMMUTABLE_DEPLOYMENT_LANES } = require("../deployments/immutableDeploymentLanes.ts");
 const { FX_RATE_FEEDS, FX_RATE_UPDATER, MULTI_SIG } = require("../deployments/parameters.ts");
 const lane = require("../deploy/44_deploy_fx_rate_feeds.ts");
 const DEPLOYER = "0x1000000000000000000000000000000000000001";
@@ -119,6 +123,15 @@ function expectedCalls(network) {
     ...(network === "base" ? names.map((name) => `transfer:${name}:${MULTI_SIG.base}`) : []),
   ];
 }
+
+test("pins the executed lane source and tags as immutable", () => {
+  const filename = "44_deploy_fx_rate_feeds.ts";
+  const evidence = IMMUTABLE_DEPLOYMENT_LANES[filename];
+  assert.ok(evidence);
+  const source = readFileSync(resolve(__dirname, "../deploy", filename));
+  assert.equal(evidence.sha256, createHash("sha256").update(source).digest("hex"));
+  assert.deepEqual(evidence.tags, lane.default.tags);
+});
 
 test("exports its identity", () => {
   assert.equal(lane.TAG, "44_deploy_fx_rate_feeds");
