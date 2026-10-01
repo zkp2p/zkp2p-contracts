@@ -32,7 +32,9 @@ export function resolveAbiOutputContracts(
   return resolveActiveDisputeAliases(network, contracts, activeDisputeStack);
 }
 
-const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
+export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
+  FxRateStore: "contracts/oracles/FxRateStore.sol/FxRateStore.json",
+  FxRateFeed: "contracts/oracles/FxRateFeed.sol/FxRateFeed.json",
   IntentGuardian: "contracts/IntentGuardian.sol/IntentGuardian.json",
   OrchestratorV3: "contracts/OrchestratorV3.sol/OrchestratorV3.json",
   NullifierRegistryV2:

@@ -1,6 +1,7 @@
 import 'ts-node/register/transpile-only';
 import * as fs from 'fs';
 import * as path from 'path';
+import type { ChainlinkFeed } from '../data/oracleFeeds';
 
 // Preconfigure module aliasing to avoid pulling Hardhat at runtime
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -14,6 +15,10 @@ function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
+export function renderOracleFeeds(feeds: ChainlinkFeed[], generatedAt: string) {
+  return { generatedAt, network: 'base', feeds };
+}
+
 export async function extractOracleFeeds(): Promise<void> {
   ensureDir(ORACLE_DIR);
 
@@ -22,11 +27,7 @@ export async function extractOracleFeeds(): Promise<void> {
   } = require(path.join(__dirname, '..', 'data', 'oracleFeeds'));
 
   // Write chainlink.json
-  const chainlinkJson = {
-    generatedAt: new Date().toISOString(),
-    network: 'base',
-    feeds: CHAINLINK_FEEDS,
-  };
+  const chainlinkJson = renderOracleFeeds(CHAINLINK_FEEDS, new Date().toISOString());
   fs.writeFileSync(
     path.join(ORACLE_DIR, 'chainlink.json'),
     JSON.stringify(chainlinkJson, null, 2)
@@ -39,6 +40,7 @@ export interface ChainlinkFeed {
   pair: string;
   feed: string;
   decimals: number;
+  provider?: 'chainlink' | 'zkp2p';
 }
 
 export interface ChainlinkFeeds {
