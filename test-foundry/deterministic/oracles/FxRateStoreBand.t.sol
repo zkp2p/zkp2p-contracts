@@ -30,11 +30,11 @@ contract FxRateStoreBandTest is Test {
         feedIds[0] = feedId;
         answers[0] = answer;
         vm.prank(updater);
-        store.updateRates(feedIds, answers, uint64(block.timestamp));
+        store.updateRates(feedIds, answers, uint64(vm.getBlockTimestamp()));
     }
 
     function _write(bytes32 feedId, uint64 answer) internal {
-        vm.warp(block.timestamp + 1);
+        vm.warp(vm.getBlockTimestamp() + 1);
         _update(feedId, answer);
     }
 
@@ -49,7 +49,7 @@ contract FxRateStoreBandTest is Test {
     }
 
     function _rejectBand(uint64 answer, uint64 lower, uint64 upper) internal {
-        vm.warp(block.timestamp + 1);
+        vm.warp(vm.getBlockTimestamp() + 1);
         vm.expectRevert(abi.encodeWithSelector(IFxRateStore.AnswerOutOfBand.selector, WIDE, answer, lower, upper));
         _update(WIDE, answer);
     }
@@ -111,6 +111,15 @@ contract FxRateStoreBandTest is Test {
         _assertBand(WIDE, true, 952_381, 1_050_000);
     }
 
+    function test_ExpiredBucketsReanchorToLatestNonSeedRound() public {
+        _write(WIDE, 1_050_000);
+        vm.warp(vm.getBlockTimestamp() + 25 hours);
+        // With every bucket expired, both bounds must come from the latest answer.
+        _assertBand(WIDE, true, 1_000_000, 1_102_500);
+        _update(WIDE, 1_102_500);
+        _assertBand(WIDE, true, 1_050_000, 1_102_500);
+    }
+
     function test_FoldingBlocksDoubleStepAfterGap() public {
         vm.warp(START + 30 hours);
         _write(WIDE, 1_050_000);
@@ -147,7 +156,7 @@ contract FxRateStoreBandTest is Test {
         store.setFeedLimits(WIDE, 2_000_000, 3_000_000);
         _assertBand(WIDE, false, 2_000_000, 1_050_000);
         _rejectBand(2_000_000, 2_000_000, 1_050_000);
-        vm.warp(block.timestamp + 1);
+        vm.warp(vm.getBlockTimestamp() + 1);
         vm.expectRevert(abi.encodeWithSelector(IFxRateStore.AnswerOutOfLimits.selector, WIDE, uint64(1_000_000)));
         _update(WIDE, 1_000_000);
     }

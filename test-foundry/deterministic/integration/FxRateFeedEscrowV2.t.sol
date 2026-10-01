@@ -123,7 +123,7 @@ contract FxRateFeedEscrowV2Test is Test {
         uint64[] memory answers = new uint64[](1);
         answers[0] = 1_030_000;
         vm.prank(updater);
-        store.updateRates(feedIds, answers, uint64(block.timestamp));
+        store.updateRates(feedIds, answers, uint64(vm.getBlockTimestamp()));
 
         uint256 rate = escrow.getEffectiveRate(DEPOSIT_ID, METHOD, INR);
         assertEq(rate, 99_029_126_213_592_233_011);

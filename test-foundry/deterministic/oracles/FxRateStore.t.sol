@@ -153,8 +153,8 @@ contract FxRateStoreTest is Test {
 
     function test_UpdateRatesWritesBatchAndClearsSeedFlag() public {
         _seedBoth();
-        vm.warp(block.timestamp + 1 hours);
-        uint64 observedAt = uint64(block.timestamp - 60);
+        vm.warp(vm.getBlockTimestamp() + 1 hours);
+        uint64 observedAt = uint64(vm.getBlockTimestamp() - 60);
         (bytes32[] memory feedIds, uint64[] memory answers) = _pair();
         vm.expectEmit(true, true, false, true, address(store));
         emit AnswerUpdated(INR, answers[0], 2, observedAt);
@@ -197,12 +197,12 @@ contract FxRateStoreTest is Test {
 
     function test_UpdateRatesRejectsOutOfLimits() public {
         store.seedFeed(INR, 1_041_667);
-        vm.warp(block.timestamp + 1);
+        vm.warp(vm.getBlockTimestamp() + 1);
         vm.startPrank(updater);
         vm.expectRevert(abi.encodeWithSelector(IFxRateStore.AnswerOutOfLimits.selector, INR, uint64(799_999)));
-        store.updateRates(_ids(INR), _answers(799_999), uint64(block.timestamp));
+        store.updateRates(_ids(INR), _answers(799_999), uint64(vm.getBlockTimestamp()));
         vm.expectRevert(abi.encodeWithSelector(IFxRateStore.AnswerOutOfLimits.selector, INR, uint64(1_400_001)));
-        store.updateRates(_ids(INR), _answers(1_400_001), uint64(block.timestamp));
+        store.updateRates(_ids(INR), _answers(1_400_001), uint64(vm.getBlockTimestamp()));
         vm.stopPrank();
     }
 
@@ -224,12 +224,12 @@ contract FxRateStoreTest is Test {
 
     function test_UpdateRatesIsAtomic() public {
         _seedBoth();
-        vm.warp(block.timestamp + 1);
+        vm.warp(vm.getBlockTimestamp() + 1);
         (bytes32[] memory feedIds, uint64[] memory answers) = _pair();
         answers[1] = 20_000_001;
         vm.prank(updater);
         vm.expectRevert(abi.encodeWithSelector(IFxRateStore.AnswerOutOfLimits.selector, CNY, answers[1]));
-        store.updateRates(feedIds, answers, uint64(block.timestamp));
+        store.updateRates(feedIds, answers, uint64(vm.getBlockTimestamp()));
         _assertRound(INR, 1, 1_041_667, 1_000_000);
         _assertRound(CNY, 1, 14_880_952, 1_000_000);
         assertTrue(store.getFeedConfig(INR).latestIsSeed);
@@ -237,11 +237,11 @@ contract FxRateStoreTest is Test {
 
     function test_UpdateRatesRejectsDuplicateFeedInBatch() public {
         store.seedFeed(INR, 1_041_667);
-        vm.warp(block.timestamp + 1);
+        vm.warp(vm.getBlockTimestamp() + 1);
         (bytes32[] memory feedIds, uint64[] memory answers) = _pair();
         feedIds[1] = INR;
         answers[1] = answers[0];
-        uint64 observedAt = uint64(block.timestamp);
+        uint64 observedAt = uint64(vm.getBlockTimestamp());
         vm.prank(updater);
         vm.expectRevert(abi.encodeWithSelector(IFxRateStore.ObservationNotNewer.selector, INR, observedAt, observedAt));
         store.updateRates(feedIds, answers, observedAt);
@@ -251,7 +251,7 @@ contract FxRateStoreTest is Test {
 
     function test_EmergencyStopDisablesUpdaterAndLocksFeeds() public {
         _seedBoth();
-        vm.warp(block.timestamp + 1);
+        vm.warp(vm.getBlockTimestamp() + 1);
         (bytes32[] memory feedIds, uint64[] memory answers) = _pair();
         vm.prank(updater);
         store.updateRates(feedIds, answers, 1_000_001);
@@ -305,7 +305,7 @@ contract FxRateStoreTest is Test {
         store.setUpdater(newUpdater);
         store.seedFeed(INR, 1_040_000);
         _assertRound(INR, 2, 1_040_000, 1_000_000);
-        vm.warp(block.timestamp + 1);
+        vm.warp(vm.getBlockTimestamp() + 1);
         vm.prank(newUpdater);
         store.updateRates(_ids(INR), _answers(1_040_001), 1_000_001);
         _assertRound(INR, 3, 1_040_001, 1_000_001);

@@ -68,7 +68,7 @@ contract FxRateFeedTest is Test {
         feed.setSource(address(ext), bytes32(0));
         assertEq(feed.source(), address(ext));
         assertEq(feed.sourceFeedId(), bytes32(0));
-        uint256 timestamp = block.timestamp;
+        uint256 timestamp = vm.getBlockTimestamp();
         ext.setRoundData(5, 1_050_000, timestamp, timestamp, 4);
         _assertLatest(feed, 5, 1_050_000, timestamp, timestamp, 4);
         // Distinct timestamps ensure the facade never substitutes updatedAt for startedAt.
@@ -93,12 +93,12 @@ contract FxRateFeedTest is Test {
         AggregatorV3Mock wrongDecimals = new AggregatorV3Mock(18, 1_043_000);
         vm.expectRevert(abi.encodeWithSelector(FxRateFeed.UnsupportedDecimals.selector, uint8(18)));
         feed.setSource(address(wrongDecimals), bytes32(0));
-        _rejectExternalRound(5, 0, block.timestamp, 5);
-        _rejectExternalRound(5, -1, block.timestamp, 5);
+        _rejectExternalRound(5, 0, vm.getBlockTimestamp(), 5);
+        _rejectExternalRound(5, -1, vm.getBlockTimestamp(), 5);
         _rejectExternalRound(5, 1_043_000, 0, 5);
-        _rejectExternalRound(5, 1_043_000, block.timestamp + 1, 5);
-        _rejectExternalRound(5, 1_043_000, block.timestamp - 1 days - 1, 5);
-        _rejectExternalRound(5, 1_043_000, block.timestamp, 4);
+        _rejectExternalRound(5, 1_043_000, vm.getBlockTimestamp() + 1, 5);
+        _rejectExternalRound(5, 1_043_000, vm.getBlockTimestamp() - 1 days - 1, 5);
+        _rejectExternalRound(5, 1_043_000, vm.getBlockTimestamp(), 4);
         store2.addFeed(CNY, 10_000_000, 20_000_000);
         vm.expectRevert(
             abi.encodeWithSelector(FxRateFeed.UnusableSourceRound.selector, uint80(0), int256(0), uint256(0), uint80(0))
@@ -108,9 +108,9 @@ contract FxRateFeedTest is Test {
         assertEq(feed.sourceFeedId(), INR);
         _assertLatest(feed, 1, 1_041_667, 1_000_000, 1_000_000, 1);
         // The inclusive one-day boundary is usable.
-        ext.setRoundData(5, 1_043_000, block.timestamp - 1 days, block.timestamp - 1 days, 5);
+        ext.setRoundData(5, 1_043_000, vm.getBlockTimestamp() - 1 days, vm.getBlockTimestamp() - 1 days, 5);
         feed.setSource(address(ext), bytes32(0));
-        _assertLatest(feed, 5, 1_043_000, block.timestamp - 1 days, block.timestamp - 1 days, 5);
+        _assertLatest(feed, 5, 1_043_000, vm.getBlockTimestamp() - 1 days, vm.getBlockTimestamp() - 1 days, 5);
     }
 
     function test_SetSourceIsOwnerOnly() public {
@@ -124,8 +124,8 @@ contract FxRateFeedTest is Test {
     function test_GetRoundDataServesLatestOnly() public {
         _assertGetRound(1, 1_041_667, 1_000_000, 1_000_000, 1);
         feed.setSource(address(ext), bytes32(0));
-        ext.setRoundData(5, 1_050_000, block.timestamp - 60, block.timestamp, 4);
-        _assertGetRound(5, 1_050_000, block.timestamp - 60, block.timestamp, 4);
+        ext.setRoundData(5, 1_050_000, vm.getBlockTimestamp() - 60, vm.getBlockTimestamp(), 4);
+        _assertGetRound(5, 1_050_000, vm.getBlockTimestamp() - 60, vm.getBlockTimestamp(), 4);
     }
 
     function _assertLatest(
@@ -146,7 +146,7 @@ contract FxRateFeedTest is Test {
     }
 
     function _rejectExternalRound(uint80 roundId, int256 answer, uint256 updatedAt, uint80 answeredInRound) internal {
-        ext.setRoundData(roundId, answer, block.timestamp, updatedAt, answeredInRound);
+        ext.setRoundData(roundId, answer, vm.getBlockTimestamp(), updatedAt, answeredInRound);
         vm.expectRevert(
             abi.encodeWithSelector(FxRateFeed.UnusableSourceRound.selector, roundId, answer, updatedAt, answeredInRound)
         );

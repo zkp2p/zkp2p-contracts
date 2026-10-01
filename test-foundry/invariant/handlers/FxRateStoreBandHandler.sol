@@ -21,14 +21,14 @@ contract FxRateStoreBandHandler is Test {
         store = new FxRateStore(address(this));
         store.addFeed(FEED_ID, 1, type(uint64).max);
         store.seedFeed(FEED_ID, 1_000_000);
-        displayLog.push(DisplayEntry(uint64(block.timestamp), 1_000_000, epoch, true));
+        displayLog.push(DisplayEntry(uint64(vm.getBlockTimestamp()), 1_000_000, epoch, true));
     }
 
     function warp(uint256 rawSeconds) external {
         // Exercise expired buckets as well as short gaps and hour boundaries.
         uint256 elapsed =
             rawSeconds % 4 == 0 ? bound(rawSeconds, 25 hours + 1, 30 hours) : bound(rawSeconds, 1, 30 hours);
-        vm.warp(block.timestamp + elapsed);
+        vm.warp(vm.getBlockTimestamp() + elapsed);
     }
 
     function write(uint256 rawAnswer) external {
@@ -43,8 +43,8 @@ contract FxRateStoreBandHandler is Test {
         feedIds[0] = FEED_ID;
         uint64[] memory answers = new uint64[](1);
         answers[0] = uint64(answer);
-        try store.updateRates(feedIds, answers, uint64(block.timestamp)) {
-            displayLog.push(DisplayEntry(uint64(block.timestamp), uint64(answer), epoch, false));
+        try store.updateRates(feedIds, answers, uint64(vm.getBlockTimestamp())) {
+            displayLog.push(DisplayEntry(uint64(vm.getBlockTimestamp()), uint64(answer), epoch, false));
         } catch {
             // Out-of-band candidates and writes at the same timestamp are expected.
         }
@@ -55,7 +55,7 @@ contract FxRateStoreBandHandler is Test {
         uint64 answer = uint64(bound(rawAnswer, 500_000, 2_000_000));
         store.seedFeed(FEED_ID, answer);
         ++epoch;
-        displayLog.push(DisplayEntry(uint64(block.timestamp), answer, epoch, true));
+        displayLog.push(DisplayEntry(uint64(vm.getBlockTimestamp()), answer, epoch, true));
     }
 
     function logLength() external view returns (uint256) {
