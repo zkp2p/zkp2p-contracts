@@ -151,8 +151,12 @@ test("base requires the live flag before any write", async () => {
     assert.deepEqual(state.calls, []);
   }
 });
+test("base resolves the committed updater parameter", () => {
+  FX_RATE_UPDATER.base = savedUpdater;
+  assert.equal(FX_RATE_UPDATER.base, "0x81630fb1ab2A7Eab137888b9746b66889f78F091");
+  assert.equal(lane.resolveUpdater("base", []), FX_RATE_UPDATER.base);
+});
 test("base requires a valid nonzero updater parameter", () => {
-  assert.equal(savedUpdater, "");
   for (const value of ["", "invalid", constants.AddressZero]) {
     FX_RATE_UPDATER.base = value;
     assert.throws(() => lane.resolveUpdater("base", []), /FX_RATE_UPDATER.base is not set/);

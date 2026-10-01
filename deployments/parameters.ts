@@ -53,7 +53,7 @@ export const MULTI_SIG: any = {
 export const FX_RATE_UPDATER: Record<string, string> = {
   localhost: "",
   hardhat: "",
-  base: "",
+  base: "0x81630fb1ab2A7Eab137888b9746b66889f78F091",
   base_staging: "",
 };
 
