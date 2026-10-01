@@ -13,10 +13,22 @@ contract FxRateStore is IFxRateStore, Ownable {
         uint64 roundId;
     }
 
+    struct BandBucket {
+        uint32 hourIndex;
+        uint64 minAnswer;
+        uint64 maxAnswer;
+    }
+
+    uint256 internal constant MAX_BAND_BPS = 500;
+    uint256 internal constant BPS = 10_000;
+    uint256 internal constant BAND_BUCKET_SECONDS = 1 hours;
+    uint256 internal constant BAND_BUCKET_COUNT = 25;
+
     /// @inheritdoc IFxRateStore
     address public override updater;
     mapping(bytes32 => FeedConfig) internal feedConfigs;
     mapping(bytes32 => Round) internal rounds;
+    mapping(bytes32 => BandBucket[25]) internal bandBuckets;
 
     /// @notice Initializes the store with the deployer as owner and a nonzero updater.
     constructor(address initialUpdater) Ownable() {
@@ -44,11 +56,25 @@ contract FxRateStore is IFxRateStore, Ownable {
             if (config.locked) revert FeedLocked(feedId);
             uint64 answer = answers[index];
             if (answer < config.minAnswer || answer > config.maxAnswer) revert AnswerOutOfLimits(feedId, answer);
-            Round storage round = rounds[feedId];
+            Round memory round = rounds[feedId];
+            (bool available, uint64 lower, uint64 upper) = _band(feedId, config, round);
+            if (!available || answer < lower || answer > upper) revert AnswerOutOfBand(feedId, answer, lower, upper);
             if (observedAt <= round.updatedAt) revert ObservationNotNewer(feedId, observedAt, round.updatedAt);
 
             uint64 nextRoundId = round.roundId + 1;
             rounds[feedId] = Round({answer: answer, updatedAt: observedAt, roundId: nextRoundId});
+            uint256 currentHour = block.timestamp / BAND_BUCKET_SECONDS;
+            BandBucket storage bucket = bandBuckets[feedId][currentHour % BAND_BUCKET_COUNT];
+            uint64 minimum = round.answer < answer ? round.answer : answer;
+            uint64 maximum = round.answer > answer ? round.answer : answer;
+            if (bucket.hourIndex != currentHour || bucket.maxAnswer == 0) {
+                bucket.hourIndex = uint32(currentHour);
+                bucket.minAnswer = minimum;
+                bucket.maxAnswer = maximum;
+            } else {
+                if (minimum < bucket.minAnswer) bucket.minAnswer = minimum;
+                if (maximum > bucket.maxAnswer) bucket.maxAnswer = maximum;
+            }
             config.latestIsSeed = false;
             emit AnswerUpdated(feedId, answer, nextRoundId, observedAt);
         }
@@ -82,6 +108,10 @@ contract FxRateStore is IFxRateStore, Ownable {
         uint64 nextRoundId = rounds[feedId].roundId + 1;
         uint64 updatedAt = uint64(block.timestamp);
         rounds[feedId] = Round({answer: answer, updatedAt: updatedAt, roundId: nextRoundId});
+        delete bandBuckets[feedId];
+        uint256 currentHour = block.timestamp / BAND_BUCKET_SECONDS;
+        bandBuckets[feedId][currentHour % BAND_BUCKET_COUNT] =
+            BandBucket({hourIndex: uint32(currentHour), minAnswer: answer, maxAnswer: answer});
         config.locked = false;
         config.latestIsSeed = true;
         emit FeedSeeded(feedId, answer, nextRoundId);
@@ -143,8 +173,36 @@ contract FxRateStore is IFxRateStore, Ownable {
     }
 
     /// @inheritdoc IFxRateStore
-    /// @dev Band enforcement is deferred to Task 2; this core implementation always reports unavailable.
-    function getBand(bytes32) external pure override returns (bool available, uint64 lower, uint64 upper) {
-        return (false, 0, 0);
+    function getBand(bytes32 feedId) external view override returns (bool available, uint64 lower, uint64 upper) {
+        FeedConfig memory config = feedConfigs[feedId];
+        if (!config.registered || config.locked) return (false, 0, 0);
+        return _band(feedId, config, rounds[feedId]);
+    }
+
+    function _band(bytes32 feedId, FeedConfig memory config, Round memory round)
+        internal
+        view
+        returns (bool available, uint64 lower, uint64 upper)
+    {
+        uint256 currentHour = block.timestamp / BAND_BUCKET_SECONDS;
+        uint256 low = type(uint256).max;
+        uint256 high = 0;
+        for (uint256 index = 0; index < BAND_BUCKET_COUNT; ++index) {
+            BandBucket memory bucket = bandBuckets[feedId][index];
+            if (bucket.maxAnswer != 0 && uint256(bucket.hourIndex) + 24 >= currentHour) {
+                if (bucket.minAnswer < low) low = bucket.minAnswer;
+                if (bucket.maxAnswer > high) high = bucket.maxAnswer;
+            }
+        }
+        // The latest answer anchors even an outage longer than the bucket window.
+        if (round.answer != 0) {
+            if (round.answer < low) low = round.answer;
+            if (round.answer > high) high = round.answer;
+        }
+        uint256 lowerBound = (high * BPS + (BPS + MAX_BAND_BPS) - 1) / (BPS + MAX_BAND_BPS);
+        uint256 upperBound = low * (BPS + MAX_BAND_BPS) / BPS;
+        if (lowerBound < config.minAnswer) lowerBound = config.minAnswer;
+        if (upperBound > config.maxAnswer) upperBound = config.maxAnswer;
+        return (lowerBound <= upperBound, uint64(lowerBound), uint64(upperBound));
     }
 }
