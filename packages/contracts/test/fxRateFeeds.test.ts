@@ -59,10 +59,15 @@ describe("FX rate feed package", () => {
   });
 
   it("binds each ZKP2P feed to its Base deployment", () => {
-    for (const feed of CHAINLINK_FEEDS.filter((entry) => entry.provider === OracleFeedProvider.Zkp2p)) {
-      expect(feed.pair).toMatch(/^[A-Z]{3}\/USD$/);
-      const currency = feed.pair.split("/")[0];
-      const name = `FxRateFeed${currency[0]}${currency.slice(1).toLowerCase()}Usd`;
+    const deploymentsByPair: Record<string, string> = {
+      "CNY/USD": "FxRateFeedCnyUsd",
+      "INR/USD": "FxRateFeedInrUsd",
+    };
+    const feeds = CHAINLINK_FEEDS.filter((entry) => entry.provider === OracleFeedProvider.Zkp2p);
+    expect(feeds.map((feed) => feed.pair).sort()).toEqual(Object.keys(deploymentsByPair).sort());
+    for (const feed of feeds) {
+      const name = deploymentsByPair[feed.pair];
+      expect(feed.decimals).toBe(8);
       const deployment = JSON.parse(fs.readFileSync(
         path.resolve(__dirname, "../../../deployments/base", `${name}.json`), "utf8",
       ));

@@ -1,10 +1,11 @@
 // Static oracle feed data — Chainlink or ZKP2P-operated AggregatorV3 feeds on Base
-// used by the protocol. Manually maintained; sourced from arm-dashboard/src/constants.ts
-// and deployments/parameters.ts.
+// used by the protocol. Manually maintained; Chainlink feeds are sourced from
+// arm-dashboard/src/constants.ts and deployments/parameters.ts. ZKP2P feeds come
+// from deployments/base/FxRateFeed* artifacts (deployment lane 44).
 //
 // NOTE: Pyth oracle feeds have been removed (2026-03-17). Pyth Hermes is being
-// deprecated and new FX feeds are Lazer-only (paid, API key required). We ship
-// with Chainlink-only for the ARM launch. Pyth/Lazer can be re-added later.
+// deprecated and new FX feeds are Lazer-only (paid, API key required).
+// Pyth/Lazer can be re-added later.
 
 export enum OracleFeedProvider {
   Chainlink = "chainlink",
@@ -18,16 +19,18 @@ export interface ChainlinkFeed {
   provider: OracleFeedProvider;
 }
 
-// ── Chainlink FX proxy addresses on Base mainnet ──────────────────────
-// Verified on-chain via description() calls
+// ── FX oracle feed addresses on Base mainnet (alphabetical by pair) ──
+// Chainlink proxy addresses verified on-chain via description() calls
 export const CHAINLINK_FEEDS: ChainlinkFeed[] = [
   { pair: 'AUD/USD', feed: '0x46e51B8cA41d709928EdA9Ae43e42193E6CDf229', decimals: 8, provider: OracleFeedProvider.Chainlink },
   { pair: 'BRL/USD', feed: '0x0b0E64c05083FdF9ED7C5D3d8262c4216eFc9394', decimals: 8, provider: OracleFeedProvider.Chainlink },
   { pair: 'CAD/USD', feed: '0xA840145F87572E82519d578b1F36340368a25D5d', decimals: 8, provider: OracleFeedProvider.Chainlink },
   { pair: 'CHF/USD', feed: '0x3A1d6444fb6a402470098E23DaD0B7E86E14252F', decimals: 8, provider: OracleFeedProvider.Chainlink },
+  { pair: 'CNY/USD', feed: '0xc034d806DbeA6b13980D94174eA5FF83E1C191C3', decimals: 8, provider: OracleFeedProvider.Zkp2p },
   { pair: 'EUR/USD', feed: '0xc91D87E81faB8f93699ECf7Ee9B44D11e1D53F0F', decimals: 8, provider: OracleFeedProvider.Chainlink },
   { pair: 'GBP/USD', feed: '0xCceA6576904C118037695eB71195a5425E69Fa15', decimals: 8, provider: OracleFeedProvider.Chainlink },
   { pair: 'IDR/USD', feed: '0x05A6cF213EcC5501A11a08EBefA4A8a60313ef97', decimals: 8, provider: OracleFeedProvider.Chainlink },
+  { pair: 'INR/USD', feed: '0x053A03F1704aE3F71082D3cDFD50BC830415A326', decimals: 8, provider: OracleFeedProvider.Zkp2p },
   { pair: 'MXN/USD', feed: '0x9e8Ee77c76d4fa41306056D1C3196AF5da1600bd', decimals: 8, provider: OracleFeedProvider.Chainlink },
   { pair: 'NGN/USD', feed: '0xdfbb5Cbc88E382de007bfe6CE99C388176ED80aD', decimals: 8, provider: OracleFeedProvider.Chainlink },
   { pair: 'NZD/USD', feed: '0x06bdFe07E71C476157FC025d3cCD4BBe08e83EF9', decimals: 8, provider: OracleFeedProvider.Chainlink },
