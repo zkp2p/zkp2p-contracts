@@ -90,6 +90,7 @@ jobs:
           corepack yarn test:xmoney-payment-method
           corepack yarn test:upi-payment-method
           corepack yarn test:intent-guardian-fee-update
+          corepack yarn test:fx-rate-feeds-deployment
           corepack yarn test:retire-dispute-risk-windows
           corepack yarn test:v3-groups-deployment
           corepack yarn test:dispute-lifecycle-deployment

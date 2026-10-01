@@ -156,6 +156,10 @@ Current numbered lanes include:
   policy; Base executed via the Safe 2026-08-28, staging via the deployer
   2026-09-02; still mounted, skips while every retired window reads zero).
 - `43`: Base-staging-only X Money payment-method preparation and execution.
+- `44`: `FxRateStore` plus the INR/USD and CNY/USD `FxRateFeed`s. It is one shared
+  feed set on Base and skips `base_staging`. On Base it runs only under its tag
+  with `ENABLE_BASE_FX_RATE_FEEDS_DEPLOYMENT=true`. It seeds both feeds, then
+  hands ownership to `MULTI_SIG.base`.
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production

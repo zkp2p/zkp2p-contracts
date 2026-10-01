@@ -122,6 +122,24 @@
   execution are mutually exclusive. It reuses lane 31's payment-binding checks, permitting only the pending
   `xmoney` entry to be absent during preparation. Execution registers it in UPV3 before the registry, requires full
   readiness, then records the snapshot. Production activation is intentionally outside this lane.
+- Lane `44` deploys `FxRateStore` and two Chainlink-compatible `FxRateFeed`s, INR/USD (`FxRateFeedInrUsd`) and
+  CNY/USD (`FxRateFeedCnyUsd`), each `XXX/USD` with 8 decimals. Curator's `fx-rate-push` job writes them from
+  ExchangeRate-API.
+  - **One shared set on Base:** the lane skips `base_staging`. Live Base runs need
+    `DEPLOY_ACTIVE_TAG=44_deploy_fx_rate_feeds` and `ENABLE_BASE_FX_RATE_FEEDS_DEPLOYMENT=true`. An untagged Base
+    run skips the lane.
+  - **Preflight, then steps:** the lane checks every input before its first transaction: live flag,
+    `FX_RATE_UPDATER.base`, and the `FX_RATE_SEED_*` env seeds. It then deploys only missing names, registers and
+    seeds both feeds, and hands ownership to `MULTI_SIG.base` with a single `Ownable` transfer, so no Safe accept is
+    needed.
+  - **Reruns only verify:** they check code, the exact updater, limits, seeded rounds, feed sources and owners, and
+    throw on any drift.
+  - **Local networks** keep deployer ownership and use `accounts[1]` as the updater.
+  - **Contract guarantee:** the updater can't publish a price more than 5% away from any price shown in the last
+    24 hours. That window is 25 hourly buckets on block time plus the latest price. Only the Safe can `seedFeed`
+    outside the band. Its `emergencyStop` zeroes the updater and locks the feeds.
+  - **Package:** feed addresses join `oracleFeeds` (`provider: "zkp2p"`) only in release B, after keeper rounds
+    land.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the
