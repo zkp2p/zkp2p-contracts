@@ -50,6 +50,20 @@ export const MULTI_SIG: any = {
   "base_staging": "",
 };
 
+export const FX_RATE_UPDATER: Record<string, string> = {
+  localhost: "",
+  hardhat: "",
+  base: "",
+  base_staging: "",
+};
+
+export const FX_RATE_FEEDS = [
+  { pair: "INR/USD", deploymentName: "FxRateFeedInrUsd", description: "INR / USD",
+    seedEnv: "FX_RATE_SEED_INR_USD", minAnswer: 800_000, maxAnswer: 1_400_000, localSeed: 1_041_667 },
+  { pair: "CNY/USD", deploymentName: "FxRateFeedCnyUsd", description: "CNY / USD",
+    seedEnv: "FX_RATE_SEED_CNY_USD", minAnswer: 10_000_000, maxAnswer: 20_000_000, localSeed: 14_880_952 },
+] as const;
+
 export const WITNESS_ADDRESS: any = {
   "localhost": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
   "hardhat": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
