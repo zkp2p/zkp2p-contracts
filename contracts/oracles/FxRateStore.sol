@@ -50,33 +50,7 @@ contract FxRateStore is IFxRateStore, Ownable {
         if (observedAt > block.timestamp) revert ObservedAtInFuture(observedAt);
 
         for (uint256 index = 0; index < feedIds.length; ++index) {
-            bytes32 feedId = feedIds[index];
-            FeedConfig storage config = feedConfigs[feedId];
-            if (!config.registered) revert FeedNotRegistered(feedId);
-            if (config.locked) revert FeedLocked(feedId);
-            uint64 answer = answers[index];
-            if (answer < config.minAnswer || answer > config.maxAnswer) revert AnswerOutOfLimits(feedId, answer);
-            Round memory round = rounds[feedId];
-            (bool available, uint64 lower, uint64 upper) = _band(feedId, config, round);
-            if (!available || answer < lower || answer > upper) revert AnswerOutOfBand(feedId, answer, lower, upper);
-            if (observedAt <= round.updatedAt) revert ObservationNotNewer(feedId, observedAt, round.updatedAt);
-
-            uint64 nextRoundId = round.roundId + 1;
-            rounds[feedId] = Round({answer: answer, updatedAt: observedAt, roundId: nextRoundId});
-            uint256 currentHour = block.timestamp / BAND_BUCKET_SECONDS;
-            BandBucket storage bucket = bandBuckets[feedId][currentHour % BAND_BUCKET_COUNT];
-            uint64 minimum = round.answer < answer ? round.answer : answer;
-            uint64 maximum = round.answer > answer ? round.answer : answer;
-            if (bucket.hourIndex != currentHour || bucket.maxAnswer == 0) {
-                bucket.hourIndex = uint32(currentHour);
-                bucket.minAnswer = minimum;
-                bucket.maxAnswer = maximum;
-            } else {
-                if (minimum < bucket.minAnswer) bucket.minAnswer = minimum;
-                if (maximum > bucket.maxAnswer) bucket.maxAnswer = maximum;
-            }
-            config.latestIsSeed = false;
-            emit AnswerUpdated(feedId, answer, nextRoundId, observedAt);
+            _updateFeed(feedIds[index], answers[index], observedAt);
         }
     }
 
@@ -177,6 +151,34 @@ contract FxRateStore is IFxRateStore, Ownable {
         FeedConfig memory config = feedConfigs[feedId];
         if (!config.registered || config.locked) return (false, 0, 0);
         return _band(feedId, config, rounds[feedId]);
+    }
+
+    function _updateFeed(bytes32 feedId, uint64 answer, uint64 observedAt) internal {
+        FeedConfig storage config = feedConfigs[feedId];
+        if (!config.registered) revert FeedNotRegistered(feedId);
+        if (config.locked) revert FeedLocked(feedId);
+        if (answer < config.minAnswer || answer > config.maxAnswer) revert AnswerOutOfLimits(feedId, answer);
+        Round memory round = rounds[feedId];
+        (bool available, uint64 lower, uint64 upper) = _band(feedId, config, round);
+        if (!available || answer < lower || answer > upper) revert AnswerOutOfBand(feedId, answer, lower, upper);
+        if (observedAt <= round.updatedAt) revert ObservationNotNewer(feedId, observedAt, round.updatedAt);
+
+        uint64 nextRoundId = round.roundId + 1;
+        rounds[feedId] = Round({answer: answer, updatedAt: observedAt, roundId: nextRoundId});
+        uint256 currentHour = block.timestamp / BAND_BUCKET_SECONDS;
+        BandBucket storage bucket = bandBuckets[feedId][currentHour % BAND_BUCKET_COUNT];
+        uint64 minimum = round.answer < answer ? round.answer : answer;
+        uint64 maximum = round.answer > answer ? round.answer : answer;
+        if (bucket.hourIndex != currentHour || bucket.maxAnswer == 0) {
+            bucket.hourIndex = uint32(currentHour);
+            bucket.minAnswer = minimum;
+            bucket.maxAnswer = maximum;
+        } else {
+            if (minimum < bucket.minAnswer) bucket.minAnswer = minimum;
+            if (maximum > bucket.maxAnswer) bucket.maxAnswer = maximum;
+        }
+        config.latestIsSeed = false;
+        emit AnswerUpdated(feedId, answer, nextRoundId, observedAt);
     }
 
     function _band(bytes32 feedId, FeedConfig memory config, Round memory round)
