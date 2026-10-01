@@ -1,9 +1,12 @@
 import * as fs from "fs";
 import * as path from "path";
+import { createRequire } from "module";
+import { runInNewContext } from "vm";
+import * as ts from "typescript";
 
 import { SOURCE_ABI_ARTIFACTS } from "../scripts/extractors/abis";
 import { CHAINLINK_FEEDS, OracleFeedProvider } from "../scripts/data/oracleFeeds";
-import { renderOracleFeeds } from "../scripts/extractors/oracleFeeds";
+import { extractOracleFeeds, renderOracleFeeds } from "../scripts/extractors/oracleFeeds";
 
 describe("FX rate feed package", () => {
   it("exports the generic FX source ABI artifacts", () => {
@@ -30,6 +33,29 @@ describe("FX rate feed package", () => {
       expect(typeof feed.provider).toBe("string");
       expect(["chainlink", "zkp2p"]).toContain(feed.provider);
     }
+  });
+
+  it("generates a runtime provider enum and matching published declarations", async () => {
+    await extractOracleFeeds();
+    const oracleDir = path.resolve(__dirname, "../oracleFeeds");
+    const indexPath = path.join(oracleDir, "index.ts");
+    const indexSource = fs.readFileSync(indexPath, "utf8");
+    const compiled = ts.transpileModule(indexSource, {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, esModuleInterop: true },
+    }).outputText;
+    const generatedExports: Record<string, unknown> = {};
+    runInNewContext(compiled, { exports: generatedExports, require: createRequire(indexPath) });
+    expect(generatedExports.OracleFeedProvider).toEqual({ Chainlink: "chainlink", Zkp2p: "zkp2p" });
+    expect(generatedExports.OracleFeedProvider).toEqual(OracleFeedProvider);
+
+    const indexDeclaration = fs.readFileSync(path.join(oracleDir, "index.d.ts"), "utf8");
+    const enumDefinition = indexSource.match(/export enum OracleFeedProvider \{[^}]+\}/)?.[0];
+    expect(enumDefinition).toBeDefined();
+    expect(indexDeclaration).toContain(enumDefinition);
+    const types = fs.readFileSync(path.join(oracleDir, "types.d.ts"), "utf8");
+    expect(types).toContain("import type { OracleFeedProvider } from './index';");
+    expect(types).toContain("provider?: OracleFeedProvider;");
+    expect(types).not.toMatch(/provider\?\s*:[^;]*['"]/);
   });
 
   it("binds each ZKP2P feed to its Base deployment", () => {
