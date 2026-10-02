@@ -2,6 +2,19 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
+## Release 0.4.3
+
+- Exports canonical `FxRateStore` and `FxRateFeed` source ABIs under `abis/contracts`.
+- Adds Base addresses for `FxRateStore` (`0x389206956C57bdB5d07FF78AB3D1e1DEED070b9c`),
+  `FxRateFeedInrUsd` (`0x053A03F1704aE3F71082D3cDFD50BC830415A326`), and
+  `FxRateFeedCnyUsd` (`0xc034d806DbeA6b13980D94174eA5FF83E1C191C3`).
+  The feeds are shared on Base; `baseStaging` exports all three names as zero addresses
+  through extractor backfill, not staging deployments.
+- Adds the `OracleFeedProvider` runtime enum and optional `provider` field to oracle feeds.
+  Existing feeds use `chainlink`; the new INR/USD and CNY/USD feeds use `zkp2p` and are
+  backed by `FxRateStore` with a hardcoded 5%/24h band.
+- Published on the `latest` tag; `rc` remains at `0.4.3-rc.1`.
+
 ## Release 0.4.3-rc.1
 
 - Adds INR/USD and CNY/USD oracle feeds with provider `zkp2p`, served by
