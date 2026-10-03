@@ -37,7 +37,7 @@ async function verifyLivePaymentBinding(hre: HardhatRuntimeEnvironment): Promise
   assert.equal((await registry.owner()).toLowerCase(), governance, "Payment registry owner mismatch");
   assert.equal((await legacy.owner()).toLowerCase(), governance, "Legacy nullifier registry owner mismatch");
 
-  // Base Safe nonce 84 appended X Money at block 51,956,359. Local catalogs stay unchanged.
+  // Base Safe nonces 84 and 85 appended X Money and Monobank. Local catalogs stay unchanged.
   const methods = network === "base" ? getActivePaymentMethods(network) : RATIFIED_PAYMENT_METHOD_ORDER.base_staging;
   assert.deepEqual(await registry.getPaymentMethods(), methods.map(ethers.utils.id),
     "Payment registry method order mismatch");

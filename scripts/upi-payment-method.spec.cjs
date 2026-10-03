@@ -41,7 +41,7 @@ test("UPI catalogs reflect the executed production registration without staging 
     "alipay", "chime", "venmo", "revolut", "cashapp", "wise",
     "mercadopago", "zelle", "monzo", "paypal", "upi",
   ];
-  assert.deepEqual(getActivePaymentMethods("base"), [...productionMethods, "xmoney"]);
+  assert.deepEqual(getActivePaymentMethods("base"), [...productionMethods, "xmoney", "monobank"]);
   assert.deepEqual(getActivePaymentMethods("base_staging"), [
     ...productionMethods.slice(0, -1), "monobank", "mercury", "upi", "xmoney",
   ]);

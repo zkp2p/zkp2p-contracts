@@ -2,6 +2,15 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
+## Release 0.4.4-rc.2
+
+- Adds the executed Monobank/UAH registration to the Base catalog, matching Base
+  Safe nonce 85 at block 52,132,101. Base staging retains its existing registration.
+- Records Monobank's zero dispute risk window. The buyer attestor separately
+  enforces the 14-day payment timestamp buffer.
+- Includes UAH currency hashes and Monobank cross-network lookups from `0.4.4-rc.1`.
+- Targets the `rc` tag; `latest` remains at `0.4.3`.
+
 ## Release 0.4.3
 
 - Exports canonical `FxRateStore` and `FxRateFeed` source ABIs under `abis/contracts`.
