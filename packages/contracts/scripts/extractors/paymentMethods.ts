@@ -39,6 +39,7 @@ const PUBLISHED_PAYMENT_METHOD_NAMES = new Set([
   'mercadopago',
   'mercury',
   'monzo',
+  'monobank',
   'paypal',
   'revolut',
   'upi',

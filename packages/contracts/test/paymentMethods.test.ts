@@ -34,6 +34,25 @@ describe("payment method package extraction", () => {
     }
   });
 
+  it("publishes the live staging Monobank UAH rail without enabling production", () => {
+    const methodHash = "0x1d966dbd6aeb8674d7c05174bd0ded7b56a798672bfb862ef20bbe8c2bbfce18";
+    const currencyHash = "0x763ce5da7605b2b5ec3e9ec5b0ab2bbcf8b27d28da2b5002e4e364278d729d14";
+    for (const format of ["", "_cjs", "_esm"]) {
+      const directory = path.resolve(__dirname, "..", format, "paymentMethods");
+      const staging = JSON.parse(fs.readFileSync(path.join(directory, "baseStaging.json"), "utf8"));
+      const production = JSON.parse(fs.readFileSync(path.join(directory, "base.json"), "utf8"));
+      const lookups = JSON.parse(fs.readFileSync(path.join(directory, "lookups.json"), "utf8"));
+      expect(staging.methods.monobank.paymentMethodHash).toBe(methodHash);
+      expect(staging.methods.monobank.currencies).toEqual([currencyHash]);
+      expect(production.methods).not.toHaveProperty("monobank");
+      expect(lookups.nameToHash.monobank).toBe(methodHash);
+      expect(lookups.hashToName[methodHash]).toBe("monobank");
+      const currencies = JSON.parse(fs.readFileSync(path.resolve(directory, "../currencies/currencies.json"), "utf8"));
+      expect(currencies.codeToHash.UAH).toBe(currencyHash);
+      expect(currencies.hashToCode[currencyHash]).toBe("UAH");
+    }
+  });
+
   it("publishes one generic Zelle method with no variant compatibility API", () => {
     const base = JSON.parse(fs.readFileSync(path.join(paymentMethodsDir, "base.json"), "utf8"));
     const baseStaging = JSON.parse(fs.readFileSync(path.join(paymentMethodsDir, "baseStaging.json"), "utf8"));
