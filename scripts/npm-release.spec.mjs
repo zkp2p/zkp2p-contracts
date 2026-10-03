@@ -356,15 +356,15 @@ test('derives a future RC release line from the package version', () => {
   );
 });
 
-test('commits the FX feeds stable candidate while preserving RC release support', () => {
+test('commits the Monobank staging catalog RC candidate', () => {
   const packageManifest = JSON.parse(fs.readFileSync(packageManifestPath, 'utf8'));
-  assert.equal(packageManifest.version, '0.4.3');
+  assert.equal(packageManifest.version, '0.4.4-rc.1');
   assert.deepEqual(
     resolveReleasePolicy({
       release: packageManifest.version,
       packageVersion: packageManifest.version,
     }),
-    { channel: 'stable', distTag: 'latest', environment: 'npm-publish' },
+    { channel: 'rc', distTag: 'rc', environment: 'npm-publish' },
   );
 });
 
@@ -387,7 +387,7 @@ test('release CLI fixtures do not inherit workflow policy variables', () => {
 test('publish workflow consumes the version-derived channel without RC-only paths', () => {
   const workflow = fs.readFileSync(releaseWorkflowPath, 'utf8');
 
-  assert.match(workflow, /^  LATEST_BASELINE: 0\.4\.2$/m);
+  assert.match(workflow, /^  LATEST_BASELINE: 0\.4\.3$/m);
   assert.match(workflow, /^  RC_BASELINE: 0\.4\.3-rc\.1$/m);
   assert.match(workflow, /^\s{2}policy:\s*$/m);
   assert.match(workflow, /node scripts\/npm-release\.mjs resolve "\$PACKAGE_JSON" "\$RELEASE_VERSION"/);
