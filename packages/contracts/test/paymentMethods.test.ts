@@ -34,7 +34,7 @@ describe("payment method package extraction", () => {
     }
   });
 
-  it("publishes the live staging Monobank UAH rail without enabling production", () => {
+  it("publishes the registered Monobank UAH rail on Base and Base staging", () => {
     const methodHash = "0x1d966dbd6aeb8674d7c05174bd0ded7b56a798672bfb862ef20bbe8c2bbfce18";
     const currencyHash = "0x763ce5da7605b2b5ec3e9ec5b0ab2bbcf8b27d28da2b5002e4e364278d729d14";
     for (const format of ["", "_cjs", "_esm"]) {
@@ -44,7 +44,8 @@ describe("payment method package extraction", () => {
       const lookups = JSON.parse(fs.readFileSync(path.join(directory, "lookups.json"), "utf8"));
       expect(staging.methods.monobank.paymentMethodHash).toBe(methodHash);
       expect(staging.methods.monobank.currencies).toEqual([currencyHash]);
-      expect(production.methods).not.toHaveProperty("monobank");
+      expect(production.methods.monobank.paymentMethodHash).toBe(methodHash);
+      expect(production.methods.monobank.currencies).toEqual([currencyHash]);
       expect(lookups.nameToHash.monobank).toBe(methodHash);
       expect(lookups.hashToName[methodHash]).toBe("monobank");
       const currencies = JSON.parse(fs.readFileSync(path.resolve(directory, "../currencies/currencies.json"), "utf8"));
