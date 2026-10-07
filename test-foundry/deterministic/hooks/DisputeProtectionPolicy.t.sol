@@ -5,7 +5,7 @@ pragma solidity ^0.8.18;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {StakeVault} from "contracts/StakeVault.sol";
-import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
+import {DisputeProtectionPolicy} from "contracts/legacy/DisputeProtectionPolicy.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";

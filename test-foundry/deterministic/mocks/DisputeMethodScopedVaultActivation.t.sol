@@ -2,7 +2,7 @@
 pragma solidity ^0.8.18;
 
 import {StakeVault} from "contracts/StakeVault.sol";
-import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
+import {DisputeProtectionPolicy} from "contracts/legacy/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {InventoryTuple} from "contracts/mocks/DisputeMethodScopedActivationTypes.sol";

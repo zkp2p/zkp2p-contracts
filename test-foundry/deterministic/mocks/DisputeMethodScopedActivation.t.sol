@@ -13,7 +13,7 @@ import {DisputeMethodScopedCutoverGuard} from "contracts/mocks/DisputeMethodScop
 import {DisputeMethodScopedRotationPostcondition} from "contracts/mocks/DisputeMethodScopedRotationPostcondition.sol";
 import {DisputeMethodScopedCutoverPostcondition} from "contracts/mocks/DisputeMethodScopedCutoverPostcondition.sol";
 import {OrchestratorV3SurfaceMock} from "contracts/mocks/OrchestratorV3SurfaceMock.sol";
-import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
+import {DisputeProtectionPolicy} from "contracts/legacy/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";

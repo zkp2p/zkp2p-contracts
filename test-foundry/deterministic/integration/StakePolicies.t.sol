@@ -4,9 +4,9 @@ pragma solidity ^0.8.18;
 
 import {Vm} from "forge-std/Vm.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
-import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicyV2.sol";
+import {DisputeProtectionPolicyV2} from "contracts/hooks/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
-import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
+import {DisputeProtectionPolicy} from "contracts/legacy/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";

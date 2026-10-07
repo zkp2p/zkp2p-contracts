@@ -60,8 +60,8 @@ export async function prepareStakePolicyCutover(config: Configuration) {
   const block = await provider.getBlock("latest");
   const at = { blockTag: block.number };
   const artifact = (file: string, name: string) => JSON.parse(readFileSync(resolve(__dirname, `../artifacts/contracts/${file}.sol/${name}.json`), "utf8")).abi;
-  const old = new Contract(config.predecessor, artifact("hooks/DisputeProtectionPolicy", "DisputeProtectionPolicy"), provider);
-  const next = new Contract(config.successor, artifact("hooks/DisputeProtectionPolicyV2", "DisputeProtectionPolicyV2"), provider);
+  const old = new Contract(config.predecessor, artifact("legacy/DisputeProtectionPolicy", "DisputeProtectionPolicy"), provider);
+  const next = new Contract(config.successor, artifact("hooks/DisputeProtectionPolicy", "DisputeProtectionPolicyV2"), provider);
   const vault = new Contract(config.vault, artifact("StakeVault", "StakeVault"), provider);
   const hook = new Contract(config.newHook, artifact("hooks/IntentLifecycleHookV2", "IntentLifecycleHookV2"), provider);
   const oldHook = new Contract(config.oldHook, artifact("hooks/IntentLifecycleHookV1", "IntentLifecycleHookV1"), provider);

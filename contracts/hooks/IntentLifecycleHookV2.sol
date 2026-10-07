@@ -7,7 +7,7 @@ import {OrchestratorV3} from "../OrchestratorV3.sol";
 import {IAttestationVerifier} from "../interfaces/IAttestationVerifier.sol";
 import {IIntentLifecycleHook} from "../interfaces/IIntentLifecycleHook.sol";
 import {IDisputeProtectionPolicy} from "../interfaces/IDisputeProtectionPolicy.sol";
-import {DisputeProtectionPolicyV2} from "./DisputeProtectionPolicyV2.sol";
+import {DisputeProtectionPolicyV2} from "./DisputeProtectionPolicy.sol";
 import {IOrchestratorRegistry} from "../interfaces/IOrchestratorRegistry.sol";
 import {IOrchestratorV3} from "../interfaces/IOrchestratorV3.sol";
 import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";

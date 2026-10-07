@@ -1,6 +1,6 @@
 # Proof-settled stake policies
 
-Implements the contracts scope of the [7 October specification](https://docs.google.com/document/d/1aUM9907Olumn89yT3bDKY7F3QzDwXRqUROdRi9rpoBg/edit). Deploy fresh `DisputeProtectionPolicyV2` and `IntentLifecycleHookV2`; reuse O3, Escrow, UPV3, its witness verifier, the vault, and both replay registries. This change exports source ABIs only and does not change active addresses or deployment lanes.
+Implements the contracts scope of the [7 October specification](https://docs.google.com/document/d/1aUM9907Olumn89yT3bDKY7F3QzDwXRqUROdRi9rpoBg/edit). Deploy fresh `DisputeProtectionPolicyV2` and `IntentLifecycleHookV2`; reuse O3, Escrow, UPV3, its witness verifier, the vault, and both replay registries. V2 is implemented directly in `contracts/hooks/DisputeProtectionPolicy.sol`; `contracts/legacy/DisputeProtectionPolicy.sol` freezes the predecessor source for immutable deployment lanes and migration tests. This change exports source ABIs only and does not change active addresses or deployment lanes.
 
 | Policy ID preimage | Kind | Window | Initial no-stake admission |
 | --- | --- | --- | --- |

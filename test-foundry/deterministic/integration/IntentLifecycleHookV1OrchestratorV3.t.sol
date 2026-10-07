@@ -7,7 +7,7 @@ import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorRegistry} from "contracts/interfaces/IOrchestratorRegistry.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
-import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
+import {DisputeProtectionPolicy} from "contracts/legacy/DisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";

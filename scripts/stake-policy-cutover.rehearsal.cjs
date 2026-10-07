@@ -39,8 +39,8 @@ async function main() {
   const vault = await deploy('StakeVault', 'StakeVault', [owner, token.address, zero, 2 * day]);
   const disputes = await deploy('registries/NullifierRegistry', 'NullifierRegistry');
   const verifier = await deploy('unifiedVerifier/DisputeVerifier', 'DisputeVerifier', [owner, replay.address, witnesses.address]);
-  const old = await deploy('hooks/DisputeProtectionPolicy', 'DisputeProtectionPolicy', [owner, vault.address, verifier.address, disputes.address]);
-  const next = await deploy('hooks/DisputeProtectionPolicyV2', 'DisputeProtectionPolicyV2', [owner, vault.address, verifier.address, disputes.address, old.address]);
+  const old = await deploy('legacy/DisputeProtectionPolicy', 'DisputeProtectionPolicy', [owner, vault.address, verifier.address, disputes.address]);
+  const next = await deploy('hooks/DisputeProtectionPolicy', 'DisputeProtectionPolicyV2', [owner, vault.address, verifier.address, disputes.address, old.address]);
   const groups = await deploy('registries/AddressGroupRegistry', 'AddressGroupRegistry');
   const whitelist = await deploy('hooks/WhitelistPolicy', 'WhitelistPolicy', [groups.address, escrows.address, origins.address]);
   const oldHook = await deploy('hooks/IntentLifecycleHookV1', 'IntentLifecycleHookV1', [origins.address, whitelist.address, old.address]);
