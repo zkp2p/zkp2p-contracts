@@ -1485,7 +1485,7 @@ test("fresh-policy event lists partition the policy ABI exactly once", () => {
             repositoryRoot,
             "artifacts",
             "contracts",
-            "hooks",
+            "legacy",
             "DisputeProtectionPolicy.sol",
             "DisputeProtectionPolicy.json"
           ),
@@ -1556,7 +1556,7 @@ test("decodeFreshStackLogs maps raw logs to named events and rejects unknown top
           repositoryRoot,
           "artifacts",
           "contracts",
-          "hooks",
+          "legacy",
           "DisputeProtectionPolicy.sol",
           "DisputeProtectionPolicy.json"
         ),

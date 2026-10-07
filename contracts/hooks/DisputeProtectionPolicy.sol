@@ -6,7 +6,6 @@ import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 import {IDisputeProtectionPolicy} from "../interfaces/IDisputeProtectionPolicy.sol";
-import {IDisputeProtectionPolicyV2} from "../interfaces/IDisputeProtectionPolicyV2.sol";
 import {DisputeProtectionPolicy} from "../legacy/DisputeProtectionPolicy.sol";
 import {IDisputeVerifier} from "../interfaces/IDisputeVerifier.sol";
 import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
@@ -32,7 +31,7 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
  * protection intent before StakeVault controller authority moves to a replacement policy unless that replacement
  * explicitly adopts this policy's intent and lock state.
  */
-contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, ReentrancyGuard {
+contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicy, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
 
     uint64 public constant MAX_RISK_WINDOW = 365 days;
@@ -56,7 +55,8 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
     mapping(address => bool) internal isLifecycleHookAuthorizedByHook;
 
     /// @dev Whether the depositor opted a deposit payment method out of default dispute protection.
-    mapping(address => mapping(uint256 => mapping(bytes32 => bool))) internal isDisputeProtectionDisabledByPaymentMethod;
+    mapping(address => mapping(uint256 => mapping(bytes32 => bool))) internal
+        isDisputeProtectionDisabledByPaymentMethod;
 
     /// @dev Minimum collateral lock window for each payment method.
     mapping(bytes32 => uint64) internal paymentMethodRiskWindow;
@@ -66,6 +66,8 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
 
     /// @notice Frozen predecessor whose settled locks remain in the same vault after controller handover.
     DisputeProtectionPolicy public immutable predecessor;
+
+    event LegacyIntentAdopted(bytes32 indexed intentHash);
 
     /* ============ Constructor ============ */
 
@@ -199,7 +201,6 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
      */
     function onIntentSettledWithWindow(bytes32 _intentHash, uint256 _releaseAmount, uint64 _window)
         external
-        override
         onlyLifecycleHook
         nonReentrant
     {
@@ -243,7 +244,8 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
      * @param _attestation Signed dispute evidence for a settled intent.
      */
     function submitDispute(IDisputeVerifier.DisputeAttestation calldata _attestation) external nonReentrant {
-        DisputeProtectionIntent storage disputeProtectionIntent = _loadIntent(_attestation.intentHash);
+        DisputeProtectionIntent storage disputeProtectionIntent =
+            _loadIntent(_attestation.intentHash);
         if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.SETTLED) {
             revert DisputeProtectionIntentNotSettled(_attestation.intentHash, disputeProtectionIntent.status);
         }

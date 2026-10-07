@@ -16,7 +16,9 @@ Ordinary protected admission records the personal policy and locks the full inte
 
 An initial balance signal carries exactly `abi.encode(keccak256("payment_policy"), keccak256("venmo_balance"))` in `intent.data`. It requires direct payout, enabled protection and policy admission, and current whitelist membership when enabled. Ordinary whitelisted/open admission remains unchanged.
 
-The checker requires exactly 480 signed bytes and a matching selected tag. It delegates signature verification to the witness verifier captured before checker installation. Proof settlement uses the saved DEFAULT or immutable OVERRIDE. Positive holds resize to verified gross release; zero unlocks the entire original lock and emits both settlement and release. Manual settlement uses the saved default. `riskWindow` always means that saved default; derive the applied hold from settlement time and `releaseEligibleAt`.
+The attestor appends connector-derived `additionalData` bytes after the unchanged 448-byte payment/snapshot prefix. The signed `dataHash` covers all bytes; UPV3 verifies that hash without interpreting the extension. This hook requires exactly 32 additional bytes matching the selected policy ID (480 bytes total) and delegates signature verification to the captured witness verifier. The HTTP API, EIP-712 schema and UPV3 contract do not change.
+
+Proof settlement uses the saved DEFAULT or immutable OVERRIDE. Positive holds resize to verified gross release; zero unlocks the entire original lock and emits both settlement and release. Manual settlement uses the saved default. In DPPv2, `riskWindow` means that saved default; derive the applied hold from settlement time and `releaseEligibleAt`.
 
 ## Preparing the existing-vault handover
 
@@ -44,4 +46,4 @@ ATTESTOR_POLICY_SMOKE_ROOT=/absolute/path/to/attestation-service \
 
 The cross-repository smoke uses the actual attestor transformer, encoder and signer, then fulfills through real O3/UPV3/hook/DPP/vault contracts. Provider responses and the signer are synthetic. Local tests do not qualify live Venmo evidence, Nitro TLS/KMS, deployed wiring, or downstream consumers.
 
-Merge the attestor proof producer and these contracts changes before publishing their packages. Qualify tagged-proof parity and deploy the attestor before activating protected policy orders. Prepare SDK/Curator/Pay/web/mobile/relayer/indexer and release/dispute jobs in their owners; those changes are outside these two PRs. Qualify authenticated balance evidence in live Nitro and consumer flows before enabling fresh no-stake admission. Base production and staging share chain ID 8453: verify the complete service/O3/UPV3/hook/DPP/vault bundle, not chain ID alone.
+Merge both PRs, publish the contracts ABI package, qualify tagged-proof parity, and deploy the attestor before activating protected policy orders. The attestor package does not change. Prepare SDK/Curator/Pay/web/mobile/relayer/indexer and release/dispute jobs in their owners; those changes are outside these two PRs. Qualify authenticated balance evidence in live Nitro and consumer flows before enabling fresh no-stake admission. Base production and staging share chain ID 8453: verify the complete service/O3/UPV3/hook/DPP/vault bundle, not chain ID alone.

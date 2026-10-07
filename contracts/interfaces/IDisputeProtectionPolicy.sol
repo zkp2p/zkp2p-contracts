@@ -31,7 +31,7 @@ interface IDisputeProtectionPolicy {
      * @param depositor Escrow depositor compensated by a successful dispute.
      * @param paymentMethod Payment method used to namespace risk configuration and dispute nullifiers.
      * @param status Current dispute protection lifecycle state.
-     * @param riskWindow Default hold saved at first stake admission; proof settlement may apply a policy override.
+     * @param riskWindow Minimum time collateral must remain locked after intent settlement.
      * @param releaseEligibleAt Earliest timestamp at which collateral may be released. Dispute evidence remains
      * valid after this time until release actually executes.
      * @param releaseAmount Amount released from Escrow before fees and therefore collateralized after settlement.
