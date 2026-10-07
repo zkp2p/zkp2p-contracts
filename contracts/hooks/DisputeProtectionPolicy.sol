@@ -54,8 +54,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     mapping(address => bool) internal isLifecycleHookAuthorizedByHook;
 
     /// @dev Whether the depositor opted a deposit payment method out of default dispute protection.
-    mapping(address => mapping(uint256 => mapping(bytes32 => bool))) internal
-        isDisputeProtectionDisabledByPaymentMethod;
+    mapping(address => mapping(uint256 => mapping(bytes32 => bool))) internal isDisputeProtectionDisabledByPaymentMethod;
 
     /// @dev Minimum collateral lock window for each payment method.
     mapping(bytes32 => uint64) internal paymentMethodRiskWindow;
@@ -173,20 +172,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
             revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);
         }
 
-        uint64 releaseEligibleAt = _calculateReleaseEligibleAt(disputeProtectionIntent.riskWindow);
-        disputeProtectionIntent.releaseAmount = _releaseAmount;
-        disputeProtectionIntent.releaseEligibleAt = releaseEligibleAt;
-        disputeProtectionIntent.status = DisputeProtectionIntentStatus.SETTLED;
-
-        stakeVault.resizeLock(_intentHash, _releaseAmount, releaseEligibleAt);
-        emit DisputeProtectionIntentSettled(
-            _intentHash,
-            disputeProtectionIntent.stakeOwner,
-            disputeProtectionIntent.depositor,
-            _releaseAmount,
-            releaseEligibleAt,
-            _isManualRelease
-        );
+        _settleIntent(_intentHash, _releaseAmount, disputeProtectionIntent.riskWindow, _isManualRelease);
     }
 
     /* ============ Permissionless Functions ============ */
@@ -218,8 +204,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
      * @param _attestation Signed dispute evidence for a settled intent.
      */
     function submitDispute(IDisputeVerifier.DisputeAttestation calldata _attestation) external nonReentrant {
-        DisputeProtectionIntent storage disputeProtectionIntent =
-            disputeProtectionIntentByIntentHash[_attestation.intentHash];
+        DisputeProtectionIntent storage disputeProtectionIntent = _loadIntent(_attestation.intentHash);
         if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.SETTLED) {
             revert DisputeProtectionIntentNotSettled(_attestation.intentHash, disputeProtectionIntent.status);
         }
@@ -343,7 +328,12 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
      * @notice Returns the stored dispute protection state for an intent.
      * @param _intentHash Intent whose dispute protection state is queried.
      */
-    function getDisputeProtectionIntent(bytes32 _intentHash) external view returns (DisputeProtectionIntent memory) {
+    function getDisputeProtectionIntent(bytes32 _intentHash)
+        public
+        view
+        virtual
+        returns (DisputeProtectionIntent memory)
+    {
         return disputeProtectionIntentByIntentHash[_intentHash];
     }
 
@@ -415,7 +405,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     }
 
     function _releaseMaturedDisputeProtectionIntent(bytes32 _intentHash) internal {
-        DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];
+        DisputeProtectionIntent storage disputeProtectionIntent = _loadIntent(_intentHash);
         if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.SETTLED) {
             revert DisputeProtectionIntentNotSettled(_intentHash, disputeProtectionIntent.status);
         }
@@ -430,6 +420,32 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
         disputeProtectionIntent.status = DisputeProtectionIntentStatus.RELEASED;
         stakeVault.unlockStake(_intentHash);
         emit DisputeProtectionIntentReleased(_intentHash, disputeProtectionIntent.stakeOwner, releasedAmount);
+    }
+
+    /// @dev Release/dispute state loader. Successors may adopt settled predecessor records here only.
+    function _loadIntent(bytes32 _intentHash) internal virtual returns (DisputeProtectionIntent storage) {
+        return disputeProtectionIntentByIntentHash[_intentHash];
+    }
+
+    function _settleIntent(bytes32 _intentHash, uint256 _releaseAmount, uint64 _window, bool _isManualRelease)
+        internal
+    {
+        DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
+        uint64 releaseEligibleAt = _calculateReleaseEligibleAt(_window);
+        intent.releaseAmount = _releaseAmount;
+        intent.releaseEligibleAt = releaseEligibleAt;
+        intent.status = DisputeProtectionIntentStatus.SETTLED;
+
+        if (_window != 0) stakeVault.resizeLock(_intentHash, _releaseAmount, releaseEligibleAt);
+        emit DisputeProtectionIntentSettled(
+            _intentHash, intent.stakeOwner, intent.depositor, _releaseAmount, releaseEligibleAt, _isManualRelease
+        );
+        if (_window == 0) {
+            (, uint256 lockedAmount,) = stakeVault.locks(_intentHash);
+            intent.status = DisputeProtectionIntentStatus.RELEASED;
+            stakeVault.unlockStake(_intentHash);
+            emit DisputeProtectionIntentReleased(_intentHash, intent.stakeOwner, lockedAmount);
+        }
     }
 
     function _calculateReleaseEligibleAt(uint64 _riskWindow) internal view returns (uint64) {

@@ -44,6 +44,7 @@
     "scripts/verify-method-scoped-safe-batch.ts",
     "scripts/active-dispute-stack.spec.cjs",
     "scripts/bootstrapWhitelistPolicy.ts",
+    "scripts/prepareStakePolicyCutover.ts",
     "scripts/test-dispute-lifecycle-deployment.cjs",
     "scripts/test-method-scoped-deployment.cjs",
     "scripts/test-method-scoped-vault-deployment.cjs",

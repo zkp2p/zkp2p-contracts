@@ -53,7 +53,7 @@
     "simulate:obsolete-dispute-safe-batch": "ts-node --transpile-only scripts/simulate-dispute-opt-in-safe-batch.ts --obsolete-batch deployments/outputs/safe-batches/superseded/base_2026-08-11T07-40-03.json",
     "verify:dispute-opt-in-safe-batch": "ts-node --transpile-only scripts/verify-dispute-opt-in-safe-batch.ts --mode artifact-child",
     "verify:method-scoped-safe-batch": "ts-node --transpile-only scripts/verify-method-scoped-safe-batch.ts --mode artifact-child",
-    "test": "forge test",
+    "test": "yarn test:stake-policy-cutover && forge test",
     "test:deterministic": "forge test --match-path 'test-foundry/deterministic/**/*.t.sol'",
     "test:fuzz": "forge test --match-path 'test-foundry/fuzz/**/*.t.sol'",
     "test:invariant": "forge test --match-path 'test-foundry/invariant/**/*.t.sol'",
@@ -71,6 +71,7 @@
     "typechain": "hardhat typechain",
     "transpile": "tsc",
     "typecheck:dispute-deployment": "tsc -p tsconfig.dispute-deployment.json",
+    "test:stake-policy-cutover": "node --test scripts/stake-policy-cutover.spec.cjs",
     "test:fx-rate-feeds-deployment": "node --test scripts/fx-rate-feeds-deployment.spec.cjs",
     "deploy:fx-rate-feeds:base": "ts-node --transpile-only scripts/deployActive.ts base 44_deploy_fx_rate_feeds && hardhat export --network base --export ./deployments/outputs/baseContracts.ts && ts-node --transpile-only scripts/canonicalizeDeploymentOutput.ts base ./deployments/outputs/baseContracts.ts && yarn workspace @zkp2p/contracts-v2 extract",
     "verify:fx-rate-feeds:base": "yarn hardhat --network base etherscan-verify-with-delay --delay 600 --contracts FxRateStore,FxRateFeedInrUsd,FxRateFeedCnyUsd --fail-on-error"

@@ -33,6 +33,8 @@ export function resolveAbiOutputContracts(
 }
 
 export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
+  DisputeProtectionPolicyV2: "contracts/hooks/DisputeProtectionPolicyV2.sol/DisputeProtectionPolicyV2.json",
+  IntentLifecycleHookV2: "contracts/hooks/IntentLifecycleHookV2.sol/IntentLifecycleHookV2.json",
   FxRateStore: "contracts/oracles/FxRateStore.sol/FxRateStore.json",
   FxRateFeed: "contracts/oracles/FxRateFeed.sol/FxRateFeed.json",
   IntentGuardian: "contracts/IntentGuardian.sol/IntentGuardian.json",

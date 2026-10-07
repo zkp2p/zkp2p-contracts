@@ -73,6 +73,8 @@ const sourceAbiArtifacts = {
     "artifacts/contracts/hooks/WhitelistLifecycleHook.sol/WhitelistLifecycleHook.json",
   DisputeNullifierRegistry:
     "artifacts/contracts/registries/NullifierRegistry.sol/NullifierRegistry.json",
+  DisputeProtectionPolicyV2: "artifacts/contracts/hooks/DisputeProtectionPolicyV2.sol/DisputeProtectionPolicyV2.json",
+  IntentLifecycleHookV2: "artifacts/contracts/hooks/IntentLifecycleHookV2.sol/IntentLifecycleHookV2.json",
   DisputeProtectionPolicy:
     "artifacts/contracts/hooks/DisputeProtectionPolicy.sol/DisputeProtectionPolicy.json",
   DisputeVerifier:
