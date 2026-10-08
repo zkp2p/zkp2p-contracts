@@ -31,7 +31,7 @@ interface IDisputeProtectionPolicy {
      * @param depositor Escrow depositor compensated by a successful dispute.
      * @param paymentMethod Payment method used to namespace risk configuration and dispute nullifiers.
      * @param status Current dispute protection lifecycle state.
-     * @param riskWindow Minimum time collateral must remain locked after intent settlement.
+     * @param riskWindow Default collateral window saved at stake admission; a verified policy may override it.
      * @param releaseEligibleAt Earliest timestamp at which collateral may be released. Dispute evidence remains
      * valid after this time until release actually executes.
      * @param releaseAmount Amount released from Escrow before fees and therefore collateralized after settlement.
@@ -143,6 +143,15 @@ interface IDisputeProtectionPolicy {
      * @param _isManualRelease Whether the depositor used the manual-release path without an on-chain payment proof.
      */
     function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease) external;
+
+    /// @notice Settles pending collateral using the window established by the verified payment policy.
+    function onIntentSettledWithWindow(bytes32 _intentHash, uint256 _releaseAmount, uint64 _window) external;
+
+    /// @notice Returns an intent's collateral state, including the default saved at stake admission.
+    function getDisputeProtectionIntent(bytes32 _intentHash) external view returns (DisputeProtectionIntent memory);
+
+    /// @notice Maximum accepted policy or default collateral window.
+    function MAX_RISK_WINDOW() external view returns (uint64);
 
     /**
      * @notice Returns the effective stake-backed dispute protection state for a deposit payment method.

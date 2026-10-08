@@ -60,7 +60,10 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     function onIntentSignaled(bytes32 _intentHash) external override onlyOrchestrator {
         IOrchestratorV3.Intent memory intent = IOrchestratorV3(msg.sender).getIntent(_intentHash);
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
+        _admitIntent(_intentHash, intent);
+    }
 
+    function _admitIntent(bytes32 _intentHash, IOrchestratorV3.Intent memory intent) internal virtual {
         bool isWhitelistEnabled = whitelistPolicy.enabled(intent.escrow, intent.depositId, intent.paymentMethod);
         if (
             isWhitelistEnabled
@@ -82,14 +85,14 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     /**
      * @inheritdoc IIntentLifecycleHook
      */
-    function onIntentCancelled(bytes32 _intentHash) external override onlyOrchestrator {
+    function onIntentCancelled(bytes32 _intentHash) external virtual override onlyOrchestrator {
         disputeProtectionPolicy.onIntentCancelled(_intentHash);
     }
 
     /**
      * @inheritdoc IIntentLifecycleHook
      */
-    function settleIntent(SettlementContext calldata _context) external override onlyOrchestrator {
+    function settleIntent(SettlementContext calldata _context) external virtual override onlyOrchestrator {
         disputeProtectionPolicy.onIntentSettled(_context.intentHash, _context.releaseAmount, _context.isManualRelease);
     }
 

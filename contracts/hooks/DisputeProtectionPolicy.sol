@@ -33,7 +33,7 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
 contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
 
-    uint64 public constant MAX_RISK_WINDOW = 365 days;
+    uint64 public constant override MAX_RISK_WINDOW = 365 days;
     uint64 public constant PENDING_COVERAGE_MATURITY = type(uint64).max;
 
     /* ============ State Variables ============ */
@@ -169,16 +169,40 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     {
         DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];
         if (disputeProtectionIntent.status == DisputeProtectionIntentStatus.NONE) return;
+        _settleIntent(_intentHash, _releaseAmount, disputeProtectionIntent.riskWindow, _isManualRelease);
+    }
+
+    /**
+     * @notice LIFECYCLE HOOK ONLY: Settles collateral with the window established by the verified payment policy.
+     * @dev Zero releases the full lock immediately. Positive windows retain only the verified gross release amount.
+     * The riskWindow saved at admission remains unchanged for later policy selection and manual settlement.
+     */
+    function onIntentSettledWithWindow(bytes32 _intentHash, uint256 _releaseAmount, uint64 _window)
+        external
+        override
+        onlyLifecycleHook
+        nonReentrant
+    {
+        if (_window > MAX_RISK_WINDOW) revert InvalidRiskWindow(_window);
+        _settleIntent(_intentHash, _releaseAmount, _window, false);
+    }
+
+    function _settleIntent(bytes32 _intentHash, uint256 _releaseAmount, uint64 _window, bool _isManualRelease)
+        internal
+    {
+        DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];
         if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.PENDING) {
             revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);
         }
 
-        uint64 releaseEligibleAt = _calculateReleaseEligibleAt(disputeProtectionIntent.riskWindow);
+        uint64 releaseEligibleAt = _calculateReleaseEligibleAt(_window);
         disputeProtectionIntent.releaseAmount = _releaseAmount;
         disputeProtectionIntent.releaseEligibleAt = releaseEligibleAt;
         disputeProtectionIntent.status = DisputeProtectionIntentStatus.SETTLED;
 
-        stakeVault.resizeLock(_intentHash, _releaseAmount, releaseEligibleAt);
+        if (_window > 0) {
+            stakeVault.resizeLock(_intentHash, _releaseAmount, releaseEligibleAt);
+        }
         emit DisputeProtectionIntentSettled(
             _intentHash,
             disputeProtectionIntent.stakeOwner,
@@ -187,6 +211,14 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
             releaseEligibleAt,
             _isManualRelease
         );
+        if (_window == 0) {
+            (, uint256 releasedAmount,) = stakeVault.locks(_intentHash);
+            // Zero bypasses resizeLock's amount validation and releases the original lock, including partial fills.
+            require(_releaseAmount > 0 && _releaseAmount <= releasedAmount, "DPP: Invalid release amount");
+            disputeProtectionIntent.status = DisputeProtectionIntentStatus.RELEASED;
+            stakeVault.unlockStake(_intentHash);
+            emit DisputeProtectionIntentReleased(_intentHash, disputeProtectionIntent.stakeOwner, releasedAmount);
+        }
     }
 
     /* ============ Permissionless Functions ============ */
@@ -343,7 +375,12 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
      * @notice Returns the stored dispute protection state for an intent.
      * @param _intentHash Intent whose dispute protection state is queried.
      */
-    function getDisputeProtectionIntent(bytes32 _intentHash) external view returns (DisputeProtectionIntent memory) {
+    function getDisputeProtectionIntent(bytes32 _intentHash)
+        external
+        view
+        override
+        returns (DisputeProtectionIntent memory)
+    {
         return disputeProtectionIntentByIntentHash[_intentHash];
     }
 
