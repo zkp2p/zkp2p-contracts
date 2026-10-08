@@ -54,8 +54,6 @@ export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
     "contracts/unifiedVerifier/DisputeVerifier.sol/DisputeVerifier.json",
   IntentLifecycleHookV1:
     "contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json",
-  IntentLifecycleHookV2:
-    "contracts/hooks/IntentLifecycleHookV2.sol/IntentLifecycleHookV2.json",
   StakeVault: "contracts/StakeVault.sol/StakeVault.json",
 };
 

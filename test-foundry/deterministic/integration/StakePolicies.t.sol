@@ -5,7 +5,6 @@ pragma solidity ^0.8.18;
 import {Vm} from "forge-std/Vm.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
-import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";
@@ -42,7 +41,7 @@ contract StakePoliciesTest is OrchestratorV3Fixture {
     MultiAttestationVerifier internal witnesses;
     UnifiedPaymentVerifierV3 internal upv;
     NullifierRegistryV2 internal nullifiers;
-    IntentLifecycleHookV2 internal policy;
+    IntentLifecycleHookV1 internal policy;
     IntentLifecycleHookV1 internal oldHook;
 
     function setUp() public override {
@@ -70,13 +69,34 @@ contract StakePoliciesTest is OrchestratorV3Fixture {
         whitelist = new WhitelistPolicy(new AddressGroupRegistry(), escrowRegistry, orchestratorRegistry);
         oldHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelist, protection);
         protection.setLifecycleHookAuthorization(address(oldHook), true);
-        policy = new IntentLifecycleHookV2(whitelist, protection, upv);
-        policy.setPolicy(POLICY, METHOD, IntentLifecycleHookV2.PolicyKind.OVERRIDE, 0, true);
-        policy.setPolicy(GOODS_POLICY, METHOD, IntentLifecycleHookV2.PolicyKind.OVERRIDE, 90 days, false);
-        policy.setPolicy(PERSONAL, METHOD, IntentLifecycleHookV2.PolicyKind.DEFAULT, 0, false);
+        policy = new IntentLifecycleHookV1(orchestratorRegistry, whitelist, protection);
+        policy.initializePaymentVerifier(upv);
+        policy.setPolicy(POLICY, METHOD, IntentLifecycleHookV1.PolicyKind.OVERRIDE, 0, true);
+        policy.setPolicy(GOODS_POLICY, METHOD, IntentLifecycleHookV1.PolicyKind.OVERRIDE, 90 days, false);
+        policy.setPolicy(PERSONAL, METHOD, IntentLifecycleHookV1.PolicyKind.DEFAULT, 0, false);
         protection.setLifecycleHookAuthorization(address(policy), true);
         upv.setAttestationVerifier(address(policy));
         orchestrator.setLifecycleHook(policy);
+    }
+
+    function test_VerifierBindingRequiresGovernanceMatchingRegistryAndWitnessBeforeInstallation() public {
+        IntentLifecycleHookV1 freshHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelist, protection);
+        vm.prank(other);
+        vm.expectRevert("ILH: Only governance");
+        freshHook.initializePaymentVerifier(upv);
+        vm.mockCall(address(upv), abi.encodeWithSignature("orchestratorRegistry()"), abi.encode(address(0)));
+        vm.expectRevert("ILH: Registry mismatch");
+        freshHook.initializePaymentVerifier(upv);
+        vm.clearMockedCalls();
+        upv.setAttestationVerifier(address(freshHook));
+        vm.expectRevert("ILH: Hook already installed");
+        freshHook.initializePaymentVerifier(upv);
+        upv.setAttestationVerifier(address(witnesses));
+        freshHook.initializePaymentVerifier(upv);
+        assertEq(address(freshHook.paymentVerifier()), address(upv));
+        assertEq(address(freshHook.signatureVerifier()), address(witnesses));
+        vm.expectRevert("ILH: Verifier initialized");
+        freshHook.initializePaymentVerifier(upv);
     }
 
     // Each matrix row executes the real O3 -> UPV3 -> witness checker -> hook -> DPP -> vault boundary.
@@ -132,8 +152,8 @@ contract StakePoliciesTest is OrchestratorV3Fixture {
     function test_PayPalPersonalAndGoods() public {
         _addPaymentMethod(PAYPAL);
         protection.setRiskWindow(PAYPAL, RISK_WINDOW);
-        policy.setPolicy(PAYPAL_PERSONAL, PAYPAL, IntentLifecycleHookV2.PolicyKind.DEFAULT, 0, false);
-        policy.setPolicy(PAYPAL_GOODS, PAYPAL, IntentLifecycleHookV2.PolicyKind.OVERRIDE, 90 days, false);
+        policy.setPolicy(PAYPAL_PERSONAL, PAYPAL, IntentLifecycleHookV1.PolicyKind.DEFAULT, 0, false);
+        policy.setPolicy(PAYPAL_GOODS, PAYPAL, IntentLifecycleHookV1.PolicyKind.OVERRIDE, 90 days, false);
         _stake();
         IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
         params.paymentMethod = PAYPAL;
@@ -250,7 +270,7 @@ contract StakePoliciesTest is OrchestratorV3Fixture {
         _select(hash, PERSONAL);
         vm.expectRevert("ILH: Policy method mismatch");
         _select(hash, keccak256("unknown"));
-        policy.setPolicy(PAYPAL_GOODS, PAYPAL, IntentLifecycleHookV2.PolicyKind.OVERRIDE, 90 days, false);
+        policy.setPolicy(PAYPAL_GOODS, PAYPAL, IntentLifecycleHookV1.PolicyKind.OVERRIDE, 90 days, false);
         vm.expectRevert("ILH: Policy method mismatch");
         _select(hash, PAYPAL_GOODS);
         orchestratorRegistry.removeOrchestrator(address(orchestrator));
@@ -301,15 +321,15 @@ contract StakePoliciesTest is OrchestratorV3Fixture {
     function test_PolicyRulesImmutableAndAdmissionToggleDoesNotBlockSelections() public {
         vm.prank(other);
         vm.expectRevert("ILH: Only governance");
-        policy.setPolicy(POLICY, METHOD, IntentLifecycleHookV2.PolicyKind.OVERRIDE, 0, false);
+        policy.setPolicy(POLICY, METHOD, IntentLifecycleHookV1.PolicyKind.OVERRIDE, 0, false);
         vm.expectRevert("ILH: Policy terms immutable");
-        policy.setPolicy(GOODS_POLICY, METHOD, IntentLifecycleHookV2.PolicyKind.OVERRIDE, 1 days, false);
+        policy.setPolicy(GOODS_POLICY, METHOD, IntentLifecycleHookV1.PolicyKind.OVERRIDE, 1 days, false);
         vm.expectRevert("ILH: Invalid default policy");
-        policy.setPolicy(keccak256("second-default"), METHOD, IntentLifecycleHookV2.PolicyKind.DEFAULT, 0, false);
+        policy.setPolicy(keccak256("second-default"), METHOD, IntentLifecycleHookV1.PolicyKind.DEFAULT, 0, false);
         vm.expectRevert("ILH: Invalid no-stake policy");
-        policy.setPolicy(PERSONAL, METHOD, IntentLifecycleHookV2.PolicyKind.DEFAULT, 0, true);
+        policy.setPolicy(PERSONAL, METHOD, IntentLifecycleHookV1.PolicyKind.DEFAULT, 0, true);
         bytes32 hash = _signalBalance();
-        policy.setPolicy(POLICY, METHOD, IntentLifecycleHookV2.PolicyKind.OVERRIDE, 0, false);
+        policy.setPolicy(POLICY, METHOD, IntentLifecycleHookV1.PolicyKind.OVERRIDE, 0, false);
         vm.expectRevert("ILH: Admissions disabled");
         _signalCall(taker, _balanceParams());
         _stake();
@@ -390,7 +410,7 @@ contract StakePoliciesTest is OrchestratorV3Fixture {
         protection.onIntentSettled(hash, INTENT_AMOUNT + 1, 0, false);
     }
 
-    function test_OldUnprotectedTaggedProofSurvivesCutoverAndWhitelistBypassStaysUnstaked() public {
+    function test_UnprotectedTaggedProofSurvivesHookReplacementAndWhitelistBypassStaysUnstaked() public {
         protection.setRiskWindow(METHOD, 0);
         orchestrator.setLifecycleHook(oldHook);
         bytes32 hash = _signalDefault();

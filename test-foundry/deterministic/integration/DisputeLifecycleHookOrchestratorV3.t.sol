@@ -16,6 +16,7 @@ import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.so
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
 import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
+import {UnifiedPaymentVerifierV3} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol";
 
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 
@@ -23,7 +24,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     uint64 internal constant RISK_WINDOW = 30 days;
     uint256 internal constant STAKE_AMOUNT = 500e6;
     bytes32 internal constant WINDOWLESS_METHOD = keccak256("windowless");
-    bytes32 internal constant OTHER_METHOD = keccak256("zelle");
+    bytes32 internal constant OTHER_METHOD = keccak256("paypal");
 
     AddressGroupRegistry internal groupRegistry;
     WhitelistPolicy internal whitelistPolicy;
@@ -49,6 +50,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         vault.initializeController(address(disputeProtectionPolicy));
         disputeNullifierRegistry.addWritePermission(address(disputeProtectionPolicy));
         lifecycleHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, disputeProtectionPolicy);
+        _configurePolicyHook(lifecycleHook);
+        vm.mockCall(address(verifier), abi.encodeWithSignature("attestationVerifier()"), abi.encode(lifecycleHook));
         disputeProtectionPolicy.setLifecycleHookAuthorization(address(lifecycleHook), true);
         disputeProtectionPolicy.setRiskWindow(METHOD, RISK_WINDOW);
         orchestrator.setLifecycleHook(lifecycleHook);
@@ -356,6 +359,8 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         bytes32 oldSettledIntent = _signalDefault();
         IntentLifecycleHookV1 newLifecycleHook =
             new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, disputeProtectionPolicy);
+        _configurePolicyHook(newLifecycleHook);
+        vm.mockCall(address(verifier), abi.encodeWithSignature("attestationVerifier()"), abi.encode(lifecycleHook));
 
         disputeProtectionPolicy.setLifecycleHookAuthorization(address(newLifecycleHook), true);
         orchestrator.setLifecycleHook(newLifecycleHook);
@@ -390,6 +395,7 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         );
         assertEq(oldSettledIntentState.releaseAmount, releaseAmount);
 
+        vm.mockCall(address(verifier), abi.encodeWithSignature("attestationVerifier()"), abi.encode(newLifecycleHook));
         bytes32 newIntent = _signalDefault();
         assertEq(address(orchestrator.getIntentLifecycleHook(newIntent)), address(newLifecycleHook));
         vm.prank(taker);
@@ -399,6 +405,18 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
             uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.CANCELLED)
         );
         assertEq(vault.lockedStake(taker), releaseAmount);
+    }
+
+    function _configurePolicyHook(IntentLifecycleHookV1 hook) internal {
+        // This suite mocks payment verification; StakePoliciesTest exercises the real UPV and signed proof.
+        vm.mockCall(address(verifier), abi.encodeWithSignature("owner()"), abi.encode(address(this)));
+        vm.mockCall(address(verifier), abi.encodeWithSignature("orchestratorRegistry()"), abi.encode(orchestratorRegistry));
+        vm.mockCall(
+            address(verifier), abi.encodeWithSignature("attestationVerifier()"), abi.encode(new AttestationVerifierMock())
+        );
+        hook.initializePaymentVerifier(UnifiedPaymentVerifierV3(address(verifier)));
+        hook.setPolicy(keccak256("venmo_personal"), METHOD, IntentLifecycleHookV1.PolicyKind.DEFAULT, 0, false);
+        hook.setPolicy(keccak256("paypal_personal"), OTHER_METHOD, IntentLifecycleHookV1.PolicyKind.DEFAULT, 0, false);
     }
 
     function _setWhitelist(bool enabled, bool includeTaker) internal {

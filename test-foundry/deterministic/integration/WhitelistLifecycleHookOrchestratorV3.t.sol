@@ -16,6 +16,7 @@ import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.so
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
 import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
+import {UnifiedPaymentVerifierV3} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol";
 
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 
@@ -172,6 +173,14 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         vault.initializeController(address(disputeProtectionPolicy));
         disputeNullifierRegistry.addWritePermission(address(disputeProtectionPolicy));
         combinedHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelistPolicy, disputeProtectionPolicy);
+        vm.mockCall(address(verifier), abi.encodeWithSignature("owner()"), abi.encode(address(this)));
+        vm.mockCall(address(verifier), abi.encodeWithSignature("orchestratorRegistry()"), abi.encode(orchestratorRegistry));
+        vm.mockCall(
+            address(verifier), abi.encodeWithSignature("attestationVerifier()"), abi.encode(new AttestationVerifierMock())
+        );
+        combinedHook.initializePaymentVerifier(UnifiedPaymentVerifierV3(address(verifier)));
+        combinedHook.setPolicy(keccak256("venmo_personal"), METHOD, IntentLifecycleHookV1.PolicyKind.DEFAULT, 0, false);
+        vm.mockCall(address(verifier), abi.encodeWithSignature("attestationVerifier()"), abi.encode(combinedHook));
         disputeProtectionPolicy.setLifecycleHookAuthorization(address(combinedHook), true);
         disputeProtectionPolicy.setRiskWindow(METHOD, RISK_WINDOW);
 
