@@ -57,7 +57,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     mapping(address => mapping(uint256 => mapping(bytes32 => bool))) internal
         isDisputeProtectionDisabledByPaymentMethod;
 
-    /// @dev Minimum collateral lock window for each payment method.
+    /// @dev Default collateral lock window for each payment method.
     mapping(bytes32 => uint64) internal paymentMethodRiskWindow;
 
     /// @dev Dispute protection lifecycle state keyed by globally unique intent hash.
@@ -161,7 +161,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     /**
      * @inheritdoc IDisputeProtectionPolicy
      */
-    function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease)
+    function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, uint64 _window, bool _isManualRelease)
         external
         override
         onlyLifecycleHook
@@ -169,32 +169,12 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     {
         DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];
         if (disputeProtectionIntent.status == DisputeProtectionIntentStatus.NONE) return;
-        _settleIntent(_intentHash, _releaseAmount, disputeProtectionIntent.riskWindow, _isManualRelease);
-    }
-
-    /**
-     * @notice LIFECYCLE HOOK ONLY: Settles collateral with the window established by the verified payment policy.
-     * @dev Zero releases the full lock immediately. Positive windows retain only the verified gross release amount.
-     * The riskWindow saved at admission remains unchanged for later policy selection and manual settlement.
-     */
-    function onIntentSettledWithWindow(bytes32 _intentHash, uint256 _releaseAmount, uint64 _window)
-        external
-        override
-        onlyLifecycleHook
-        nonReentrant
-    {
-        if (_window > MAX_RISK_WINDOW) revert InvalidRiskWindow(_window);
-        _settleIntent(_intentHash, _releaseAmount, _window, false);
-    }
-
-    function _settleIntent(bytes32 _intentHash, uint256 _releaseAmount, uint64 _window, bool _isManualRelease)
-        internal
-    {
-        DisputeProtectionIntent storage disputeProtectionIntent = disputeProtectionIntentByIntentHash[_intentHash];
         if (disputeProtectionIntent.status != DisputeProtectionIntentStatus.PENDING) {
             revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);
         }
 
+        if (_isManualRelease) _window = disputeProtectionIntent.riskWindow;
+        if (_window > MAX_RISK_WINDOW) revert InvalidRiskWindow(_window);
         uint64 releaseEligibleAt = _calculateReleaseEligibleAt(_window);
         disputeProtectionIntent.releaseAmount = _releaseAmount;
         disputeProtectionIntent.releaseEligibleAt = releaseEligibleAt;
@@ -301,12 +281,12 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     /* ============ Governance Functions ============ */
 
     /**
-     * @notice GOVERNANCE ONLY: Sets the minimum collateral lock window for future intents of a payment method.
+     * @notice GOVERNANCE ONLY: Sets the default collateral lock window for future intents of a payment method.
      * @dev A zero window means the payment method is never routed through dispute protection: the lifecycle hook then
      * applies the deposit's whitelist (rejecting non-members when it is enabled) or admits openly when it is disabled.
      * Changing the window affects future admissions only; admitted intents keep their snapshotted window.
      * @param _paymentMethod Payment method whose future risk window is updated.
-     * @param _riskWindow Minimum seconds collateral remains locked after settlement.
+     * @param _riskWindow Default seconds collateral remains locked after settlement.
      */
     function setRiskWindow(bytes32 _paymentMethod, uint64 _riskWindow) external onlyOwner {
         if (_riskWindow > MAX_RISK_WINDOW) revert InvalidRiskWindow(_riskWindow);

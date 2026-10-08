@@ -378,16 +378,16 @@ contract StakePoliciesTest is OrchestratorV3Fixture {
         vm.expectRevert(
             abi.encodeWithSelector(IDisputeProtectionPolicy.UnauthorizedLifecycleHook.selector, address(this))
         );
-        protection.onIntentSettledWithWindow(hash, 1, 0);
+        protection.onIntentSettled(hash, 1, 0, false);
         vm.prank(address(policy));
         vm.expectRevert(abi.encodeWithSelector(IDisputeProtectionPolicy.InvalidRiskWindow.selector, uint64(366 days)));
-        protection.onIntentSettledWithWindow(hash, 1, 366 days);
+        protection.onIntentSettled(hash, 1, 366 days, false);
         vm.prank(address(policy));
         vm.expectRevert("DPP: Invalid release amount");
-        protection.onIntentSettledWithWindow(hash, 0, 0);
+        protection.onIntentSettled(hash, 0, 0, false);
         vm.prank(address(policy));
         vm.expectRevert("DPP: Invalid release amount");
-        protection.onIntentSettledWithWindow(hash, INTENT_AMOUNT + 1, 0);
+        protection.onIntentSettled(hash, INTENT_AMOUNT + 1, 0, false);
     }
 
     function test_OldUnprotectedTaggedProofSurvivesCutoverAndWhitelistBypassStaysUnstaked() public {

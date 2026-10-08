@@ -183,18 +183,18 @@ contract IntentLifecycleHookV2 is IntentLifecycleHookV1, IAttestationVerifier {
         }
         // O3 deletes its live intent before this callback, so use the origin recorded at admission.
         require(selected.orchestrator == msg.sender, "ILH: Foreign intent");
-        if (_context.isManualRelease) {
-            disputeProtectionPolicy.onIntentSettled(_context.intentHash, _context.releaseAmount, true);
-        } else {
+        uint64 window = stake.riskWindow;
+        if (!_context.isManualRelease) {
             PaymentPolicy memory rule = policies[selected.policyId];
             _requireVerifierInstalled(msg.sender, rule.paymentMethod);
             if (stake.status == IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE) {
                 require(rule.kind == PolicyKind.OVERRIDE && rule.window == 0, "ILH: Missing stake");
-            } else {
-                uint64 window = rule.kind == PolicyKind.DEFAULT ? stake.riskWindow : rule.window;
-                disputeProtectionPolicy.onIntentSettledWithWindow(_context.intentHash, _context.releaseAmount, window);
             }
+            if (rule.kind == PolicyKind.OVERRIDE) window = rule.window;
         }
+        disputeProtectionPolicy.onIntentSettled(
+            _context.intentHash, _context.releaseAmount, window, _context.isManualRelease
+        );
         delete policyIntents[_context.intentHash];
     }
 

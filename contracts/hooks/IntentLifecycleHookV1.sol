@@ -93,7 +93,12 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
      * @inheritdoc IIntentLifecycleHook
      */
     function settleIntent(SettlementContext calldata _context) external virtual override onlyOrchestrator {
-        disputeProtectionPolicy.onIntentSettled(_context.intentHash, _context.releaseAmount, _context.isManualRelease);
+        disputeProtectionPolicy.onIntentSettled(
+            _context.intentHash,
+            _context.releaseAmount,
+            disputeProtectionPolicy.getDisputeProtectionIntent(_context.intentHash).riskWindow,
+            _context.isManualRelease
+        );
     }
 
     /* ============ Modifiers ============ */

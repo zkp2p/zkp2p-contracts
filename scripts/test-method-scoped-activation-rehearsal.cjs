@@ -184,7 +184,7 @@ async function openIntent(state, intentHash, settle) {
       await (
         await state.predecessorPolicy
           .connect(hookSigner)
-          .onIntentSettled(intentHash, RELEASE_AMOUNT, false)
+          .onIntentSettled(intentHash, RELEASE_AMOUNT, RISK_WINDOW, false)
       ).wait();
     }
   } finally {
@@ -213,7 +213,7 @@ async function openAndSettleFreshIntent(state) {
     await (
       await state.freshPolicy
         .connect(hookSigner)
-        .onIntentSettled(FRESH_INTENT_HASH, RELEASE_AMOUNT, false)
+        .onIntentSettled(FRESH_INTENT_HASH, RELEASE_AMOUNT, RISK_WINDOW, false)
     ).wait();
   } finally {
     await ethers.provider.send("hardhat_stopImpersonatingAccount", [

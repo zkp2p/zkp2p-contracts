@@ -126,7 +126,7 @@ contract DisputeMethodScopedActivationTest is OrchestratorV3Fixture {
         _stake(taker, STAKE_AMOUNT);
         vm.startPrank(address(predecessorHook));
         predecessorPolicy.onIntentSignaled(INTENT_HASH, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
-        predecessorPolicy.onIntentSettled(INTENT_HASH, RELEASE_AMOUNT, false);
+        predecessorPolicy.onIntentSettled(INTENT_HASH, RELEASE_AMOUNT, RISK_WINDOW, false);
         vm.stopPrank();
 
         disputeRegistry.transferOwnership(safe);

@@ -135,17 +135,16 @@ interface IDisputeProtectionPolicy {
     function onIntentCancelled(bytes32 _intentHash) external;
 
     /**
-     * @notice Marks a pending dispute protection intent as settled and resizes its collateral.
-     * @dev Missing dispute protection intents are ignored. The snapshotted risk window determines when collateral
-     * becomes release-eligible; it does not invalidate dispute evidence until release actually executes.
+     * @notice Settles pending collateral with the verified window, or the saved default for manual release.
+     * @dev Missing dispute protection intents are ignored. Zero unlocks the full original lock immediately;
+     * positive windows retain the gross release amount. The saved default remains unchanged.
      * @param _intentHash Intent completed by proof-based fulfillment or manual release.
      * @param _releaseAmount Amount released from Escrow before protocol, referral, and manager fees.
+     * @param _window Verified collateral window; ignored for manual release, which uses the saved default.
      * @param _isManualRelease Whether the depositor used the manual-release path without an on-chain payment proof.
      */
-    function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease) external;
-
-    /// @notice Settles pending collateral using the window established by the verified payment policy.
-    function onIntentSettledWithWindow(bytes32 _intentHash, uint256 _releaseAmount, uint64 _window) external;
+    function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, uint64 _window, bool _isManualRelease)
+        external;
 
     /// @notice Returns an intent's collateral state, including the default saved at stake admission.
     function getDisputeProtectionIntent(bytes32 _intentHash) external view returns (DisputeProtectionIntent memory);

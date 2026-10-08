@@ -163,7 +163,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         assertEq(vault.lockedStake(taker), lockedBefore);
         assertEq(vault.freeStake(taker), freeBefore);
 
-        disputeProtectionPolicy.onIntentSettled(INTENT, INTENT_AMOUNT, false);
+        disputeProtectionPolicy.onIntentSettled(INTENT, INTENT_AMOUNT, RISK_WINDOW, false);
         disputeProtectionPolicy.onIntentCancelled(INTENT);
         assertEq(
             uint256(disputeProtectionPolicy.getDisputeProtectionIntent(INTENT).status),
@@ -221,7 +221,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         disputeProtectionPolicy.onIntentSignaled(
             settledIntent, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT
         );
-        disputeProtectionPolicy.onIntentSettled(settledIntent, INTENT_AMOUNT, false);
+        disputeProtectionPolicy.onIntentSettled(settledIntent, INTENT_AMOUNT, RISK_WINDOW, false);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IDisputeProtectionPolicy.DisputeProtectionIntentNotPending.selector,
@@ -233,12 +233,12 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
     }
 
     function test_SettlementResizesFullAndPartialAndEmitsManualFlag() public {
-        disputeProtectionPolicy.onIntentSettled(keccak256("missing"), INTENT_AMOUNT, false);
+        disputeProtectionPolicy.onIntentSettled(keccak256("missing"), INTENT_AMOUNT, RISK_WINDOW, false);
         disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
         uint256 releaseEligibleAt = vm.getBlockTimestamp() + RISK_WINDOW;
         vm.expectEmit(true, true, true, true);
         emit DisputeProtectionIntentSettled(INTENT, taker, depositor, 40e6, uint64(releaseEligibleAt), true);
-        disputeProtectionPolicy.onIntentSettled(INTENT, 40e6, true);
+        disputeProtectionPolicy.onIntentSettled(INTENT, 40e6, 0, true);
 
         IDisputeProtectionPolicy.DisputeProtectionIntent memory disputeProtectionIntent =
             disputeProtectionPolicy.getDisputeProtectionIntent(INTENT);
@@ -259,11 +259,11 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
                 IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED
             )
         );
-        disputeProtectionPolicy.onIntentSettled(INTENT, 40e6, true);
+        disputeProtectionPolicy.onIntentSettled(INTENT, 40e6, 0, true);
 
         bytes32 fullIntent = keccak256("full");
         disputeProtectionPolicy.onIntentSignaled(fullIntent, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
-        disputeProtectionPolicy.onIntentSettled(fullIntent, INTENT_AMOUNT, false);
+        disputeProtectionPolicy.onIntentSettled(fullIntent, INTENT_AMOUNT, RISK_WINDOW, false);
         (, amount,) = vault.locks(fullIntent);
         assertEq(amount, INTENT_AMOUNT);
     }
@@ -441,7 +441,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         assertTrue(disputeProtectionPolicy.isLifecycleHookAuthorized(newHook));
         disputeProtectionPolicy.onIntentCancelled(keccak256("old-hook-cancel"));
         vm.prank(newHook);
-        disputeProtectionPolicy.onIntentSettled(keccak256("new-hook-settle"), INTENT_AMOUNT, false);
+        disputeProtectionPolicy.onIntentSettled(keccak256("new-hook-settle"), INTENT_AMOUNT, RISK_WINDOW, false);
 
         vm.expectEmit(true, false, false, true);
         emit LifecycleHookAuthorizationUpdated(address(this), false);
@@ -475,7 +475,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
                 IDisputeProtectionPolicy.TimestampOverflow.selector, overflowingTimestamp + RISK_WINDOW
             )
         );
-        disputeProtectionPolicy.onIntentSettled(INTENT, INTENT_AMOUNT, false);
+        disputeProtectionPolicy.onIntentSettled(INTENT, INTENT_AMOUNT, RISK_WINDOW, false);
     }
 
     function test_MaturedReleaseRejectsCurrentTimestampOverflow() public {
@@ -572,7 +572,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
 
     function _admitAndSettle(bytes32 intentHash, uint256 releaseAmount, bool manualRelease) internal {
         disputeProtectionPolicy.onIntentSignaled(intentHash, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
-        disputeProtectionPolicy.onIntentSettled(intentHash, releaseAmount, manualRelease);
+        disputeProtectionPolicy.onIntentSettled(intentHash, releaseAmount, RISK_WINDOW, manualRelease);
     }
 
     function _attestation(bytes32 intentHash, bytes32 paymentMethod, bytes32 paymentId, bytes32 disputeId)
