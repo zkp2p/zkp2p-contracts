@@ -100,6 +100,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
             disputeProtectionPolicy.getDisputeProtectionIntent(INTENT);
         assertEq(disputeProtectionIntent.taker, taker);
         assertEq(disputeProtectionIntent.stakeOwner, taker);
+        assertFalse(disputeProtectionIntent.noStake);
         assertEq(disputeProtectionIntent.depositor, depositor);
         assertEq(disputeProtectionIntent.riskWindow, RISK_WINDOW);
         assertEq(disputeProtectionIntent.releaseAmount, 0);
@@ -203,6 +204,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, other, METHOD, INTENT_AMOUNT, false);
 
         assertEq(disputeProtectionPolicy.getDisputeProtectionIntent(INTENT).stakeOwner, stakeOwner);
+        assertFalse(disputeProtectionPolicy.getDisputeProtectionIntent(INTENT).noStake);
         assertEq(vault.lockedStake(stakeOwner), INTENT_AMOUNT);
         assertEq(vault.lockedStake(other), 0);
     }
@@ -248,6 +250,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         );
         assertEq(disputeProtectionIntent.releaseEligibleAt, releaseEligibleAt);
         assertEq(disputeProtectionIntent.releaseAmount, 40e6);
+        assertFalse(disputeProtectionIntent.noStake);
         (, uint256 amount, uint64 maturesAt) = vault.locks(INTENT);
         assertEq(amount, 40e6);
         assertEq(maturesAt, releaseEligibleAt);

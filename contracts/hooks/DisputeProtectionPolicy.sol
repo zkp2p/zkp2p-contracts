@@ -140,6 +140,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
             status: DisputeProtectionIntentStatus.PENDING,
             riskWindow: riskWindow,
             releaseEligibleAt: 0,
+            noStake: _noStake,
             releaseAmount: 0
         });
 
@@ -161,7 +162,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
 
         (, uint256 releasedAmount,) = stakeVault.locks(_intentHash);
         disputeProtectionIntent.status = DisputeProtectionIntentStatus.CANCELLED;
-        if (disputeProtectionIntent.stakeOwner != address(0)) stakeVault.unlockStake(_intentHash);
+        if (!disputeProtectionIntent.noStake) stakeVault.unlockStake(_intentHash);
         emit DisputeProtectionIntentCancelled(_intentHash, disputeProtectionIntent.stakeOwner, releasedAmount);
     }
 
@@ -180,7 +181,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
             revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);
         }
 
-        uint64 window = disputeProtectionIntent.stakeOwner == address(0) ? 0 : disputeProtectionIntent.riskWindow;
+        uint64 window = disputeProtectionIntent.noStake ? 0 : disputeProtectionIntent.riskWindow;
         uint64 releaseEligibleAt = _calculateReleaseEligibleAt(window);
         disputeProtectionIntent.releaseAmount = _releaseAmount;
         disputeProtectionIntent.releaseEligibleAt = releaseEligibleAt;
@@ -219,10 +220,11 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
         DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
         require(intent.status == DisputeProtectionIntentStatus.PENDING, "DPP: Intent not pending");
         require(msg.sender == intent.taker, "DPP: Only taker");
-        require(_noStake != (intent.stakeOwner == address(0)), "DPP: Mode unchanged");
+        require(_noStake != intent.noStake, "DPP: Mode unchanged");
 
         if (_noStake) {
             intent.stakeOwner = address(0);
+            intent.noStake = _noStake;
             stakeVault.unlockStake(_intentHash);
         } else {
             IntentLifecycleHookV1 hook = IntentLifecycleHookV1(address(_orchestrator.getIntentLifecycleHook(_intentHash)));
@@ -230,9 +232,10 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
             require(hook.orchestratorRegistry().isOrchestrator(address(_orchestrator)), "DPP: Unregistered orchestrator");
             IOrchestratorV3.Intent memory paymentIntent = _orchestrator.getIntent(_intentHash);
             intent.stakeOwner = stakeVault.stakeOwnerOf(intent.taker);
+            intent.noStake = _noStake;
             stakeVault.lockStake(intent.stakeOwner, _intentHash, paymentIntent.amount, PENDING_COVERAGE_MATURITY);
         }
-        emit DisputeProtectionIntentStakeModeChanged(_intentHash, intent.stakeOwner);
+        emit DisputeProtectionIntentStakeModeChanged(_intentHash, intent.stakeOwner, _noStake);
     }
 
     /* ============ Permissionless Functions ============ */
@@ -407,7 +410,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
     /// @inheritdoc IPaymentValidationHook
     function validatePayment(bytes32 _intentHash, bytes calldata _data, bytes calldata) external view override {
         DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
-        if (intent.status == DisputeProtectionIntentStatus.PENDING && intent.stakeOwner == address(0)) {
+        if (intent.status == DisputeProtectionIntentStatus.PENDING && intent.noStake) {
             (,, bool bypassState) = abi.decode(
                 _data, (UnifiedPaymentVerifierV4.PaymentDetails, UnifiedPaymentVerifierV4.IntentSnapshot, bool)
             );
