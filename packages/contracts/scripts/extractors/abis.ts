@@ -41,6 +41,8 @@ export const SOURCE_ABI_ARTIFACTS: Record<string, string> = {
     "contracts/registries/NullifierRegistryV2.sol/NullifierRegistryV2.json",
   UnifiedPaymentVerifierV3:
     "contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol/UnifiedPaymentVerifierV3.json",
+  UnifiedPaymentVerifierV4:
+    "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol/UnifiedPaymentVerifierV4.json",
   AddressGroupRegistry:
     "contracts/registries/AddressGroupRegistry.sol/AddressGroupRegistry.json",
   WhitelistPolicy: "contracts/hooks/WhitelistPolicy.sol/WhitelistPolicy.json",

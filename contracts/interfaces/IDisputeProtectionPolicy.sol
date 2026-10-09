@@ -6,7 +6,7 @@ pragma solidity ^0.8.18;
  * @title IDisputeProtectionPolicy
  * @notice Lifecycle-hook integration surface for stake-backed dispute coverage.
  * @dev The concrete policy exposes depositor, governance, dispute, and release functions directly.
- *      This interface intentionally contains only the functions consumed by IntentLifecycleHookV1.
+ *      This interface contains the functions consumed by the lifecycle hook and payment verifier.
  */
 interface IDisputeProtectionPolicy {
     /**
@@ -27,11 +27,11 @@ interface IDisputeProtectionPolicy {
     /**
      * @notice Dispute protection state retained after an intent is admitted by the lifecycle hook.
      * @param taker Account that signaled the intent.
-     * @param stakeOwner Account whose StakeVault balance collateralizes the intent.
+     * @param stakeOwner Account whose StakeVault balance collateralizes the intent; zero in no-stake mode.
      * @param depositor Escrow depositor compensated by a successful dispute.
      * @param paymentMethod Payment method used to namespace risk configuration and dispute nullifiers.
      * @param status Current dispute protection lifecycle state.
-     * @param riskWindow Minimum time collateral must remain locked after intent settlement.
+     * @param riskWindow Default collateral window saved at intent admission, including when admitted without stake.
      * @param releaseEligibleAt Earliest timestamp at which collateral may be released. Dispute evidence remains
      * valid after this time until release actually executes.
      * @param releaseAmount Amount released from Escrow before fees and therefore collateralized after settlement.
@@ -59,6 +59,7 @@ interface IDisputeProtectionPolicy {
     event DisputeProtectionIntentCancelled(
         bytes32 indexed intentHash, address indexed stakeOwner, uint256 releasedAmount
     );
+    event DisputeProtectionIntentStakeModeChanged(bytes32 indexed intentHash, address indexed stakeOwner);
     event DisputeProtectionIntentSettled(
         bytes32 indexed intentHash,
         address indexed stakeOwner,
@@ -109,13 +110,15 @@ interface IDisputeProtectionPolicy {
      * for this direct policy callback; the canonical lifecycle hook never calls this function for a zero-window payment
      * method and applies the whitelist instead. It creates no dispute protection intent. Otherwise the call validates
      * deposit configuration and token compatibility, snapshots the risk configuration, and locks the taker's selected
-     * stake.
+     * stake, unless no-stake admission is requested. No-stake intents require a verified bypass flag or an
+     * explicit taker switch to staked mode before ordinary fulfillment.
      * @param _intentHash Unique intent identifier assigned by the calling orchestrator.
      * @param _escrow Escrow that owns the intent and deposit.
      * @param _depositId Deposit supplying the intent liquidity.
      * @param _taker Account that signaled the intent.
      * @param _paymentMethod Payment method selected for the off-chain payment.
      * @param _amount Full on-chain intent amount initially locked as collateral.
+     * @param _noStake Whether to admit without collateral and require a signed bypass flag at fulfillment.
      */
     function onIntentSignaled(
         bytes32 _intentHash,
@@ -123,7 +126,8 @@ interface IDisputeProtectionPolicy {
         uint256 _depositId,
         address _taker,
         bytes32 _paymentMethod,
-        uint256 _amount
+        uint256 _amount,
+        bool _noStake
     ) external;
 
     /**
@@ -135,14 +139,18 @@ interface IDisputeProtectionPolicy {
     function onIntentCancelled(bytes32 _intentHash) external;
 
     /**
-     * @notice Marks a pending dispute protection intent as settled and resizes its collateral.
-     * @dev Missing dispute protection intents are ignored. The snapshotted risk window determines when collateral
-     * becomes release-eligible; it does not invalidate dispute evidence until release actually executes.
+     * @notice Settles a pending dispute protection intent according to its selected stake mode.
+     * @dev Missing dispute protection intents are ignored. Staked intents retain collateral for the saved window;
+     * no-stake intents release immediately. The authorized hook must enforce use of the policy-aware payment
+     * verifier for proof-based no-stake settlement. Manual release creates no new lock.
      * @param _intentHash Intent completed by proof-based fulfillment or manual release.
      * @param _releaseAmount Amount released from Escrow before protocol, referral, and manager fees.
      * @param _isManualRelease Whether the depositor used the manual-release path without an on-chain payment proof.
      */
     function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease) external;
+
+    /// @notice Returns the policy's stored admission mode and lifecycle state for an intent.
+    function getDisputeProtectionIntent(bytes32 _intentHash) external view returns (DisputeProtectionIntent memory);
 
     /**
      * @notice Returns the effective stake-backed dispute protection state for a deposit payment method.

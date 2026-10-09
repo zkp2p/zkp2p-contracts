@@ -82,9 +82,9 @@ contract DisputeMethodScopedVaultActivationTest is OrchestratorV3Fixture {
         freshPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, false);
         _stake(taker, 500e6);
         vm.startPrank(address(predecessorHook));
-        predecessorPolicy.onIntentSignaled(SETTLED_INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        predecessorPolicy.onIntentSignaled(SETTLED_INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
         predecessorPolicy.onIntentSettled(SETTLED_INTENT, 40e6, false);
-        predecessorPolicy.onIntentSignaled(CANCELLED_INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        predecessorPolicy.onIntentSignaled(CANCELLED_INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
         predecessorPolicy.onIntentCancelled(CANCELLED_INTENT);
         vm.stopPrank();
         disputeRegistry.transferOwnership(safe);

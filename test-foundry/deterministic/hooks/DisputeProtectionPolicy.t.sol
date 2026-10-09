@@ -90,11 +90,11 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
                 IDisputeProtectionPolicy.DisputeProtectionNotEnabled.selector, address(escrow), depositId, METHOD
             )
         );
-        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
 
         vm.prank(depositor);
         disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, true);
-        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
 
         IDisputeProtectionPolicy.DisputeProtectionIntent memory disputeProtectionIntent =
             disputeProtectionPolicy.getDisputeProtectionIntent(INTENT);
@@ -121,11 +121,11 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
     function test_onIntentSignaledRejectsUnauthorizedPausedDisabledAndDuplicate() public {
         vm.expectRevert(abi.encodeWithSelector(IDisputeProtectionPolicy.UnauthorizedLifecycleHook.selector, other));
         vm.prank(other);
-        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
 
         disputeProtectionPolicy.setAdmissionsPaused(true);
         vm.expectRevert(IDisputeProtectionPolicy.AdmissionsPaused.selector);
-        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
         disputeProtectionPolicy.setAdmissionsPaused(false);
 
         vm.prank(depositor);
@@ -135,15 +135,15 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
                 IDisputeProtectionPolicy.DisputeProtectionNotEnabled.selector, address(escrow), depositId, METHOD
             )
         );
-        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
         vm.prank(depositor);
         disputeProtectionPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, true);
 
-        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
         vm.expectRevert(
             abi.encodeWithSelector(IDisputeProtectionPolicy.DisputeProtectionIntentAlreadyExists.selector, INTENT)
         );
-        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
     }
 
     function test_onIntentSignaledPassesThroughWindowlessMethodEvenWhenAdmissionsPaused() public {
@@ -153,7 +153,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         disputeProtectionPolicy.setAdmissionsPaused(true);
 
         disputeProtectionPolicy.onIntentSignaled(
-            INTENT, address(escrow), depositId, taker, windowlessMethod, INTENT_AMOUNT
+            INTENT, address(escrow), depositId, taker, windowlessMethod, INTENT_AMOUNT, false
         );
 
         assertEq(
@@ -182,14 +182,14 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
             )
         );
         disputeProtectionPolicy.onIntentSignaled(
-            INTENT, address(wrongTokenEscrow), depositId, taker, METHOD, INTENT_AMOUNT
+            INTENT, address(wrongTokenEscrow), depositId, taker, METHOD, INTENT_AMOUNT, false
         );
 
         bytes32 secondIntent = keccak256("second-intent");
         vm.expectRevert(
             abi.encodeWithSelector(IStakeVault.InsufficientFreeStake.selector, other, uint256(0), INTENT_AMOUNT)
         );
-        disputeProtectionPolicy.onIntentSignaled(secondIntent, address(escrow), depositId, other, METHOD, INTENT_AMOUNT);
+        disputeProtectionPolicy.onIntentSignaled(secondIntent, address(escrow), depositId, other, METHOD, INTENT_AMOUNT, false);
     }
 
     function test_DelegatedStakeLocksSelectedOwnersStake() public {
@@ -200,7 +200,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         vm.prank(other);
         vault.selectStakeOwner(stakeOwner);
 
-        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, other, METHOD, INTENT_AMOUNT);
+        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, other, METHOD, INTENT_AMOUNT, false);
 
         assertEq(disputeProtectionPolicy.getDisputeProtectionIntent(INTENT).stakeOwner, stakeOwner);
         assertEq(vault.lockedStake(stakeOwner), INTENT_AMOUNT);
@@ -209,7 +209,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
 
     function test_CancellationUnlocksPendingNoneIsNoOpAndSettledReverts() public {
         disputeProtectionPolicy.onIntentCancelled(keccak256("missing"));
-        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
         disputeProtectionPolicy.onIntentCancelled(INTENT);
         assertEq(vault.lockedStake(taker), 0);
         assertEq(
@@ -219,7 +219,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
 
         bytes32 settledIntent = keccak256("settled");
         disputeProtectionPolicy.onIntentSignaled(
-            settledIntent, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT
+            settledIntent, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false
         );
         disputeProtectionPolicy.onIntentSettled(settledIntent, INTENT_AMOUNT, false);
         vm.expectRevert(
@@ -234,7 +234,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
 
     function test_SettlementResizesFullAndPartialAndEmitsManualFlag() public {
         disputeProtectionPolicy.onIntentSettled(keccak256("missing"), INTENT_AMOUNT, false);
-        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
         uint256 releaseEligibleAt = vm.getBlockTimestamp() + RISK_WINDOW;
         vm.expectEmit(true, true, true, true);
         emit DisputeProtectionIntentSettled(INTENT, taker, depositor, 40e6, uint64(releaseEligibleAt), true);
@@ -262,7 +262,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         disputeProtectionPolicy.onIntentSettled(INTENT, 40e6, true);
 
         bytes32 fullIntent = keccak256("full");
-        disputeProtectionPolicy.onIntentSignaled(fullIntent, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        disputeProtectionPolicy.onIntentSignaled(fullIntent, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
         disputeProtectionPolicy.onIntentSettled(fullIntent, INTENT_AMOUNT, false);
         (, amount,) = vault.locks(fullIntent);
         assertEq(amount, INTENT_AMOUNT);
@@ -348,7 +348,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         );
         disputeProtectionPolicy.submitDispute(attestation);
 
-        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
         vm.expectRevert(
             abi.encodeWithSelector(
                 IDisputeProtectionPolicy.DisputeProtectionIntentNotSettled.selector,
@@ -466,7 +466,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
     }
 
     function test_SettlementRejectsReleaseEligibilityTimestampOverflow() public {
-        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
         uint256 overflowingTimestamp = uint256(type(uint64).max) - RISK_WINDOW + 1;
         vm.warp(overflowingTimestamp);
 
@@ -562,6 +562,78 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         assertEq(secondVault.controller(), address(secondDisputeProtectionPolicy));
     }
 
+    function test_ReleasePredecessorLocksBeforeMaturityKeepsStakeInVault() public {
+        bytes32[] memory intents = new bytes32[](2);
+        intents[0] = INTENT;
+        intents[1] = keccak256("second-settlement");
+        _admitAndSettle(intents[0], 20e6, false);
+        _admitAndSettle(intents[1], 30e6, false);
+        DisputeProtectionPolicy successor = _handoverVault();
+
+        assertEq(vault.lockedStake(taker), 50e6);
+        assertLt(block.timestamp, disputeProtectionPolicy.getDisputeProtectionIntent(INTENT).releaseEligibleAt);
+        successor.releasePredecessorLocks(intents);
+
+        assertEq(vault.lockedStake(taker), 0);
+        assertEq(vault.freeStake(taker), STAKE_AMOUNT);
+        assertEq(vault.stakeBalance(taker), STAKE_AMOUNT);
+        assertEq(vault.totalAccounted(), STAKE_AMOUNT);
+        assertEq(token.balanceOf(address(vault)), STAKE_AMOUNT);
+        assertEq(token.balanceOf(taker), 0);
+        assertEq(
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(INTENT).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED)
+        );
+        assertEq(
+            uint256(successor.getDisputeProtectionIntent(INTENT).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+        );
+        vm.expectRevert(abi.encodeWithSelector(IStakeVault.LockNotFound.selector, INTENT));
+        successor.releasePredecessorLocks(intents);
+    }
+
+    function test_ReleasePredecessorLocksRejectsUnauthorizedPendingAndCurrentIntents() public {
+        _admitAndSettle(INTENT, 20e6, false);
+        bytes32 pendingIntent = keccak256("pending-predecessor");
+        disputeProtectionPolicy.onIntentSignaled(
+            pendingIntent, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false
+        );
+        DisputeProtectionPolicy successor = _handoverVault();
+        bytes32[] memory intents = new bytes32[](2);
+        intents[0] = INTENT;
+        intents[1] = pendingIntent;
+
+        vm.expectRevert("Ownable: caller is not the owner");
+        vm.prank(other);
+        successor.releasePredecessorLocks(intents);
+        vm.expectRevert("DPP: Pending predecessor intent");
+        successor.releasePredecessorLocks(intents);
+        assertEq(vault.lockedStake(taker), 20e6 + INTENT_AMOUNT);
+        (, uint256 settledLockAmount,) = vault.locks(INTENT);
+        assertEq(settledLockAmount, 20e6); // The earlier release in the batch also rolls back.
+
+        bytes32 currentIntent = keccak256("successor-settlement");
+        successor.setLifecycleHookAuthorization(address(this), true);
+        successor.setRiskWindow(METHOD, RISK_WINDOW);
+        successor.onIntentSignaled(currentIntent, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
+        successor.onIntentSettled(currentIntent, INTENT_AMOUNT, false);
+        intents[1] = currentIntent;
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IDisputeProtectionPolicy.DisputeProtectionIntentAlreadyExists.selector, currentIntent
+            )
+        );
+        successor.releasePredecessorLocks(intents);
+        assertEq(vault.lockedStake(taker), 20e6 + 2 * INTENT_AMOUNT);
+    }
+
+    function _handoverVault() internal returns (DisputeProtectionPolicy successor) {
+        successor = new DisputeProtectionPolicy(address(this), vault, disputeVerifier, disputeNullifierRegistry);
+        vault.proposeController(address(successor));
+        vm.warp(vault.pendingControllerValidAt());
+        successor.acceptVaultController();
+    }
+
     function _stake(address stakeOwner, uint256 amount) internal {
         token.transfer(stakeOwner, amount);
         vm.startPrank(stakeOwner);
@@ -571,7 +643,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
     }
 
     function _admitAndSettle(bytes32 intentHash, uint256 releaseAmount, bool manualRelease) internal {
-        disputeProtectionPolicy.onIntentSignaled(intentHash, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        disputeProtectionPolicy.onIntentSignaled(intentHash, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
         disputeProtectionPolicy.onIntentSettled(intentHash, releaseAmount, manualRelease);
     }
 

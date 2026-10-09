@@ -14,12 +14,14 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
  * protection. Whitelisted takers bypass staking. Non-whitelisted takers use stake-backed admission on payment methods
  * with a nonzero risk window unless the depositor opted the deposit payment method out; otherwise an enabled whitelist
  * rejects them while a whitelist-disabled deposit stays open. A payment method with a zero risk window is never routed
- * through dispute protection, so its whitelist remains the only gate.
+ * through dispute protection, so its whitelist remains the only gate. Protected intents may request no-stake admission
+ * on whitelist-disabled deposits, then fulfill through O3 with signed bypass evidence or explicitly switch to staked mode.
  * @dev Reads canonical intent data from the calling orchestrator and forwards cancellation and settlement accounting
  * to DisputeProtectionPolicy. All callbacks remain fail-closed. This hook serves every registered orchestrator and
  * forwards lifecycle callbacks without provenance checks; the trust argument lives in DisputeProtectionPolicy's header.
  * Deregistering an orchestrator with unresolved intents snapshotted to this hook permanently blocks their terminal
  * callbacks, so governance must drain its intents before removing it from OrchestratorRegistry.
+ * Governance must route protected payment methods through UPV4 before enabling this hook.
  */
 contract IntentLifecycleHookV1 is IIntentLifecycleHook {
     /* ============ State Variables ============ */
@@ -71,8 +73,14 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
         // Dispute protection admission is stateful, so the configuration query only selects the route.
         // onIntentSignaled remains authoritative for token compatibility, collateral, and pause checks.
         if (disputeProtectionPolicy.isDisputeProtectionEnabled(intent.escrow, intent.depositId, intent.paymentMethod)) {
+            (address validationHook, bytes memory hookData) = abi.decode(intent.data, (address, bytes));
+            require(validationHook == address(disputeProtectionPolicy), "ILH: Invalid payment validation hook");
+            bool noStake = abi.decode(hookData, (bool));
+            if (noStake && isWhitelistEnabled) {
+                revert TakerNotWhitelisted(intent.escrow, intent.depositId, intent.paymentMethod, intent.owner);
+            }
             disputeProtectionPolicy.onIntentSignaled(
-                _intentHash, intent.escrow, intent.depositId, intent.owner, intent.paymentMethod, intent.amount
+                _intentHash, intent.escrow, intent.depositId, intent.owner, intent.paymentMethod, intent.amount, noStake
             );
         } else if (isWhitelistEnabled) {
             revert TakerNotWhitelisted(intent.escrow, intent.depositId, intent.paymentMethod, intent.owner);
