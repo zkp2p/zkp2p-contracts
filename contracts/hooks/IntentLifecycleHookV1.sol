@@ -15,7 +15,8 @@ import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
  * with a nonzero risk window unless the depositor opted the deposit payment method out; otherwise an enabled whitelist
  * rejects them while a whitelist-disabled deposit stays open. A payment method with a zero risk window is never routed
  * through dispute protection, so its whitelist remains the only gate. Protected intents may request no-stake admission
- * on whitelist-disabled deposits, then fulfill through O3 with signed bypass evidence or explicitly switch to staked mode.
+ * under the same access rules as staked admission, then fulfill through O3 with signed bypass evidence or explicitly
+ * switch to staked mode.
  * @dev Reads canonical intent data from the calling orchestrator and forwards cancellation and settlement accounting
  * to DisputeProtectionPolicy. All callbacks remain fail-closed. This hook serves every registered orchestrator and
  * forwards lifecycle callbacks without provenance checks; the trust argument lives in DisputeProtectionPolicy's header.
@@ -76,9 +77,6 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
             (address validationHook, bytes memory hookData) = abi.decode(intent.data, (address, bytes));
             require(validationHook == address(disputeProtectionPolicy), "ILH: Invalid payment validation hook");
             bool noStake = abi.decode(hookData, (bool));
-            if (noStake && isWhitelistEnabled) {
-                revert TakerNotWhitelisted(intent.escrow, intent.depositId, intent.paymentMethod, intent.owner);
-            }
             disputeProtectionPolicy.onIntentSignaled(
                 _intentHash, intent.escrow, intent.depositId, intent.owner, intent.paymentMethod, intent.amount, noStake
             );

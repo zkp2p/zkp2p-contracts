@@ -350,22 +350,55 @@ contract DisputeWindowBypassTest is OrchestratorV3Fixture {
         assertEq(token.balanceOf(taker), 2 * INTENT_AMOUNT);
     }
 
-    function test_NoStakeAdmissionAndModeChangeCannotBypassWhitelist() public {
+    function test_NoStakeAdmissionFollowsStakedAccessOnWhitelistEnabledDeposit() public {
         vm.prank(depositor);
         whitelist.setEnabled(address(escrow), depositId, METHOD, true);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IntentLifecycleHookV1.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker
-            )
+        assertFalse(whitelist.isTakerAllowed(address(escrow), depositId, METHOD, taker));
+        bytes32 hash = _signalUnstaked();
+        assertEq(
+            uint256(protection.getDisputeProtectionIntent(hash).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING)
         );
-        _signalCall(taker, _unstakedParams());
+        assertEq(protection.getDisputeProtectionIntent(hash).stakeOwner, address(0));
+        assertEq(vault.lockedStake(taker), 0);
+
+        bytes memory proof = _proof(hash, PAYMENT_ID, abi.encode(false));
+        vm.expectRevert("DPP: Payment cannot bypass");
+        _settle(hash, proof);
+        assertFalse(nullifiers.isNullified(keccak256(abi.encodePacked(METHOD, PAYMENT_ID))));
+
+        _settle(hash, _proof(hash, PAYMENT_ID, abi.encode(true)));
+        assertEq(
+            uint256(protection.getDisputeProtectionIntent(hash).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.RELEASED)
+        );
+        assertEq(protection.getDisputeProtectionIntent(hash).stakeOwner, address(0));
+        assertEq(vault.lockedStake(taker), 0);
+        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
+    }
+
+    function test_ModeChangeToNoStakeAllowedOnWhitelistEnabledDeposit() public {
+        vm.prank(depositor);
+        whitelist.setEnabled(address(escrow), depositId, METHOD, true);
+        assertFalse(whitelist.isTakerAllowed(address(escrow), depositId, METHOD, taker));
         _stake();
         bytes32 hash = _signalDefault();
-        vm.expectRevert("DPP: Whitelist enabled");
-        _setNoStake(hash, true);
-        bytes memory proof = _proof(hash, PAYMENT_ID, abi.encode(true));
-        _settle(hash, proof);
         assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
+        _setNoStake(hash, true);
+        assertEq(vault.lockedStake(taker), 0);
+        assertEq(vault.freeStake(taker), 500e6);
+        assertEq(protection.getDisputeProtectionIntent(hash).stakeOwner, address(0));
+    }
+
+    function test_ModeChangeToNoStakeDoesNotReadOrchestrator() public {
+        _stake();
+        bytes32 hash = _signalDefault();
+        assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
+        vm.prank(taker);
+        protection.setIntentNoStake(IOrchestratorV3(other), hash, true);
+        assertEq(vault.lockedStake(taker), 0);
+        assertEq(vault.freeStake(taker), 500e6);
+        assertEq(protection.getDisputeProtectionIntent(hash).stakeOwner, address(0));
     }
 
     function testFuzz_PayoutFailureRollsBackCollateralPaymentAndWindow(bool bypass) public {

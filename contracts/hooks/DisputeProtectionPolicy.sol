@@ -208,9 +208,10 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
     /**
      * @notice Changes a pending intent's stake mode. Only the taker may choose its collateral terms.
      * @dev Staked mode locks the full intent amount using the current stake owner. No-stake mode unlocks it and
-     * requires a signed bypass flag at fulfillment. The saved risk window is unchanged.
-     * Funding and fulfillment are separate calls.
-     * @param _orchestrator Registered orchestrator that owns the intent.
+     * requires a signed bypass flag at fulfillment. No-stake follows the same access rules as staked mode.
+     * The saved risk window is unchanged. Funding and fulfillment are separate calls.
+     * @param _orchestrator Registered orchestrator that owns the intent; only read and validated when switching
+     * to staked mode.
      * @param _intentHash Pending intent whose mode is changing.
      * @param _noStake Whether fulfillment must bypass the collateral window.
      */
@@ -219,19 +220,15 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
         require(intent.status == DisputeProtectionIntentStatus.PENDING, "DPP: Intent not pending");
         require(msg.sender == intent.taker, "DPP: Only taker");
         require(_noStake != (intent.stakeOwner == address(0)), "DPP: Mode unchanged");
-        IntentLifecycleHookV1 hook = IntentLifecycleHookV1(address(_orchestrator.getIntentLifecycleHook(_intentHash)));
-        if (!isLifecycleHookAuthorizedByHook[address(hook)]) revert UnauthorizedLifecycleHook(address(hook));
-        require(hook.orchestratorRegistry().isOrchestrator(address(_orchestrator)), "DPP: Unregistered orchestrator");
-        IOrchestratorV3.Intent memory paymentIntent = _orchestrator.getIntent(_intentHash);
 
         if (_noStake) {
-            require(
-                !hook.whitelistPolicy().enabled(paymentIntent.escrow, paymentIntent.depositId, intent.paymentMethod),
-                "DPP: Whitelist enabled"
-            );
             intent.stakeOwner = address(0);
             stakeVault.unlockStake(_intentHash);
         } else {
+            IntentLifecycleHookV1 hook = IntentLifecycleHookV1(address(_orchestrator.getIntentLifecycleHook(_intentHash)));
+            if (!isLifecycleHookAuthorizedByHook[address(hook)]) revert UnauthorizedLifecycleHook(address(hook));
+            require(hook.orchestratorRegistry().isOrchestrator(address(_orchestrator)), "DPP: Unregistered orchestrator");
+            IOrchestratorV3.Intent memory paymentIntent = _orchestrator.getIntent(_intentHash);
             intent.stakeOwner = stakeVault.stakeOwnerOf(intent.taker);
             stakeVault.lockStake(intent.stakeOwner, _intentHash, paymentIntent.amount, PENDING_COVERAGE_MATURITY);
         }
