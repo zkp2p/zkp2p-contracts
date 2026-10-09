@@ -1,0 +1,14 @@
+{
+  "capitalUsd": 10000,
+  "riskWindowDays": 14,
+  "additionalHoldDays": 0,
+  "utilizationBps": 7500,
+  "targetNetAprBps": 1200,
+  "expectedLossBps": 10,
+  "operatingCostBps": 5,
+  "sponsorFeeBps": 40,
+  "serviceFeeBps": 100,
+  "l1FeeBps": 40,
+  "l2FeeBps": 10,
+  "minimumPeerFeeBps": 10
+}

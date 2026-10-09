@@ -6,9 +6,13 @@ pragma solidity ^0.8.18;
  * @title IDisputeProtectionPolicy
  * @notice Lifecycle-hook integration surface for stake-backed dispute coverage.
  * @dev The concrete policy exposes depositor, governance, dispute, and release functions directly.
- *      This interface intentionally contains only the functions consumed by IntentLifecycleHookV1.
+ *      This interface contains lifecycle calls consumed by IntentLifecycleHookV1 and the stake-referral snapshot
+ *      read consumed by OrchestratorV3.
  */
 interface IDisputeProtectionPolicy {
+    /** @notice Returns the snapshotted collateral owner and lifecycle state for an intent. */
+    function getDisputeProtectionIntent(bytes32 _intentHash) external view returns (DisputeProtectionIntent memory);
+
     /**
      * @notice Lifecycle state of a dispute-protected intent.
      * @dev `NONE` is the required zero-value sentinel for an uninitialized mapping entry; it is not a live state.
