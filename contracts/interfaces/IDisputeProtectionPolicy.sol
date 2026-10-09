@@ -6,7 +6,7 @@ pragma solidity ^0.8.18;
  * @title IDisputeProtectionPolicy
  * @notice Lifecycle-hook integration surface for stake-backed dispute coverage.
  * @dev The concrete policy exposes depositor, governance, dispute, and release functions directly.
- *      This interface contains the functions consumed by the lifecycle hook and payment verifier.
+ *      This interface contains the functions consumed by the lifecycle hook.
  */
 interface IDisputeProtectionPolicy {
     /**
@@ -141,8 +141,8 @@ interface IDisputeProtectionPolicy {
     /**
      * @notice Settles a pending dispute protection intent according to its selected stake mode.
      * @dev Missing dispute protection intents are ignored. Staked intents retain collateral for the saved window;
-     * no-stake intents release immediately. The authorized hook must enforce use of the policy-aware payment
-     * verifier for proof-based no-stake settlement. Manual release creates no new lock.
+     * no-stake intents release immediately. Governance must route proof-based fulfillment through a verifier that
+     * calls the policy's validation hook. Lifecycle admission pins the policy address. Manual release creates no new lock.
      * @param _intentHash Intent completed by proof-based fulfillment or manual release.
      * @param _releaseAmount Amount released from Escrow before protocol, referral, and manager fees.
      * @param _isManualRelease Whether the depositor used the manual-release path without an on-chain payment proof.
