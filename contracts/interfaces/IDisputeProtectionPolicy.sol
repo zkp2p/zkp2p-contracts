@@ -149,9 +149,6 @@ interface IDisputeProtectionPolicy {
      */
     function onIntentSettled(bytes32 _intentHash, uint256 _releaseAmount, bool _isManualRelease) external;
 
-    /// @notice Returns the policy's stored admission mode and lifecycle state for an intent.
-    function getDisputeProtectionIntent(bytes32 _intentHash) external view returns (DisputeProtectionIntent memory);
-
     /**
      * @notice Returns the effective stake-backed dispute protection state for a deposit payment method.
      * @dev True when the depositor has not opted the tuple out and the payment method has a nonzero risk window.
