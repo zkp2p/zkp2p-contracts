@@ -86,6 +86,24 @@ contract DisputeWindowBypassTest is OrchestratorV3Fixture {
         orchestrator.setLifecycleHook(policy);
     }
 
+    function test_NoStakeSignalHonorsAdmissionPauseAndDepositorOptOut() public {
+        protection.setAdmissionsPaused(true);
+        vm.expectRevert(IDisputeProtectionPolicy.AdmissionsPaused.selector);
+        _signalCall(taker, _unstakedParams());
+        protection.setAdmissionsPaused(false);
+
+        vm.prank(depositor);
+        protection.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, false);
+        bytes32 hash = _signalUnstaked();
+        assertEq(
+            uint256(protection.getDisputeProtectionIntent(hash).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+        );
+        _settle(hash, _proof(hash, PAYMENT_ID, abi.encode(false)));
+        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
+        assertEq(vault.lockedStake(taker), 0);
+    }
+
     function testFuzz_StakeAndBypassAccounting(bool noStake, bool funded, bool bypass, uint96 release) public {
         uint256 releaseAmount = bound(release, 1, INTENT_AMOUNT);
         if (!noStake) _stake();
