@@ -34,9 +34,6 @@ interface IDisputeProtectionPolicy {
      * @param riskWindow Default collateral window saved at intent admission, including when admitted without stake.
      * @param releaseEligibleAt Earliest timestamp at which collateral may be released. Dispute evidence remains
      * valid after this time until release actually executes.
-     * @param noStake Whether the intent is in no-stake mode (no collateral locked; proof-based fulfillment requires
-     * a signed bypass flag); this field is the authoritative stake mode, and `setIntentNoStake` does not update
-     * the signal-time flag in the orchestrator's `intent.data`.
      * @param releaseAmount Amount released from Escrow before fees and therefore collateralized after settlement.
      */
     struct DisputeProtectionIntent {
@@ -47,7 +44,6 @@ interface IDisputeProtectionPolicy {
         DisputeProtectionIntentStatus status;
         uint64 riskWindow;
         uint64 releaseEligibleAt;
-        bool noStake;
         uint256 releaseAmount;
     }
 

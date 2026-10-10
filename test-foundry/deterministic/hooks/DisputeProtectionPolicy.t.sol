@@ -128,7 +128,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
             disputeProtectionPolicy.getDisputeProtectionIntent(INTENT);
         assertEq(disputeProtectionIntent.taker, other);
         assertEq(disputeProtectionIntent.stakeOwner, address(0));
-        assertTrue(disputeProtectionIntent.noStake);
+        assertTrue(disputeProtectionPolicy.isIntentNoStake(INTENT));
         assertEq(disputeProtectionIntent.depositor, depositor);
         assertEq(
             uint256(disputeProtectionIntent.status),
@@ -175,7 +175,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         assertEq(disputeProtectionIntent.releaseEligibleAt, block.timestamp);
         assertEq(disputeProtectionIntent.releaseAmount, 40e6);
         assertEq(disputeProtectionIntent.riskWindow, RISK_WINDOW);
-        assertTrue(disputeProtectionIntent.noStake);
+        assertTrue(disputeProtectionPolicy.isIntentNoStake(INTENT));
         (, uint256 amount,) = vault.locks(INTENT);
         assertEq(amount, 0);
         assertEq(vault.lockedStake(other), 0);
@@ -265,7 +265,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
             disputeProtectionPolicy.getDisputeProtectionIntent(INTENT);
         assertEq(disputeProtectionIntent.taker, taker);
         assertEq(disputeProtectionIntent.stakeOwner, taker);
-        assertFalse(disputeProtectionIntent.noStake);
+        assertFalse(disputeProtectionPolicy.isIntentNoStake(INTENT));
         assertEq(disputeProtectionIntent.depositor, depositor);
         assertEq(disputeProtectionIntent.riskWindow, RISK_WINDOW);
         assertEq(disputeProtectionIntent.releaseAmount, 0);
@@ -369,7 +369,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, other, METHOD, INTENT_AMOUNT, false);
 
         assertEq(disputeProtectionPolicy.getDisputeProtectionIntent(INTENT).stakeOwner, stakeOwner);
-        assertFalse(disputeProtectionPolicy.getDisputeProtectionIntent(INTENT).noStake);
+        assertFalse(disputeProtectionPolicy.isIntentNoStake(INTENT));
         assertEq(vault.lockedStake(stakeOwner), INTENT_AMOUNT);
         assertEq(vault.lockedStake(other), 0);
     }
@@ -399,6 +399,26 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         disputeProtectionPolicy.onIntentCancelled(settledIntent);
     }
 
+    function test_GetDisputeProtectionIntentPreservesPredecessorAbi() public {
+        uint256 releaseAmount = 40e6;
+        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
+        disputeProtectionPolicy.onIntentSettled(INTENT, releaseAmount, false);
+
+        bytes memory encodedIntent = abi.encode(disputeProtectionPolicy.getDisputeProtectionIntent(INTENT));
+        assertEq(encodedIntent.length, 8 * 32);
+        (,,,,,,, uint256 decodedReleaseAmount) =
+            abi.decode(encodedIntent, (address, address, address, bytes32, uint8, uint64, uint64, uint256));
+        assertEq(decodedReleaseAmount, releaseAmount);
+        assertFalse(disputeProtectionPolicy.isIntentNoStake(INTENT));
+
+        bytes32 noStakeIntent = keccak256("no-stake-abi");
+        disputeProtectionPolicy.onIntentSignaled(
+            noStakeIntent, address(escrow), depositId, other, METHOD, INTENT_AMOUNT, true
+        );
+        assertTrue(disputeProtectionPolicy.isIntentNoStake(noStakeIntent));
+        assertFalse(disputeProtectionPolicy.isIntentNoStake(keccak256("unknown")));
+    }
+
     function test_SettlementResizesFullAndPartialAndEmitsManualFlag() public {
         disputeProtectionPolicy.onIntentSettled(keccak256("missing"), INTENT_AMOUNT, false);
         disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
@@ -415,7 +435,7 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         );
         assertEq(disputeProtectionIntent.releaseEligibleAt, releaseEligibleAt);
         assertEq(disputeProtectionIntent.releaseAmount, 40e6);
-        assertFalse(disputeProtectionIntent.noStake);
+        assertFalse(disputeProtectionPolicy.isIntentNoStake(INTENT));
         (, uint256 amount, uint64 maturesAt) = vault.locks(INTENT);
         assertEq(amount, 40e6);
         assertEq(maturesAt, releaseEligibleAt);

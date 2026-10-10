@@ -119,7 +119,7 @@ contract DisputeWindowBypassTest is OrchestratorV3Fixture {
             _setNoStake(hash, false);
             assertEq(token.balanceOf(taker), 0);
             assertEq(protection.getDisputeProtectionIntent(hash).stakeOwner, address(0));
-            assertTrue(protection.getDisputeProtectionIntent(hash).noStake);
+            assertTrue(protection.isIntentNoStake(hash));
             assertEq(orchestrator.getIntent(hash).owner, taker);
             assertFalse(nullifiers.isNullified(keccak256(abi.encodePacked(METHOD, PAYMENT_ID))));
             return;
@@ -170,7 +170,7 @@ contract DisputeWindowBypassTest is OrchestratorV3Fixture {
         vm.expectEmit(true, true, false, true, address(protection));
         emit DisputeProtectionIntentStakeModeChanged(hash, taker, false);
         _setNoStake(hash, false);
-        assertFalse(protection.getDisputeProtectionIntent(hash).noStake);
+        assertFalse(protection.isIntentNoStake(hash));
         assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
         vm.expectRevert("DPP: Only taker");
         vm.prank(other);
@@ -183,9 +183,9 @@ contract DisputeWindowBypassTest is OrchestratorV3Fixture {
         _setNoStake(hash, true);
         assertEq(vault.lockedStake(taker), 0);
         assertEq(protection.getDisputeProtectionIntent(hash).stakeOwner, address(0));
-        assertTrue(protection.getDisputeProtectionIntent(hash).noStake);
+        assertTrue(protection.isIntentNoStake(hash));
         _setNoStake(hash, false);
-        assertFalse(protection.getDisputeProtectionIntent(hash).noStake);
+        assertFalse(protection.isIntentNoStake(hash));
         assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
         assertEq(protection.getDisputeProtectionIntent(hash).riskWindow, RISK_WINDOW);
     }
@@ -320,13 +320,13 @@ contract DisputeWindowBypassTest is OrchestratorV3Fixture {
         vm.expectRevert("DPP: Payment cannot bypass");
         _settle(hash, proof);
         _setNoStake(hash, false);
-        assertFalse(protection.getDisputeProtectionIntent(hash).noStake);
+        assertFalse(protection.isIntentNoStake(hash));
         assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
         _settle(hash, proof);
         assertEq(vault.lockedStake(taker), 40e6);
         assertEq(vault.freeStake(taker), 460e6);
         assertEq(protection.getDisputeProtectionIntent(hash).stakeOwner, taker);
-        assertFalse(protection.getDisputeProtectionIntent(hash).noStake);
+        assertFalse(protection.isIntentNoStake(hash));
         assertEq(protection.getDisputeProtectionIntent(hash).riskWindow, RISK_WINDOW);
         assertEq(protection.getDisputeProtectionIntent(hash).releaseEligibleAt, block.timestamp + RISK_WINDOW);
     }
@@ -384,7 +384,7 @@ contract DisputeWindowBypassTest is OrchestratorV3Fixture {
             uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING)
         );
         assertEq(protection.getDisputeProtectionIntent(hash).stakeOwner, address(0));
-        assertTrue(protection.getDisputeProtectionIntent(hash).noStake);
+        assertTrue(protection.isIntentNoStake(hash));
         assertEq(vault.lockedStake(taker), 0);
 
         bytes memory proof = _proof(hash, PAYMENT_ID, abi.encode(false));
@@ -398,7 +398,7 @@ contract DisputeWindowBypassTest is OrchestratorV3Fixture {
             uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.RELEASED)
         );
         assertEq(protection.getDisputeProtectionIntent(hash).stakeOwner, address(0));
-        assertTrue(protection.getDisputeProtectionIntent(hash).noStake);
+        assertTrue(protection.isIntentNoStake(hash));
         assertEq(protection.getDisputeProtectionIntent(hash).releaseAmount, INTENT_AMOUNT);
         assertEq(vault.lockedStake(taker), 0);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
@@ -415,7 +415,7 @@ contract DisputeWindowBypassTest is OrchestratorV3Fixture {
         assertEq(vault.lockedStake(taker), 0);
         assertEq(vault.freeStake(taker), 500e6);
         assertEq(protection.getDisputeProtectionIntent(hash).stakeOwner, address(0));
-        assertTrue(protection.getDisputeProtectionIntent(hash).noStake);
+        assertTrue(protection.isIntentNoStake(hash));
     }
 
     function test_ModeChangeToNoStakeDoesNotReadOrchestrator() public {
@@ -427,7 +427,7 @@ contract DisputeWindowBypassTest is OrchestratorV3Fixture {
         assertEq(vault.lockedStake(taker), 0);
         assertEq(vault.freeStake(taker), 500e6);
         assertEq(protection.getDisputeProtectionIntent(hash).stakeOwner, address(0));
-        assertTrue(protection.getDisputeProtectionIntent(hash).noStake);
+        assertTrue(protection.isIntentNoStake(hash));
     }
 
     function testFuzz_PayoutFailureRollsBackCollateralPaymentAndWindow(bool bypass) public {
@@ -445,7 +445,7 @@ contract DisputeWindowBypassTest is OrchestratorV3Fixture {
         assertEq(vault.lockedStake(taker), bypass ? 0 : INTENT_AMOUNT);
         assertEq(vault.freeStake(taker), bypass ? 500e6 : 450e6);
         assertEq(protection.getDisputeProtectionIntent(hash).stakeOwner, bypass ? address(0) : taker);
-        assertEq(protection.getDisputeProtectionIntent(hash).noStake, bypass);
+        assertEq(protection.isIntentNoStake(hash), bypass);
         assertEq(orchestrator.getIntent(hash).owner, taker);
         assertFalse(nullifiers.isNullified(keccak256(abi.encodePacked(METHOD, PAYMENT_ID))));
         assertEq(protection.getDisputeProtectionIntent(hash).riskWindow, RISK_WINDOW);
@@ -481,7 +481,7 @@ contract DisputeWindowBypassTest is OrchestratorV3Fixture {
         vault.setTakerAuthorization(taker, false);
         _settle(hash, proof);
         assertEq(protection.getDisputeProtectionIntent(hash).stakeOwner, other);
-        assertFalse(protection.getDisputeProtectionIntent(hash).noStake);
+        assertFalse(protection.isIntentNoStake(hash));
         assertEq(vault.lockedStake(other), INTENT_AMOUNT);
         assertEq(vault.freeStake(other), 50e6);
     }
@@ -509,7 +509,7 @@ contract DisputeWindowBypassTest is OrchestratorV3Fixture {
             params.paymentMethod = method;
             bytes32 hash = _signal(taker, params);
             assertEq(protection.getDisputeProtectionIntent(hash).stakeOwner, address(0));
-            assertTrue(protection.getDisputeProtectionIntent(hash).noStake);
+            assertTrue(protection.isIntentNoStake(hash));
             _settle(hash, _proof(hash, PAYMENT_ID, abi.encode(true)));
             assertEq(protection.getDisputeProtectionIntent(hash).releaseEligibleAt, block.timestamp);
             assertEq(vault.lockedStake(taker), i * INTENT_AMOUNT);
@@ -698,7 +698,7 @@ contract DisputeWindowBypassTest is OrchestratorV3Fixture {
             uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.PENDING)
         );
         assertEq(protection.getDisputeProtectionIntent(hash).stakeOwner, address(0));
-        assertTrue(protection.getDisputeProtectionIntent(hash).noStake);
+        assertTrue(protection.isIntentNoStake(hash));
         assertEq(vault.lockedStake(taker), 0);
         assertEq(vault.freeStake(taker), 500e6);
         assertEq(orchestrator.getIntent(hash).owner, taker);
