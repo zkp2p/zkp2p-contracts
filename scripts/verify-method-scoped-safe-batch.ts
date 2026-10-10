@@ -447,7 +447,7 @@ async function assertVaultContractIdentity(
   }
 }
 
-function liveHre(
+export function liveHre(
   hre: HardhatRuntimeEnvironment,
   provider: ethers.providers.Provider
 ): HardhatRuntimeEnvironment {
