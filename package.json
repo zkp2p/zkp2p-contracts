@@ -57,6 +57,7 @@
     "test:deterministic": "forge test --match-path 'test-foundry/deterministic/**/*.t.sol'",
     "test:fuzz": "forge test --match-path 'test-foundry/fuzz/**/*.t.sol'",
     "test:invariant": "forge test --match-path 'test-foundry/invariant/**/*.t.sol'",
+    "test:smoke": "forge test --match-path 'test-foundry/smoke/**/*.t.sol'",
     "test:intent-guardian-fee-update": "node --test scripts/intent-guardian-fee-update.spec.cjs",
     "test:upi-payment-method": "node --test scripts/upi-payment-method.spec.cjs",
     "test:xmoney-payment-method": "node --test scripts/xmoney-payment-method.spec.cjs",

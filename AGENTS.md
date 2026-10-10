@@ -349,6 +349,8 @@ afterward; reject impossible states instead of handling them.
   package release.
 - Put deterministic tests in `test-foundry/deterministic/<domain>/`, fuzz properties in `test-foundry/fuzz/`, and
   stateful handlers/invariants in `test-foundry/invariant/`.
+- Put opt-in, environment-gated cross-repo smoke tests in `test-foundry/smoke/`. They skip unless their
+  environment is set, and coverage never runs them. Never put a skipping test under `test-foundry/deterministic/`.
 - Every behavior change needs the smallest deterministic success/revert/state regression that proves it. Add fuzz or
   invariant coverage only for a meaningful input space or state-machine property, not as automatic duplication.
 - Keep core paths and revert scenarios covered, but do not add tests solely to raise counts or exercise unrelated
