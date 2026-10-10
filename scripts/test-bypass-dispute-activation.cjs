@@ -1059,6 +1059,72 @@ async function withCleanLaneEnv(run) {
   }
 }
 
+test("lane 46 classifies bypass policy activity across cutover", () => {
+  const {
+    FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
+  } = require("../deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts");
+  /** @param {string} name */
+  const event = (name) =>
+    /** @type {import("../deploy/37_deploy_method_scoped_dispute_lifecycle_stack").FreshStackEvent} */ ({
+      name,
+      blockNumber: 1,
+      transactionIndex: 0,
+      logIndex: 0,
+      transactionHash: hash(1),
+    });
+  const configuration = [
+    "DisputeProtectionEnabledUpdated",
+    "RiskWindowUpdated",
+    "LifecycleHookAuthorizationUpdated",
+    "OwnershipTransferStarted",
+  ].map(event);
+  assert.deepEqual(lane.BYPASS_POLICY_LIFECYCLE_EVENTS, [
+    ...FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
+    "DisputeProtectionIntentStakeModeChanged",
+  ]);
+  for (const name of [
+    "DisputeProtectionIntentStakeModeChanged",
+    "DisputeProtectionIntentOpened",
+  ]) {
+    assert.throws(
+      () => lane.classifyBypassPolicyActivity([event(name)], true),
+      {
+        message:
+          "Fresh DisputeProtectionPolicyBypass has lifecycle activity before cutover: " +
+          `${name} in ${hash(1)}`,
+      }
+    );
+  }
+  assert.doesNotThrow(() =>
+    lane.classifyBypassPolicyActivity(configuration, true)
+  );
+  assert.doesNotThrow(() =>
+    lane.classifyBypassPolicyActivity(
+      [
+        "DisputeProtectionIntentOpened",
+        "DisputeProtectionIntentSettled",
+        "DisputeProtectionIntentReleased",
+        "DisputeProtectionIntentCancelled",
+        "DisputeResolved",
+        "DisputeProtectionIntentStakeModeChanged",
+      ]
+        .map(event)
+        .concat(configuration),
+      false
+    )
+  );
+  for (const beforeCutover of [true, false]) {
+    assert.throws(
+      () =>
+        lane.classifyBypassPolicyActivity(
+          [...configuration, event("SomethingNew")],
+          beforeCutover
+        ),
+      /emitted an unclassified event: SomethingNew/
+    );
+  }
+});
+
 test("lane 46 exposes bypass activation tags and no dependencies", () => {
   assert.equal(lane.TAG, "46_activate_bypass_dispute_stack");
   assert.deepEqual(lane.default.tags, [lane.TAG, "V3DisputeBypassActivation"]);
