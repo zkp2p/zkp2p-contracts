@@ -74,6 +74,7 @@ contract IntentLifecycleHookV1 is IIntentLifecycleHook {
         // Dispute protection admission is stateful, so the configuration query only selects the route.
         // onIntentSignaled remains authoritative for token compatibility, collateral, and pause checks.
         if (disputeProtectionPolicy.isDisputeProtectionEnabled(intent.escrow, intent.depositId, intent.paymentMethod)) {
+            require(intent.data.length != 0, "ILH: Missing payment validation hook");
             (address validationHook, bytes memory hookData) = abi.decode(intent.data, (address, bytes));
             require(validationHook == address(disputeProtectionPolicy), "ILH: Invalid payment validation hook");
             bool noStake = abi.decode(hookData, (bool));

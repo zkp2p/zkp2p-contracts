@@ -642,7 +642,7 @@ contract DisputeWindowBypassTest is OrchestratorV3Fixture {
         for (uint256 i; i < 2; i++) {
             IOrchestratorV3.SignalIntentParams memory params = i == 0 ? _defaultParams() : _unstakedParams();
             params.data = "";
-            vm.expectRevert();
+            vm.expectRevert("ILH: Missing payment validation hook");
             _signalCall(taker, params);
             params.data = abi.encode(other, abi.encode(i == 1));
             vm.expectRevert("ILH: Invalid payment validation hook");
