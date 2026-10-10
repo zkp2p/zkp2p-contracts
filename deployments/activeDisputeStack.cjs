@@ -16,11 +16,18 @@ const CANONICAL_NAMES = [
   "IntentLifecycleHookV1",
   "WhitelistPolicy",
 ];
+/** @type {string[]} */
+const BY_NAME_DISPUTE_RECORDS = [
+  "StakeVaultBypass",
+  "DisputeProtectionPolicyBypass",
+  "IntentLifecycleHookV1Bypass",
+];
+// Internal policies stay hidden; selected records hide unless retained by name above.
+// The predecessor vault exports by name after deselection for withdrawals and claims.
 const INTERNAL_POLICY_RECORDS = [
   "WhitelistPolicyMethodScoped",
   "DisputeProtectionPolicyMethodScoped",
   "IntentLifecycleHookV1MethodScoped",
-  "StakeVaultMethodScoped",
   "DisputeProtectionPolicyMethodScopedStaked",
   "IntentLifecycleHookV1MethodScopedStaked",
 ];
@@ -72,16 +79,6 @@ function validateManifest() {
 }
 
 validateManifest();
-
-/** @type {Set<string>} */
-const SELECTED_INTERNAL_NAMES = new Set();
-for (const selection of Object.values(manifest.networks)) {
-  for (const canonicalName of CANONICAL_NAMES) {
-    const internalName = selection[canonicalName];
-    if (internalName !== canonicalName)
-      SELECTED_INTERNAL_NAMES.add(internalName);
-  }
-}
 
 /**
  * @param {string} network
@@ -159,6 +156,8 @@ function resolveActiveDisputeAliases(network, contracts, selectionStamp) {
     throw new Error("Canonical dispute deployment selection stamp mismatch");
   }
   const resolved = { ...contracts };
+  /** @type {Set<string>} */
+  const selectedInternalNames = new Set();
 
   for (const canonicalName of CANONICAL_NAMES) {
     const internalName = getActiveDisputeDeploymentName(network, canonicalName);
@@ -171,13 +170,15 @@ function resolveActiveDisputeAliases(network, contracts, selectionStamp) {
       throw new Error(`Missing active dispute deployment ${internalName}`);
     }
     resolved[canonicalName] = selected;
+    if (internalName !== canonicalName) selectedInternalNames.add(internalName);
   }
 
   for (const name of Object.keys(resolved)) {
     if (
       name.endsWith("OptIn") ||
       INTERNAL_POLICY_RECORDS.includes(name) ||
-      SELECTED_INTERNAL_NAMES.has(name)
+      (selectedInternalNames.has(name) &&
+        !BY_NAME_DISPUTE_RECORDS.includes(name))
     ) {
       delete resolved[name];
     }
@@ -186,6 +187,7 @@ function resolveActiveDisputeAliases(network, contracts, selectionStamp) {
 }
 
 module.exports = {
+  BY_NAME_DISPUTE_RECORDS,
   INTERNAL_POLICY_RECORDS,
   getActiveDisputeDeploymentName,
   getActiveDisputeSelectionStamp,

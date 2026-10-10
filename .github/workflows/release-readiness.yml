@@ -97,6 +97,7 @@ jobs:
           corepack yarn test:method-scoped-deployment
           corepack yarn test:method-scoped-vault-deployment
           corepack yarn test:method-scoped-activation
+          corepack yarn test:dispute-bypass-deployment
           corepack yarn whitelist:bootstrap --self-test
       - name: Typecheck dispute deployment surface
         run: corepack yarn typecheck:dispute-deployment

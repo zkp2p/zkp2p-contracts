@@ -790,6 +790,29 @@ Both lanes are immutable and pinned after their 2026-08-28 Base execution.
 Stake in the old vaults is abandoned: stakers withdraw once their locks release and takers re-stake in the new vault
 before the cutover; that readiness is part of `CONFIRM_BASE_V3_DISPUTE_METHOD_SCOPED_VAULT_DOWNSTREAM_READY`.
 
+`deploy/45_deploy_bypass_dispute_stack.ts` and `deploy/46_activate_bypass_dispute_stack.ts` prepare and activate
+`StakeVaultBypass`, `DisputeProtectionPolicyBypass`, `IntentLifecycleHookV1Bypass`, and `UnifiedPaymentVerifierV4`.
+Use `yarn deploy:dispute-bypass-stack:base_staging` / `:base` with
+`ENABLE_{STAGING,BASE}_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT=true` for resumable deploy-only preparation; Base starts
+vault/policy two-step transfers and transfers UPV4 ownership directly to the Safe. Verify with
+`yarn verify:dispute-bypass-stack:base_staging` / `:base`. Activation uses
+`yarn deploy:dispute-bypass-activation:base_staging` / `:base`: staging selects
+`PREPARE_STAGING_V3_DISPUTE_BYPASS_ACTIVATION=true` or `ENABLE_STAGING_V3_DISPUTE_BYPASS_ACTIVATION=true`, while Base
+uses `ENABLE_BASE_V3_DISPUTE_BYPASS_CUTOVER_PREPARATION=true`; both require their network's
+`CONFIRM_{STAGING,BASE}_V3_DISPUTE_BYPASS_ACTIVATION` and `CONFIRM_{STAGING,BASE}_V3_DISPUTE_BYPASS_DOWNSTREAM_READY`
+flags. Base also requires `CONFIRM_BASE_V3_DISPUTE_BYPASS_RELEASE_READY_SHA` matching the source SHA. Lane 46 makes
+UPV4 the sole NRV2 writer, reroutes all methods without changing currencies or order, adds the fresh dispute writer,
+and switches the O3 hook; the predecessor dispute writer stays until a later drain/removal lane. Base preparation
+deploys the guard and simulation-only postcondition and produces one unsigned atomic Safe batch at
+`deployments/outputs/safe-batches/base_dispute_bypass_cutover{,.sha256}.json`. Use
+`yarn simulate:dispute-bypass-safe-batch` for the pinned fork simulation and `yarn verify:dispute-bypass-safe-batch`
+immediately before Safe execution. Predecessor opt-outs on live listed windowed tuples must first be mirrored on
+the fresh policy. Live canonical package aliases remain on MethodScoped until the post-execution recording PR;
+the bypass records and UPV4 export by name before and after that flip, which only adds the canonical aliases at the
+same addresses. That PR also pins the lanes, records evidence, and
+updates the lane-31 wrapper for UPV4. Local deployments activate bypass and select its canonical aliases; restart
+the node before a second `yarn deploy:localhost` after activation because lanes 31/39 assume the old local wiring.
+
 The package exports the currently selected (latest) addresses for each network, and consumers should treat them as
 the addresses to use.
 

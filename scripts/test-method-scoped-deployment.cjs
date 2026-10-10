@@ -1330,7 +1330,7 @@ test("historical validation resolves the OptIn deployment record names", async (
   ]);
 });
 
-test("active dispute manifest selects the dedicated-vault stack on every network", () => {
+test("active dispute manifest selects the dedicated-vault stack on live networks and the bypass stack on local networks", () => {
   for (const network of /** @type {Array<"base" | "base_staging">} */ ([
     "base",
     "base_staging",
@@ -1347,16 +1347,16 @@ test("active dispute manifest selects the dedicated-vault stack on every network
     "hardhat",
   ])) {
     assert.deepEqual(Object.values(activeDisputeManifest.networks[network]), [
-      "StakeVaultMethodScoped",
-      "DisputeProtectionPolicyMethodScopedStaked",
-      "IntentLifecycleHookV1MethodScopedStaked",
+      "StakeVaultBypass",
+      "DisputeProtectionPolicyBypass",
+      "IntentLifecycleHookV1Bypass",
       "WhitelistPolicyMethodScoped",
     ]);
   }
   const resolved = resolveActiveDisputeAliases("hardhat", {
-    StakeVaultMethodScoped: { address: "vault" },
-    DisputeProtectionPolicyMethodScopedStaked: { address: "policy" },
-    IntentLifecycleHookV1MethodScopedStaked: { address: "hook" },
+    StakeVaultBypass: { address: "vault" },
+    DisputeProtectionPolicyBypass: { address: "policy" },
+    IntentLifecycleHookV1Bypass: { address: "hook" },
     WhitelistPolicyMethodScoped: { address: "whitelist" },
   });
   assert.equal(
@@ -1365,6 +1365,14 @@ test("active dispute manifest selects the dedicated-vault stack on every network
     ),
     false
   );
+  for (const name of [
+    "StakeVault",
+    "DisputeProtectionPolicy",
+    "IntentLifecycleHookV1",
+  ]) {
+    assert.ok(resolved[`${name}Bypass`]);
+    assert.deepEqual(resolved[`${name}Bypass`], resolved[name]);
+  }
 });
 
 test("summary and package wiring expose only the current deployment lanes", () => {
