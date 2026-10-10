@@ -28,6 +28,9 @@ import {UnifiedPaymentVerifierV4} from "../unifiedVerifier/UnifiedPaymentVerifie
  * intents it created and already validated against its EscrowRegistry. Registering an orchestrator is therefore a
  * governance assertion about its callback behavior.
  *
+ * TOKEN: The stake token, and therefore every protected deposit token, must not call recipients on transfer:
+ * such callbacks expose an unfixed stake-mode switch during fulfillment (see `setIntentNoStake`).
+ *
  * Governance must authorize a lifecycle hook here before configuring it on an Orchestrator. Predecessor hooks must
  * remain authorized until all intents snapshotted to them have been cancelled or settled. Likewise, an orchestrator
  * must be drained before it is removed from OrchestratorRegistry. Pending protected intents must drain before
@@ -74,7 +77,8 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
      * @dev After deployment, authorize this policy as the StakeVault controller and as a writer on the dedicated
      * dispute nullifier registry before enabling deposits.
      * @param _owner Governance owner for policy and dependency configuration.
-     * @param _stakeVault Vault holding and locking taker collateral.
+     * @param _stakeVault Vault holding and locking taker collateral. Its stake token must not have transfer callbacks
+     * (see `setIntentNoStake`).
      * @param _disputeVerifier Verifier for signed dispute evidence.
      * @param _disputeNullifierRegistry Dedicated registry that rejects reused dispute nullifiers.
      */
@@ -211,6 +215,17 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
      * @dev Staked mode locks the full intent amount using the current stake owner. No-stake mode unlocks it and
      * requires a signed bypass flag at fulfillment. No-stake follows the same access rules as staked mode.
      * The saved risk window is unchanged. Funding and fulfillment are separate calls.
+     * @dev WARNING: OrchestratorV3 reads stake mode twice during fulfillment: in `validatePayment`, called by the
+     * verifier during `verifyPayment`, and in `onIntentSettled`, called from `settleIntent`. Between these reads it
+     * prunes the intent and transfers the deposit token, including referral fees to recipients chosen by the taker
+     * at signal. This function remains callable while the policy record is PENDING, so a recipient callback
+     * (e.g. an ERC-777-style hook) can let a taker contract switch a staked intent to no-stake mid-fulfillment;
+     * settlement then releases it immediately without collateral, a risk window, or a signed bypass flag.
+     * `releaseFundsToPayer` has the same gap. It is unreachable while `stakeVault.stakeToken()` has no transfer
+     * callbacks (USDC today), since every protected deposit token must equal the stake token; intentionally unfixed.
+     * Possible fixes: require `_orchestrator.getIntent(_intentHash).owner == intent.taker` on a validated orchestrator
+     * in both switch directions (OrchestratorV3 prunes before any transfer), or have `validatePayment` record that
+     * its check ran and require that record in `onIntentSettled`.
      * @param _orchestrator Registered orchestrator that owns the intent; only read and validated when switching
      * to staked mode.
      * @param _intentHash Pending intent whose mode is changing.
