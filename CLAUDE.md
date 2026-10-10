@@ -164,6 +164,9 @@ Current numbered lanes include:
   feeds, then hands ownership to `MULTI_SIG.base`. It was executed on Base on
   2026-10-01 from `88be796` and is still mounted; tagged reruns only verify.
 
+- `45`: bypass dispute stack and UPV4 (tag + network flag on live networks; resumable deploy-only steps).
+- `46`: bypass/UPV4 activation (staging EOA actions; guarded atomic Base Safe batch; retains the predecessor dispute writer).
+
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production
 execution; successors get the next unused lane and new deployment names, and
