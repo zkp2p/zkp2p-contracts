@@ -188,7 +188,7 @@ abstract contract OrchestratorV3Fixture is Test {
         });
     }
 
-    function _defaultParams() internal view returns (IOrchestratorV3.SignalIntentParams memory) {
+    function _defaultParams() internal view virtual returns (IOrchestratorV3.SignalIntentParams memory) {
         return _params(
             depositId, taker, INTENT_AMOUNT, CONVERSION_RATE, _emptyReferralFees(), IPostIntentHookV2(address(0)), ""
         );

@@ -1476,18 +1476,16 @@ test("fresh-policy classifier rejects every lifecycle event", () => {
   }
 });
 
-test("fresh-policy event lists partition the policy ABI exactly once", () => {
+test("lane 37 event lists partition its deployed policy ABI exactly once", () => {
   const artifactEvents =
     /** @type {{ abi: Array<{ type: string, name: string }> }} */ (
       JSON.parse(
         readFileSync(
           join(
             repositoryRoot,
-            "artifacts",
-            "contracts",
-            "hooks",
-            "DisputeProtectionPolicy.sol",
-            "DisputeProtectionPolicy.json"
+            "deployments",
+            "base",
+            "DisputeProtectionPolicyMethodScoped.json"
           ),
           "utf8"
         )

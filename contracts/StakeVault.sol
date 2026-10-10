@@ -37,9 +37,11 @@ import {IStakeVault} from "./interfaces/IStakeVault.sol";
  *      lock is unlocked or converted into claims. `NEVER_MATURES` represents exposure requiring an explicit controller
  *      transition on all paths.
  *
- *      Controller replacement is delayed, but accepted authority is global: the new controller immediately gains the
- *      same power over existing and future locks. The owner can cancel a pending handover during the delay and cannot
- *      renounce ownership, preserving a governance recovery path. Governance must drain all active locks before replacing
+ *      Controller replacement uses the immutable configured delay, which may be zero. With zero delay, governance can
+ *      replace the controller in one transaction, so stakers rely entirely on governance not to install a controller
+ *      that locks free stake or converts locks into claims. Accepted authority is global: the new controller immediately
+ *      gains the same power over existing and future locks. The owner can cancel a pending handover during the delay and
+ *      cannot renounce ownership, preserving a governance recovery path. Governance must drain all active locks before replacing
  *      a policy controller unless the replacement explicitly adopts the predecessor's lock state; the delay alone does
  *      not give a new policy contract the state needed to resolve predecessor locks.
  *
@@ -61,15 +63,12 @@ import {IStakeVault} from "./interfaces/IStakeVault.sol";
  *         takes custody.
  *      6. User withdrawals and claims apply accounting effects before token interactions and are reentrancy guarded.
  *      7. Initializing an omitted controller is allowed only before any stake or claim liabilities exist. Later controller
- *         replacements always use the configured handover delay.
+ *         replacements always use the configured handover delay, which may be zero.
  */
 contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     /* ============ Constants ============ */
-
-    /// @notice Minimum governance delay allowed for controller replacement.
-    uint64 public constant MIN_CONTROLLER_CHANGE_DELAY = 1 days;
 
     /// @notice Sentinel maturity for locks that must never become mature through passage of practical time.
     uint64 public constant NEVER_MATURES = type(uint64).max;
@@ -134,20 +133,16 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
     /* ============ Constructor ============ */
 
     /**
-     * @notice Creates a token vault with an optional initial controller and delayed controller replacement.
+     * @notice Creates a token vault with an optional initial controller and configurable controller replacement delay.
      * @dev `_controller` may be zero to break circular deployment dependencies; it can then be initialized exactly once
-     *      before any liabilities exist. The owner and token must be non-zero, and the handover delay must be at least
-     *      one day. Future ownership transfers use Ownable2Step.
+     *      before any liabilities exist. The owner and token must be non-zero. Future ownership transfers use Ownable2Step.
      * @param _owner Governance owner responsible for controller selection and recovery.
      * @param _stakeToken Canonical USDC token held and accounted by the vault.
      * @param _controller Initial global lock-policy controller, or zero for later liability-free initialization.
-     * @param _controllerChangeDelay Delay required before a proposed replacement controller may accept authority.
+     * @param _controllerChangeDelay Delay before a proposed controller may accept; zero allows immediate replacement.
      */
     constructor(address _owner, IERC20 _stakeToken, address _controller, uint64 _controllerChangeDelay) {
         if (_owner == address(0) || address(_stakeToken) == address(0)) revert ZeroAddress();
-        if (_controllerChangeDelay < MIN_CONTROLLER_CHANGE_DELAY) {
-            revert InvalidControllerChangeDelay(_controllerChangeDelay);
-        }
 
         stakeToken = _stakeToken;
         controller = _controller;
@@ -450,7 +445,7 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
     }
 
     /**
-     * @notice Ownership renunciation is disabled so governance always retains a delayed controller recovery path.
+     * @notice Ownership renunciation is disabled so governance always retains a controller recovery path.
      * @dev Always reverts for the owner; non-owners revert through the inherited ownership check first.
      */
     function renounceOwnership() public view override onlyOwner {
@@ -460,7 +455,7 @@ contract StakeVault is IStakeVault, Ownable2Step, ReentrancyGuard {
     /**
      * @notice GOVERNANCE ONLY: Proposes a replacement global controller subject to the immutable handover delay.
      * @dev A new proposal overwrites any existing proposal and restarts the full delay. The current controller remains
-     *      authoritative until the proposed controller accepts after `pendingControllerValidAt`. Governance must drain
+     *      authoritative until the proposed controller accepts at or after `pendingControllerValidAt`. Governance must drain
      *      active locks first unless the replacement controller can adopt and resolve the predecessor's lock state.
      * @param _controller Non-zero address proposed to receive global lock authority.
      */

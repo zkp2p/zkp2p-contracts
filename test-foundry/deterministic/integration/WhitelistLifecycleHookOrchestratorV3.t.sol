@@ -10,6 +10,7 @@ import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 import {IOrchestratorRegistry} from "contracts/interfaces/IOrchestratorRegistry.sol";
+import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
 import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
@@ -126,7 +127,9 @@ contract WhitelistLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
         assertEq(address(orchestrator.getIntentLifecycleHook(oldSettledIntent)), address(whitelistHook));
 
         orchestrator.setLifecycleHook(combinedHook);
-        bytes32 freshIntent = _signalDefault();
+        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        params.data = abi.encode(address(disputeProtectionPolicy), abi.encode(false));
+        bytes32 freshIntent = _signal(taker, params);
         assertEq(address(orchestrator.getIntentLifecycleHook(freshIntent)), address(combinedHook));
         assertEq(
             uint256(disputeProtectionPolicy.getDisputeProtectionIntent(freshIntent).status),
