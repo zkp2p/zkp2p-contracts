@@ -512,4 +512,72 @@ contract UnifiedPaymentVerifierV3Test is Test {
         assertFalse(nullifierRegistry.isWriter(address(verifier)));
         assertTrue(nullifierRegistry.isWriter(address(replacement)));
     }
+
+    function test_UPV3AcceptsTrailingBypassFlagAndBindsFullAttestationData() public {
+        UnifiedPaymentVerifierV3 target =
+            new UnifiedPaymentVerifierV3(orchestratorRegistry, nullifierRegistry, attestationVerifier);
+        target.addPaymentMethod(METHOD);
+        nullifierRegistry.addWritePermission(address(target));
+        for (uint256 index; index < 4; index++) {
+            _checkTrailingBypass(target, index);
+        }
+        _checkTrailingBypassHashFailures(target);
+    }
+
+    function _checkTrailingBypass(UnifiedPaymentVerifierV3 target, uint256 index) private {
+        // NRV2 binds each intent once; isolate cases while retaining the required fixture intent hashes.
+        uint256 state = vm.snapshotState();
+        bytes32 intentHash = index < 2 ? LEGACY_INTENT : V2_INTENT;
+        bool flag = index % 2 == 1;
+        bytes32 paymentId = keccak256(abi.encode("trailing-bypass", index));
+        bytes memory data = bytes.concat(abi.encode(_payment(paymentId), _snapshot(intentHash)), abi.encode(flag));
+        assertEq(data.length, 480);
+        assertEq(keccak256(data), keccak256(abi.encode(_payment(paymentId), _snapshot(intentHash), flag)));
+        bytes memory proof = _encodeProof(target, intentHash, AMOUNT, keccak256(data), data, WITNESS_KEY);
+        _assertTrailingBypassResult(
+            target,
+            intentHash,
+            paymentId,
+            proof,
+            IUnifiedVerifierCaller(index < 2 ? address(legacyCaller) : address(v2Caller))
+        );
+        assertTrue(vm.revertToState(state));
+    }
+
+    function _assertTrailingBypassResult(
+        UnifiedPaymentVerifierV3 target,
+        bytes32 intentHash,
+        bytes32 paymentId,
+        bytes memory proof,
+        IUnifiedVerifierCaller caller
+    ) private {
+        vm.expectEmit(true, true, true, true, address(target));
+        emit PaymentVerified(intentHash, METHOD, USD, AMOUNT, TIMESTAMP * 1000, paymentId, PAYEE);
+        IPaymentVerifier.PaymentVerificationResult memory result = _call(caller, target, intentHash, proof);
+        assertTrue(result.success);
+        assertEq(result.intentHash, intentHash);
+        assertEq(result.releaseAmount, AMOUNT);
+        assertTrue(nullifierRegistry.isNullified(_nullifier(paymentId)));
+        assertEq(nullifierRegistry.intentHashByNullifier(_nullifier(paymentId)), intentHash);
+    }
+
+    function _checkTrailingBypassHashFailures(UnifiedPaymentVerifierV3 target) private {
+        bytes32 paymentId = keccak256("trailing-bypass-invalid-hash");
+        bytes memory prefix = abi.encode(_payment(paymentId), _snapshot(LEGACY_INTENT));
+        assertEq(prefix.length, 448);
+        bytes memory data = bytes.concat(prefix, abi.encode(true));
+        bytes memory proof = _encodeProof(target, LEGACY_INTENT, AMOUNT, keccak256(prefix), data, WITNESS_KEY);
+        vm.expectRevert("UPV: Data hash mismatch");
+        _call(IUnifiedVerifierCaller(address(legacyCaller)), target, LEGACY_INTENT, proof);
+        assertFalse(nullifierRegistry.isNullified(_nullifier(paymentId)));
+
+        proof = _encodeProof(target, LEGACY_INTENT, AMOUNT, keccak256(data), data, WITNESS_KEY);
+        UnifiedPaymentVerifierV3.PaymentAttestation memory attestation =
+            abi.decode(proof, (UnifiedPaymentVerifierV3.PaymentAttestation));
+        attestation.data = bytes.concat(prefix, abi.encode(false));
+        proof = abi.encode(attestation);
+        vm.expectRevert("UPV: Data hash mismatch");
+        _call(IUnifiedVerifierCaller(address(legacyCaller)), target, LEGACY_INTENT, proof);
+        assertFalse(nullifierRegistry.isNullified(_nullifier(paymentId)));
+    }
 }
