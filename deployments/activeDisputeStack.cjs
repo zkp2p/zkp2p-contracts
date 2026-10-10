@@ -16,11 +16,12 @@ const CANONICAL_NAMES = [
   "IntentLifecycleHookV1",
   "WhitelistPolicy",
 ];
+// Selected records are hidden per network; the predecessor vault is not internal
+// so it exports by name after deselection for withdrawals and claims.
 const INTERNAL_POLICY_RECORDS = [
   "WhitelistPolicyMethodScoped",
   "DisputeProtectionPolicyMethodScoped",
   "IntentLifecycleHookV1MethodScoped",
-  "StakeVaultMethodScoped",
   "DisputeProtectionPolicyMethodScopedStaked",
   "IntentLifecycleHookV1MethodScopedStaked",
 ];
@@ -72,16 +73,6 @@ function validateManifest() {
 }
 
 validateManifest();
-
-/** @type {Set<string>} */
-const SELECTED_INTERNAL_NAMES = new Set();
-for (const selection of Object.values(manifest.networks)) {
-  for (const canonicalName of CANONICAL_NAMES) {
-    const internalName = selection[canonicalName];
-    if (internalName !== canonicalName)
-      SELECTED_INTERNAL_NAMES.add(internalName);
-  }
-}
 
 /**
  * @param {string} network
@@ -159,6 +150,8 @@ function resolveActiveDisputeAliases(network, contracts, selectionStamp) {
     throw new Error("Canonical dispute deployment selection stamp mismatch");
   }
   const resolved = { ...contracts };
+  /** @type {Set<string>} */
+  const selectedInternalNames = new Set();
 
   for (const canonicalName of CANONICAL_NAMES) {
     const internalName = getActiveDisputeDeploymentName(network, canonicalName);
@@ -171,13 +164,14 @@ function resolveActiveDisputeAliases(network, contracts, selectionStamp) {
       throw new Error(`Missing active dispute deployment ${internalName}`);
     }
     resolved[canonicalName] = selected;
+    if (internalName !== canonicalName) selectedInternalNames.add(internalName);
   }
 
   for (const name of Object.keys(resolved)) {
     if (
       name.endsWith("OptIn") ||
       INTERNAL_POLICY_RECORDS.includes(name) ||
-      SELECTED_INTERNAL_NAMES.has(name)
+      selectedInternalNames.has(name)
     ) {
       delete resolved[name];
     }
