@@ -15,6 +15,7 @@ const { join } = require("node:path");
 const { test } = require("node:test");
 
 const {
+  BY_NAME_DISPUTE_RECORDS,
   INTERNAL_POLICY_RECORDS,
   getActiveDisputeDeploymentName,
   getActiveDisputeSelectionStamp,
@@ -133,7 +134,7 @@ test("normalizes Hardhat and package network names through one boundary", () => 
 });
 
 for (const network of ["base", "base_staging", "localhost", "hardhat"]) {
-  test(`${network} exports the selected aliases and preserves unselected bypass records`, () => {
+  test(`${network} exports the selected aliases and preserves bypass records by name`, () => {
     const input = contracts();
     const local = network === "localhost" || network === "hardhat";
     for (const resolveContracts of [
@@ -153,11 +154,10 @@ for (const network of ["base", "base_staging", "localhost", "hardhat"]) {
           : input.IntentLifecycleHookV1MethodScopedStaked,
         WhitelistPolicy: input.WhitelistPolicyMethodScoped,
         UnifiedPaymentVerifierV4: input.UnifiedPaymentVerifierV4,
-        ...(local ? { StakeVaultMethodScoped: input.StakeVaultMethodScoped } : {
-          StakeVaultBypass: input.StakeVaultBypass,
-          DisputeProtectionPolicyBypass: input.DisputeProtectionPolicyBypass,
-          IntentLifecycleHookV1Bypass: input.IntentLifecycleHookV1Bypass,
-        }),
+        StakeVaultBypass: input.StakeVaultBypass,
+        DisputeProtectionPolicyBypass: input.DisputeProtectionPolicyBypass,
+        IntentLifecycleHookV1Bypass: input.IntentLifecycleHookV1Bypass,
+        ...(local ? { StakeVaultMethodScoped: input.StakeVaultMethodScoped } : {}),
       });
     }
   });
@@ -181,13 +181,36 @@ test("exports the predecessor vault by name only when it is not selected", () =>
   }
 });
 
-test("a record selected on one network is not hidden on another", () => {
+test("bypass selection preserves by-name exports and the deselected predecessor vault", () => {
+  assert.deepEqual(BY_NAME_DISPUTE_RECORDS, [
+    "StakeVaultBypass",
+    "DisputeProtectionPolicyBypass",
+    "IntentLifecycleHookV1Bypass",
+  ]);
   const input = contracts();
-  const selectedName = getActiveDisputeDeploymentName("localhost", "StakeVault");
-  assert.equal(selectedName, "StakeVaultBypass");
-  assert.equal(selectedName in resolveActiveDisputeAliases("localhost", input), false);
-  for (const network of ["base", "base_staging"]) {
-    assert.deepEqual(resolveActiveDisputeAliases(network, input)[selectedName], input[selectedName]);
+  // Local selection exercises the same rule as a live post-activation flip.
+  for (const network of ["localhost", "hardhat"]) {
+    for (const resolveContracts of [
+      resolveActiveDisputeAliases,
+      resolveAddressOutputContracts,
+      resolveAbiOutputContracts,
+    ]) {
+      const resolved = resolveContracts(network, input);
+      for (const name of BY_NAME_DISPUTE_RECORDS) {
+        const canonicalName = name.replace(/Bypass$/, "");
+        assert.deepEqual(resolved[name], input[name]);
+        assert.deepEqual(resolved[canonicalName], resolved[name]);
+        assert.equal(resolved[canonicalName], resolved[name]);
+      }
+      assert.deepEqual(
+        resolved.StakeVaultMethodScoped,
+        input.StakeVaultMethodScoped
+      );
+      assert.deepEqual(
+        resolved.UnifiedPaymentVerifierV4,
+        input.UnifiedPaymentVerifierV4
+      );
+    }
   }
 });
 
@@ -228,7 +251,7 @@ test("fails closed on missing records and lets the selected hard cut replace a l
   );
 });
 
-test("does not mutate its input or expose one internal record twice", () => {
+test("does not mutate its input and exposes distinct canonical addresses", () => {
   const input = contracts();
   const snapshot = structuredClone(input);
   const resolved = resolveActiveDisputeAliases("localhost", input);
@@ -242,7 +265,7 @@ test("does not mutate its input or expose one internal record twice", () => {
   assert.equal(new Set(exposedAddresses).size, exposedAddresses.length);
 });
 
-test("every deployment/package consumer exposes canonical aliases and the predecessor vault", () => {
+test("every deployment/package consumer exposes additive bypass aliases and the predecessor vault", () => {
   const input = contracts();
   const consumers =
     /** @type {Array<(value: ReturnType<typeof contracts>) => ReturnType<typeof contracts>>} */ ([
@@ -275,6 +298,13 @@ test("every deployment/package consumer exposes canonical aliases and the predec
     assert.deepEqual(
       Object.keys(resolved).filter((name) => name.includes("MethodScoped")),
       ["StakeVaultMethodScoped"]
+    );
+    for (const name of BY_NAME_DISPUTE_RECORDS) {
+      assert.deepEqual(resolved[name], resolved[name.replace(/Bypass$/, "")]);
+    }
+    assert.deepEqual(
+      resolved.UnifiedPaymentVerifierV4,
+      input.UnifiedPaymentVerifierV4
     );
     assert.equal(resolved.StakeVaultMethodScoped.address, input.StakeVaultMethodScoped.address);
   }
@@ -764,7 +794,9 @@ test("canonical deployment-output rewriting is deterministic and leaves deployme
     assert.equal(readFileSync(historicalPath, "utf8"), historicalBytes);
     assert.equal(first.includes("StakeVaultOptIn"), false);
     assert.equal(first.includes("StakeVaultMethodScoped"), true);
-    assert.equal(first.includes("StakeVaultBypass"), false);
+    for (const name of [...BY_NAME_DISPUTE_RECORDS, "UnifiedPaymentVerifierV4"]) {
+      assert.equal(first.includes(name), true);
+    }
     assert.match(
       first,
       new RegExp(inputAddressFor("StakeVaultBypass"), "i")

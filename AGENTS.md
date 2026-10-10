@@ -181,9 +181,10 @@
   flip `active-dispute-stack.json`, `dispute-stack-evidence.json`, and `PREDECESSOR_DISPUTE_STACKS`, and update the
   lane-31 active wrapper to verify the UPV4 binding. Until that wrapper is updated, untagged live runs fail closed
   at lane 31. Live package outputs export the three bypass records and `UnifiedPaymentVerifierV4` by name while
-  canonical aliases stay on the MethodScoped stack until the recording PR flips them. After the flip, the bypass
-  records are reachable only through canonical aliases; UPV4 remains by name, and `StakeVaultMethodScoped` stays
-  exported under its own name for withdraw/claim from the old vault. The recording PR's dispute-stack evidence must
+  canonical aliases stay on the MethodScoped stack until the recording PR flips them. The flip is additive: the
+  three bypass records (`BY_NAME_DISPUTE_RECORDS` in `deployments/activeDisputeStack.cjs`) and UPV4 stay exported by
+  name with the same address as their canonical aliases, because clients resolve the signal-envelope target by
+  record name, and `StakeVaultMethodScoped` stays exported under its own name for withdraw/claim from the old vault. The recording PR's dispute-stack evidence must
   name `DisputeProtectionPolicyMethodScopedStaked` / `IntentLifecycleHookV1MethodScopedStaked` as
   `RecognizedPredecessorPolicy` / `RecognizedPredecessorHook`. Local aliases already select bypass
   records, with `WhitelistPolicy` still selecting `WhitelistPolicyMethodScoped`. A second `yarn deploy:localhost`

@@ -16,8 +16,14 @@ const CANONICAL_NAMES = [
   "IntentLifecycleHookV1",
   "WhitelistPolicy",
 ];
-// Selected records are hidden per network; the predecessor vault is not internal
-// so it exports by name after deselection for withdrawals and claims.
+/** @type {string[]} */
+const BY_NAME_DISPUTE_RECORDS = [
+  "StakeVaultBypass",
+  "DisputeProtectionPolicyBypass",
+  "IntentLifecycleHookV1Bypass",
+];
+// Internal policies stay hidden; selected records hide unless retained by name above.
+// The predecessor vault exports by name after deselection for withdrawals and claims.
 const INTERNAL_POLICY_RECORDS = [
   "WhitelistPolicyMethodScoped",
   "DisputeProtectionPolicyMethodScoped",
@@ -171,7 +177,8 @@ function resolveActiveDisputeAliases(network, contracts, selectionStamp) {
     if (
       name.endsWith("OptIn") ||
       INTERNAL_POLICY_RECORDS.includes(name) ||
-      selectedInternalNames.has(name)
+      (selectedInternalNames.has(name) &&
+        !BY_NAME_DISPUTE_RECORDS.includes(name))
     ) {
       delete resolved[name];
     }
@@ -180,6 +187,7 @@ function resolveActiveDisputeAliases(network, contracts, selectionStamp) {
 }
 
 module.exports = {
+  BY_NAME_DISPUTE_RECORDS,
   INTERNAL_POLICY_RECORDS,
   getActiveDisputeDeploymentName,
   getActiveDisputeSelectionStamp,

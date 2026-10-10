@@ -1365,10 +1365,14 @@ test("active dispute manifest selects the dedicated-vault stack on live networks
     ),
     false
   );
-  assert.equal(
-    Object.keys(resolved).some((name) => name.endsWith("Bypass")),
-    false
-  );
+  for (const name of [
+    "StakeVault",
+    "DisputeProtectionPolicy",
+    "IntentLifecycleHookV1",
+  ]) {
+    assert.ok(resolved[`${name}Bypass`]);
+    assert.deepEqual(resolved[`${name}Bypass`], resolved[name]);
+  }
 });
 
 test("summary and package wiring expose only the current deployment lanes", () => {

@@ -808,7 +808,8 @@ deploys the guard and simulation-only postcondition and produces one unsigned at
 `yarn simulate:dispute-bypass-safe-batch` for the pinned fork simulation and `yarn verify:dispute-bypass-safe-batch`
 immediately before Safe execution. Predecessor opt-outs on live listed windowed tuples must first be mirrored on
 the fresh policy. Live canonical package aliases remain on MethodScoped until the post-execution recording PR;
-the bypass records and UPV4 export by name in the meantime. That PR also pins the lanes, records evidence, and
+the bypass records and UPV4 export by name before and after that flip, which only adds the canonical aliases at the
+same addresses. That PR also pins the lanes, records evidence, and
 updates the lane-31 wrapper for UPV4. Local deployments activate bypass and select its canonical aliases; restart
 the node before a second `yarn deploy:localhost` after activation because lanes 31/39 assume the old local wiring.
 
