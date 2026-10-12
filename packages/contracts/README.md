@@ -2,6 +2,24 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
+## Release 0.4.4-rc.4
+
+- Base staging canonical aliases (`StakeVault`, `DisputeProtectionPolicy`,
+  `IntentLifecycleHookV1`) now resolve to the bypass stack; every staging payment
+  method routes to `UnifiedPaymentVerifierV4`.
+- The by-name records `StakeVaultBypass`, `DisputeProtectionPolicyBypass`,
+  `IntentLifecycleHookV1Bypass`, and `UnifiedPaymentVerifierV4` retain their addresses;
+  the three dispute records equal their canonical aliases on staging. The previous
+  staging vault remains exported as `StakeVaultMethodScoped` for withdrawals and claims.
+- The staging dispute-stack manifest names the previous policy and hook as
+  `RecognizedPredecessorPolicy` / `RecognizedPredecessorHook`. The dispute registry
+  retains the predecessor as a passive writer and the bypass policy as its active writer.
+- Base is unchanged: MethodScoped aliases, UPV3 routing, and zero addresses for the bypass
+  names. Base also exports a zero address for `StakeVaultMethodScoped`, because that vault
+  is still Base's canonical `StakeVault`.
+- Includes everything from `0.4.4-rc.3`.
+- Targets the `rc` tag; `latest` remains at `0.4.3`.
+
 ## Release 0.4.4-rc.3
 
 - Adds the `UnifiedPaymentVerifierV4` canonical source ABI and no-stake dispute
