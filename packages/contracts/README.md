@@ -2,6 +2,22 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
+## Release 0.4.4-rc.3
+
+- Adds the `UnifiedPaymentVerifierV4` canonical source ABI and no-stake dispute
+  protection ABIs: `DisputeProtectionPolicy` gains `setIntentNoStake`,
+  `isIntentNoStake`, `validatePayment`, and the `DisputeProtectionIntentStakeModeChanged`
+  event; the `getDisputeProtectionIntent` struct is unchanged. `IntentLifecycleHookV1`
+  requires the `abi.encode(policy, abi.encode(bool noStake))` validation envelope in
+  `intent.data` on protected routes. `StakeVault` accepts a zero controller-change delay.
+- Base staging exports `StakeVaultBypass`, `DisputeProtectionPolicyBypass`,
+  `IntentLifecycleHookV1Bypass`, and `UnifiedPaymentVerifierV4` deployment records by
+  name (deployed, not yet activated). Canonical aliases (`StakeVault`,
+  `DisputeProtectionPolicy`, `IntentLifecycleHookV1`) are unchanged on both networks;
+  Base exports zero addresses for the new names.
+- Includes everything from `0.4.4-rc.2`.
+- Targets the `rc` tag; `latest` remains at `0.4.3`.
+
 ## Release 0.4.4-rc.2
 
 - Adds the executed Monobank/UAH registration to the Base catalog, matching Base
