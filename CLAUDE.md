@@ -8,9 +8,11 @@ package artifacts.
 
 Read `AGENTS.md` before acting. Treat deployment status as network-scoped:
 
-- `EscrowV2` remains the shared escrow in the mounted V3 lifecycle lane.
-  `OrchestratorV2` and `OrchestratorV3` are distinct current implementations;
-  never infer which one is active from the version number alone.
+- `EscrowV2` remains the shared escrow in the mounted V3 lifecycle lane and
+  `OrchestratorV3` is the current orchestrator source. `OrchestratorV2` is
+  archived under `contracts/archive/`: it left the Base `OrchestratorRegistry`
+  on 2026-08-27 and is still registered on Base staging. Never infer which
+  deployment is active from a version number alone.
 - `deploy/30_deploy_v3_lifecycle_stack.ts` is mounted by
   `scripts/deployActive.ts` for `localhost`, `hardhat`, Base staging, and Base.
   Base execution is a separately approved whitelist-only deployment that queues
@@ -22,7 +24,12 @@ Read `AGENTS.md` before acting. Treat deployment status as network-scoped:
 - Verifier and nullifier cutovers are one-way. Never route a payment method back
   to a verifier whose replay domain cannot observe the current nullifier writes.
 - V1 source and deployment artifacts are historical evidence, not an active
-  development or compatibility lane. Never route new work through V1.
+  development or compatibility lane. Never route new work through V1. V1
+  sources live in `contracts/archive/`.
+- `contracts/archive/` holds superseded sources that stay compiled only because
+  executed lanes deploy them on local networks and tests exercise them. Never
+  edit them or base new work on them; `contracts/archive/README.md` lists what
+  is there and what deliberately is not.
 
 ## Build and test
 
@@ -48,8 +55,8 @@ clean build, the full suite, or coverage for documentation-only work.
 
 ## Architecture
 
-The V2 flow remains relevant wherever current network state routes through
-`OrchestratorV2`:
+The V2 flow remains relevant wherever current network state still routes
+through the archived `OrchestratorV2`:
 
 ```text
 maker -> EscrowV2.createDeposit
@@ -98,6 +105,7 @@ Review shared invariants and those explicit deltas separately.
 
 ```text
 contracts/               Solidity source
+  archive/               superseded sources, still compiled for executed lanes and tests
   unifiedVerifier/       verifier implementations and bases
   interfaces/            interfaces
   registries/            registry contracts

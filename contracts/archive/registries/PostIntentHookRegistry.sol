@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { AddressArrayUtils } from "../external/AddressArrayUtils.sol";
+import { AddressArrayUtils } from "../../external/AddressArrayUtils.sol";
 import { IPostIntentHookRegistry } from "../interfaces/IPostIntentHookRegistry.sol";
 
 pragma solidity ^0.8.18;

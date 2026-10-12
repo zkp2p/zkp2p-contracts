@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import { IEscrow } from "./interfaces/IEscrow.sol";
+import { IEscrow } from "../interfaces/IEscrow.sol";
 import { IProtocolViewer } from "./interfaces/IProtocolViewer.sol";
-import { IOrchestrator } from "./interfaces/IOrchestrator.sol";
+import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
 
 contract ProtocolViewer is IProtocolViewer {
 

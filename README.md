@@ -4,6 +4,8 @@
 
 Smart contracts for the ZKP2P fiat on/off-ramp, with the current repository centered on the v2 system.
 The pristine deployed pre-cut `OrchestratorV2` source is archived outside the compilation tree.
+Superseded sources that executed deployment lanes and tests still need are in `contracts/archive/`; see
+`contracts/archive/README.md` before assuming a contract is current.
 
 - `EscrowV2`: maker liquidity, per-deposit payment configuration, oracle-backed pricing, delegated rate managers.
 - `OrchestratorV2`: intent lifecycle, fee handling, pre-intent hooks, whitelist hooks, post-intent execution, and unrestricted account-level concurrency.
@@ -441,13 +443,14 @@ Payment IDs are nullified as `keccak256(paymentMethod, paymentId)` so the same r
 
 ```text
 contracts/
-  Escrow.sol
+  DepositCreationGuard.sol
   EscrowV2.sol
-  Orchestrator.sol
-  OrchestratorV2.sol
-  ProtocolViewer.sol
+  IntentGuardian.sol
+  OrchestratorV3.sol
   ProtocolViewerV2.sol
   RateManagerV1.sol
+  StakeVault.sol
+  archive/                          # superseded sources, still compiled for executed lanes and tests
   hooks/
   interfaces/
   lib/

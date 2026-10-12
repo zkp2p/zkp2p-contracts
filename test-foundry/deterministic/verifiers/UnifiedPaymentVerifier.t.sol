@@ -3,7 +3,7 @@ pragma solidity ^0.8.18;
 
 import {Test} from "forge-std/Test.sol";
 
-import {UnifiedPaymentVerifier} from "contracts/unifiedVerifier/UnifiedPaymentVerifier.sol";
+import {UnifiedPaymentVerifier} from "contracts/archive/unifiedVerifier/UnifiedPaymentVerifier.sol";
 import {SimpleAttestationVerifier} from "contracts/unifiedVerifier/SimpleAttestationVerifier.sol";
 import {FailingAttestationVerifier} from "contracts/mocks/FailingAttestationVerifier.sol";
 import {UnifiedPaymentVerifierV3CallerHarness} from "contracts/mocks/UnifiedPaymentVerifierV3Harness.sol";

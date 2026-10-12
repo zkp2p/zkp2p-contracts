@@ -8,18 +8,18 @@ import { Pausable } from "@openzeppelin/contracts/security/Pausable.sol";
 import { SignatureChecker } from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-import { AddressArrayUtils } from "./external/AddressArrayUtils.sol";
-import { Bytes32ArrayUtils } from "./external/Bytes32ArrayUtils.sol";
-import { StringArrayUtils } from "./external/StringArrayUtils.sol";
+import { AddressArrayUtils } from "../external/AddressArrayUtils.sol";
+import { Bytes32ArrayUtils } from "../external/Bytes32ArrayUtils.sol";
+import { StringArrayUtils } from "../external/StringArrayUtils.sol";
 import { Uint256ArrayUtils } from "./external/Uint256ArrayUtils.sol";
 
-import { IEscrow } from "./interfaces/IEscrow.sol";
-import { IOrchestrator } from "./interfaces/IOrchestrator.sol";
-import { IPostIntentHook } from "./interfaces/IPostIntentHook.sol";
-import { IPaymentVerifier } from "./interfaces/IPaymentVerifier.sol";
-import { IPaymentVerifierRegistry } from "./interfaces/IPaymentVerifierRegistry.sol";
+import { IEscrow } from "../interfaces/IEscrow.sol";
+import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
+import { IPostIntentHook } from "../interfaces/IPostIntentHook.sol";
+import { IPaymentVerifier } from "../interfaces/IPaymentVerifier.sol";
+import { IPaymentVerifierRegistry } from "../interfaces/IPaymentVerifierRegistry.sol";
 import { IPostIntentHookRegistry } from "./interfaces/IPostIntentHookRegistry.sol";
-import { IRelayerRegistry } from "./interfaces/IRelayerRegistry.sol";
+import { IRelayerRegistry } from "../interfaces/IRelayerRegistry.sol";
 pragma solidity ^0.8.18;
 
 /**

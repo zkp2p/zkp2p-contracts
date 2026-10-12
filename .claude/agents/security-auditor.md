@@ -40,9 +40,9 @@ Anyone -- fulfillIntent --> OrchestratorV2 -- verifyPayment --> UnifiedPaymentVe
 | Contract | Path | LOC |
 |----------|------|-----|
 | EscrowV2 | `contracts/EscrowV2.sol` | ~1565 |
-| OrchestratorV2 | `contracts/OrchestratorV2.sol` | ~788 |
+| OrchestratorV2 (archived) | `contracts/archive/OrchestratorV2.sol` | ~788 |
 | RateManagerV1 | `contracts/RateManagerV1.sol` | ~366 |
-| UnifiedPaymentVerifier | `contracts/unifiedVerifier/UnifiedPaymentVerifier.sol` | ~200 |
+| UnifiedPaymentVerifier (archived) | `contracts/archive/unifiedVerifier/UnifiedPaymentVerifier.sol` | ~200 |
 | SimpleAttestationVerifier | `contracts/unifiedVerifier/SimpleAttestationVerifier.sol` | ~100 |
 | ProtocolViewerV2 | `contracts/ProtocolViewerV2.sol` | ~200 |
 | PaymentVerifierRegistry | `contracts/registries/PaymentVerifierRegistry.sol` | ~150 |

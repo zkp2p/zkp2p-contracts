@@ -2,10 +2,10 @@
 pragma solidity ^0.8.18;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { Bytes32ArrayUtils } from "../external/Bytes32ArrayUtils.sol";
-import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
-import { INullifierRegistry } from "../interfaces/INullifierRegistry.sol";
-import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
+import { Bytes32ArrayUtils } from "../../external/Bytes32ArrayUtils.sol";
+import { IAttestationVerifier } from "../../interfaces/IAttestationVerifier.sol";
+import { INullifierRegistry } from "../../interfaces/INullifierRegistry.sol";
+import { IOrchestratorRegistry } from "../../interfaces/IOrchestratorRegistry.sol";
 
 /**
  * @title BaseUnifiedPaymentVerifier

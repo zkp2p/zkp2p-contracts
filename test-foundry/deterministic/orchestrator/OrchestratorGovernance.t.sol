@@ -3,7 +3,7 @@ pragma solidity ^0.8.18;
 
 import {OrchestratorLegacyFixture} from "../helpers/OrchestratorLegacyFixture.sol";
 import {IOrchestrator} from "contracts/interfaces/IOrchestrator.sol";
-import {PostIntentHookRegistry} from "contracts/registries/PostIntentHookRegistry.sol";
+import {PostIntentHookRegistry} from "contracts/archive/registries/PostIntentHookRegistry.sol";
 import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 
 contract OrchestratorGovernanceTest is OrchestratorLegacyFixture {

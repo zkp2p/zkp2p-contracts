@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EscrowV2} from "contracts/EscrowV2.sol";
-import {OrchestratorV2} from "contracts/OrchestratorV2.sol";
+import {OrchestratorV2} from "contracts/archive/OrchestratorV2.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
@@ -14,7 +14,7 @@ import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.so
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
 import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {SimpleAttestationVerifier} from "contracts/unifiedVerifier/SimpleAttestationVerifier.sol";
-import {UnifiedPaymentVerifier} from "contracts/unifiedVerifier/UnifiedPaymentVerifier.sol";
+import {UnifiedPaymentVerifier} from "contracts/archive/unifiedVerifier/UnifiedPaymentVerifier.sol";
 import {UnifiedPaymentVerifierV3} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";

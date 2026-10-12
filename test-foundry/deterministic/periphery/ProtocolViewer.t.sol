@@ -4,19 +4,19 @@ pragma solidity ^0.8.18;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import {Escrow} from "contracts/Escrow.sol";
-import {Orchestrator} from "contracts/Orchestrator.sol";
-import {ProtocolViewer} from "contracts/ProtocolViewer.sol";
+import {Escrow} from "contracts/archive/Escrow.sol";
+import {Orchestrator} from "contracts/archive/Orchestrator.sol";
+import {ProtocolViewer} from "contracts/archive/ProtocolViewer.sol";
 import {PaymentVerifierMock} from "contracts/mocks/PaymentVerifierMock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
-import {PostIntentHookRegistry} from "contracts/registries/PostIntentHookRegistry.sol";
+import {PostIntentHookRegistry} from "contracts/archive/registries/PostIntentHookRegistry.sol";
 import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {IEscrow} from "contracts/interfaces/IEscrow.sol";
 import {IOrchestrator} from "contracts/interfaces/IOrchestrator.sol";
 import {IPostIntentHook} from "contracts/interfaces/IPostIntentHook.sol";
-import {IProtocolViewer} from "contracts/interfaces/IProtocolViewer.sol";
+import {IProtocolViewer} from "contracts/archive/interfaces/IProtocolViewer.sol";
 
 contract ProtocolViewerTest is Test {
     uint256 internal constant GATING_KEY = 0xA11CE;

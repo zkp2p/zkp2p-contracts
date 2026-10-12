@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 import {EscrowLegacyFixture} from "../helpers/EscrowLegacyFixture.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {IEscrow} from "contracts/interfaces/IEscrow.sol";
-import {IProtocolViewer} from "contracts/interfaces/IProtocolViewer.sol";
+import {IProtocolViewer} from "contracts/archive/interfaces/IProtocolViewer.sol";
 
 contract EscrowCreateDepositTest is EscrowLegacyFixture {
     event DepositReceived(
