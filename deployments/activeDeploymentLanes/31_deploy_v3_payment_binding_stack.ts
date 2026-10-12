@@ -8,6 +8,7 @@ import {
   RATIFIED_PAYMENT_METHOD_CURRENCIES,
   RATIFIED_PAYMENT_METHOD_ORDER,
 } from "../../deploy/31_deploy_v3_payment_binding_stack";
+import { bypassPaymentBindingRecorded, verifyBypassPaymentBinding } from "../bypassPaymentBinding";
 import { getActivePaymentMethods } from "../parameters";
 
 const historicalLane = require("../../deploy/31_deploy_v3_payment_binding_stack").default as
@@ -16,6 +17,9 @@ const historicalLane = require("../../deploy/31_deploy_v3_payment_binding_stack"
 async function verifyLivePaymentBinding(hre: HardhatRuntimeEnvironment): Promise<boolean> {
   const network = hre.deployments.getNetworkName();
   if (network !== "base" && network !== "base_staging") return false;
+
+  // One-way verifier migration: never fall back to UPV3 after the cutover is recorded.
+  if (bypassPaymentBindingRecorded(network)) { await verifyBypassPaymentBinding(hre, network); return true; }
 
   // Reuse the frozen runtime, governance, witness and replay-domain checks.
   assert.ok(await assertPaymentBindingReady(hre), "Live payment-binding artifacts are missing");

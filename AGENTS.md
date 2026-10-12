@@ -158,7 +158,17 @@
   PayPal/Venmo risk windows, deploy UPV4, and add its methods in registry order. Base then starts two-step vault
   and policy ownership transfers to the Safe and transfers UPV4's plain `Ownable` ownership directly to the Safe.
   Local networks deploy and configure the same records; lane 46 activates them. Lane 45 changes no live writers,
-  payment routes, or O3 hook.
+  payment routes, or O3 hook. Lane 45 executed on Base staging on 2026-10-11 from `f9eab7f`:
+
+  - `StakeVaultBypass`: `0xAca0d2e3C91182F2310446B2Eda0010E593DDEe6`
+  - `DisputeProtectionPolicyBypass`: `0x4bF03895eB7126c605D915b84A8c775D0f4C6C0B`
+  - `IntentLifecycleHookV1Bypass`: `0x2c1E846fA3887FfCbfD1F556d0FA6F4EC5899029`
+  - `UnifiedPaymentVerifierV4`: `0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7`
+
+  Recorded deployments are verified against `BYPASS_RECORDED_DEPLOYMENTS` address and runtime-hash pins:
+  a record's `solcInputHash` depends on the deploying checkout's build cache. Each network's recording PR adds
+  its pins; Base must add them right after lane 45, before preparing the lane-46 batch from a clean checkout.
+  Once activation starts, lane 45's tagged skip defers to lane 46's reducer and reports the stack as prepared.
 - `deploy/46_activate_bypass_dispute_stack.ts` targets `NullifierRegistryV2` writers exactly `[UPV4]`, every
   `PaymentVerifierRegistry` method routed to UPV4 with identical currencies and method order (reverse-remove,
   then in-order-add), and the O3 hook set to `IntentLifecycleHookV1Bypass`. It adds the fresh policy to the dispute
@@ -177,17 +187,22 @@
   `yarn verify:dispute-bypass-safe-batch` immediately before the Safe executes. Preparation signs, proposes, and
   executes no Safe transaction. Predecessor opt-outs on live listed windowed tuples must be mirrored on the fresh
   policy before the batch; inventory mismatches fail closed.
-  After execution, recording PRs must pin lanes 45/46 in `immutableDeploymentLanes.ts`, commit records and outputs,
-  flip `active-dispute-stack.json`, `dispute-stack-evidence.json`, and `PREDECESSOR_DISPUTE_STACKS`, and update the
-  lane-31 active wrapper to verify the UPV4 binding. Until that wrapper is updated, untagged live runs fail closed
-  at lane 31. Live package outputs export the three bypass records and `UnifiedPaymentVerifierV4` by name while
-  canonical aliases stay on the MethodScoped stack until the recording PR flips them. The flip is additive: the
-  three bypass records (`BY_NAME_DISPUTE_RECORDS` in `deployments/activeDisputeStack.cjs`) and UPV4 stay exported by
-  name with the same address as their canonical aliases, because clients resolve the signal-envelope target by
-  record name, and `StakeVaultMethodScoped` stays exported under its own name for withdraw/claim from the old vault. The recording PR's dispute-stack evidence must
-  name `DisputeProtectionPolicyMethodScopedStaked` / `IntentLifecycleHookV1MethodScopedStaked` as
-  `RecognizedPredecessorPolicy` / `RecognizedPredecessorHook`. Local aliases already select bypass
-  records, with `WhitelistPolicy` still selecting `WhitelistPolicyMethodScoped`. A second `yarn deploy:localhost`
+  Lane 46 executed on Base staging on 2026-10-12 from `a6970aa` in 32 deployer actions over three runs.
+  Staging aliases, `dispute-stack-evidence.json`, `PREDECESSOR_DISPUTE_STACKS`, and the lane-31 wrapper are
+  recorded for the activated stack. Base has not executed either lane and retains MethodScoped aliases and the
+  UPV3 binding; its recording PRs must add deployment pins after lane 45, then flip aliases, evidence, and
+  predecessor identities after lane 46. Lanes 45/46 remain unpinned until Base executes.
+  The lane-31 wrapper verifies UPV4 on every network whose recorded selection is the bypass hook and never
+  falls back to UPV3. Staging-only method lanes 35/41/43 still pin UPV3 and fail closed on tagged staging reruns;
+  new staging payment methods require a UPV4-aware lane. The lane-30 guard resolves the recorded bypass hook
+  through its pinned runtime hash.
+  Staging package aliases select bypass records; `WhitelistPolicy` still selects `WhitelistPolicyMethodScoped`.
+  The three bypass records (`BY_NAME_DISPUTE_RECORDS` in `deployments/activeDisputeStack.cjs`) remain exported
+  by name at their canonical alias addresses, and UPV4 remains exported by name. `StakeVaultMethodScoped` stays
+  exported for withdrawals and claims from the old staging vault. Staging evidence names
+  `DisputeProtectionPolicyMethodScopedStaked` / `IntentLifecycleHookV1MethodScopedStaked` as
+  `RecognizedPredecessorPolicy` / `RecognizedPredecessorHook`; the predecessor dispute writer stays passive.
+  Local aliases also select bypass records. A second `yarn deploy:localhost`
   on a chain where lane 46 already activated is unsupported: lanes 31/39 retain historical local checks for UPV3
   and lane-39 wiring. Restart the node before deploying again.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the

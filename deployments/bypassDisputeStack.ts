@@ -1,4 +1,10 @@
 import { utils } from "ethers";
+import type { HardhatRuntimeEnvironment } from "hardhat/types";
+import type { Deployment } from "hardhat-deploy/types";
+import {
+  assertCanonicalDeployment,
+  assertDeploymentMatchesChain,
+} from "./canonicalDeployment";
 import { DISPUTABLE_PAYMENT_METHODS } from "./parameters";
 import { RATIFIED_PAYMENT_METHOD_CURRENCIES } from "../deploy/31_deploy_v3_payment_binding_stack";
 
@@ -20,6 +26,89 @@ export const BYPASS_ARTIFACT_NAMES: Record<BypassDeploymentName, string> = {
   IntentLifecycleHookV1Bypass: "IntentLifecycleHookV1",
   UnifiedPaymentVerifierV4: "UnifiedPaymentVerifierV4",
 };
+/** Recorded after execution; Base is added by its own recording PR after
+ * lane 45 runs there. */
+export const BYPASS_RECORDED_DEPLOYMENTS: Partial<
+  Record<
+    BypassNetwork,
+    Record<BypassDeploymentName, { address: string; runtimeCodeHash: string }>
+  >
+> = {
+  base_staging: {
+    StakeVaultBypass: {
+      address: "0xAca0d2e3C91182F2310446B2Eda0010E593DDEe6",
+      runtimeCodeHash:
+        "0x3ce00cf0a7e325a116e87ea330c8997b94df705e4e0653d3de9484fca614356e",
+    },
+    DisputeProtectionPolicyBypass: {
+      address: "0x4bF03895eB7126c605D915b84A8c775D0f4C6C0B",
+      runtimeCodeHash:
+        "0x1ccd36086e5fb3b3816397a6c453280a0ac4ebd575bc4e2c80aa7e43167739d4",
+    },
+    IntentLifecycleHookV1Bypass: {
+      address: "0x2c1E846fA3887FfCbfD1F556d0FA6F4EC5899029",
+      runtimeCodeHash:
+        "0x68272c25f80dae42db6031fb4d5da3e2268c3134b7a914be08968b8393d91a43",
+    },
+    UnifiedPaymentVerifierV4: {
+      address: "0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7",
+      runtimeCodeHash:
+        "0xd4492805a7f86aca9419a84156f4ffe64bdc2f82854f83e7d17c0e5f79049a5c",
+    },
+  },
+};
+
+/** A record's solcInputHash depends on the deploying checkout's build cache
+ * history, so it cannot gate later verification from a clean build. Recorded
+ * deployments use address and runtime pins; unrecorded ones stay canonical. */
+export async function assertBypassDeploymentRecord(
+  hre: HardhatRuntimeEnvironment,
+  network: string,
+  name: BypassDeploymentName,
+  record: Deployment,
+  blockTag?: string | number
+): Promise<void> {
+  await assertDeploymentMatchesChain(
+    hre,
+    record,
+    name,
+    BYPASS_ARTIFACT_NAMES[name],
+    blockTag
+  );
+  const pin = isBypassLiveNetwork(network)
+    ? BYPASS_RECORDED_DEPLOYMENTS[network]?.[name]
+    : undefined;
+  if (pin) {
+    if (record.address.toLowerCase() !== pin.address.toLowerCase()) {
+      throw new Error(`${name} deployment address mismatch`);
+    }
+    const code = await hre.ethers.provider.getCode(record.address, blockTag);
+    if (utils.keccak256(code) !== pin.runtimeCodeHash) {
+      throw new Error(`${name} runtime bytecode hash mismatch`);
+    }
+  } else {
+    await assertCanonicalDeployment(
+      hre,
+      record,
+      name,
+      BYPASS_ARTIFACT_NAMES[name],
+      blockTag
+    );
+  }
+}
+
+export function recordedBypassLifecycleHookRuntimeHash(
+  network: string,
+  address: string
+): string | undefined {
+  const pin = isBypassLiveNetwork(network)
+    ? BYPASS_RECORDED_DEPLOYMENTS[network]?.IntentLifecycleHookV1Bypass
+    : undefined;
+  return pin && address.toLowerCase() === pin.address.toLowerCase()
+    ? pin.runtimeCodeHash
+    : undefined;
+}
+
 export const BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY = 0;
 export const BYPASS_PREDECESSOR_DEPLOYMENT_NAMES = {
   vault: "StakeVaultMethodScoped",

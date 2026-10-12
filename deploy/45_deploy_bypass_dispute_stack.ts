@@ -11,6 +11,7 @@ import {
   BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
   LANE_45_STEP_KINDS,
   LANE_45_TAG,
+  assertBypassDeploymentRecord,
   classifyLane45Prefix,
   expectedPaymentMethodCurrencies,
   isBypassLiveNetwork,
@@ -24,6 +25,7 @@ import {
   assertCanonicalDeployment,
   assertDeploymentMatchesChain,
 } from "../deployments/canonicalDeployment";
+import { reduceBypassActivation } from "../deployments/bypassDisputeActivation";
 import { waitForDeploymentDelay } from "../deployments/helpers";
 import {
   ACTIVE_PAYMENT_METHODS,
@@ -468,6 +470,7 @@ export async function assertLiveSharedState(
 }
 
 type StackContext = {
+  network: string;
   deployer: string;
   governance: string;
   stakeToken: string;
@@ -497,6 +500,7 @@ function liveContext(network: BypassNetwork): StackContext {
   const pins = BYPASS_EXPECTED_LIVE[network];
   const expected = EXPECTED_LIVE[network];
   return {
+    network,
     deployer: pins.deployer,
     governance: pins.governance,
     stakeToken: pins.stakeToken,
@@ -543,18 +547,7 @@ async function readFreshState(
     const record = deployments[index];
     if (!record) continue;
     const name = BYPASS_DEPLOYMENT_NAMES[index];
-    await assertDeploymentMatchesChain(
-      hre,
-      record,
-      name,
-      BYPASS_ARTIFACT_NAMES[name]
-    );
-    await assertCanonicalDeployment(
-      hre,
-      record,
-      name,
-      BYPASS_ARTIFACT_NAMES[name]
-    );
+    await assertBypassDeploymentRecord(hre, context.network, name, record);
   }
   const [vaultRecord, policyRecord, hookRecord, verifierRecord] = deployments;
   await assertFreshPolicyUnused(hre, policyRecord);
@@ -950,6 +943,7 @@ async function deployLocalBypassStack(
     windows[method] = window.toString();
   }
   const context: StackContext = {
+    network,
     deployer,
     governance: deployer,
     stakeToken:
@@ -978,12 +972,7 @@ async function deployLocalBypassStack(
   ): Promise<Deployment> => {
     const existing = await hre.deployments.getOrNull(name);
     if (existing) {
-      await assertCanonicalDeployment(
-        hre,
-        existing,
-        name,
-        BYPASS_ARTIFACT_NAMES[name]
-      );
+      await assertBypassDeploymentRecord(hre, network, name, existing);
       return existing;
     }
     const result = await deployFresh(hre, name, deployer, args);
@@ -1072,11 +1061,40 @@ async function deployLocalBypassStack(
   );
 }
 
+/** Once the fresh policy is a writer, lane 46 has started from a fully
+ * prepared stack. Its checks recognize activation prefixes and re-verify the
+ * fresh configuration; lane 45's pre-cutover checks no longer apply. */
 export async function bypassDisputeStackPrepared(
   hre: HardhatRuntimeEnvironment
 ): Promise<boolean> {
   const network = hre.deployments.getNetworkName();
   if (!isBypassLiveNetwork(network)) return false;
+  const records = await Promise.all(
+    BYPASS_DEPLOYMENT_NAMES.map((name) => hre.deployments.getOrNull(name))
+  );
+  if (records.every(Boolean)) {
+    const registry = await hre.ethers.getContractAt(
+      "NullifierRegistry",
+      BYPASS_EXPECTED_LIVE[network].disputeNullifierRegistry.address
+    );
+    if (await registry.isWriter(records[1]!.address)) {
+      const lane46 = require("./46_activate_bypass_dispute_stack");
+      await lane46.loadBypassActivationContext(hre, network);
+      const snapshot = await lane46.assertBypassActivationSharedState(
+        hre,
+        network,
+        await hre.ethers.provider.getBlockNumber()
+      );
+      const { phase } = reduceBypassActivation(
+        snapshot,
+        lane46.expectedBypassActivationState(network)
+      );
+      console.log(
+        `=== ${network} bypass dispute stack prepared; lane 46 activation is ${phase} ===`
+      );
+      return true;
+    }
+  }
   const state = await readLane45State(hre, network);
   return classifyLane45Prefix(network, state.completed).nextStep === null;
 }
