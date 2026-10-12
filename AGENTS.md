@@ -209,6 +209,14 @@
   Local aliases also select bypass records. A second `yarn deploy:localhost`
   on a chain where lane 46 already activated is unsupported: lanes 31/39 retain historical local checks for UPV3
   and lane-39 wiring. Restart the node before deploying again.
+- `deploy/47_replace_staging_bypass_stack.ts` replaces only the Base-staging bypass vault, policy and hook after
+  the stake-owner policy change. It is staging-only and tag-only, with mutually exclusive
+  `PREPARE_STAGING_V3_DISPUTE_BYPASS_REPLACEMENT=true` (read-only) and
+  `ENABLE_STAGING_V3_DISPUTE_BYPASS_REPLACEMENT=true` flags. It overwrites the three bypass records with fresh
+  deployments, retains UPV4 and all payment routes, adds the new policy writer, switches the O3 hook, and removes
+  the superseded writer only if its policy has no lifecycle activity. The August predecessor stays first in the
+  writer list. Pins, evidence and generated outputs are updated only in a subsequent recording PR. Not executed;
+  Base runs lanes 45/46 unchanged. See `docs/staging-bypass-replacement.md` for checks and recording boundaries.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the

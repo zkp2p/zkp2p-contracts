@@ -175,6 +175,10 @@ Current numbered lanes include:
 - `45`: bypass dispute stack and UPV4 (tag + network flag on live networks; resumable deploy-only steps). Executed on Base staging 2026-10-11; Base pending.
 - `46`: bypass/UPV4 activation (staging EOA actions; guarded atomic Base Safe batch; retains the predecessor dispute writer). Executed on Base staging 2026-10-12; Base pending.
 
+- `47`: staging-only, tag-only fresh replacement of the bypass dispute trio after the stake-owner policy change;
+  prepare/execute flags, UPV4 unchanged, superseded writer removed only without lifecycle activity. Not executed;
+  Base uses lanes 45/46 unchanged. Pins/evidence/outputs follow in a separate recording PR.
+
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production
 execution; successors get the next unused lane and new deployment names, and

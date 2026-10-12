@@ -107,7 +107,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         }
     }
 
-    function _activateLane46() private {
+    function _activateLane46() internal {
         disputeNullifiers.addWritePermission(address(freshPolicy));
         nullifiers.addWritePermission(address(successor));
         for (uint256 remaining = originalMethods.length; remaining > 0; remaining--) {
@@ -231,7 +231,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         assertNotEq(keccak256(abi.encode(actual)), keccak256(abi.encode(originalMethods)));
     }
 
-    function _signalProtected(DisputeProtectionPolicy protection, bool noStake) private returns (bytes32) {
+    function _signalProtected(DisputeProtectionPolicy protection, bool noStake) internal returns (bytes32) {
         IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
         params.data = abi.encode(address(protection), abi.encode(noStake));
         return _signal(taker, params);
@@ -248,7 +248,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         );
     }
 
-    function _signedProof(bytes32 intentHash, bytes32 paymentId, bytes32 domain) private view returns (bytes memory) {
+    function _signedProof(bytes32 intentHash, bytes32 paymentId, bytes32 domain) internal view returns (bytes memory) {
         bytes memory data = _attestationData(intentHash, paymentId);
         bytes32 dataHash = keccak256(data);
         bytes32 structHash = keccak256(
@@ -268,7 +268,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         );
     }
 
-    function _settle(bytes32 intentHash, bytes memory proof) private {
+    function _settle(bytes32 intentHash, bytes memory proof) internal {
         orchestrator.fulfillIntent(IOrchestratorV3.FulfillIntentParams(proof, intentHash, "", ""));
     }
 }
