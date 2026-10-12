@@ -59,6 +59,12 @@ The policy activity scan reuses lane 37's decoder/classifier and starts at the o
 pinned independently of the record overwritten by step 2. Unknown events also fail closed.
 It scans the superseded policy only; the lane never pauses, deauthorizes, drains, or edits the superseded trio.
 
+If the superseded policy shows activity, or gains any before the hook switch, the lane completes steps 1-9 and
+then refuses step 10 on every rerun. That state is safe (the new hook is mounted and the writers are the August
+predecessor, the superseded policy and the new policy), but neither the lane nor its prepare-mode verification can
+reach `active` from it. Removing or keeping the superseded writer is then a separate owner decision; do not record
+the run as complete until it is made. Run prepare mode first: it reports the refusal before anything is sent.
+
 A missing record or a record at its historical superseded address means that deployment step is incomplete.
 Any replacement record must match the canonical build and chain; getters re-verify its dependencies, ownership,
 controller, hook authorization, and windows. Completed steps must form a contiguous prefix. Gaps, unexpected
