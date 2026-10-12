@@ -1077,8 +1077,13 @@ export async function bypassDisputeStackPrepared(
       "NullifierRegistry",
       BYPASS_EXPECTED_LIVE[network].disputeNullifierRegistry.address
     );
-    if (await registry.isWriter(records[1]!.address)) {
-      const lane46 = require("./46_activate_bypass_dispute_stack");
+    const policy =
+      records[
+        BYPASS_DEPLOYMENT_NAMES.indexOf("DisputeProtectionPolicyBypass")
+      ]!;
+    if (await registry.isWriter(policy.address)) {
+      // Lazy loading avoids a load-time dependency on lane 46 for lane 45.
+      const lane46: typeof import("./46_activate_bypass_dispute_stack") = require("./46_activate_bypass_dispute_stack");
       await lane46.loadBypassActivationContext(hre, network);
       const snapshot = await lane46.assertBypassActivationSharedState(
         hre,

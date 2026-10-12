@@ -744,6 +744,116 @@ test("recorded bypass deployment pins match the executed staging stack only", ()
     );
 });
 
+test(
+  "recorded bypass pins agree with the committed staging records and " +
+    "dispute-stack evidence",
+  () => {
+    const {
+      BYPASS_DEPLOYMENT_NAMES,
+      BYPASS_RECORDED_DEPLOYMENTS,
+    } = require("../deployments/bypassDisputeStack.ts");
+    const {
+      PREDECESSOR_DISPUTE_STACKS,
+    } = require("../deployments/predecessorDisputeStack.ts");
+    const evidence = require("../deployments/dispute-stack-evidence.json")
+      .networks.base_staging;
+    const selections =
+      require("../deployments/active-dispute-stack.json").networks;
+    const pins = BYPASS_RECORDED_DEPLOYMENTS.base_staging;
+    assert.ok(pins);
+
+    const { keccak256 } = require("ethers").utils;
+    const stagingRecords = {
+      StakeVaultBypass: require("../deployments/base_staging/StakeVaultBypass.json"),
+      DisputeProtectionPolicyBypass: require("../deployments/base_staging/DisputeProtectionPolicyBypass.json"),
+      IntentLifecycleHookV1Bypass: require("../deployments/base_staging/IntentLifecycleHookV1Bypass.json"),
+      UnifiedPaymentVerifierV4: require("../deployments/base_staging/UnifiedPaymentVerifierV4.json"),
+      DisputeProtectionPolicyMethodScopedStaked: require("../deployments/base_staging/DisputeProtectionPolicyMethodScopedStaked.json"),
+      IntentLifecycleHookV1MethodScopedStaked: require("../deployments/base_staging/IntentLifecycleHookV1MethodScopedStaked.json"),
+    };
+
+    for (const name of BYPASS_DEPLOYMENT_NAMES) {
+      /** @type {{ address: string, runtimeCodeHash: string }} */
+      const pin = pins[name];
+      assert.equal(
+        pin.address.toLowerCase(),
+        stagingRecords[name].address.toLowerCase(),
+        `${name} pinned address`
+      );
+    }
+
+    const bypassNames = /** @type {const} */ ({
+      StakeVault: "StakeVaultBypass",
+      DisputeProtectionPolicy: "DisputeProtectionPolicyBypass",
+      IntentLifecycleHookV1: "IntentLifecycleHookV1Bypass",
+    });
+    const canonicalNames = /** @type {Array<keyof typeof bypassNames>} */ (
+      Object.keys(bypassNames)
+    );
+    for (const canonical of canonicalNames) {
+      const name = bypassNames[canonical];
+      /** @type {{ address: string, runtimeCodeHash: string }} */
+      const pin = pins[name];
+      const record = stagingRecords[name];
+      assert.equal(
+        evidence.addresses[canonical].toLowerCase(),
+        pin.address.toLowerCase()
+      );
+      assert.equal(evidence.runtimeCodeHashes[canonical], pin.runtimeCodeHash);
+      assert.deepEqual(evidence.deploymentEvidence[canonical], {
+        deploymentName: name,
+        solcInputHash: record.solcInputHash,
+        deployedBytecodeHash: keccak256(record.deployedBytecode),
+      });
+      assert.equal(selections.base_staging[canonical], name);
+    }
+
+    const predecessor = PREDECESSOR_DISPUTE_STACKS.base_staging;
+    assert.ok(predecessor);
+    const predecessorEvidence = /** @type {const} */ ({
+      IntentLifecycleHookV1: evidence.recognizedPredecessorHook,
+      DisputeProtectionPolicy: evidence.recognizedPredecessorPolicy,
+    });
+    const predecessorNames = /** @type {
+      Array<keyof typeof predecessorEvidence>
+    } */ (Object.keys(predecessorEvidence));
+    for (const canonical of predecessorNames) {
+      const name = /** @type {const} */ (`${canonical}MethodScopedStaked`);
+      const contract = predecessor.contracts[canonical];
+      const recognized = predecessorEvidence[canonical];
+      assert.ok(contract);
+      assert.equal(contract.deploymentName, name);
+      assert.equal(
+        contract.address.toLowerCase(),
+        recognized.address.toLowerCase()
+      );
+      assert.equal(contract.runtimeCodeHash, recognized.runtimeCodeHash);
+      assert.equal(
+        contract.address.toLowerCase(),
+        stagingRecords[name].address.toLowerCase()
+      );
+    }
+    assert.equal(
+      predecessor.activeLifecycleHook.address.toLowerCase(),
+      evidence.recognizedPredecessorHook.address.toLowerCase()
+    );
+    assert.equal(
+      predecessor.activeLifecycleHook.runtimeCodeHash,
+      evidence.recognizedPredecessorHook.runtimeCodeHash
+    );
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(BYPASS_RECORDED_DEPLOYMENTS, "base"),
+      false
+    );
+    assert.deepEqual(selections.base, {
+      StakeVault: "StakeVaultMethodScoped",
+      DisputeProtectionPolicy: "DisputeProtectionPolicyMethodScopedStaked",
+      IntentLifecycleHookV1: "IntentLifecycleHookV1MethodScopedStaked",
+      WhitelistPolicy: "WhitelistPolicyMethodScoped",
+    });
+  }
+);
+
 test("recorded bypass records use address and runtime pins across build caches", async () => {
   const {
     BYPASS_RECORDED_DEPLOYMENTS,

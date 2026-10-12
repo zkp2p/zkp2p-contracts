@@ -8,7 +8,13 @@ import {
   type BypassNetwork,
 } from "./bypassDisputeStack";
 
-const { getActiveDisputeDeploymentName } = require("./activeDisputeStack.cjs");
+const { getActiveDisputeDeploymentName } =
+  require("./activeDisputeStack.cjs") as {
+    getActiveDisputeDeploymentName(
+      network: string,
+      canonicalName: string
+    ): string;
+  };
 
 /** The bypass hook requires UPV4 routing. The recorded alias flip is the single
  * switch for a live network's payment binding; recording PRs flip it per network
