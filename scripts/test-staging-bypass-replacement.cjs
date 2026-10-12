@@ -6,7 +6,9 @@ aliases.reset();
 aliases.addAlias("@utils", process.cwd() + "/utils");
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { readdirSync } = require("node:fs");
+const { existsSync, readFileSync, readdirSync } = require("node:fs");
+const { join } = require("node:path");
+const { utils } = require("ethers");
 const model = require("../deployments/bypassDisputeActivation.ts");
 const replacement = require("../deployments/stagingBypassReplacement.ts");
 const { selectActiveDeploymentScripts } = require("../deployments/immutableDeploymentLanes.ts");
@@ -256,6 +258,79 @@ test("stale executable builds, including metadata-only differences, are refused"
     /stale/
   );
   replacement.assertPolicyBuildChanged("0x60006002a10001", "0x60006001b10001");
+});
+test("artifact source hashes match case-insensitively and ignore package sources", () => {
+  const metadata = JSON.stringify({
+    sources: {
+      "contracts/StakeVault.sol": { keccak256: "0xABCD" },
+      "contracts/interfaces/IStakeVault.sol": { keccak256: "0x1234" },
+      "@openzeppelin/contracts/access/Ownable.sol": { keccak256: "wrong" },
+    },
+  });
+  replacement.assertArtifactSourcesCurrent("StakeVault", metadata, (name) => {
+    assert.ok(name.startsWith("contracts/"));
+    return name === "contracts/StakeVault.sol" ? "0xabcd" : "0x1234";
+  });
+});
+test("changed and missing project sources name the stale artifact and source", () => {
+  const metadata = JSON.stringify({
+    sources: {
+      "contracts/StakeVault.sol": { keccak256: hash(1) },
+      "contracts/interfaces/IStakeVault.sol": { keccak256: hash(2) },
+    },
+  });
+  for (const actual of [hash(3), undefined]) {
+    assert.throws(
+      () =>
+        replacement.assertArtifactSourcesCurrent("StakeVault", metadata, (name) =>
+          name === "contracts/StakeVault.sol" ? hash(1) : actual
+        ),
+      /Lane 47 stale StakeVault artifact: contracts\/interfaces\/IStakeVault.sol.*compile before retrying/
+    );
+  }
+});
+test("invalid artifact metadata and missing project sources fail closed", () => {
+  for (const metadata of [
+    undefined,
+    {},
+    "{",
+    "null",
+    "[]",
+    "{}",
+    '{"sources":null}',
+    '{"sources":[]}',
+    '{"sources":{}}',
+    '{"sources":{"@openzeppelin/contracts/access/Ownable.sol":{}}}',
+    '{"sources":{"contracts/StakeVault.sol":null}}',
+    '{"sources":{"contracts/StakeVault.sol":{}}}',
+  ]) {
+    assert.throws(
+      () => replacement.assertArtifactSourcesCurrent("StakeVault", metadata, () => undefined),
+      /Lane 47 stale StakeVault artifact:.*compile before retrying/
+    );
+  }
+});
+test("real trio artifacts match this checkout's project sources", async () => {
+  const hre = require("hardhat");
+  assert.equal(hre.network.name, "hardhat");
+  for (const name of ["StakeVault", "DisputeProtectionPolicy", "IntentLifecycleHookV1"]) {
+    const artifact = await hre.deployments.getExtendedArtifact(name);
+    replacement.assertArtifactSourcesCurrent(name, artifact.metadata, (sourceName) => {
+      const filename = join(hre.config.paths.root, sourceName);
+      return existsSync(filename) ? utils.keccak256(readFileSync(filename)) : undefined;
+    });
+  }
+});
+test("August predecessor metadata is a stale DisputeProtectionPolicy artifact", () => {
+  const { metadata } = require("../deployments/base_staging/DisputeProtectionPolicyMethodScopedStaked.json");
+  assert.throws(
+    () =>
+      replacement.assertArtifactSourcesCurrent("DisputeProtectionPolicy", metadata, (name) => {
+        const filename = join(process.cwd(), name);
+        return existsSync(filename) ? utils.keccak256(readFileSync(filename)) : undefined;
+      }),
+    /Lane 47 stale DisputeProtectionPolicy artifact: contracts\/hooks\/DisputeProtectionPolicy.sol.*compile before retrying/
+  );
 });
 test("mounted hook accepts superseded or replacement and rejects any third hook", () => {
   replacement.assertMountedHook(SUPERSEDED.IntentLifecycleHookV1Bypass);

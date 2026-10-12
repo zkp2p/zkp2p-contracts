@@ -72,6 +72,33 @@ function executable(code: string): string {
   requireState(metadataBytes * 2 < code.length - 2, "Invalid policy metadata length");
   return code.slice(0, -metadataBytes * 2);
 }
+export function assertArtifactSourcesCurrent(
+  artifactName: string,
+  metadata: unknown,
+  hashSource: (sourceName: string) => string | undefined
+): void {
+  const invalid = `Lane 47 stale ${artifactName} artifact: invalid source metadata; compile before retrying`;
+  requireState(typeof metadata === "string", invalid);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(metadata);
+  } catch {
+    requireState(false, invalid);
+  }
+  requireState(typeof parsed === "object" && parsed !== null && !Array.isArray(parsed), invalid);
+  const sources = (parsed as Record<string, unknown>).sources;
+  requireState(typeof sources === "object" && sources !== null && !Array.isArray(sources), invalid);
+  const projectSources = Object.entries(sources).filter(([name]) => name.startsWith("contracts/"));
+  requireState(projectSources.length > 0, invalid);
+  for (const [name, source] of projectSources) {
+    const mismatch = `Lane 47 stale ${artifactName} artifact: ${name} source hash mismatch; compile before retrying`;
+    requireState(typeof source === "object" && source !== null && !Array.isArray(source), mismatch);
+    const expected = (source as Record<string, unknown>).keccak256;
+    requireState(typeof expected === "string", mismatch);
+    const actual = hashSource(name);
+    requireState(typeof actual === "string" && same(actual, expected), mismatch);
+  }
+}
 export function assertPolicyBuildChanged(artifact: string, supersededCode: string): void {
   // Ignore CBOR metadata and constructor immutable slots (zeroes in artifact runtime).
   requireState(

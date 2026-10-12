@@ -3,6 +3,8 @@
  * remain superseded until a separate recording PR. Do not run untagged/45/46 in that interval.
  * UPV4 and the August predecessor are retained. The superseded trio is abandoned, not migrated.
  */
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import { BigNumber, constants, utils } from "ethers";
 import type { Contract } from "ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
@@ -34,6 +36,7 @@ import {
   isReplacement,
   classifyReplacement,
   assertPolicyBuildChanged,
+  assertArtifactSourcesCurrent,
   replacementWriters,
   assertMountedHook,
   assertReplacementActive,
@@ -188,6 +191,17 @@ async function preflight(hre: HardhatRuntimeEnvironment, block: number): Promise
     }),
     "Lane 47 August predecessor writer missing"
   );
+  for (const name of Object.keys(SUPERSEDED) as TrioName[]) {
+    const artifactName = BYPASS_ARTIFACT_NAMES[name];
+    assertArtifactSourcesCurrent(
+      artifactName,
+      (await hre.deployments.getExtendedArtifact(artifactName)).metadata,
+      (sourceName) => {
+        const filename = join(hre.config.paths.root, sourceName);
+        return existsSync(filename) ? utils.keccak256(readFileSync(filename)) : undefined;
+      }
+    );
+  }
   const oldCode = await hre.ethers.provider.getCode(
     SUPERSEDED.DisputeProtectionPolicyBypass,
     block

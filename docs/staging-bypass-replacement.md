@@ -8,7 +8,8 @@ UPV4, its record, payment routes/currencies/order, NRV2 writers, and the August 
 ## Prepare and execute
 
 Use the compiled policy artifact containing the stake-owner change. The tagged runner uses `--no-compile`.
-The lane rejects executable runtime identical to the superseded policy, ignoring metadata and immutable slots.
+The lane rejects executable runtime identical to the superseded policy, ignoring metadata and immutable slots,
+and any vault, policy or hook artifact whose compiler metadata does not match this checkout's `contracts/` sources.
 
 Supply `ALCHEMY_API_KEY` and `BASE_DEPLOY_PRIVATE_KEY` externally through the approved environment. Keep the local
 `.env` dummy copy unchanged. Each command below names its required variables without providing their values.
@@ -78,7 +79,7 @@ Every pass checks the network/chain and pinned governance signer. The existing U
 checks its record/runtime, ownership/dependencies/methods, NRV2's sole writer, legacy replay permissions,
 attestation witnesses, O3 registration/ownership, and every route/currency/order. Additional checks pin dispute,
 whitelist and August predecessor records/runtime; verify dispute-registry governance and retained August writer;
-reject stale policy artifacts; and verify the mounted hook and the replacement prefix.
+reject stale vault, policy and hook artifacts; and verify the mounted hook and the replacement prefix.
 
 After completion, the same read-only command prints a block-pinned snapshot and requires the existing
 `reduceBypassActivation` result to be exactly `active` using the new trio addresses and the unchanged August
@@ -105,7 +106,7 @@ Record only after successful execution, in a separate PR:
 
 - `deployments/base_staging/StakeVaultBypass.json`, `DisputeProtectionPolicyBypass.json`, and
   `IntentLifecycleHookV1Bypass.json`: generated replacement records and receipts.
-- Any new `deployments/base_staging/solcInputs/*.json` referenced by those records: deploying build inputs.
+- Solc inputs under `deployments/base_staging/solcInputs/` are gitignored and are not part of the recording PR.
 - `deployments/bypassDisputeStack.ts`: update only the three staging `BYPASS_RECORDED_DEPLOYMENTS` address/runtime
   pins. UPV4 and `BYPASS_EXPECTED_LIVE` (the August predecessor) remain unchanged.
 - `deployments/dispute-stack-evidence.json`: staging execution provenance, trio addresses and artifact hashes.
