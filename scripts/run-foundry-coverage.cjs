@@ -20,6 +20,8 @@ const coverageFloors = {
     functions: 100,
 };
 const excludedProductionDirectories = new Set([
+    "contracts/archive/external",
+    "contracts/archive/interfaces",
     "contracts/external",
     "contracts/interfaces",
     "contracts/mocks",
@@ -129,13 +131,18 @@ const exactSourceCoverageRuns = [
         test: "test-foundry/deterministic/registries",
     },
     {
+        name: "archive-registries",
+        source: "contracts/archive/registries",
+        test: "test-foundry/deterministic/registries",
+    },
+    {
         name: "oracles",
         source: "contracts/oracles",
         test: "test-foundry/deterministic/oracles",
     },
     {
         name: "escrows",
-        source: "contracts/Escrow.sol",
+        source: "contracts/archive/Escrow.sol",
         test: "test-foundry/deterministic/escrow",
     },
     {
@@ -144,8 +151,13 @@ const exactSourceCoverageRuns = [
         test: "test-foundry/deterministic/verifiers",
     },
     {
+        name: "archive-unified-verifiers",
+        source: "contracts/archive/unifiedVerifier",
+        test: "test-foundry/deterministic/verifiers",
+    },
+    {
         name: "protocol-viewer",
-        source: "contracts/ProtocolViewer.sol",
+        source: "contracts/archive/ProtocolViewer.sol",
         test: "test-foundry/deterministic/periphery/ProtocolViewer.t.sol",
     },
     {
@@ -155,7 +167,7 @@ const exactSourceCoverageRuns = [
     },
     ...legacyOrchestratorTests.map((test, index) => ({
         name: `legacy-orchestrator-${index}`,
-        source: "contracts/Orchestrator.sol",
+        source: "contracts/archive/Orchestrator.sol",
         test,
     })),
 ];

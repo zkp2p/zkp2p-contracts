@@ -2,13 +2,13 @@
 pragma solidity ^0.8.18;
 
 import { BaseUnifiedPaymentVerifier } from "./BaseUnifiedPaymentVerifier.sol";
-import { INullifierRegistry } from "../interfaces/INullifierRegistry.sol";
-import { IPaymentVerifier } from "../interfaces/IPaymentVerifier.sol";
-import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
-import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
-import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
-import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
-import { IEscrow } from "../interfaces/IEscrow.sol";
+import { INullifierRegistry } from "../../interfaces/INullifierRegistry.sol";
+import { IPaymentVerifier } from "../../interfaces/IPaymentVerifier.sol";
+import { IAttestationVerifier } from "../../interfaces/IAttestationVerifier.sol";
+import { IOrchestrator } from "../../interfaces/IOrchestrator.sol";
+import { IOrchestratorV2 } from "../../interfaces/IOrchestratorV2.sol";
+import { IOrchestratorRegistry } from "../../interfaces/IOrchestratorRegistry.sol";
+import { IEscrow } from "../../interfaces/IEscrow.sol";
 
 /**
  * @title UnifiedPaymentVerifier

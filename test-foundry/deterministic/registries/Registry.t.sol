@@ -8,7 +8,7 @@ import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
-import {PostIntentHookRegistry} from "contracts/registries/PostIntentHookRegistry.sol";
+import {PostIntentHookRegistry} from "contracts/archive/registries/PostIntentHookRegistry.sol";
 import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {INullifierRegistry} from "contracts/interfaces/INullifierRegistry.sol";
 import {INullifierRegistryV2} from "contracts/interfaces/INullifierRegistryV2.sol";

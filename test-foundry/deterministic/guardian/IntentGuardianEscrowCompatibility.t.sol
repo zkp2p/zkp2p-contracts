@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 
 import {Test} from "forge-std/Test.sol";
 
-import {Escrow} from "../../../contracts/Escrow.sol";
+import {Escrow} from "../../../contracts/archive/Escrow.sol";
 import {EscrowV2} from "../../../contracts/EscrowV2.sol";
 import {IntentGuardian} from "../../../contracts/IntentGuardian.sol";
 import {IEscrow} from "../../../contracts/interfaces/IEscrow.sol";

@@ -2,13 +2,13 @@
 pragma solidity ^0.8.18;
 
 import {Test} from "forge-std/Test.sol";
-import {Escrow} from "contracts/Escrow.sol";
-import {Orchestrator} from "contracts/Orchestrator.sol";
-import {ProtocolViewer} from "contracts/ProtocolViewer.sol";
+import {Escrow} from "contracts/archive/Escrow.sol";
+import {Orchestrator} from "contracts/archive/Orchestrator.sol";
+import {ProtocolViewer} from "contracts/archive/ProtocolViewer.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
-import {PostIntentHookRegistry} from "contracts/registries/PostIntentHookRegistry.sol";
+import {PostIntentHookRegistry} from "contracts/archive/registries/PostIntentHookRegistry.sol";
 import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 
 contract LegacySystemDeploymentTest is Test {

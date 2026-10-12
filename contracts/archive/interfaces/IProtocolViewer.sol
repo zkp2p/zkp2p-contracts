@@ -2,8 +2,8 @@
 
 pragma solidity ^0.8.18;
 
-import { IEscrow } from "./IEscrow.sol";
-import { IOrchestrator } from "./IOrchestrator.sol";
+import { IEscrow } from "../../interfaces/IEscrow.sol";
+import { IOrchestrator } from "../../interfaces/IOrchestrator.sol";
 
 interface IProtocolViewer {
 
