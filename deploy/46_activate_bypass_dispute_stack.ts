@@ -4,11 +4,11 @@ import type { BigNumber, Contract, providers } from "ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import type { DeployFunction, Deployment } from "hardhat-deploy/types";
 import {
-  BYPASS_ARTIFACT_NAMES,
   BYPASS_DEPLOYMENT_NAMES,
   BYPASS_EXPECTED_LIVE,
   BYPASS_PREDECESSOR_DEPLOYMENT_NAMES,
   LANE_46_TAG,
+  assertBypassDeploymentRecord,
   expectedPaymentMethodCurrencies,
   isBypassLiveNetwork,
   paymentMethodHash,
@@ -42,10 +42,7 @@ import {
   validateBypassActivationBatchManifest,
 } from "../deployments/bypassActivationBatchManifest";
 import type { BypassActivationBatchManifest } from "../deployments/bypassActivationBatchManifest";
-import {
-  assertCanonicalDeployment,
-  assertDeploymentMatchesChain,
-} from "../deployments/canonicalDeployment";
+import { assertDeploymentMatchesChain } from "../deployments/canonicalDeployment";
 import { waitForDeploymentDelay } from "../deployments/helpers";
 import {
   DISPUTABLE_PAYMENT_METHODS,
@@ -302,11 +299,11 @@ async function verifyRecords(
   blockTag: string | number
 ): Promise<void> {
   for (const name of BYPASS_DEPLOYMENT_NAMES) {
-    await assertCanonicalDeployment(
+    await assertBypassDeploymentRecord(
       hre,
-      await hre.deployments.get(name),
+      network,
       name,
-      BYPASS_ARTIFACT_NAMES[name],
+      await hre.deployments.get(name),
       blockTag
     );
   }
