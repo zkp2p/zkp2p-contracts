@@ -27,7 +27,7 @@ interface IDisputeProtectionPolicy {
     /**
      * @notice Dispute protection state retained after an intent is admitted by the lifecycle hook.
      * @param taker Account that signaled the intent.
-     * @param stakeOwner Account whose StakeVault balance collateralizes the intent; zero in no-stake mode.
+     * @param stakeOwner Collateral owner; for an existing record, zero means no-stake and nonzero means staked.
      * @param depositor Escrow depositor compensated by a successful dispute.
      * @param paymentMethod Payment method used to namespace risk configuration and dispute nullifiers.
      * @param status Current dispute protection lifecycle state.

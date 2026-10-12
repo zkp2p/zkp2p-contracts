@@ -93,6 +93,22 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         _stake(taker, STAKE_AMOUNT);
     }
 
+    function test_StakedAdmissionRejectsZeroOwnerWithoutCreatingRecord() public {
+        vm.expectRevert(IStakeVault.ZeroAddress.selector);
+        disputeProtectionPolicy.onIntentSignaled(
+            INTENT, address(escrow), depositId, address(0), METHOD, INTENT_AMOUNT, false
+        );
+        assertFalse(disputeProtectionPolicy.isIntentNoStake(INTENT));
+        assertEq(
+            uint256(disputeProtectionPolicy.getDisputeProtectionIntent(INTENT).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
+        );
+    }
+
+    function test_GasNoStakeSignal() public {
+        disputeProtectionPolicy.onIntentSignaled(INTENT, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, true);
+    }
+
     function test_NoStakeAdmissionUsesStakedAdmissionGatesWithoutCollateral() public {
         disputeProtectionPolicy.setAdmissionsPaused(true);
         vm.expectRevert(IDisputeProtectionPolicy.AdmissionsPaused.selector);
@@ -155,6 +171,8 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         vm.expectEmit(true, true, false, true, address(disputeProtectionPolicy));
         emit DisputeProtectionIntentCancelled(cancelledIntent, address(0), 0);
         disputeProtectionPolicy.onIntentCancelled(cancelledIntent);
+        assertTrue(disputeProtectionPolicy.isIntentNoStake(cancelledIntent));
+        assertEq(disputeProtectionPolicy.getDisputeProtectionIntent(cancelledIntent).stakeOwner, address(0));
         assertEq(
             uint256(disputeProtectionPolicy.getDisputeProtectionIntent(cancelledIntent).status),
             uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.CANCELLED)
@@ -486,6 +504,8 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         intents[0] = INTENT;
         intents[1] = secondIntent;
         disputeProtectionPolicy.releaseMaturedDisputeProtectionIntents(intents);
+        assertFalse(disputeProtectionPolicy.isIntentNoStake(INTENT));
+        assertEq(disputeProtectionPolicy.getDisputeProtectionIntent(INTENT).stakeOwner, taker);
         assertEq(vault.lockedStake(taker), 0);
         assertEq(vault.freeStake(taker), STAKE_AMOUNT);
         vm.expectRevert(
@@ -514,6 +534,8 @@ contract DisputeProtectionPolicyTest is OrchestratorV3Fixture {
         nullifierRegistry.addNullifier(paymentNullifier, INTENT);
         disputeProtectionPolicy.submitDispute(attestation);
 
+        assertFalse(disputeProtectionPolicy.isIntentNoStake(INTENT));
+        assertEq(disputeProtectionPolicy.getDisputeProtectionIntent(INTENT).stakeOwner, taker);
         assertEq(vault.claimable(depositor), 40e6);
         assertEq(vault.lockedStake(taker), 0);
         assertEq(vault.stakeBalance(taker), STAKE_AMOUNT - 40e6);
