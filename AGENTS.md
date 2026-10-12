@@ -172,7 +172,12 @@
   Recorded deployments are verified against `BYPASS_RECORDED_DEPLOYMENTS` address and runtime-hash pins:
   a record's `solcInputHash` depends on the deploying checkout's build cache. Each network's recording PR adds
   its pins; Base must add them right after lane 45, before preparing the lane-46 batch from a clean checkout.
-  Once activation starts, lane 45's tagged skip defers to lane 46's reducer and reports the stack as prepared.
+  The staging trio from that execution is now abandoned after the stake-owner policy change. Source-only staging
+  replacement is pending through the same lanes, tags, flags and record names. While all three recorded staging
+  pins still name the abandoned trio, lane 45 dispatches to `deployments/stagingBypassReplacementExecution.ts`
+  before the ordinary prepared check. It deploys and configures only the fresh trio, then reports lane 46 next.
+  UPV4, its record and every payment route remain unchanged. Base remains pending and unchanged.
+  Outside staging replacement, once activation starts, lane 45's tagged skip defers to lane 46's reducer.
 - `deploy/46_activate_bypass_dispute_stack.ts` targets `NullifierRegistryV2` writers exactly `[UPV4]`, every
   `PaymentVerifierRegistry` method routed to UPV4 with identical currencies and method order (reverse-remove,
   then in-order-add), and the O3 hook set to `IntentLifecycleHookV1Bypass`. It adds the fresh policy to the dispute
@@ -192,6 +197,13 @@
   executes no Safe transaction. Predecessor opt-outs on live listed windowed tuples must be mirrored on the fresh
   policy before the batch; inventory mismatches fail closed.
   Lane 46 executed on Base staging on 2026-10-12 from `a6970aa` in 32 deployer actions over three runs.
+  That staging trio is now abandoned. Pending source-only re-execution uses the same staging prepare/execute and
+  confirmation flags. Prepare prints all remaining replacement steps across both lanes without sending anything;
+  execute requires lane 45 complete, adds the fresh writer, switches O3's hook and removes the abandoned writer
+  only after its activity scan passes. The August predecessor remains. After completion, prepare requires the
+  block-pinned snapshot to reduce to `active`. Updating all three staging recorded pins retires replacement routing;
+  ordinary verification then handles the fresh trio. See `docs/staging-bypass-replacement.md` for the refusal state
+  and recording boundary. Base has no replacement path.
   Staging aliases, `dispute-stack-evidence.json`, `PREDECESSOR_DISPUTE_STACKS`, and the lane-31 wrapper are
   recorded for the activated stack. Base has not executed either lane and retains MethodScoped aliases and the
   UPV3 binding; its recording PRs must add deployment pins after lane 45, then flip aliases, evidence, and
@@ -209,14 +221,6 @@
   Local aliases also select bypass records. A second `yarn deploy:localhost`
   on a chain where lane 46 already activated is unsupported: lanes 31/39 retain historical local checks for UPV3
   and lane-39 wiring. Restart the node before deploying again.
-- `deploy/47_replace_staging_bypass_stack.ts` replaces only the Base-staging bypass vault, policy and hook after
-  the stake-owner policy change. It is staging-only and tag-only, with mutually exclusive
-  `PREPARE_STAGING_V3_DISPUTE_BYPASS_REPLACEMENT=true` (read-only) and
-  `ENABLE_STAGING_V3_DISPUTE_BYPASS_REPLACEMENT=true` flags. It overwrites the three bypass records with fresh
-  deployments, retains UPV4 and all payment routes, adds the new policy writer, switches the O3 hook, and removes
-  the superseded writer only if its policy has no lifecycle activity. The August predecessor stays first in the
-  writer list. Pins, evidence and generated outputs are updated only in a subsequent recording PR. Not executed;
-  Base runs lanes 45/46 unchanged. See `docs/staging-bypass-replacement.md` for checks and recording boundaries.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the

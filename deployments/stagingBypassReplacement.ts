@@ -5,11 +5,6 @@ import type {
   BypassExpectedActivationState,
 } from "./bypassDisputeActivation";
 
-export const LANE_47_TAG = "47_replace_staging_bypass_stack";
-export const LIVE_FLAGS = {
-  prepare: "PREPARE_STAGING_V3_DISPUTE_BYPASS_REPLACEMENT",
-  execute: "ENABLE_STAGING_V3_DISPUTE_BYPASS_REPLACEMENT",
-} as const;
 // Historical identities must survive overwriting the three canonical records and later pin updates.
 export const SUPERSEDED = {
   StakeVaultBypass: "0xAca0d2e3C91182F2310446B2Eda0010E593DDEe6",
@@ -36,20 +31,19 @@ export const same = (a: string, b: string): boolean => a.toLowerCase() === b.toL
 export function requireState(ok: boolean, message: string): asserts ok {
   if (!ok) throw new Error(message);
 }
-export function replacementMode(
-  network: string,
-  env: NodeJS.ProcessEnv
-): "skip" | "prepare" | "execute" {
-  if (env.DEPLOY_ACTIVE_TAG !== LANE_47_TAG) return "skip";
-  requireState(network !== "base", "Lane 47 is staging-only; Base must use lanes 45/46 unchanged");
-  if (network !== "base_staging") return "skip";
-  const prepare = env[LIVE_FLAGS.prepare] === "true";
-  const execute = env[LIVE_FLAGS.execute] === "true";
+/** The recording PR retires replacement routing by updating all three address pins.
+ * Records alone cannot retire it: hardhat-deploy overwrites them during execution. */
+export function replacementRecordingPending(
+  recorded: Partial<Record<TrioName, { address: string }>> | undefined
+): boolean {
+  const names = Object.keys(SUPERSEDED) as TrioName[];
+  requireState(names.every((name) => !!recorded?.[name]), "Missing staging bypass recorded pins");
+  const abandoned = names.map((name) => same(recorded![name]!.address, SUPERSEDED[name]));
   requireState(
-    prepare !== execute,
-    `Lane 47 requires exactly one of ${LIVE_FLAGS.prepare} or ${LIVE_FLAGS.execute}=true`
+    abandoned.every(Boolean) || abandoned.every((value) => !value),
+    "Partially updated staging bypass recorded pins"
   );
-  return prepare ? "prepare" : "execute";
+  return abandoned.every(Boolean);
 }
 export function isReplacement(name: TrioName, address?: string): boolean {
   return !!address && !same(address, SUPERSEDED[name]);
@@ -58,11 +52,11 @@ export function classifyReplacement(
   completed: readonly boolean[],
   steps: readonly string[]
 ): number | null {
-  requireState(completed.length === steps.length, "Lane 47 state length mismatch");
+  requireState(completed.length === steps.length, "Staging bypass replacement state length mismatch");
   const next = completed.indexOf(false);
   requireState(
     next < 0 || !completed.slice(next + 1).some(Boolean),
-    "Lane 47 state is not a contiguous prefix"
+    "Staging bypass replacement state is not a contiguous prefix"
   );
   return next < 0 ? null : next;
 }
@@ -77,7 +71,7 @@ export function assertArtifactSourcesCurrent(
   metadata: unknown,
   hashSource: (sourceName: string) => string | undefined
 ): void {
-  const invalid = `Lane 47 stale ${artifactName} artifact: invalid source metadata; compile before retrying`;
+  const invalid = `Staging bypass replacement stale ${artifactName} artifact: invalid source metadata; compile before retrying`;
   requireState(typeof metadata === "string", invalid);
   let parsed: unknown;
   try {
@@ -91,7 +85,7 @@ export function assertArtifactSourcesCurrent(
   const projectSources = Object.entries(sources).filter(([name]) => name.startsWith("contracts/"));
   requireState(projectSources.length > 0, invalid);
   for (const [name, source] of projectSources) {
-    const mismatch = `Lane 47 stale ${artifactName} artifact: ${name} source hash mismatch; compile before retrying`;
+    const mismatch = `Staging bypass replacement stale ${artifactName} artifact: ${name} source hash mismatch; compile before retrying`;
     requireState(typeof source === "object" && source !== null && !Array.isArray(source), mismatch);
     const expected = (source as Record<string, unknown>).keccak256;
     requireState(typeof expected === "string", mismatch);
@@ -103,7 +97,7 @@ export function assertPolicyBuildChanged(artifact: string, supersededCode: strin
   // Ignore CBOR metadata and constructor immutable slots (zeroes in artifact runtime).
   requireState(
     !deploymentCodeMatchesRecord(executable(artifact), executable(supersededCode)),
-    "Lane 47 stale DisputeProtectionPolicy artifact: executable runtime matches superseded policy; compile before retrying"
+    "Staging bypass replacement stale DisputeProtectionPolicy artifact: executable runtime matches superseded policy; compile before retrying"
   );
 }
 export function replacementWriters(
@@ -124,7 +118,7 @@ export function replacementWriters(
 export function assertMountedHook(mounted: string, fresh?: string): void {
   requireState(
     same(mounted, SUPERSEDED.IntentLifecycleHookV1Bypass) || (!!fresh && same(mounted, fresh)),
-    "Lane 47 mounted lifecycle hook is neither superseded nor replacement"
+    "Staging bypass replacement mounted lifecycle hook is neither superseded nor replacement"
   );
 }
 export function assertReplacementActive(
@@ -134,6 +128,6 @@ export function assertReplacementActive(
   const result = reduceBypassActivation(snapshot, expected);
   requireState(
     result.phase === "active",
-    `Lane 47 final state is not lane-46 active: ${result.violations.join(", ")}`
+    `Staging bypass replacement final state is not lane-46 active: ${result.violations.join(", ")}`
   );
 }

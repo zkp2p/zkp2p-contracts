@@ -39,7 +39,6 @@
     "deploy:dispute-bypass-stack:base_staging": "ts-node --transpile-only scripts/deployActive.ts base_staging 45_deploy_bypass_dispute_stack",
     "deploy:dispute-bypass-stack:base": "ts-node --transpile-only scripts/deployActive.ts base 45_deploy_bypass_dispute_stack",
     "deploy:dispute-bypass-activation:base_staging": "ts-node --transpile-only scripts/deployActive.ts base_staging 46_activate_bypass_dispute_stack",
-    "deploy:dispute-bypass-replacement:base_staging": "ts-node --transpile-only scripts/deployActive.ts base_staging 47_replace_staging_bypass_stack",
     "deploy:dispute-bypass-activation:base": "ts-node --transpile-only scripts/deployActive.ts base 46_activate_bypass_dispute_stack",
     "deploy:dispute-risk-windows:base_staging": "ts-node --transpile-only scripts/deployActive.ts base_staging 42_retire_dispute_risk_windows",
     "deploy:dispute-risk-windows:base": "ts-node --transpile-only scripts/deployActive.ts base 42_retire_dispute_risk_windows",

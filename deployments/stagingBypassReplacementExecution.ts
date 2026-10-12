@@ -1,38 +1,36 @@
-/** Staging-only replacement after the stake-owner policy change. Base uses 45/46 unchanged.
- * After execution, the trio records are new but bypass pins, evidence and generated outputs
- * remain superseded until a separate recording PR. Do not run untagged/45/46 in that interval.
- * UPV4 and the August predecessor are retained. The superseded trio is abandoned, not migrated.
+/** Staging-only replacement dispatched by lanes 45/46 until the recording PR.
+ * UPV4 and the August predecessor are retained; the superseded trio is abandoned.
  */
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { BigNumber, constants, utils } from "ethers";
 import type { Contract } from "ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
-import type { DeployFunction, Deployment } from "hardhat-deploy/types";
+import type { Deployment } from "hardhat-deploy/types";
 import {
   BYPASS_ARTIFACT_NAMES,
+  BYPASS_RECORDED_DEPLOYMENTS,
   LANE_45_STEP_KINDS,
   BYPASS_EXPECTED_LIVE,
   BYPASS_PREDECESSOR_DEPLOYMENT_NAMES,
   BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
   expectedPaymentMethodCurrencies,
   paymentMethodHash,
-} from "../deployments/bypassDisputeStack";
+} from "./bypassDisputeStack";
 import {
   assertCanonicalDeployment,
   assertDeploymentMatchesChain,
-} from "../deployments/canonicalDeployment";
+} from "./canonicalDeployment";
 import type {
   BypassActivationSnapshot,
   BypassExpectedActivationState,
-} from "../deployments/bypassDisputeActivation";
+} from "./bypassDisputeActivation";
 import {
-  LANE_47_TAG,
   SUPERSEDED,
   SUPERSEDED_POLICY_BLOCK,
   SUPERSEDED_POLICY_RUNTIME_HASH,
   replacementSteps,
-  replacementMode,
+  replacementRecordingPending,
   isReplacement,
   classifyReplacement,
   assertPolicyBuildChanged,
@@ -42,20 +40,20 @@ import {
   assertReplacementActive,
   same,
   requireState,
-} from "../deployments/stagingBypassReplacement";
-import type { TrioName } from "../deployments/stagingBypassReplacement";
+} from "./stagingBypassReplacement";
+import type { TrioName } from "./stagingBypassReplacement";
 import {
   EXPECTED_LIVE,
   classifyFreshStackActivity,
   decodeFreshStackLogs,
-} from "./37_deploy_method_scoped_dispute_lifecycle_stack";
+} from "../deploy/37_deploy_method_scoped_dispute_lifecycle_stack";
 import {
   preflightStagingTransaction,
   requireStableStagingNonce,
   mapWithConcurrency,
-} from "./38_activate_method_scoped_dispute_lifecycle_stack";
-import { verifyBypassPaymentBinding } from "../deployments/bypassPaymentBinding";
-import { waitForDeploymentDelay } from "../deployments/helpers";
+} from "../deploy/38_activate_method_scoped_dispute_lifecycle_stack";
+import { verifyBypassPaymentBinding } from "./bypassPaymentBinding";
+import { waitForDeploymentDelay } from "./helpers";
 
 const STEPS = replacementSteps(LANE_45_STEP_KINDS.base_staging);
 const pins = BYPASS_EXPECTED_LIVE.base_staging;
@@ -115,7 +113,7 @@ export async function assertSupersededUnused(
       policyEvents: decodeFreshStackLogs(iface, logs, "Superseded staging bypass policy"),
     });
   } catch (error) {
-    throw new Error(`Lane 47 refuses to remove superseded writer: ${String(error)}`);
+    throw new Error(`Staging bypass replacement refuses to remove superseded writer: ${String(error)}`);
   }
 }
 async function authorizedHooks(
@@ -136,16 +134,16 @@ async function authorizedHooks(
 async function preflight(hre: HardhatRuntimeEnvironment, block: number): Promise<void> {
   requireState(
     hre.deployments.getNetworkName() === "base_staging",
-    "Lane 47 requires base_staging"
+    "Staging bypass replacement requires base_staging"
   );
   requireState(
     (await hre.ethers.provider.getNetwork()).chainId === pins.chainId,
-    "Lane 47 chain ID mismatch"
+    "Staging bypass replacement chain ID mismatch"
   );
   const [deployer] = await hre.getUnnamedAccounts();
   requireState(
     same(deployer, pins.deployer) && same(deployer, pins.governance),
-    "Lane 47 signer is not pinned staging governance"
+    "Staging bypass replacement signer is not pinned staging governance"
   );
   // Reuse the mounted lane-31 UPV4 checks; this never loads the trio's stale pins.
   await verifyBypassPaymentBinding(hre, "base_staging");
@@ -160,12 +158,12 @@ async function preflight(hre: HardhatRuntimeEnvironment, block: number): Promise
   ] as const;
   for (const [name, artifact, pin] of records) {
     const record = await hre.deployments.get(name);
-    requireState(same(record.address, pin.address), `Lane 47 ${name} address mismatch`);
+    requireState(same(record.address, pin.address), `Staging bypass replacement ${name} address mismatch`);
     await assertDeploymentMatchesChain(hre, record, name, artifact, block);
     requireState(
       utils.keccak256(await hre.ethers.provider.getCode(pin.address, block)) ===
         pin.runtimeCodeHash,
-      `Lane 47 ${name} runtime hash mismatch`
+      `Staging bypass replacement ${name} runtime hash mismatch`
     );
   }
   for (const [name, address] of Object.entries({
@@ -176,20 +174,20 @@ async function preflight(hre: HardhatRuntimeEnvironment, block: number): Promise
   })) {
     requireState(
       same((await hre.deployments.get(name)).address, address),
-      `Lane 47 ${name} address mismatch`
+      `Staging bypass replacement ${name} address mismatch`
     );
   }
   const at = (artifact: string, address: string) => hre.ethers.getContractAt(artifact, address);
   const disputeRegistry = await at("NullifierRegistry", pins.disputeNullifierRegistry.address);
   requireState(
     same(await disputeRegistry.owner({ blockTag: block }), pins.governance),
-    "Lane 47 dispute registry owner mismatch"
+    "Staging bypass replacement dispute registry owner mismatch"
   );
   requireState(
     await disputeRegistry.isWriter(pins.predecessorPolicy.address, {
       blockTag: block,
     }),
-    "Lane 47 August predecessor writer missing"
+    "Staging bypass replacement August predecessor writer missing"
   );
   for (const name of Object.keys(SUPERSEDED) as TrioName[]) {
     const artifactName = BYPASS_ARTIFACT_NAMES[name];
@@ -208,7 +206,7 @@ async function preflight(hre: HardhatRuntimeEnvironment, block: number): Promise
   );
   requireState(
     utils.keccak256(oldCode) === SUPERSEDED_POLICY_RUNTIME_HASH,
-    "Lane 47 superseded policy runtime mismatch"
+    "Staging bypass replacement superseded policy runtime mismatch"
   );
   const artifact = await hre.deployments.getExtendedArtifact("DisputeProtectionPolicy");
   requireState(
@@ -246,15 +244,15 @@ export async function readReplacementState(
     "deploy-policy": !!policy,
     "deploy-hook": !!hook,
   };
-  requireState(!policy || !!vault, "Lane 47 replacement policy lacks replacement vault");
-  requireState(!hook || !!policy, "Lane 47 replacement hook lacks replacement policy");
+  requireState(!policy || !!vault, "Staging bypass replacement replacement policy lacks replacement vault");
+  requireState(!hook || !!policy, "Staging bypass replacement replacement hook lacks replacement policy");
   const opts = { blockTag: block };
   for (const contract of [vault, policy])
     if (contract) {
       requireState(
         same(await contract.owner(opts), pins.governance) &&
           same(await contract.pendingOwner(opts), zero),
-        `Lane 47 ${contract.address} ownership mismatch`
+        `Staging bypass replacement ${contract.address} ownership mismatch`
       );
     }
   if (vault) {
@@ -263,28 +261,28 @@ export async function readReplacementState(
         BigNumber.from(await vault.controllerChangeDelay(opts)).eq(
           BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY
         ),
-      "Lane 47 vault constructor mismatch"
+      "Staging bypass replacement vault constructor mismatch"
     );
     const controller = await vault.controller(opts);
     const pending = await vault.pendingController(opts);
     requireState(
       same(pending, zero) === BigNumber.from(await vault.pendingControllerValidAt(opts)).isZero(),
-      "Lane 47 pending controller evidence mismatch"
+      "Staging bypass replacement pending controller evidence mismatch"
     );
     done["initialize-controller"] = !!policy && same(controller, policy.address);
     requireState(
       same(controller, zero) || done["initialize-controller"],
-      "Lane 47 vault controller mismatch"
+      "Staging bypass replacement vault controller mismatch"
     );
     requireState(
       BigNumber.from(await vault.pendingControllerValidAt(opts)).isZero() ||
         (!done["initialize-controller"] && !!policy && same(pending, policy.address)),
-      "Lane 47 pending controller timestamp mismatch"
+      "Staging bypass replacement pending controller timestamp mismatch"
     );
     requireState(
       same(pending, zero) ||
         (!done["initialize-controller"] && !!policy && same(pending, policy.address)),
-      "Lane 47 pending controller mismatch"
+      "Staging bypass replacement pending controller mismatch"
     );
   }
   if (policy) {
@@ -293,22 +291,22 @@ export async function readReplacementState(
         same(await policy.disputeVerifier(opts), pins.disputeVerifier.address) &&
         same(await policy.disputeNullifierRegistry(opts), pins.disputeNullifierRegistry.address) &&
         !(await policy.admissionsPaused(opts)),
-      "Lane 47 policy dependency or pause mismatch"
+      "Staging bypass replacement policy dependency or pause mismatch"
     );
     const hooks = await authorizedHooks(hre, records.DisputeProtectionPolicyBypass!, block);
     requireState(
       hooks.length === 0 || (!!hook && sameList(hooks, [hook.address])),
-      "Lane 47 unexpected authorized hook"
+      "Staging bypass replacement unexpected authorized hook"
     );
     done["authorize-hook"] = !!hook && (await policy.isLifecycleHookAuthorized(hook.address, opts));
     requireState(
       done["authorize-hook"] === (hooks.length === 1),
-      "Lane 47 authorization log/state mismatch"
+      "Staging bypass replacement authorization log/state mismatch"
     );
     for (const name of pins.paymentMethods) {
       const actual = BigNumber.from(await policy.getRiskWindow(paymentMethodHash(name), opts));
       const expected = pins.riskWindows[name] || "0";
-      requireState(actual.isZero() || actual.eq(expected), `Lane 47 ${name} risk window mismatch`);
+      requireState(actual.isZero() || actual.eq(expected), `Staging bypass replacement ${name} risk window mismatch`);
       if (pins.riskWindows[name]) done[`set-risk-window:${name}`] = actual.eq(expected);
     }
   }
@@ -317,7 +315,7 @@ export async function readReplacementState(
       same(await hook.orchestratorRegistry(opts), shared.orchestratorRegistry) &&
         same(await hook.whitelistPolicy(opts), pins.whitelistPolicy.address) &&
         same(await hook.disputeProtectionPolicy(opts), policy!.address),
-      "Lane 47 hook immutable mismatch"
+      "Staging bypass replacement hook immutable mismatch"
     );
   const registry = await hre.ethers.getContractAt(
     "NullifierRegistry",
@@ -338,7 +336,7 @@ export async function readReplacementState(
         done["remove-superseded-writer"]
       )
     ),
-    "Lane 47 dispute writer order mismatch"
+    "Staging bypass replacement dispute writer order mismatch"
   );
   const orchestrator = await hre.ethers.getContractAt("OrchestratorV3", shared.orchestrator);
   const mounted = await orchestrator.lifecycleHook(opts);
@@ -636,7 +634,7 @@ async function executeStep(
       method = "addWritePermission";
       args = [policy!.address];
     } else {
-      requireState(step === "remove-superseded-writer", `Unknown lane 47 step ${step}`);
+      requireState(step === "remove-superseded-writer", `Unknown staging replacement step ${step}`);
       await assertSupersededUnused(hre, state.block);
       method = "removeWritePermission";
       args = [SUPERSEDED.DisputeProtectionPolicyBypass];
@@ -681,9 +679,20 @@ async function executeStep(
   await waitForDeploymentDelay(hre);
 }
 
-const func: DeployFunction = async (hre) => {
-  const mode = replacementMode(hre.deployments.getNetworkName(), process.env);
-  if (mode === "skip") return;
+/** Dispatch stays active through post-run verification, but pending work is determined
+ * only by readReplacementState's contiguous prefix. No replacement flag exists. */
+export function stagingReplacementRecordingPending(hre: HardhatRuntimeEnvironment): boolean {
+  requireState(hre.deployments.getNetworkName() === "base_staging", "Replacement requires base_staging");
+  return replacementRecordingPending(BYPASS_RECORDED_DEPLOYMENTS.base_staging);
+}
+
+export async function runStagingBypassReplacement(
+  hre: HardhatRuntimeEnvironment,
+  lane: 45 | 46,
+  mode: "prepare" | "execute"
+): Promise<void> {
+  requireState(stagingReplacementRecordingPending(hre), "Replacement already recorded");
+  const activationStart = STEPS.indexOf("add-policy-writer");
   while (true) {
     const nonce = await hre.ethers.provider.getTransactionCount(pins.deployer, "pending");
     const state = await readReplacementState(hre);
@@ -694,20 +703,23 @@ const func: DeployFunction = async (hre) => {
     if (state.next === null) {
       const snapshot = await finalSnapshot(hre, state.block);
       assertReplacementActive(snapshot, (await finalContext(hre)).expected);
-      console.log("Lane 47 active; recording PR required for pins, evidence and outputs.");
+      console.log("Staging bypass replacement active; recording PR required for pins, evidence and outputs.");
       console.log(JSON.stringify(snapshot, null, 2));
       return;
     }
-    console.log(`Lane 47 remaining actions: ${STEPS.slice(state.next).join(" -> ")}`);
+    console.log(`Staging bypass replacement remaining actions: ${STEPS.slice(state.next).join(" -> ")}`);
     if (mode === "prepare") {
       await assertSupersededUnused(hre, state.block);
       return;
     }
+    if (lane === 45 && state.next >= activationStart) {
+      console.log("Lane 45 replacement deploy-only steps complete; run lane 46 next.");
+      return;
+    }
+    requireState(
+      lane === 45 || state.next >= activationStart,
+      "Replacement deployment incomplete; run lane 45 first"
+    );
     await executeStep(hre, state, nonce);
   }
-};
-func.skip = async (hre) =>
-  replacementMode(hre.deployments.getNetworkName(), process.env) === "skip";
-func.tags = [LANE_47_TAG];
-func.dependencies = [];
-export default func;
+}

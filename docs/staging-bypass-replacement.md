@@ -1,46 +1,57 @@
-# Lane 47: staging bypass replacement
+# Staging bypass replacement through lanes 45 and 46
 
-Source-only, not executed. `base_staging` is a staging namespace on Base chain 8453, not a separate testnet.
-Base production uses lanes 45/46 unchanged. Lane 47 replaces only the staging dispute trio under the existing
-`StakeVaultBypass`, `DisputeProtectionPolicyBypass`, and `IntentLifecycleHookV1Bypass` record names.
-UPV4, its record, payment routes/currencies/order, NRV2 writers, and the August predecessor stay unchanged.
+Source-only, not executed. The staging trio deployed on 2026-10-11 and activated on 2026-10-12 is now abandoned.
+`base_staging` is a staging namespace on Base chain 8453. Base production remains pending and unchanged.
+The same lanes, tags, flags and `StakeVaultBypass`, `DisputeProtectionPolicyBypass`, and
+`IntentLifecycleHookV1Bypass` record names replace only that dispute trio. UPV4, its record, payment routes,
+currencies, method order, NRV2 sole writer, and the August predecessor remain unchanged.
 
-## Prepare and execute
+## Operator sequence
 
-Use the compiled policy artifact containing the stake-owner change. The tagged runner uses `--no-compile`.
-The lane rejects executable runtime identical to the superseded policy, ignoring metadata and immutable slots,
-and any vault, policy or hook artifact whose compiler metadata does not match this checkout's `contracts/` sources.
+Compile the current artifacts before live work; the tagged runner uses `--no-compile`. Every trio artifact must
+have compiler source hashes matching the checkout, and the policy executable runtime must differ from the
+abandoned policy. Live authorization is separate from this source change.
 
-Supply `ALCHEMY_API_KEY` and `BASE_DEPLOY_PRIVATE_KEY` externally through the approved environment. Keep the local
-`.env` dummy copy unchanged. Each command below names its required variables without providing their values.
-Set the selected mode variable to `true`; the other mode must be unset. The package script supplies
-`DEPLOY_ACTIVE_TAG=47_replace_staging_bypass_stack` through `scripts/deployActive.ts`.
+Supply these variable names through the approved environment, with no values committed here:
+`ALCHEMY_API_KEY`, `BASE_DEPLOY_PRIVATE_KEY`. The package commands set their existing `DEPLOY_ACTIVE_TAG`.
+For each activation invocation, select exactly one mode and unset the other mode. Both prepare and execute
+require `CONFIRM_STAGING_V3_DISPUTE_BYPASS_ACTIVATION` and
+`CONFIRM_STAGING_V3_DISPUTE_BYPASS_DOWNSTREAM_READY`, exactly as ordinary lane 46 does.
 
-Read-only preparation (also the post-run verification command):
-
-```sh
-env -u ENABLE_STAGING_V3_DISPUTE_BYPASS_REPLACEMENT \
-  ALCHEMY_API_KEY="$ALCHEMY_API_KEY" \
-  BASE_DEPLOY_PRIVATE_KEY="$BASE_DEPLOY_PRIVATE_KEY" \
-  PREPARE_STAGING_V3_DISPUTE_BYPASS_REPLACEMENT="$PREPARE_STAGING_V3_DISPUTE_BYPASS_REPLACEMENT" \
-  yarn deploy:dispute-bypass-replacement:base_staging
-```
-
-Execution, only after separate live authorization:
+First run the read-only check with `PREPARE_STAGING_V3_DISPUTE_BYPASS_ACTIVATION` and both confirmation
+variables supplied. Unset `ENABLE_STAGING_V3_DISPUTE_BYPASS_ACTIVATION`:
 
 ```sh
-env -u PREPARE_STAGING_V3_DISPUTE_BYPASS_REPLACEMENT \
-  ALCHEMY_API_KEY="$ALCHEMY_API_KEY" \
-  BASE_DEPLOY_PRIVATE_KEY="$BASE_DEPLOY_PRIVATE_KEY" \
-  ENABLE_STAGING_V3_DISPUTE_BYPASS_REPLACEMENT="$ENABLE_STAGING_V3_DISPUTE_BYPASS_REPLACEMENT" \
-  yarn deploy:dispute-bypass-replacement:base_staging
+yarn deploy:dispute-bypass-activation:base_staging
 ```
 
-No confirmation flags from lane 46 apply. Untagged runs skip lane 47, even with a mode flag set. Tagged `base`
-runs throw before any RPC access; other networks skip. Tagged staging runs require exactly one mode flag.
-Preparation reads and prints remaining steps; it neither deletes deployment records nor sends transactions.
+It prints every remaining replacement action across both lanes in order and checks the abandoned policy's
+activity. It never deletes records or sends transactions. A refusal is reported before execution.
+
+The two execution commands, in order, are:
+
+```sh
+yarn deploy:dispute-bypass-stack:base_staging
+yarn deploy:dispute-bypass-activation:base_staging
+```
+
+The first requires `ENABLE_STAGING_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT`. It prints remaining actions while
+completing steps 1-7 below, then prints `Lane 45 replacement deploy-only steps complete; run lane 46 next.`
+The second requires `ENABLE_STAGING_V3_DISPUTE_BYPASS_ACTIVATION` and both confirmation variables, with
+`PREPARE_STAGING_V3_DISPUTE_BYPASS_ACTIVATION` unset. It refuses with `run lane 45 first` if any deploy-only
+step remains. It performs steps 8-10, then prints `Staging bypass replacement active; recording PR required for
+pins, evidence and outputs.` and the block-pinned snapshot.
+
+Finally switch back to `PREPARE_STAGING_V3_DISPUTE_BYPASS_ACTIVATION`, unset the execute variable, retain both
+confirmation variables and repeat the read-only command. It requires the fresh-trio snapshot to reduce to exactly
+`active` and prints the same completion message and snapshot. Before completion it prints remaining actions.
+Neither command creates a Safe batch or changes the UPV4 record. Untagged lane 45 skips; lane 46 keeps its
+existing tag and action-flag validation. Base and local branches never dispatch to the replacement executor,
+which independently rejects every network except `base_staging` before accessing RPC.
 
 ## Steps and resumability
+
+Lane 45 owns steps 1-7. Lane 46 owns steps 8-10.
 
 1. Deploy `StakeVault(governance, USDC, address(0), BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY)` as `StakeVaultBypass`.
 2. Deploy `DisputeProtectionPolicy(governance, newVault, disputeVerifier, disputeRegistry)` as `DisputeProtectionPolicyBypass`.
@@ -59,8 +70,8 @@ The policy activity scan reuses lane 37's decoder/classifier and starts at the o
 pinned independently of the record overwritten by step 2. Unknown events also fail closed.
 It scans the superseded policy only; the lane never pauses, deauthorizes, drains, or edits the superseded trio.
 
-If the superseded policy shows activity, or gains any before the hook switch, the lane completes steps 1-9 and
-then refuses step 10 on every rerun. That state is safe (the new hook is mounted and the writers are the August
+If the superseded policy shows activity, or gains any before the hook switch, lane 45 completes steps 1-7 and
+lane 46 completes steps 8-9, then refuses step 10 on every rerun. That state is safe (the new hook is mounted and the writers are the August
 predecessor, the superseded policy and the new policy), but neither the lane nor its prepare-mode verification can
 reach `active` from it. Removing or keeping the superseded writer is then a separate owner decision; do not record
 the run as complete until it is made. Run prepare mode first: it reports the refusal before anything is sent.
@@ -104,40 +115,53 @@ predecessor. The snapshot reads:
 - The remaining ownership, shared dependencies and August predecessor fields required by lane 46's reducer.
 
 The reducer's deposit inventory is not evaluated by this replacement (reported `ok: false`, empty inventory).
-Lane 46 does not gate its `active` row on inventory. This lane intentionally does not migrate old policy opt-outs.
+Lane 46 does not gate its `active` row on inventory. This replacement intentionally does not migrate old policy opt-outs.
 
 ## Recording PR and interim behavior
 
-Record only after successful execution, in a separate PR:
+Replacement routing is enabled while all three `BYPASS_RECORDED_DEPLOYMENTS.base_staging` address pins equal
+`SUPERSEDED` in `deployments/stagingBypassReplacement.ts`. Whether replacement work is pending comes from the
+live contiguous step prefix: missing or abandoned trio records and any unfinished configuration or activation
+step keep it pending. Updating records alone cannot retire routing. After execution the same module verifies
+completion while the old pins remain. A partially updated set of pins fails closed. Once all three recorded pins
+name fresh addresses, replacement dispatch is inert and ordinary lanes 45/46 verify prepared and active state
+using the recorded address/runtime pins, without inspecting the abandoned policy or requiring its old artifacts.
 
-- `deployments/base_staging/StakeVaultBypass.json`, `DisputeProtectionPolicyBypass.json`, and
-  `IntentLifecycleHookV1Bypass.json`: generated replacement records and receipts.
-- Solc inputs under `deployments/base_staging/solcInputs/` are gitignored and are not part of the recording PR.
-- `deployments/bypassDisputeStack.ts`: update only the three staging `BYPASS_RECORDED_DEPLOYMENTS` address/runtime
-  pins. UPV4 and `BYPASS_EXPECTED_LIVE` (the August predecessor) remain unchanged.
+Record only after successful execution, in a separate PR. The file list is:
+
+- `deployments/base_staging/StakeVaultBypass.json`: generated fresh vault record and receipt.
+- `deployments/base_staging/DisputeProtectionPolicyBypass.json`: generated fresh policy record and receipt.
+- `deployments/base_staging/IntentLifecycleHookV1Bypass.json`: generated fresh hook record and receipt.
+- `deployments/bypassDisputeStack.ts`: the three staging `BYPASS_RECORDED_DEPLOYMENTS` address/runtime pins only.
 - `deployments/dispute-stack-evidence.json`: staging execution provenance, trio addresses and artifact hashes.
-- `deployments/outputs/baseStagingContracts.ts`: regenerate and canonicalize trio aliases and by-name exports.
-- `scripts/test-bypass-dispute-deployment.cjs`: update the staging recorded-pin expectations.
-- `AGENTS.md`, `CLAUDE.md`, `README.md`, and this lane note: record actual execution source/transactions/status.
-- Archive transaction/block/postcondition evidence in a new `deployments/outputs/` recording file.
+- `deployments/outputs/baseStagingContracts.ts`: regenerated trio aliases and by-name exports.
+- `scripts/test-bypass-dispute-deployment.cjs`: update the staging recorded-address/runtime expectations.
+- `scripts/active-dispute-stack.spec.cjs`: update the staging recorded-address/runtime expectations.
+  Replacement tests use explicit abandoned-address fixtures, which remain historical rather than becoming
+  fresh-address expectations.
+- `CLAUDE.md`, `AGENTS.md`, `README.md`: update lane 45/46 execution entries.
+- `docs/staging-bypass-replacement.md`: update this tracked, otherwise gitignored operator note with actual status.
 
-`deployments/active-dispute-stack.json` already selects these three record names, so no alias flip is required.
-`PREDECESSOR_DISPUTE_STACKS` still identifies the retained August predecessor; do not replace it with the abandoned
-trio. `BYPASS_EXPECTED_LIVE` and lane 45/46 sources stay unchanged. No Base files change.
-Package generation later refreshes `packages/contracts/addresses/baseStaging.json` and generated manifest/runtime
-metadata from the recorded output; package release is a separate boundary, not a lane-47 side effect.
+Solc inputs under `deployments/base_staging/solcInputs/` stay gitignored. UPV4's record and pin stay unchanged.
+`deployments/active-dispute-stack.json` already selects the same record names. `PREDECESSOR_DISPUTE_STACKS`
+and `BYPASS_EXPECTED_LIVE` still identify the retained August predecessor. No Base records change. Package
+outputs and publication remain a separate boundary.
 
-Between execution and recording:
+Between execution and recording, tagged lane 45 checks the completed replacement state and tagged lane 46
+prepare mode performs final verification despite stale trio pins. If activation is still pending, lane 45 reports
+lane 46 next and lane 46 resumes. The lane-45 deployment flag is still required in this interval. Avoid broad
+untagged deployment: other mounted checks and output/package extraction are not a substitute for recording.
+Lane 31 continues verifying the unchanged UPV4 binding independently of trio pins.
 
-- Tagged lane 47 resumes/verifies independently of the three stale recorded pins.
-- Tagged lane 45 detects the new policy writer and enters lane 46's record loader; lane 46's own tagged run also
-  uses that loader. Both fail on `StakeVaultBypass deployment address mismatch` until pins are recorded.
-- Untagged deployment skips 45/46/47. Lane 30 can recognize the new hook in the deploying checkout through matching
-  canonical build evidence; a different build-cache checkout without its new runtime pin fails closed. Lane 31
-  verifies unchanged UPV4 independently of trio pins. Do not assume the untagged command is a recording gate:
-  if all mounted lanes pass, `yarn deploy:base_staging` proceeds to export/canonicalize output and extract package
-  files despite the stale dispute pins/evidence. Complete the recording PR before using that broad command.
+The recording PR may delete the replacement machinery after updating all three records and pins, without
+changing subsequent ordinary staging verification or Base behavior. Delete both
+`deployments/stagingBypassReplacementExecution.ts` and `deployments/stagingBypassReplacement.ts` (including
+abandoned pins), remove the guarded dispatch blocks from lane 45's entry and prepared check and lane 46's
+staging entry, remove their explicit TypeScript project entries, and remove or adapt the replacement-specific
+script tests and their package/typecheck references. The local Foundry continuity tests can remain independently.
+Do not delete the module while leaving its guarded imports behind. No runner mount or production logic needs
+changing for this cleanup.
 
 The Foundry continuity case admits protected intents before switching and proves cancellation/settlement still
-use the old hook and vault. Such activity intentionally prevents the real lane's final writer-removal step;
-that test stops at the switch prefix and retains the writer. It does not claim activity can pass the removal gate.
+use the old hook and vault. Such activity prevents the real replacement's final writer-removal step; that test
+retains the writer at the switch prefix. It does not claim activity can pass the removal gate.

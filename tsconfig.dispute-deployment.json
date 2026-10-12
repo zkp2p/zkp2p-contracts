@@ -35,7 +35,7 @@
     "deploy/44_deploy_fx_rate_feeds.ts",
     "deploy/45_deploy_bypass_dispute_stack.ts",
     "deploy/46_activate_bypass_dispute_stack.ts",
-    "deploy/47_replace_staging_bypass_stack.ts",
+    "deployments/stagingBypassReplacementExecution.ts",
     "deployments/stagingBypassReplacement.ts",
     "scripts/test-staging-bypass-replacement.cjs",
     "scripts/fx-rate-feeds-deployment.spec.cjs",

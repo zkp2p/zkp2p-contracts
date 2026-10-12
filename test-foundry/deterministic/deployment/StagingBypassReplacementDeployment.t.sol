@@ -14,7 +14,7 @@ contract StagingBypassReplacementDeploymentTest is BypassDisputeStackDeploymentT
     DisputeProtectionPolicy internal replacementPolicy;
     IntentLifecycleHookV1 internal replacementHook;
 
-    function _replaceTrio(bool removeUnusedWriter) internal {
+    function _deployReplacementLane45() internal {
         replacementVault = new StakeVault(address(this), token, address(0), 0);
         replacementPolicy =
             new DisputeProtectionPolicy(address(this), replacementVault, disputeVerifier, disputeNullifiers);
@@ -23,14 +23,39 @@ contract StagingBypassReplacementDeploymentTest is BypassDisputeStackDeploymentT
         replacementPolicy.setLifecycleHookAuthorization(address(replacementHook), true);
         replacementPolicy.setRiskWindow(PAYPAL, RISK_WINDOW);
         replacementPolicy.setRiskWindow(METHOD, RISK_WINDOW);
+    }
+
+    function _activateReplacementLane46(bool removeUnusedWriter) internal {
+        require(address(replacementHook) != address(0), "Run lane 45 first");
         disputeNullifiers.addWritePermission(address(replacementPolicy));
         orchestrator.setLifecycleHook(replacementHook);
         if (removeUnusedWriter) disputeNullifiers.removeWritePermission(address(freshPolicy));
     }
 
+    function test_ReplacementLane45DoesNotActivateOrChangePaymentBinding() public {
+        _activateLane46();
+        address[] memory writers = disputeNullifiers.getWriters();
+        _deployReplacementLane45();
+        assertEq(disputeNullifiers.getWriters(), writers);
+        assertEq(address(orchestrator.lifecycleHook()), address(freshHook));
+        assertEq(replacementVault.controller(), address(replacementPolicy));
+        assertTrue(replacementPolicy.isLifecycleHookAuthorized(address(replacementHook)));
+        assertEq(replacementPolicy.getRiskWindow(PAYPAL), RISK_WINDOW);
+        assertEq(replacementPolicy.getRiskWindow(METHOD), RISK_WINDOW);
+        assertEq(nullifiers.getWriters()[0], address(successor));
+        assertEq(nullifiers.getWriters().length, 1);
+        assertEq(paymentVerifierRegistry.getPaymentMethods(), originalMethods);
+        for (uint256 index; index < originalMethods.length; index++) {
+            bytes32 method = originalMethods[index];
+            assertEq(paymentVerifierRegistry.getVerifier(method), address(successor));
+            assertEq(paymentVerifierRegistry.getCurrencies(method), originalCurrencies[method]);
+        }
+    }
+
     function test_ReplacementEndStatePreservesUPV4AndWriterOrder() public {
         _activateLane46();
-        _replaceTrio(true);
+        _deployReplacementLane45();
+        _activateReplacementLane46(true);
         assertNotEq(address(replacementVault), address(freshVault));
         assertNotEq(address(replacementPolicy), address(freshPolicy));
         assertNotEq(address(replacementHook), address(freshHook));
@@ -77,7 +102,8 @@ contract StagingBypassReplacementDeploymentTest is BypassDisputeStackDeploymentT
 
     function test_ReplacementNoStakeUsesZeroOwnerAndStakedIntentLocksNewVault() public {
         _activateLane46();
-        _replaceTrio(true);
+        _deployReplacementLane45();
+        _activateReplacementLane46(true);
         bytes32 noStake = _signalProtected(replacementPolicy, true);
         address owner = replacementPolicy.getDisputeProtectionIntent(noStake).stakeOwner;
         assertEq(owner, address(0));
@@ -98,7 +124,8 @@ contract StagingBypassReplacementDeploymentTest is BypassDisputeStackDeploymentT
 
     function test_ReplacementHookRejectsSupersededPolicyData() public {
         _activateLane46();
-        _replaceTrio(true);
+        _deployReplacementLane45();
+        _activateReplacementLane46(true);
         IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
         params.data = abi.encode(address(freshPolicy), abi.encode(true));
         vm.expectRevert("ILH: Invalid payment validation hook");
@@ -114,8 +141,9 @@ contract StagingBypassReplacementDeploymentTest is BypassDisputeStackDeploymentT
         vm.stopPrank();
         bytes32 cancelled = _signalProtected(freshPolicy, false);
         bytes32 settled = _signalProtected(freshPolicy, false);
-        // Activity would stop lane 47 before writer removal. Reproduce precisely that prefix.
-        _replaceTrio(false);
+        // Activity would stop lane 46 before writer removal. Reproduce precisely that prefix.
+        _deployReplacementLane45();
+        _activateReplacementLane46(false);
         assertEq(address(orchestrator.getIntentLifecycleHook(cancelled)), address(freshHook));
         assertEq(address(orchestrator.getIntentLifecycleHook(settled)), address(freshHook));
         vm.prank(taker);

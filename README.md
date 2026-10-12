@@ -820,14 +820,16 @@ staging dispute aliases equal their by-name records, and `StakeVaultMethodScoped
 withdrawals and claims. Local deployments activate bypass and select its canonical aliases; restart
 the node before a second `yarn deploy:localhost` after activation because lanes 31/39 assume the old local wiring.
 
-Lane `47_replace_staging_bypass_stack` replaces the staging bypass trio after the stake-owner policy change;
-Base still uses lanes 45/46 unchanged. It is staging-only and tag-only and has not been executed.
-Use `yarn deploy:dispute-bypass-replacement:base_staging` with exactly one of
-`PREPARE_STAGING_V3_DISPUTE_BYPASS_REPLACEMENT=true` (read-only) or
-`ENABLE_STAGING_V3_DISPUTE_BYPASS_REPLACEMENT=true` (execute). It deploys fresh records under the same three names,
-keeps UPV4 and every payment route, switches the hook, and removes only the unused superseded policy writer.
-The August predecessor remains. See [lane 47](docs/staging-bypass-replacement.md) for preflight, resume semantics,
-post-run reads, the recording PR, and interim behavior of other lanes.
+The staging trio deployed on 2026-10-11 and activated on 2026-10-12 is now abandoned after the stake-owner
+policy change. Source-only replacement is pending through the same lanes 45/46, tags, flags and record names.
+Run `yarn deploy:dispute-bypass-stack:base_staging` with the existing staging deployment flag to deploy and
+configure only the fresh trio, then `yarn deploy:dispute-bypass-activation:base_staging` with the existing
+activation execute and confirmation flags to add the fresh writer, switch the hook and remove the unused
+abandoned writer. The activation prepare flag prints every remaining step across both lanes without sending
+anything and verifies the final block-pinned `active` snapshot. UPV4, its record, every payment route and the
+August predecessor remain unchanged. Replacement routing retires once all three staging recorded pins name
+the fresh trio. Base is pending and unchanged. See [staging replacement](docs/staging-bypass-replacement.md)
+for preflight, resumability, the refusal state and the recording PR.
 
 The package exports the currently selected (latest) addresses for each network, and consumers should treat them as
 the addresses to use.

@@ -543,7 +543,6 @@ test("active selection mounts successor lanes and excludes retired history", () 
   );
   for (const filename of [
     "36_deploy_method_scoped_whitelist_policy.ts",
-    "47_replace_staging_bypass_stack.ts",
     "32_deploy_deposit_creation_guard.ts",
   ]) {
     assert.equal(
