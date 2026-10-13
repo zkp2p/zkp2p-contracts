@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {EscrowV2} from "contracts/EscrowV2.sol";
 import {OrchestratorV2} from "contracts/archive/OrchestratorV2.sol";
 import {UnifiedPaymentVerifier} from "contracts/archive/unifiedVerifier/UnifiedPaymentVerifier.sol";
-import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";
+import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";

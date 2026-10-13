@@ -6,7 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {EscrowV2} from "contracts/EscrowV2.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
-import {AggregatorV3Mock} from "contracts/mocks/AggregatorV3Mock.sol";
+import {AggregatorV3Mock} from "../../mocks/AggregatorV3Mock.sol";
 import {PaymentVerifierMock} from "contracts/mocks/PaymentVerifierMock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {ChainlinkOracleAdapter} from "contracts/oracles/ChainlinkOracleAdapter.sol";

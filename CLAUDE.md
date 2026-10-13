@@ -110,8 +110,9 @@ contracts/               Solidity source
   interfaces/            interfaces
   registries/            registry contracts
   hooks/                 pre/post-intent hooks
-  mocks/                 test support
+  mocks/                 doubles that deploy lanes or Hardhat deployment tests load, and Safe-batch guards
 test-foundry/
+  mocks/                 test doubles used only by Foundry tests
   deterministic/         focused success, revert, deployment, regression tests
   fuzz/                  input-space properties
   invariant/             stateful handlers and invariants

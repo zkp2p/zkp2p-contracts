@@ -10,7 +10,7 @@ import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionP
 import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IStakeVault} from "contracts/interfaces/IStakeVault.sol";
-import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";
+import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";

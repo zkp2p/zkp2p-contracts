@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.18;
 
-import { AddressGroupRegistry } from "../registries/AddressGroupRegistry.sol";
+import { AddressGroupRegistry } from "contracts/registries/AddressGroupRegistry.sol";
 
 // Test-only subclass that raises the resolver gas limit so the bounded-returndata copy can be
 // demonstrated with payloads far larger than the production stipend permits (harness-level

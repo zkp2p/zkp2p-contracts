@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
-import { IPaymentVerifier } from "../interfaces/IPaymentVerifier.sol";
+import { IOrchestrator } from "contracts/interfaces/IOrchestrator.sol";
+import { IPaymentVerifier } from "contracts/interfaces/IPaymentVerifier.sol";
 
 /** @notice Legacy-orchestrator-shaped caller used to cover UPV V3's V1 snapshot path. */
 contract UnifiedPaymentVerifierV3CallerHarness {

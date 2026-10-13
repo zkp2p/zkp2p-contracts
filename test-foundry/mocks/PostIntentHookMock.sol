@@ -3,8 +3,8 @@
 pragma solidity ^0.8.18;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { IPostIntentHook } from "../interfaces/IPostIntentHook.sol";
-import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
+import { IPostIntentHook } from "contracts/interfaces/IPostIntentHook.sol";
+import { IOrchestrator } from "contracts/interfaces/IOrchestrator.sol";
 
 /**
  * @title PostIntentHookMock

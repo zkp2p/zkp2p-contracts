@@ -5,8 +5,8 @@ import {Test} from "forge-std/Test.sol";
 
 import {UnifiedPaymentVerifier} from "contracts/archive/unifiedVerifier/UnifiedPaymentVerifier.sol";
 import {SimpleAttestationVerifier} from "contracts/unifiedVerifier/SimpleAttestationVerifier.sol";
-import {FailingAttestationVerifier} from "contracts/mocks/FailingAttestationVerifier.sol";
-import {UnifiedPaymentVerifierV3CallerHarness} from "contracts/mocks/UnifiedPaymentVerifierV3Harness.sol";
+import {FailingAttestationVerifier} from "../../mocks/FailingAttestationVerifier.sol";
+import {UnifiedPaymentVerifierV3CallerHarness} from "../../mocks/UnifiedPaymentVerifierV3Harness.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {IOrchestrator} from "contracts/interfaces/IOrchestrator.sol";

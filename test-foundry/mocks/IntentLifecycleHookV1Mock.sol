@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.18;
 
-import { IIntentLifecycleHook } from "../interfaces/IIntentLifecycleHook.sol";
+import { IIntentLifecycleHook } from "contracts/interfaces/IIntentLifecycleHook.sol";
 
 /**
  * @title IntentLifecycleHookV1Mock

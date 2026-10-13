@@ -2,9 +2,9 @@
 
 pragma solidity ^0.8.18;
 
-import { IPreIntentHook } from "../interfaces/IPreIntentHook.sol";
-import { IReferralFee } from "../interfaces/IReferralFee.sol";
-import { ReferralFeeLib } from "../lib/ReferralFeeLib.sol";
+import { IPreIntentHook } from "contracts/interfaces/IPreIntentHook.sol";
+import { IReferralFee } from "contracts/interfaces/IReferralFee.sol";
+import { ReferralFeeLib } from "contracts/lib/ReferralFeeLib.sol";
 
 contract PreIntentHookMock is IPreIntentHook {
     bool public shouldRevert;
