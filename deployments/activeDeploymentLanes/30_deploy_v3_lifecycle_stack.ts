@@ -1,18 +1,23 @@
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 
-import { guardManagedDisputeLifecycleHook } from "../managedDisputeLifecycleHook";
+import {
+  assertRecognizedLiveLifecycleHook,
+  guardManagedDisputeLifecycleHook,
+} from "../managedDisputeLifecycleHook";
 
 const historicalLane = require("../../deploy/30_deploy_v3_lifecycle_stack")
   .default as DeployFunction;
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   if (await guardManagedDisputeLifecycleHook(hre)) return;
+  await assertRecognizedLiveLifecycleHook(hre);
   await historicalLane(hre);
 };
 
 func.skip = async (hre: HardhatRuntimeEnvironment): Promise<boolean> => {
   if (await guardManagedDisputeLifecycleHook(hre)) return true;
+  await assertRecognizedLiveLifecycleHook(hre);
   return (await historicalLane.skip?.(hre)) ?? false;
 };
 

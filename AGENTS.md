@@ -27,7 +27,9 @@
   deployment. The supported runner verifies its deployed-source hash and mounts
   `deployments/activeDeploymentLanes/30_deploy_v3_lifecycle_stack.ts` under lane 30's filename. That current wrapper
   preserves the exact tags and lane-29 dependency, refuses to roll a verified predecessor or successor dispute hook
-  back to `WhitelistLifecycleHook`, and otherwise delegates to the immutable historical implementation.
+  back to `WhitelistLifecycleHook`, and otherwise delegates to the immutable historical implementation. On Base and
+  Base staging it delegates only when no `OrchestratorV3` is recorded or the live hook is the recorded
+  `WhitelistLifecycleHook`; any other live hook throws before the historical lane is evaluated.
 - Base staging removes only the explicitly drained staging predecessors. Base keeps the existing orchestrators
   registered and queues exactly one Safe call to register the fresh O3. Base execution requires
   `ENABLE_BASE_V3_GROUPS_CUTOVER=true`, a separately approved exact source SHA, and the production governance path.

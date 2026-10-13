@@ -24,6 +24,7 @@ if (!deployGroupsStack.skip)
   throw new Error("V3 groups wrapper must define skip");
 const skipGroupsStack = deployGroupsStack.skip;
 const {
+  assertRecognizedLiveLifecycleHook,
   guardManagedDisputeLifecycleHook,
   validateManagedDisputeHookSnapshot,
 } = require("../deployments/managedDisputeLifecycleHook.ts");
@@ -40,6 +41,8 @@ const {
   ORCHESTRATOR_V3_PROTOCOL_FEE_RECIPIENT,
 } = require("../deployments/parameters.ts");
 const { safeBatchCollector } = require("../deployments/safeBatchCollector.ts");
+
+const assert = require("node:assert/strict");
 
 const scenario = process.argv[2];
 
@@ -448,8 +451,11 @@ async function run() {
       passed =
         passed &&
         (await guardManagedDisputeLifecycleHook(unknownState.fakeHre)) ===
-          false &&
-        (await skipGroupsStack(unknownState.fakeHre)) === false;
+          false;
+      await assert.rejects(
+        () => skipGroupsStack(unknownState.fakeHre),
+        /Unrecognized OrchestratorV3 lifecycle hook/
+      );
     } finally {
       unknown.restore();
       if (previousCutover === undefined)
@@ -459,6 +465,87 @@ async function run() {
 
     if (!passed) {
       throw new Error("Managed lifecycle hook rollback regression failed");
+    }
+    process.stdout.write("0x01");
+    return;
+  }
+
+  if (scenario === "managed-hook-unrecognized-live") {
+    for (const networkName of /** @type {Array<"base_staging" | "base">} */ ([
+      "base_staging",
+      "base",
+    ])) {
+      const state = await fixture();
+      const managed = await installManagedHookState(state, networkName, {
+        kind: "unknown",
+      });
+      const flag =
+        networkName === "base_staging"
+          ? "ENABLE_STAGING_V3_GROUPS_CUTOVER"
+          : "ENABLE_BASE_V3_GROUPS_CUTOVER";
+      const previousFlag = process.env[flag];
+      process.env[flag] = "true";
+      try {
+        const whitelistHook = await deployContract("WhitelistLifecycleHook", [
+          (await state.fakeHre.deployments.get("OrchestratorRegistry")).address,
+          (await state.fakeHre.deployments.get("WhitelistPolicy")).address,
+        ]);
+        state.deployments.set("WhitelistLifecycleHook", {
+          address: whitelistHook.address,
+        });
+        const orchestrator = await ethers.getContractAt(
+          "OrchestratorV3",
+          (await state.fakeHre.deployments.get("OrchestratorV3")).address
+        );
+        const nonce = await ethers.provider.getTransactionCount(state.deployer);
+        const currentHook = await orchestrator.lifecycleHook();
+        const batchCount = safeBatchCollector.count();
+        assert.notEqual(currentHook, whitelistHook.address);
+        await assert.rejects(
+          () => skipGroupsStack(state.fakeHre),
+          /Unrecognized OrchestratorV3 lifecycle hook/
+        );
+        await assert.rejects(
+          () => deployGroupsStack(state.fakeHre),
+          /Unrecognized OrchestratorV3 lifecycle hook/
+        );
+        assert.equal(
+          await ethers.provider.getTransactionCount(state.deployer),
+          nonce
+        );
+        assert.equal(await orchestrator.lifecycleHook(), currentHook);
+        assert.equal(safeBatchCollector.count(), batchCount);
+
+        if (networkName === "base_staging") {
+          state.deployments.set("WhitelistLifecycleHook", {
+            address: managed.currentHook,
+          });
+          await assert.doesNotReject(() =>
+            assertRecognizedLiveLifecycleHook(state.fakeHre)
+          );
+        }
+      } finally {
+        managed.restore();
+        if (previousFlag === undefined) delete process.env[flag];
+        else process.env[flag] = previousFlag;
+      }
+    }
+
+    for (const networkName of /** @type {Array<"hardhat" | "localhost">} */ ([
+      "hardhat",
+      "localhost",
+    ])) {
+      const state = await fixture();
+      const managed = await installManagedHookState(state, networkName, {
+        kind: "unknown",
+      });
+      try {
+        await assert.doesNotReject(() =>
+          assertRecognizedLiveLifecycleHook(state.fakeHre)
+        );
+      } finally {
+        managed.restore();
+      }
     }
     process.stdout.write("0x01");
     return;
