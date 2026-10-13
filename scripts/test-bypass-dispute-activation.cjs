@@ -1224,12 +1224,11 @@ test("Base bypass preparation requires release-ready SHA before chain or git acc
   });
 });
 
-test("after staging recording, lane 45 prepared check delegates activating and active stacks to lane 46", async () => {
+test("lane 45 prepared check delegates activating and active stacks to lane 46", async () => {
   const lane45 = require("../deploy/45_deploy_bypass_dispute_stack.ts");
   const {
     BYPASS_DEPLOYMENT_NAMES,
     BYPASS_EXPECTED_LIVE,
-    BYPASS_RECORDED_DEPLOYMENTS,
   } = require("../deployments/bypassDisputeStack.ts");
   // Required module exports are patched because lane 45 lazily requires lane 46.
   const mutableLane = /** @type {any} */ (lane);
@@ -1239,9 +1238,6 @@ test("after staging recording, lane 45 prepared check delegates activating and a
     expectedBypassActivationState: lane.expectedBypassActivationState,
   };
   const wanted = expected("base_staging");
-  const recordedPins = BYPASS_RECORDED_DEPLOYMENTS.base_staging;
-  assert.ok(recordedPins);
-
   /** @type {Array<string>} */
   const calls = [];
   const records = new Map(
@@ -1286,14 +1282,6 @@ test("after staging recording, lane 45 prepared check delegates activating and a
     },
   });
   try {
-    // Model the recording PR: all three fresh addresses replace the abandoned pins.
-    BYPASS_RECORDED_DEPLOYMENTS.base_staging = {
-      ...recordedPins,
-      StakeVaultBypass: { address: address(90), runtimeCodeHash: hash(90) },
-      DisputeProtectionPolicyBypass: { address: wanted.addresses.freshPolicy, runtimeCodeHash: hash(91) },
-      IntentLifecycleHookV1Bypass: { address: address(90), runtimeCodeHash: hash(92) },
-      UnifiedPaymentVerifierV4: recordedPins.UnifiedPaymentVerifierV4,
-    };
     mutableLane.loadBypassActivationContext = async (
       /** @type {any} */ actual,
       /** @type {string} */ network
@@ -1341,7 +1329,6 @@ test("after staging recording, lane 45 prepared check delegates activating and a
     );
     assert.deepEqual(calls, ["context"]);
   } finally {
-    BYPASS_RECORDED_DEPLOYMENTS.base_staging = recordedPins;
     Object.assign(mutableLane, original);
   }
 });

@@ -2,6 +2,34 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
+## Release 0.4.4-rc.5
+
+Compared with rc.4, Base staging exports the dispute trio redeployed with the stake-owner policy bytecode
+on 2026-10-13 from `285bc5c`:
+
+- `StakeVault` / `StakeVaultBypass`: `0x6b32df91EB92637F64bA444996702fC9582C87a1`.
+- `DisputeProtectionPolicy` / `DisputeProtectionPolicyBypass`: `0x1a9C442E3Ae99fB08313242fCdA601431027B39C`.
+- `IntentLifecycleHookV1` / `IntentLifecycleHookV1Bypass`: `0xec27Cc47370267c843177375c3Fe43D29D498bB4`.
+
+All other staging addresses, including `StakeVaultMethodScoped` and `UnifiedPaymentVerifierV4`, are unchanged.
+ABIs are unchanged, including the byte-identical `DisputeProtectionPolicy` ABI export. Every Base value is
+unchanged. Includes everything from `0.4.4-rc.4` and targets the `rc` tag; `latest` remains at `0.4.3`.
+
+The rc.4 staging trio is abandoned and no longer exported. OrchestratorV3 on staging mounts the fresh hook,
+which rejects a protected-route validation envelope that names the rc.4 policy
+(`ILH: Invalid payment validation hook`), so staging consumers must use the rc.5 `DisputeProtectionPolicy`
+address.
+
+The staging dispute-stack manifest (`disputeStack/baseStaging`) follows the fresh trio: its addresses, the
+policy and hook runtime code hashes, and `lifecycleHookAuthorizationFromBlock`, which is now `52530944`.
+
+This is also the first release after the superseded sources moved to `contracts/archive/`. Their TypeChain
+types move from `types/contracts/` to `types/contracts/archive/`, so `Escrow`, `Orchestrator`,
+`OrchestratorV2`, `ProtocolViewer`, `IProtocolViewer`, `PostIntentHookRegistry`, `IPostIntentHookRegistry`,
+`UnifiedPaymentVerifier` and `BaseUnifiedPaymentVerifier` are now exported under `contracts.archive` from
+`@zkp2p/contracts-v2/types`, keeping their `interfaces`, `registries` and `unifiedVerifier` sub-namespaces.
+Their ABI and address exports are unchanged.
+
 ## Release 0.4.4-rc.4
 
 - Base staging canonical aliases (`StakeVault`, `DisputeProtectionPolicy`,
@@ -119,8 +147,9 @@ import { USDC, INTENT_EXPIRATION_PERIOD } from "@zkp2p/contracts-v2/constants/ba
 // Import payment method configurations
 import { baseStaging as paymentMethods } from "@zkp2p/contracts-v2/paymentMethods"
 
-// Import TypeScript types
-import type { Escrow, Orchestrator } from "@zkp2p/contracts-v2/types"
+// Import TypeScript types (TypeChain contract types are under the `contracts` namespace,
+// for example `contracts.EscrowV2` and `contracts.OrchestratorV3`)
+import type { contracts } from "@zkp2p/contracts-v2/types"
 
 // Import utility functions
 import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils/protocolUtils"

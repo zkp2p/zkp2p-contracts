@@ -832,7 +832,7 @@ export default {
       ]
     },
     "DisputeProtectionPolicy": {
-      "address": "0x4bF03895eB7126c605D915b84A8c775D0f4C6C0B",
+      "address": "0x1a9C442E3Ae99fB08313242fCdA601431027B39C",
       "abi": [
         {
           "inputs": [
@@ -1956,7 +1956,7 @@ export default {
       ]
     },
     "DisputeProtectionPolicyBypass": {
-      "address": "0x4bF03895eB7126c605D915b84A8c775D0f4C6C0B",
+      "address": "0x1a9C442E3Ae99fB08313242fCdA601431027B39C",
       "abi": [
         {
           "inputs": [
@@ -9331,7 +9331,7 @@ export default {
       ]
     },
     "IntentLifecycleHookV1": {
-      "address": "0x2c1E846fA3887FfCbfD1F556d0FA6F4EC5899029",
+      "address": "0xec27Cc47370267c843177375c3Fe43D29D498bB4",
       "abi": [
         {
           "inputs": [
@@ -9531,7 +9531,7 @@ export default {
       ]
     },
     "IntentLifecycleHookV1Bypass": {
-      "address": "0x2c1E846fA3887FfCbfD1F556d0FA6F4EC5899029",
+      "address": "0xec27Cc47370267c843177375c3Fe43D29D498bB4",
       "abi": [
         {
           "inputs": [
@@ -18894,7 +18894,7 @@ export default {
       ]
     },
     "StakeVault": {
-      "address": "0xAca0d2e3C91182F2310446B2Eda0010E593DDEe6",
+      "address": "0x6b32df91EB92637F64bA444996702fC9582C87a1",
       "abi": [
         {
           "inputs": [
@@ -20358,7 +20358,7 @@ export default {
       ]
     },
     "StakeVaultBypass": {
-      "address": "0xAca0d2e3C91182F2310446B2Eda0010E593DDEe6",
+      "address": "0x6b32df91EB92637F64bA444996702fC9582C87a1",
       "abi": [
         {
           "inputs": [
