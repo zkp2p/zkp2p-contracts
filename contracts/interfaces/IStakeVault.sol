@@ -25,6 +25,7 @@ interface IStakeVault {
     error ZeroAddress();
     error ZeroAmount();
     error ZeroLockId();
+    error InvalidControllerChangeDelay(uint64 suppliedDelay);
     error ControllerAlreadyInitialized(address controller);
     error ControllerInitializationWithLiabilities(uint256 totalStaked, uint256 totalClaimable);
     error UnauthorizedController(address caller);

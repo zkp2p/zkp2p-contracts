@@ -83,7 +83,7 @@ contract UnifiedPaymentVerifierV3Test is Test {
     UnifiedPaymentVerifierV3CallerHarness internal legacyCaller;
     UnifiedVerifierV2CallerHarness internal v2Caller;
 
-    function setUp() public virtual {
+    function setUp() public {
         vm.warp(TIMESTAMP);
         witness = vm.addr(WITNESS_KEY);
         attacker = makeAddr("attacker");
