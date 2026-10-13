@@ -12,6 +12,12 @@ Compile the current artifacts before live work; the tagged runner uses `--no-com
 have compiler source hashes matching the checkout, and the policy executable runtime must differ from the
 abandoned policy. Live authorization is separate from this source change.
 
+Keep that build from lane 45's first transaction until the final read-only verification, and run every command
+from the same checkout. Fresh records have no address/runtime pins before the recording PR, so the executor ties
+them to the compiled artifacts by `solcInputHash`. Recompiling in between can change the compiler input (changed
+sources, or different compilation-job grouping after a clean rebuild). If that hash changes, the executor refuses
+the fresh records with `<name> lacks canonical deployment evidence` until the matching build is restored.
+
 Supply these variable names through the approved environment, with no values committed here:
 `ALCHEMY_API_KEY`, `BASE_DEPLOY_PRIVATE_KEY`. The package commands set their existing `DEPLOY_ACTIVE_TAG`.
 For each activation invocation, select exactly one mode and unset the other mode. Both prepare and execute
