@@ -178,9 +178,11 @@ Current numbered lanes include:
   record are unchanged. Base pending and unchanged.
 - `46`: bypass/UPV4 activation (staging EOA actions; guarded atomic Base Safe batch). First executed on Base
   staging 2026-10-12. The redeployed staging trio was activated through the same lane on 2026-10-13 from
-  `285bc5c`: add the fresh writer, switch O3's hook and remove the abandoned writer. The August predecessor,
-  UPV4 and all 14 payment routes, currencies and method order remain unchanged. The block-52531092 snapshot
-  reduced to `active`; records, pins, evidence and outputs select the fresh trio. Base pending and unchanged.
+  `285bc5c`: add the fresh writer, switch O3's hook and remove the abandoned writer. Both 2026-10-13 runs used
+  staging replacement routing that existed only at `285bc5c` and is deleted; lanes 45/46 match `314298e`
+  again. The August predecessor (the lane-39 policy), UPV4 and all 14 payment routes, currencies and method
+  order remain unchanged. The block-52531092 snapshot reduced to `active`; records, pins, evidence and outputs
+  select the fresh trio. Base pending and unchanged.
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production

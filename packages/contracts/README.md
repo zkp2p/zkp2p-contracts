@@ -15,6 +15,11 @@ All other staging addresses, including `StakeVaultMethodScoped` and `UnifiedPaym
 ABIs are unchanged, including the byte-identical `DisputeProtectionPolicy` ABI export. Every Base value is
 unchanged. Includes everything from `0.4.4-rc.4` and targets the `rc` tag; `latest` remains at `0.4.3`.
 
+The rc.4 staging trio is abandoned and no longer exported. OrchestratorV3 on staging mounts the fresh hook,
+which rejects a protected-route validation envelope that names the rc.4 policy
+(`ILH: Invalid payment validation hook`), so staging consumers must use the rc.5 `DisputeProtectionPolicy`
+address.
+
 The staging dispute-stack manifest (`disputeStack/baseStaging`) follows the fresh trio: its addresses, the
 policy and hook runtime code hashes, and `lifecycleHookAuthorizationFromBlock`, which is now `52530944`.
 
@@ -142,8 +147,9 @@ import { USDC, INTENT_EXPIRATION_PERIOD } from "@zkp2p/contracts-v2/constants/ba
 // Import payment method configurations
 import { baseStaging as paymentMethods } from "@zkp2p/contracts-v2/paymentMethods"
 
-// Import TypeScript types
-import type { Escrow, Orchestrator } from "@zkp2p/contracts-v2/types"
+// Import TypeScript types (TypeChain contract types are under the `contracts` namespace,
+// for example `contracts.EscrowV2` and `contracts.OrchestratorV3`)
+import type { contracts } from "@zkp2p/contracts-v2/types"
 
 // Import utility functions
 import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils/protocolUtils"

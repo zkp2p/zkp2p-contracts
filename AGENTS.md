@@ -199,10 +199,15 @@
   Lane 46 activated the redeployed staging trio on 2026-10-13 from `285bc5c`, adding the fresh policy writer,
   switching O3's hook and removing the abandoned policy writer. Lanes 45/46 completed in one pass each,
   ten transactions at deployer nonces 16340 through 16349. At block 52531092 the snapshot reduced to `active`.
+  Both 2026-10-13 runs used staging replacement routing that existed only at `285bc5c` (#341). The recording PR
+  deleted it, and lanes 45/46 are byte-identical to `314298e` again.
   The abandoned trio never opened a protected intent, holds no stake and has no live references or writer permission.
-  The August predecessor remains a passive writer. UPV4, all 14 payment routes, currencies, method order and
-  the sole NullifierRegistryV2 writer are unchanged. Recorded staging pins now select the fresh trio;
-  ordinary lane verification applies. Base remains pending and unchanged.
+  The August predecessor (`DisputeProtectionPolicyMethodScopedStaked`,
+  `0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c`) remains a passive writer. The ten transactions mirrored no
+  depositor opt-outs onto the fresh policy, and lane 46's reducer gates the opt-out inventory only in the
+  `deployed` state, so `active` does not attest that predecessor opt-outs are mirrored. UPV4, all 14 payment
+  routes, currencies, method order and the sole NullifierRegistryV2 writer are unchanged. Recorded staging pins
+  now select the fresh trio; ordinary lane verification applies. Base remains pending and unchanged.
   Staging aliases, `dispute-stack-evidence.json`, `PREDECESSOR_DISPUTE_STACKS`, and the lane-31 wrapper are
   recorded for the activated stack. Base has not executed either lane and retains MethodScoped aliases and the
   UPV3 binding; its recording PRs must add deployment pins after lane 45, then flip aliases, evidence, and
