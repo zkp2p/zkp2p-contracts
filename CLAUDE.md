@@ -43,7 +43,6 @@ yarn test
 yarn test:deterministic
 yarn test:fuzz
 yarn test:invariant
-yarn test:smoke
 forge test --match-path '<test-foundry/path>'
 
 yarn coverage
@@ -116,7 +115,6 @@ test-foundry/
   deterministic/         focused success, revert, deployment, regression tests
   fuzz/                  input-space properties
   invariant/             stateful handlers and invariants
-  smoke/                 opt-in, environment-gated cross-repo tests excluded from coverage
 deploy/                  ordered Hardhat Deploy scripts
 deployments/             network artifacts, parameters, Safe batches, outputs
 scripts/                 deployment and release support
