@@ -994,13 +994,6 @@ export async function prepareOrExecuteStagingActivation(
     `Set exactly one of ${FLAGS.stagingPrepare}=true or ${FLAGS.stagingExecute}=true`
   );
   requireConfirmations("base_staging");
-  if (hre.deployments.getNetworkName() === "base_staging") {
-    const replacement: typeof import("../deployments/stagingBypassReplacementExecution") = require("../deployments/stagingBypassReplacementExecution");
-    if (replacement.stagingReplacementRecordingPending(hre)) {
-      await replacement.runStagingBypassReplacement(hre, 46, preparing ? "prepare" : "execute");
-      return;
-    }
-  }
   if (executing) {
     await executeActivation(hre, "base_staging");
     return;

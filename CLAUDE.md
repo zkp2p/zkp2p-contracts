@@ -173,17 +173,8 @@ Current numbered lanes include:
   feeds, then hands ownership to `MULTI_SIG.base`. It was executed on Base on
   2026-10-01 from `88be796` and is still mounted; tagged reruns only verify.
 
-- `45`: bypass dispute stack and UPV4 (tag + network flag on live networks; resumable deploy-only steps).
-  Executed on Base staging 2026-10-11 with a trio now abandoned after the stake-owner policy change. Source-only
-  staging re-execution through the same lane is pending: deploy/configure only the fresh trio, retain UPV4, stop
-  before activation. Base pending and unchanged.
-- `46`: bypass/UPV4 activation (staging EOA actions; guarded atomic Base Safe batch). Executed on Base staging
-  2026-10-12 with the now-abandoned trio. Pending staging replacement uses the same flags and requires lane 45
-  complete before adding the fresh writer, switching the hook and removing the abandoned writer after its activity
-  scan. Prepare mode prints every remaining step across both lanes and verifies the final block-pinned `active`
-  snapshot. The August predecessor and payment binding stay unchanged. All three fresh staging recorded pins
-  retire replacement routing; records, pins, evidence and outputs follow in a separate recording PR. Base pending
-  and unchanged. See `docs/staging-bypass-replacement.md`.
+- `45`: bypass dispute stack and UPV4 (tag + network flag on live networks; resumable deploy-only steps). Executed on Base staging 2026-10-11; Base pending.
+- `46`: bypass/UPV4 activation (staging EOA actions; guarded atomic Base Safe batch; retains the predecessor dispute writer). Executed on Base staging 2026-10-12; Base pending.
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production

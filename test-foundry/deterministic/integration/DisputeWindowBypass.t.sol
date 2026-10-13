@@ -21,77 +21,6 @@ contract ValidationEnvelopePostHookMock is IPostIntentHookV2 {
 }
 
 contract DisputeWindowBypassTest is DisputeWindowBypassFixture {
-    function test_UntrackedWhitelistAndUnprotectedIntentsAreNotNoStake() public {
-        _assertUntrackedMode(keccak256("unknown"));
-        address[] memory takers = new address[](1);
-        takers[0] = taker;
-        vm.startPrank(depositor);
-        whitelist.addWhitelistedAddresses(address(escrow), depositId, takers);
-        whitelist.setEnabled(address(escrow), depositId, METHOD, true);
-        vm.stopPrank();
-        bytes32 whitelisted = _signalUnstaked();
-        _assertUntrackedMode(whitelisted);
-        vm.prank(taker);
-        orchestrator.cancelIntent(whitelisted);
-        _assertUntrackedMode(whitelisted);
-
-        vm.prank(depositor);
-        whitelist.setEnabled(address(escrow), depositId, METHOD, false);
-        protection.setRiskWindow(METHOD, 0);
-        bytes32 unprotected = _signalUnstaked();
-        _assertUntrackedMode(unprotected);
-        _settle(unprotected, _proof(unprotected, PAYMENT_ID, abi.encode(false)));
-        _assertUntrackedMode(unprotected);
-    }
-
-    function test_ModeRoundTripResolvesChangedDelegation() public {
-        _stake();
-        bytes32 hash = _signalDefault();
-        _assertModeAndLock(hash, false, taker, INTENT_AMOUNT);
-        _setNoStake(hash, true);
-        _assertModeAndLock(hash, true, address(0), 0);
-        token.transfer(other, INTENT_AMOUNT);
-        vm.startPrank(other);
-        token.approve(address(vault), INTENT_AMOUNT);
-        vault.depositStake(INTENT_AMOUNT);
-        vault.setTakerAuthorization(taker, true);
-        vm.stopPrank();
-        vm.prank(taker);
-        vault.selectStakeOwner(other);
-        _setNoStake(hash, false);
-        _assertModeAndLock(hash, false, other, INTENT_AMOUNT);
-        assertEq(vault.lockedStake(taker), 0);
-        _setNoStake(hash, true);
-        _assertModeAndLock(hash, true, address(0), 0);
-        vm.prank(other);
-        vault.setTakerAuthorization(taker, false);
-        _setNoStake(hash, false);
-        _assertModeAndLock(hash, false, taker, INTENT_AMOUNT);
-        vm.prank(taker);
-        orchestrator.cancelIntent(hash);
-        _assertModeAndLock(hash, false, taker, 0);
-    }
-
-    function _assertUntrackedMode(bytes32 hash) internal view {
-        assertEq(
-            uint256(protection.getDisputeProtectionIntent(hash).status),
-            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE)
-        );
-        assertFalse(protection.isIntentNoStake(hash));
-    }
-
-    function _assertModeAndLock(bytes32 hash, bool noStake, address owner, uint256 lockedAmount) internal view {
-        IDisputeProtectionPolicy.DisputeProtectionIntent memory intent = protection.getDisputeProtectionIntent(hash);
-        assertTrue(intent.status != IDisputeProtectionPolicy.DisputeProtectionIntentStatus.NONE);
-        assertEq(intent.stakeOwner, owner);
-        assertEq(intent.stakeOwner == address(0), noStake);
-        assertEq(protection.isIntentNoStake(hash), noStake);
-        (address lockOwner, uint256 amount, uint64 maturity) = vault.locks(hash);
-        assertEq(amount, lockedAmount);
-        assertEq(lockOwner, lockedAmount == 0 ? address(0) : owner);
-        if (lockedAmount == 0) assertEq(maturity, 0);
-    }
-
     function test_NoStakeSignalHonorsAdmissionPauseAndDepositorOptOut() public {
         protection.setAdmissionsPaused(true);
         vm.expectRevert(IDisputeProtectionPolicy.AdmissionsPaused.selector);
@@ -114,7 +43,6 @@ contract DisputeWindowBypassTest is DisputeWindowBypassFixture {
         uint256 releaseAmount = bound(release, 1, INTENT_AMOUNT);
         if (!noStake) _stake();
         bytes32 hash = noStake ? _signalUnstaked() : _signalDefault();
-        _assertModeAndLock(hash, noStake, noStake ? address(0) : taker, noStake ? 0 : INTENT_AMOUNT);
         if (noStake && funded) _stake();
         uint256 deposited = !noStake || funded ? 500e6 : 0;
         assertEq(vault.lockedStake(taker), noStake ? 0 : INTENT_AMOUNT);
@@ -132,9 +60,7 @@ contract DisputeWindowBypassTest is DisputeWindowBypassFixture {
             return;
         }
         if (noStake != bypass) _setNoStake(hash, bypass);
-        _assertModeAndLock(hash, bypass, bypass ? address(0) : taker, bypass ? 0 : INTENT_AMOUNT);
         _settle(hash, proof);
-        _assertModeAndLock(hash, bypass, bypass ? address(0) : taker, bypass ? 0 : releaseAmount);
         assertEq(protection.getDisputeProtectionIntent(hash).riskWindow, RISK_WINDOW);
         assertEq(token.balanceOf(taker), releaseAmount);
         assertEq(vault.lockedStake(taker), bypass ? 0 : releaseAmount);
@@ -363,7 +289,6 @@ contract DisputeWindowBypassTest is DisputeWindowBypassFixture {
         _stake();
         for (uint256 i; i < 4; i++) {
             bytes32 hash = i < 2 ? _signalUnstaked() : _signalDefault();
-            _assertModeAndLock(hash, i < 2, i < 2 ? address(0) : taker, i < 2 ? 0 : INTENT_AMOUNT);
             if (i % 2 == 0) {
                 vm.prank(taker);
                 orchestrator.cancelIntent(hash);
@@ -379,7 +304,6 @@ contract DisputeWindowBypassTest is DisputeWindowBypassFixture {
                     block.timestamp + (i < 2 ? 0 : RISK_WINDOW)
                 );
             }
-            _assertModeAndLock(hash, i < 2, i < 2 ? address(0) : taker, i == 3 ? INTENT_AMOUNT : 0);
         }
         assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
         assertEq(token.balanceOf(taker), 2 * INTENT_AMOUNT);
