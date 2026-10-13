@@ -15,6 +15,16 @@ All other staging addresses, including `StakeVaultMethodScoped` and `UnifiedPaym
 ABIs are unchanged, including the byte-identical `DisputeProtectionPolicy` ABI export. Every Base value is
 unchanged. Includes everything from `0.4.4-rc.4` and targets the `rc` tag; `latest` remains at `0.4.3`.
 
+The staging dispute-stack manifest (`disputeStack/baseStaging`) follows the fresh trio: its addresses, the
+policy and hook runtime code hashes, and `lifecycleHookAuthorizationFromBlock`, which is now `52530944`.
+
+This is also the first release after the superseded sources moved to `contracts/archive/`. Their TypeChain
+types move from `types/contracts/` to `types/contracts/archive/`, so `Escrow`, `Orchestrator`,
+`OrchestratorV2`, `ProtocolViewer`, `IProtocolViewer`, `PostIntentHookRegistry`, `IPostIntentHookRegistry`,
+`UnifiedPaymentVerifier` and `BaseUnifiedPaymentVerifier` are now exported under `contracts.archive` from
+`@zkp2p/contracts-v2/types`, keeping their `interfaces`, `registries` and `unifiedVerifier` sub-namespaces.
+Their ABI and address exports are unchanged.
+
 ## Release 0.4.4-rc.4
 
 - Base staging canonical aliases (`StakeVault`, `DisputeProtectionPolicy`,
