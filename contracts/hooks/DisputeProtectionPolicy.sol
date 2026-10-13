@@ -20,7 +20,8 @@ import {UnifiedPaymentVerifierV4} from "../unifiedVerifier/UnifiedPaymentVerifie
  * @notice Deposit-and-payment-method-scoped, stake-backed dispute protection that is on by default for every payment method with a nonzero risk window and can be opted out per deposit payment method by the depositor.
  * @dev The policy owns no tokens. StakeVault is the source of truth for collateral locks, a dedicated
  * `disputeNullifierRegistry` deployment is the source of truth for consumed dispute nullifiers, and the calling
- * Orchestrator is the source of truth for valid escrows and intents.
+ * Orchestrator is the source of truth for valid escrows and intents. Stake mode is derived from the intent's
+ * stakeOwner (see DisputeProtectionIntent). Mode switches do not update the signal-time flag in intent.data.
  *
  * TRUST: Dispute protection intents are keyed by intent hash, which embeds the originating orchestrator
  * (OrchestratorV3 hashes its own address into every intent hash), so identities do not collide across orchestrators.
@@ -67,13 +68,8 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
     /// @dev Minimum collateral lock window for each payment method.
     mapping(bytes32 => uint64) internal paymentMethodRiskWindow;
 
-    /// @dev Dispute protection lifecycle state keyed by globally unique intent hash.
+    /// @dev Lifecycle state and authoritative stake owner keyed by globally unique intent hash.
     mapping(bytes32 => DisputeProtectionIntent) internal disputeProtectionIntentByIntentHash;
-
-    /// @dev Authoritative stake mode per intent; true means no collateral is locked and proof-based fulfillment
-    /// requires a signed bypass flag. setIntentNoStake does not update the signal-time flag in the orchestrator's
-    /// intent.data. Kept outside the struct so getDisputeProtectionIntent stays ABI-compatible with the predecessor policy.
-    mapping(bytes32 => bool) internal isNoStakeByIntentHash;
 
     /* ============ Constructor ============ */
 
@@ -152,8 +148,6 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
             releaseAmount: 0
         });
 
-        if (_noStake) isNoStakeByIntentHash[_intentHash] = true;
-
         if (!_noStake) stakeVault.lockStake(stakeOwner, _intentHash, _amount, PENDING_COVERAGE_MATURITY);
         emit DisputeProtectionIntentOpened(
             _intentHash, stakeOwner, depositor, _taker, _paymentMethod, _noStake ? 0 : _amount, riskWindow
@@ -172,7 +166,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
 
         (, uint256 releasedAmount,) = stakeVault.locks(_intentHash);
         disputeProtectionIntent.status = DisputeProtectionIntentStatus.CANCELLED;
-        if (!isNoStakeByIntentHash[_intentHash]) stakeVault.unlockStake(_intentHash);
+        if (!_isNoStake(disputeProtectionIntent)) stakeVault.unlockStake(_intentHash);
         emit DisputeProtectionIntentCancelled(_intentHash, disputeProtectionIntent.stakeOwner, releasedAmount);
     }
 
@@ -191,7 +185,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
             revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);
         }
 
-        uint64 window = isNoStakeByIntentHash[_intentHash] ? 0 : disputeProtectionIntent.riskWindow;
+        uint64 window = _isNoStake(disputeProtectionIntent) ? 0 : disputeProtectionIntent.riskWindow;
         uint64 releaseEligibleAt = _calculateReleaseEligibleAt(window);
         disputeProtectionIntent.releaseAmount = _releaseAmount;
         disputeProtectionIntent.releaseEligibleAt = releaseEligibleAt;
@@ -241,11 +235,10 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
         DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
         require(intent.status == DisputeProtectionIntentStatus.PENDING, "DPP: Intent not pending");
         require(msg.sender == intent.taker, "DPP: Only taker");
-        require(_noStake != isNoStakeByIntentHash[_intentHash], "DPP: Mode unchanged");
+        require(_noStake != _isNoStake(intent), "DPP: Mode unchanged");
 
         if (_noStake) {
             intent.stakeOwner = address(0);
-            isNoStakeByIntentHash[_intentHash] = _noStake;
             stakeVault.unlockStake(_intentHash);
         } else {
             IntentLifecycleHookV1 hook = IntentLifecycleHookV1(address(_orchestrator.getIntentLifecycleHook(_intentHash)));
@@ -253,7 +246,6 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
             require(hook.orchestratorRegistry().isOrchestrator(address(_orchestrator)), "DPP: Unregistered orchestrator");
             IOrchestratorV3.Intent memory paymentIntent = _orchestrator.getIntent(_intentHash);
             intent.stakeOwner = stakeVault.stakeOwnerOf(intent.taker);
-            isNoStakeByIntentHash[_intentHash] = _noStake;
             stakeVault.lockStake(intent.stakeOwner, _intentHash, paymentIntent.amount, PENDING_COVERAGE_MATURITY);
         }
         emit DisputeProtectionIntentStakeModeChanged(_intentHash, intent.stakeOwner, _noStake);
@@ -429,18 +421,18 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
     /* ============ View Functions ============ */
 
     /**
-     * @notice Returns the authoritative stake mode for an intent.
+     * @notice Returns true only for an existing intent whose stakeOwner is zero (no-stake mode).
      * @param _intentHash Intent whose stake mode is queried.
      * @return True for no-stake mode; false for staked or unknown intents.
      */
     function isIntentNoStake(bytes32 _intentHash) external view returns (bool) {
-        return isNoStakeByIntentHash[_intentHash];
+        return _isNoStake(disputeProtectionIntentByIntentHash[_intentHash]);
     }
 
     /// @inheritdoc IPaymentValidationHook
     function validatePayment(bytes32 _intentHash, bytes calldata _data, bytes calldata) external view override {
         DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
-        if (intent.status == DisputeProtectionIntentStatus.PENDING && isNoStakeByIntentHash[_intentHash]) {
+        if (intent.status == DisputeProtectionIntentStatus.PENDING && _isNoStake(intent)) {
             (,, bool bypassState) = abi.decode(
                 _data, (UnifiedPaymentVerifierV4.PaymentDetails, UnifiedPaymentVerifierV4.IntentSnapshot, bool)
             );
@@ -492,6 +484,10 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidation
     }
 
     /* ============ Internal Functions ============ */
+
+    function _isNoStake(DisputeProtectionIntent storage _intent) internal view returns (bool) {
+        return _intent.status != DisputeProtectionIntentStatus.NONE && _intent.stakeOwner == address(0);
+    }
 
     /**
      * @dev Validates policy-owned admission requirements and returns the collateral owner and depositor to snapshot.
