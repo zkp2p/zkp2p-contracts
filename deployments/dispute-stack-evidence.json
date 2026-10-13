@@ -203,23 +203,23 @@
       },
       "activeDisputeStack": {
         "version": 2,
-        "selectionHash": "e3b360a09c2f541052ab7519987862e1f59c0efc9bc25daea09937e9ea59b783"
+        "selectionHash": "6c49c1ce51eec594a22385c4efcab08aa9926b6b63a725e14a0027ec5d2f4fc9"
       },
       "recognizedPredecessorHook": {
-        "address": "0x5A7f6cb7397134da1fDEFA7E2D434b4Cf18E56D9",
-        "runtimeCodeHash": "0xb9ce42108c706f9241aeb41ffdc0da6b7584e8482183055452098b2f16c7abfd"
+        "address": "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
+        "runtimeCodeHash": "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367"
       },
       "recognizedPredecessorPolicy": {
-        "address": "0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c",
-        "runtimeCodeHash": "0x70c43bfae8253a6a166f9697ddc27b2d77b4d9841e01fefc2db84037d9a98622"
+        "address": "0x21517b7743E727ae47A66FafF93550B689c15020",
+        "runtimeCodeHash": "0x4e6617a94819ad15693289b173a9a66a78cfe1dd706f6b4fdc5a5f6ad6a32971"
       },
       "addresses": {
         "Orchestrator": "0xF9b9CD27Deea496B960b3cb5221b514705fCaF5e",
         "OrchestratorV2": "0xc17a59227B136c45fAa153086a15EF87ED14bE00",
         "OrchestratorV3": "0x2b5E8Ab562e45fA89D73802605E145ED3E3EeF4f",
-        "StakeVault": "0xAca0d2e3C91182F2310446B2Eda0010E593DDEe6",
-        "DisputeProtectionPolicy": "0x4bF03895eB7126c605D915b84A8c775D0f4C6C0B",
-        "IntentLifecycleHookV1": "0x2c1E846fA3887FfCbfD1F556d0FA6F4EC5899029",
+        "StakeVault": "0x92d7B59E99e1CD2066540Cd2413b8714948b731f",
+        "DisputeProtectionPolicy": "0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c",
+        "IntentLifecycleHookV1": "0x5A7f6cb7397134da1fDEFA7E2D434b4Cf18E56D9",
         "OrchestratorRegistry": "0xfA6384EB6176cfEC049540526A3d2126C3666d8A",
         "WhitelistPolicy": "0xF79aAD1BAaB617fF3Eb299225c80893F22F743Fe",
         "DisputeVerifier": "0x973578148c5Fd49b9f68B50B26066555325AC708",
@@ -251,29 +251,29 @@
           "deployedBytecodeHash": "0xb3840e761def8aed11dbd20dae46415f69e2891535754f056f41eed145c96ba5"
         },
         "StakeVault": {
-          "deploymentName": "StakeVaultBypass",
-          "solcInputHash": "6cef33c0753069c9c5722f6a545f27af",
-          "deployedBytecodeHash": "0xf7cabf278bb23a08d062f334ebeb55afc8397c957919c5a2fd179221a7f51e65"
+          "deploymentName": "StakeVaultMethodScoped",
+          "solcInputHash": "e92231251afd168f019cf92952f2a541",
+          "deployedBytecodeHash": "0x3ceac244f2d721614975457b041e95f661feba8ef6bbfc73c23b55aaac27d3e6"
         },
         "DisputeProtectionPolicy": {
-          "deploymentName": "DisputeProtectionPolicyBypass",
-          "solcInputHash": "6cef33c0753069c9c5722f6a545f27af",
-          "deployedBytecodeHash": "0xad563c1fa7f32b0f514301a822a3183106e95b337480f73aaba8ae09dfd61b04"
+          "deploymentName": "DisputeProtectionPolicyMethodScopedStaked",
+          "solcInputHash": "e92231251afd168f019cf92952f2a541",
+          "deployedBytecodeHash": "0x062855429a45681017e1082910a9ebb35e3fc3d57c2a0416f4003c2c1e327706"
         },
         "IntentLifecycleHookV1": {
-          "deploymentName": "IntentLifecycleHookV1Bypass",
-          "solcInputHash": "6cef33c0753069c9c5722f6a545f27af",
-          "deployedBytecodeHash": "0xf924a370fd220fc6eaba544d5eba3562c006c1b838553382a5800bbf6029192a"
-        },
-        "RecognizedPredecessorHook": {
           "deploymentName": "IntentLifecycleHookV1MethodScopedStaked",
           "solcInputHash": "e92231251afd168f019cf92952f2a541",
           "deployedBytecodeHash": "0x22f175667caa0501ef498c0124a09393344ff254cdd9fea65fa0642ed9a4314c"
         },
+        "RecognizedPredecessorHook": {
+          "deploymentName": "IntentLifecycleHookV1",
+          "solcInputHash": "4873c5befde1a76742d7cd30fb21abe1",
+          "deployedBytecodeHash": "0xad298e1829958f431833bf1c0e53311f27e95dd29806c4d55aa75163e6dbcc21"
+        },
         "RecognizedPredecessorPolicy": {
-          "deploymentName": "DisputeProtectionPolicyMethodScopedStaked",
-          "solcInputHash": "e92231251afd168f019cf92952f2a541",
-          "deployedBytecodeHash": "0x062855429a45681017e1082910a9ebb35e3fc3d57c2a0416f4003c2c1e327706"
+          "deploymentName": "DisputeProtectionPolicy",
+          "solcInputHash": "4873c5befde1a76742d7cd30fb21abe1",
+          "deployedBytecodeHash": "0x6146f8eb152848ddfd40d67a152a44230ed783b6c1e768d023b88fc2a09cb38f"
         },
         "OrchestratorRegistry": {
           "deploymentName": "OrchestratorRegistry",
@@ -305,9 +305,9 @@
         "Orchestrator": "0xf511343f2903dd1877c490796cc9423fac66b162b59004d55e522046c1ceb050",
         "OrchestratorV2": "0xcf70a08cc24fcc00799f9f365d0998abe37c718c93ee370a78d1ca06c60d01e0",
         "OrchestratorV3": "0x4e58f26129559301c017ff264b61dd2255ed2107593d308472ef32d07b8745e9",
-        "StakeVault": "0x3ce00cf0a7e325a116e87ea330c8997b94df705e4e0653d3de9484fca614356e",
-        "DisputeProtectionPolicy": "0x1ccd36086e5fb3b3816397a6c453280a0ac4ebd575bc4e2c80aa7e43167739d4",
-        "IntentLifecycleHookV1": "0x68272c25f80dae42db6031fb4d5da3e2268c3134b7a914be08968b8393d91a43",
+        "StakeVault": "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
+        "DisputeProtectionPolicy": "0x70c43bfae8253a6a166f9697ddc27b2d77b4d9841e01fefc2db84037d9a98622",
+        "IntentLifecycleHookV1": "0xb9ce42108c706f9241aeb41ffdc0da6b7584e8482183055452098b2f16c7abfd",
         "OrchestratorRegistry": "0xf0d132d621ac03181a6fade6a93bd0968d33830c8bf393793236787e7978aee1",
         "WhitelistPolicy": "0x1ece96bb7be9cdd2433a2aad66c9b2d710e3e210a65876e0f8c1e43662ee5653",
         "DisputeVerifier": "0xb3b34734cfd162cd129d0c84285461c751321545213ec20164745b8e72f9dd6c",

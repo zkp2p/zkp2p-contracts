@@ -811,14 +811,10 @@ deploys the guard and simulation-only postcondition and produces one unsigned at
 `deployments/outputs/safe-batches/base_dispute_bypass_cutover{,.sha256}.json`. Use
 `yarn simulate:dispute-bypass-safe-batch` for the pinned fork simulation and `yarn verify:dispute-bypass-safe-batch`
 immediately before Safe execution. Predecessor opt-outs on live listed windowed tuples must first be mirrored on
-the fresh policy. Lane 45 executed on Base staging on 2026-10-11 from `f9eab7f`, and lane 46 on 2026-10-12
-from `a6970aa` in 32 deployer actions; staging aliases, evidence, predecessor identities, and lane-31 UPV4
-verification now record that activation, while Base retains MethodScoped aliases and UPV3 routing.
-Recorded deployments use `BYPASS_RECORDED_DEPLOYMENTS` address/runtime-hash pins because `solcInputHash` depends
-on build-cache history; Base must add its pins after lane 45 and before clean-checkout lane-46 preparation,
-and lanes 45/46 remain unpinned until Base executes. The bypass records and UPV4 remain exported by name;
-staging dispute aliases equal their by-name records, and `StakeVaultMethodScoped` remains available for old-vault
-withdrawals and claims. Local deployments activate bypass and select its canonical aliases; restart
+the fresh policy. Live canonical package aliases remain on MethodScoped until the post-execution recording PR;
+the bypass records and UPV4 export by name before and after that flip, which only adds the canonical aliases at the
+same addresses. That PR also pins the lanes, records evidence, and
+updates the lane-31 wrapper for UPV4. Local deployments activate bypass and select its canonical aliases; restart
 the node before a second `yarn deploy:localhost` after activation because lanes 31/39 assume the old local wiring.
 
 The package exports the currently selected (latest) addresses for each network, and consumers should treat them as

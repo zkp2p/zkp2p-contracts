@@ -27,7 +27,7 @@ type HistoricalDisputeStack = {
   contracts: Record<string, HistoricalContractEvidence>;
 };
 
-// Predecessor of the selected stack: Base OptIn; staging lane-39 MethodScoped.
+// Predecessor of the currently selected dispute stack.
 export const PREDECESSOR_DISPUTE_STACKS: Record<
   string,
   HistoricalDisputeStack
@@ -81,98 +81,6 @@ export const PREDECESSOR_DISPUTE_STACKS: Record<
   },
   base_staging: {
     activeLifecycleHook: {
-      address: "0x5A7f6cb7397134da1fDEFA7E2D434b4Cf18E56D9",
-      runtimeCodeHash:
-        "0xb9ce42108c706f9241aeb41ffdc0da6b7584e8482183055452098b2f16c7abfd",
-    },
-    contracts: {
-      StakeVault: {
-        deploymentName: "StakeVaultMethodScoped",
-        address: "0x92d7B59E99e1CD2066540Cd2413b8714948b731f",
-        deploymentBytecodeHash:
-          "0x3ceac244f2d721614975457b041e95f661feba8ef6bbfc73c23b55aaac27d3e6",
-        runtimeCodeHash:
-          "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
-      },
-      DisputeProtectionPolicy: {
-        deploymentName: "DisputeProtectionPolicyMethodScopedStaked",
-        address: "0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c",
-        deploymentBytecodeHash:
-          "0x062855429a45681017e1082910a9ebb35e3fc3d57c2a0416f4003c2c1e327706",
-        runtimeCodeHash:
-          "0x70c43bfae8253a6a166f9697ddc27b2d77b4d9841e01fefc2db84037d9a98622",
-      },
-      IntentLifecycleHookV1: {
-        deploymentName: "IntentLifecycleHookV1MethodScopedStaked",
-        address: "0x5A7f6cb7397134da1fDEFA7E2D434b4Cf18E56D9",
-        deploymentBytecodeHash:
-          "0x22f175667caa0501ef498c0124a09393344ff254cdd9fea65fa0642ed9a4314c",
-        runtimeCodeHash:
-          "0xb9ce42108c706f9241aeb41ffdc0da6b7584e8482183055452098b2f16c7abfd",
-      },
-      DisputeVerifier: {
-        address: "0x973578148c5Fd49b9f68B50B26066555325AC708",
-        deploymentBytecodeHash:
-          "0x7aae03ea4bd5bc953dc87b7a272ef967dc093a71b39417f4b7bd88f46210e876",
-        runtimeCodeHash:
-          "0xb3b34734cfd162cd129d0c84285461c751321545213ec20164745b8e72f9dd6c",
-      },
-      DisputeNullifierRegistry: {
-        address: "0xE0B05a9655AF0f31E32904267baa50FbC7f217ea",
-        deploymentBytecodeHash:
-          "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
-        runtimeCodeHash:
-          "0x1a711749b7700142265363c9c184c195ac81a1415e2142aa84edcbf1cd88142a",
-      },
-    },
-  },
-};
-
-// Historical lane-37 predecessors: Base OptIn and staging lane 32.
-// Keep these pins independent of later selected-stack predecessor changes.
-export const METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS: Record<
-  string,
-  HistoricalDisputeStack
-> = {
-  base: {
-    activeLifecycleHook: {
-      address: "0x71467dCac3B50eeED5A485aC6a70f27B1EAC1970",
-      runtimeCodeHash:
-        "0x35789014e608a248f3244b61210fa259fee3566c33f50fd0e3fa1f5ae22e370b",
-    },
-    contracts: {
-      StakeVault: {
-        deploymentName: "StakeVaultOptIn",
-        address: "0x4d16F4a9946CfC76b1c1A4B63aa9D94cdA2dbCEB",
-        deploymentBytecodeHash:
-          "0x3ceac244f2d721614975457b041e95f661feba8ef6bbfc73c23b55aaac27d3e6",
-        runtimeCodeHash:
-          "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
-      },
-      DisputeProtectionPolicy: {
-        deploymentName: "DisputeProtectionPolicyOptIn",
-        address: "0xcEc48F7242eDBf02875BB4629115Bd927e1287aA",
-        deploymentBytecodeHash:
-          "0xe4600241bce095f1a8789d46efb639b2d8c681a423a836c66173274b5284a788",
-        runtimeCodeHash:
-          "0x9c4be279da216021183638eaef79ebf98db248472685e9ecd0de3f24a513a641",
-      },
-      IntentLifecycleHookV1: {
-        deploymentName: "IntentLifecycleHookV1OptIn",
-        address: "0x71467dCac3B50eeED5A485aC6a70f27B1EAC1970",
-        deploymentBytecodeHash:
-          "0xd379478c4798979d09db6bef1dbf626739cd50ffe6469732f6e182ecb7cea7db",
-        runtimeCodeHash:
-          "0x35789014e608a248f3244b61210fa259fee3566c33f50fd0e3fa1f5ae22e370b",
-      },
-      DisputeVerifier:
-        PREDECESSOR_DISPUTE_STACKS.base.contracts.DisputeVerifier,
-      DisputeNullifierRegistry:
-        PREDECESSOR_DISPUTE_STACKS.base.contracts.DisputeNullifierRegistry,
-    },
-  },
-  base_staging: {
-    activeLifecycleHook: {
       address: "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
       runtimeCodeHash:
         "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367",
@@ -215,6 +123,51 @@ export const METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS: Record<
       },
     },
   },
+};
+
+// Stack replaced by lane 37. It now matches the selected-stack predecessor on Base.
+export const METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS: Record<
+  string,
+  HistoricalDisputeStack
+> = {
+  base: {
+    activeLifecycleHook: {
+      address: "0x71467dCac3B50eeED5A485aC6a70f27B1EAC1970",
+      runtimeCodeHash:
+        "0x35789014e608a248f3244b61210fa259fee3566c33f50fd0e3fa1f5ae22e370b",
+    },
+    contracts: {
+      StakeVault: {
+        deploymentName: "StakeVaultOptIn",
+        address: "0x4d16F4a9946CfC76b1c1A4B63aa9D94cdA2dbCEB",
+        deploymentBytecodeHash:
+          "0x3ceac244f2d721614975457b041e95f661feba8ef6bbfc73c23b55aaac27d3e6",
+        runtimeCodeHash:
+          "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
+      },
+      DisputeProtectionPolicy: {
+        deploymentName: "DisputeProtectionPolicyOptIn",
+        address: "0xcEc48F7242eDBf02875BB4629115Bd927e1287aA",
+        deploymentBytecodeHash:
+          "0xe4600241bce095f1a8789d46efb639b2d8c681a423a836c66173274b5284a788",
+        runtimeCodeHash:
+          "0x9c4be279da216021183638eaef79ebf98db248472685e9ecd0de3f24a513a641",
+      },
+      IntentLifecycleHookV1: {
+        deploymentName: "IntentLifecycleHookV1OptIn",
+        address: "0x71467dCac3B50eeED5A485aC6a70f27B1EAC1970",
+        deploymentBytecodeHash:
+          "0xd379478c4798979d09db6bef1dbf626739cd50ffe6469732f6e182ecb7cea7db",
+        runtimeCodeHash:
+          "0x35789014e608a248f3244b61210fa259fee3566c33f50fd0e3fa1f5ae22e370b",
+      },
+      DisputeVerifier:
+        PREDECESSOR_DISPUTE_STACKS.base.contracts.DisputeVerifier,
+      DisputeNullifierRegistry:
+        PREDECESSOR_DISPUTE_STACKS.base.contracts.DisputeNullifierRegistry,
+    },
+  },
+  base_staging: PREDECESSOR_DISPUTE_STACKS.base_staging,
 };
 
 function sameAddress(left: string, right: string): boolean {
