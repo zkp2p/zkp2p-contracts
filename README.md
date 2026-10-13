@@ -820,16 +820,17 @@ staging dispute aliases equal their by-name records, and `StakeVaultMethodScoped
 withdrawals and claims. Local deployments activate bypass and select its canonical aliases; restart
 the node before a second `yarn deploy:localhost` after activation because lanes 31/39 assume the old local wiring.
 
-The staging trio deployed on 2026-10-11 and activated on 2026-10-12 is now abandoned after the stake-owner
-policy change. Source-only replacement is pending through the same lanes 45/46, tags, flags and record names.
-Run `yarn deploy:dispute-bypass-stack:base_staging` with the existing staging deployment flag to deploy and
-configure only the fresh trio, then `yarn deploy:dispute-bypass-activation:base_staging` with the existing
-activation execute and confirmation flags to add the fresh writer, switch the hook and remove the unused
-abandoned writer. The activation prepare flag prints every remaining step across both lanes without sending
-anything and verifies the final block-pinned `active` snapshot. UPV4, its record, every payment route and the
-August predecessor remain unchanged. Replacement routing retires once all three staging recorded pins name
-the fresh trio. Base is pending and unchanged. See [staging replacement](docs/staging-bypass-replacement.md)
-for preflight, resumability, the refusal state and the recording PR.
+The staging dispute trio was redeployed and activated through the same lanes 45/46 on 2026-10-13 from
+`285bc5c` with the stake-owner policy bytecode. The first trio, deployed on 2026-10-11 and activated on
+2026-10-12, is abandoned: it never opened a protected intent, holds no stake and has no live references or
+writer permission. Both lanes completed in one pass each, ten transactions at staging deployer
+`0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929` nonces 16340 through 16349. The block-52531092 snapshot
+reduced to `active`. The current staging records are `StakeVaultBypass`
+`0x6b32df91EB92637F64bA444996702fC9582C87a1`, `DisputeProtectionPolicyBypass`
+`0x1a9C442E3Ae99fB08313242fCdA601431027B39C` and `IntentLifecycleHookV1Bypass`
+`0xec27Cc47370267c843177375c3Fe43D29D498bB4`. UPV4, its record, all 14 payment routes, currencies, method
+order, the sole NullifierRegistryV2 writer and the August predecessor remain unchanged. Recorded staging
+pins select the fresh trio and ordinary lane verification applies. Base is pending and unchanged.
 
 The package exports the currently selected (latest) addresses for each network, and consumers should treat them as
 the addresses to use.

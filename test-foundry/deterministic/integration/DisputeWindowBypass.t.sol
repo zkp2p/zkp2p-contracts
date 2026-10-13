@@ -3,6 +3,8 @@
 pragma solidity ^0.8.18;
 
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
+import {StakeVault} from "contracts/StakeVault.sol";
+import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {IStakeVault} from "contracts/interfaces/IStakeVault.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
@@ -21,6 +23,43 @@ contract ValidationEnvelopePostHookMock is IPostIntentHookV2 {
 }
 
 contract DisputeWindowBypassTest is DisputeWindowBypassFixture {
+    function test_ProtectedIntentsCancelAndSettleThroughSavedHookAfterSwitch() public {
+        _stake();
+        bytes32 cancelled = _signalDefault();
+        bytes32 settled = _signalDefault();
+
+        StakeVault nextVault = new StakeVault(address(this), token, address(0), 0);
+        DisputeProtectionPolicy nextPolicy =
+            new DisputeProtectionPolicy(address(this), nextVault, disputeVerifier, disputeNullifiers);
+        nextVault.initializeController(address(nextPolicy));
+        IntentLifecycleHookV1 nextHook = new IntentLifecycleHookV1(orchestratorRegistry, whitelist, nextPolicy);
+        nextPolicy.setLifecycleHookAuthorization(address(nextHook), true);
+        nextPolicy.setRiskWindow(METHOD, RISK_WINDOW);
+        disputeNullifiers.addWritePermission(address(nextPolicy));
+        orchestrator.setLifecycleHook(nextHook);
+
+        assertEq(address(orchestrator.getIntentLifecycleHook(cancelled)), address(policy));
+        assertEq(address(orchestrator.getIntentLifecycleHook(settled)), address(policy));
+        vm.prank(taker);
+        orchestrator.cancelIntent(cancelled);
+        _settle(settled, _proof(settled, PAYMENT_ID, ""));
+
+        assertEq(
+            uint256(protection.getDisputeProtectionIntent(cancelled).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.CANCELLED)
+        );
+        assertEq(
+            uint256(protection.getDisputeProtectionIntent(settled).status),
+            uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED)
+        );
+        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
+        assertEq(vault.lockedStake(taker), INTENT_AMOUNT);
+        assertEq(nextVault.lockedStake(taker), 0);
+        assertFalse(protection.admissionsPaused());
+        assertTrue(protection.isLifecycleHookAuthorized(address(policy)));
+        assertEq(vault.controller(), address(protection));
+    }
+
     function test_UntrackedWhitelistAndUnprotectedIntentsAreNotNoStake() public {
         _assertUntrackedMode(keccak256("unknown"));
         address[] memory takers = new address[](1);

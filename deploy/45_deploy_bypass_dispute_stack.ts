@@ -1069,17 +1069,6 @@ export async function bypassDisputeStackPrepared(
 ): Promise<boolean> {
   const network = hre.deployments.getNetworkName();
   if (!isBypassLiveNetwork(network)) return false;
-  if (network === "base_staging") {
-    const replacement: typeof import("../deployments/stagingBypassReplacementExecution") = require("../deployments/stagingBypassReplacementExecution");
-    if (replacement.stagingReplacementRecordingPending(hre)) {
-      requireState(
-        process.env[LIVE_FLAGS[network]] === "true",
-        `${network} bypass deployment requires ${LIVE_FLAGS[network]}=true`
-      );
-      // Never let the ordinary loader accept the abandoned trio as prepared.
-      return false;
-    }
-  }
   const records = await Promise.all(
     BYPASS_DEPLOYMENT_NAMES.map((name) => hre.deployments.getOrNull(name))
   );
@@ -1125,13 +1114,6 @@ const func: DeployFunction = async function (
       process.env[LIVE_FLAGS[network]] === "true",
       `${network} bypass deployment requires ${LIVE_FLAGS[network]}=true`
     );
-    if (network === "base_staging") {
-      const replacement: typeof import("../deployments/stagingBypassReplacementExecution") = require("../deployments/stagingBypassReplacementExecution");
-      if (replacement.stagingReplacementRecordingPending(hre)) {
-        await replacement.runStagingBypassReplacement(hre, 45, "execute");
-        return;
-      }
-    }
     await deployLiveBypassStack(hre, network);
     return;
   }

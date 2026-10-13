@@ -2,6 +2,19 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
+## Release 0.4.4-rc.5
+
+Compared with rc.4, Base staging exports the dispute trio redeployed with the stake-owner policy bytecode
+on 2026-10-13 from `285bc5c`:
+
+- `StakeVault` / `StakeVaultBypass`: `0x6b32df91EB92637F64bA444996702fC9582C87a1`.
+- `DisputeProtectionPolicy` / `DisputeProtectionPolicyBypass`: `0x1a9C442E3Ae99fB08313242fCdA601431027B39C`.
+- `IntentLifecycleHookV1` / `IntentLifecycleHookV1Bypass`: `0xec27Cc47370267c843177375c3Fe43D29D498bB4`.
+
+All other staging addresses, including `StakeVaultMethodScoped` and `UnifiedPaymentVerifierV4`, are unchanged.
+ABIs are unchanged, including the byte-identical `DisputeProtectionPolicy` ABI export. Every Base value is
+unchanged. Includes everything from `0.4.4-rc.4` and targets the `rc` tag; `latest` remains at `0.4.3`.
+
 ## Release 0.4.4-rc.4
 
 - Base staging canonical aliases (`StakeVault`, `DisputeProtectionPolicy`,

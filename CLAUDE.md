@@ -147,7 +147,7 @@ Current numbered lanes include:
 - `32`: dispute lifecycle stack (immutable, retired) and the unrelated
   deposit-creation guard;
 - `33`: IntentGuardian fee update;
-- `34`: opt-in dispute stack (immutable, retired; its Base trio is live);
+- `34`: opt-in dispute stack (immutable, retired; its Base trio was superseded by lanes 39/40);
 - `35`: Mercury payment method (Base staging only);
 - `36`: `WhitelistPolicyMethodScoped` (immutable, executed on both networks,
   still mounted behind its canonical-record skip);
@@ -173,16 +173,14 @@ Current numbered lanes include:
   2026-10-01 from `88be796` and is still mounted; tagged reruns only verify.
 
 - `45`: bypass dispute stack and UPV4 (tag + network flag on live networks; resumable deploy-only steps).
-  Executed on Base staging 2026-10-11 with a trio now abandoned after the stake-owner policy change. Source-only
-  staging re-execution through the same lane is pending: deploy/configure only the fresh trio, retain UPV4, stop
-  before activation. Base pending and unchanged.
-- `46`: bypass/UPV4 activation (staging EOA actions; guarded atomic Base Safe batch). Executed on Base staging
-  2026-10-12 with the now-abandoned trio. Pending staging replacement uses the same flags and requires lane 45
-  complete before adding the fresh writer, switching the hook and removing the abandoned writer after its activity
-  scan. Prepare mode prints every remaining step across both lanes and verifies the final block-pinned `active`
-  snapshot. The August predecessor and payment binding stay unchanged. All three fresh staging recorded pins
-  retire replacement routing; records, pins, evidence and outputs follow in a separate recording PR. Base pending
-  and unchanged. See `docs/staging-bypass-replacement.md`.
+  First executed on Base staging 2026-10-11. The staging dispute trio was redeployed through the same lane on
+  2026-10-13 from `285bc5c` with the stake-owner policy bytecode; the first trio is abandoned. UPV4 and its
+  record are unchanged. Base pending and unchanged.
+- `46`: bypass/UPV4 activation (staging EOA actions; guarded atomic Base Safe batch). First executed on Base
+  staging 2026-10-12. The redeployed staging trio was activated through the same lane on 2026-10-13 from
+  `285bc5c`: add the fresh writer, switch O3's hook and remove the abandoned writer. The August predecessor,
+  UPV4 and all 14 payment routes, currencies and method order remain unchanged. The block-52531092 snapshot
+  reduced to `active`; records, pins, evidence and outputs select the fresh trio. Base pending and unchanged.
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production
