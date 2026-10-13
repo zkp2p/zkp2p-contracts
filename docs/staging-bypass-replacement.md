@@ -150,17 +150,33 @@ outputs and publication remain a separate boundary.
 Between execution and recording, tagged lane 45 checks the completed replacement state and tagged lane 46
 prepare mode performs final verification despite stale trio pins. If activation is still pending, lane 45 reports
 lane 46 next and lane 46 resumes. The lane-45 deployment flag is still required in this interval. Avoid broad
-untagged deployment: other mounted checks and output/package extraction are not a substitute for recording.
-Lane 31 continues verifying the unchanged UPV4 binding independently of trio pins.
+untagged deployment from lane 45's first transaction until the recording PR merges: other mounted checks and
+output/package extraction are not a substitute for recording. Lane 31 continues verifying the unchanged UPV4
+binding independently of trio pins.
+
+The lane-30 wrapper's managed-hook guard (`deployments/managedDisputeLifecycleHook.ts`) identifies O3's hook
+only through the August predecessor pin and the canonical `IntentLifecycleHookV1Bypass` record. Between the two
+lanes that record already names the fresh hook while O3 still mounts the abandoned one, and after the switch a
+checkout without the fresh records still names the abandoned hook. While all three recorded pins name the
+abandoned trio, the guard therefore verifies the abandoned hook by its recorded address and runtime pin and
+throws on any other staging hook it cannot verify. Lane 30 then cannot reset O3 to `WhitelistLifecycleHook`,
+including under `ENABLE_STAGING_V3_GROUPS_CUTOVER`. After the switch, an untagged staging run from a checkout
+without the fresh records fails at lane 30 until the recording PR merges. Base and local networks never reach
+that branch.
 
 The recording PR may delete the replacement machinery after updating all three records and pins, without
 changing subsequent ordinary staging verification or Base behavior. Delete both
 `deployments/stagingBypassReplacementExecution.ts` and `deployments/stagingBypassReplacement.ts` (including
 abandoned pins), remove the guarded dispatch blocks from lane 45's entry and prepared check and lane 46's
-staging entry, remove their explicit TypeScript project entries, and remove or adapt the replacement-specific
-script tests and their package/typecheck references. The local Foundry continuity tests can remain independently.
-Do not delete the module while leaving its guarded imports behind. No runner mount or production logic needs
-changing for this cleanup.
+staging entry, remove the staging branch of the lane-30 managed-hook guard and its
+`managed-hook-staging-replacement` scenario (`scripts/test-v3-groups-base-deployment.cjs` and the
+`test:v3-groups-deployment` chain), remove their explicit TypeScript project entries, and remove or adapt the
+replacement-specific script tests and their package/typecheck references. The local Foundry continuity tests
+can remain independently. Do not delete either module while leaving its guarded imports behind. No runner mount
+or production logic needs changing for this cleanup. Finish it before Base executes lane 45: lanes 45/46 become
+immutable at their first production execution, and `deploy/45_*` and `deploy/46_*` are protected paths for a
+generated Base cutover batch, so dispatch blocks still present then stay in the lanes and keep both modules
+with them.
 
 The Foundry continuity case admits protected intents before switching and proves cancellation/settlement still
 use the old hook and vault. Such activity prevents the real replacement's final writer-removal step; that test

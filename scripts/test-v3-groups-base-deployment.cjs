@@ -621,6 +621,161 @@ async function run() {
     return;
   }
 
+  if (scenario === "managed-hook-staging-replacement") {
+    const replacementAssert = require("node:assert/strict");
+    const Module =
+      /** @type {typeof import("node:module") & { _load: (request: string, ...args: unknown[]) => unknown }} */ (
+        require("node:module")
+      );
+    const {
+      SUPERSEDED,
+    } = require("../deployments/stagingBypassReplacement.ts");
+    const bypassPinsModule = require("../deployments/bypassDisputeStack.ts");
+    const originalPins =
+      bypassPinsModule.BYPASS_RECORDED_DEPLOYMENTS.base_staging;
+    replacementAssert.ok(originalPins);
+    const previousCutover = process.env.ENABLE_STAGING_V3_GROUPS_CUTOVER;
+    const originalLoad = Module._load;
+    const abandoned = SUPERSEDED.IntentLifecycleHookV1Bypass;
+    const previousCode = await ethers.provider.getCode(abandoned);
+    const state = await fixture();
+    const installed = await installManagedHookState(state, "base_staging", {
+      kind: "successor",
+      successorPolicy: "method-scoped",
+    });
+    try {
+      const runtimeCode = await ethers.provider.getCode(installed.currentHook);
+      const runtimeCodeHash = ethers.utils.keccak256(runtimeCode);
+      const pins = {
+        ...originalPins,
+        StakeVaultBypass: {
+          address: SUPERSEDED.StakeVaultBypass,
+          runtimeCodeHash,
+        },
+        DisputeProtectionPolicyBypass: {
+          address: SUPERSEDED.DisputeProtectionPolicyBypass,
+          runtimeCodeHash,
+        },
+        IntentLifecycleHookV1Bypass: { address: abandoned, runtimeCodeHash },
+      };
+      bypassPinsModule.BYPASS_RECORDED_DEPLOYMENTS.base_staging = pins;
+      await ethers.provider.send("hardhat_setCode", [abandoned, runtimeCode]);
+      const orchestrator = await ethers.getContractAt(
+        "OrchestratorV3",
+        state.deployments.get("OrchestratorV3").address
+      );
+      await (await orchestrator.setLifecycleHook(abandoned)).wait();
+      replacementAssert.equal(
+        await guardManagedDisputeLifecycleHook(state.fakeHre),
+        true
+      );
+      replacementAssert.equal(await skipGroupsStack(state.fakeHre), true);
+      process.env.ENABLE_STAGING_V3_GROUPS_CUTOVER = "true";
+      await deployGroupsStack(state.fakeHre);
+      replacementAssert.equal(await orchestrator.lifecycleHook(), abandoned);
+
+      const hookRecord = state.deployments.get("IntentLifecycleHookV1Bypass");
+      state.deployments.delete("IntentLifecycleHookV1Bypass");
+      try {
+        replacementAssert.equal(
+          await guardManagedDisputeLifecycleHook(state.fakeHre),
+          true
+        );
+      } finally {
+        state.deployments.set("IntentLifecycleHookV1Bypass", hookRecord);
+      }
+
+      await ethers.provider.send("hardhat_setCode", [
+        abandoned,
+        `${runtimeCode}00`,
+      ]);
+      await replacementAssert.rejects(
+        guardManagedDisputeLifecycleHook(state.fakeHre),
+        /runtime bytecode mismatch/
+      );
+      await replacementAssert.rejects(
+        skipGroupsStack(state.fakeHre),
+        /runtime bytecode mismatch/
+      );
+      replacementAssert.equal(await orchestrator.lifecycleHook(), abandoned);
+      await ethers.provider.send("hardhat_setCode", [abandoned, runtimeCode]);
+
+      const fresh = await deployContract("IntentLifecycleHookV1", [
+        state.deployments.get("OrchestratorRegistry").address,
+        state.deployments.get("WhitelistPolicyMethodScoped").address,
+        state.deployments.get("EscrowRegistry").address,
+      ]);
+      await (await orchestrator.setLifecycleHook(fresh.address)).wait();
+      await replacementAssert.rejects(
+        guardManagedDisputeLifecycleHook(state.fakeHre),
+        /unrecorded/
+      );
+      await replacementAssert.rejects(
+        skipGroupsStack(state.fakeHre),
+        /unrecorded/
+      );
+      await replacementAssert.rejects(
+        deployGroupsStack(state.fakeHre),
+        /unrecorded/
+      );
+      replacementAssert.equal(
+        await orchestrator.lifecycleHook(),
+        fresh.address
+      );
+
+      pins.StakeVaultBypass.address =
+        state.deployments.get("EscrowRegistry").address;
+      pins.DisputeProtectionPolicyBypass.address = state.deployments.get(
+        "WhitelistPolicyMethodScoped"
+      ).address;
+      pins.IntentLifecycleHookV1Bypass.address = installed.currentHook;
+      replacementAssert.equal(
+        await guardManagedDisputeLifecycleHook(state.fakeHre),
+        false
+      );
+      await (await orchestrator.setLifecycleHook(abandoned)).wait();
+      replacementAssert.equal(
+        await guardManagedDisputeLifecycleHook(state.fakeHre),
+        false
+      );
+
+      const unknownState = await fixture();
+      const unknown = await installManagedHookState(unknownState, "base", {
+        kind: "unknown",
+      });
+      /** @type {string[]} */
+      const replacementLoads = [];
+      Module._load = function (request, ...args) {
+        if (request.includes("stagingBypassReplacement"))
+          replacementLoads.push(request);
+        return originalLoad.call(this, request, ...args);
+      };
+      try {
+        for (const network of ["base", "localhost", "hardhat"]) {
+          unknownState.fakeHre.deployments.getNetworkName = () => network;
+          replacementAssert.equal(
+            await guardManagedDisputeLifecycleHook(unknownState.fakeHre),
+            false
+          );
+        }
+        replacementAssert.deepEqual(replacementLoads, []);
+      } finally {
+        Module._load = originalLoad;
+        unknown.restore();
+      }
+    } finally {
+      Module._load = originalLoad;
+      bypassPinsModule.BYPASS_RECORDED_DEPLOYMENTS.base_staging = originalPins;
+      if (previousCutover === undefined)
+        delete process.env.ENABLE_STAGING_V3_GROUPS_CUTOVER;
+      else process.env.ENABLE_STAGING_V3_GROUPS_CUTOVER = previousCutover;
+      await ethers.provider.send("hardhat_setCode", [abandoned, previousCode]);
+      installed.restore();
+    }
+    process.stdout.write("0x01");
+    return;
+  }
+
   if (scenario === "managed-hook-historical-successor") {
     const historicalHookAddress = "0x71467dCac3B50eeED5A485aC6a70f27B1EAC1970";
     const pinnedRuntimeCodeHash =

@@ -1,7 +1,10 @@
 import { ethers } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
-import { recordedBypassLifecycleHookRuntimeHash } from "./bypassDisputeStack";
+import {
+  BYPASS_RECORDED_DEPLOYMENTS,
+  recordedBypassLifecycleHookRuntimeHash,
+} from "./bypassDisputeStack";
 import { zeroImmutableValues } from "./canonicalDeployment";
 import {
   findPinnedLifecycleHookRuntimeHash,
@@ -97,7 +100,45 @@ export async function guardManagedDisputeLifecycleHook(
   const matchedSuccessor =
     successorDeployment &&
     sameAddress(currentHook, successorDeployment.address);
-  if (!matchedPredecessor && !matchedSuccessor) return false;
+  if (!matchedPredecessor && !matchedSuccessor) {
+    if (network !== "base_staging") return false;
+    // Staging replacement window (delete with the replacement machinery after recording): lane 45
+    // overwrites the hook record while O3 still mounts the abandoned hook, and a checkout without
+    // the fresh records cannot identify the hook after the switch.
+    const replacement: typeof import("./stagingBypassReplacement") = require("./stagingBypassReplacement");
+    const recorded = BYPASS_RECORDED_DEPLOYMENTS.base_staging;
+    if (!replacement.replacementRecordingPending(recorded)) return false;
+    const abandoned =
+      BYPASS_RECORDED_DEPLOYMENTS.base_staging?.IntentLifecycleHookV1Bypass;
+    if (!abandoned || !sameAddress(currentHook, abandoned.address))
+      throw new Error(
+        `Staging bypass replacement is unrecorded; lane 30 cannot verify lifecycle hook ${currentHook}`
+      );
+    const runtimeCode = await ethers.provider.getCode(currentHook);
+    if (runtimeCode === "0x")
+      throw new Error("Managed dispute lifecycle hook has no bytecode");
+    const hook = new ethers.Contract(
+      currentHook,
+      [
+        "function orchestratorRegistry() view returns (address)",
+        "function whitelistPolicy() view returns (address)",
+      ],
+      ethers.provider
+    );
+    return validateManagedDisputeHookSnapshot({
+      currentHook,
+      successor: abandoned,
+      actualRuntimeCodeHash: ethers.utils.keccak256(runtimeCode),
+      actualOrchestratorRegistry: await hook.orchestratorRegistry(),
+      expectedOrchestratorRegistry: (
+        await hre.deployments.get("OrchestratorRegistry")
+      ).address,
+      actualWhitelistPolicy: await hook.whitelistPolicy(),
+      expectedWhitelistPolicy: (
+        await hre.deployments.get("WhitelistPolicyMethodScoped")
+      ).address,
+    });
+  }
 
   const runtimeCode = await ethers.provider.getCode(currentHook);
   if (runtimeCode === "0x")

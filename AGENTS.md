@@ -202,8 +202,11 @@
   execute requires lane 45 complete, adds the fresh writer, switches O3's hook and removes the abandoned writer
   only after its activity scan passes. The August predecessor remains. After completion, prepare requires the
   block-pinned snapshot to reduce to `active`. Updating all three staging recorded pins retires replacement routing;
-  ordinary verification then handles the fresh trio. See `docs/staging-bypass-replacement.md` for the refusal state
-  and recording boundary. Base has no replacement path.
+  ordinary verification then handles the fresh trio. Until then the lane-30 managed-hook guard also verifies the
+  abandoned staging hook by its recorded pin and throws on any other staging hook it cannot verify, because the
+  canonical hook record and O3's mounted hook disagree between the two lanes and in checkouts without the fresh
+  records. See `docs/staging-bypass-replacement.md` for the refusal state and recording boundary. Base has no
+  replacement path.
   Staging aliases, `dispute-stack-evidence.json`, `PREDECESSOR_DISPUTE_STACKS`, and the lane-31 wrapper are
   recorded for the activated stack. Base has not executed either lane and retains MethodScoped aliases and the
   UPV3 binding; its recording PRs must add deployment pins after lane 45, then flip aliases, evidence, and
