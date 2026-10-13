@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.18;
 
-import { IOracleAdapter } from "../interfaces/IOracleAdapter.sol";
+import { IOracleAdapter } from "contracts/interfaces/IOracleAdapter.sol";
 
 /**
  * @title StaticOracleAdapterMock

@@ -2,8 +2,8 @@
 
 pragma solidity ^0.8.18;
 
-import { IRateManager } from "../interfaces/IRateManager.sol";
-import { IEscrowV2 } from "../interfaces/IEscrowV2.sol";
+import { IRateManager } from "contracts/interfaces/IRateManager.sol";
+import { IEscrowV2 } from "contracts/interfaces/IEscrowV2.sol";
 
 /**
  * @notice Rate manager mock that attempts to reenter setRateManager during onDepositOptIn.

@@ -8,7 +8,7 @@ import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {IAttestationVerifier} from "contracts/interfaces/IAttestationVerifier.sol";
 import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";
 import {INullifierRegistryV2} from "contracts/interfaces/INullifierRegistryV2.sol";
-import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";
+import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
 

@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 
 import {ChainlinkOracleAdapter} from "contracts/oracles/ChainlinkOracleAdapter.sol";
 import {PythOracleAdapter} from "contracts/oracles/PythOracleAdapter.sol";
-import {AggregatorV3Mock} from "contracts/mocks/AggregatorV3Mock.sol";
+import {AggregatorV3Mock} from "../../mocks/AggregatorV3Mock.sol";
 import {PythMock} from "contracts/mocks/PythMock.sol";
 
 contract ChainlinkOracleAdapterTest is Test {

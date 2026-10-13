@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.18;
 
-import { IEscrow } from "../interfaces/IEscrow.sol";
+import { IEscrow } from "contracts/interfaces/IEscrow.sol";
 
 /**
  * @title OrchestratorMock

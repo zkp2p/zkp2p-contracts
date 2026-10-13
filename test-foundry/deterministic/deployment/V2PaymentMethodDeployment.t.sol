@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 import {Test} from "forge-std/Test.sol";
 import {UnifiedPaymentVerifier} from "contracts/archive/unifiedVerifier/UnifiedPaymentVerifier.sol";
 import {UnifiedPaymentVerifierV3} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol";
-import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";
+import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";

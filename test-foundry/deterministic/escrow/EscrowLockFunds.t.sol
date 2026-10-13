@@ -3,7 +3,7 @@ pragma solidity ^0.8.18;
 
 import {EscrowLegacyFixture} from "../helpers/EscrowLegacyFixture.sol";
 import {IEscrow} from "contracts/interfaces/IEscrow.sol";
-import {ReentrantOrchestratorMock} from "contracts/mocks/ReentrantOrchestratorMock.sol";
+import {ReentrantOrchestratorMock} from "../../mocks/ReentrantOrchestratorMock.sol";
 
 contract EscrowLockFundsTest is EscrowLegacyFixture {
     event FundsLocked(uint256 indexed depositId, bytes32 indexed intentHash, uint256 amount, uint256 expiryTime);

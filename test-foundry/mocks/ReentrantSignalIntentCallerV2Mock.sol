@@ -2,10 +2,10 @@
 
 pragma solidity ^0.8.18;
 
-import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
+import { IOrchestratorV2 } from "contracts/interfaces/IOrchestratorV2.sol";
 
 /**
- * @notice V2 variant of ReentrantSignalIntentCallerMock that uses IOrchestratorV2.SignalIntentParams
+ * @notice Reentrant signalIntent caller that uses IOrchestratorV2.SignalIntentParams
  *         (which includes preIntentHookData).
  */
 contract ReentrantSignalIntentCallerV2Mock {

@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.18;
 
-import { IRateManager } from "../interfaces/IRateManager.sol";
+import { IRateManager } from "contracts/interfaces/IRateManager.sol";
 
 /**
  * @title RateManagerMock

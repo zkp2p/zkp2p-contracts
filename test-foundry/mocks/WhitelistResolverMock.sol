@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.18;
 
-import { IWhitelistResolver } from "../interfaces/IWhitelistResolver.sol";
+import { IWhitelistResolver } from "contracts/interfaces/IWhitelistResolver.sol";
 
 contract WhitelistResolverMock is IWhitelistResolver {
     enum Mode {

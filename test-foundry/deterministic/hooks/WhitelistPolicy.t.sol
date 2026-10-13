@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 
 import {Test} from "forge-std/Test.sol";
 
-import {EscrowDepositorMock} from "contracts/mocks/EscrowDepositorMock.sol";
+import {EscrowDepositorMock} from "../../mocks/EscrowDepositorMock.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {IPreIntentHook} from "contracts/interfaces/IPreIntentHook.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";

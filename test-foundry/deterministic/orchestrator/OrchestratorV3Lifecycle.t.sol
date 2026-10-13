@@ -3,7 +3,7 @@ pragma solidity ^0.8.18;
 
 import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
-import {IntentLifecycleHookV1Mock} from "contracts/mocks/IntentLifecycleHookV1Mock.sol";
+import {IntentLifecycleHookV1Mock} from "../../mocks/IntentLifecycleHookV1Mock.sol";
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 
 contract OrchestratorV3LifecycleTest is OrchestratorV3Fixture {

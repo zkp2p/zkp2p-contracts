@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 import {Test} from "forge-std/Test.sol";
 import {FxRateFeed} from "contracts/oracles/FxRateFeed.sol";
 import {FxRateStore} from "contracts/oracles/FxRateStore.sol";
-import {AggregatorV3Mock} from "contracts/mocks/AggregatorV3Mock.sol";
+import {AggregatorV3Mock} from "../../mocks/AggregatorV3Mock.sol";
 
 contract FxRateFeedTest is Test {
     bytes32 internal constant INR = keccak256("INR/USD");

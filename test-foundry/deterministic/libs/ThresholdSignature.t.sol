@@ -3,7 +3,7 @@ pragma solidity ^0.8.18;
 
 import {Test} from "forge-std/Test.sol";
 
-import {ThresholdSigVerifierUtilsMock} from "contracts/mocks/ThresholdSigVerifierUtilsMock.sol";
+import {ThresholdSigVerifierUtilsMock} from "../../mocks/ThresholdSigVerifierUtilsMock.sol";
 
 contract ThresholdSignatureTest is Test {
     string internal constant THRESHOLD_ERROR = "ThresholdSigVerifierUtils: Not enough valid witness signatures";

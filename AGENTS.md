@@ -3,12 +3,16 @@
 ## Project Structure & Module Organization
 
 - `contracts/`: Solidity sources (0.8.18), plus `interfaces/`, `lib/`, `mocks/`, `unifiedVerifier/`.
+- `contracts/mocks/`: only what Hardhat must compile. That is the doubles a deploy lane or a Hardhat deployment test
+  loads (`USDCMock`, `PythMock`, `PaymentVerifierMock`, `OrchestratorV3SurfaceMock`) and the Safe-batch guard,
+  postcondition, and activation-type contracts (`Dispute*`). Every other test double lives in `test-foundry/mocks/`.
 - `contracts/archive/`: superseded sources (V1 `Escrow`, `Orchestrator`, `ProtocolViewer`, and
   `PostIntentHookRegistry`; `OrchestratorV2`; the pre-V3 `UnifiedPaymentVerifier`). They stay compiled only because
   executed lanes deploy them on local networks and tests exercise them. Never edit them or base new work on them.
   `contracts/archive/README.md` lists what is there and which lower-numbered sources are still current.
 - `deploy/`: Hardhat Deploy scripts, ordered `NN_description.ts` (e.g., `00_deploy_system.ts`).
-- `test-foundry/`: the only contract test system, split into `deterministic/`, `fuzz/`, and `invariant/`.
+- `test-foundry/`: the only contract test system, split into `deterministic/`, `fuzz/`, and `invariant/`, with
+  shared test doubles in `mocks/`.
 - `scripts/`: coverage and deployment-support scripts.
 - `deployments/`: Network artifacts and exported addresses; update on live deploys.
 - `tasks/`: Custom Hardhat tasks (e.g., Etherscan verification with delay).

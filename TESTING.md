@@ -67,6 +67,9 @@ CI uploads only `coverage/lcov.info` under the `foundry` flag using Codecov OIDC
 
 ## Adding tests
 
+Put a new test double in `test-foundry/mocks/`. Only a double that a deploy lane or a Hardhat deployment test loads
+belongs in `contracts/mocks/`, because Hardhat compiles `contracts/` alone.
+
 ### Deterministic behavior
 
 Place the test in the matching domain under `test-foundry/deterministic/`. Use explicit actor addresses, assert exact custom-error arguments and events where meaningful, and verify the complete state/balance postcondition. Deployment changes require a deterministic topology or deployment-helper test. Every test must pass alone and in the complete suite.

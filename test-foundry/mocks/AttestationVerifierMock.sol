@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.18;
 
-import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
+import { IAttestationVerifier } from "contracts/interfaces/IAttestationVerifier.sol";
 
 /**
  * @title AttestationVerifierMock

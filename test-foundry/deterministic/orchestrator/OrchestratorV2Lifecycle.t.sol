@@ -2,7 +2,7 @@
 pragma solidity ^0.8.18;
 
 import {OrchestratorV2LegacyFixture} from "../helpers/OrchestratorV2LegacyFixture.sol";
-import {ReentrantReleaseEscrowMock} from "contracts/mocks/ReentrantReleaseEscrowMock.sol";
+import {ReentrantReleaseEscrowMock} from "../../mocks/ReentrantReleaseEscrowMock.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 

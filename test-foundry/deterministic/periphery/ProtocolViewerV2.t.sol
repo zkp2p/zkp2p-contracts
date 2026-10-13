@@ -8,7 +8,7 @@ import {EscrowV2} from "contracts/EscrowV2.sol";
 import {OrchestratorV2} from "contracts/archive/OrchestratorV2.sol";
 import {ProtocolViewerV2} from "contracts/ProtocolViewerV2.sol";
 import {PaymentVerifierMock} from "contracts/mocks/PaymentVerifierMock.sol";
-import {RateManagerMock} from "contracts/mocks/RateManagerMock.sol";
+import {RateManagerMock} from "../../mocks/RateManagerMock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";

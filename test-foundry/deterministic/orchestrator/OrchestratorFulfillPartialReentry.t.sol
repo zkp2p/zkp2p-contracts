@@ -5,7 +5,7 @@ import {OrchestratorLegacyFixture} from "../helpers/OrchestratorLegacyFixture.so
 import {IEscrow} from "contracts/interfaces/IEscrow.sol";
 import {IOrchestrator} from "contracts/interfaces/IOrchestrator.sol";
 import {IPostIntentHook} from "contracts/interfaces/IPostIntentHook.sol";
-import {ReentrantPostIntentHook} from "contracts/mocks/ReentrantPostIntentHook.sol";
+import {ReentrantPostIntentHook} from "../../mocks/ReentrantPostIntentHook.sol";
 
 contract OrchestratorFulfillPartialReentryTest is OrchestratorLegacyFixture {
     event IntentFulfilled(

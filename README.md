@@ -479,6 +479,7 @@ test-foundry/
   deterministic/
   fuzz/
   invariant/
+  mocks/                            # test doubles used only by Foundry tests
 ```
 
 ## Getting Started

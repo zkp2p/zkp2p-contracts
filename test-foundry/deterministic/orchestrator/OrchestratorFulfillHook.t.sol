@@ -4,9 +4,9 @@ pragma solidity ^0.8.18;
 import {OrchestratorLegacyFixture} from "../helpers/OrchestratorLegacyFixture.sol";
 import {IOrchestrator} from "contracts/interfaces/IOrchestrator.sol";
 import {IPostIntentHook} from "contracts/interfaces/IPostIntentHook.sol";
-import {PostIntentHookMock} from "contracts/mocks/PostIntentHookMock.sol";
-import {PartialPullPostIntentHookMock} from "contracts/mocks/PartialPullPostIntentHookMock.sol";
-import {PushPostIntentHookMock} from "contracts/mocks/PushPostIntentHookMock.sol";
+import {PostIntentHookMock} from "../../mocks/PostIntentHookMock.sol";
+import {PartialPullPostIntentHookMock} from "../../mocks/PartialPullPostIntentHookMock.sol";
+import {PushPostIntentHookMock} from "../../mocks/PushPostIntentHookMock.sol";
 
 contract OrchestratorFulfillHookTest is OrchestratorLegacyFixture {
     event IntentFulfilled(

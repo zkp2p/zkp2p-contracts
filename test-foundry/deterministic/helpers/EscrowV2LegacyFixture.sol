@@ -5,12 +5,12 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {EscrowV2} from "contracts/EscrowV2.sol";
-import {OrchestratorMock} from "contracts/mocks/OrchestratorMock.sol";
+import {OrchestratorMock} from "../../mocks/OrchestratorMock.sol";
 import {PaymentVerifierMock} from "contracts/mocks/PaymentVerifierMock.sol";
-import {RateManagerMock} from "contracts/mocks/RateManagerMock.sol";
-import {RevertingOracleAdapterMock} from "contracts/mocks/RevertingOracleAdapterMock.sol";
-import {RevertingPruneOrchestratorMock} from "contracts/mocks/RevertingPruneOrchestratorMock.sol";
-import {StaticOracleAdapterMock} from "contracts/mocks/StaticOracleAdapterMock.sol";
+import {RateManagerMock} from "../../mocks/RateManagerMock.sol";
+import {RevertingOracleAdapterMock} from "../../mocks/RevertingOracleAdapterMock.sol";
+import {RevertingPruneOrchestratorMock} from "../../mocks/RevertingPruneOrchestratorMock.sol";
+import {StaticOracleAdapterMock} from "../../mocks/StaticOracleAdapterMock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.sol";
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";

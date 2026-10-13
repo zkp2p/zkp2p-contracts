@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 import {OrchestratorV2LegacyFixture} from "../helpers/OrchestratorV2LegacyFixture.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";
 import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
-import {ReentrantHookSetterMock} from "contracts/mocks/ReentrantHookSetterMock.sol";
+import {ReentrantHookSetterMock} from "../../mocks/ReentrantHookSetterMock.sol";
 import {IOrchestratorV2} from "contracts/interfaces/IOrchestratorV2.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 import {IPreIntentHook} from "contracts/interfaces/IPreIntentHook.sol";

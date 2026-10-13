@@ -9,7 +9,7 @@ import {OrchestratorV2} from "contracts/archive/OrchestratorV2.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {WhitelistPreIntentHook} from "contracts/hooks/WhitelistPreIntentHook.sol";
 import {PaymentVerifierMock} from "contracts/mocks/PaymentVerifierMock.sol";
-import {PreIntentHookMock} from "contracts/mocks/PreIntentHookMock.sol";
+import {PreIntentHookMock} from "../../mocks/PreIntentHookMock.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {EscrowRegistry} from "contracts/registries/EscrowRegistry.sol";

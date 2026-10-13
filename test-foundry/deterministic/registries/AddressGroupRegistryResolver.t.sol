@@ -4,8 +4,8 @@ pragma solidity ^0.8.18;
 import {Test} from "forge-std/Test.sol";
 
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
-import {AddressGroupRegistryGasHarness} from "contracts/mocks/AddressGroupRegistryGasHarness.sol";
-import {WhitelistResolverMock} from "contracts/mocks/WhitelistResolverMock.sol";
+import {AddressGroupRegistryGasHarness} from "../../mocks/AddressGroupRegistryGasHarness.sol";
+import {WhitelistResolverMock} from "../../mocks/WhitelistResolverMock.sol";
 
 contract AddressGroupRegistryResolverTest is Test {
     event ResolverSet(bytes32 indexed groupId, address indexed oldResolver, address indexed newResolver);

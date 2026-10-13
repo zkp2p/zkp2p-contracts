@@ -11,7 +11,7 @@ import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IStakeVault} from "contracts/interfaces/IStakeVault.sol";
-import {AttestationVerifierMock} from "contracts/mocks/AttestationVerifierMock.sol";
+import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
 import {NullifierRegistryV2} from "contracts/registries/NullifierRegistryV2.sol";

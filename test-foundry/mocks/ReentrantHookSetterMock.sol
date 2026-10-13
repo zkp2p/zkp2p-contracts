@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.18;
 
-import { IPreIntentHook } from "../interfaces/IPreIntentHook.sol";
+import { IPreIntentHook } from "contracts/interfaces/IPreIntentHook.sol";
 
 interface IOrchestratorHookSetter {
     function setDepositPreIntentHook(address escrow, uint256 depositId, IPreIntentHook hook) external;

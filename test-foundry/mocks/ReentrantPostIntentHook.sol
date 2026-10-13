@@ -3,19 +3,19 @@
 pragma solidity ^0.8.18;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { IPostIntentHookV2 } from "../interfaces/IPostIntentHookV2.sol";
-import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
+import { IPostIntentHook } from "contracts/interfaces/IPostIntentHook.sol";
+import { IOrchestrator } from "contracts/interfaces/IOrchestrator.sol";
 
 /**
- * @title ReentrantPostIntentHookV2
- * @notice Malicious V2 hook contract that attempts reentrancy attack on fulfillIntent
- * @dev Used for testing reentrancy protection in OrchestratorV2 contract
+ * @title ReentrantPostIntentHook
+ * @notice Malicious hook contract that attempts reentrancy attack on fulfillIntent
+ * @dev Used for testing reentrancy protection in Orchestrator contract
  */
-contract ReentrantPostIntentHookV2 is IPostIntentHookV2 {
+contract ReentrantPostIntentHook is IPostIntentHook {
 
     /* ============ State Variables ============ */
 
-    IOrchestratorV2 public immutable orchestrator;
+    IOrchestrator public immutable orchestrator;
     IERC20 public immutable usdc;
 
     // Attack configuration
@@ -23,7 +23,7 @@ contract ReentrantPostIntentHookV2 is IPostIntentHookV2 {
     uint256 public reentrancyAttempts = 0;
 
     // Stored params for reentrancy attempt
-    IOrchestratorV2.FulfillIntentParams public storedFulfillParams;
+    IOrchestrator.FulfillIntentParams public storedFulfillParams;
 
     /* ============ Events ============ */
 
@@ -34,7 +34,7 @@ contract ReentrantPostIntentHookV2 is IPostIntentHookV2 {
 
     constructor(address _usdc, address _orchestrator) {
         usdc = IERC20(_usdc);
-        orchestrator = IOrchestratorV2(_orchestrator);
+        orchestrator = IOrchestrator(_orchestrator);
     }
 
     /* ============ External Functions ============ */
@@ -48,7 +48,7 @@ contract ReentrantPostIntentHookV2 is IPostIntentHookV2 {
         bytes calldata verificationData,
         bytes calldata postIntentHookData
     ) external {
-        storedFulfillParams = IOrchestratorV2.FulfillIntentParams({
+        storedFulfillParams = IOrchestrator.FulfillIntentParams({
             paymentProof: paymentProof,
             intentHash: intentHash,
             verificationData: verificationData,
@@ -65,11 +65,13 @@ contract ReentrantPostIntentHookV2 is IPostIntentHookV2 {
 
     /**
      * @notice Executes post-intent action and attempts reentrancy attack
-     * @param _ctx Hook execution context
+     * @param _intent The intent data
+     * @param _amountNetFees Amount of funds to transfer after fees are deducted
      */
     function execute(
-        HookExecutionContext calldata _ctx,
-        bytes calldata /* _fulfillHookData */
+        IOrchestrator.Intent memory _intent,
+        uint256 _amountNetFees,
+        bytes calldata /* _fulfillIntentData */
     ) external override {
         // Increment attempt counter
         reentrancyAttempts++;
@@ -91,9 +93,9 @@ contract ReentrantPostIntentHookV2 is IPostIntentHookV2 {
 
         // Normal execution - transfer funds to intended recipient
         // Pull USDC from orchestrator (which approved this amount)
-        usdc.transferFrom(msg.sender, _ctx.intent.to, _ctx.executableAmount);
+        usdc.transferFrom(msg.sender, _intent.to, _amountNetFees);
 
-        emit ExecutionCompleted(_ctx.intent.to, _ctx.executableAmount);
+        emit ExecutionCompleted(_intent.to, _amountNetFees);
     }
 
     /**

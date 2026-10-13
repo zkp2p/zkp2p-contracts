@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import { ThresholdSigVerifierUtils } from "../lib/ThresholdSigVerifierUtils.sol";
+import { ThresholdSigVerifierUtils } from "contracts/lib/ThresholdSigVerifierUtils.sol";
 
 /**
  * @title ThresholdSigVerifierUtilsMock
