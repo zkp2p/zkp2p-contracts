@@ -8,21 +8,21 @@
       "WhitelistPolicy": "WhitelistPolicyMethodScoped"
     },
     "base_staging": {
-      "StakeVault": "StakeVaultBypass",
-      "DisputeProtectionPolicy": "DisputeProtectionPolicyBypass",
-      "IntentLifecycleHookV1": "IntentLifecycleHookV1Bypass",
+      "StakeVault": "StakeVaultMethodScoped",
+      "DisputeProtectionPolicy": "DisputeProtectionPolicyMethodScopedStaked",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1MethodScopedStaked",
       "WhitelistPolicy": "WhitelistPolicyMethodScoped"
     },
     "localhost": {
-      "StakeVault": "StakeVaultBypass",
-      "DisputeProtectionPolicy": "DisputeProtectionPolicyBypass",
-      "IntentLifecycleHookV1": "IntentLifecycleHookV1Bypass",
+      "StakeVault": "StakeVaultMethodScoped",
+      "DisputeProtectionPolicy": "DisputeProtectionPolicyMethodScopedStaked",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1MethodScopedStaked",
       "WhitelistPolicy": "WhitelistPolicyMethodScoped"
     },
     "hardhat": {
-      "StakeVault": "StakeVaultBypass",
-      "DisputeProtectionPolicy": "DisputeProtectionPolicyBypass",
-      "IntentLifecycleHookV1": "IntentLifecycleHookV1Bypass",
+      "StakeVault": "StakeVaultMethodScoped",
+      "DisputeProtectionPolicy": "DisputeProtectionPolicyMethodScopedStaked",
+      "IntentLifecycleHookV1": "IntentLifecycleHookV1MethodScopedStaked",
       "WhitelistPolicy": "WhitelistPolicyMethodScoped"
     }
   }

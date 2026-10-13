@@ -177,8 +177,7 @@ async function openIntent(state, intentHash, settle) {
           0,
           state.taker.address,
           METHOD,
-          INTENT_AMOUNT,
-          false
+          INTENT_AMOUNT
         )
     ).wait();
     if (settle) {
@@ -208,8 +207,7 @@ async function openAndSettleFreshIntent(state) {
           0,
           state.taker.address,
           METHOD,
-          INTENT_AMOUNT,
-          false
+          INTENT_AMOUNT
         )
     ).wait();
     await (

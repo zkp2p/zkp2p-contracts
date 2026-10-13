@@ -137,30 +137,16 @@ function harness({ mode = "execute", selectedTag = tag, network = "base_staging"
   };
   dependencies["./31_deploy_v3_payment_binding_stack"] = binding;
   const lane = loadLane("43_add_xmoney_payment_method.ts", dependencies, env).default;
-  const bypassCalls = [];
-  const bypassBinding = {
-    bypassPaymentBindingRecorded: (network) => network === "base_staging",
-    verifyBypassPaymentBinding: async (actualHre, actualNetwork) => {
-      assert.equal(actualHre, hre);
-      assert.equal(actualNetwork, "base_staging");
-      bypassCalls.push(actualNetwork);
-    },
-  };
-  const historicalCalls = [];
-  const historical = async () => historicalCalls.push("deploy");
-  historical.skip = async () => { historicalCalls.push("skip"); return false; };
   const liveLane = loadLane("../deployments/activeDeploymentLanes/31_deploy_v3_payment_binding_stack.ts", {
     "node:assert/strict": assert,
     hardhat: dependencies.hardhat,
-    "../../deploy/31_deploy_v3_payment_binding_stack": { ...binding, default: historical },
-    "../bypassPaymentBinding": bypassBinding,
+    "../../deploy/31_deploy_v3_payment_binding_stack": binding,
     "../parameters": parameters,
   }, env).default;
   return {
     run: () => lane(hre), ready: () => binding.paymentBindingCutoverReady(hre),
     runLive: () => liveLane(hre), skipLive: () => liveLane.skip(hre),
     calls, contracts, provider, hre, registryMethods, verifierMethods,
-    bypassCalls, bypassBinding, historicalCalls,
     actions: () => calls.filter((call) => call !== "read"),
   };
 }
@@ -178,27 +164,9 @@ test("the mounted live lane verifies Base and staging without invoking the histo
   for (const network of ["base", "base_staging"]) {
     const h = harness({ network, registryHas: true, verifierHas: true });
     assert.equal(await h.skipLive(), true);
-    assert.deepEqual(h.bypassCalls, network === "base_staging" ? [network] : []);
-    h.bypassCalls.length = 0;
     await h.runLive();
-    assert.deepEqual(h.bypassCalls, network === "base_staging" ? [network] : []);
-    assert.deepEqual(h.historicalCalls, []);
     assert.deepEqual(h.actions(), []);
-    if (network === "base_staging") assert.deepEqual(h.calls, []);
-    else assert.ok(h.calls.includes("read"));
   }
-});
-
-test("the mounted bypass binding fails closed without a UPV3 or historical fallback", async () => {
-  const h = harness({ registryHas: true, verifierHas: true });
-  const failure = new Error("UPV4 binding drift");
-  h.bypassBinding.verifyBypassPaymentBinding = async () => { throw failure; };
-  h.hre.deployments.getOrNull = async () => { throw new Error("UPV3 fallback"); };
-  h.hre.deployments.get = async () => { throw new Error("UPV3 fallback"); };
-  await assert.rejects(h.skipLive(), (error) => error === failure);
-  await assert.rejects(h.runLive(), (error) => error === failure);
-  assert.deepEqual(h.historicalCalls, []);
-  assert.deepEqual(h.calls, []);
 });
 
 test("the mounted live lane rejects missing artifacts and registry drift without writes", async () => {
@@ -229,10 +197,6 @@ test("the mounted lane preserves local deployment and skip behavior", async () =
     "node:assert/strict": assert,
     hardhat: { ethers },
     "../../deploy/31_deploy_v3_payment_binding_stack": { default: historical },
-    "../bypassPaymentBinding": {
-      bypassPaymentBindingRecorded: () => { throw new Error("Local binding lookup"); },
-      verifyBypassPaymentBinding: async () => { throw new Error("Local verification"); },
-    },
     "../parameters": parameters,
   }, {}).default;
   const hre = { deployments: { getNetworkName: () => "localhost" } };

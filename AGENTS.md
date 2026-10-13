@@ -27,7 +27,9 @@
   deployment. The supported runner verifies its deployed-source hash and mounts
   `deployments/activeDeploymentLanes/30_deploy_v3_lifecycle_stack.ts` under lane 30's filename. That current wrapper
   preserves the exact tags and lane-29 dependency, refuses to roll a verified predecessor or successor dispute hook
-  back to `WhitelistLifecycleHook`, and otherwise delegates to the immutable historical implementation.
+  back to `WhitelistLifecycleHook`, and otherwise delegates to the immutable historical implementation. On Base and
+  Base staging it delegates only when no `OrchestratorV3` is recorded or the live hook is the recorded
+  `WhitelistLifecycleHook`; any other live hook throws before the historical lane is evaluated.
 - Base staging removes only the explicitly drained staging predecessors. Base keeps the existing orchestrators
   registered and queues exactly one Safe call to register the fresh O3. Base execution requires
   `ENABLE_BASE_V3_GROUPS_CUTOVER=true`, a separately approved exact source SHA, and the production governance path.
@@ -48,9 +50,8 @@
 - `deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts` is immutable and retired. It deployed and, on Base, activated
   the `*OptIn` dispute stack built from the deposit-only interfaces; the runner verifies its digest, excludes it from
   every supported run, and rejects both of its tags. Its Safe simulation and verification scripts remain as tooling
-  for that executed history. Lanes 39/40 superseded the Base `*OptIn` trio on 2026-08-28, and
-  `PREDECESSOR_DISPUTE_STACKS` records it as the predecessor of the selected Base stack. The Base-staging `*OptIn`
-  trio is deployed but was never activated.
+  for that executed history. The Base `*OptIn` trio is the live dispute stack until a later activation lane replaces
+  it; the Base-staging `*OptIn` trio is deployed but was never activated.
 - Lanes `36` and `37` executed deploy-only on Base staging and Base on 2026-08-27 and are immutable (pinned in
   `deployments/immutableDeploymentLanes.ts`). Lane `36` stays mounted behind its canonical-record skip; lane `37` is
   retired for live networks (its preflight requires the predecessor hook, which lane 38 replaces) and is mounted through
@@ -159,76 +160,6 @@
     were written before the three `transferOwnership` calls to `MULTI_SIG.base`. The updater is
     `0x81630fb1ab2A7Eab137888b9746b66889f78F091`. All three contracts are Basescan-verified. The lane is immutable
     and pinned in `deployments/immutableDeploymentLanes.ts`.
-- `deploy/45_deploy_bypass_dispute_stack.ts` prepares the no-stake bypass dispute stack: `StakeVaultBypass`,
-  `DisputeProtectionPolicyBypass`, `IntentLifecycleHookV1Bypass`, and `UnifiedPaymentVerifierV4`, reusing
-  `WhitelistPolicyMethodScoped`. Live deployment requires `DEPLOY_ACTIVE_TAG=45_deploy_bypass_dispute_stack`
-  and `ENABLE_{STAGING,BASE}_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT=true` for the selected network. It is deploy-only:
-  resumable steps deploy the vault and policy, initialize the controller, deploy and authorize the hook, set the
-  PayPal/Venmo risk windows, deploy UPV4, and add its methods in registry order. Base then starts two-step vault
-  and policy ownership transfers to the Safe and transfers UPV4's plain `Ownable` ownership directly to the Safe.
-  Local networks deploy and configure the same records; lane 46 activates them. Lane 45 changes no live writers,
-  payment routes, or O3 hook. Lane 45 first executed on Base staging on 2026-10-11 from `f9eab7f`.
-  The staging dispute trio was redeployed through the same lane on 2026-10-13 from `285bc5c` with the
-  stake-owner policy bytecode. The first trio is abandoned. Current staging records are:
-
-  - `StakeVaultBypass`: `0x6b32df91EB92637F64bA444996702fC9582C87a1`
-  - `DisputeProtectionPolicyBypass`: `0x1a9C442E3Ae99fB08313242fCdA601431027B39C`
-  - `IntentLifecycleHookV1Bypass`: `0xec27Cc47370267c843177375c3Fe43D29D498bB4`
-  - `UnifiedPaymentVerifierV4`: `0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7`
-
-  Recorded deployments are verified against `BYPASS_RECORDED_DEPLOYMENTS` address and runtime-hash pins:
-  a record's `solcInputHash` depends on the deploying checkout's build cache. Each network's recording PR adds
-  its pins; Base must add them right after lane 45, before preparing the lane-46 batch from a clean checkout.
-  UPV4, its record and every payment route remain unchanged. Base remains pending and unchanged.
-  Once activation starts, lane 45's tagged skip defers to lane 46's reducer.
-- `deploy/46_activate_bypass_dispute_stack.ts` targets `NullifierRegistryV2` writers exactly `[UPV4]`, every
-  `PaymentVerifierRegistry` method routed to UPV4 with identical currencies and method order (reverse-remove,
-  then in-order-add), and the O3 hook set to `IntentLifecycleHookV1Bypass`. It adds the fresh policy to the dispute
-  registry while retaining the predecessor writer until old intents drain; a later lane removes that writer.
-  Live runs require `DEPLOY_ACTIVE_TAG=46_activate_bypass_dispute_stack`. Base staging uses resumable deployer-EOA
-  actions with exactly one of `PREPARE_STAGING_V3_DISPUTE_BYPASS_ACTIVATION=true` (read-only preparation) or
-  `ENABLE_STAGING_V3_DISPUTE_BYPASS_ACTIVATION=true` (execution), plus both
-  `CONFIRM_STAGING_V3_DISPUTE_BYPASS_ACTIVATION=true` and `CONFIRM_STAGING_V3_DISPUTE_BYPASS_DOWNSTREAM_READY=true`.
-  Base preparation requires `ENABLE_BASE_V3_DISPUTE_BYPASS_CUTOVER_PREPARATION=true`,
-  `CONFIRM_BASE_V3_DISPUTE_BYPASS_ACTIVATION=true`, `CONFIRM_BASE_V3_DISPUTE_BYPASS_DOWNSTREAM_READY=true`,
-  and `CONFIRM_BASE_V3_DISPUTE_BYPASS_RELEASE_READY_SHA` matching the source SHA. It prepares one guarded atomic
-  Safe batch: guard → conditional vault/policy `acceptOwnership` → activation actions. The deployer deploys both
-  guard and postcondition contracts during preparation; the postcondition runs only in the pinned fork simulation.
-  Artifacts are `deployments/outputs/safe-batches/base_dispute_bypass_cutover.json` and
-  `deployments/outputs/safe-batches/base_dispute_bypass_cutover.sha256.json`; run
-  `yarn verify:dispute-bypass-safe-batch` immediately before the Safe executes. Preparation signs, proposes, and
-  executes no Safe transaction. Predecessor opt-outs on live listed windowed tuples must be mirrored on the fresh
-  policy before the batch; inventory mismatches fail closed.
-  Lane 46 executed on Base staging on 2026-10-12 from `a6970aa` in 32 deployer actions over three runs.
-  Lane 46 activated the redeployed staging trio on 2026-10-13 from `285bc5c`, adding the fresh policy writer,
-  switching O3's hook and removing the abandoned policy writer. Lanes 45/46 completed in one pass each,
-  ten transactions at deployer nonces 16340 through 16349. At block 52531092 the snapshot reduced to `active`.
-  Both 2026-10-13 runs used staging replacement routing that existed only at `285bc5c` (#341). The recording PR
-  deleted it, and lanes 45/46 are byte-identical to `314298e` again.
-  The abandoned trio never opened a protected intent, holds no stake and has no live references or writer permission.
-  The August predecessor (`DisputeProtectionPolicyMethodScopedStaked`,
-  `0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c`) remains a passive writer. The ten transactions mirrored no
-  depositor opt-outs onto the fresh policy, and lane 46's reducer gates the opt-out inventory only in the
-  `deployed` state, so `active` does not attest that predecessor opt-outs are mirrored. UPV4, all 14 payment
-  routes, currencies, method order and the sole NullifierRegistryV2 writer are unchanged. Recorded staging pins
-  now select the fresh trio; ordinary lane verification applies. Base remains pending and unchanged.
-  Staging aliases, `dispute-stack-evidence.json`, `PREDECESSOR_DISPUTE_STACKS`, and the lane-31 wrapper are
-  recorded for the activated stack. Base has not executed either lane and retains MethodScoped aliases and the
-  UPV3 binding; its recording PRs must add deployment pins after lane 45, then flip aliases, evidence, and
-  predecessor identities after lane 46. Lanes 45/46 remain unpinned until Base executes.
-  The lane-31 wrapper verifies UPV4 on every network whose recorded selection is the bypass hook and never
-  falls back to UPV3. Staging-only method lanes 35/41/43 still pin UPV3 and fail closed on tagged staging reruns;
-  new staging payment methods require a UPV4-aware lane. The lane-30 guard resolves the recorded bypass hook
-  through its pinned runtime hash.
-  Staging package aliases select bypass records; `WhitelistPolicy` still selects `WhitelistPolicyMethodScoped`.
-  The three bypass records (`BY_NAME_DISPUTE_RECORDS` in `deployments/activeDisputeStack.cjs`) remain exported
-  by name at their canonical alias addresses, and UPV4 remains exported by name. `StakeVaultMethodScoped` stays
-  exported for withdrawals and claims from the old staging vault. Staging evidence names
-  `DisputeProtectionPolicyMethodScopedStaked` / `IntentLifecycleHookV1MethodScopedStaked` as
-  `RecognizedPredecessorPolicy` / `RecognizedPredecessorHook`; the predecessor dispute writer stays passive.
-  Local aliases also select bypass records. A second `yarn deploy:localhost`
-  on a chain where lane 46 already activated is unsupported: lanes 31/39 retain historical local checks for UPV3
-  and lane-39 wiring. Restart the node before deploying again.
 - `deployments/predecessorDisputeStack.ts` keeps two pinned maps: `PREDECESSOR_DISPUTE_STACKS` describes the
   predecessor of the currently selected stack and feeds the lane-30 wrapper, the package's recognized-predecessor
   identities, and lane-34 tooling; `METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS` describes what lane 37 replaces (the
@@ -431,8 +362,6 @@ afterward; reject impossible states instead of handling them.
   package release.
 - Put deterministic tests in `test-foundry/deterministic/<domain>/`, fuzz properties in `test-foundry/fuzz/`, and
   stateful handlers/invariants in `test-foundry/invariant/`.
-- Put opt-in, environment-gated cross-repo smoke tests in `test-foundry/smoke/`. They skip unless their
-  environment is set, and coverage never runs them. Never put a skipping test under `test-foundry/deterministic/`.
 - Every behavior change needs the smallest deterministic success/revert/state regression that proves it. Add fuzz or
   invariant coverage only for a meaningful input space or state-machine property, not as automatic duplication.
 - Keep core paths and revert scenarios covered, but do not add tests solely to raise counts or exercise unrelated

@@ -1218,46 +1218,10 @@ test("the lane 37 predecessor map pins the Base OptIn stack exactly", () => {
       },
     }
   );
-  const staging = METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS.base_staging;
-  const selectedPredecessor = PREDECESSOR_DISPUTE_STACKS.base_staging;
-  assert.deepEqual(staging.activeLifecycleHook, {
-    address: "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
-    runtimeCodeHash:
-      "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367",
-  });
-  assert.deepEqual(selectedPredecessor.activeLifecycleHook, {
-    address: "0x5A7f6cb7397134da1fDEFA7E2D434b4Cf18E56D9",
-    runtimeCodeHash:
-      "0xb9ce42108c706f9241aeb41ffdc0da6b7584e8482183055452098b2f16c7abfd",
-  });
-  for (const [name, lane32Address, lane39Name, lane39Address] of [
-    [
-      "StakeVault",
-      "0xEc9f801e2a9Cc22bdc217aD3BB1E3058d0668f43",
-      "StakeVaultMethodScoped",
-      "0x92d7B59E99e1CD2066540Cd2413b8714948b731f",
-    ],
-    [
-      "DisputeProtectionPolicy",
-      "0x21517b7743E727ae47A66FafF93550B689c15020",
-      "DisputeProtectionPolicyMethodScopedStaked",
-      "0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c",
-    ],
-    [
-      "IntentLifecycleHookV1",
-      "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
-      "IntentLifecycleHookV1MethodScopedStaked",
-      "0x5A7f6cb7397134da1fDEFA7E2D434b4Cf18E56D9",
-    ],
-  ]) {
-    assert.equal(staging.contracts[name].address, lane32Address);
-    assert.equal(staging.contracts[name].deploymentName, undefined);
-    assert.equal(selectedPredecessor.contracts[name].address, lane39Address);
-    assert.equal(
-      selectedPredecessor.contracts[name].deploymentName,
-      lane39Name
-    );
-  }
+  assert.strictEqual(
+    METHOD_SCOPED_PREDECESSOR_DISPUTE_STACKS.base_staging,
+    PREDECESSOR_DISPUTE_STACKS.base_staging
+  );
   for (const name of /** @type {Array<"DisputeVerifier" | "DisputeNullifierRegistry">} */ ([
     "DisputeVerifier",
     "DisputeNullifierRegistry",
@@ -1366,8 +1330,11 @@ test("historical validation resolves the OptIn deployment record names", async (
   ]);
 });
 
-test("active dispute manifest selects the dedicated-vault stack on Base and the bypass stack on staging and local networks", () => {
-  for (const network of /** @type {Array<"base">} */ (["base"])) {
+test("active dispute manifest selects the dedicated-vault stack on every network", () => {
+  for (const network of /** @type {Array<"base" | "base_staging">} */ ([
+    "base",
+    "base_staging",
+  ])) {
     assert.deepEqual(Object.values(activeDisputeManifest.networks[network]), [
       "StakeVaultMethodScoped",
       "DisputeProtectionPolicyMethodScopedStaked",
@@ -1375,22 +1342,21 @@ test("active dispute manifest selects the dedicated-vault stack on Base and the 
       "WhitelistPolicyMethodScoped",
     ]);
   }
-  for (const network of /** @type {Array<"base_staging" | "localhost" | "hardhat">} */ ([
-    "base_staging",
+  for (const network of /** @type {Array<"localhost" | "hardhat">} */ ([
     "localhost",
     "hardhat",
   ])) {
     assert.deepEqual(Object.values(activeDisputeManifest.networks[network]), [
-      "StakeVaultBypass",
-      "DisputeProtectionPolicyBypass",
-      "IntentLifecycleHookV1Bypass",
+      "StakeVaultMethodScoped",
+      "DisputeProtectionPolicyMethodScopedStaked",
+      "IntentLifecycleHookV1MethodScopedStaked",
       "WhitelistPolicyMethodScoped",
     ]);
   }
   const resolved = resolveActiveDisputeAliases("hardhat", {
-    StakeVaultBypass: { address: "vault" },
-    DisputeProtectionPolicyBypass: { address: "policy" },
-    IntentLifecycleHookV1Bypass: { address: "hook" },
+    StakeVaultMethodScoped: { address: "vault" },
+    DisputeProtectionPolicyMethodScopedStaked: { address: "policy" },
+    IntentLifecycleHookV1MethodScopedStaked: { address: "hook" },
     WhitelistPolicyMethodScoped: { address: "whitelist" },
   });
   assert.equal(
@@ -1399,14 +1365,6 @@ test("active dispute manifest selects the dedicated-vault stack on Base and the 
     ),
     false
   );
-  for (const name of [
-    "StakeVault",
-    "DisputeProtectionPolicy",
-    "IntentLifecycleHookV1",
-  ]) {
-    assert.ok(resolved[`${name}Bypass`]);
-    assert.deepEqual(resolved[`${name}Bypass`], resolved[name]);
-  }
 });
 
 test("summary and package wiring expose only the current deployment lanes", () => {
@@ -1518,16 +1476,18 @@ test("fresh-policy classifier rejects every lifecycle event", () => {
   }
 });
 
-test("lane 37 event lists partition its deployed policy ABI exactly once", () => {
+test("fresh-policy event lists partition the policy ABI exactly once", () => {
   const artifactEvents =
     /** @type {{ abi: Array<{ type: string, name: string }> }} */ (
       JSON.parse(
         readFileSync(
           join(
             repositoryRoot,
-            "deployments",
-            "base",
-            "DisputeProtectionPolicyMethodScoped.json"
+            "artifacts",
+            "contracts",
+            "hooks",
+            "DisputeProtectionPolicy.sol",
+            "DisputeProtectionPolicy.json"
           ),
           "utf8"
         )
