@@ -696,19 +696,19 @@ test("recorded bypass deployment pins match the executed staging stack only", ()
   assert.deepEqual(BYPASS_RECORDED_DEPLOYMENTS, {
     base_staging: {
       StakeVaultBypass: {
-        address: "0x6b32df91EB92637F64bA444996702fC9582C87a1",
+        address: "0xAca0d2e3C91182F2310446B2Eda0010E593DDEe6",
         runtimeCodeHash:
           "0x3ce00cf0a7e325a116e87ea330c8997b94df705e4e0653d3de9484fca614356e",
       },
       DisputeProtectionPolicyBypass: {
-        address: "0x1a9C442E3Ae99fB08313242fCdA601431027B39C",
+        address: "0x4bF03895eB7126c605D915b84A8c775D0f4C6C0B",
         runtimeCodeHash:
-          "0x496cfd95e23692cb7e282cfe7911797d16056b973d2bacfb44ff30c179c719e0",
+          "0x1ccd36086e5fb3b3816397a6c453280a0ac4ebd575bc4e2c80aa7e43167739d4",
       },
       IntentLifecycleHookV1Bypass: {
-        address: "0xec27Cc47370267c843177375c3Fe43D29D498bB4",
+        address: "0x2c1E846fA3887FfCbfD1F556d0FA6F4EC5899029",
         runtimeCodeHash:
-          "0x42574848f3e7e0bda80a2715bbe10a6317134211e4de6c2455baaed4ef792f61",
+          "0x68272c25f80dae42db6031fb4d5da3e2268c3134b7a914be08968b8393d91a43",
       },
       UnifiedPaymentVerifierV4: {
         address: "0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7",

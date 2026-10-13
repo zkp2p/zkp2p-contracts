@@ -48,9 +48,8 @@
 - `deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts` is immutable and retired. It deployed and, on Base, activated
   the `*OptIn` dispute stack built from the deposit-only interfaces; the runner verifies its digest, excludes it from
   every supported run, and rejects both of its tags. Its Safe simulation and verification scripts remain as tooling
-  for that executed history. Lanes 39/40 superseded the Base `*OptIn` trio on 2026-08-28, and
-  `PREDECESSOR_DISPUTE_STACKS` records it as the predecessor of the selected Base stack. The Base-staging `*OptIn`
-  trio is deployed but was never activated.
+  for that executed history. The Base `*OptIn` trio is the live dispute stack until a later activation lane replaces
+  it; the Base-staging `*OptIn` trio is deployed but was never activated.
 - Lanes `36` and `37` executed deploy-only on Base staging and Base on 2026-08-27 and are immutable (pinned in
   `deployments/immutableDeploymentLanes.ts`). Lane `36` stays mounted behind its canonical-record skip; lane `37` is
   retired for live networks (its preflight requires the predecessor hook, which lane 38 replaces) and is mounted through
@@ -167,20 +166,22 @@
   PayPal/Venmo risk windows, deploy UPV4, and add its methods in registry order. Base then starts two-step vault
   and policy ownership transfers to the Safe and transfers UPV4's plain `Ownable` ownership directly to the Safe.
   Local networks deploy and configure the same records; lane 46 activates them. Lane 45 changes no live writers,
-  payment routes, or O3 hook. Lane 45 first executed on Base staging on 2026-10-11 from `f9eab7f`.
-  The staging dispute trio was redeployed through the same lane on 2026-10-13 from `285bc5c` with the
-  stake-owner policy bytecode. The first trio is abandoned. Current staging records are:
+  payment routes, or O3 hook. Lane 45 executed on Base staging on 2026-10-11 from `f9eab7f`:
 
-  - `StakeVaultBypass`: `0x6b32df91EB92637F64bA444996702fC9582C87a1`
-  - `DisputeProtectionPolicyBypass`: `0x1a9C442E3Ae99fB08313242fCdA601431027B39C`
-  - `IntentLifecycleHookV1Bypass`: `0xec27Cc47370267c843177375c3Fe43D29D498bB4`
+  - `StakeVaultBypass`: `0xAca0d2e3C91182F2310446B2Eda0010E593DDEe6`
+  - `DisputeProtectionPolicyBypass`: `0x4bF03895eB7126c605D915b84A8c775D0f4C6C0B`
+  - `IntentLifecycleHookV1Bypass`: `0x2c1E846fA3887FfCbfD1F556d0FA6F4EC5899029`
   - `UnifiedPaymentVerifierV4`: `0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7`
 
   Recorded deployments are verified against `BYPASS_RECORDED_DEPLOYMENTS` address and runtime-hash pins:
   a record's `solcInputHash` depends on the deploying checkout's build cache. Each network's recording PR adds
   its pins; Base must add them right after lane 45, before preparing the lane-46 batch from a clean checkout.
+  The staging trio from that execution is now abandoned after the stake-owner policy change. Source-only staging
+  replacement is pending through the same lanes, tags, flags and record names. While all three recorded staging
+  pins still name the abandoned trio, lane 45 dispatches to `deployments/stagingBypassReplacementExecution.ts`
+  before the ordinary prepared check. It deploys and configures only the fresh trio, then reports lane 46 next.
   UPV4, its record and every payment route remain unchanged. Base remains pending and unchanged.
-  Once activation starts, lane 45's tagged skip defers to lane 46's reducer.
+  Outside staging replacement, once activation starts, lane 45's tagged skip defers to lane 46's reducer.
 - `deploy/46_activate_bypass_dispute_stack.ts` targets `NullifierRegistryV2` writers exactly `[UPV4]`, every
   `PaymentVerifierRegistry` method routed to UPV4 with identical currencies and method order (reverse-remove,
   then in-order-add), and the O3 hook set to `IntentLifecycleHookV1Bypass`. It adds the fresh policy to the dispute
@@ -200,18 +201,16 @@
   executes no Safe transaction. Predecessor opt-outs on live listed windowed tuples must be mirrored on the fresh
   policy before the batch; inventory mismatches fail closed.
   Lane 46 executed on Base staging on 2026-10-12 from `a6970aa` in 32 deployer actions over three runs.
-  Lane 46 activated the redeployed staging trio on 2026-10-13 from `285bc5c`, adding the fresh policy writer,
-  switching O3's hook and removing the abandoned policy writer. Lanes 45/46 completed in one pass each,
-  ten transactions at deployer nonces 16340 through 16349. At block 52531092 the snapshot reduced to `active`.
-  Both 2026-10-13 runs used staging replacement routing that existed only at `285bc5c` (#341). The recording PR
-  deleted it, and lanes 45/46 are byte-identical to `314298e` again.
-  The abandoned trio never opened a protected intent, holds no stake and has no live references or writer permission.
-  The August predecessor (`DisputeProtectionPolicyMethodScopedStaked`,
-  `0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c`) remains a passive writer. The ten transactions mirrored no
-  depositor opt-outs onto the fresh policy, and lane 46's reducer gates the opt-out inventory only in the
-  `deployed` state, so `active` does not attest that predecessor opt-outs are mirrored. UPV4, all 14 payment
-  routes, currencies, method order and the sole NullifierRegistryV2 writer are unchanged. Recorded staging pins
-  now select the fresh trio; ordinary lane verification applies. Base remains pending and unchanged.
+  That staging trio is now abandoned. Pending source-only re-execution uses the same staging prepare/execute and
+  confirmation flags. Prepare prints all remaining replacement steps across both lanes without sending anything;
+  execute requires lane 45 complete, adds the fresh writer, switches O3's hook and removes the abandoned writer
+  only after its activity scan passes. The August predecessor remains. After completion, prepare requires the
+  block-pinned snapshot to reduce to `active`. Updating all three staging recorded pins retires replacement routing;
+  ordinary verification then handles the fresh trio. Until then the lane-30 managed-hook guard also verifies the
+  abandoned staging hook by its recorded pin and throws on any other staging hook it cannot verify, because the
+  canonical hook record and O3's mounted hook disagree between the two lanes and in checkouts without the fresh
+  records. See `docs/staging-bypass-replacement.md` for the refusal state and recording boundary. Base has no
+  replacement path.
   Staging aliases, `dispute-stack-evidence.json`, `PREDECESSOR_DISPUTE_STACKS`, and the lane-31 wrapper are
   recorded for the activated stack. Base has not executed either lane and retains MethodScoped aliases and the
   UPV3 binding; its recording PRs must add deployment pins after lane 45, then flip aliases, evidence, and

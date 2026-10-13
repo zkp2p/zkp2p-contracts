@@ -521,7 +521,7 @@ const DISPUTE_STACK_BY_NETWORK = {
     riskWindows: RISK_WINDOWS_BY_NETWORK.baseStaging,
     governanceOwner: "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
     orchestratorAuthorizationFromBlock: "42614859",
-    policyDeploymentBlock: "52530944",
+    policyDeploymentBlock: "52483257",
     allowMultipleIntents: false,
     attestationWitnesses: [
       "0x66649F896521b0fb487fE2077b4FBDA283d7f19a",
@@ -546,19 +546,19 @@ const DISPUTE_STACK_BY_NETWORK = {
           "0x4e58f26129559301c017ff264b61dd2255ed2107593d308472ef32d07b8745e9",
       },
       StakeVault: {
-        address: "0x6b32df91EB92637F64bA444996702fC9582C87a1",
+        address: "0xAca0d2e3C91182F2310446B2Eda0010E593DDEe6",
         runtimeCodeHash:
           "0x3ce00cf0a7e325a116e87ea330c8997b94df705e4e0653d3de9484fca614356e",
       },
       DisputeProtectionPolicy: {
-        address: "0x1a9C442E3Ae99fB08313242fCdA601431027B39C",
+        address: "0x4bF03895eB7126c605D915b84A8c775D0f4C6C0B",
         runtimeCodeHash:
-          "0x496cfd95e23692cb7e282cfe7911797d16056b973d2bacfb44ff30c179c719e0",
+          "0x1ccd36086e5fb3b3816397a6c453280a0ac4ebd575bc4e2c80aa7e43167739d4",
       },
       IntentLifecycleHookV1: {
-        address: "0xec27Cc47370267c843177375c3Fe43D29D498bB4",
+        address: "0x2c1E846fA3887FfCbfD1F556d0FA6F4EC5899029",
         runtimeCodeHash:
-          "0x42574848f3e7e0bda80a2715bbe10a6317134211e4de6c2455baaed4ef792f61",
+          "0x68272c25f80dae42db6031fb4d5da3e2268c3134b7a914be08968b8393d91a43",
       },
       RecognizedPredecessorHook: {
         address: "0x5A7f6cb7397134da1fDEFA7E2D434b4Cf18E56D9",
