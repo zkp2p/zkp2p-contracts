@@ -44,8 +44,9 @@
 - `deploy/34_deploy_opt_in_dispute_lifecycle_stack.ts` is immutable and retired. It deployed and, on Base, activated
   the `*OptIn` dispute stack built from the deposit-only interfaces; the runner verifies its digest, excludes it from
   every supported run, and rejects both of its tags. Its Safe simulation and verification scripts remain as tooling
-  for that executed history. The Base `*OptIn` trio is the live dispute stack until a later activation lane replaces
-  it; the Base-staging `*OptIn` trio is deployed but was never activated.
+  for that executed history. Lanes 39/40 superseded the Base `*OptIn` trio on 2026-08-28, and
+  `PREDECESSOR_DISPUTE_STACKS` records it as the predecessor of the selected Base stack. The Base-staging `*OptIn`
+  trio is deployed but was never activated.
 - Lanes `36` and `37` executed deploy-only on Base staging and Base on 2026-08-27 and are immutable (pinned in
   `deployments/immutableDeploymentLanes.ts`). Lane `36` stays mounted behind its canonical-record skip; lane `37` is
   retired for live networks (its preflight requires the predecessor hook, which lane 38 replaces) and is mounted through
