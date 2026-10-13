@@ -65,6 +65,8 @@ const sourceAbiArtifacts = {
     "artifacts/contracts/registries/NullifierRegistryV2.sol/NullifierRegistryV2.json",
   UnifiedPaymentVerifierV3:
     "artifacts/contracts/unifiedVerifier/UnifiedPaymentVerifierV3.sol/UnifiedPaymentVerifierV3.json",
+  UnifiedPaymentVerifierV4:
+    "artifacts/contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol/UnifiedPaymentVerifierV4.json",
   AddressGroupRegistry:
     "artifacts/contracts/registries/AddressGroupRegistry.sol/AddressGroupRegistry.json",
   WhitelistPolicy:

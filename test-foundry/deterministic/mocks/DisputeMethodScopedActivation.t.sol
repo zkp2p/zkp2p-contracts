@@ -125,7 +125,7 @@ contract DisputeMethodScopedActivationTest is OrchestratorV3Fixture {
 
         _stake(taker, STAKE_AMOUNT);
         vm.startPrank(address(predecessorHook));
-        predecessorPolicy.onIntentSignaled(INTENT_HASH, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT);
+        predecessorPolicy.onIntentSignaled(INTENT_HASH, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false);
         predecessorPolicy.onIntentSettled(INTENT_HASH, RELEASE_AMOUNT, false);
         vm.stopPrank();
 
@@ -557,7 +557,7 @@ contract DisputeMethodScopedActivationTest is OrchestratorV3Fixture {
     function test_CutoverGuardRejectsPendingIntent() public {
         vm.prank(address(predecessorHook));
         predecessorPolicy.onIntentSignaled(
-            CANCELLED_INTENT_HASH, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT
+            CANCELLED_INTENT_HASH, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false
         );
         _prepareCutover(true);
         _expectCutoverError(
@@ -583,7 +583,7 @@ contract DisputeMethodScopedActivationTest is OrchestratorV3Fixture {
     function test_CutoverGuardRejectsCancelledIntentWithNonzeroLock() public {
         vm.startPrank(address(predecessorHook));
         predecessorPolicy.onIntentSignaled(
-            CANCELLED_INTENT_HASH, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT
+            CANCELLED_INTENT_HASH, address(escrow), depositId, taker, METHOD, INTENT_AMOUNT, false
         );
         predecessorPolicy.onIntentCancelled(CANCELLED_INTENT_HASH);
         vm.stopPrank();

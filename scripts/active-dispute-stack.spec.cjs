@@ -15,6 +15,7 @@ const { join } = require("node:path");
 const { test } = require("node:test");
 
 const {
+  BY_NAME_DISPUTE_RECORDS,
   INTERNAL_POLICY_RECORDS,
   getActiveDisputeDeploymentName,
   getActiveDisputeSelectionStamp,
@@ -77,6 +78,16 @@ function contracts() {
     IntentLifecycleHookV1MethodScopedStaked: deployment(
       "0x0000000000000000000000000000000000000035"
     ),
+    StakeVaultBypass: deployment("0x0000000000000000000000000000000000000051"),
+    DisputeProtectionPolicyBypass: deployment(
+      "0x0000000000000000000000000000000000000052"
+    ),
+    IntentLifecycleHookV1Bypass: deployment(
+      "0x0000000000000000000000000000000000000053"
+    ),
+    UnifiedPaymentVerifierV4: deployment(
+      "0x0000000000000000000000000000000000000054"
+    ),
     WhitelistPolicy: deployment("0x0000000000000000000000000000000000000041"),
     WhitelistPolicyMethodScoped: deployment(
       "0x0000000000000000000000000000000000000042"
@@ -89,7 +100,6 @@ test("strips passive internal policy records on every supported network", () => 
     "WhitelistPolicyMethodScoped",
     "DisputeProtectionPolicyMethodScoped",
     "IntentLifecycleHookV1MethodScoped",
-    "StakeVaultMethodScoped",
     "DisputeProtectionPolicyMethodScopedStaked",
     "IntentLifecycleHookV1MethodScopedStaked",
   ]);
@@ -123,51 +133,89 @@ test("normalizes Hardhat and package network names through one boundary", () => 
   );
 });
 
-test("resolves successor records on live networks after the passive deployment", () => {
-  assert.deepEqual(resolveActiveDisputeAliases("base", contracts()), {
-    OtherContract: deployment("0x0000000000000000000000000000000000000001", []),
-    StakeVault: deployment("0x0000000000000000000000000000000000000031"),
-    DisputeProtectionPolicy: deployment(
-      "0x0000000000000000000000000000000000000034"
-    ),
-    IntentLifecycleHookV1: deployment(
-      "0x0000000000000000000000000000000000000035"
-    ),
-    WhitelistPolicy: deployment("0x0000000000000000000000000000000000000042"),
+for (const network of ["base", "base_staging", "localhost", "hardhat"]) {
+  test(`${network} exports the selected aliases and preserves bypass records by name`, () => {
+    const input = contracts();
+    const bypassSelected = network !== "base";
+    for (const resolveContracts of [
+      resolveActiveDisputeAliases,
+      resolveAddressOutputContracts,
+      resolveAbiOutputContracts,
+    ]) {
+      const resolved = resolveContracts(network, input);
+      assert.deepEqual(resolved, {
+        OtherContract: input.OtherContract,
+        StakeVault: bypassSelected
+          ? input.StakeVaultBypass
+          : input.StakeVaultMethodScoped,
+        DisputeProtectionPolicy: bypassSelected
+          ? input.DisputeProtectionPolicyBypass
+          : input.DisputeProtectionPolicyMethodScopedStaked,
+        IntentLifecycleHookV1: bypassSelected
+          ? input.IntentLifecycleHookV1Bypass
+          : input.IntentLifecycleHookV1MethodScopedStaked,
+        WhitelistPolicy: input.WhitelistPolicyMethodScoped,
+        UnifiedPaymentVerifierV4: input.UnifiedPaymentVerifierV4,
+        StakeVaultBypass: input.StakeVaultBypass,
+        DisputeProtectionPolicyBypass: input.DisputeProtectionPolicyBypass,
+        IntentLifecycleHookV1Bypass: input.IntentLifecycleHookV1Bypass,
+        ...(bypassSelected
+          ? { StakeVaultMethodScoped: input.StakeVaultMethodScoped }
+          : {}),
+      });
+    }
   });
-  assert.equal(
-    resolveActiveDisputeAliases("base_staging", contracts()).StakeVault.address,
-    "0x0000000000000000000000000000000000000031"
-  );
+}
+
+test("exports the predecessor vault by name only when it is not selected", () => {
+  const input = contracts();
+  for (const network of ["localhost", "hardhat", "base", "base_staging"]) {
+    const resolved = resolveActiveDisputeAliases(network, input);
+    const bypassSelected = network !== "base";
+    if (bypassSelected) {
+      assert.equal(resolved.StakeVaultMethodScoped.address, input.StakeVaultMethodScoped.address, network);
+      assert.equal(resolved.StakeVault.address, input.StakeVaultBypass.address, network);
+      assert.notEqual(resolved.StakeVaultMethodScoped.address, resolved.StakeVault.address, network);
+    } else {
+      assert.equal("StakeVaultMethodScoped" in resolved, false, network);
+      assert.equal(resolved.StakeVault.address, input.StakeVaultMethodScoped.address, network);
+    }
+    assert.equal("DisputeProtectionPolicyMethodScopedStaked" in resolved, false, network);
+    assert.equal("IntentLifecycleHookV1MethodScopedStaked" in resolved, false, network);
+  }
 });
 
-test("resolves successor records locally and removes every internal deployment key", () => {
-  const resolved = resolveActiveDisputeAliases("hardhat", contracts());
-
-  assert.equal(
-    resolved.StakeVault.address,
-    "0x0000000000000000000000000000000000000031"
-  );
-  assert.equal(
-    resolved.DisputeProtectionPolicy.address,
-    "0x0000000000000000000000000000000000000034"
-  );
-  assert.equal(
-    resolved.IntentLifecycleHookV1.address,
-    "0x0000000000000000000000000000000000000035"
-  );
-  assert.equal(
-    resolved.WhitelistPolicy.address,
-    "0x0000000000000000000000000000000000000042"
-  );
-  assert.equal(
-    Object.keys(resolved).some((name) => name.endsWith("OptIn")),
-    false
-  );
-  assert.equal(
-    Object.keys(resolved).some((name) => name.includes("MethodScoped")),
-    false
-  );
+test("bypass selection preserves by-name exports and the deselected predecessor vault", () => {
+  assert.deepEqual(BY_NAME_DISPUTE_RECORDS, [
+    "StakeVaultBypass",
+    "DisputeProtectionPolicyBypass",
+    "IntentLifecycleHookV1Bypass",
+  ]);
+  const input = contracts();
+  // Staging and local selections preserve the same additive exports.
+  for (const network of ["base_staging", "localhost", "hardhat"]) {
+    for (const resolveContracts of [
+      resolveActiveDisputeAliases,
+      resolveAddressOutputContracts,
+      resolveAbiOutputContracts,
+    ]) {
+      const resolved = resolveContracts(network, input);
+      for (const name of BY_NAME_DISPUTE_RECORDS) {
+        const canonicalName = name.replace(/Bypass$/, "");
+        assert.deepEqual(resolved[name], input[name]);
+        assert.deepEqual(resolved[canonicalName], resolved[name]);
+        assert.equal(resolved[canonicalName], resolved[name]);
+      }
+      assert.deepEqual(
+        resolved.StakeVaultMethodScoped,
+        input.StakeVaultMethodScoped
+      );
+      assert.deepEqual(
+        resolved.UnifiedPaymentVerifierV4,
+        input.UnifiedPaymentVerifierV4
+      );
+    }
+  }
 });
 
 test("returns only known canonical deployment names", () => {
@@ -181,7 +229,7 @@ test("returns only known canonical deployment names", () => {
   );
   assert.equal(
     getActiveDisputeDeploymentName("hardhat", "StakeVault"),
-    "StakeVaultMethodScoped"
+    "StakeVaultBypass"
   );
   assert.throws(
     () => getActiveDisputeDeploymentName("base", "UnknownPolicy"),
@@ -191,7 +239,7 @@ test("returns only known canonical deployment names", () => {
 
 test("fails closed on missing records and lets the selected hard cut replace a legacy ABI", () => {
   const missing = contracts();
-  delete missing.StakeVaultMethodScoped;
+  delete missing.StakeVaultBypass;
   assert.throws(
     () => resolveActiveDisputeAliases("localhost", missing),
     /Missing active dispute deployment/
@@ -203,11 +251,11 @@ test("fails closed on missing records and lets the selected hard cut replace a l
   ];
   assert.deepEqual(
     resolveActiveDisputeAliases("localhost", drifted).StakeVault.abi,
-    contracts().StakeVaultMethodScoped.abi
+    contracts().StakeVaultBypass.abi
   );
 });
 
-test("does not mutate its input or expose one internal record twice", () => {
+test("does not mutate its input and exposes distinct canonical addresses", () => {
   const input = contracts();
   const snapshot = structuredClone(input);
   const resolved = resolveActiveDisputeAliases("localhost", input);
@@ -221,7 +269,7 @@ test("does not mutate its input or expose one internal record twice", () => {
   assert.equal(new Set(exposedAddresses).size, exposedAddresses.length);
 });
 
-test("every deployment/package consumer exposes only canonical aliases", () => {
+test("every deployment/package consumer exposes additive bypass aliases and the predecessor vault", () => {
   const input = contracts();
   const consumers =
     /** @type {Array<(value: ReturnType<typeof contracts>) => ReturnType<typeof contracts>>} */ ([
@@ -233,15 +281,15 @@ test("every deployment/package consumer exposes only canonical aliases", () => {
     const resolved = resolveContracts(input);
     assert.equal(
       resolved.StakeVault.address,
-      input.StakeVaultMethodScoped.address
+      input.StakeVaultBypass.address
     );
     assert.equal(
       resolved.DisputeProtectionPolicy.address,
-      input.DisputeProtectionPolicyMethodScopedStaked.address
+      input.DisputeProtectionPolicyBypass.address
     );
     assert.equal(
       resolved.IntentLifecycleHookV1.address,
-      input.IntentLifecycleHookV1MethodScopedStaked.address
+      input.IntentLifecycleHookV1Bypass.address
     );
     assert.equal(
       resolved.WhitelistPolicy.address,
@@ -251,10 +299,18 @@ test("every deployment/package consumer exposes only canonical aliases", () => {
       Object.keys(resolved).some((name) => name.endsWith("OptIn")),
       false
     );
-    assert.equal(
-      Object.keys(resolved).some((name) => name.includes("MethodScoped")),
-      false
+    assert.deepEqual(
+      Object.keys(resolved).filter((name) => name.includes("MethodScoped")),
+      ["StakeVaultMethodScoped"]
     );
+    for (const name of BY_NAME_DISPUTE_RECORDS) {
+      assert.deepEqual(resolved[name], resolved[name.replace(/Bypass$/, "")]);
+    }
+    assert.deepEqual(
+      resolved.UnifiedPaymentVerifierV4,
+      input.UnifiedPaymentVerifierV4
+    );
+    assert.equal(resolved.StakeVaultMethodScoped.address, input.StakeVaultMethodScoped.address);
   }
 });
 
@@ -290,10 +346,10 @@ test("accepts only a currently stamped canonical successor output", () => {
 test("address extraction preserves the exact active dispute selection stamp", async () => {
   await extractAddresses();
 
-  for (const [packageNetwork, manifestNetwork] of [
+  for (const [packageNetwork, manifestNetwork] of /** @type {Array<["base" | "baseStaging", string]>} */ ([
     ["base", "base"],
     ["baseStaging", "base_staging"],
-  ]) {
+  ])) {
     const addresses = JSON.parse(
       readFileSync(
         join(
@@ -311,6 +367,34 @@ test("address extraction preserves the exact active dispute selection stamp", as
       addresses.activeDisputeStack,
       getActiveDisputeSelectionStamp(manifestNetwork)
     );
+    const published = addresses.contracts;
+    const zeroAddress = "0x0000000000000000000000000000000000000000";
+    for (const name of BY_NAME_DISPUTE_RECORDS) {
+      const canonicalName = /** @type {"StakeVault" | "DisputeProtectionPolicy" | "IntentLifecycleHookV1"} */ (name.replace(/Bypass$/, ""));
+      assert.equal(
+        published[canonicalName],
+        DISPUTE_STACK_BY_NETWORK[packageNetwork].runtimeIdentities[canonicalName]
+          .address
+      );
+      assert.equal(
+        published[name],
+        packageNetwork === "baseStaging" ? published[canonicalName] : zeroAddress
+      );
+    }
+    assert.equal(
+      published.UnifiedPaymentVerifierV4,
+      packageNetwork === "baseStaging"
+        ? "0x3fe38Afdfa85A9E14D9b0ae5A5B2E577A8a71DA7"
+        : zeroAddress
+    );
+    assert.equal(
+      published.StakeVaultMethodScoped,
+      packageNetwork === "baseStaging"
+        ? "0x92d7B59E99e1CD2066540Cd2413b8714948b731f"
+        : zeroAddress
+    );
+    assert.equal("DisputeProtectionPolicyMethodScopedStaked" in published, false);
+    assert.equal("IntentLifecycleHookV1MethodScopedStaked" in published, false);
   }
 });
 
@@ -437,14 +521,14 @@ const DISPUTE_STACK_BY_NETWORK = {
     riskWindows: RISK_WINDOWS_BY_NETWORK.baseStaging,
     governanceOwner: "0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929",
     orchestratorAuthorizationFromBlock: "42614859",
-    policyDeploymentBlock: "50536390",
+    policyDeploymentBlock: "52530944",
     allowMultipleIntents: false,
     attestationWitnesses: [
       "0x66649F896521b0fb487fE2077b4FBDA283d7f19a",
       "0x4ab950AE1e3326578Bf7e643a2031E858aBa2927",
     ],
     selectionHash:
-      "6c49c1ce51eec594a22385c4efcab08aa9926b6b63a725e14a0027ec5d2f4fc9",
+      "e3b360a09c2f541052ab7519987862e1f59c0efc9bc25daea09937e9ea59b783",
     runtimeIdentities: {
       Orchestrator: {
         address: "0xF9b9CD27Deea496B960b3cb5221b514705fCaF5e",
@@ -462,29 +546,29 @@ const DISPUTE_STACK_BY_NETWORK = {
           "0x4e58f26129559301c017ff264b61dd2255ed2107593d308472ef32d07b8745e9",
       },
       StakeVault: {
-        address: "0x92d7B59E99e1CD2066540Cd2413b8714948b731f",
+        address: "0x6b32df91EB92637F64bA444996702fC9582C87a1",
         runtimeCodeHash:
-          "0xfd8d2a910b9ac2c55675ae06d0504f9aac43b02b7022755cf229b571156c681d",
+          "0x3ce00cf0a7e325a116e87ea330c8997b94df705e4e0653d3de9484fca614356e",
       },
       DisputeProtectionPolicy: {
-        address: "0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c",
+        address: "0x1a9C442E3Ae99fB08313242fCdA601431027B39C",
         runtimeCodeHash:
-          "0x70c43bfae8253a6a166f9697ddc27b2d77b4d9841e01fefc2db84037d9a98622",
+          "0x496cfd95e23692cb7e282cfe7911797d16056b973d2bacfb44ff30c179c719e0",
       },
       IntentLifecycleHookV1: {
+        address: "0xec27Cc47370267c843177375c3Fe43D29D498bB4",
+        runtimeCodeHash:
+          "0x42574848f3e7e0bda80a2715bbe10a6317134211e4de6c2455baaed4ef792f61",
+      },
+      RecognizedPredecessorHook: {
         address: "0x5A7f6cb7397134da1fDEFA7E2D434b4Cf18E56D9",
         runtimeCodeHash:
           "0xb9ce42108c706f9241aeb41ffdc0da6b7584e8482183055452098b2f16c7abfd",
       },
-      RecognizedPredecessorHook: {
-        address: "0x19D9F0Fcb08C60D8bd0CD061C34eae27eF8b6e65",
-        runtimeCodeHash:
-          "0xba70239e37624f5808e2f79e100e83a17daeb1558f310543187f5d8a121ec367",
-      },
       RecognizedPredecessorPolicy: {
-        address: "0x21517b7743E727ae47A66FafF93550B689c15020",
+        address: "0x484fA07F085eb66bb7C2b649Ea9d5894b2B6681c",
         runtimeCodeHash:
-          "0x4e6617a94819ad15693289b173a9a66a78cfe1dd706f6b4fdc5a5f6ad6a32971",
+          "0x70c43bfae8253a6a166f9697ddc27b2d77b4d9841e01fefc2db84037d9a98622",
       },
       OrchestratorRegistry: {
         address: "0xfA6384EB6176cfEC049540526A3d2126C3666d8A",
@@ -741,10 +825,13 @@ test("canonical deployment-output rewriting is deterministic and leaves deployme
     assert.equal(readFileSync(outputPath, "utf8"), first);
     assert.equal(readFileSync(historicalPath, "utf8"), historicalBytes);
     assert.equal(first.includes("StakeVaultOptIn"), false);
-    assert.equal(first.includes("StakeVaultMethodScoped"), false);
+    assert.equal(first.includes("StakeVaultMethodScoped"), true);
+    for (const name of [...BY_NAME_DISPUTE_RECORDS, "UnifiedPaymentVerifierV4"]) {
+      assert.equal(first.includes(name), true);
+    }
     assert.match(
       first,
-      new RegExp(inputAddressFor("StakeVaultMethodScoped"), "i")
+      new RegExp(inputAddressFor("StakeVaultBypass"), "i")
     );
   } finally {
     rmSync(directory, { recursive: true, force: true });

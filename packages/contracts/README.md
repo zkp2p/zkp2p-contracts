@@ -2,6 +2,68 @@
 
 Official npm package for ZKP2P V2 smart contract interfaces, ABIs, addresses, and utilities.
 
+## Release 0.4.4-rc.5
+
+Compared with rc.4, Base staging exports the dispute trio redeployed with the stake-owner policy bytecode
+on 2026-10-13 from `285bc5c`:
+
+- `StakeVault` / `StakeVaultBypass`: `0x6b32df91EB92637F64bA444996702fC9582C87a1`.
+- `DisputeProtectionPolicy` / `DisputeProtectionPolicyBypass`: `0x1a9C442E3Ae99fB08313242fCdA601431027B39C`.
+- `IntentLifecycleHookV1` / `IntentLifecycleHookV1Bypass`: `0xec27Cc47370267c843177375c3Fe43D29D498bB4`.
+
+All other staging addresses, including `StakeVaultMethodScoped` and `UnifiedPaymentVerifierV4`, are unchanged.
+ABIs are unchanged, including the byte-identical `DisputeProtectionPolicy` ABI export. Every Base value is
+unchanged. Includes everything from `0.4.4-rc.4` and targets the `rc` tag; `latest` remains at `0.4.3`.
+
+The rc.4 staging trio is abandoned and no longer exported. OrchestratorV3 on staging mounts the fresh hook,
+which rejects a protected-route validation envelope that names the rc.4 policy
+(`ILH: Invalid payment validation hook`), so staging consumers must use the rc.5 `DisputeProtectionPolicy`
+address.
+
+The staging dispute-stack manifest (`disputeStack/baseStaging`) follows the fresh trio: its addresses, the
+policy and hook runtime code hashes, and `lifecycleHookAuthorizationFromBlock`, which is now `52530944`.
+
+This is also the first release after the superseded sources moved to `contracts/archive/`. Their TypeChain
+types move from `types/contracts/` to `types/contracts/archive/`, so `Escrow`, `Orchestrator`,
+`OrchestratorV2`, `ProtocolViewer`, `IProtocolViewer`, `PostIntentHookRegistry`, `IPostIntentHookRegistry`,
+`UnifiedPaymentVerifier` and `BaseUnifiedPaymentVerifier` are now exported under `contracts.archive` from
+`@zkp2p/contracts-v2/types`, keeping their `interfaces`, `registries` and `unifiedVerifier` sub-namespaces.
+Their ABI and address exports are unchanged.
+
+## Release 0.4.4-rc.4
+
+- Base staging canonical aliases (`StakeVault`, `DisputeProtectionPolicy`,
+  `IntentLifecycleHookV1`) now resolve to the bypass stack; every staging payment
+  method routes to `UnifiedPaymentVerifierV4`.
+- The by-name records `StakeVaultBypass`, `DisputeProtectionPolicyBypass`,
+  `IntentLifecycleHookV1Bypass`, and `UnifiedPaymentVerifierV4` retain their addresses;
+  the three dispute records equal their canonical aliases on staging. The previous
+  staging vault remains exported as `StakeVaultMethodScoped` for withdrawals and claims.
+- The staging dispute-stack manifest names the previous policy and hook as
+  `RecognizedPredecessorPolicy` / `RecognizedPredecessorHook`. The dispute registry
+  retains the predecessor as a passive writer and the bypass policy as its active writer.
+- Base is unchanged: MethodScoped aliases, UPV3 routing, and zero addresses for the bypass
+  names. Base also exports a zero address for `StakeVaultMethodScoped`, because that vault
+  is still Base's canonical `StakeVault`.
+- Includes everything from `0.4.4-rc.3`.
+- Targets the `rc` tag; `latest` remains at `0.4.3`.
+
+## Release 0.4.4-rc.3
+
+- Adds the `UnifiedPaymentVerifierV4` canonical source ABI and no-stake dispute
+  protection ABIs: `DisputeProtectionPolicy` gains `setIntentNoStake`,
+  `isIntentNoStake`, `validatePayment`, and the `DisputeProtectionIntentStakeModeChanged`
+  event; the `getDisputeProtectionIntent` struct is unchanged. `IntentLifecycleHookV1`
+  requires the `abi.encode(policy, abi.encode(bool noStake))` validation envelope in
+  `intent.data` on protected routes. `StakeVault` accepts a zero controller-change delay.
+- Base staging exports `StakeVaultBypass`, `DisputeProtectionPolicyBypass`,
+  `IntentLifecycleHookV1Bypass`, and `UnifiedPaymentVerifierV4` deployment records by
+  name (deployed, not yet activated). Canonical aliases (`StakeVault`,
+  `DisputeProtectionPolicy`, `IntentLifecycleHookV1`) are unchanged on both networks;
+  Base exports zero addresses for the new names.
+- Includes everything from `0.4.4-rc.2`.
+- Targets the `rc` tag; `latest` remains at `0.4.3`.
+
 ## Release 0.4.4-rc.2
 
 - Adds the executed Monobank/UAH registration to the Base catalog, matching Base
@@ -85,8 +147,9 @@ import { USDC, INTENT_EXPIRATION_PERIOD } from "@zkp2p/contracts-v2/constants/ba
 // Import payment method configurations
 import { baseStaging as paymentMethods } from "@zkp2p/contracts-v2/paymentMethods"
 
-// Import TypeScript types
-import type { Escrow, Orchestrator } from "@zkp2p/contracts-v2/types"
+// Import TypeScript types (TypeChain contract types are under the `contracts` namespace,
+// for example `contracts.EscrowV2` and `contracts.OrchestratorV3`)
+import type { contracts } from "@zkp2p/contracts-v2/types"
 
 // Import utility functions
 import { getKeccak256Hash, calculateIntentHash } from "@zkp2p/contracts-v2/utils/protocolUtils"

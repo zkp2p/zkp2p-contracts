@@ -5,18 +5,23 @@ pragma solidity ^0.8.18;
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
+import {IntentLifecycleHookV1} from "./IntentLifecycleHookV1.sol";
 import {IDisputeProtectionPolicy} from "../interfaces/IDisputeProtectionPolicy.sol";
 import {IDisputeVerifier} from "../interfaces/IDisputeVerifier.sol";
 import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 import {INullifierRegistry} from "../interfaces/INullifierRegistry.sol";
+import {IOrchestratorV3} from "../interfaces/IOrchestratorV3.sol";
+import {IPaymentValidationHook} from "../interfaces/IPaymentValidationHook.sol";
 import {IStakeVault} from "../interfaces/IStakeVault.sol";
+import {UnifiedPaymentVerifierV4} from "../unifiedVerifier/UnifiedPaymentVerifierV4.sol";
 
 /**
  * @title DisputeProtectionPolicy
  * @notice Deposit-and-payment-method-scoped, stake-backed dispute protection that is on by default for every payment method with a nonzero risk window and can be opted out per deposit payment method by the depositor.
  * @dev The policy owns no tokens. StakeVault is the source of truth for collateral locks, a dedicated
  * `disputeNullifierRegistry` deployment is the source of truth for consumed dispute nullifiers, and the calling
- * Orchestrator is the source of truth for valid escrows and intents.
+ * Orchestrator is the source of truth for valid escrows and intents. Stake mode is derived from the intent's
+ * stakeOwner (see DisputeProtectionIntent). Mode switches do not update the signal-time flag in intent.data.
  *
  * TRUST: Dispute protection intents are keyed by intent hash, which embeds the originating orchestrator
  * (OrchestratorV3 hashes its own address into every intent hash), so identities do not collide across orchestrators.
@@ -24,13 +29,16 @@ import {IStakeVault} from "../interfaces/IStakeVault.sol";
  * intents it created and already validated against its EscrowRegistry. Registering an orchestrator is therefore a
  * governance assertion about its callback behavior.
  *
+ * TOKEN: The stake token, and therefore every protected deposit token, must not call recipients on transfer:
+ * such callbacks expose an unfixed stake-mode switch during fulfillment (see `setIntentNoStake`).
+ *
  * Governance must authorize a lifecycle hook here before configuring it on an Orchestrator. Predecessor hooks must
  * remain authorized until all intents snapshotted to them have been cancelled or settled. Likewise, an orchestrator
- * must be drained before it is removed from OrchestratorRegistry. This policy must also drain every active dispute
- * protection intent before StakeVault controller authority moves to a replacement policy unless that replacement
- * explicitly adopts this policy's intent and lock state.
+ * must be drained before it is removed from OrchestratorRegistry. Pending protected intents must drain before
+ * StakeVault controller authority moves. Settled locks must also drain unless the replacement explicitly adopts
+ * them or governance ends their coverage through releasePredecessorLocks.
  */
-contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, ReentrancyGuard {
+contract DisputeProtectionPolicy is IDisputeProtectionPolicy, IPaymentValidationHook, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
 
     uint64 public constant MAX_RISK_WINDOW = 365 days;
@@ -60,7 +68,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     /// @dev Minimum collateral lock window for each payment method.
     mapping(bytes32 => uint64) internal paymentMethodRiskWindow;
 
-    /// @dev Dispute protection lifecycle state keyed by globally unique intent hash.
+    /// @dev Lifecycle state and authoritative stake owner keyed by globally unique intent hash.
     mapping(bytes32 => DisputeProtectionIntent) internal disputeProtectionIntentByIntentHash;
 
     /* ============ Constructor ============ */
@@ -70,7 +78,8 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
      * @dev After deployment, authorize this policy as the StakeVault controller and as a writer on the dedicated
      * dispute nullifier registry before enabling deposits.
      * @param _owner Governance owner for policy and dependency configuration.
-     * @param _stakeVault Vault holding and locking taker collateral.
+     * @param _stakeVault Vault holding and locking taker collateral. Its stake token must not have transfer callbacks
+     * (see `setIntentNoStake`).
      * @param _disputeVerifier Verifier for signed dispute evidence.
      * @param _disputeNullifierRegistry Dedicated registry that rejects reused dispute nullifiers.
      */
@@ -117,13 +126,16 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
         uint256 _depositId,
         address _taker,
         bytes32 _paymentMethod,
-        uint256 _amount
+        uint256 _amount,
+        bool _noStake
     ) external override onlyLifecycleHook nonReentrant {
         uint64 riskWindow = paymentMethodRiskWindow[_paymentMethod];
         if (riskWindow == 0) return;
 
         (address stakeOwner, address depositor) =
             _validateIntentAdmission(_intentHash, _escrow, _depositId, _paymentMethod, _taker);
+
+        if (_noStake) stakeOwner = address(0);
 
         disputeProtectionIntentByIntentHash[_intentHash] = DisputeProtectionIntent({
             taker: _taker,
@@ -136,9 +148,9 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
             releaseAmount: 0
         });
 
-        stakeVault.lockStake(stakeOwner, _intentHash, _amount, PENDING_COVERAGE_MATURITY);
+        if (!_noStake) stakeVault.lockStake(stakeOwner, _intentHash, _amount, PENDING_COVERAGE_MATURITY);
         emit DisputeProtectionIntentOpened(
-            _intentHash, stakeOwner, depositor, _taker, _paymentMethod, _amount, riskWindow
+            _intentHash, stakeOwner, depositor, _taker, _paymentMethod, _noStake ? 0 : _amount, riskWindow
         );
     }
 
@@ -154,7 +166,7 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
 
         (, uint256 releasedAmount,) = stakeVault.locks(_intentHash);
         disputeProtectionIntent.status = DisputeProtectionIntentStatus.CANCELLED;
-        stakeVault.unlockStake(_intentHash);
+        if (!_isNoStake(disputeProtectionIntent)) stakeVault.unlockStake(_intentHash);
         emit DisputeProtectionIntentCancelled(_intentHash, disputeProtectionIntent.stakeOwner, releasedAmount);
     }
 
@@ -173,12 +185,15 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
             revert DisputeProtectionIntentNotPending(_intentHash, disputeProtectionIntent.status);
         }
 
-        uint64 releaseEligibleAt = _calculateReleaseEligibleAt(disputeProtectionIntent.riskWindow);
+        uint64 window = _isNoStake(disputeProtectionIntent) ? 0 : disputeProtectionIntent.riskWindow;
+        uint64 releaseEligibleAt = _calculateReleaseEligibleAt(window);
         disputeProtectionIntent.releaseAmount = _releaseAmount;
         disputeProtectionIntent.releaseEligibleAt = releaseEligibleAt;
         disputeProtectionIntent.status = DisputeProtectionIntentStatus.SETTLED;
 
-        stakeVault.resizeLock(_intentHash, _releaseAmount, releaseEligibleAt);
+        if (window > 0) {
+            stakeVault.resizeLock(_intentHash, _releaseAmount, releaseEligibleAt);
+        }
         emit DisputeProtectionIntentSettled(
             _intentHash,
             disputeProtectionIntent.stakeOwner,
@@ -187,6 +202,53 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
             releaseEligibleAt,
             _isManualRelease
         );
+        if (window == 0) {
+            disputeProtectionIntent.status = DisputeProtectionIntentStatus.RELEASED;
+            emit DisputeProtectionIntentReleased(_intentHash, address(0), 0);
+        }
+    }
+
+    /* ============ Taker Functions ============ */
+
+    /**
+     * @notice Changes a pending intent's stake mode. Only the taker may choose its collateral terms.
+     * @dev Staked mode locks the full intent amount using the current stake owner. No-stake mode unlocks it and
+     * requires a signed bypass flag at fulfillment. No-stake follows the same access rules as staked mode.
+     * The saved risk window is unchanged. Funding and fulfillment are separate calls.
+     * @dev WARNING: OrchestratorV3 reads stake mode twice during fulfillment: in `validatePayment`, called by the
+     * verifier during `verifyPayment`, and in `onIntentSettled`, called from `settleIntent`. Between these reads it
+     * prunes the intent and transfers the deposit token, including referral fees to recipients chosen by the taker
+     * at signal. This function remains callable while the policy record is PENDING, so a recipient callback
+     * (e.g. an ERC-777-style hook) can let a taker contract switch a staked intent to no-stake mid-fulfillment;
+     * settlement then releases it immediately without collateral, a risk window, or a signed bypass flag.
+     * `releaseFundsToPayer` has the same gap. It is unreachable while `stakeVault.stakeToken()` has no transfer
+     * callbacks (USDC today), since every protected deposit token must equal the stake token; intentionally unfixed.
+     * Possible fixes: require `_orchestrator.getIntent(_intentHash).owner == intent.taker` on a validated orchestrator
+     * in both switch directions (OrchestratorV3 prunes before any transfer), or have `validatePayment` record that
+     * its check ran and require that record in `onIntentSettled`.
+     * @param _orchestrator Registered orchestrator that owns the intent; only read and validated when switching
+     * to staked mode.
+     * @param _intentHash Pending intent whose mode is changing.
+     * @param _noStake Whether fulfillment must bypass the collateral window.
+     */
+    function setIntentNoStake(IOrchestratorV3 _orchestrator, bytes32 _intentHash, bool _noStake) external nonReentrant {
+        DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
+        require(intent.status == DisputeProtectionIntentStatus.PENDING, "DPP: Intent not pending");
+        require(msg.sender == intent.taker, "DPP: Only taker");
+        require(_noStake != _isNoStake(intent), "DPP: Mode unchanged");
+
+        if (_noStake) {
+            intent.stakeOwner = address(0);
+            stakeVault.unlockStake(_intentHash);
+        } else {
+            IntentLifecycleHookV1 hook = IntentLifecycleHookV1(address(_orchestrator.getIntentLifecycleHook(_intentHash)));
+            if (!isLifecycleHookAuthorizedByHook[address(hook)]) revert UnauthorizedLifecycleHook(address(hook));
+            require(hook.orchestratorRegistry().isOrchestrator(address(_orchestrator)), "DPP: Unregistered orchestrator");
+            IOrchestratorV3.Intent memory paymentIntent = _orchestrator.getIntent(_intentHash);
+            intent.stakeOwner = stakeVault.stakeOwnerOf(intent.taker);
+            stakeVault.lockStake(intent.stakeOwner, _intentHash, paymentIntent.amount, PENDING_COVERAGE_MATURITY);
+        }
+        emit DisputeProtectionIntentStakeModeChanged(_intentHash, intent.stakeOwner, _noStake);
     }
 
     /* ============ Permissionless Functions ============ */
@@ -331,6 +393,25 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     }
 
     /**
+     * @notice GOVERNANCE ONLY: Releases predecessor settlement locks early after controller handover.
+     * @dev Ends the remaining dispute coverage without moving tokens or importing predecessor policy records.
+     * Pending predecessor locks retain PENDING_COVERAGE_MATURITY and cannot be released here. Drain those intents
+     * before handover: their snapshotted hooks still call the predecessor, which loses vault authority.
+     * @param _intentHashes Predecessor settled intents whose collateral should become free stake.
+     */
+    function releasePredecessorLocks(bytes32[] calldata _intentHashes) external onlyOwner {
+        for (uint256 i; i < _intentHashes.length; i++) {
+            bytes32 intentHash = _intentHashes[i];
+            if (disputeProtectionIntentByIntentHash[intentHash].status != DisputeProtectionIntentStatus.NONE) {
+                revert DisputeProtectionIntentAlreadyExists(intentHash);
+            }
+            (,, uint64 maturesAt) = stakeVault.locks(intentHash);
+            require(maturesAt != PENDING_COVERAGE_MATURITY, "DPP: Pending predecessor intent");
+            stakeVault.unlockStake(intentHash);
+        }
+    }
+
+    /**
      * @notice Disables ownership renunciation so governed safety controls cannot become unreachable.
      */
     function renounceOwnership() public view override onlyOwner {
@@ -338,6 +419,26 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     }
 
     /* ============ View Functions ============ */
+
+    /**
+     * @notice Returns true only for an existing intent whose stakeOwner is zero (no-stake mode).
+     * @param _intentHash Intent whose stake mode is queried.
+     * @return True for no-stake mode; false for staked or unknown intents.
+     */
+    function isIntentNoStake(bytes32 _intentHash) external view returns (bool) {
+        return _isNoStake(disputeProtectionIntentByIntentHash[_intentHash]);
+    }
+
+    /// @inheritdoc IPaymentValidationHook
+    function validatePayment(bytes32 _intentHash, bytes calldata _data, bytes calldata) external view override {
+        DisputeProtectionIntent storage intent = disputeProtectionIntentByIntentHash[_intentHash];
+        if (intent.status == DisputeProtectionIntentStatus.PENDING && _isNoStake(intent)) {
+            (,, bool bypassState) = abi.decode(
+                _data, (UnifiedPaymentVerifierV4.PaymentDetails, UnifiedPaymentVerifierV4.IntentSnapshot, bool)
+            );
+            require(bypassState, "DPP: Payment cannot bypass");
+        }
+    }
 
     /**
      * @notice Returns the stored dispute protection state for an intent.
@@ -383,6 +484,10 @@ contract DisputeProtectionPolicy is IDisputeProtectionPolicy, Ownable2Step, Reen
     }
 
     /* ============ Internal Functions ============ */
+
+    function _isNoStake(DisputeProtectionIntent storage _intent) internal view returns (bool) {
+        return _intent.status != DisputeProtectionIntentStatus.NONE && _intent.stakeOwner == address(0);
+    }
 
     /**
      * @dev Validates policy-owned admission requirements and returns the collateral owner and depositor to snapshot.

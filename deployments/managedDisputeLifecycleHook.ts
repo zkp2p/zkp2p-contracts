@@ -1,6 +1,7 @@
 import { ethers } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
+import { recordedBypassLifecycleHookRuntimeHash } from "./bypassDisputeStack";
 import { zeroImmutableValues } from "./canonicalDeployment";
 import {
   findPinnedLifecycleHookRuntimeHash,
@@ -62,34 +63,6 @@ export function validateManagedDisputeHookSnapshot(
     throw new Error("Managed dispute lifecycle hook whitelist policy mismatch");
   }
   return true;
-}
-
-/**
- * Live networks may reach historical lane 30 only with the recorded whitelist
- * hook. Hooks not recognized by the managed guard fail closed here so the
- * historical body can never roll a live hook back.
- */
-export async function assertRecognizedLiveLifecycleHook(
-  hre: HardhatRuntimeEnvironment
-): Promise<void> {
-  const network = hre.deployments.getNetworkName();
-  if (network !== "base" && network !== "base_staging") return;
-  const orchestratorDeployment = await hre.deployments.getOrNull(
-    "OrchestratorV3"
-  );
-  if (!orchestratorDeployment) return;
-  const orchestrator = await ethers.getContractAt(
-    "OrchestratorV3",
-    orchestratorDeployment.address
-  );
-  const currentHook = await orchestrator.lifecycleHook();
-  const whitelistHook = await hre.deployments.getOrNull(
-    "WhitelistLifecycleHook"
-  );
-  if (whitelistHook && sameAddress(currentHook, whitelistHook.address)) return;
-  throw new Error(
-    `Unrecognized OrchestratorV3 lifecycle hook ${currentHook} on ${network}; refusing the historical lane-30 path`
-  );
 }
 
 export async function guardManagedDisputeLifecycleHook(
@@ -204,10 +177,9 @@ export async function guardManagedDisputeLifecycleHook(
         zeroImmutableValues(runtimeCode, immutableReferences)
       );
     } else {
-      const pinnedRuntimeCodeHash = findPinnedLifecycleHookRuntimeHash(
-        network,
-        currentHook
-      );
+      const pinnedRuntimeCodeHash =
+        findPinnedLifecycleHookRuntimeHash(network, currentHook) ??
+        recordedBypassLifecycleHookRuntimeHash(network, currentHook);
       if (!pinnedRuntimeCodeHash) {
         throw new Error(
           `Managed successor lifecycle hook ${currentHook} was built from a different source and has no pinned runtime hash`

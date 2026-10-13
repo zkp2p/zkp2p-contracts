@@ -701,8 +701,9 @@ and runtime-bytecode verification used by lane 34 and the Safe tooling.
 networks and, through its Safe batch, activated them on Base. It is immutable and retired: the supported
 runner verifies its digest, excludes it from every tagged and untagged run, and rejects both of its tags.
 `yarn verify:dispute-opt-in-safe-batch` and `yarn simulate:obsolete-dispute-safe-batch` remain as tooling
-for that executed history. The Base `*OptIn` trio is the live dispute stack until the method-scoped
-activation lane replaces it; the Base-staging `*OptIn` trio was deployed but never activated.
+for that executed history. Lanes 39/40 superseded the Base `*OptIn` trio on 2026-08-28, and
+`PREDECESSOR_DISPUTE_STACKS` records it as the predecessor of the selected Base stack; the Base-staging
+`*OptIn` trio was deployed but never activated.
 
 `deploy/36_deploy_method_scoped_whitelist_policy.ts` deploys `WhitelistPolicyMethodScoped`, the
 payment-method-scoped `WhitelistPolicy`, against the existing `AddressGroupRegistry`, `EscrowRegistry`,
@@ -793,6 +794,47 @@ artifact-pair, or live-chain checks.
 Both lanes are immutable and pinned after their 2026-08-28 Base execution.
 Stake in the old vaults is abandoned: stakers withdraw once their locks release and takers re-stake in the new vault
 before the cutover; that readiness is part of `CONFIRM_BASE_V3_DISPUTE_METHOD_SCOPED_VAULT_DOWNSTREAM_READY`.
+
+`deploy/45_deploy_bypass_dispute_stack.ts` and `deploy/46_activate_bypass_dispute_stack.ts` prepare and activate
+`StakeVaultBypass`, `DisputeProtectionPolicyBypass`, `IntentLifecycleHookV1Bypass`, and `UnifiedPaymentVerifierV4`.
+Use `yarn deploy:dispute-bypass-stack:base_staging` / `:base` with
+`ENABLE_{STAGING,BASE}_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT=true` for resumable deploy-only preparation; Base starts
+vault/policy two-step transfers and transfers UPV4 ownership directly to the Safe. Verify with
+`yarn verify:dispute-bypass-stack:base_staging` / `:base`. Activation uses
+`yarn deploy:dispute-bypass-activation:base_staging` / `:base`: staging selects
+`PREPARE_STAGING_V3_DISPUTE_BYPASS_ACTIVATION=true` or `ENABLE_STAGING_V3_DISPUTE_BYPASS_ACTIVATION=true`, while Base
+uses `ENABLE_BASE_V3_DISPUTE_BYPASS_CUTOVER_PREPARATION=true`; both require their network's
+`CONFIRM_{STAGING,BASE}_V3_DISPUTE_BYPASS_ACTIVATION` and `CONFIRM_{STAGING,BASE}_V3_DISPUTE_BYPASS_DOWNSTREAM_READY`
+flags. Base also requires `CONFIRM_BASE_V3_DISPUTE_BYPASS_RELEASE_READY_SHA` matching the source SHA. Lane 46 makes
+UPV4 the sole NRV2 writer, reroutes all methods without changing currencies or order, adds the fresh dispute writer,
+and switches the O3 hook; the predecessor dispute writer stays until a later drain/removal lane. Base preparation
+deploys the guard and simulation-only postcondition and produces one unsigned atomic Safe batch at
+`deployments/outputs/safe-batches/base_dispute_bypass_cutover{,.sha256}.json`. Use
+`yarn simulate:dispute-bypass-safe-batch` for the pinned fork simulation and `yarn verify:dispute-bypass-safe-batch`
+immediately before Safe execution. Predecessor opt-outs on live listed windowed tuples must first be mirrored on
+the fresh policy. Lane 45 executed on Base staging on 2026-10-11 from `f9eab7f`, and lane 46 on 2026-10-12
+from `a6970aa` in 32 deployer actions; staging aliases, evidence, predecessor identities, and lane-31 UPV4
+verification record the activated stack, while Base retains MethodScoped aliases and UPV3 routing.
+Recorded deployments use `BYPASS_RECORDED_DEPLOYMENTS` address/runtime-hash pins because `solcInputHash` depends
+on build-cache history; Base must add its pins after lane 45 and before clean-checkout lane-46 preparation,
+and lanes 45/46 remain unpinned until Base executes. The bypass records and UPV4 remain exported by name;
+staging dispute aliases equal their by-name records, and `StakeVaultMethodScoped` remains available for old-vault
+withdrawals and claims. Local deployments activate bypass and select its canonical aliases; restart
+the node before a second `yarn deploy:localhost` after activation because lanes 31/39 assume the old local wiring.
+
+The staging dispute trio was redeployed and activated through the same lanes 45/46 on 2026-10-13 from
+`285bc5c` with the stake-owner policy bytecode. Those runs used staging replacement routing that existed only
+at `285bc5c` (#341); it is deleted, and both lanes are byte-identical to `314298e` again. The first trio,
+deployed on 2026-10-11 and activated on 2026-10-12, is abandoned: it never opened a protected intent, holds
+no stake and has no live references or writer permission. Both lanes completed in one pass each, ten
+transactions at staging deployer `0x84e113087C97Cd80eA9D78983D4B8Ff61ECa1929` nonces 16340 through 16349.
+The block-52531092 snapshot reduced to `active`. The current staging records are `StakeVaultBypass`
+`0x6b32df91EB92637F64bA444996702fC9582C87a1`, `DisputeProtectionPolicyBypass`
+`0x1a9C442E3Ae99fB08313242fCdA601431027B39C` and `IntentLifecycleHookV1Bypass`
+`0xec27Cc47370267c843177375c3Fe43D29D498bB4`. UPV4, its record, all 14 payment routes, currencies, method
+order, the sole NullifierRegistryV2 writer and the August predecessor
+(`DisputeProtectionPolicyMethodScopedStaked`) remain unchanged. Recorded staging pins select the fresh trio
+and ordinary lane verification applies. Base is pending and unchanged.
 
 The package exports the currently selected (latest) addresses for each network, and consumers should treat them as
 the addresses to use.

@@ -43,6 +43,7 @@ yarn test
 yarn test:deterministic
 yarn test:fuzz
 yarn test:invariant
+yarn test:smoke
 forge test --match-path '<test-foundry/path>'
 
 yarn coverage
@@ -115,6 +116,7 @@ test-foundry/
   deterministic/         focused success, revert, deployment, regression tests
   fuzz/                  input-space properties
   invariant/             stateful handlers and invariants
+  smoke/                 opt-in, environment-gated cross-repo tests excluded from coverage
 deploy/                  ordered Hardhat Deploy scripts
 deployments/             network artifacts, parameters, Safe batches, outputs
 scripts/                 deployment and release support
@@ -146,7 +148,7 @@ Current numbered lanes include:
 - `32`: dispute lifecycle stack (immutable, retired) and the unrelated
   deposit-creation guard;
 - `33`: IntentGuardian fee update;
-- `34`: opt-in dispute stack (immutable, retired; its Base trio is live);
+- `34`: opt-in dispute stack (immutable, retired; its Base trio was superseded by lanes 39/40);
 - `35`: Mercury payment method (Base staging only);
 - `36`: `WhitelistPolicyMethodScoped` (immutable, executed on both networks,
   still mounted behind its canonical-record skip);
@@ -170,6 +172,18 @@ Current numbered lanes include:
   under its tag with `ENABLE_BASE_FX_RATE_FEEDS_DEPLOYMENT=true`. It seeds both
   feeds, then hands ownership to `MULTI_SIG.base`. It was executed on Base on
   2026-10-01 from `88be796` and is still mounted; tagged reruns only verify.
+
+- `45`: bypass dispute stack and UPV4 (tag + network flag on live networks; resumable deploy-only steps).
+  First executed on Base staging 2026-10-11. The staging dispute trio was redeployed through the same lane on
+  2026-10-13 from `285bc5c` with the stake-owner policy bytecode; the first trio is abandoned. UPV4 and its
+  record are unchanged. Base pending and unchanged.
+- `46`: bypass/UPV4 activation (staging EOA actions; guarded atomic Base Safe batch). First executed on Base
+  staging 2026-10-12. The redeployed staging trio was activated through the same lane on 2026-10-13 from
+  `285bc5c`: add the fresh writer, switch O3's hook and remove the abandoned writer. Both 2026-10-13 runs used
+  staging replacement routing that existed only at `285bc5c` and is deleted; lanes 45/46 match `314298e`
+  again. The August predecessor (the lane-39 policy), UPV4 and all 14 payment routes, currencies and method
+  order remain unchanged. The block-52531092 snapshot reduced to `active`; records, pins, evidence and outputs
+  select the fresh trio. Base pending and unchanged.
 
 There is no `26` script. Numbered files are identities, not proof that every
 script should execute. A numbered script is immutable after any production

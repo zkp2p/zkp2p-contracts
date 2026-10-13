@@ -33,6 +33,11 @@ contract DisputeLifecycleHookOrchestratorV3Test is OrchestratorV3Fixture {
     DisputeProtectionPolicy internal disputeProtectionPolicy;
     IntentLifecycleHookV1 internal lifecycleHook;
 
+    function _defaultParams() internal view override returns (IOrchestratorV3.SignalIntentParams memory params) {
+        params = super._defaultParams();
+        params.data = abi.encode(address(disputeProtectionPolicy), abi.encode(false));
+    }
+
     function setUp() public override {
         super.setUp();
         groupRegistry = new AddressGroupRegistry();

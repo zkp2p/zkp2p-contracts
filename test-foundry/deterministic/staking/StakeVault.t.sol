@@ -87,9 +87,22 @@ contract StakeVaultTest is Test {
 
         vm.expectRevert(IStakeVault.ZeroAddress.selector);
         new StakeVault(address(this), IERC20(address(0)), controller, CONTROLLER_DELAY);
+    }
 
-        vm.expectRevert(abi.encodeWithSelector(IStakeVault.InvalidControllerChangeDelay.selector, CONTROLLER_DELAY - 1));
-        new StakeVault(address(this), token, controller, CONTROLLER_DELAY - 1);
+    function test_ZeroDelayVaultHandsOverControllerImmediately() public {
+        StakeVault zeroDelayVault = new StakeVault(address(this), token, controller, 0);
+        assertEq(zeroDelayVault.controllerChangeDelay(), 0);
+
+        zeroDelayVault.proposeController(nextController);
+        assertEq(zeroDelayVault.pendingController(), nextController);
+        assertEq(zeroDelayVault.pendingControllerValidAt(), block.timestamp);
+
+        vm.prank(nextController);
+        zeroDelayVault.acceptController();
+
+        assertEq(zeroDelayVault.controller(), nextController);
+        assertEq(zeroDelayVault.pendingController(), address(0));
+        assertEq(zeroDelayVault.pendingControllerValidAt(), 0);
     }
 
     function test_InitialControllerCanBeInitializedOnce() public {
