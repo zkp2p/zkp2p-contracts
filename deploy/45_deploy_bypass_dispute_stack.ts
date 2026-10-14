@@ -9,6 +9,8 @@ import {
   BYPASS_EXPECTED_LIVE,
   BYPASS_PREDECESSOR_DEPLOYMENT_NAMES,
   BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
+  BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS,
+  isSupersededStagingRecord,
   LANE_45_STEP_KINDS,
   LANE_45_TAG,
   assertBypassDeploymentRecord,
@@ -20,11 +22,13 @@ import {
 import type {
   BypassDeploymentName,
   BypassNetwork,
+  ContractPin,
 } from "../deployments/bypassDisputeStack";
 import {
   assertCanonicalDeployment,
   assertDeploymentMatchesChain,
 } from "../deployments/canonicalDeployment";
+import { verifySupersededStagingBinding } from "../deployments/bypassPaymentBinding";
 import { reduceBypassActivation } from "../deployments/bypassDisputeActivation";
 import { waitForDeploymentDelay } from "../deployments/helpers";
 import {
@@ -37,6 +41,8 @@ import {
 import { assertPaymentBindingReady } from "./31_deploy_v3_payment_binding_stack";
 import {
   EXPECTED_LIVE,
+  FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
+  type FreshStackEvent,
   assertOrchestratorGovernanceState,
   classifyFreshStackActivity,
   decodeFreshStackLogs,
@@ -54,6 +60,33 @@ export const LIVE_FLAGS: Record<BypassNetwork, string> = {
   base_staging: "ENABLE_STAGING_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT",
   base: "ENABLE_BASE_V3_DISPUTE_BYPASS_STACK_DEPLOYMENT",
 };
+
+export const BYPASS_POLICY_LIFECYCLE_EVENTS = [
+  ...FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
+  "DeferredPayoutFunded",
+  "DeferredPayoutClaimed",
+] as const;
+
+export function classifyBypassPolicyActivity(
+  events: FreshStackEvent[],
+  beforeCutover: boolean
+): void {
+  const lifecycleEvents = events.filter((event) =>
+    BYPASS_POLICY_LIFECYCLE_EVENTS.some((name) => name === event.name)
+  );
+  if (beforeCutover && lifecycleEvents.length > 0) {
+    const event = lifecycleEvents[0];
+    throw new Error(
+      `Fresh CascadeDisputeProtectionPolicy has lifecycle activity before cutover: ` +
+        `${event.name} in ${event.transactionHash}`
+    );
+  }
+  classifyFreshStackActivity({
+    policyEvents: beforeCutover
+      ? events
+      : events.filter((event) => !lifecycleEvents.includes(event)),
+  });
+}
 
 function sameAddress(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
@@ -77,7 +110,7 @@ function deploymentBlock(deployment: Deployment): number {
   const block = deployment.receipt?.blockNumber;
   if (typeof block !== "number" || !Number.isSafeInteger(block) || block < 0) {
     throw new Error(
-      "DisputeProtectionPolicyBypass lacks deployment block evidence"
+      "CascadeDisputeProtectionPolicy lacks deployment block evidence"
     );
   }
   return block;
@@ -89,20 +122,21 @@ async function assertFreshPolicyUnused(
 ): Promise<void> {
   if (!deployment) return;
   const artifact = await hre.deployments.getExtendedArtifact(
-    "DisputeProtectionPolicy"
+    "CascadeDisputeProtectionPolicy"
   );
   const logs = await hre.ethers.provider.getLogs({
     address: deployment.address,
     fromBlock: deploymentBlock(deployment),
     toBlock: await hre.ethers.provider.getBlockNumber(),
   });
-  classifyFreshStackActivity({
-    policyEvents: decodeFreshStackLogs(
+  classifyBypassPolicyActivity(
+    decodeFreshStackLogs(
       new utils.Interface(artifact.abi),
       logs,
-      "DisputeProtectionPolicyBypass"
+      "CascadeDisputeProtectionPolicy"
     ),
-  });
+    true
+  );
 }
 
 async function assertOnlySuccessorHookAuthorization(
@@ -152,6 +186,137 @@ async function assertUntransferredOwnership(
   );
 }
 
+export async function assertLane45PaymentBinding(
+  hre: HardhatRuntimeEnvironment,
+  network: BypassNetwork,
+  checks = { assertPaymentBindingReady, verifySupersededStagingBinding }
+): Promise<void> {
+  if (network === "base_staging") {
+    await checks.verifySupersededStagingBinding(
+      hre,
+      BYPASS_EXPECTED_LIVE[network].retiredVerifier
+    );
+  } else {
+    requireState(
+      await checks.assertPaymentBindingReady(hre),
+      "V3 payment binding artifacts are missing"
+    );
+  }
+}
+
+export async function resolveOptOutPredecessor(
+  hre: HardhatRuntimeEnvironment,
+  network: BypassNetwork
+): Promise<string> {
+  const pins = BYPASS_EXPECTED_LIVE[network];
+  const hook = await hre.ethers.getContractAt(
+    "IntentLifecycleHookV1",
+    pins.predecessorHook.address
+  );
+  const predecessor = await hook.disputeProtectionPolicy();
+  requireState(
+    sameAddress(predecessor, pins.predecessorPolicy.address),
+    "Opt-out predecessor policy address mismatch"
+  );
+  requireState(
+    (await hre.ethers.provider.getCode(predecessor)) !== "0x",
+    "Opt-out predecessor policy has no code"
+  );
+  if (network === "base") {
+    const orchestratorV3 = await hre.ethers.getContractAt(
+      "OrchestratorV3",
+      EXPECTED_LIVE[network].orchestrator
+    );
+    requireState(
+      sameAddress(
+        await orchestratorV3.lifecycleHook(),
+        pins.predecessorHook.address
+      ),
+      "OrchestratorV3 lifecycle hook drifted"
+    );
+  }
+  return predecessor;
+}
+
+type VerifierRecordReader = {
+  getCode(address: string): Promise<string>;
+  assertFreshRecord(record: Deployment): Promise<void>;
+};
+
+export async function resolveLane45VerifierRecord(
+  deployments: VerifierRecordReader,
+  network: string,
+  record: Deployment,
+  pin: ContractPin
+): Promise<"use" | "replace"> {
+  if (
+    isSupersededStagingRecord(
+      network,
+      "UnifiedPaymentVerifierV4",
+      record.address
+    )
+  ) {
+    requireState(
+      sameAddress(record.address, pin.address),
+      "Superseded verifier pin address mismatch"
+    );
+    const code = await deployments.getCode(pin.address);
+    requireState(
+      code !== "0x" && utils.keccak256(code) === pin.runtimeCodeHash,
+      "UnifiedPaymentVerifierV4 runtime bytecode hash mismatch"
+    );
+    return "replace";
+  }
+  await deployments.assertFreshRecord(record);
+  return "use";
+}
+
+export async function deployLane45Verifier(
+  hre: HardhatRuntimeEnvironment,
+  network: string,
+  deployer: string,
+  args: unknown[]
+): Promise<Deployment> {
+  const record = await hre.deployments.getOrNull("UnifiedPaymentVerifierV4");
+  if (record) {
+    const action = await resolveLane45VerifierRecord(
+      {
+        getCode: (address) => hre.ethers.provider.getCode(address),
+        assertFreshRecord: (existing) =>
+          assertBypassDeploymentRecord(
+            hre,
+            network,
+            "UnifiedPaymentVerifierV4",
+            existing
+          ),
+      },
+      network,
+      record,
+      BYPASS_EXPECTED_LIVE.base_staging.retiredVerifier
+    );
+    requireState(
+      action === "replace",
+      "UnifiedPaymentVerifierV4 already deployed"
+    );
+    await hre.deployments.delete("UnifiedPaymentVerifierV4");
+  }
+  const fresh = await deployFresh(
+    hre,
+    "UnifiedPaymentVerifierV4",
+    deployer,
+    args
+  );
+  requireState(
+    !isSupersededStagingRecord(
+      network,
+      "UnifiedPaymentVerifierV4",
+      fresh.address
+    ),
+    "UnifiedPaymentVerifierV4 reused superseded address"
+  );
+  return fresh;
+}
+
 export async function assertLiveSharedState(
   hre: HardhatRuntimeEnvironment,
   network: BypassNetwork
@@ -171,10 +336,12 @@ export async function assertLiveSharedState(
     sameAddress(USDC[network], pins.stakeToken),
     "StakeVault token does not match the approved USDC target"
   );
+  await assertLane45PaymentBinding(hre, network);
   requireState(
-    await assertPaymentBindingReady(hre),
-    "V3 payment binding artifacts are missing"
+    pins.allowMultipleIntents === expected.allowMultipleIntents,
+    "Orchestrator allowMultipleIntents pin mismatch"
   );
+  await resolveOptOutPredecessor(hre, network);
   const legacyNullifierRegistry = await hre.ethers.getContractAt(
     "NullifierRegistry",
     (
@@ -278,23 +445,64 @@ export async function assertLiveSharedState(
       `${name} runtime bytecode hash mismatch`
     );
   }
+  for (const [name, pin] of [
+    ["Retired verifier", pins.retiredVerifier],
+    ["Initial O3 hook", pins.initialO3Hook],
+  ] as const) {
+    const code = await hre.ethers.provider.getCode(pin.address);
+    requireState(
+      code !== "0x" && utils.keccak256(code) === pin.runtimeCodeHash,
+      `${name} runtime bytecode hash mismatch`
+    );
+  }
+  if (network === "base_staging") {
+    const stale = BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS;
+    for (const [name, pin] of Object.entries(stale)) {
+      const code = await hre.ethers.provider.getCode(pin.address);
+      requireState(
+        code !== "0x" && utils.keccak256(code) === pin.runtimeCodeHash,
+        `${name} runtime bytecode hash mismatch`
+      );
+    }
+    const vault = await hre.ethers.getContractAt(
+      "StakeVault",
+      stale.StakeVaultBypass.address
+    );
+    const policy = await hre.ethers.getContractAt(
+      "DisputeProtectionPolicy",
+      stale.DisputeProtectionPolicyBypass.address
+    );
+    requireState(
+      sameAddress(
+        await vault.controller(),
+        stale.DisputeProtectionPolicyBypass.address
+      ),
+      "Superseded vault controller drifted"
+    );
+    requireState(
+      await policy.isLifecycleHookAuthorized(
+        stale.IntentLifecycleHookV1Bypass.address
+      ),
+      "Superseded policy hook authorization drifted"
+    );
+  }
   requireState(
     (await hre.ethers.provider.getCode(pins.stakeToken)) !== "0x",
     "USDC has no runtime bytecode"
   );
-  const orchestrator = await hre.ethers.getContractAt(
+  const orchestratorV3 = await hre.ethers.getContractAt(
     "OrchestratorV3",
     expected.orchestrator
   );
   await assertOrchestratorGovernanceState(
-    orchestrator,
+    orchestratorV3,
     pins.governance,
     expected
   );
   requireState(
     sameAddress(
-      await orchestrator.lifecycleHook(),
-      pins.predecessorHook.address
+      await orchestratorV3.lifecycleHook(),
+      pins.initialO3Hook.address
     ),
     "OrchestratorV3 lifecycle hook drifted"
   );
@@ -313,9 +521,7 @@ export async function assertLiveSharedState(
   );
   requireState(
     sameAddress(await disputeRegistry.owner(), pins.governance) &&
-      sameList(await disputeRegistry.getWriters(), [
-        pins.predecessorPolicy.address,
-      ]),
+      sameList(await disputeRegistry.getWriters(), pins.retainedDisputeWriters),
     "Predecessor dispute registry owner or writer set drifted"
   );
   const nullifierRegistry = await hre.ethers.getContractAt(
@@ -325,7 +531,7 @@ export async function assertLiveSharedState(
   requireState(
     sameAddress(await nullifierRegistry.owner(), pins.governance) &&
       sameList(await nullifierRegistry.getWriters(), [
-        pins.unifiedPaymentVerifierV3.address,
+        pins.retiredVerifier.address,
       ]),
     "NullifierRegistryV2 owner or writer set drifted"
   );
@@ -349,7 +555,7 @@ export async function assertLiveSharedState(
     requireState(
       sameAddress(
         await registry.getVerifier(hash),
-        pins.unifiedPaymentVerifierV3.address
+        pins.retiredVerifier.address
       ),
       `Payment verifier route drifted for ${method}`
     );
@@ -362,12 +568,14 @@ export async function assertLiveSharedState(
     );
   }
   const retiredVerifier = await hre.ethers.getContractAt(
-    "UnifiedPaymentVerifierV3",
-    pins.unifiedPaymentVerifierV3.address
+    network === "base"
+      ? "UnifiedPaymentVerifierV3"
+      : "UnifiedPaymentVerifierV4",
+    pins.retiredVerifier.address
   );
   requireState(
     sameAddress(await retiredVerifier.owner(), pins.governance),
-    "UnifiedPaymentVerifierV3 owner drifted"
+    "Retired verifier owner drifted"
   );
   const policy = await hre.ethers.getContractAt(
     "DisputeProtectionPolicy",
@@ -483,6 +691,14 @@ type StackContext = {
   paymentMethods: string[];
   riskWindows: Record<string, string>;
   transferOwnership: boolean;
+  chainId: number;
+  escrowRegistry: string;
+  paymentVerifierRegistry: string;
+  relayerRegistry: string;
+  protocolFee: string;
+  protocolFeeRecipient: string;
+  allowMultipleIntents: boolean;
+  optOutPredecessor: string;
 };
 
 type Lane45State = {
@@ -493,10 +709,26 @@ type Lane45State = {
     policy?: Contract;
     hook?: Contract;
     verifier?: Contract;
+    orchestrator?: Contract;
   };
 };
 
-function liveContext(network: BypassNetwork): StackContext {
+function orchestratorArgs(context: StackContext): unknown[] {
+  return [
+    context.deployer,
+    context.chainId,
+    context.escrowRegistry,
+    context.paymentVerifierRegistry,
+    context.relayerRegistry,
+    context.protocolFee,
+    context.protocolFeeRecipient,
+  ];
+}
+
+async function liveContext(
+  hre: HardhatRuntimeEnvironment,
+  network: BypassNetwork
+): Promise<StackContext> {
   const pins = BYPASS_EXPECTED_LIVE[network];
   const expected = EXPECTED_LIVE[network];
   return {
@@ -523,6 +755,14 @@ function liveContext(network: BypassNetwork): StackContext {
       ])
     ),
     transferOwnership: network === "base",
+    chainId: pins.chainId,
+    escrowRegistry: expected.escrowRegistry,
+    paymentVerifierRegistry: expected.paymentVerifierRegistry,
+    relayerRegistry: expected.relayerRegistry,
+    protocolFee: "0",
+    protocolFeeRecipient: expected.protocolFeeRecipient,
+    allowMultipleIntents: pins.allowMultipleIntents,
+    optOutPredecessor: await resolveOptOutPredecessor(hre, network),
   };
 }
 
@@ -537,6 +777,30 @@ async function readFreshState(
   const deployments = await Promise.all(
     BYPASS_DEPLOYMENT_NAMES.map((name) => hre.deployments.getOrNull(name))
   );
+  const verifierIndex = BYPASS_DEPLOYMENT_NAMES.indexOf(
+    "UnifiedPaymentVerifierV4"
+  );
+  const existingVerifier = deployments[verifierIndex];
+  if (
+    existingVerifier &&
+    (await resolveLane45VerifierRecord(
+      {
+        getCode: (address) => hre.ethers.provider.getCode(address),
+        assertFreshRecord: (record) =>
+          assertBypassDeploymentRecord(
+            hre,
+            context.network,
+            "UnifiedPaymentVerifierV4",
+            record
+          ),
+      },
+      context.network,
+      existingVerifier,
+      BYPASS_EXPECTED_LIVE.base_staging.retiredVerifier
+    )) === "replace"
+  ) {
+    deployments[verifierIndex] = null;
+  }
   const firstMissing = deployments.indexOf(null);
   requireState(
     firstMissing < 0 ||
@@ -549,7 +813,13 @@ async function readFreshState(
     const name = BYPASS_DEPLOYMENT_NAMES[index];
     await assertBypassDeploymentRecord(hre, context.network, name, record);
   }
-  const [vaultRecord, policyRecord, hookRecord, verifierRecord] = deployments;
+  const [
+    vaultRecord,
+    policyRecord,
+    hookRecord,
+    verifierRecord,
+    orchestratorRecord,
+  ] = deployments;
   await assertFreshPolicyUnused(hre, policyRecord);
   const contracts: Lane45State["contracts"] = {};
   const completed: Record<string, boolean> = {
@@ -557,7 +827,18 @@ async function readFreshState(
     "deploy-policy": Boolean(policyRecord),
     "deploy-hook": Boolean(hookRecord),
     "deploy-verifier": Boolean(verifierRecord),
+    "deploy-orchestrator": Boolean(orchestratorRecord),
   };
+  if (policyRecord) {
+    const policy = await hre.ethers.getContractAt(
+      "CascadeDisputeProtectionPolicy",
+      policyRecord.address
+    );
+    requireState(
+      sameAddress(await policy.predecessorPolicy(), context.optOutPredecessor),
+      "Fresh cascade policy predecessor drifted"
+    );
+  }
   if (vaultRecord) {
     const vault = (contracts.vault = await hre.ethers.getContractAt(
       "StakeVault",
@@ -568,13 +849,13 @@ async function readFreshState(
         BigNumber.from(await vault.controllerChangeDelay()).eq(
           BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY
         ),
-      "Fresh StakeVaultBypass dependency state drifted"
+      "Fresh StakeVaultCascade dependency state drifted"
     );
     const controller: string = await vault.controller();
     requireState(
       sameAddress(controller, constants.AddressZero) ||
         Boolean(policyRecord && sameAddress(controller, policyRecord.address)),
-      "Fresh StakeVaultBypass controller drifted"
+      "Fresh StakeVaultCascade controller drifted"
     );
     const pendingController: string = await vault.pendingController();
     requireState(
@@ -584,7 +865,7 @@ async function readFreshState(
           Boolean(
             policyRecord && sameAddress(pendingController, policyRecord.address)
           )),
-      "Fresh StakeVaultBypass pending controller drifted"
+      "Fresh StakeVaultCascade pending controller drifted"
     );
     completed["initialize-controller"] = Boolean(
       policyRecord && sameAddress(controller, policyRecord.address)
@@ -595,19 +876,19 @@ async function readFreshState(
         await vault.pendingOwner(),
         context.deployer,
         context.governance,
-        "StakeVaultBypass"
+        "StakeVaultCascade"
       );
     } else {
       await assertUntransferredOwnership(
         vault,
         context.deployer,
-        "StakeVaultBypass"
+        "StakeVaultCascade"
       );
     }
   }
   if (policyRecord) {
     const policy = (contracts.policy = await hre.ethers.getContractAt(
-      "DisputeProtectionPolicy",
+      "CascadeDisputeProtectionPolicy",
       policyRecord.address
     ));
     requireState(
@@ -644,19 +925,19 @@ async function readFreshState(
         await policy.pendingOwner(),
         context.deployer,
         context.governance,
-        "DisputeProtectionPolicyBypass"
+        "CascadeDisputeProtectionPolicy"
       );
     } else {
       await assertUntransferredOwnership(
         policy,
         context.deployer,
-        "DisputeProtectionPolicyBypass"
+        "CascadeDisputeProtectionPolicy"
       );
     }
   }
   if (hookRecord) {
     const hook = (contracts.hook = await hre.ethers.getContractAt(
-      "IntentLifecycleHookV1",
+      "IntentLifecycleHookV2",
       hookRecord.address
     ));
     requireState(
@@ -710,6 +991,66 @@ async function readFreshState(
     completed["transfer-verifier-owner"] =
       context.transferOwnership && sameAddress(owner, context.governance);
   }
+  if (orchestratorRecord) {
+    const orchestrator = (contracts.orchestrator =
+      await hre.ethers.getContractAt(
+        "OrchestratorV4",
+        orchestratorRecord.address
+      ));
+    for (const field of [
+      "escrowRegistry",
+      "paymentVerifierRegistry",
+      "relayerRegistry",
+      "protocolFeeRecipient",
+    ] as const) {
+      requireState(
+        sameAddress(await orchestrator[field](), context[field]),
+        `Fresh OrchestratorV4 ${field} drifted`
+      );
+    }
+    for (const field of ["chainId", "protocolFee"] as const) {
+      requireState(
+        BigNumber.from(await orchestrator[field]()).eq(context[field]),
+        `Fresh OrchestratorV4 ${field} drifted`
+      );
+    }
+    requireState(
+      !(await orchestrator.paused()),
+      "Fresh OrchestratorV4 paused state drifted"
+    );
+    const lifecycleHook = await orchestrator.lifecycleHook();
+    requireState(
+      sameAddress(lifecycleHook, constants.AddressZero) ||
+        sameAddress(lifecycleHook, hookRecord!.address),
+      "Fresh OrchestratorV4 lifecycle hook drifted"
+    );
+    completed["set-orchestrator-hook"] = sameAddress(
+      lifecycleHook,
+      hookRecord!.address
+    );
+    const multiple = await orchestrator.allowMultipleIntents();
+    requireState(
+      !multiple || context.allowMultipleIntents,
+      "Fresh OrchestratorV4 allowMultipleIntents drifted"
+    );
+    completed["set-allow-multiple-intents"] = multiple;
+    const owner = await orchestrator.owner();
+    requireState(
+      sameAddress(owner, context.deployer) ||
+        (context.transferOwnership && sameAddress(owner, context.governance)),
+      "Fresh OrchestratorV4 owner drifted"
+    );
+    completed["transfer-orchestrator-owner"] =
+      context.transferOwnership && sameAddress(owner, context.governance);
+    const registry = await hre.ethers.getContractAt(
+      "OrchestratorRegistry",
+      context.orchestratorRegistry
+    );
+    requireState(
+      !(await registry.isOrchestrator(orchestrator.address)),
+      "OrchestratorV4 registered before lane 46"
+    );
+  }
   return { completed, deployments, contracts };
 }
 
@@ -718,7 +1059,7 @@ export async function readLane45State(
   network: BypassNetwork
 ): Promise<Lane45State> {
   await assertLiveSharedState(hre, network);
-  const state = await readFreshState(hre, liveContext(network));
+  const state = await readFreshState(hre, await liveContext(hre, network));
   const completed = LANE_45_STEP_KINDS[network].map((step) => {
     if (
       step.startsWith("set-risk-window:") ||
@@ -744,18 +1085,18 @@ async function initializeBypassController(
     requireState(
       sameAddress(pendingController, constants.AddressZero) &&
         BigNumber.from(await vault.pendingControllerValidAt()).isZero(),
-      "Fresh StakeVaultBypass pending controller drifted"
+      "Fresh StakeVaultCascade pending controller drifted"
     );
     return;
   }
   requireState(
     sameAddress(controller, constants.AddressZero),
-    "Fresh StakeVaultBypass controller drifted"
+    "Fresh StakeVaultCascade controller drifted"
   );
   if (sameAddress(pendingController, constants.AddressZero)) {
     requireState(
       BigNumber.from(await vault.pendingControllerValidAt()).isZero(),
-      "Fresh StakeVaultBypass pending controller drifted"
+      "Fresh StakeVaultCascade pending controller drifted"
     );
     if (
       BigNumber.from(await vault.totalStaked()).isZero() &&
@@ -764,7 +1105,7 @@ async function initializeBypassController(
       await (await vault.initializeController(policy.address)).wait();
     } else {
       console.log(
-        "StakeVaultBypass liabilities forced the zero-delay handover"
+        "StakeVaultCascade liabilities forced the zero-delay handover"
       );
       await (await vault.proposeController(policy.address)).wait();
     }
@@ -772,7 +1113,7 @@ async function initializeBypassController(
   }
   requireState(
     sameAddress(pendingController, policy.address),
-    "Fresh StakeVaultBypass pending controller drifted"
+    "Fresh StakeVaultCascade pending controller drifted"
   );
   await (await policy.acceptVaultController()).wait();
 }
@@ -785,7 +1126,7 @@ async function deployLiveBypassStack(
     process.env[LIVE_FLAGS[network]] === "true",
     `${network} bypass deployment requires ${LIVE_FLAGS[network]}=true`
   );
-  const context = liveContext(network);
+  const context = await liveContext(hre, network);
   while (true) {
     const state = await readLane45State(hre, network);
     const prefix = classifyLane45Prefix(network, state.completed);
@@ -795,80 +1136,107 @@ async function deployLiveBypassStack(
       return;
     }
     const step = LANE_45_STEP_KINDS[network][prefix.nextStep];
-    if (step === "deploy-vault") {
-      await deployFresh(hre, "StakeVaultBypass", context.deployer, [
-        context.deployer,
-        context.stakeToken,
-        constants.AddressZero,
-        BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
-      ]);
-    } else if (step === "deploy-policy") {
-      await deployFresh(
-        hre,
-        "DisputeProtectionPolicyBypass",
-        context.deployer,
-        [
-          context.deployer,
-          state.contracts.vault!.address,
-          context.disputeVerifier,
-          context.disputeNullifierRegistry,
-        ]
-      );
-    } else if (step === "initialize-controller") {
-      await initializeBypassController(
-        state.contracts.vault!,
-        state.contracts.policy!
-      );
-    } else if (step === "deploy-hook") {
-      await deployFresh(hre, "IntentLifecycleHookV1Bypass", context.deployer, [
-        context.orchestratorRegistry,
-        context.whitelistPolicy,
-        state.contracts.policy!.address,
-      ]);
-    } else if (step === "authorize-hook") {
-      await (
-        await state.contracts.policy!.setLifecycleHookAuthorization(
-          state.contracts.hook!.address,
-          true
-        )
-      ).wait();
-    } else if (step.startsWith("set-risk-window:")) {
-      const method = paymentMethodHash(step.slice("set-risk-window:".length));
-      await (
-        await state.contracts.policy!.setRiskWindow(
-          method,
-          context.riskWindows[method]
-        )
-      ).wait();
-    } else if (step === "deploy-verifier") {
-      await deployFresh(hre, "UnifiedPaymentVerifierV4", context.deployer, [
-        context.orchestratorRegistry,
-        context.nullifierRegistryV2,
-        context.attestationVerifier,
-      ]);
-    } else if (step.startsWith("add-verifier-method:")) {
-      const verifier = state.contracts.verifier!;
-      await (
-        await verifier.addPaymentMethod(
-          paymentMethodHash(step.slice("add-verifier-method:".length))
-        )
-      ).wait();
-    } else if (step === "transfer-vault-owner") {
-      await (
-        await state.contracts.vault!.transferOwnership(context.governance)
-      ).wait();
-    } else if (step === "transfer-policy-owner") {
-      await (
-        await state.contracts.policy!.transferOwnership(context.governance)
-      ).wait();
-    } else if (step === "transfer-verifier-owner") {
-      await (
-        await state.contracts.verifier!.transferOwnership(context.governance)
-      ).wait();
-    } else {
-      throw new Error(`Unknown deploy-only step ${step}`);
-    }
+    await executeLane45Step(hre, network, context, state, step);
     await waitForDeploymentDelay(hre);
+  }
+}
+
+export async function executeLane45Step(
+  hre: HardhatRuntimeEnvironment,
+  network: BypassNetwork,
+  context: StackContext,
+  state: Lane45State,
+  step: string
+): Promise<void> {
+  if (step === "deploy-vault") {
+    await deployFresh(hre, "StakeVaultCascade", context.deployer, [
+      context.deployer,
+      context.stakeToken,
+      constants.AddressZero,
+      BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
+    ]);
+  } else if (step === "deploy-policy") {
+    await deployFresh(hre, "CascadeDisputeProtectionPolicy", context.deployer, [
+      context.deployer,
+      state.contracts.vault!.address,
+      context.disputeVerifier,
+      context.disputeNullifierRegistry,
+      context.optOutPredecessor,
+    ]);
+  } else if (step === "initialize-controller") {
+    await initializeBypassController(
+      state.contracts.vault!,
+      state.contracts.policy!
+    );
+  } else if (step === "deploy-hook") {
+    await deployFresh(hre, "IntentLifecycleHookV2", context.deployer, [
+      context.orchestratorRegistry,
+      context.whitelistPolicy,
+      state.contracts.policy!.address,
+    ]);
+  } else if (step === "authorize-hook") {
+    await (
+      await state.contracts.policy!.setLifecycleHookAuthorization(
+        state.contracts.hook!.address,
+        true
+      )
+    ).wait();
+  } else if (step.startsWith("set-risk-window:")) {
+    const method = paymentMethodHash(step.slice("set-risk-window:".length));
+    await (
+      await state.contracts.policy!.setRiskWindow(
+        method,
+        context.riskWindows[method]
+      )
+    ).wait();
+  } else if (step === "deploy-verifier") {
+    await deployLane45Verifier(hre, network, context.deployer, [
+      context.orchestratorRegistry,
+      context.nullifierRegistryV2,
+      context.attestationVerifier,
+    ]);
+  } else if (step.startsWith("add-verifier-method:")) {
+    const verifier = state.contracts.verifier!;
+    await (
+      await verifier.addPaymentMethod(
+        paymentMethodHash(step.slice("add-verifier-method:".length))
+      )
+    ).wait();
+  } else if (step === "deploy-orchestrator") {
+    await deployFresh(
+      hre,
+      "OrchestratorV4",
+      context.deployer,
+      orchestratorArgs(context)
+    );
+  } else if (step === "set-orchestrator-hook") {
+    await (
+      await state.contracts.orchestrator!.setLifecycleHook(
+        state.contracts.hook!.address
+      )
+    ).wait();
+  } else if (step === "set-allow-multiple-intents") {
+    await (
+      await state.contracts.orchestrator!.setAllowMultipleIntents(true)
+    ).wait();
+  } else if (step === "transfer-orchestrator-owner") {
+    await (
+      await state.contracts.orchestrator!.transferOwnership(context.governance)
+    ).wait();
+  } else if (step === "transfer-vault-owner") {
+    await (
+      await state.contracts.vault!.transferOwnership(context.governance)
+    ).wait();
+  } else if (step === "transfer-policy-owner") {
+    await (
+      await state.contracts.policy!.transferOwnership(context.governance)
+    ).wait();
+  } else if (step === "transfer-verifier-owner") {
+    await (
+      await state.contracts.verifier!.transferOwnership(context.governance)
+    ).wait();
+  } else {
+    throw new Error(`Unknown deploy-only step ${step}`);
   }
 }
 
@@ -891,9 +1259,9 @@ async function deployFresh(
   return deployment;
 }
 
-async function deployLocalBypassStack(
+async function localContext(
   hre: HardhatRuntimeEnvironment
-): Promise<void> {
+): Promise<StackContext> {
   const network = hre.deployments.getNetworkName();
   const [deployer] = await hre.getUnnamedAccounts();
   const predecessorVault = await hre.deployments.get(
@@ -942,6 +1310,21 @@ async function deployLocalBypassStack(
     );
     windows[method] = window.toString();
   }
+  const orchestratorV3 = await hre.ethers.getContractAt(
+    "OrchestratorV3",
+    (
+      await hre.deployments.get("OrchestratorV3")
+    ).address
+  );
+  const predecessorHook = await hre.ethers.getContractAt(
+    "IntentLifecycleHookV1",
+    await orchestratorV3.lifecycleHook()
+  );
+  const optOutPredecessor = await predecessorHook.disputeProtectionPolicy();
+  requireState(
+    sameAddress(optOutPredecessor, predecessorPolicy.address),
+    "Local opt-out predecessor policy mismatch"
+  );
   const context: StackContext = {
     network,
     deployer,
@@ -965,7 +1348,47 @@ async function deployLocalBypassStack(
     paymentMethods: methods,
     riskWindows: windows,
     transferOwnership: false,
+    chainId: (await hre.ethers.provider.getNetwork()).chainId,
+    escrowRegistry: await orchestratorV3.escrowRegistry(),
+    paymentVerifierRegistry: await orchestratorV3.paymentVerifierRegistry(),
+    relayerRegistry: await orchestratorV3.relayerRegistry(),
+    protocolFee: (await orchestratorV3.protocolFee()).toString(),
+    protocolFeeRecipient: await orchestratorV3.protocolFeeRecipient(),
+    allowMultipleIntents: await orchestratorV3.allowMultipleIntents(),
+    optOutPredecessor,
   };
+  return context;
+}
+
+function localSteps(context: StackContext): string[] {
+  return [
+    "deploy-vault",
+    "deploy-policy",
+    "initialize-controller",
+    "deploy-hook",
+    "authorize-hook",
+    ...DISPUTABLE_PAYMENT_METHODS.map(
+      (method) => `set-risk-window:${paymentMethodHash(method)}`
+    ),
+    "deploy-verifier",
+    ...context.paymentMethods.map((method) => `add-verifier-method:${method}`),
+    "deploy-orchestrator",
+    "set-orchestrator-hook",
+    ...(context.allowMultipleIntents ? ["set-allow-multiple-intents"] : []),
+  ];
+}
+
+async function deployLocalBypassStack(
+  hre: HardhatRuntimeEnvironment
+): Promise<void> {
+  const context = await localContext(hre);
+  const {
+    network,
+    deployer,
+    paymentMethods: methods,
+    riskWindows: windows,
+  } = context;
+  const protectedMethods = DISPUTABLE_PAYMENT_METHODS.map(paymentMethodHash);
   const deploy = async (
     name: BypassDeploymentName,
     args: unknown[]
@@ -986,17 +1409,18 @@ async function deployLocalBypassStack(
     return result;
   };
   await readFreshState(hre, context);
-  const vaultRecord = await deploy("StakeVaultBypass", [
+  const vaultRecord = await deploy("StakeVaultCascade", [
     deployer,
     context.stakeToken,
     constants.AddressZero,
     BYPASS_STAKE_VAULT_CONTROLLER_CHANGE_DELAY,
   ]);
-  const policyRecord = await deploy("DisputeProtectionPolicyBypass", [
+  const policyRecord = await deploy("CascadeDisputeProtectionPolicy", [
     deployer,
     vaultRecord.address,
     context.disputeVerifier,
     context.disputeNullifierRegistry,
+    context.optOutPredecessor,
   ]);
   let state = await readFreshState(hre, context);
   while (!state.completed["initialize-controller"]) {
@@ -1007,7 +1431,7 @@ async function deployLocalBypassStack(
     await waitForDeploymentDelay(hre);
     state = await readFreshState(hre, context);
   }
-  const hookRecord = await deploy("IntentLifecycleHookV1Bypass", [
+  const hookRecord = await deploy("IntentLifecycleHookV2", [
     context.orchestratorRegistry,
     context.whitelistPolicy,
     policyRecord.address,
@@ -1044,61 +1468,107 @@ async function deployLocalBypassStack(
       await waitForDeploymentDelay(hre);
     }
   }
+  await deploy("OrchestratorV4", orchestratorArgs(context));
   state = await readFreshState(hre, context);
-  const expectedSteps = [
-    "deploy-vault",
-    "deploy-policy",
-    "initialize-controller",
-    "deploy-hook",
-    "authorize-hook",
-    ...protectedMethods.map((method) => `set-risk-window:${method}`),
-    "deploy-verifier",
-    ...methods.map((method) => `add-verifier-method:${method}`),
-  ];
+  if (!state.completed["set-orchestrator-hook"]) {
+    await (
+      await state.contracts.orchestrator!.setLifecycleHook(hookRecord.address)
+    ).wait();
+    await waitForDeploymentDelay(hre);
+  }
+  if (
+    context.allowMultipleIntents &&
+    !state.completed["set-allow-multiple-intents"]
+  ) {
+    await (
+      await state.contracts.orchestrator!.setAllowMultipleIntents(true)
+    ).wait();
+    await waitForDeploymentDelay(hre);
+  }
+  state = await readFreshState(hre, context);
+  const expectedSteps = localSteps(context);
   requireState(
     expectedSteps.every((step) => state.completed[step]),
     "Local bypass stack preparation verification failed"
   );
 }
 
-/** Once the fresh policy is a writer, lane 46 has started from a fully
- * prepared stack. Its checks recognize activation prefixes and re-verify the
- * fresh configuration; lane 45's pre-cutover checks no longer apply. */
+/** After activation starts, lane 46 verifies the stack and action prefix. */
 export async function bypassDisputeStackPrepared(
   hre: HardhatRuntimeEnvironment
 ): Promise<boolean> {
   const network = hre.deployments.getNetworkName();
-  if (!isBypassLiveNetwork(network)) return false;
+  if (!SUPPORTED_NETWORKS.has(network)) return false;
+  const live = isBypassLiveNetwork(network);
   const records = await Promise.all(
     BYPASS_DEPLOYMENT_NAMES.map((name) => hre.deployments.getOrNull(name))
   );
-  if (records.every(Boolean)) {
+  if (
+    records.every(Boolean) &&
+    !isSupersededStagingRecord(
+      network,
+      "UnifiedPaymentVerifierV4",
+      records[3]!.address
+    )
+  ) {
     const registry = await hre.ethers.getContractAt(
       "NullifierRegistry",
-      BYPASS_EXPECTED_LIVE[network].disputeNullifierRegistry.address
+      live
+        ? BYPASS_EXPECTED_LIVE[network].disputeNullifierRegistry.address
+        : (
+            await hre.deployments.get("DisputeNullifierRegistry")
+          ).address
     );
     const policy =
       records[
-        BYPASS_DEPLOYMENT_NAMES.indexOf("DisputeProtectionPolicyBypass")
+        BYPASS_DEPLOYMENT_NAMES.indexOf("CascadeDisputeProtectionPolicy")
       ]!;
-    if (await registry.isWriter(policy.address)) {
+    const orchestratorV3 = await hre.ethers.getContractAt(
+      "OrchestratorV3",
+      live
+        ? EXPECTED_LIVE[network].orchestrator
+        : (
+            await hre.deployments.get("OrchestratorV3")
+          ).address
+    );
+    const activationStarted =
+      network === "base_staging"
+        ? !sameAddress(
+            await orchestratorV3.lifecycleHook(),
+            BYPASS_EXPECTED_LIVE[network].initialO3Hook.address
+          )
+        : await registry.isWriter(policy.address);
+    if (activationStarted) {
       // Lazy loading avoids a load-time dependency on lane 46 for lane 45.
       const lane46: typeof import("./46_activate_bypass_dispute_stack") = require("./46_activate_bypass_dispute_stack");
-      await lane46.loadBypassActivationContext(hre, network);
-      const snapshot = await lane46.assertBypassActivationSharedState(
+      await lane46.loadBypassActivationContext(
         hre,
-        network,
-        await hre.ethers.provider.getBlockNumber()
+        network as "base" | "base_staging" | "hardhat" | "localhost"
       );
+      const block = await hre.ethers.provider.getBlockNumber();
+      const snapshot = live
+        ? await lane46.assertBypassActivationSharedState(hre, network, block)
+        : await lane46.readBypassActivationSnapshot(
+            hre,
+            network as "hardhat" | "localhost",
+            block
+          );
       const { phase } = reduceBypassActivation(
         snapshot,
-        lane46.expectedBypassActivationState(network)
+        lane46.expectedBypassActivationState(
+          network as "base" | "base_staging" | "hardhat" | "localhost"
+        )
       );
       console.log(
         `=== ${network} bypass dispute stack prepared; lane 46 activation is ${phase} ===`
       );
       return true;
     }
+  }
+  if (!live) {
+    const context = await localContext(hre);
+    const state = await readFreshState(hre, context);
+    return localSteps(context).every((step) => state.completed[step]);
   }
   const state = await readLane45State(hre, network);
   return classifyLane45Prefix(network, state.completed).nextStep === null;

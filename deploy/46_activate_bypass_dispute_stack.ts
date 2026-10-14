@@ -55,9 +55,6 @@ import { installSafeArtifactPair } from "../deployments/safeArtifacts";
 import { canonicalTransactionHash } from "../deployments/safeBatchManifest";
 import {
   EXPECTED_LIVE,
-  FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
-  type FreshStackEvent,
-  classifyFreshStackActivity,
   decodeFreshStackLogs,
 } from "./37_deploy_method_scoped_dispute_lifecycle_stack";
 import {
@@ -72,33 +69,13 @@ import {
   verifyBypassActivationCandidate,
 } from "../scripts/verify-bypass-dispute-safe-batch";
 
+import { classifyBypassPolicyActivity } from "./45_deploy_bypass_dispute_stack";
+export {
+  BYPASS_POLICY_LIFECYCLE_EVENTS,
+  classifyBypassPolicyActivity,
+} from "./45_deploy_bypass_dispute_stack";
+
 export { assertBypassAdvance };
-export const BYPASS_POLICY_LIFECYCLE_EVENTS = [
-  ...FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
-  "DisputeProtectionIntentStakeModeChanged",
-] as const;
-
-export function classifyBypassPolicyActivity(
-  events: FreshStackEvent[],
-  beforeCutover: boolean
-): void {
-  const lifecycleEvents = events.filter((event) =>
-    BYPASS_POLICY_LIFECYCLE_EVENTS.some((name) => name === event.name)
-  );
-  if (beforeCutover && lifecycleEvents.length > 0) {
-    const event = lifecycleEvents[0];
-    throw new Error(
-      `Fresh DisputeProtectionPolicyBypass has lifecycle activity before cutover: ` +
-        `${event.name} in ${event.transactionHash}`
-    );
-  }
-  classifyFreshStackActivity({
-    policyEvents: beforeCutover
-      ? events
-      : events.filter((event) => !lifecycleEvents.includes(event)),
-  });
-}
-
 export const TAG = LANE_46_TAG;
 export const SUPPORTED_NETWORKS = new Set<string>(BYPASS_ACTIVATION_NETWORKS);
 export const FLAGS = {
