@@ -9,7 +9,7 @@ import {IOrchestratorRegistry} from "contracts/interfaces/IOrchestratorRegistry.
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
 import {ICascadeDisputeProtectionPolicy as P} from "contracts/interfaces/ICascadeDisputeProtectionPolicy.sol";
-import {CascadeDisputeProtectionPolicy, IPredecessorDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
+import {CascadeDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
@@ -37,7 +37,7 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         policy = new CascadeDisputeProtectionPolicy(
             address(this), vault,
             new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new AttestationVerifierMock()),
-            new NullifierRegistry(), IPredecessorDisputeProtectionPolicy(address(0))
+            new NullifierRegistry()
         );
         vault.initializeController(address(policy));
         policy.setRiskWindow(METHOD, 14 days);

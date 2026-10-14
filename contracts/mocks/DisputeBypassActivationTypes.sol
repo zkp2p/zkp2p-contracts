@@ -67,8 +67,6 @@ interface IBypassActivationCascadePolicy is IActivationOwned {
     function disputeNullifierRegistry() external view returns (address);
     /// @notice Returns the stake vault.
     function stakeVault() external view returns (address);
-    /// @notice Returns the policy supplying inherited opt-outs.
-    function predecessorPolicy() external view returns (address);
     /// @notice Returns whether a lifecycle hook is authorized.
     function isLifecycleHookAuthorized(address hook) external view returns (bool);
     /// @notice Returns the risk window for a payment method.
@@ -108,7 +106,6 @@ abstract contract DisputeBypassTrustSurfaceChecks {
     error RiskWindowConfigurationLengthMismatch(uint256 paymentMethodCount, uint256 riskWindowCount);
     error RegistryOwnerMismatch(address actual);
     error OrchestratorRegistryOwnerMismatch(address actual);
-    error FreshPolicyPredecessorMismatch(address actual);
     error OrchestratorV4OwnerMismatch(address actual);
     error OrchestratorV4PausedMismatch(bool actual);
     error OrchestratorV4ChainIdMismatch(uint256 actual);
@@ -387,8 +384,6 @@ abstract contract DisputeBypassTrustSurfaceChecks {
         if (actualAddress != expected.disputeRegistry) revert FreshPolicyDisputeRegistryMismatch(actualAddress);
         actualAddress = fresh.stakeVault();
         if (actualAddress != expected.freshVault) revert FreshPolicyStakeVaultMismatch(actualAddress);
-        actualAddress = fresh.predecessorPolicy();
-        if (actualAddress != expected.predecessorPolicy) revert FreshPolicyPredecessorMismatch(actualAddress);
 
         IBypassActivationVault vault = IBypassActivationVault(expected.freshVault);
         actualAddress = vault.controller();

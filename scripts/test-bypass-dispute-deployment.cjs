@@ -1130,56 +1130,24 @@ test("local lane 45 rejects an O4 whose fee recipient differs from O3", async ()
   );
 });
 
-test("lane 45 passes the policy behind the predecessor hook as the opt-out predecessor", async () => {
-  const state = await localhostFixture();
-  await deployLane45(state.fakeHre);
-  const record = state.records.get("CascadeDisputeProtectionPolicy");
-  const policy = await ethers.getContractAt(
-    "CascadeDisputeProtectionPolicy",
-    record.address
+test("live lane 45 preserves the Base O3 hook precondition", async () => {
+  const pins = BYPASS_EXPECTED_LIVE.base;
+  /** @type {any} */
+  const fake = {
+    ethers: {
+      getContractAt: async () => ({
+        lifecycleHook: async () => ethers.constants.AddressZero,
+      }),
+    },
+  };
+  await assert.rejects(
+    lane45.assertO3PredecessorHook(fake, "base"),
+    /OrchestratorV3 lifecycle hook drifted/
   );
-  assert.equal(
-    await policy.predecessorPolicy(),
-    state.predecessorPolicy.address
-  );
-  state.records.delete("CascadeDisputeProtectionPolicy");
-  await state.deployRecord(
-    "CascadeDisputeProtectionPolicy",
-    "CascadeDisputeProtectionPolicy",
-    [
-      state.deployer,
-      state.records.get("StakeVaultCascade").address,
-      state.records.get("DisputeVerifier").address,
-      state.disputeRegistry.address,
-      state.records.get("OrchestratorV3").address,
-    ]
-  );
-  await assert.rejects(deployLane45(state.fakeHre), /predecessor.*drifted/);
-});
-
-test("live lane 45 rejects a mismatched opt-out predecessor before deployment", async () => {
-  for (const network of /** @type {const} */ (["base", "base_staging"])) {
-    const pins = BYPASS_EXPECTED_LIVE[network];
-    /** @type {any} */
-    const fake = {
-      ethers: {
-        provider: { getCode: async () => "0x6000" },
-        getContractAt: async (
-          /** @type {string} */ name,
-          /** @type {string} */ address
-        ) => {
-          assert.equal(address, pins.predecessorHook.address);
-          return {
-            disputeProtectionPolicy: async () => ethers.constants.AddressZero,
-          };
-        },
-      },
-    };
-    await assert.rejects(
-      lane45.resolveOptOutPredecessor(fake, network),
-      /predecessor policy.*mismatch/
-    );
-  }
+  fake.ethers.getContractAt = async () => ({
+    lifecycleHook: async () => pins.predecessorHook.address,
+  });
+  await lane45.assertO3PredecessorHook(fake, "base");
 });
 
 test("lane 45 rejects cascade lifecycle activity and removed stake-mode events", () => {
@@ -1603,7 +1571,6 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
       whitelistPolicy: pins.whitelistPolicy.address,
       nullifierRegistryV2: expected.nullifierRegistryV2,
       attestationVerifier: expected.attestationVerifier,
-      optOutPredecessor: pins.predecessorPolicy.address,
       chainId: 8453,
       escrowRegistry: expected.escrowRegistry,
       paymentVerifierRegistry: expected.paymentVerifierRegistry,
@@ -1658,7 +1625,6 @@ test("lane 45 live step handlers only configure the fresh stack on Base and stag
       addresses.StakeVaultCascade,
       pins.disputeVerifier.address,
       pins.disputeNullifierRegistry.address,
-      pins.predecessorPolicy.address,
     ]);
     assert.deepEqual(records.get("OrchestratorV4").args, [
       pins.deployer,

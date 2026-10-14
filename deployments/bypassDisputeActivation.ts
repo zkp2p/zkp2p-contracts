@@ -30,7 +30,6 @@ export type BypassActivationSnapshot = {
     stakeToken: string;
   };
   freshPolicy: Ownership & {
-    predecessorPolicy: string;
     admissionsPaused: boolean;
     stakeVault: string;
     disputeVerifier: string;
@@ -299,7 +298,6 @@ function commonInvariants(
     "freshVault.pendingControllerValidAt": "0",
     "freshVault.controllerChangeDelay": "0",
     "freshVault.stakeToken": a.stakeToken,
-    "freshPolicy.predecessorPolicy": a.predecessorPolicy,
     "freshPolicy.admissionsPaused": false,
     "freshPolicy.stakeVault": a.freshVault,
     "freshPolicy.disputeVerifier": a.disputeVerifier,
@@ -714,7 +712,6 @@ export const BYPASS_GUARD_BOUND_FIELDS = [
   "freshVault.stakeToken",
   "freshPolicy.owner",
   "freshPolicy.pendingOwner",
-  "freshPolicy.predecessorPolicy",
   "freshPolicy.admissionsPaused",
   "freshPolicy.stakeVault",
   "freshPolicy.disputeVerifier",

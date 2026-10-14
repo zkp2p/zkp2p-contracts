@@ -11,14 +11,6 @@ import {IEscrowV2} from "../interfaces/IEscrowV2.sol";
 import {INullifierRegistry} from "../interfaces/INullifierRegistry.sol";
 import {IStakeVault} from "../interfaces/IStakeVault.sol";
 
-/// @notice Read-only predecessor configuration used to carry depositor opt-outs forward.
-interface IPredecessorDisputeProtectionPolicy {
-    /// @notice Returns effective predecessor protection for a tuple.
-    function isDisputeProtectionEnabled(address, uint256, bytes32) external view returns (bool);
-    /// @notice Returns the predecessor payment method risk window.
-    function getRiskWindow(bytes32) external view returns (uint64);
-}
-
 /**
  * @title CascadeDisputeProtectionPolicy
  * @notice Selects bypass, existing stake, or deferred payout collateral at settlement.
@@ -28,9 +20,7 @@ interface IPredecessorDisputeProtectionPolicy {
  * Intent hashes must embed the originating orchestrator so identities cannot collide. Governance must keep
  * predecessor hooks authorized and orchestrators registered until their snapshotted intents drain, and drain
  * active locks before moving vault control unless the successor explicitly adopts their state.
- * Opt-out read-through works only while the predecessor's method risk window is nonzero. Before zeroing
- * that window or giving the cascade a window for a method the predecessor has at zero, import that method's
- * opt-outs rebuilt from the predecessor's DisputeProtectionEnabledUpdated events.
+ * Protection starts on by default for windowed methods. Opt-outs are not carried over; depositors opt out again here.
  */
 contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Ownable2Step, ReentrancyGuard {
     /* ============ Constants ============ */
@@ -41,9 +31,6 @@ contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Owna
 
     /// @notice Stake custody and lock accounting controlled by this policy.
     IStakeVault public immutable override stakeVault;
-
-    /// @notice Optional predecessor whose depositor opt-outs are inherited.
-    IPredecessorDisputeProtectionPolicy public immutable predecessorPolicy;
 
     /// @notice Dedicated replay registry for payment-method-scoped dispute nullifiers.
     INullifierRegistry public immutable disputeNullifierRegistry;
@@ -57,8 +44,8 @@ contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Owna
     /// @dev Lifecycle-hook authorization keyed by lifecycle hook address.
     mapping(address => bool) internal isLifecycleHookAuthorizedByHook;
 
-    /// @dev Local overrides take priority over inherited predecessor opt-outs.
-    mapping(address => mapping(uint256 => mapping(bytes32 => OptOutState))) internal optOutState;
+    /// @dev Explicit depositor opt-outs keyed by escrow, deposit, and payment method.
+    mapping(address => mapping(uint256 => mapping(bytes32 => bool))) internal isDisputeProtectionDisabledByPaymentMethod;
 
     /// @dev Minimum collateral lock window for each payment method.
     mapping(bytes32 => uint64) internal paymentMethodRiskWindow;
@@ -76,22 +63,18 @@ contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Owna
      * @param _stakeVault Vault holding and locking taker collateral.
      * @param _disputeVerifier Verifier for signed dispute evidence.
      * @param _disputeNullifierRegistry Dedicated registry that rejects reused dispute nullifiers.
-     * @param _predecessorPolicy Optional source of inherited depositor opt-outs.
      */
     constructor(
         address _owner,
         IStakeVault _stakeVault,
         IDisputeVerifier _disputeVerifier,
-        INullifierRegistry _disputeNullifierRegistry,
-        IPredecessorDisputeProtectionPolicy _predecessorPolicy
+        INullifierRegistry _disputeNullifierRegistry
     ) {
         if (_owner == address(0)) revert ZeroAddress();
         _validateDependency(address(_stakeVault));
         _validateDependency(address(_disputeVerifier));
         _validateDependency(address(_disputeNullifierRegistry));
 
-        if (address(_predecessorPolicy) != address(0)) _validateDependency(address(_predecessorPolicy));
-        predecessorPolicy = _predecessorPolicy;
         stakeVault = _stakeVault;
         disputeVerifier = _disputeVerifier;
         disputeNullifierRegistry = _disputeNullifierRegistry;
@@ -291,7 +274,7 @@ contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Owna
         external
         onlyDepositor(_escrow, _depositId)
     {
-        optOutState[_escrow][_depositId][_paymentMethod] = _isEnabled ? OptOutState.ENABLED : OptOutState.DISABLED;
+        isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod] = !_isEnabled;
         emit DisputeProtectionEnabledUpdated(_escrow, _depositId, _paymentMethod, _isEnabled);
     }
 
@@ -309,16 +292,6 @@ contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Owna
         if (_riskWindow > MAX_RISK_WINDOW) revert InvalidRiskWindow(_riskWindow);
         paymentMethodRiskWindow[_paymentMethod] = _riskWindow;
         emit RiskWindowUpdated(_paymentMethod, _riskWindow);
-    }
-
-    /// @inheritdoc ICascadeDisputeProtectionPolicy
-    function importOptOuts(OptOutImport[] calldata _optOuts) external override onlyOwner {
-        for (uint256 i = 0; i < _optOuts.length; ++i) {
-            OptOutImport calldata optOut = _optOuts[i];
-            if (optOutState[optOut.escrow][optOut.depositId][optOut.paymentMethod] != OptOutState.INHERIT) continue;
-            optOutState[optOut.escrow][optOut.depositId][optOut.paymentMethod] = OptOutState.DISABLED;
-            emit DisputeProtectionOptOutImported(optOut.escrow, optOut.depositId, optOut.paymentMethod);
-        }
     }
 
     /**
@@ -390,7 +363,7 @@ contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Owna
      * @notice Returns the effective stake-backed dispute protection state for a deposit payment method.
      * @dev True when the depositor has not opted the tuple out and the payment method has a nonzero risk window.
      * Performs no validation: any escrow, any deposit id (including nonexistent ones), and any payment method with a
-     * nonzero window read true unless locally or previously opted out.
+     * nonzero window read true unless explicitly opted out.
      * @param _escrow Escrow containing the deposit.
      * @param _depositId Deposit whose payment-method-specific configuration is queried.
      * @param _paymentMethod Payment method whose dispute protection configuration is queried.
@@ -401,7 +374,7 @@ contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Owna
         override
         returns (bool)
     {
-        return !_isOptedOut(_escrow, _depositId, _paymentMethod)
+        return !isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod]
             && paymentMethodRiskWindow[_paymentMethod] != 0;
     }
 
@@ -434,7 +407,7 @@ contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Owna
         if (disputeProtectionIntentByIntentHash[_intentHash].status != DisputeProtectionIntentStatus.NONE) {
             revert DisputeProtectionIntentAlreadyExists(_intentHash);
         }
-        if (_isOptedOut(_escrow, _depositId, _paymentMethod)) {
+        if (isDisputeProtectionDisabledByPaymentMethod[_escrow][_depositId][_paymentMethod]) {
             revert DisputeProtectionNotEnabled(_escrow, _depositId, _paymentMethod);
         }
 
@@ -445,14 +418,6 @@ contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Owna
         }
 
         depositor = deposit.depositor;
-    }
-
-    function _isOptedOut(address _escrow, uint256 _depositId, bytes32 _paymentMethod) internal view returns (bool) {
-        OptOutState state = optOutState[_escrow][_depositId][_paymentMethod];
-        if (state == OptOutState.DISABLED) return true;
-        if (state == OptOutState.ENABLED) return false;
-        return address(predecessorPolicy) != address(0) && predecessorPolicy.getRiskWindow(_paymentMethod) != 0
-            && !predecessorPolicy.isDisputeProtectionEnabled(_escrow, _depositId, _paymentMethod);
     }
 
     function _releaseMaturedDisputeProtectionIntent(bytes32 _intentHash) internal {

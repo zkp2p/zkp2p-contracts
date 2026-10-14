@@ -3,10 +3,7 @@ pragma solidity ^0.8.18;
 
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
-import {
-    CascadeDisputeProtectionPolicy,
-    IPredecessorDisputeProtectionPolicy
-} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
+import {CascadeDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
 import {ICascadeDisputeProtectionPolicy as P} from "contracts/interfaces/ICascadeDisputeProtectionPolicy.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
@@ -110,8 +107,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
             address(this),
             freshVault,
             disputeVerifier,
-            disputeNullifiers,
-            IPredecessorDisputeProtectionPolicy(address(predecessorPolicy))
+            disputeNullifiers
         );
         freshVault.initializeController(address(freshPolicy));
         freshHook = new IntentLifecycleHookV2(orchestratorRegistry, whitelist, freshPolicy);
@@ -349,16 +345,31 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         );
     }
 
-    function test_O4InheritsO3PolicyOptOut() public {
+    function test_O4IgnoresAugustOptOutUntilDepositorOptsOutAgain() public {
         vm.prank(depositor);
         predecessorPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, false);
         _deployLane45();
         _activateLane46();
-        assertEq(address(freshPolicy.predecessorPolicy()), address(predecessorPolicy));
-        assertFalse(freshPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
-        bytes32 id = _signalO4();
+        assertFalse(predecessorPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
+        assertTrue(freshPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
+        bytes32 protectedId = _signalO4();
         assertEq(
-            uint256(freshPolicy.getDisputeProtectionIntent(id).status), uint256(P.DisputeProtectionIntentStatus.NONE)
+            uint256(freshPolicy.getDisputeProtectionIntent(protectedId).status),
+            uint256(P.DisputeProtectionIntentStatus.PENDING)
+        );
+        _settleO4(protectedId, _signedProof(protectedId, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true));
+        assertEq(
+            uint256(freshPolicy.getDisputeProtectionIntent(protectedId).collateralSource),
+            uint256(P.CollateralSource.DEFERRED_PAYOUT)
+        );
+        assertEq(freshVault.lockedStake(other), INTENT_AMOUNT);
+        vm.prank(depositor);
+        freshPolicy.setDisputeProtectionEnabled(address(escrow), depositId, METHOD, false);
+        assertFalse(freshPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
+        bytes32 optedOutId = _signalO4();
+        assertEq(
+            uint256(freshPolicy.getDisputeProtectionIntent(optedOutId).status),
+            uint256(P.DisputeProtectionIntentStatus.NONE)
         );
         vm.prank(depositor);
         whitelist.setEnabled(address(escrow), depositId, METHOD, true);

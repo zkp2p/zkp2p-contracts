@@ -603,7 +603,6 @@ export async function readBypassActivationSnapshot(
     },
     freshPolicy: {
       ...(await ownership(policy)),
-      predecessorPolicy: await address(policy, "predecessorPolicy"),
       admissionsPaused: await bool(policy, "admissionsPaused"),
       stakeVault: await address(policy, "stakeVault"),
       disputeVerifier: await address(policy, "disputeVerifier"),

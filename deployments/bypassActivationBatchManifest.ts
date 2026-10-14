@@ -135,7 +135,6 @@ const snapshot = object({
   }),
   freshPolicy: object({
     ...ownership,
-    predecessorPolicy: address,
     admissionsPaused: boolean,
     stakeVault: address,
     disputeVerifier: address,

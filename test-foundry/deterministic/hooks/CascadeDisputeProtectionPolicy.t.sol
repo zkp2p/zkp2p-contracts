@@ -3,7 +3,7 @@ pragma solidity ^0.8.18;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {CascadeDisputeProtectionPolicy, IPredecessorDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
+import {CascadeDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
 import {ICascadeDisputeProtectionPolicy as P} from "contracts/interfaces/ICascadeDisputeProtectionPolicy.sol";
 import {IStakeVault} from "contracts/interfaces/IStakeVault.sol";
 import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";
@@ -16,26 +16,7 @@ import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {AttestationVerifierMock} from "../../mocks/AttestationVerifierMock.sol";
 import {EscrowDepositStub} from "../../mocks/EscrowDepositStub.sol";
 
-contract PredecessorPolicyStub is IPredecessorDisputeProtectionPolicy {
-    uint64 public window = 14 days;
-    bool public enabled;
-    /// @notice Configures inherited protection.
-    function configure(uint64 _window, bool _enabled) external {
-        window = _window;
-        enabled = _enabled;
-    }
-    /// @notice Returns configured protection.
-    function isDisputeProtectionEnabled(address, uint256, bytes32) external view returns (bool) {
-        return enabled;
-    }
-    /// @notice Returns configured window.
-    function getRiskWindow(bytes32) external view returns (uint64) {
-        return window;
-    }
-}
-
 contract CascadeDisputeProtectionPolicyTest is Test {
-    event DisputeProtectionOptOutImported(address indexed escrow, uint256 indexed depositId, bytes32 indexed paymentMethod);
     event DisputeProtectionIntentOpened(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow);
     event DisputeProtectionIntentSettled(bytes32 indexed intentHash, P.CollateralSource indexed collateralSource, address indexed stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt, bool isManualRelease);
     event RiskWindowUpdated(bytes32 indexed paymentMethod, uint64 riskWindow);
@@ -67,12 +48,12 @@ contract CascadeDisputeProtectionPolicyTest is Test {
         disputes = new NullifierRegistry();
         verifier = new DisputeVerifier(address(this), payments, new AttestationVerifierMock());
         escrow = new EscrowDepositStub(DEPOSITOR, usdc);
-        _newPolicy(IPredecessorDisputeProtectionPolicy(address(0)));
+        _newPolicy();
         vault.initializeController(address(policy));
     }
 
-    function _newPolicy(IPredecessorDisputeProtectionPolicy predecessor) internal {
-        policy = new CascadeDisputeProtectionPolicy(address(this), vault, verifier, disputes, predecessor);
+    function _newPolicy() internal {
+        policy = new CascadeDisputeProtectionPolicy(address(this), vault, verifier, disputes);
         policy.setLifecycleHookAuthorization(address(this), true);
         policy.setRiskWindow(METHOD, WINDOW);
         disputes.addWritePermission(address(policy));
@@ -421,17 +402,15 @@ contract CascadeDisputeProtectionPolicyTest is Test {
     }
     function test_ConstructorRejectsZeroOrCodelessDependencies() public {
         vm.expectRevert(P.ZeroAddress.selector);
-        new CascadeDisputeProtectionPolicy(address(0), vault, verifier, disputes, IPredecessorDisputeProtectionPolicy(address(0)));
+        new CascadeDisputeProtectionPolicy(address(0), vault, verifier, disputes);
         for (uint256 i; i < 3; ++i) {
             for (uint256 j; j < 2; ++j) {
                 address bad = j == 0 ? address(0) : STRANGER;
                 if (j == 0) vm.expectRevert(P.ZeroAddress.selector);
                 else vm.expectRevert(abi.encodeWithSelector(P.InvalidContract.selector, bad));
-                new CascadeDisputeProtectionPolicy(address(this), i == 0 ? IStakeVault(bad) : vault, i == 1 ? IDisputeVerifier(bad) : verifier, i == 2 ? INullifierRegistry(bad) : disputes, IPredecessorDisputeProtectionPolicy(address(0)));
+                new CascadeDisputeProtectionPolicy(address(this), i == 0 ? IStakeVault(bad) : vault, i == 1 ? IDisputeVerifier(bad) : verifier, i == 2 ? INullifierRegistry(bad) : disputes);
             }
         }
-        vm.expectRevert(abi.encodeWithSelector(P.InvalidContract.selector, STRANGER));
-        new CascadeDisputeProtectionPolicy(address(this), vault, verifier, disputes, IPredecessorDisputeProtectionPolicy(STRANGER));
     }
     function test_SetDisputeVerifier() public {
         DisputeVerifier next = new DisputeVerifier(address(this), payments, new AttestationVerifierMock());
@@ -442,7 +421,7 @@ contract CascadeDisputeProtectionPolicyTest is Test {
     }
     function test_AcceptVaultController() public {
         vault = new StakeVault(address(this), usdc, address(this), 0);
-        _newPolicy(IPredecessorDisputeProtectionPolicy(address(0)));
+        _newPolicy();
         vault.proposeController(address(policy));
         policy.acceptVaultController();
         assertEq(vault.controller(), address(policy));
@@ -481,94 +460,6 @@ contract CascadeDisputeProtectionPolicyTest is Test {
         policy.setDisputeProtectionEnabled(address(escrow), 1, METHOD, false);
         _opt(false);
         assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
-    }
-    function test_InheritsPredecessorOptOut() public {
-        PredecessorPolicyStub predecessor = new PredecessorPolicyStub();
-        _newPolicy(predecessor);
-        assertEq(address(policy.predecessorPolicy()), address(predecessor));
-        assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
-        vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionNotEnabled.selector, address(escrow), 1, METHOD));
-        _signal(ID);
-    }
-    function test_ImportOptOutsDisablesInheritTuples() public {
-        P.OptOutImport[] memory imports = new P.OptOutImport[](2);
-        imports[0] = P.OptOutImport(address(escrow), 1, METHOD);
-        imports[1] = P.OptOutImport(address(escrow), 2, METHOD);
-        vm.expectEmit(true, true, true, true, address(policy));
-        emit DisputeProtectionOptOutImported(address(escrow), 1, METHOD);
-        vm.expectEmit(true, true, true, true, address(policy));
-        emit DisputeProtectionOptOutImported(address(escrow), 2, METHOD);
-        policy.importOptOuts(imports);
-        assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
-        assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 2, METHOD));
-        vm.recordLogs();
-        policy.importOptOuts(imports);
-        assertEq(vm.getRecordedLogs().length, 0);
-    }
-    function test_ImportOptOutsSkipsExplicitChoices() public {
-        _opt(true);
-        vm.prank(DEPOSITOR);
-        policy.setDisputeProtectionEnabled(address(escrow), 2, METHOD, false);
-        P.OptOutImport[] memory imports = new P.OptOutImport[](2);
-        imports[0] = P.OptOutImport(address(escrow), 1, METHOD);
-        imports[1] = P.OptOutImport(address(escrow), 2, METHOD);
-        vm.recordLogs();
-        policy.importOptOuts(imports);
-        assertEq(vm.getRecordedLogs().length, 0);
-        assertTrue(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
-        assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 2, METHOD));
-    }
-    function test_ImportOptOutsOnlyOwner() public {
-        P.OptOutImport[] memory imports = new P.OptOutImport[](1);
-        imports[0] = P.OptOutImport(address(escrow), 1, METHOD);
-        vm.prank(STRANGER);
-        vm.expectRevert("Ownable: caller is not the owner");
-        policy.importOptOuts(imports);
-        assertTrue(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
-    }
-    function test_ImportedOptOutSurvivesPredecessorWindowZeroed() public {
-        PredecessorPolicyStub predecessor = new PredecessorPolicyStub();
-        _newPolicy(predecessor);
-        assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
-        P.OptOutImport[] memory imports = new P.OptOutImport[](1);
-        imports[0] = P.OptOutImport(address(escrow), 1, METHOD);
-        policy.importOptOuts(imports);
-        predecessor.configure(0, false);
-        assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
-        vm.expectRevert(abi.encodeWithSelector(P.DisputeProtectionNotEnabled.selector, address(escrow), 1, METHOD));
-        _signal(ID);
-    }
-    function test_DepositorCanReenableImportedOptOut() public {
-        P.OptOutImport[] memory imports = new P.OptOutImport[](1);
-        imports[0] = P.OptOutImport(address(escrow), 1, METHOD);
-        policy.importOptOuts(imports);
-        assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
-        _opt(true);
-        policy.importOptOuts(imports);
-        assertTrue(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
-        _signal(ID);
-    }
-    function test_LocalSettingOverridesPredecessor() public {
-        PredecessorPolicyStub predecessor = new PredecessorPolicyStub();
-        _newPolicy(predecessor);
-        _opt(true);
-        assertTrue(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
-        _signal(ID);
-        predecessor.configure(WINDOW, true);
-        _opt(false);
-        assertFalse(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
-    }
-    function test_PredecessorZeroWindowNotInherited() public {
-        PredecessorPolicyStub predecessor = new PredecessorPolicyStub();
-        predecessor.configure(0, false);
-        _newPolicy(predecessor);
-        assertTrue(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
-        _signal(ID);
-    }
-    function test_NoPredecessorMeansEnabled() public {
-        assertEq(address(policy.predecessorPolicy()), address(0));
-        assertTrue(policy.isDisputeProtectionEnabled(address(escrow), 1, METHOD));
-        _signal(ID);
     }
     function test_SetAdmissionsPausedEmits() public {
         vm.expectEmit(false, false, false, true, address(policy));

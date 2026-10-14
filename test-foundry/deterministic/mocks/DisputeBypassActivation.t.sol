@@ -6,10 +6,7 @@ import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.s
 import {IntentLifecycleHookV1} from "contracts/hooks/IntentLifecycleHookV1.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {OrchestratorV4} from "contracts/OrchestratorV4.sol";
-import {
-    CascadeDisputeProtectionPolicy,
-    IPredecessorDisputeProtectionPolicy
-} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
+import {CascadeDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
 import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 import {IIntentLifecycleHookV2} from "contracts/interfaces/IIntentLifecycleHookV2.sol";
@@ -73,8 +70,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
             address(this),
             freshVault,
             disputeVerifier,
-            disputeRegistry,
-            IPredecessorDisputeProtectionPolicy(address(predecessorPolicy))
+            disputeRegistry
         );
         groupRegistry = new AddressGroupRegistry();
         whitelistPolicy = new WhitelistPolicy(groupRegistry, escrowRegistry, orchestratorRegistry);
@@ -135,7 +131,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
         _transfer(disputeVerifier, true);
         _transfer(freshVault, false);
         freshPolicy.transferOwnership(safe);
-        assertFalse(freshPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
+        assertTrue(freshPolicy.isDisputeProtectionEnabled(address(escrow), depositId, METHOD));
     }
 
     function test_CutoverPassesForEveryConditionalAcceptanceCombination() public {
@@ -313,8 +309,7 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
             address(this),
             delayedVault,
             disputeVerifier,
-            disputeRegistry,
-            IPredecessorDisputeProtectionPolicy(address(predecessorPolicy))
+            disputeRegistry
         );
         IntentLifecycleHookV2 delayedHook =
             new IntentLifecycleHookV2(orchestratorRegistry, whitelistPolicy, delayedPolicy);
@@ -512,22 +507,6 @@ contract DisputeBypassActivationTest is OrchestratorV3Fixture {
             abi.encodeWithSelector(DisputeBypassTrustSurfaceChecks.OrchestratorV4RegistrationMismatch.selector, false)
         );
         postcondition.assertPostconditions();
-    }
-
-    function test_GuardRejectsFreshPolicyPredecessorDrift() public {
-        CascadeDisputeProtectionPolicy wrongPolicy = new CascadeDisputeProtectionPolicy(
-            address(this), freshVault, disputeVerifier, disputeRegistry, IPredecessorDisputeProtectionPolicy(address(0))
-        );
-        IntentLifecycleHookV2 wrongHook = new IntentLifecycleHookV2(orchestratorRegistry, whitelistPolicy, wrongPolicy);
-        vm.prank(safe);
-        orchestratorV4.setLifecycleHook(wrongHook);
-        BypassTrustSurface memory surface = _surface();
-        surface.freshPolicy = address(wrongPolicy);
-        surface.freshHook = address(wrongHook);
-        _expectReady(
-            _guard(surface, true, true),
-            abi.encodeWithSelector(DisputeBypassTrustSurfaceChecks.FreshPolicyPredecessorMismatch.selector, address(0))
-        );
     }
 
     function test_GuardRejectsWhitelistOwnerDrift() public {

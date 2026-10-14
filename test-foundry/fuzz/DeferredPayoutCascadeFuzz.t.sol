@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 import {Test} from "forge-std/Test.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {USDCMock} from "contracts/mocks/USDCMock.sol";
-import {CascadeDisputeProtectionPolicy, IPredecessorDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
+import {CascadeDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
 import {ICascadeDisputeProtectionPolicy as P} from "contracts/interfaces/ICascadeDisputeProtectionPolicy.sol";
 import {DisputeVerifier} from "contracts/unifiedVerifier/DisputeVerifier.sol";
 import {MultiAttestationVerifier} from "contracts/unifiedVerifier/MultiAttestationVerifier.sol";
@@ -32,7 +32,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         signers[0] = vm.addr(0xA11CE);
         DisputeVerifier verifier = new DisputeVerifier(address(this), new NullifierRegistryV2(new NullifierRegistry()), new MultiAttestationVerifier(signers, 1));
         NullifierRegistry disputes = new NullifierRegistry();
-        policy = new CascadeDisputeProtectionPolicy(address(this), vault, verifier, disputes, IPredecessorDisputeProtectionPolicy(address(0)));
+        policy = new CascadeDisputeProtectionPolicy(address(this), vault, verifier, disputes);
         vault.initializeController(address(policy));
         policy.setLifecycleHookAuthorization(address(this), true);
         policy.setRiskWindow(METHOD, WINDOW);

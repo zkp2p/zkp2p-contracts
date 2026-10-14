@@ -179,7 +179,6 @@ function snapshot(wanted, k = 0) {
     },
     freshPolicy: {
       ...ownership,
-      predecessorPolicy: a.predecessorPolicy,
       admissionsPaused: false,
       stakeVault: a.freshVault,
       disputeVerifier: a.disputeVerifier,
@@ -1012,7 +1011,6 @@ test("lane 46 classifies bypass policy activity across O4 registration", () => {
     });
   const configuration = [
     "DisputeProtectionEnabledUpdated",
-    "DisputeProtectionOptOutImported",
     "RiskWindowUpdated",
     "LifecycleHookAuthorizationUpdated",
     "OwnershipTransferStarted",
@@ -1309,13 +1307,6 @@ test("bypass batches never call OrchestratorV3", () => {
   assert.deepEqual(initial.nrv2Writers, [staging.addresses.retiredVerifier]);
   assert.equal(initial.registry.length, staging.paymentMethods.length);
   assert.equal(initial.o3Hook, staging.addresses.initialO3Hook);
-});
-
-test("reducer rejects a fresh policy whose predecessor is not the resolved O3 policy", () => {
-  const wanted = expected();
-  const state = snapshot(wanted);
-  state.freshPolicy.predecessorPolicy = address(99);
-  assertViolation(state, wanted, "freshPolicy.predecessorPolicy");
 });
 
 test("O4 and registry trust drift fails closed", () => {

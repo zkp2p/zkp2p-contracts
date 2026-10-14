@@ -87,11 +87,7 @@ export function classifyBypassPolicyActivity(
     );
   }
   classifyFreshStackActivity({
-    policyEvents: events.filter(
-      (event) =>
-        event.name !== "DisputeProtectionOptOutImported" &&
-        !lifecycleEvents.includes(event)
-    ),
+    policyEvents: events.filter((event) => !lifecycleEvents.includes(event)),
   });
 }
 
@@ -211,24 +207,11 @@ export async function assertLane45PaymentBinding(
   }
 }
 
-export async function resolveOptOutPredecessor(
+export async function assertO3PredecessorHook(
   hre: HardhatRuntimeEnvironment,
   network: BypassNetwork
-): Promise<string> {
+): Promise<void> {
   const pins = BYPASS_EXPECTED_LIVE[network];
-  const hook = await hre.ethers.getContractAt(
-    "IntentLifecycleHookV1",
-    pins.predecessorHook.address
-  );
-  const predecessor = await hook.disputeProtectionPolicy();
-  requireState(
-    sameAddress(predecessor, pins.predecessorPolicy.address),
-    "Opt-out predecessor policy address mismatch"
-  );
-  requireState(
-    (await hre.ethers.provider.getCode(predecessor)) !== "0x",
-    "Opt-out predecessor policy has no code"
-  );
   if (network === "base") {
     const orchestratorV3 = await hre.ethers.getContractAt(
       "OrchestratorV3",
@@ -242,7 +225,6 @@ export async function resolveOptOutPredecessor(
       "OrchestratorV3 lifecycle hook drifted"
     );
   }
-  return predecessor;
 }
 
 type VerifierRecordReader = {
@@ -348,7 +330,7 @@ export async function assertLiveSharedState(
     pins.allowMultipleIntents === expected.allowMultipleIntents,
     "Orchestrator allowMultipleIntents pin mismatch"
   );
-  await resolveOptOutPredecessor(hre, network);
+  await assertO3PredecessorHook(hre, network);
   const legacyNullifierRegistry = await hre.ethers.getContractAt(
     "NullifierRegistry",
     (
@@ -705,7 +687,6 @@ type StackContext = {
   protocolFee: string;
   protocolFeeRecipient: string;
   allowMultipleIntents: boolean;
-  optOutPredecessor: string;
 };
 
 type Lane45State = {
@@ -769,7 +750,6 @@ async function liveContext(
     protocolFee: "0",
     protocolFeeRecipient: expected.protocolFeeRecipient,
     allowMultipleIntents: pins.allowMultipleIntents,
-    optOutPredecessor: await resolveOptOutPredecessor(hre, network),
   };
 }
 
@@ -836,16 +816,6 @@ async function readFreshState(
     "deploy-verifier": Boolean(verifierRecord),
     "deploy-orchestrator": Boolean(orchestratorRecord),
   };
-  if (policyRecord) {
-    const policy = await hre.ethers.getContractAt(
-      "CascadeDisputeProtectionPolicy",
-      policyRecord.address
-    );
-    requireState(
-      sameAddress(await policy.predecessorPolicy(), context.optOutPredecessor),
-      "Fresh cascade policy predecessor drifted"
-    );
-  }
   if (vaultRecord) {
     const vault = (contracts.vault = await hre.ethers.getContractAt(
       "StakeVault",
@@ -1173,7 +1143,6 @@ export async function executeLane45Step(
       state.contracts.vault!.address,
       context.disputeVerifier,
       context.disputeNullifierRegistry,
-      context.optOutPredecessor,
     ]);
   } else if (step === "initialize-controller") {
     await initializeBypassController(
@@ -1328,15 +1297,6 @@ async function localContext(
       await hre.deployments.get("OrchestratorV3")
     ).address
   );
-  const predecessorHook = await hre.ethers.getContractAt(
-    "IntentLifecycleHookV1",
-    await orchestratorV3.lifecycleHook()
-  );
-  const optOutPredecessor = await predecessorHook.disputeProtectionPolicy();
-  requireState(
-    sameAddress(optOutPredecessor, predecessorPolicy.address),
-    "Local opt-out predecessor policy mismatch"
-  );
   const context: StackContext = {
     network,
     deployer,
@@ -1367,7 +1327,6 @@ async function localContext(
     protocolFee: (await orchestratorV3.protocolFee()).toString(),
     protocolFeeRecipient: await orchestratorV3.protocolFeeRecipient(),
     allowMultipleIntents: await orchestratorV3.allowMultipleIntents(),
-    optOutPredecessor,
   };
   return context;
 }
@@ -1432,7 +1391,6 @@ async function deployLocalBypassStack(
     vaultRecord.address,
     context.disputeVerifier,
     context.disputeNullifierRegistry,
-    context.optOutPredecessor,
   ]);
   let state = await readFreshState(hre, context);
   while (!state.completed["initialize-controller"]) {

@@ -3,7 +3,7 @@ pragma solidity ^0.8.18;
 
 import {OrchestratorV4Fixture} from "./OrchestratorV4Fixture.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
-import {CascadeDisputeProtectionPolicy, IPredecessorDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
+import {CascadeDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
@@ -47,7 +47,7 @@ abstract contract CascadeStackFixture is OrchestratorV4Fixture {
         vault = new StakeVault(address(this), token, address(0), 0);
         disputeNullifiers = new NullifierRegistry();
         disputeVerifier = new DisputeVerifier(address(this), nullifiers, witnesses);
-        protection = new CascadeDisputeProtectionPolicy(address(this), vault, disputeVerifier, disputeNullifiers, IPredecessorDisputeProtectionPolicy(address(0)));
+        protection = new CascadeDisputeProtectionPolicy(address(this), vault, disputeVerifier, disputeNullifiers);
         vault.initializeController(address(protection));
         disputeNullifiers.addWritePermission(address(protection));
         protection.setRiskWindow(METHOD, RISK_WINDOW);

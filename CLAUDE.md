@@ -187,7 +187,7 @@ Current numbered lanes include:
   hook on Base/local; staging restores it first. Adds the cascade dispute writer, routes all methods to
   fresh UPV4, makes it the sole NRV2 writer and registers O4 last. Existing dispute writers remain passive.
   Every PENDING stale-policy intent blocks verifier rotation and later actions, regardless of stake mode.
-  Opt-outs are inherited by read-through from the pinned August predecessor; no mirroring or inventory gate.
+  The cascade policy starts with protection on by default; opt-outs are not carried over; depositors opt out again on it.
   Staging order is lane 45 (reports stale intents), lane 46 `ENABLE_` with both `CONFIRM_` flags, then
   lane 46 `PREPARE_` expecting `active`; keep one build and avoid untagged runs until recording merges.
   Downstream readiness means new-domain 480-byte UPV4 attestations for both orchestrators and O4 client

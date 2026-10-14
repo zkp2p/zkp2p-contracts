@@ -170,8 +170,7 @@
   pinned runtime hash may be replaced. Lane 45 deletes that record and deploys a different address.
   Pre-cutover binding checks use the pinned retired verifier independently of the mutable record, including
   after a crash between deletion and deployment; other identity or runtime mismatches fail closed.
-  The cascade policy inherits opt-outs by read-through from the August policy behind `predecessorHook`,
-  which must equal the pinned predecessor policy. No opt-out mirroring or inventory gate remains.
+  The cascade policy starts with protection on by default; opt-outs are not carried over; depositors opt out again on it.
   Historical lane 45 first executed on staging on 2026-10-11 from `f9eab7f`. The stake-owner bypass trio
   replaced that first trio on 2026-10-13 from `285bc5c`; UPV4 and its record were unchanged by that run.
 - `deploy/46_activate_bypass_dispute_stack.ts` activates the cascade stack with O4 registration last.

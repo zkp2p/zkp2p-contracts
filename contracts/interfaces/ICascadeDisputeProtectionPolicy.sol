@@ -5,14 +5,7 @@ import {IStakeVault} from "./IStakeVault.sol";
 
 interface ICascadeDisputeProtectionPolicy {
     enum DisputeProtectionIntentStatus { NONE, PENDING, CANCELLED, AWAITING_FUNDING, SETTLED, RELEASED, DISPUTED }
-    enum OptOutState { INHERIT, ENABLED, DISABLED }
     enum CollateralSource { NONE, BYPASS, STAKE, DEFERRED_PAYOUT, MANUAL_RELEASE }
-
-    struct OptOutImport {
-        address escrow;
-        uint256 depositId;
-        bytes32 paymentMethod;
-    }
 
     struct DisputeProtectionIntent {
         address taker;            // intent.owner; may call claimFor on a deferred payout
@@ -38,7 +31,6 @@ interface ICascadeDisputeProtectionPolicy {
     event DisputeResolved(bytes32 indexed intentHash, address indexed stakeOwner, address indexed depositor, uint256 compensatedAmount, bytes32 disputeId);
     event DisputeProtectionEnabledUpdated(address indexed escrow, uint256 indexed depositId, bytes32 indexed paymentMethod, bool isDisputeProtectionEnabled);
     event RiskWindowUpdated(bytes32 indexed paymentMethod, uint64 riskWindow);
-    event DisputeProtectionOptOutImported(address indexed escrow, uint256 indexed depositId, bytes32 indexed paymentMethod);
     event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
     event LifecycleHookAuthorizationUpdated(address indexed hook, bool isAuthorized);
     event AdmissionsPausedUpdated(bool isPaused);
@@ -73,9 +65,4 @@ interface ICascadeDisputeProtectionPolicy {
     function isDisputeProtectionEnabled(address _escrow, uint256 _depositId, bytes32 _paymentMethod) external view returns (bool);
     /// @notice Returns the collateral vault.
     function stakeVault() external view returns (IStakeVault);
-    /// @notice Imports predecessor opt-outs without overriding explicit depositor choices.
-    /// @dev Opt-out read-through works only while the predecessor's method risk window is nonzero.
-    /// Before zeroing that window or giving the cascade a window for a method the predecessor has at zero,
-    /// import that method's opt-outs rebuilt from the predecessor's DisputeProtectionEnabledUpdated events.
-    function importOptOuts(OptOutImport[] calldata _optOuts) external;
 }
