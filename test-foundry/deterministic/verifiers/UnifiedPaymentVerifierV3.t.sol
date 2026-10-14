@@ -173,6 +173,10 @@ contract UnifiedPaymentVerifierV3Test is Test {
         });
     }
 
+    function _payloadSuffix() internal view virtual returns (bytes memory) {
+        return "";
+    }
+
     function _proof(
         UnifiedPaymentVerifierV3 target,
         bytes32 attestedIntentHash,
@@ -182,7 +186,7 @@ contract UnifiedPaymentVerifierV3Test is Test {
         uint256 signerKey,
         bool correctDataHash
     ) internal view returns (bytes memory) {
-        bytes memory data = abi.encode(payment, snapshot);
+        bytes memory data = bytes.concat(abi.encode(payment, snapshot), _payloadSuffix());
         bytes32 dataHash = correctDataHash ? keccak256(data) : keccak256("tampered-hash");
         return _encodeProof(target, attestedIntentHash, releaseAmount, dataHash, data, signerKey);
     }

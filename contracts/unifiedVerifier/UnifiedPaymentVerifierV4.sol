@@ -8,11 +8,11 @@ import { IAttestationVerifier } from "../interfaces/IAttestationVerifier.sol";
 import { IOrchestrator } from "../interfaces/IOrchestrator.sol";
 import { IOrchestratorV2 } from "../interfaces/IOrchestratorV2.sol";
 import { IOrchestratorRegistry } from "../interfaces/IOrchestratorRegistry.sol";
-import { IPaymentValidationHook } from "../interfaces/IPaymentValidationHook.sol";
+import { IPaymentVerifierV2 } from "../interfaces/IPaymentVerifierV2.sol";
 
 /**
  * @title UnifiedPaymentVerifierV4
- * @notice Preserves V3 payment verification and forwards authenticated payment data to an intent-selected hook.
+ * @notice Preserves V3 payment verification and returns the attestation-signed balance funding flag.
  *
  * Key features:
  * - Supports multiple payment methods, each with custom configuration
@@ -21,11 +21,14 @@ import { IPaymentValidationHook } from "../interfaces/IPaymentValidationHook.sol
  * - Verifies standardized payment details against provided data
  * @dev Payment attestations use this deployment's EIP-712 domain. Governance must reuse the payment-nullifier
  * registry, route payment methods to this verifier, and retire V3's registry write permission during activation.
- * Nonempty intent.data must encode (IPaymentValidationHook, bytes hookData). Admission enforces any required hook.
+ * attestation.data is `abi.encode(PaymentDetails, IntentSnapshot, bool balanceFunded)`;
+ * intent.data is never read and belongs to post-intent hooks.
  */
-contract UnifiedPaymentVerifierV4 is IPaymentVerifier, BaseUnifiedPaymentVerifierV3 {
+contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerifierV3 {
 
     /* ============ Constants ============ */
+
+    uint256 private constant PAYMENT_PAYLOAD_LENGTH = 480;
 
     // Max timestamp buffer
     uint256 private constant MAX_TIMESTAMP_BUFFER = 48 * 60 * 60 * 1000; // 48 hours
@@ -126,24 +129,27 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifier, BaseUnifiedPaymentVerifie
      * Hence only Orchestrator can call this function to prevent griefing.
      *
      * @param _verifyPaymentData Payment proof and intent details required for verification
-     * @return result The payment verification result containing success status, intent hash, and release amount
+     * @return result The payment verification result containing success status, intent hash, release amount, and balance funding flag
      * @dev Ensure the orchestrator verifies the intent exists before calling this function
      */
     function verifyPayment(
-        VerifyPaymentData calldata _verifyPaymentData
+        IPaymentVerifier.VerifyPaymentData calldata _verifyPaymentData
     )
         external
         override
         onlyOrchestrator()
-        returns (PaymentVerificationResult memory result)
+        returns (IPaymentVerifierV2.PaymentVerificationResultV2 memory result)
     {
         PaymentAttestation memory attestation = _decodeAttestation(_verifyPaymentData.paymentProof);
         require(attestation.intentHash == _verifyPaymentData.intentHash, "UPV: Attestation hash mismatch");
         require(attestation.releaseAmount != 0, "UPV: Invalid release amount");
 
+        require(attestation.data.length == PAYMENT_PAYLOAD_LENGTH, "UPV: Invalid payload length");
+
         (
             PaymentDetails memory paymentDetails,
-            IntentSnapshot memory intentSnapshot
+            IntentSnapshot memory intentSnapshot,
+            bool balanceFunded
         ) = _decodeAttestationPayload(attestation.data);
         require(isPaymentMethod[paymentDetails.method], "UPV: Invalid payment method");
         require(paymentDetails.method == intentSnapshot.paymentMethod, "UPV: Payment method mismatch");
@@ -151,16 +157,10 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifier, BaseUnifiedPaymentVerifie
         require(paymentDetails.amount != 0, "UPV: Invalid payment amount");
         require(paymentDetails.currency != bytes32(0), "UPV: Invalid payment currency");
 
-        bytes memory intentData = _validateIntentSnapshot(_verifyPaymentData.intentHash, intentSnapshot);
+        _validateIntentSnapshot(_verifyPaymentData.intentHash, intentSnapshot);
 
         bool isValid = _verifyAttestation(attestation);
         require(isValid, "UPV: Invalid attestation");
-
-        if (intentData.length != 0) {
-            (IPaymentValidationHook hook, bytes memory hookData) =
-                abi.decode(intentData, (IPaymentValidationHook, bytes));
-            hook.validatePayment(attestation.intentHash, attestation.data, hookData);
-        }
 
         // Nullify the payment to prevent double-spending
         _nullifyPayment(paymentDetails.method, paymentDetails.paymentId, attestation.intentHash);
@@ -168,10 +168,11 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifier, BaseUnifiedPaymentVerifie
         _emitPaymentDetails(attestation.intentHash, paymentDetails);
 
         uint256 releaseAmount = _calculateReleaseAmount(attestation.releaseAmount, intentSnapshot.amount);
-        result = PaymentVerificationResult({
+        result = IPaymentVerifierV2.PaymentVerificationResultV2({
             success: true,
             intentHash: attestation.intentHash,
-            releaseAmount: releaseAmount
+            releaseAmount: releaseAmount,
+            balanceFunded: balanceFunded
         });
 
         return result;
@@ -186,9 +187,9 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifier, BaseUnifiedPaymentVerifie
     function _decodeAttestationPayload(bytes memory paymentData)
         internal
         pure
-        returns (PaymentDetails memory paymentDetails, IntentSnapshot memory intentSnapshot)
+        returns (PaymentDetails memory paymentDetails, IntentSnapshot memory intentSnapshot, bool balanceFunded)
     {
-        (paymentDetails, intentSnapshot) = abi.decode(paymentData, (PaymentDetails, IntentSnapshot));
+        (paymentDetails, intentSnapshot, balanceFunded) = abi.decode(paymentData, (PaymentDetails, IntentSnapshot, bool));
     }
 
     /**
@@ -235,12 +236,11 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifier, BaseUnifiedPaymentVerifie
     function _validateIntentSnapshot(
         bytes32 intentHash,
         IntentSnapshot memory snapshot
-    ) internal view returns (bytes memory intentData) {
+    ) internal view {
         require(snapshot.intentHash == intentHash, "UPV: Snapshot hash mismatch");
 
         if (_isV2Orchestrator(msg.sender)) {
             IOrchestratorV2.Intent memory intentV2 = IOrchestratorV2(msg.sender).getIntent(intentHash);
-            intentData = intentV2.data;
             _validateSnapshotAgainstIntent(
                 snapshot,
                 intentV2.payeeId,
@@ -252,7 +252,6 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifier, BaseUnifiedPaymentVerifie
             );
         } else {
             IOrchestrator.Intent memory intent = IOrchestrator(msg.sender).getIntent(intentHash);
-            intentData = intent.data;
             _validateSnapshotAgainstIntent(
                 snapshot,
                 intent.payeeId,

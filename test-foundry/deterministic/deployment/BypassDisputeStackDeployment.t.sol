@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+// Plan 2 rewrites this lane test
+
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
@@ -188,14 +190,18 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         token.approve(address(predecessorVault), INTENT_AMOUNT);
         predecessorVault.depositStake(INTENT_AMOUNT);
         vm.stopPrank();
-        bytes32 first = _signalProtected(predecessorPolicy, false);
+        bytes32 first = _signalProtected(predecessorPolicy);
         _settle(first, _signedProof(first, PAYMENT_ID, predecessor.DOMAIN_SEPARATOR()));
         bytes32 nullifier = keccak256(abi.encodePacked(METHOD, PAYMENT_ID));
         assertEq(nullifiers.intentHashByNullifier(nullifier), first);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
         assertEq(predecessorVault.lockedStake(taker), INTENT_AMOUNT);
         _activateLane46();
-        bytes32 second = _signalProtected(freshPolicy, true);
+        vm.startPrank(taker);
+        token.approve(address(freshVault), INTENT_AMOUNT);
+        freshVault.depositStake(INTENT_AMOUNT);
+        vm.stopPrank();
+        bytes32 second = _signalProtected(freshPolicy);
         bytes memory proof = _signedProof(second, PAYMENT_ID, successor.DOMAIN_SEPARATOR());
         vm.expectRevert("Nullifier has already been used");
         _settle(second, proof);
@@ -231,9 +237,9 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         assertNotEq(keccak256(abi.encode(actual)), keccak256(abi.encode(originalMethods)));
     }
 
-    function _signalProtected(DisputeProtectionPolicy protection, bool noStake) private returns (bytes32) {
+    function _signalProtected(DisputeProtectionPolicy) private returns (bytes32) {
         IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
-        params.data = abi.encode(address(protection), abi.encode(noStake));
+        params.data = "";
         return _signal(taker, params);
     }
 
