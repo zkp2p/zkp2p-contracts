@@ -36,6 +36,7 @@ contract PredecessorPolicyStub is IPredecessorDisputeProtectionPolicy {
 
 contract CascadeDisputeProtectionPolicyTest is Test {
     event DisputeProtectionIntentOpened(bytes32 indexed intentHash, address indexed taker, address indexed depositor, address recipient, bytes32 paymentMethod, uint64 riskWindow);
+    event DisputeProtectionIntentSettled(bytes32 indexed intentHash, P.CollateralSource indexed collateralSource, address indexed stakeOwner, uint256 releaseAmount, uint256 lockedAmount, uint64 releaseEligibleAt, bool isManualRelease);
     event RiskWindowUpdated(bytes32 indexed paymentMethod, uint64 riskWindow);
     event AdmissionsPausedUpdated(bool isPaused);
     event DisputeVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
@@ -175,7 +176,10 @@ contract CascadeDisputeProtectionPolicyTest is Test {
     }
     function test_BypassReleasesWithoutLock() public {
         _signal(ID);
+        vm.expectEmit(true, true, true, true, address(policy));
+        emit DisputeProtectionIntentSettled(ID, P.CollateralSource.BYPASS, address(0), GROSS, 0, uint64(block.timestamp), false);
         assertFalse(policy.onIntentSettled(ID, GROSS, NET, true, false));
+        assertEq(_record().releaseEligibleAt, block.timestamp);
         _status(P.DisputeProtectionIntentStatus.RELEASED);
         assertEq(uint256(_record().collateralSource), uint256(P.CollateralSource.BYPASS));
         assertEq(vault.totalAccounted(), 0);
@@ -185,10 +189,13 @@ contract CascadeDisputeProtectionPolicyTest is Test {
             if (i == 2) _stake(TAKER, GROSS);
             bytes32 id = bytes32(i + 1);
             _signal(id);
+            vm.expectEmit(true, true, true, true, address(policy));
+            emit DisputeProtectionIntentSettled(id, P.CollateralSource.MANUAL_RELEASE, address(0), GROSS, 0, uint64(block.timestamp), true);
             assertFalse(policy.onIntentSettled(id, GROSS, NET, i % 2 == 0, true));
             P.DisputeProtectionIntent memory r = policy.getDisputeProtectionIntent(id);
             assertEq(uint256(r.status), uint256(P.DisputeProtectionIntentStatus.RELEASED));
             assertEq(uint256(r.collateralSource), uint256(P.CollateralSource.MANUAL_RELEASE));
+            assertEq(r.releaseEligibleAt, block.timestamp);
             assertEq(r.lockedAmount, 0);
             assertEq(r.stakeOwner, address(0));
             assertEq(vault.lockedStake(TAKER), 0);

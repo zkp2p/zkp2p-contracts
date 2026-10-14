@@ -158,7 +158,7 @@ contract CascadeDisputeProtectionPolicy is ICascadeDisputeProtectionPolicy, Owna
         if (intent.status != DisputeProtectionIntentStatus.PENDING) revert UnexpectedStatus(_intentHash, intent.status);
         if (_releaseAmount == 0 || _netAmount == 0) revert InvalidSettlementAmount(_releaseAmount, _netAmount);
         intent.releaseAmount = _releaseAmount;
-        intent.releaseEligibleAt = _calculateReleaseEligibleAt(intent.riskWindow);
+        intent.releaseEligibleAt = _calculateReleaseEligibleAt(_isManualRelease || _balanceFunded ? 0 : intent.riskWindow);
         if (_isManualRelease || _balanceFunded) {
             intent.collateralSource = _isManualRelease ? CollateralSource.MANUAL_RELEASE : CollateralSource.BYPASS;
             intent.status = DisputeProtectionIntentStatus.RELEASED;
