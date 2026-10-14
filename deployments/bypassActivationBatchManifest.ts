@@ -16,7 +16,7 @@ export { canonicalJson } from "./activationBatchManifest";
 export type { ContractIdentity } from "./activationBatchManifest";
 
 export type BypassActivationBatchManifest = {
-  version: 4;
+  version: 5;
   kind: "dispute-bypass-cutover";
   chainId: 8453;
   safe: string;
@@ -114,18 +114,6 @@ const riskWindows: Validator = (value, label) => {
     uint64(window, `${label}.${method}`);
   });
 };
-const inventoryTuple = object({
-  escrow: address,
-  depositId: uint256,
-  paymentMethod: hash,
-});
-const inventory = object({
-  escrow: address,
-  block: decimal,
-  tuples: array(inventoryTuple),
-  violations: array(inventoryTuple),
-  ok: boolean,
-});
 const route = object({
   paymentMethod: hash,
   verifier: address,
@@ -147,6 +135,7 @@ const snapshot = object({
   }),
   freshPolicy: object({
     ...ownership,
+    predecessorPolicy: address,
     admissionsPaused: boolean,
     stakeVault: address,
     disputeVerifier: address,
@@ -191,6 +180,20 @@ const snapshot = object({
     allowMultipleIntents: boolean,
     registered: boolean,
   }),
+  orchestratorV4: object({
+    chainId: uint256,
+    owner: address,
+    paused: boolean,
+    lifecycleHook: address,
+    escrowRegistry: address,
+    paymentVerifierRegistry: address,
+    relayerRegistry: address,
+    protocolFee: uint256,
+    protocolFeeRecipient: address,
+    allowMultipleIntents: boolean,
+    registered: boolean,
+  }),
+  orchestratorRegistry: object({ owner: address }),
   whitelistPolicy: object({
     owner: address,
     escrowRegistry: address,
@@ -207,12 +210,12 @@ const snapshot = object({
     attestationVerifier: address,
     nullifierRegistry: address,
   }),
-  inventory,
 });
 const trustSurface = object({
   safe: address,
   deployer: address,
   orchestrator: address,
+  orchestratorV4: address,
   orchestratorRegistry: address,
   escrowRegistry: address,
   paymentVerifierRegistry: address,
@@ -262,7 +265,7 @@ const transaction = object({
 });
 const manifestSchema = object({
   version: (value) => {
-    if (value !== 4) throw new Error("Invalid version");
+    if (value !== 5) throw new Error("Invalid version");
   },
   kind: (value) => {
     if (value !== "dispute-bypass-cutover") throw new Error("Invalid kind");
@@ -340,9 +343,9 @@ export const BYPASS_ACTIVATION_BATCH_PATHS = {
   sidecar: `${SAFE_BATCH_DIR}/base_dispute_bypass_cutover.sha256.json`,
   supersededDir: `${SAFE_BATCH_DIR}/superseded`,
   meta: {
-    name: "ZKP2P no-stake dispute bypass and UPV4 cutover - base",
+    name: "ZKP2P cascade dispute stack and UPV4 cutover - base",
     description:
-      "assertReady(); conditionally accept fresh vault and policy ownership; add fresh dispute writer; add UPV4 nullifier writer; re-route every payment method to UPV4 preserving order and currencies; remove UPV3 nullifier writer; set fresh lifecycle hook",
+      "assertReady(); conditionally accept fresh vault and policy ownership; add fresh dispute writer; add UPV4 nullifier writer; re-route every payment method to UPV4 preserving order and currencies; remove UPV3 nullifier writer; register OrchestratorV4",
   },
 } as const;
 export function bypassSafeBatchJson(

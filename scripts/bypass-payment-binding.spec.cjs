@@ -42,7 +42,10 @@ function fixture(superseded = false) {
       ...BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS.UnifiedPaymentVerifierV4,
     },
   };
-  BYPASS_RECORDED_DEPLOYMENTS.base_staging = recorded;
+  BYPASS_RECORDED_DEPLOYMENTS.base_staging =
+    /** @type {NonNullable<typeof BYPASS_RECORDED_DEPLOYMENTS.base_staging>} */ (
+      recorded
+    );
   assert.ok(recorded);
   const verifierRecord = {
     ...require("../deployments/base_staging/UnifiedPaymentVerifierV4.json"),
@@ -50,6 +53,7 @@ function fixture(superseded = false) {
   if (!superseded)
     verifierRecord.address = "0x0000000000000000000000000000000000000001";
   recorded.UnifiedPaymentVerifierV4.address = verifierRecord.address;
+  /** @type {Record<string, string>} */
   const addresses = {
     NullifierRegistryV2: shared.nullifierRegistryV2,
     MultiAttestationVerifier: shared.attestationVerifier,

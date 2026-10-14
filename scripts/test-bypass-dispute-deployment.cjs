@@ -792,14 +792,11 @@ test("superseded staging pins preserve the executed stack identities", () => {
       supersededBypassLifecycleHookRuntimeHash(network, hook.address),
       undefined
     );
-  for (const name of Object.keys(pins).filter(
-    (name) => name !== "IntentLifecycleHookV1Bypass"
+  for (const [name, pin] of Object.entries(pins).filter(
+    ([name]) => name !== "IntentLifecycleHookV1Bypass"
   ))
     assert.equal(
-      supersededBypassLifecycleHookRuntimeHash(
-        "base_staging",
-        pins[name].address
-      ),
+      supersededBypassLifecycleHookRuntimeHash("base_staging", pin.address),
       undefined
     );
 });
@@ -824,6 +821,7 @@ test(
     assert.deepEqual(BYPASS_RECORDED_DEPLOYMENTS, {});
 
     const { keccak256 } = require("ethers").utils;
+    /** @type {Record<string, { address: string; deployedBytecode: string; solcInputHash: string }>} */
     const stagingRecords = {
       StakeVaultBypass: require("../deployments/base_staging/StakeVaultBypass.json"),
       DisputeProtectionPolicyBypass: require("../deployments/base_staging/DisputeProtectionPolicyBypass.json"),
@@ -833,9 +831,7 @@ test(
       IntentLifecycleHookV1MethodScopedStaked: require("../deployments/base_staging/IntentLifecycleHookV1MethodScopedStaked.json"),
     };
 
-    for (const name of Object.keys(pins)) {
-      /** @type {{ address: string, runtimeCodeHash: string }} */
-      const pin = pins[name];
+    for (const [name, pin] of Object.entries(pins)) {
       assert.equal(
         pin.address.toLowerCase(),
         stagingRecords[name].address.toLowerCase(),
@@ -931,7 +927,10 @@ test("recorded bypass records use address and runtime pins across build caches",
       },
     ])
   );
-  BYPASS_RECORDED_DEPLOYMENTS.base_staging = pins;
+  BYPASS_RECORDED_DEPLOYMENTS.base_staging =
+    /** @type {NonNullable<typeof BYPASS_RECORDED_DEPLOYMENTS.base_staging>} */ (
+      pins
+    );
   try {
     for (const name of BYPASS_DEPLOYMENT_NAMES) {
       const pin = pins[name];
@@ -1048,10 +1047,10 @@ test("fresh record validation rejects the superseded staging verifier before art
   } = require("../deployments/bypassDisputeStack.ts");
   await assert.rejects(
     assertBypassDeploymentRecord(
-      {},
+      /** @type {import("hardhat/types").HardhatRuntimeEnvironment} */ ({}),
       "base_staging",
       "UnifiedPaymentVerifierV4",
-      { address: pins.UnifiedPaymentVerifierV4.address }
+      { address: pins.UnifiedPaymentVerifierV4.address, abi: [] }
     ),
     /UnifiedPaymentVerifierV4 is the superseded staging deployment; run lane 45/
   );

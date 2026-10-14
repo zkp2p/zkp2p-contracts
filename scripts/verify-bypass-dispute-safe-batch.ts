@@ -17,7 +17,6 @@ import {
   assertBypassCanonicalTransactions,
   assertBypassGuardExpectationsUnchanged,
   buildBypassTrustSurface,
-  bypassInventoryTupleArgs,
   bypassTrustSurfaceTuple,
   reduceBypassActivation,
 } from "../deployments/bypassDisputeActivation";
@@ -147,19 +146,14 @@ export function deriveBypassConstructorArgs(
   const tuple = bypassTrustSurfaceTuple(manifest.trustSurface);
   if (role === "postcondition") return [tuple];
   const safe = manifest.safe.toLowerCase();
-  const { freshVault, freshPolicy, inventory } = manifest.proofSnapshot;
+  const { freshVault, freshPolicy } = manifest.proofSnapshot;
   const includeVault =
     freshVault.owner.toLowerCase() !== safe &&
     freshVault.pendingOwner.toLowerCase() === safe;
   const includePolicy =
     freshPolicy.owner.toLowerCase() !== safe &&
     freshPolicy.pendingOwner.toLowerCase() === safe;
-  return [
-    tuple,
-    includeVault,
-    includePolicy,
-    bypassInventoryTupleArgs(inventory),
-  ];
+  return [tuple, includeVault, includePolicy];
 }
 
 async function assertBypassContractIdentity(
@@ -324,14 +318,6 @@ export async function verifyBypassActivationCandidate(
     includeVault,
     includePolicy
   );
-  if (
-    manifest.proofSnapshot.inventory.escrow.toLowerCase() !==
-    expected.addresses.escrow.toLowerCase()
-  ) {
-    throw new Error(
-      "Manifest inventory escrow does not match canonical Base escrow"
-    );
-  }
   await assertBypassContractIdentity(
     verificationHre,
     manifest,
@@ -359,8 +345,8 @@ export async function verifyBypassActivationCandidate(
   }
   assertBypassGuardExpectationsUnchanged(manifest.proofSnapshot, snapshot);
   const reduction = reduceBypassActivation(snapshot, expected);
-  if (reduction.phase !== "deployed" || !snapshot.inventory.ok) {
-    throw new Error("Verification state is not deployed with inventory ok");
+  if (reduction.phase !== "deployed") {
+    throw new Error("Verification state is not deployed");
   }
   await lane.runPinnedSimulation(manifest, input.forkRpcUrl);
 }

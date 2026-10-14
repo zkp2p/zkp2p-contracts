@@ -86,6 +86,7 @@ const {
 } = require("../deployments/safeBatchManifest.ts");
 const {
   assertBypassArtifactGitState,
+  deriveBypassConstructorArgs,
 } = require("./verify-bypass-dispute-safe-batch.ts");
 const lane = require("../deploy/46_activate_bypass_dispute_stack.ts");
 const guardArtifact = require("../artifacts/contracts/mocks/DisputeBypassCutoverGuard.sol/DisputeBypassCutoverGuard.json");
@@ -118,10 +119,17 @@ function expected(network = "base") {
     attestationVerifier: address(22),
     disputeVerifier: address(23),
     stakeToken: address(24),
+    orchestratorV4: address(25),
+    initialO3Hook: network === "base_staging" ? address(26) : address(11),
   };
   return {
     network,
     addresses,
+    chainId: "8453",
+    retainedDisputeWriters:
+      network === "base_staging"
+        ? [addresses.predecessorPolicy, address(27)]
+        : [addresses.predecessorPolicy],
     governance: network === "base" ? addresses.safe : addresses.deployer,
     deployer: addresses.deployer,
     allowedWhitelistPolicyOwners: [addresses.deployer, addresses.safe],
@@ -171,6 +179,7 @@ function snapshot(wanted, k = 0) {
     },
     freshPolicy: {
       ...ownership,
+      predecessorPolicy: a.predecessorPolicy,
       admissionsPaused: false,
       stakeVault: a.freshVault,
       disputeVerifier: a.disputeVerifier,
@@ -222,7 +231,7 @@ function snapshot(wanted, k = 0) {
     orchestrator: {
       owner,
       paused: false,
-      lifecycleHook: row.hook,
+      lifecycleHook: row.o3Hook,
       escrowRegistry: a.escrowRegistry,
       paymentVerifierRegistry: a.paymentVerifierRegistry,
       relayerRegistry: a.relayerRegistry,
@@ -230,6 +239,20 @@ function snapshot(wanted, k = 0) {
       protocolFeeRecipient: a.protocolFeeRecipient,
       allowMultipleIntents: wanted.allowMultipleIntents,
       registered: true,
+    },
+    orchestratorRegistry: { owner },
+    orchestratorV4: {
+      owner,
+      paused: false,
+      chainId: wanted.chainId,
+      lifecycleHook: a.freshHook,
+      escrowRegistry: a.escrowRegistry,
+      paymentVerifierRegistry: a.paymentVerifierRegistry,
+      relayerRegistry: a.relayerRegistry,
+      protocolFee: wanted.protocolFee,
+      protocolFeeRecipient: a.protocolFeeRecipient,
+      allowMultipleIntents: wanted.allowMultipleIntents,
+      registered: row.o4Registered,
     },
     whitelistPolicy: {
       owner: wanted.deployer,
@@ -247,13 +270,6 @@ function snapshot(wanted, k = 0) {
       pendingOwner: ZERO,
       attestationVerifier: a.attestationVerifier,
       nullifierRegistry: a.nullifierRegistryV2,
-    },
-    inventory: {
-      escrow: a.escrow,
-      block: "100",
-      tuples: [],
-      violations: [],
-      ok: true,
     },
   };
 }
@@ -275,7 +291,7 @@ function assertViolation(state, wanted, path) {
 
 test("bypass actions preserve reverse removal and forward registration order", () => {
   assert.deepEqual(
-    model.bypassActivationActions([hash(103), hash(101), hash(102)]),
+    model.bypassActivationActions([hash(103), hash(101), hash(102)], "base"),
     [
       "add-dispute-writer",
       "add-verifier-writer",
@@ -286,7 +302,7 @@ test("bypass actions preserve reverse removal and forward registration order", (
       `add-method:${hash(101)}`,
       `add-method:${hash(102)}`,
       "remove-retired-verifier-writer",
-      "set-lifecycle-hook",
+      "register-orchestrator",
     ]
   );
 });
@@ -294,9 +310,10 @@ test("bypass actions preserve reverse removal and forward registration order", (
 test("staging recognizes every bypass action prefix", () => {
   const wanted = expected("base_staging");
   const actions = model.bypassActivationActions(
-    wanted.paymentMethods.map((method) => method.paymentMethod)
+    wanted.paymentMethods.map((method) => method.paymentMethod),
+    wanted.network
   );
-  assert.equal(actions.length, 10);
+  assert.equal(actions.length, 11);
   for (let k = 0; k <= actions.length; k++) {
     assert.deepEqual(
       model.reduceBypassActivation(snapshot(wanted, k), wanted),
@@ -373,27 +390,6 @@ test("bypass ownership permits Base handovers and requires staging deployer owne
   }
 });
 
-test("inventory gates only the initial bypass state", () => {
-  for (const network of /** @type {const} */ (["base", "base_staging"])) {
-    const wanted = expected(network);
-    const state = snapshot(wanted);
-    state.inventory.ok = false;
-    assert.deepEqual(model.reduceBypassActivation(state, wanted), {
-      phase: "unrecognized",
-      completedActions: null,
-      nextAction: null,
-      violations: ["inventory.ok"],
-    });
-  }
-  const wanted = expected("base_staging");
-  for (let k = 1; k <= 10; k++) {
-    const state = snapshot(wanted, k);
-    const recognized = model.reduceBypassActivation(state, wanted);
-    state.inventory.ok = false;
-    assert.deepEqual(model.reduceBypassActivation(state, wanted), recognized);
-  }
-});
-
 test("bypass reducer names trust and ordered registry drift", () => {
   const wanted = expected("base_staging");
   /** @type {Array<[string, (state: Snapshot) => void]>} */
@@ -460,7 +456,7 @@ test("bypass reducer names trust and ordered registry drift", () => {
     ],
   ];
   for (const [path, mutate] of cases) {
-    const state = snapshot(wanted, 2);
+    const state = snapshot(wanted, 3);
     mutate(state);
     assertViolation(state, wanted, path);
   }
@@ -468,17 +464,17 @@ test("bypass reducer names trust and ordered registry drift", () => {
 
 test("bypass advance accepts exactly one recognized action", () => {
   const wanted = expected("base_staging");
-  const reductions = Array.from({ length: 11 }, (_, k) =>
+  const reductions = Array.from({ length: 12 }, (_, k) =>
     model.reduceBypassActivation(snapshot(wanted, k), wanted)
   );
   const bad = snapshot(wanted);
   bad.orchestrator.protocolFee = "1";
   const unrecognized = model.reduceBypassActivation(bad, wanted);
-  for (let k = 0; k < 10; k++) {
+  for (let k = 0; k < 11; k++) {
     assert.doesNotThrow(() =>
       model.assertBypassAdvance(reductions[k], reductions[k + 1])
     );
-    if (k < 9)
+    if (k < 10)
       assert.throws(
         () => model.assertBypassAdvance(reductions[k], reductions[k + 2]),
         /exactly one action/
@@ -496,6 +492,7 @@ const transactionInterface = new utils.Interface([
   "function removePaymentMethod(bytes32)",
   "function addPaymentMethod(bytes32,address,bytes32[])",
   "function setLifecycleHook(address)",
+  "function addOrchestrator(address)",
   "function assertReady()",
   "function acceptOwnership()",
 ]);
@@ -532,7 +529,12 @@ test("bypass action calldata targets the exact contracts and arguments", () => {
       "removeWritePermission",
       [a.retiredVerifier],
     ],
-    ["set-lifecycle-hook", a.orchestrator, "setLifecycleHook", [a.freshHook]],
+    [
+      "register-orchestrator",
+      a.orchestratorRegistry,
+      "addOrchestrator",
+      [a.orchestratorV4],
+    ],
   ];
   for (const method of wanted.paymentMethods) {
     cases.push([
@@ -567,7 +569,8 @@ test("13-method bypass batches contain 31 to 33 ordered calls", () => {
   }));
   const actions = model
     .bypassActivationActions(
-      wanted.paymentMethods.map((method) => method.paymentMethod)
+      wanted.paymentMethods.map((method) => method.paymentMethod),
+      wanted.network
     )
     .map((action) => model.buildBypassActionTransaction(action, wanted));
   for (const includeVaultAcceptOwnership of [false, true])
@@ -667,13 +670,6 @@ test("bypass trust surface round-trips guard and postcondition constructor ABIs"
   const wanted = expected();
   const state = snapshot(wanted);
   state.whitelistPolicy.owner = wanted.addresses.safe;
-  state.inventory.tuples = [
-    {
-      escrow: wanted.addresses.escrow,
-      depositId: "12",
-      paymentMethod: hash(103),
-    },
-  ];
   const surface = model.buildBypassTrustSurface(wanted, state);
   assert.equal(surface.whitelistPolicyOwner, state.whitelistPolicy.owner);
   assert.deepEqual(surface.paymentMethods, [hash(103), hash(101), hash(102)]);
@@ -694,13 +690,11 @@ test("bypass trust surface round-trips guard and postcondition constructor ABIs"
   ]);
   assert.deepEqual(surface.riskWindows, ["86400", "172800", "0", "0"]);
   const tuple = model.bypassTrustSurfaceTuple(surface);
-  const inventory = model.bypassInventoryTupleArgs(state.inventory);
-  assert.deepEqual(inventory, [[wanted.addresses.escrow, "12", hash(103)]]);
   for (const [
     artifact,
     args,
   ] of /** @type {Array<[{ abi: any[] }, any[]]>} */ ([
-    [guardArtifact, [tuple, true, false, inventory]],
+    [guardArtifact, [tuple, true, false]],
     [postconditionArtifact, [tuple]],
   ])) {
     const iface = new utils.Interface(artifact.abi);
@@ -712,76 +706,8 @@ test("bypass trust surface round-trips guard and postcondition constructor ABIs"
   }
 });
 
-test("bypass inventory filters opt-outs, sorts numeric IDs, and rejects foreign escrows", () => {
-  const wanted = expected();
-  /** @param {string} depositId @param {string} [paymentMethod] */
-  const tuple = (depositId, paymentMethod = hash(103)) => ({
-    escrow: wanted.addresses.escrow,
-    depositId,
-    paymentMethod,
-    depositor: address(40),
-    listedPaymentMethods: [hash(101), hash(103)],
-    predecessorEnabled: false,
-    freshEnabled: false,
-  });
-  const input = {
-    escrow: wanted.addresses.escrow,
-    block: "100",
-    freshRiskWindows: wanted.riskWindows,
-    tuples: [
-      { ...tuple("10"), freshEnabled: true },
-      tuple("2", hash(103)),
-      tuple("2", hash(101)),
-      { ...tuple("3"), depositor: ZERO, freshEnabled: true },
-      { ...tuple("4"), listedPaymentMethods: [], freshEnabled: true },
-      {
-        ...tuple("5", hash(102)),
-        listedPaymentMethods: [hash(102)],
-        freshEnabled: true,
-      },
-      { ...tuple("6"), predecessorEnabled: true, freshEnabled: true },
-    ],
-  };
-  const required = [
-    tuple("2", hash(101)),
-    tuple("2", hash(103)),
-    tuple("10"),
-  ].map(({ escrow, depositId, paymentMethod }) => ({
-    escrow,
-    depositId,
-    paymentMethod,
-  }));
-  assert.deepEqual(model.buildBypassInventory(input), {
-    escrow: input.escrow,
-    block: "100",
-    tuples: required,
-    violations: [required[2]],
-    ok: false,
-  });
-  input.tuples[0].freshEnabled = false;
-  assert.deepEqual(model.buildBypassInventory(input), {
-    escrow: input.escrow,
-    block: "100",
-    tuples: required,
-    violations: [],
-    ok: true,
-  });
-  input.tuples.push({ ...tuple("20"), escrow: address(99), depositor: ZERO });
-  assert.throws(
-    () => model.buildBypassInventory(input),
-    /Inventory escrow mismatch/
-  );
-});
-
-test("bypass guard expectations bind routes, writers, inventory, and whitelist owner", () => {
+test("bypass guard expectations bind routes, writers, O4, and whitelist owner", () => {
   const proof = snapshot(expected());
-  proof.inventory.tuples = [
-    {
-      escrow: proof.inventory.escrow,
-      depositId: "2",
-      paymentMethod: hash(103),
-    },
-  ];
   assert.doesNotThrow(() =>
     model.assertBypassGuardExpectationsUnchanged(proof, clone(proof))
   );
@@ -797,12 +723,6 @@ test("bypass guard expectations bind routes, writers, inventory, and whitelist o
       "nullifierRegistryV2.writers",
       (s) => {
         s.nullifierRegistryV2.writers[0] = address(99);
-      },
-    ],
-    [
-      "inventory.tuples.depositId",
-      (s) => {
-        s.inventory.tuples[0].depositId = "3";
       },
     ],
     [
@@ -845,12 +765,7 @@ function manifest() {
     deployTransactionHash: hash(id),
     runtimeCodeHash: hash(id + 100),
   });
-  const guard = identity("DisputeBypassCutoverGuard", 50, [
-    tuple,
-    true,
-    true,
-    model.bypassInventoryTupleArgs(proofSnapshot.inventory),
-  ]);
+  const guard = identity("DisputeBypassCutoverGuard", 50, [tuple, true, true]);
   const postcondition = identity("DisputeBypassCutoverPostcondition", 51, [
     tuple,
   ]);
@@ -862,7 +777,7 @@ function manifest() {
   });
   /** @type {Omit<Manifest, "manifestSha256">} */
   const unsigned = {
-    version: 4,
+    version: 5,
     kind: "dispute-bypass-cutover",
     chainId: 8453,
     safe: wanted.addresses.safe,
@@ -885,13 +800,33 @@ function manifest() {
   };
 }
 
-test("unsigned v4 bypass manifests validate and reject tampering", () => {
+test("unsigned v5 bypass manifests validate and reject v4 and tampering", () => {
   const valid = manifest();
+  assert.deepEqual(
+    deriveBypassConstructorArgs(valid, "guard"),
+    valid.guard.constructorArgs
+  );
+  assert.deepEqual(
+    deriveBypassConstructorArgs(valid, "postcondition"),
+    valid.postcondition.constructorArgs
+  );
+  const oldVersion = { ...valid, version: 4 };
+  const { manifestSha256: oldDigest, ...oldUnsigned } = oldVersion;
+  oldVersion.manifestSha256 = manifests.computeBypassManifestSha256(
+    /** @type {any} */ (oldUnsigned)
+  );
+  assert.throws(
+    () => manifests.validateBypassActivationBatchManifest(oldVersion),
+    /Invalid dispute bypass Safe batch manifest/
+  );
   assert.doesNotThrow(() =>
     manifests.validateBypassActivationBatchManifest(valid, valid)
   );
   /** @type {Array<(value: Manifest) => void>} */
   const mutations = [
+    (m) => {
+      Object.assign(m, { version: 4 });
+    },
     (m) => {
       m.transactions[0].to = address(99);
     },
@@ -1059,7 +994,7 @@ async function withCleanLaneEnv(run) {
   }
 }
 
-test("lane 46 classifies bypass policy activity across cutover", () => {
+test("lane 46 classifies bypass policy activity across O4 registration", () => {
   const {
     FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
   } = require("../deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts");
@@ -1080,17 +1015,19 @@ test("lane 46 classifies bypass policy activity across cutover", () => {
   ].map(event);
   assert.deepEqual(lane.BYPASS_POLICY_LIFECYCLE_EVENTS, [
     ...FORBIDDEN_POLICY_LIFECYCLE_EVENTS,
-    "DisputeProtectionIntentStakeModeChanged",
+    "DeferredPayoutFunded",
+    "DeferredPayoutClaimed",
   ]);
   for (const name of [
-    "DisputeProtectionIntentStakeModeChanged",
+    "DeferredPayoutFunded",
+    "DeferredPayoutClaimed",
     "DisputeProtectionIntentOpened",
   ]) {
     assert.throws(
       () => lane.classifyBypassPolicyActivity([event(name)], true),
       {
         message:
-          "Fresh DisputeProtectionPolicyBypass has lifecycle activity before cutover: " +
+          "Fresh CascadeDisputeProtectionPolicy has lifecycle activity before cutover: " +
           `${name} in ${hash(1)}`,
       }
     );
@@ -1106,7 +1043,8 @@ test("lane 46 classifies bypass policy activity across cutover", () => {
         "DisputeProtectionIntentReleased",
         "DisputeProtectionIntentCancelled",
         "DisputeResolved",
-        "DisputeProtectionIntentStakeModeChanged",
+        "DeferredPayoutFunded",
+        "DeferredPayoutClaimed",
       ]
         .map(event)
         .concat(configuration),
@@ -1117,10 +1055,10 @@ test("lane 46 classifies bypass policy activity across cutover", () => {
     assert.throws(
       () =>
         lane.classifyBypassPolicyActivity(
-          [...configuration, event("SomethingNew")],
+          [...configuration, event("DisputeProtectionIntentStakeModeChanged")],
           beforeCutover
         ),
-      /emitted an unclassified event: SomethingNew/
+      /emitted an unclassified event: DisputeProtectionIntentStakeModeChanged/
     );
   }
 });
@@ -1245,7 +1183,7 @@ test("lane 45 prepared check delegates activating and active stacks to lane 46",
       name,
       {
         address:
-          name === "DisputeProtectionPolicyBypass"
+          name === "CascadeDisputeProtectionPolicy"
             ? wanted.addresses.freshPolicy
             : address(90),
       },
@@ -1266,17 +1204,16 @@ test("lane 45 prepared check delegates activating and active stacks to lane 46",
       provider: { getBlockNumber: async () => 100 },
       /** @param {string} name @param {string} target */
       getContractAt: async (name, target) => {
-        assert.equal(name, "NullifierRegistry");
+        if (name === "NullifierRegistry") return {};
+        assert.equal(name, "OrchestratorV3");
         assert.equal(
           target,
-          BYPASS_EXPECTED_LIVE.base_staging.disputeNullifierRegistry.address
+          require("../deploy/37_deploy_method_scoped_dispute_lifecycle_stack.ts")
+            .EXPECTED_LIVE.base_staging.orchestrator
         );
         return {
-          /** @param {string} policy */
-          isWriter: async (policy) => {
-            assert.equal(policy, wanted.addresses.freshPolicy);
-            return true;
-          },
+          lifecycleHook: async () =>
+            BYPASS_EXPECTED_LIVE.base_staging.predecessorHook.address,
         };
       },
     },
@@ -1297,7 +1234,7 @@ test("lane 45 prepared check delegates activating and active stacks to lane 46",
       calls.push("expected");
       return wanted;
     };
-    for (const count of [1, 2 * wanted.paymentMethods.length + 4]) {
+    for (const count of [1, 2 * wanted.paymentMethods.length + 5]) {
       const state = snapshot(wanted, count);
       assert.equal(
         model.reduceBypassActivation(state, wanted).phase,
@@ -1331,4 +1268,203 @@ test("lane 45 prepared check delegates activating and active stacks to lane 46",
   } finally {
     Object.assign(mutableLane, original);
   }
+});
+
+test("bypass batches never call OrchestratorV3", () => {
+  const wanted = expected();
+  const calls = model.buildBypassCutoverTransactions({
+    expected: wanted,
+    guard: address(50),
+    includeVaultAcceptOwnership: true,
+    includePolicyAcceptOwnership: true,
+  });
+  assert.ok(calls.every((call) => call.to !== wanted.addresses.orchestrator));
+  assert.equal(
+    transactionInterface.parseTransaction(calls[calls.length - 1]).name,
+    "addOrchestrator"
+  );
+  const staging = expected("base_staging");
+  const restore = model.buildBypassActionTransaction(
+    "restore-o3-hook",
+    staging
+  );
+  assert.equal(restore.to, staging.addresses.orchestrator);
+  assert.deepEqual(
+    abiValue(transactionInterface.parseTransaction(restore).args),
+    [staging.addresses.predecessorHook]
+  );
+  assert.deepEqual(model.bypassActivationActions([], "base_staging"), [
+    "restore-o3-hook",
+    "add-dispute-writer",
+    "add-verifier-writer",
+    "remove-retired-verifier-writer",
+    "register-orchestrator",
+  ]);
+  const initial = model.bypassRowStateAfter(staging, 0);
+  assert.deepEqual(initial.disputeWriters, staging.retainedDisputeWriters);
+  assert.deepEqual(initial.nrv2Writers, [staging.addresses.retiredVerifier]);
+  assert.equal(initial.registry.length, staging.paymentMethods.length);
+  assert.equal(initial.o3Hook, staging.addresses.initialO3Hook);
+});
+
+test("reducer rejects a fresh policy whose predecessor is not the resolved O3 policy", () => {
+  const wanted = expected();
+  const state = snapshot(wanted);
+  state.freshPolicy.predecessorPolicy = address(99);
+  assertViolation(state, wanted, "freshPolicy.predecessorPolicy");
+});
+
+test("O4 and registry trust drift fails closed", () => {
+  const wanted = expected();
+  for (const [key, value] of Object.entries({
+    owner: address(99),
+    paused: true,
+    chainId: "1",
+    lifecycleHook: ZERO,
+    escrowRegistry: ZERO,
+    paymentVerifierRegistry: ZERO,
+    relayerRegistry: ZERO,
+    protocolFee: "1",
+    protocolFeeRecipient: ZERO,
+    allowMultipleIntents: false,
+    registered: true,
+  })) {
+    const state = snapshot(wanted);
+    Object.assign(state.orchestratorV4, { [key]: value });
+    assertViolation(state, wanted, `orchestratorV4.${key}`);
+    assert.throws(
+      () =>
+        model.assertBypassGuardExpectationsUnchanged(snapshot(wanted), state),
+      /orchestratorV4/
+    );
+  }
+  const state = snapshot(wanted);
+  state.orchestratorRegistry.owner = ZERO;
+  assertViolation(state, wanted, "orchestratorRegistry.owner");
+  state.orchestrator.lifecycleHook = wanted.addresses.freshHook;
+  assertViolation(state, wanted, "orchestrator.lifecycleHook");
+});
+
+for (const mode of ["staked", "no-stake", "staked then switched to no-stake"]) {
+  test(`${mode} PENDING stale-policy intent blocks rotation`, async () => {
+    const events = [
+      { name: "DisputeProtectionIntentOpened", intentHash: hash(1) },
+    ];
+    if (mode.includes("switched"))
+      events.push({
+        name: "DisputeProtectionIntentStakeModeChanged",
+        intentHash: hash(1),
+      });
+    assert.deepEqual(model.openStaleBypassIntents(events), [hash(1)]);
+  });
+}
+
+test("a settled or cancelled intent does not block", () => {
+  assert.deepEqual(
+    model.openStaleBypassIntents([
+      { name: "DisputeProtectionIntentOpened", intentHash: hash(1) },
+      { name: "DisputeProtectionIntentOpened", intentHash: hash(2) },
+      { name: "DisputeProtectionIntentSettled", intentHash: hash(1) },
+      { name: "DisputeProtectionIntentCancelled", intentHash: hash(2) },
+    ]),
+    []
+  );
+});
+
+test("staging rotation waits for stale bypass intents", async () => {
+  const abi = [
+    "event DisputeProtectionIntentOpened(bytes32 indexed intentHash, uint256 amount)",
+    "event DisputeProtectionIntentSettled(bytes32 indexed intentHash)",
+    "event DisputeProtectionIntentCancelled(bytes32 indexed intentHash)",
+  ];
+  const iface = new utils.Interface(abi);
+  const record = {
+    address: address(80),
+    abi,
+    receipt: {
+      blockNumber: 10,
+      from: address(1),
+      transactionHash: hash(1),
+      blockHash: hash(2),
+      transactionIndex: 0,
+      gasUsed: "1",
+      cumulativeGasUsed: "1",
+      logs: [],
+    },
+  };
+  const opened = iface.encodeEventLog(
+    iface.getEvent("DisputeProtectionIntentOpened"),
+    [hash(1), 100]
+  );
+  const settled = iface.encodeEventLog(
+    iface.getEvent("DisputeProtectionIntentSettled"),
+    [hash(1)]
+  );
+  const logs = [opened];
+  /** @param {import("ethers").providers.Filter} filter */
+  const readLogs = async (filter) => {
+    assert.deepEqual(filter, {
+      address: record.address,
+      fromBlock: 10,
+      toBlock: 100,
+    });
+    return logs;
+  };
+  await assert.rejects(
+    () => lane.assertStaleBypassIntentsDrained(readLogs, record, 100),
+    /Stale bypass intents still open: 1/
+  );
+  logs.push(settled);
+  await assert.doesNotReject(() =>
+    lane.assertStaleBypassIntentsDrained(readLogs, record, 100)
+  );
+});
+
+test("staging rows follow each registry mutation and register O4 last", () => {
+  const wanted = expected("base_staging");
+  const a = wanted.addresses;
+  const state = {
+    disputeWriters: [...wanted.retainedDisputeWriters],
+    nrv2Writers: [a.retiredVerifier],
+    registry: wanted.paymentMethods.map((method) => ({
+      ...method,
+      verifier: a.retiredVerifier,
+    })),
+    o3Hook: a.initialO3Hook,
+    o4Registered: false,
+  };
+  const actions = model.bypassActivationActions(
+    wanted.paymentMethods.map((method) => method.paymentMethod),
+    wanted.network
+  );
+  assert.deepEqual(model.bypassRowStateAfter(wanted, 0), state);
+  actions.forEach((action, index) => {
+    if (action === "restore-o3-hook") state.o3Hook = a.predecessorHook;
+    else if (action === "add-dispute-writer")
+      state.disputeWriters.push(a.freshPolicy);
+    else if (action === "add-verifier-writer")
+      state.nrv2Writers.push(a.verifier);
+    else if (action === "remove-retired-verifier-writer")
+      state.nrv2Writers = [a.verifier];
+    else if (action === "register-orchestrator") state.o4Registered = true;
+    else if (action.startsWith("remove-method:")) {
+      const removed = state.registry.pop();
+      assert.equal(
+        removed?.paymentMethod,
+        action.slice("remove-method:".length)
+      );
+    } else {
+      const method = wanted.paymentMethods.find(
+        (method) => action === `add-method:${method.paymentMethod}`
+      );
+      assert.ok(method);
+      state.registry.push({ ...method, verifier: a.verifier });
+    }
+    assert.deepEqual(model.bypassRowStateAfter(wanted, index + 1), state);
+  });
+  for (const invalid of [-1, 0.5, actions.length + 1])
+    assert.throws(
+      () => model.bypassRowStateAfter(wanted, invalid),
+      /Invalid completed action count/
+    );
 });

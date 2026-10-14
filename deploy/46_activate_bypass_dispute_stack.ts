@@ -1,5 +1,6 @@
 import { spawnSync } from "child_process";
 import { resolve } from "path";
+import { utils } from "ethers";
 import type { BigNumber, Contract, providers } from "ethers";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
 import type { DeployFunction, Deployment } from "hardhat-deploy/types";
@@ -12,6 +13,8 @@ import {
   expectedPaymentMethodCurrencies,
   isBypassLiveNetwork,
   paymentMethodHash,
+  isSupersededStagingRecord,
+  BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS,
 } from "../deployments/bypassDisputeStack";
 import type { BypassNetwork } from "../deployments/bypassDisputeStack";
 import {
@@ -20,20 +23,17 @@ import {
   assertBypassGuardExpectationsUnchanged,
   buildBypassActionTransaction,
   buildBypassCutoverTransactions,
-  buildBypassInventory,
   buildBypassTrustSurface,
   bypassActivationActions,
-  bypassInventoryTupleArgs,
   bypassTrustSurfaceTuple,
   reduceBypassActivation,
+  openStaleBypassIntents,
 } from "../deployments/bypassDisputeActivation";
 import type {
   BypassActivationNetwork,
   BypassActivationReduction,
   BypassActivationSnapshot,
   BypassExpectedActivationState,
-  BypassInventory,
-  BypassInventoryTuple,
 } from "../deployments/bypassDisputeActivation";
 import {
   BYPASS_ACTIVATION_BATCH_PATHS,
@@ -69,6 +69,7 @@ import {
   verifyBypassActivationCandidate,
 } from "../scripts/verify-bypass-dispute-safe-batch";
 
+import { verifySupersededStagingBinding } from "../deployments/bypassPaymentBinding";
 import { classifyBypassPolicyActivity } from "./45_deploy_bypass_dispute_stack";
 export {
   BYPASS_POLICY_LIFECYCLE_EVENTS,
@@ -96,11 +97,10 @@ export const FLAGS = {
 
 const RECORD_NAMES = {
   escrow: "EscrowV2",
-  freshVault: "StakeVaultBypass",
-  freshPolicy: "DisputeProtectionPolicyBypass",
-  freshHook: "IntentLifecycleHookV1Bypass",
+  freshVault: "StakeVaultCascade",
+  freshPolicy: "CascadeDisputeProtectionPolicy",
+  freshHook: "IntentLifecycleHookV2",
   verifier: "UnifiedPaymentVerifierV4",
-  retiredVerifier: "UnifiedPaymentVerifierV3",
   predecessorVault: BYPASS_PREDECESSOR_DEPLOYMENT_NAMES.vault,
   predecessorPolicy: BYPASS_PREDECESSOR_DEPLOYMENT_NAMES.policy,
   predecessorHook: BYPASS_PREDECESSOR_DEPLOYMENT_NAMES.hook,
@@ -108,6 +108,7 @@ const RECORD_NAMES = {
   nullifierRegistryV2: "NullifierRegistryV2",
   paymentVerifierRegistry: "PaymentVerifierRegistry",
   orchestrator: "OrchestratorV3",
+  orchestratorV4: "OrchestratorV4",
   orchestratorRegistry: "OrchestratorRegistry",
   escrowRegistry: "EscrowRegistry",
   relayerRegistry: "RelayerRegistry",
@@ -230,11 +231,6 @@ function liveRecordPins(network: BypassNetwork): RecordPin[] {
     ...(
       [
         [
-          "UnifiedPaymentVerifierV3",
-          "UnifiedPaymentVerifierV3",
-          p.unifiedPaymentVerifierV3,
-        ],
-        [
           "PaymentVerifierRegistry",
           "PaymentVerifierRegistry",
           p.paymentVerifierRegistry,
@@ -276,15 +272,23 @@ async function verifyRecords(
   blockTag: string | number
 ): Promise<void> {
   for (const name of BYPASS_DEPLOYMENT_NAMES) {
-    await assertBypassDeploymentRecord(
-      hre,
-      network,
-      name,
-      await hre.deployments.get(name),
-      blockTag
+    const record = await hre.deployments.get(name);
+    requireState(
+      !isSupersededStagingRecord(network, name, record.address),
+      "Superseded staging UPV4; run lane 45 first"
     );
+    await assertBypassDeploymentRecord(hre, network, name, record, blockTag);
   }
   if (!isBypassLiveNetwork(network)) return;
+  for (const key of ["retiredVerifier", "initialO3Hook"] as const) {
+    const pin = BYPASS_EXPECTED_LIVE[network][key];
+    const code = await hre.ethers.provider.getCode(pin.address, blockTag);
+    requireState(
+      code !== "0x" &&
+        lower(hre.ethers.utils.keccak256(code)) === lower(pin.runtimeCodeHash),
+      `${key} runtime bytecode hash mismatch`
+    );
+  }
   for (const pin of liveRecordPins(network)) {
     const record = await hre.deployments.get(pin.name);
     requireState(
@@ -360,6 +364,14 @@ export async function resolveBypassActivationContext(
         lower(record.address),
       ])
     ) as Record<RecordKey, string>),
+    retiredVerifier: lower(
+      live
+        ? live.retiredVerifier.address
+        : (await hre.deployments.get("UnifiedPaymentVerifierV3")).address
+    ),
+    initialO3Hook: lower(
+      live ? live.initialO3Hook.address : records.predecessorHook.address
+    ),
     safe: governance,
     deployer,
     protocolFeeRecipient: lower(
@@ -428,6 +440,12 @@ export async function resolveBypassActivationContext(
   }
   const expected: BypassExpectedActivationState = {
     network,
+    chainId: String(
+      live ? 8453 : (await hre.ethers.provider.getNetwork()).chainId
+    ),
+    retainedDisputeWriters: live
+      ? live.retainedDisputeWriters.map(lower)
+      : [addresses.predecessorPolicy],
     governance,
     deployer,
     addresses,
@@ -507,91 +525,89 @@ async function authorizedHooks(
   }
   return [...authorized].filter(([, enabled]) => enabled).map(([hook]) => hook);
 }
-async function readInventory(
-  hre: HardhatRuntimeEnvironment,
-  context: ActivationContext,
-  block: number,
-  riskWindows: Record<string, string>
-): Promise<BypassInventory> {
-  const { addresses: a } = context.expected;
-  const record = context.records.predecessorPolicy;
-  const iface = new hre.ethers.utils.Interface(record.abi);
-  const logs = await pagedLogs(
-    hre,
-    {
-      address: record.address,
-      topics: [
-        iface.getEventTopic("DisputeProtectionEnabledUpdated"),
-        hre.ethers.utils.hexZeroPad(a.escrow, 32),
-      ],
-    },
-    deploymentBlock(record),
-    block
-  );
-  const distinct = new Map<string, BypassInventoryTuple>();
-  for (const log of logs) {
-    const { args } = iface.parseLog(log);
-    const tuple = {
-      escrow: lower(args.escrow),
-      depositId: decimal(args.depositId),
-      paymentMethod: lower(args.paymentMethod),
-    };
-    distinct.set(
-      `${tuple.escrow}:${tuple.depositId}:${tuple.paymentMethod}`,
-      tuple
-    );
-  }
-  const escrow = await hre.ethers.getContractAt("EscrowV2", a.escrow);
-  const predecessor = await hre.ethers.getContractAt(
-    "DisputeProtectionPolicy",
-    a.predecessorPolicy
-  );
-  const fresh = await hre.ethers.getContractAt(
-    "DisputeProtectionPolicy",
-    a.freshPolicy
-  );
-  const tuples = await mapWithConcurrency(
-    [...distinct.values()],
-    readConcurrency(),
-    async (tuple) => {
-      const deposit = await read<{ depositor: string }>(
-        escrow,
-        "getDeposit",
-        [tuple.depositId],
-        block
-      );
-      return {
-        ...tuple,
-        depositor: lower(deposit.depositor),
-        listedPaymentMethods: (
-          await read<string[]>(
-            escrow,
-            "getDepositPaymentMethods",
-            [tuple.depositId],
-            block
-          )
-        ).map(lower),
-        predecessorEnabled: await read<boolean>(
-          predecessor,
-          "isDisputeProtectionEnabled",
-          [tuple.escrow, tuple.depositId, tuple.paymentMethod],
-          block
-        ),
-        freshEnabled: await read<boolean>(
-          fresh,
-          "isDisputeProtectionEnabled",
-          [tuple.escrow, tuple.depositId, tuple.paymentMethod],
-          block
-        ),
-      };
-    }
-  );
-  return buildBypassInventory({
-    escrow: a.escrow,
-    block: decimal(block),
-    freshRiskWindows: riskWindows,
-    tuples,
+type ReadStaleLogs = (
+  filter: providers.Filter
+) => Promise<Array<Pick<providers.Log, "topics" | "data">>>;
+async function readOpenStaleBypassIntents(
+  readLogs: ReadStaleLogs,
+  staleRecord: Deployment,
+  toBlock: number
+): Promise<string[]> {
+  const iface = new utils.Interface(staleRecord.abi);
+  const logs = await readLogs({
+    address: staleRecord.address,
+    fromBlock: deploymentBlock(staleRecord),
+    toBlock,
   });
+  const events = logs
+    .map((log) => iface.parseLog(log))
+    .filter((event) =>
+      [
+        "DisputeProtectionIntentOpened",
+        "DisputeProtectionIntentCancelled",
+        "DisputeProtectionIntentSettled",
+      ].includes(event.name)
+    )
+    .map((event) => ({
+      name: event.name,
+      intentHash: String(event.args.intentHash),
+    }));
+  return openStaleBypassIntents(events);
+}
+export async function assertStaleBypassIntentsDrained(
+  readLogs: ReadStaleLogs,
+  staleRecord: Deployment,
+  toBlock: number
+): Promise<void> {
+  const open = await readOpenStaleBypassIntents(readLogs, staleRecord, toBlock);
+  requireState(
+    open.length === 0,
+    `Stale bypass intents still open: ${open.length}; ${open.join(", ")}`
+  );
+}
+async function stalePolicyScan(
+  hre: HardhatRuntimeEnvironment,
+  toBlock: number
+) {
+  const record = await hre.deployments.get("DisputeProtectionPolicyBypass");
+  const pin =
+    BYPASS_SUPERSEDED_STAGING_DEPLOYMENTS.DisputeProtectionPolicyBypass;
+  requireState(
+    lower(record.address) === lower(pin.address),
+    "Stale bypass policy address mismatch"
+  );
+  requireState(
+    lower(
+      hre.ethers.utils.keccak256(
+        await hre.ethers.provider.getCode(pin.address, toBlock)
+      )
+    ) === lower(pin.runtimeCodeHash),
+    "Stale bypass policy runtime bytecode hash mismatch"
+  );
+  const readLogs: ReadStaleLogs = (filter) =>
+    pagedLogs(
+      hre,
+      { address: filter.address },
+      Number(filter.fromBlock),
+      Number(filter.toBlock)
+    );
+  return { record, readLogs };
+}
+async function assertStagingDrain(
+  hre: HardhatRuntimeEnvironment,
+  state: Awaited<ReturnType<typeof readPinnedState>>
+): Promise<void> {
+  const actions = bypassActivationActions(
+    state.expected.paymentMethods.map((method) => method.paymentMethod),
+    "base_staging"
+  );
+  if (
+    state.reduction.completedActions !== null &&
+    state.reduction.completedActions >= actions.indexOf("add-verifier-writer")
+  ) {
+    const { record, readLogs } = await stalePolicyScan(hre, state.blockNumber);
+    await assertStaleBypassIntentsDrained(readLogs, record, state.blockNumber);
+  }
 }
 
 export async function readBypassActivationSnapshot(
@@ -631,7 +647,7 @@ export async function readBypassActivationSnapshot(
     writers: await list(c, "getWriters"),
   });
   const vault = await at("StakeVault", a.freshVault);
-  const policy = await at("DisputeProtectionPolicy", a.freshPolicy);
+  const policy = await at("CascadeDisputeProtectionPolicy", a.freshPolicy);
   const predecessorVault = await at("StakeVault", a.predecessorVault);
   const predecessorPolicy = await at(
     "DisputeProtectionPolicy",
@@ -644,6 +660,11 @@ export async function readBypassActivationSnapshot(
     a.paymentVerifierRegistry
   );
   const orchestrator = await at("OrchestratorV3", a.orchestrator);
+  const orchestratorV4 = await at("OrchestratorV4", a.orchestratorV4);
+  const orchestratorRegistry = await at(
+    "OrchestratorRegistry",
+    a.orchestratorRegistry
+  );
   const whitelist = await at("WhitelistPolicy", a.whitelistPolicy);
   const attestation = await at(
     context.simpleAttestation
@@ -677,6 +698,7 @@ export async function readBypassActivationSnapshot(
     },
     freshPolicy: {
       ...(await ownership(policy)),
+      predecessorPolicy: await address(policy, "predecessorPolicy"),
       admissionsPaused: await bool(policy, "admissionsPaused"),
       stakeVault: await address(policy, "stakeVault"),
       disputeVerifier: await address(policy, "disputeVerifier"),
@@ -691,7 +713,7 @@ export async function readBypassActivationSnapshot(
       ),
       riskWindows,
     },
-    freshHook: await hook(await at("IntentLifecycleHookV1", a.freshHook)),
+    freshHook: await hook(await at("IntentLifecycleHookV2", a.freshHook)),
     verifier: {
       owner: await address(verifier, "owner"),
       orchestratorRegistry: await address(verifier, "orchestratorRegistry"),
@@ -769,6 +791,32 @@ export async function readBypassActivationSnapshot(
         [a.orchestrator]
       ),
     },
+    orchestratorV4: {
+      chainId: await number(orchestratorV4, "chainId"),
+      owner: await address(orchestratorV4, "owner"),
+      paused: await bool(orchestratorV4, "paused"),
+      lifecycleHook: await address(orchestratorV4, "lifecycleHook"),
+      escrowRegistry: await address(orchestratorV4, "escrowRegistry"),
+      paymentVerifierRegistry: await address(
+        orchestratorV4,
+        "paymentVerifierRegistry"
+      ),
+      relayerRegistry: await address(orchestratorV4, "relayerRegistry"),
+      protocolFee: await number(orchestratorV4, "protocolFee"),
+      protocolFeeRecipient: await address(
+        orchestratorV4,
+        "protocolFeeRecipient"
+      ),
+      allowMultipleIntents: await bool(orchestratorV4, "allowMultipleIntents"),
+      registered: await bool(
+        await at("OrchestratorRegistry", a.orchestratorRegistry),
+        "isOrchestrator",
+        [a.orchestratorV4]
+      ),
+    },
+    orchestratorRegistry: {
+      owner: await address(orchestratorRegistry, "owner"),
+    },
     whitelistPolicy: {
       owner: await address(whitelist, "owner"),
       escrowRegistry: await address(whitelist, "escrowRegistry"),
@@ -795,7 +843,6 @@ export async function readBypassActivationSnapshot(
       ),
       nullifierRegistry: await address(disputeVerifier, "nullifierRegistry"),
     },
-    inventory: await readInventory(hre, context, block.number, riskWindows),
   };
 }
 
@@ -813,7 +860,7 @@ function recognized(
   return reduction;
 }
 /** Unlike lane 45, activation admits each recognized prefix. Fresh lifecycle
- * activity is legitimate only after O3 has switched to the successor hook. */
+ * activity is legitimate only after O4 has been registered. */
 export async function assertBypassActivationSharedState(
   hre: HardhatRuntimeEnvironment,
   network: BypassNetwork,
@@ -863,18 +910,23 @@ export async function assertBypassActivationSharedState(
       deploymentBlock(record),
       block.number
     ),
-    "DisputeProtectionPolicyBypass"
+    "CascadeDisputeProtectionPolicy"
   );
-  const beforeCutover =
-    snapshot.orchestrator.lifecycleHook ===
-    context.expected.addresses.predecessorHook;
+  const beforeCutover = !snapshot.orchestratorV4.registered;
   classifyBypassPolicyActivity(events, beforeCutover);
-  recognized(snapshot, context.expected);
+  const reduction = recognized(snapshot, context.expected);
+  if (
+    network === "base_staging" &&
+    reduction.completedActions !== null &&
+    reduction.completedActions <= 2
+  ) {
+    await verifySupersededStagingBinding(hre, pins.retiredVerifier);
+  }
   return snapshot;
 }
 
-/** Downstream readiness confirms UPV4-domain attestations with the bypass flag and
- * clients encoding intent.data = abi.encode(policy, abi.encode(bool noStake)). */
+/** Downstream readiness confirms 480-byte UPV4-domain attestations for both
+ * orchestrators and clients routing new intents to O4. */
 function requireConfirmations(network: BypassNetwork): void {
   for (const flag of [
     FLAGS.confirmActivation(network),
@@ -927,6 +979,7 @@ async function executeActivation(
     );
     const signer = await hre.ethers.getSigner(before.expected.deployer);
     if (network === "base_staging") {
+      await assertStagingDrain(hre, before);
       const preflight = await preflightStagingTransaction(
         hre,
         before.transaction,
@@ -941,6 +994,7 @@ async function executeActivation(
             JSON.stringify(before.transaction),
         "Base staging bypass activation state changed after preflight"
       );
+      await assertStagingDrain(hre, execution);
       const executionPreflight = await preflightStagingTransaction(
         hre,
         execution.transaction,
@@ -976,6 +1030,15 @@ export async function prepareOrExecuteStagingActivation(
     return;
   }
   const state = await readPinnedState(hre, "base_staging");
+  const { record, readLogs } = await stalePolicyScan(hre, state.blockNumber);
+  const open = await readOpenStaleBypassIntents(
+    readLogs,
+    record,
+    state.blockNumber
+  );
+  console.log(
+    `Stale bypass intents still open: ${open.length}; ${open.join(", ")}`
+  );
   if (state.reduction.phase === "active") {
     logActive(state.snapshot);
     return;
@@ -985,7 +1048,8 @@ export async function prepareOrExecuteStagingActivation(
     "Base staging bypass activation has no next transaction"
   );
   const remaining = bypassActivationActions(
-    state.expected.paymentMethods.map((method) => method.paymentMethod)
+    state.expected.paymentMethods.map((method) => method.paymentMethod),
+    "base_staging"
   ).slice(state.reduction.completedActions);
   for (const action of remaining)
     console.log(
@@ -1092,8 +1156,8 @@ export async function prepareBaseCutoverBatch(
     return;
   }
   requireState(
-    reduction.phase === "deployed" && proofSnapshot.inventory.ok,
-    "Base bypass batch requires deployed phase with inventory ok"
+    reduction.phase === "deployed",
+    "Base bypass batch requires deployed phase"
   );
   const trustSurface = buildBypassTrustSurface(expected, proofSnapshot);
   const includeVaultAcceptOwnership =
@@ -1107,7 +1171,6 @@ export async function prepareBaseCutoverBatch(
     bypassTrustSurfaceTuple(trustSurface),
     includeVaultAcceptOwnership,
     includePolicyAcceptOwnership,
-    bypassInventoryTupleArgs(proofSnapshot.inventory),
   ]);
   const postcondition = await deployContract(
     hre,
@@ -1140,7 +1203,7 @@ export async function prepareBaseCutoverBatch(
     expected.addresses.safe
   );
   const unsigned: Omit<BypassActivationBatchManifest, "manifestSha256"> = {
-    version: 4,
+    version: 5,
     kind: "dispute-bypass-cutover",
     chainId: 8453,
     safe: expected.addresses.safe,

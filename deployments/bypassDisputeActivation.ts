@@ -17,18 +17,6 @@ type Hook = {
 };
 type PaymentMethod = { paymentMethod: string; currencies: string[] };
 type Route = PaymentMethod & { verifier: string };
-export type BypassInventoryTuple = {
-  escrow: string;
-  depositId: string;
-  paymentMethod: string;
-};
-export type BypassInventory = {
-  escrow: string;
-  block: string;
-  tuples: BypassInventoryTuple[];
-  violations: BypassInventoryTuple[];
-  ok: boolean;
-};
 export type BypassActivationSnapshot = {
   network: BypassActivationNetwork;
   blockNumber: string;
@@ -42,6 +30,7 @@ export type BypassActivationSnapshot = {
     stakeToken: string;
   };
   freshPolicy: Ownership & {
+    predecessorPolicy: string;
     admissionsPaused: boolean;
     stakeVault: string;
     disputeVerifier: string;
@@ -85,6 +74,20 @@ export type BypassActivationSnapshot = {
     allowMultipleIntents: boolean;
     registered: boolean;
   };
+  orchestratorV4: {
+    chainId: string;
+    owner: string;
+    paused: boolean;
+    lifecycleHook: string;
+    escrowRegistry: string;
+    paymentVerifierRegistry: string;
+    relayerRegistry: string;
+    protocolFee: string;
+    protocolFeeRecipient: string;
+    allowMultipleIntents: boolean;
+    registered: boolean;
+  };
+  orchestratorRegistry: { owner: string };
   whitelistPolicy: {
     owner: string;
     escrowRegistry: string;
@@ -100,7 +103,6 @@ export type BypassActivationSnapshot = {
     attestationVerifier: string;
     nullifierRegistry: string;
   };
-  inventory: BypassInventory;
 };
 export type BypassExpectedActivationState = {
   network: BypassActivationNetwork;
@@ -121,6 +123,8 @@ export type BypassExpectedActivationState = {
     | "disputeRegistry"
     | "nullifierRegistryV2"
     | "paymentVerifierRegistry"
+    | "orchestratorV4"
+    | "initialO3Hook"
     | "orchestrator"
     | "orchestratorRegistry"
     | "escrowRegistry"
@@ -133,6 +137,8 @@ export type BypassExpectedActivationState = {
     | "stakeToken",
     string
   >;
+  chainId: string;
+  retainedDisputeWriters: string[];
   allowedWhitelistPolicyOwners: string[];
   witnesses: string[];
   allowMultipleIntents: boolean;
@@ -152,6 +158,7 @@ export type BypassTrustSurfaceInput = {
   safe: string;
   deployer: string;
   orchestrator: string;
+  orchestratorV4: string;
   orchestratorRegistry: string;
   escrowRegistry: string;
   paymentVerifierRegistry: string;
@@ -223,9 +230,11 @@ function violations(invariants: readonly Invariant[]): string[] {
 /** Keep the predecessor dispute writer until old intents drain in a later lane.
  * Remove methods from the end so swap-and-pop preserves the remaining order. */
 export function bypassActivationActions(
-  paymentMethodHashes: string[]
+  paymentMethodHashes: string[],
+  network: BypassActivationNetwork
 ): string[] {
   return [
+    ...(network === "base_staging" ? ["restore-o3-hook"] : []),
     "add-dispute-writer",
     "add-verifier-writer",
     ...[...paymentMethodHashes]
@@ -233,7 +242,7 @@ export function bypassActivationActions(
       .map((method) => `remove-method:${method}`),
     ...paymentMethodHashes.map((method) => `add-method:${method}`),
     "remove-retired-verifier-writer",
-    "set-lifecycle-hook",
+    "register-orchestrator",
   ];
 }
 export function bypassRowStateAfter(
@@ -243,21 +252,30 @@ export function bypassRowStateAfter(
   disputeWriters: string[];
   nrv2Writers: string[];
   registry: Route[];
-  hook: string;
+  o3Hook: string;
+  o4Registered: boolean;
 } {
   const { addresses: a, paymentMethods } = expected;
   const n = paymentMethods.length;
-  if (!Number.isSafeInteger(k) || k < 0 || k > 2 * n + 4)
+  const actions = bypassActivationActions(
+    paymentMethods.map((method) => method.paymentMethod),
+    expected.network
+  );
+  const offset = expected.network === "base_staging" ? 1 : 0;
+  if (!Number.isSafeInteger(k) || k < 0 || k > actions.length)
     throw new Error("Invalid completed action count");
-  const removing = k <= n + 2;
-  const count = k <= 2 ? n : removing ? n - (k - 2) : Math.min(n, k - n - 2);
+  const j = Math.max(0, k - offset);
+  const removing = j <= n + 2;
+  const count = j <= 2 ? n : removing ? n - (j - 2) : Math.min(n, j - n - 2);
   return {
-    disputeWriters:
-      k >= 1 ? [a.predecessorPolicy, a.freshPolicy] : [a.predecessorPolicy],
+    disputeWriters: [
+      ...expected.retainedDisputeWriters,
+      ...(j >= 1 ? [a.freshPolicy] : []),
+    ],
     nrv2Writers:
-      k < 2
+      j < 2
         ? [a.retiredVerifier]
-        : k < 2 * n + 3
+        : j < 2 * n + 3
         ? [a.retiredVerifier, a.verifier]
         : [a.verifier],
     registry: paymentMethods.slice(0, count).map((method) => ({
@@ -265,7 +283,8 @@ export function bypassRowStateAfter(
       currencies: [...method.currencies],
       verifier: removing ? a.retiredVerifier : a.verifier,
     })),
-    hook: k === 2 * n + 4 ? a.freshHook : a.predecessorHook,
+    o3Hook: offset && k === 0 ? a.initialO3Hook : a.predecessorHook,
+    o4Registered: k === actions.length,
   };
 }
 function commonInvariants(
@@ -280,6 +299,7 @@ function commonInvariants(
     "freshVault.pendingControllerValidAt": "0",
     "freshVault.controllerChangeDelay": "0",
     "freshVault.stakeToken": a.stakeToken,
+    "freshPolicy.predecessorPolicy": a.predecessorPolicy,
     "freshPolicy.admissionsPaused": false,
     "freshPolicy.stakeVault": a.freshVault,
     "freshPolicy.disputeVerifier": a.disputeVerifier,
@@ -321,6 +341,17 @@ function commonInvariants(
     "orchestrator.protocolFeeRecipient": a.protocolFeeRecipient,
     "orchestrator.allowMultipleIntents": e.allowMultipleIntents,
     "orchestrator.registered": true,
+    "orchestratorV4.owner": e.governance,
+    "orchestratorV4.paused": false,
+    "orchestratorV4.escrowRegistry": a.escrowRegistry,
+    "orchestratorV4.paymentVerifierRegistry": a.paymentVerifierRegistry,
+    "orchestratorV4.relayerRegistry": a.relayerRegistry,
+    "orchestratorV4.protocolFee": e.protocolFee,
+    "orchestratorV4.protocolFeeRecipient": a.protocolFeeRecipient,
+    "orchestratorV4.allowMultipleIntents": e.allowMultipleIntents,
+    "orchestratorV4.chainId": e.chainId,
+    "orchestratorV4.lifecycleHook": a.freshHook,
+    "orchestratorRegistry.owner": e.governance,
     "whitelistPolicy.escrowRegistry": a.escrowRegistry,
     "whitelistPolicy.groupRegistry": a.groupRegistry,
     "whitelistPolicy.orchestratorRegistry": a.orchestratorRegistry,
@@ -331,8 +362,6 @@ function commonInvariants(
     "disputeVerifier.pendingOwner": ZERO,
     "disputeVerifier.attestationVerifier": a.attestationVerifier,
     "disputeVerifier.nullifierRegistry": a.nullifierRegistryV2,
-    "inventory.block": s.blockNumber,
-    "inventory.escrow": a.escrow,
   };
   const invariants: Invariant[] = Object.entries(wanted).map(
     ([path, value]) => [path, equal(getPath(s, path), value)]
@@ -387,18 +416,22 @@ function rowInvariants(
     ],
     [
       "orchestrator.lifecycleHook",
-      equal(s.orchestrator.lifecycleHook, row.hook),
+      equal(s.orchestrator.lifecycleHook, row.o3Hook),
+    ],
+    [
+      "orchestratorV4.registered",
+      equal(s.orchestratorV4.registered, row.o4Registered),
     ],
   ];
 }
-/** Inventory gates only the initial state; once activation starts it is informational.
- * Base must move atomically from deployed to active, while staging/local can resume a prefix. */
+/** Base must move atomically from deployed to active, while staging/local can resume a prefix. */
 export function reduceBypassActivation(
   snapshot: BypassActivationSnapshot,
   expected: BypassExpectedActivationState
 ): BypassActivationReduction {
   const actions = bypassActivationActions(
-    expected.paymentMethods.map((method) => method.paymentMethod)
+    expected.paymentMethods.map((method) => method.paymentMethod),
+    expected.network
   );
   const common = violations(commonInvariants(snapshot, expected));
   const rows = Array.from({ length: actions.length + 1 }, (_, k) => ({
@@ -416,7 +449,6 @@ export function reduceBypassActivation(
     if (matches.length > 1) failures.push("rows.uniqueMatch");
   }
   const k = matches.length === 1 ? matches[0].k : null;
-  if (k === 0 && !snapshot.inventory.ok) failures.push("inventory.ok");
   if (k !== null && expected.network === "base") {
     if (k > 0 && k < actions.length) failures.push("base.atomicCutover");
     if (k === actions.length) {
@@ -454,6 +486,9 @@ const interfaces = {
     "function removePaymentMethod(bytes32)",
   ]),
   orchestrator: new utils.Interface(["function setLifecycleHook(address)"]),
+  orchestratorRegistry: new utils.Interface([
+    "function addOrchestrator(address)",
+  ]),
   guard: new utils.Interface(["function assertReady()"]),
   ownership: new utils.Interface(["function acceptOwnership()"]),
 };
@@ -490,11 +525,18 @@ export function buildBypassActionTransaction(
           a.retiredVerifier,
         ])
       );
-    case "set-lifecycle-hook":
+    case "register-orchestrator":
+      return transaction(
+        a.orchestratorRegistry,
+        interfaces.orchestratorRegistry.encodeFunctionData("addOrchestrator", [
+          a.orchestratorV4,
+        ])
+      );
+    case "restore-o3-hook":
       return transaction(
         a.orchestrator,
         interfaces.orchestrator.encodeFunctionData("setLifecycleHook", [
-          a.freshHook,
+          a.predecessorHook,
         ])
       );
   }
@@ -546,7 +588,8 @@ export function buildBypassCutoverTransactions(input: {
     );
   return transactions.concat(
     bypassActivationActions(
-      input.expected.paymentMethods.map((method) => method.paymentMethod)
+      input.expected.paymentMethods.map((method) => method.paymentMethod),
+      input.expected.network
     ).map((action) => buildBypassActionTransaction(action, input.expected))
   );
 }
@@ -588,6 +631,7 @@ export function buildBypassTrustSurface(
     safe: a.safe,
     deployer: expected.deployer,
     orchestrator: a.orchestrator,
+    orchestratorV4: a.orchestratorV4,
     orchestratorRegistry: a.orchestratorRegistry,
     escrowRegistry: a.escrowRegistry,
     paymentVerifierRegistry: a.paymentVerifierRegistry,
@@ -629,6 +673,7 @@ export function bypassTrustSurfaceTuple(
     s.safe,
     s.deployer,
     s.orchestrator,
+    s.orchestratorV4,
     s.orchestratorRegistry,
     s.escrowRegistry,
     s.paymentVerifierRegistry,
@@ -659,16 +704,6 @@ export function bypassTrustSurfaceTuple(
     s.riskWindows,
   ];
 }
-export function bypassInventoryTupleArgs(
-  inventory: BypassInventory
-): [string, string, string][] {
-  return inventory.tuples.map(({ escrow, depositId, paymentMethod }) => [
-    escrow,
-    depositId,
-    paymentMethod,
-  ]);
-}
-
 export const BYPASS_GUARD_BOUND_FIELDS = [
   "freshVault.owner",
   "freshVault.pendingOwner",
@@ -679,6 +714,7 @@ export const BYPASS_GUARD_BOUND_FIELDS = [
   "freshVault.stakeToken",
   "freshPolicy.owner",
   "freshPolicy.pendingOwner",
+  "freshPolicy.predecessorPolicy",
   "freshPolicy.admissionsPaused",
   "freshPolicy.stakeVault",
   "freshPolicy.disputeVerifier",
@@ -720,6 +756,18 @@ export const BYPASS_GUARD_BOUND_FIELDS = [
   "orchestrator.protocolFeeRecipient",
   "orchestrator.allowMultipleIntents",
   "orchestrator.registered",
+  "orchestratorV4.owner",
+  "orchestratorV4.paused",
+  "orchestratorV4.lifecycleHook",
+  "orchestratorV4.escrowRegistry",
+  "orchestratorV4.paymentVerifierRegistry",
+  "orchestratorV4.relayerRegistry",
+  "orchestratorV4.protocolFee",
+  "orchestratorV4.protocolFeeRecipient",
+  "orchestratorV4.allowMultipleIntents",
+  "orchestratorV4.registered",
+  "orchestratorV4.chainId",
+  "orchestratorRegistry.owner",
   "whitelistPolicy.owner",
   "whitelistPolicy.escrowRegistry",
   "whitelistPolicy.groupRegistry",
@@ -731,12 +779,6 @@ export const BYPASS_GUARD_BOUND_FIELDS = [
   "disputeVerifier.pendingOwner",
   "disputeVerifier.attestationVerifier",
   "disputeVerifier.nullifierRegistry",
-  "inventory.escrow",
-  "inventory.tuples.escrow",
-  "inventory.tuples.depositId",
-  "inventory.tuples.paymentMethod",
-  "inventory.violations",
-  "inventory.ok",
 ] as const;
 export function assertBypassGuardExpectationsUnchanged(
   proof: BypassActivationSnapshot,
@@ -748,59 +790,21 @@ export function assertBypassGuardExpectationsUnchanged(
   if (changed.length)
     throw new Error(`Bypass guard expectations changed: ${changed.join(", ")}`);
 }
-/** Only live, listed, windowed predecessor opt-outs require a mirrored fresh opt-out. */
-export function buildBypassInventory(input: {
-  escrow: string;
-  block: string;
-  freshRiskWindows: Record<string, string>;
-  tuples: Array<
-    BypassInventoryTuple & {
-      depositor: string;
-      listedPaymentMethods: string[];
-      predecessorEnabled: boolean;
-      freshEnabled: boolean;
-    }
-  >;
-}): BypassInventory {
-  const required = input.tuples
-    .filter((tuple) => {
-      if (!equal(tuple.escrow, input.escrow))
-        throw new Error("Inventory escrow mismatch");
-      return (
-        !equal(tuple.depositor, ZERO) &&
-        tuple.listedPaymentMethods.some((method) =>
-          equal(method, tuple.paymentMethod)
-        ) &&
-        !decimal(input.freshRiskWindows[tuple.paymentMethod] ?? "0").isZero() &&
-        !tuple.predecessorEnabled
-      );
-    })
-    .sort((left, right) => {
-      const leftId = decimal(left.depositId);
-      const rightId = decimal(right.depositId);
-      return leftId.eq(rightId)
-        ? left.paymentMethod.localeCompare(right.paymentMethod)
-        : leftId.lt(rightId)
-        ? -1
-        : 1;
-    });
-  const tupleOnly = ({
-    escrow,
-    depositId,
-    paymentMethod,
-  }: BypassInventoryTuple): BypassInventoryTuple => ({
-    escrow: escrow.toLowerCase(),
-    depositId: decimal(depositId).toString(),
-    paymentMethod: paymentMethod.toLowerCase(),
-  });
-  const failed = required.filter((tuple) => tuple.freshEnabled).map(tupleOnly);
-  return {
-    escrow: input.escrow.toLowerCase(),
-    block: decimal(input.block).toString(),
-    tuples: required.map(tupleOnly),
-    violations: failed,
-    ok: failed.length === 0,
-  };
+export function openStaleBypassIntents(
+  events: { name: string; intentHash: string }[]
+): string[] {
+  const opened = new Set<string>();
+  const terminal = new Set<string>();
+  for (const event of events) {
+    const hash = event.intentHash.toLowerCase();
+    if (event.name === "DisputeProtectionIntentOpened") opened.add(hash);
+    if (
+      event.name === "DisputeProtectionIntentCancelled" ||
+      event.name === "DisputeProtectionIntentSettled"
+    )
+      terminal.add(hash);
+  }
+  return [...opened].filter((hash) => !terminal.has(hash));
 }
 export function assertBypassAdvance(
   before: BypassActivationReduction,
