@@ -403,10 +403,9 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         address hookAddress = address(_hook);
         if (hookAddress != address(0)) {
             if (hookAddress.code.length == 0) revert InvalidLifecycleHook(hookAddress);
-            // Settlement needs settleIntent to return the deferral vault and onDeferredPayoutFunded support.
-            // A V1 hook allows signaling but makes every fulfil and manual release revert.
-            // Hooks are snapshotted per intent, so switching hooks later cannot repair those intents.
-            // Reject incompatible hooks at configuration time.
+            // V2-only selectors make a V1 hook revert at signal without stranding any intents.
+            // Reject the wrong hook with InvalidLifecycleHook at configuration time instead of
+            // making every signal fail.
             if (!ERC165Checker.supportsInterface(hookAddress, type(IIntentLifecycleHookV2).interfaceId)) {
                 revert InvalidLifecycleHook(hookAddress);
             }

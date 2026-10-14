@@ -2,7 +2,6 @@
 
 pragma solidity ^0.8.18;
 
-import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 import {IIntentLifecycleHookV2} from "../interfaces/IIntentLifecycleHookV2.sol";
@@ -14,6 +13,11 @@ import {IEscrow} from "../interfaces/IEscrow.sol";
 
 /// @notice Routes whitelist admission and cascade settlement for compatible registered orchestrators.
 /// @dev Governance must drain outstanding intents before deregistering an orchestrator.
+/// V2-only selectors (onIntentSignaled(bytes32,bytes) and the V2 SettlementContext) make OrchestratorV3
+/// revert at signal, so it can never snapshot this hook. onIntentCancelled(bytes32) shares V1's selector
+/// but is only called for intents snapshotted with this hook.
+/// Registered orchestrators calling these callbacks must honour the deferral vault returned by settleIntent;
+/// registering an orchestrator is a governance assertion of that obligation.
 /// Stateless by design: per-intent hook data is stored by the orchestrator, never by this hook.
 /// V1 hook data is abi.encode(uint8(1), bytes32 conditionsHash), exactly 64 bytes with a nonzero hash.
 contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
@@ -32,7 +36,6 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
     error ZeroAddress();
     error InvalidDependency(address dependency);
     error UnauthorizedOrchestrator(address caller);
-    error UnsupportedOrchestrator(address caller);
     error IntentNotFound(bytes32 intentHash);
     error TakerNotWhitelisted(address escrow, uint256 depositId, bytes32 paymentMethod, address taker);
 
@@ -58,12 +61,6 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
      * @inheritdoc IIntentLifecycleHookV2
      */
     function onIntentSignaled(bytes32 _intentHash, bytes calldata _lifecycleHookData) external override onlyOrchestrator {
-        // O3 ignores the vault returned by settleIntent and pays intent.to directly.
-        // Deferred settlement would stay AWAITING_FUNDING with no lock, silently removing seller dispute protection.
-        // Only V4-compatible orchestrators may use this hook.
-        if (!ERC165Checker.supportsInterface(msg.sender, type(IOrchestratorV4).interfaceId)) {
-            revert UnsupportedOrchestrator(msg.sender);
-        }
         IOrchestratorV4.Intent memory intent = IOrchestratorV4(msg.sender).getIntent(_intentHash);
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 

@@ -3,7 +3,9 @@ pragma solidity ^0.8.18;
 
 import {OrchestratorV3Fixture} from "../helpers/OrchestratorV3Fixture.sol";
 import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
+import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 import {IIntentLifecycleHookV2} from "contracts/interfaces/IIntentLifecycleHookV2.sol";
+import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IOrchestratorRegistry} from "contracts/interfaces/IOrchestratorRegistry.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
@@ -201,17 +203,44 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         stub.settle(hook, context);
     }
 
-    function test_RejectsOrchestratorWithoutV2Settlement() public {
-        vm.prank(address(orchestrator));
-        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.UnsupportedOrchestrator.selector, address(orchestrator)));
-        hook.onIntentSignaled(ID, "");
+    function test_OrchestratorV3SignalRevertsBeforeCreatingIntentOrEscrowLock() public {
+        orchestrator.setLifecycleHook(IIntentLifecycleHook(address(hook)));
+        uint256 counterBefore = orchestrator.intentCounter();
+        bytes32 intentHash = _intentHash(counterBefore);
+        uint256 availableBefore = escrow.getDeposit(depositId).remainingDeposits;
+        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+
+        vm.expectCall(address(hook), abi.encodeCall(IIntentLifecycleHook.onIntentSignaled, (intentHash)));
+        vm.expectRevert(bytes(""));
+        _signalCall(taker, params);
+
+        assertEq(orchestrator.intentCounter(), counterBefore);
+        assertEq(orchestrator.getIntent(intentHash).owner, address(0));
+        assertEq(orchestrator.getAccountIntents(taker).length, 0);
+        assertEq(address(orchestrator.getIntentLifecycleHook(intentHash)), address(0));
+        assertEq(escrow.getDeposit(depositId).remainingDeposits, availableBefore);
+        assertEq(escrow.getDeposit(depositId).outstandingIntentAmount, 0);
+        assertEq(escrow.getDepositIntentHashes(depositId).length, 0);
+        assertEq(escrow.getDepositIntent(depositId, intentHash).amount, 0);
+        assertEq(uint256(policy.getDisputeProtectionIntent(intentHash).status), uint256(P.DisputeProtectionIntentStatus.NONE));
     }
 
-    function test_RejectsRegisteredNonERC165Caller() public {
-        orchestratorRegistry.addOrchestrator(address(token));
-        vm.prank(address(token));
-        vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.UnsupportedOrchestrator.selector, address(token)));
-        hook.onIntentSignaled(ID, "");
+    function test_RegisteredNonERC165CallerCanUseV2Callbacks() public {
+        stub.signal(hook, ID, "");
+        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.PENDING));
+
+        address deferralVault = stub.settle(hook, _context(ID, false));
+        assertEq(deferralVault, address(vault));
+        token.transfer(deferralVault, NET);
+        stub.fund(hook, ID);
+        assertEq(vault.lockedStake(other), NET);
+        assertEq(uint256(policy.getDisputeProtectionIntent(ID).status), uint256(P.DisputeProtectionIntentStatus.SETTLED));
+
+        bytes32 cancelledId = keccak256("cancelled");
+        _store(cancelledId, "");
+        stub.signal(hook, cancelledId, "");
+        stub.cancel(hook, cancelledId);
+        assertEq(uint256(policy.getDisputeProtectionIntent(cancelledId).status), uint256(P.DisputeProtectionIntentStatus.CANCELLED));
     }
 
     function test_UnregisteredCallerRejected() public {
@@ -356,16 +385,5 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
         bytes32 missing = keccak256("missing");
         vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.IntentNotFound.selector, missing));
         stub.signal(hook, missing, "");
-    }
-
-    function test_RejectsInvalidERC165Responses() public {
-        bytes memory callData = abi.encodeWithSignature("supportsInterface(bytes4)", type(IOrchestratorV4).interfaceId);
-        for (uint256 i; i < 4; ++i) {
-            if (i == 0) vm.mockCallRevert(address(stub), callData, "");
-            else vm.mockCall(address(stub), callData, i == 1 ? bytes("") : i == 2 ? bytes(hex"12345678") : abi.encode(bytes4(0)));
-            vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.UnsupportedOrchestrator.selector, address(stub)));
-            stub.signal(hook, ID, "");
-            vm.clearMockedCalls();
-        }
     }
 }

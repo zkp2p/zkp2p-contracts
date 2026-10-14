@@ -406,7 +406,16 @@ expected hash (zero for empty data), symmetrically, unless manually released. A 
 `ConditionsNotAttested(intentHash)`. The hook is snapshotted at signal and also handles settlement.
 IIntentLifecycleHookV2 contains only the four lifecycle callbacks: `onIntentSignaled`,
 `onIntentCancelled`, `settleIntent` and `onDeferredPayoutFunded`. Its ERC-165 interface id is the XOR
-of exactly those four selectors, excluding `conditionsHashOf`; both sides retain ERC-165 validation.
+of exactly those four selectors, excluding `conditionsHashOf`; O4 validates it when configuring the hook.
+
+O4's ERC-165 guard rejects a wrong hook with `InvalidLifecycleHook` at configuration time.
+A V1 hook would otherwise revert at signal without stranding an intent. Conversely, the V2-only
+`onIntentSignaled(bytes32,bytes)` and `SettlementContext` selectors prevent OrchestratorV3 from
+successfully signaling or snapshotting IntentLifecycleHookV2. The shared `onIntentCancelled(bytes32)`
+selector is only called for intents snapshotted with that hook.
+The V2 hook requires orchestrator-registry membership, without querying the caller's ERC-165 support.
+Registration is a governance assertion that the orchestrator honours the deferral vault returned
+by `settleIntent`. The hook still implements ERC-165 for O4's configuration-time check.
 
 The cross-repo attestor smoke remains gated by `ATTESTOR_POLICY_SMOKE_ROOT`. The attestation repo's
 script still emits the old 480-byte format until its PR updates; that format is compatible as above.

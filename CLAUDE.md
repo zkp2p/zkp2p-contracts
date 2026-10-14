@@ -310,15 +310,22 @@ expected hash (zero for empty data), symmetrically, unless manually released. A 
 `ConditionsNotAttested(intentHash)`. The hook is snapshotted at signal and also handles settlement.
 IIntentLifecycleHookV2 contains only the four lifecycle callbacks: `onIntentSignaled`,
 `onIntentCancelled`, `settleIntent` and `onDeferredPayoutFunded`. Its ERC-165 interface id is the XOR
-of exactly those four selectors, excluding `conditionsHashOf`; both sides retain ERC-165 validation.
+of exactly those four selectors, excluding `conditionsHashOf`; O4 validates it when configuring the hook.
 
 The cross-repo attestor smoke remains gated by `ATTESTOR_POLICY_SMOKE_ROOT`. The attestation repo's
 script still emits the old 480-byte format until its PR updates; that format is compatible as above.
 
 ### Deferred lifecycle compatibility
 
-OrchestratorV4 and IntentLifecycleHookV2 use standard ERC-165 checks in both directions.
-O4 accepts zero or a hook advertising IIntentLifecycleHookV2; V2 admission requires a
-registered caller advertising IOrchestratorV4. Both advertise IERC165 and reject
-0xffffffff. The protocol interfaces contain only their own functions, excluding
-supportsInterface. OrchestratorV3 and IntentLifecycleHookV1 remain unchanged.
+OrchestratorV4 accepts zero or a hook advertising IIntentLifecycleHookV2 through standard ERC-165.
+The configuration-time check rejects a wrong hook with InvalidLifecycleHook: a V1 hook would
+otherwise revert at signal because V2 uses onIntentSignaled(bytes32,bytes) and a V2-only
+SettlementContext selector, so no intent would be stranded. For the same reason, OrchestratorV3
+cannot successfully signal or snapshot IntentLifecycleHookV2. The shared V1/V2
+onIntentCancelled(bytes32) selector is only called for intents snapshotted with that hook.
+
+IntentLifecycleHookV2 checks the caller's orchestrator-registry membership without querying
+ERC-165. Registering an orchestrator is a governance assertion that it honours the deferral vault
+returned by settleIntent. O4 and the hook still advertise IERC165 and their own interfaces and
+reject 0xffffffff; the protocol interface ids exclude supportsInterface.
+OrchestratorV3 and IntentLifecycleHookV1 remain unchanged.
