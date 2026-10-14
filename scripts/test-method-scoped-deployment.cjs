@@ -1366,8 +1366,8 @@ test("historical validation resolves the OptIn deployment record names", async (
   ]);
 });
 
-test("active dispute manifest selects the dedicated-vault stack on Base and the bypass stack on staging and local networks", () => {
-  for (const network of /** @type {Array<"base">} */ (["base"])) {
+test("active dispute manifest selects the dedicated-vault stack on Base and local networks and the bypass stack on staging", () => {
+  for (const network of /** @type {Array<"base" | "localhost" | "hardhat">} */ (["base", "localhost", "hardhat"])) {
     assert.deepEqual(Object.values(activeDisputeManifest.networks[network]), [
       "StakeVaultMethodScoped",
       "DisputeProtectionPolicyMethodScopedStaked",
@@ -1375,10 +1375,8 @@ test("active dispute manifest selects the dedicated-vault stack on Base and the 
       "WhitelistPolicyMethodScoped",
     ]);
   }
-  for (const network of /** @type {Array<"base_staging" | "localhost" | "hardhat">} */ ([
+  for (const network of /** @type {Array<"base_staging">} */ ([
     "base_staging",
-    "localhost",
-    "hardhat",
   ])) {
     assert.deepEqual(Object.values(activeDisputeManifest.networks[network]), [
       "StakeVaultBypass",
@@ -1388,9 +1386,9 @@ test("active dispute manifest selects the dedicated-vault stack on Base and the 
     ]);
   }
   const resolved = resolveActiveDisputeAliases("hardhat", {
-    StakeVaultBypass: { address: "vault" },
-    DisputeProtectionPolicyBypass: { address: "policy" },
-    IntentLifecycleHookV1Bypass: { address: "hook" },
+    StakeVaultMethodScoped: { address: "vault" },
+    DisputeProtectionPolicyMethodScopedStaked: { address: "policy" },
+    IntentLifecycleHookV1MethodScopedStaked: { address: "hook" },
     WhitelistPolicyMethodScoped: { address: "whitelist" },
   });
   assert.equal(
@@ -1399,14 +1397,6 @@ test("active dispute manifest selects the dedicated-vault stack on Base and the 
     ),
     false
   );
-  for (const name of [
-    "StakeVault",
-    "DisputeProtectionPolicy",
-    "IntentLifecycleHookV1",
-  ]) {
-    assert.ok(resolved[`${name}Bypass`]);
-    assert.deepEqual(resolved[`${name}Bypass`], resolved[name]);
-  }
 });
 
 test("summary and package wiring expose only the current deployment lanes", () => {
