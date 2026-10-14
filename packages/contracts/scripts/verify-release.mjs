@@ -61,6 +61,7 @@ const networkConfigs = [
 const sourceAbiArtifacts = {
   IntentGuardian: "artifacts/contracts/IntentGuardian.sol/IntentGuardian.json",
   OrchestratorV3: "artifacts/contracts/OrchestratorV3.sol/OrchestratorV3.json",
+  OrchestratorV4: "artifacts/contracts/OrchestratorV4.sol/OrchestratorV4.json",
   NullifierRegistryV2:
     "artifacts/contracts/registries/NullifierRegistryV2.sol/NullifierRegistryV2.json",
   UnifiedPaymentVerifierV3:
@@ -77,10 +78,14 @@ const sourceAbiArtifacts = {
     "artifacts/contracts/registries/NullifierRegistry.sol/NullifierRegistry.json",
   DisputeProtectionPolicy:
     "artifacts/contracts/hooks/DisputeProtectionPolicy.sol/DisputeProtectionPolicy.json",
+  CascadeDisputeProtectionPolicy:
+    "artifacts/contracts/hooks/CascadeDisputeProtectionPolicy.sol/CascadeDisputeProtectionPolicy.json",
   DisputeVerifier:
     "artifacts/contracts/unifiedVerifier/DisputeVerifier.sol/DisputeVerifier.json",
   IntentLifecycleHookV1:
     "artifacts/contracts/hooks/IntentLifecycleHookV1.sol/IntentLifecycleHookV1.json",
+  IntentLifecycleHookV2:
+    "artifacts/contracts/hooks/IntentLifecycleHookV2.sol/IntentLifecycleHookV2.json",
   StakeVault: "artifacts/contracts/StakeVault.sol/StakeVault.json",
 };
 const requiredDisputeContracts = [
