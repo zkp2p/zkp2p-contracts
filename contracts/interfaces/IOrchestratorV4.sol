@@ -2,7 +2,8 @@
 
 pragma solidity ^0.8.18;
 
-import { IOrchestratorV3 } from "./IOrchestratorV3.sol";
+import { IPostIntentHookV2 } from "./IPostIntentHookV2.sol";
+import { IReferralFee } from "./IReferralFee.sol";
 import { IIntentLifecycleHookV2 } from "./IIntentLifecycleHookV2.sol";
 import { IPreIntentHook } from "./IPreIntentHook.sol";
 
@@ -12,6 +13,47 @@ import { IPreIntentHook } from "./IPreIntentHook.sol";
  * @dev Deferred payouts skip post-intent hooks; intent.data is never read by the protocol.
  */
 interface IOrchestratorV4 {
+
+    /* ============ Structs ============ */
+
+    struct Intent {
+        address owner;                              // Address of the intent owner
+        address to;                                 // Address to forward funds to (can be same as owner)
+        address escrow;                             // Address of the escrow contract holding the deposit
+        uint256 depositId;                          // ID of the deposit the intent is associated with
+        uint256 amount;                             // Amount of the deposit.token the owner wants to take
+        uint256 timestamp;                          // Timestamp of the intent
+        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment
+        bytes32 fiatCurrency;                       // Currency code that the owner is paying in offchain (keccak256 hash of the currency code)
+        uint256 conversionRate;                     // Conversion rate of deposit token to fiat currency at the time of intent
+        bytes32 payeeId;                            // Hashed payee identifier to whom the owner will pay offchain
+        IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
+        IPostIntentHookV2 postIntentHook;            // Address of the post-intent hook that will execute any post-intent actions
+        bytes data;                                 // Additional data to be passed to the post-intent hook contract
+    }
+
+    struct SignalIntentParams {
+        address escrow;                             // The escrow contract where the deposit is held
+        uint256 depositId;                          // The ID of the deposit the taker intends to use
+        uint256 amount;                             // The amount of deposit.token the user wants to take
+        address to;                                 // Address to forward funds to
+        bytes32 paymentMethod;                      // The payment method to be used for the offchain payment
+        bytes32 fiatCurrency;                       // The currency code for offchain payment
+        uint256 conversionRate;                     // The conversion rate agreed offchain
+        IReferralFee.ReferralFee[] referralFees;    // Referral fee recipients and fee rates paid by the taker
+        bytes gatingServiceSignature;               // Signature from the deposit's gating service
+        uint256 signatureExpiration;                // Timestamp when the gating service signature expires
+        IPostIntentHookV2 postIntentHook;           // Optional post-intent hook (address(0) for no hook)
+        bytes preIntentHookData;                    // Ephemeral data passed only to the pre-intent hook during signalIntent
+        bytes data;                                 // Signal data persisted in Intent and forwarded as post-intent hook signalHookData
+    }
+
+    struct FulfillIntentParams {
+        bytes paymentProof;                         // Payment proof. Can be Groth16 Proof, TLSNotary proof, TLSProxy proof, attestation etc.
+        bytes32 intentHash;                         // Identifier of intent being fulfilled
+        bytes verificationData;                     // Additional data for payment verifier
+        bytes postIntentHookData;                   // Additional data for post intent hook
+    }
 
     /* ============ Events ============ */
 
@@ -108,7 +150,7 @@ interface IOrchestratorV4 {
     /* ============ View Functions ============ */
 
     /// @notice Returns the active intent.
-    function getIntent(bytes32 intentHash) external view returns (IOrchestratorV3.Intent memory);
+    function getIntent(bytes32 intentHash) external view returns (Intent memory);
 
     /// @notice Returns active intent hashes owned by the account.
     function getAccountIntents(address account) external view returns (bytes32[] memory);
@@ -125,7 +167,7 @@ interface IOrchestratorV4 {
     /* ============ External Functions for Users ============ */
 
     /// @notice Signals an intent and locks its escrow funds.
-    function signalIntent(IOrchestratorV3.SignalIntentParams calldata params) external;
+    function signalIntent(SignalIntentParams calldata params) external;
 
     /// @notice Sets the deposit pre-intent hook as depositor or delegate.
     function setDepositPreIntentHook(address escrow, uint256 depositId, IPreIntentHook hook) external;
@@ -137,7 +179,7 @@ interface IOrchestratorV4 {
     function cancelIntent(bytes32 intentHash) external;
 
     /// @notice Verifies payment and settles immediately or defers the net payout.
-    function fulfillIntent(IOrchestratorV3.FulfillIntentParams calldata params) external;
+    function fulfillIntent(FulfillIntentParams calldata params) external;
 
     /// @notice Manually settles an intent as its depositor.
     function releaseFundsToPayer(bytes32 intentHash) external;

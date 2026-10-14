@@ -3,7 +3,6 @@ pragma solidity ^0.8.18;
 
 import {IIntentLifecycleHookV2} from "contracts/interfaces/IIntentLifecycleHookV2.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
-import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {LifecycleHookV2Mock} from "../../mocks/LifecycleHookV2Mock.sol";
 import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
 
@@ -95,7 +94,7 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
     function test_SettlementNotifiesHookAndFundsFlowNormally() public {
         verifier.setBalanceFunded(true);
         orchestrator.setLifecycleHook(lifecycleHookMock);
-        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.referralFees = _twoReferralFees();
         bytes32 intentHash = _signal(taker, params);
         uint256 recipientBefore = token.balanceOf(taker);
@@ -148,7 +147,7 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
 
     function test_ManualReleaseRoutesThroughLifecycleAndPostIntentHook() public {
         orchestrator.setLifecycleHook(lifecycleHookMock);
-        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.referralFees = _twoReferralFees();
         params.postIntentHook = postIntentHook;
         params.data = abi.encode(delegate);

@@ -12,7 +12,6 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuar
 import { AddressArrayUtils } from "./external/AddressArrayUtils.sol";
 import { Bytes32ArrayUtils } from "./external/Bytes32ArrayUtils.sol";
 import { IOrchestratorV4 } from "./interfaces/IOrchestratorV4.sol";
-import { IOrchestratorV3 } from "./interfaces/IOrchestratorV3.sol";
 import { IReferralFee } from "./interfaces/IReferralFee.sol";
 import { IEscrow } from "./interfaces/IEscrow.sol";
 import { IEscrowV2 } from "./interfaces/IEscrowV2.sol";
@@ -53,7 +52,7 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
 
     uint256 immutable public chainId;              // chainId of the chain the orchestrator is deployed on
 
-    mapping(bytes32 => IOrchestratorV3.Intent) internal intents;                       // Mapping of intentHashes to intent structs
+    mapping(bytes32 => Intent) internal intents;                       // Mapping of intentHashes to intent structs
     mapping(address => bytes32[]) internal accountIntents;             // Mapping of address to array of intentHashes
 
     // Snapshot of per-intent manager fee terms at the time of signal
@@ -113,7 +112,7 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
      *
      * @param _params                   Struct containing all the intent parameters
      */
-    function signalIntent(IOrchestratorV3.SignalIntentParams calldata _params)
+    function signalIntent(SignalIntentParams calldata _params)
         external
         nonReentrant
         whenNotPaused
@@ -135,7 +134,7 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
         intentManagerFeeRecipient[intentHash] = managerFeeRecipient;
         intentManagerFee[intentHash] = managerFee;
 
-        IOrchestratorV3.Intent storage storedIntent = intents[intentHash];
+        Intent storage storedIntent = intents[intentHash];
         storedIntent.owner = msg.sender;
         storedIntent.to = _params.to;
         storedIntent.escrow = _params.escrow;
@@ -200,7 +199,7 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
      */
     function cancelIntent(bytes32 _intentHash) external nonReentrant {
         // Checks
-        IOrchestratorV3.Intent memory intent = intents[_intentHash];
+        Intent memory intent = intents[_intentHash];
         
         if (intent.timestamp == 0) revert IntentNotFound(_intentHash);
         if (intent.owner != msg.sender) revert UnauthorizedCaller(msg.sender, intent.owner);
@@ -238,9 +237,9 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
      *
      * @param _params               Struct containing all the fulfill intent parameters
      */
-    function fulfillIntent(IOrchestratorV3.FulfillIntentParams calldata _params) external nonReentrant whenNotPaused {
+    function fulfillIntent(FulfillIntentParams calldata _params) external nonReentrant whenNotPaused {
         // Checks
-        IOrchestratorV3.Intent memory intent = intents[_params.intentHash];
+        Intent memory intent = intents[_params.intentHash];
         if (intent.paymentMethod == bytes32(0)) revert IntentNotFound(_params.intentHash);
         
         IEscrow.Deposit memory deposit = IEscrow(intent.escrow).getDeposit(intent.depositId);
@@ -252,7 +251,7 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
         address verifier = paymentVerifierRegistry.getVerifier(intent.paymentMethod);
         if (verifier == address(0)) revert PaymentMethodDoesNotExist(intent.paymentMethod);
         
-        IPaymentVerifierV2.PaymentVerificationResultV2 memory verificationResult = IPaymentVerifierV2(verifier).verifyPayment(
+        (IPaymentVerifierV2.PaymentVerificationResultV2 memory verificationResult, ) = IPaymentVerifierV2(verifier).verifyPayment(
             IPaymentVerifier.VerifyPaymentData({
                 intentHash: _params.intentHash,
                 paymentProof: _params.paymentProof,
@@ -292,7 +291,7 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
      */
     function releaseFundsToPayer(bytes32 _intentHash) external nonReentrant {
         // Checks
-        IOrchestratorV3.Intent memory intent = intents[_intentHash];
+        Intent memory intent = intents[_intentHash];
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
         IEscrow.Deposit memory deposit = IEscrow(intent.escrow).getDeposit(intent.depositId);
@@ -333,7 +332,7 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
         for (uint256 i = 0; i < _intents.length; i++) {
             bytes32 intentHash = _intents[i];
             if (intentHash != bytes32(0)) {
-                IOrchestratorV3.Intent memory intent = intents[intentHash];
+                Intent memory intent = intents[intentHash];
                 if (
                     intent.timestamp != 0 && // Only prune if intent exists on this contract; otherwise skip
                     intent.escrow == msg.sender // Ensure only the escrow that owns the intent can prune it; otherwise skip
@@ -357,7 +356,7 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
     function cleanupOrphanedIntents(bytes32[] calldata _intentHashes) external nonReentrant {
         for (uint256 i = 0; i < _intentHashes.length; i++) {
             bytes32 intentHash = _intentHashes[i];
-            IOrchestratorV3.Intent memory intent = intents[intentHash];
+            Intent memory intent = intents[intentHash];
 
             // Skip if intent doesn't exist on orchestrator
             if (intent.timestamp == 0) continue;
@@ -499,7 +498,7 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
     /**
      * @notice Returns the active intent.
      */
-    function getIntent(bytes32 _intentHash) external view returns (IOrchestratorV3.Intent memory) {
+    function getIntent(bytes32 _intentHash) external view returns (Intent memory) {
         return intents[_intentHash];
     }
 
@@ -544,7 +543,7 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
     /**
      * @notice Validates an intent before it is signaled.
      */
-    function _validateSignalIntent(IOrchestratorV3.SignalIntentParams calldata _intent) internal view {
+    function _validateSignalIntent(SignalIntentParams calldata _intent) internal view {
         // Check if account can have multiple intents
         bool canHaveMultipleIntents = relayerRegistry.isWhitelistedRelayer(msg.sender) || allowMultipleIntents;
         if (!canHaveMultipleIntents && accountIntents[msg.sender].length > 0) {
@@ -618,7 +617,7 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
      * @notice Executes a pre-intent hook if the address is non-zero.
      * @dev Shared by both the generic pre-intent hook and the dedicated whitelist hook.
      */
-    function _executeHookIfSet(IPreIntentHook _hook, IOrchestratorV3.SignalIntentParams calldata _params) internal {
+    function _executeHookIfSet(IPreIntentHook _hook, SignalIntentParams calldata _params) internal {
         if (address(_hook) == address(0)) return;
 
         _hook.validateSignalIntent(
@@ -659,7 +658,7 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
      * @notice Deletes an intent from storage mappings.
      */
     function _pruneIntent(bytes32 _intentHash) internal {
-        IOrchestratorV3.Intent memory intent = intents[_intentHash];
+        Intent memory intent = intents[_intentHash];
 
         accountIntents[intent.owner].removeStorage(_intentHash);
         delete intents[_intentHash];
@@ -675,7 +674,7 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
     function _calculateAndTransferFees(
         IERC20 _token,
         bytes32 _intentHash,
-        IOrchestratorV3.Intent memory _intent,
+        Intent memory _intent,
         uint256 _releaseAmount,
         address _managerFeeRecipient,
         uint256 _managerFee
@@ -720,7 +719,7 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
     function _collectFeesTransferFundsAndExecuteAction(
         IERC20 _token,
         bytes32 _intentHash,
-        IOrchestratorV3.Intent memory _intent,
+        Intent memory _intent,
         uint256 _releaseAmount,
         bytes memory _postIntentHookData,
         address _managerFeeRecipient,
@@ -810,7 +809,7 @@ contract OrchestratorV4 is Ownable, Pausable, ReentrancyGuard, IOrchestratorV4 {
      * @notice Checks if a intent gating service signature is valid.
      */
     function _isValidIntentGatingSignature(
-        IOrchestratorV3.SignalIntentParams calldata _intent,
+        SignalIntentParams calldata _intent,
         address _intentGatingService,
         address _caller
     )

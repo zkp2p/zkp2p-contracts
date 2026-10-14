@@ -21,7 +21,7 @@ import {OrchestratorRegistry} from "contracts/registries/OrchestratorRegistry.so
 import {PaymentVerifierRegistry} from "contracts/registries/PaymentVerifierRegistry.sol";
 import {RelayerRegistry} from "contracts/registries/RelayerRegistry.sol";
 import {IEscrowV2} from "contracts/interfaces/IEscrowV2.sol";
-import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
+import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 
@@ -170,8 +170,8 @@ abstract contract OrchestratorV4Fixture is Test {
         IReferralFee.ReferralFee[] memory referralFees,
         IPostIntentHookV2 hook,
         bytes memory data
-    ) internal view returns (IOrchestratorV3.SignalIntentParams memory) {
-        return IOrchestratorV3.SignalIntentParams({
+    ) internal view returns (IOrchestratorV4.SignalIntentParams memory) {
+        return IOrchestratorV4.SignalIntentParams({
             escrow: address(escrow),
             depositId: selectedDepositId,
             amount: amount,
@@ -188,7 +188,7 @@ abstract contract OrchestratorV4Fixture is Test {
         });
     }
 
-    function _defaultParams() internal view virtual returns (IOrchestratorV3.SignalIntentParams memory) {
+    function _defaultParams() internal view virtual returns (IOrchestratorV4.SignalIntentParams memory) {
         return _params(
             depositId, taker, INTENT_AMOUNT, CONVERSION_RATE, _emptyReferralFees(), IPostIntentHookV2(address(0)), ""
         );
@@ -198,12 +198,12 @@ abstract contract OrchestratorV4Fixture is Test {
         return bytes32(uint256(keccak256(abi.encodePacked(address(orchestrator), counter))) % CIRCOM_PRIME_FIELD);
     }
 
-    function _signal(address caller, IOrchestratorV3.SignalIntentParams memory params) internal returns (bytes32 hash) {
+    function _signal(address caller, IOrchestratorV4.SignalIntentParams memory params) internal returns (bytes32 hash) {
         hash = _intentHash(orchestrator.intentCounter());
         _signalCall(caller, params);
     }
 
-    function _signalCall(address caller, IOrchestratorV3.SignalIntentParams memory params) internal {
+    function _signalCall(address caller, IOrchestratorV4.SignalIntentParams memory params) internal {
         vm.prank(caller);
         orchestrator.signalIntent(params);
     }
@@ -223,7 +223,7 @@ abstract contract OrchestratorV4Fixture is Test {
 
     function _fulfill(bytes32 intentHash, uint256 releaseAmount, uint256 conversionRate) internal {
         orchestrator.fulfillIntent(
-            IOrchestratorV3.FulfillIntentParams({
+            IOrchestratorV4.FulfillIntentParams({
                 paymentProof: _paymentProof(intentHash, releaseAmount, conversionRate),
                 intentHash: intentHash,
                 verificationData: "",
@@ -243,7 +243,7 @@ abstract contract OrchestratorV4Fixture is Test {
     function _gatingSignature(
         uint256 signerKey,
         address signedCaller,
-        IOrchestratorV3.SignalIntentParams memory params,
+        IOrchestratorV4.SignalIntentParams memory params,
         uint256 expiration
     ) internal view returns (bytes memory) {
         bytes32 messageHash = keccak256(
@@ -270,7 +270,7 @@ abstract contract OrchestratorV4Fixture is Test {
     function _gatedParams(uint256 gatedDepositId, uint256 signerKey, address signedCaller, uint256 expiration)
         internal
         view
-        returns (IOrchestratorV3.SignalIntentParams memory params)
+        returns (IOrchestratorV4.SignalIntentParams memory params)
     {
         params = _params(
             gatedDepositId,

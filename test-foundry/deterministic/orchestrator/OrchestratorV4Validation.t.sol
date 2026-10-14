@@ -2,7 +2,6 @@
 pragma solidity ^0.8.18;
 
 import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
-import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 
@@ -15,14 +14,14 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
     }
 
     function test_SignalRejectsZeroRecipient() public {
-        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.to = address(0);
         vm.expectRevert(IOrchestratorV4.ZeroAddress.selector);
         _signalCall(taker, params);
     }
 
     function test_SignalRejectsEoaPostIntentHook() public {
-        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.postIntentHook = IPostIntentHookV2(other);
         vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.InvalidPostIntentHook.selector, other));
         _signalCall(taker, params);
@@ -62,7 +61,7 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
 
     function test_SignalWithGatingSignature() public {
         uint256 gatedDepositId = _newGatedDeposit();
-        IOrchestratorV3.SignalIntentParams memory params =
+        IOrchestratorV4.SignalIntentParams memory params =
             _gatedParams(gatedDepositId, gatingServiceKey, taker, block.timestamp + 1 days);
         assertNotEq(_signal(taker, params), bytes32(0));
     }
@@ -71,7 +70,7 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
         vm.warp(100);
         uint256 gatedDepositId = _newGatedDeposit();
         uint256 expiration = block.timestamp - 1;
-        IOrchestratorV3.SignalIntentParams memory params =
+        IOrchestratorV4.SignalIntentParams memory params =
             _gatedParams(gatedDepositId, gatingServiceKey, taker, expiration);
         vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.SignatureExpired.selector, expiration, block.timestamp));
         _signalCall(taker, params);
@@ -79,14 +78,14 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
 
     function test_GatingRejectsSignatureFromWrongSigner() public {
         uint256 gatedDepositId = _newGatedDeposit();
-        IOrchestratorV3.SignalIntentParams memory params =
+        IOrchestratorV4.SignalIntentParams memory params =
             _gatedParams(gatedDepositId, 0xBAD, taker, block.timestamp + 1 days);
         vm.expectRevert(IOrchestratorV4.InvalidSignature.selector);
         _signalCall(taker, params);
     }
 
     function test_FulfillRejectsPostIntentHookThatPullsTooLittle() public {
-        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.postIntentHook = partialPostIntentHook;
         params.data = abi.encode(other);
         bytes32 intentHash = _signal(taker, params);
@@ -95,7 +94,7 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
     }
 
     function test_FulfillRejectsPostIntentHookThatIncreasesBalance() public {
-        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.postIntentHook = pushPostIntentHook;
         params.data = abi.encode(other);
         bytes32 intentHash = _signal(taker, params);
@@ -136,7 +135,7 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
         bytes32 mismatchedHash = bytes32("other-hash");
         vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.HashMismatch.selector, intentHash, mismatchedHash));
         orchestrator.fulfillIntent(
-            IOrchestratorV3.FulfillIntentParams({
+            IOrchestratorV4.FulfillIntentParams({
                 paymentProof: _paymentProof(mismatchedHash, INTENT_AMOUNT, CONVERSION_RATE),
                 intentHash: intentHash,
                 verificationData: "",
@@ -173,7 +172,7 @@ contract OrchestratorV4ValidationTest is OrchestratorV4Fixture {
         orchestrator.releaseFundsToPayer(missing);
     }
     function test_SignalRejectsRateBelowMinimum() public {
-        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.conversionRate = CONVERSION_RATE - 1;
         vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.RateBelowMinimum.selector, params.conversionRate, CONVERSION_RATE));
         _signalCall(taker, params);

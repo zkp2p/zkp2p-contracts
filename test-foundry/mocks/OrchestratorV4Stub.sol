@@ -2,18 +2,18 @@
 pragma solidity ^0.8.18;
 
 import {IIntentLifecycleHookV2} from "contracts/interfaces/IIntentLifecycleHookV2.sol";
-import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
+import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 
 contract OrchestratorV4Stub {
-    mapping(bytes32 => IOrchestratorV3.Intent) internal intents;
+    mapping(bytes32 => IOrchestratorV4.Intent) internal intents;
 
     /// @notice Stores canonical intent data for a test.
-    function setIntent(bytes32 _intentHash, IOrchestratorV3.Intent calldata _intent) external {
+    function setIntent(bytes32 _intentHash, IOrchestratorV4.Intent calldata _intent) external {
         intents[_intentHash] = _intent;
     }
 
     /// @notice Returns the stored intent.
-    function getIntent(bytes32 _intentHash) external view returns (IOrchestratorV3.Intent memory) {
+    function getIntent(bytes32 _intentHash) external view returns (IOrchestratorV4.Intent memory) {
         return intents[_intentHash];
     }
 

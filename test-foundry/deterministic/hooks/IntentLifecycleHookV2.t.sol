@@ -6,7 +6,7 @@ import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
 import {IIntentLifecycleHookV2} from "contracts/interfaces/IIntentLifecycleHookV2.sol";
 import {IIntentLifecycleHook} from "contracts/interfaces/IIntentLifecycleHook.sol";
 import {IOrchestratorRegistry} from "contracts/interfaces/IOrchestratorRegistry.sol";
-import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
+import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IWhitelistPolicy} from "contracts/interfaces/IWhitelistPolicy.sol";
 import {ICascadeDisputeProtectionPolicy as P} from "contracts/interfaces/ICascadeDisputeProtectionPolicy.sol";
 import {CascadeDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
@@ -49,7 +49,7 @@ contract IntentLifecycleHookV2Test is OrchestratorV3Fixture {
     }
 
     function _store(bytes32 id, bytes memory data) internal {
-        IOrchestratorV3.Intent memory intent;
+        IOrchestratorV4.Intent memory intent;
         intent.owner = taker;
         intent.to = other;
         intent.escrow = address(escrow);

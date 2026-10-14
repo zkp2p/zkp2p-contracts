@@ -701,13 +701,30 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
       ),
       false
     );
-  assert.equal(
-    state.records
-      .get("UnifiedPaymentVerifierV4")
-      .abi.find(
-        (/** @type {{name?: string}} */ entry) => entry.name === "verifyPayment"
-      ).outputs[0].components.length,
-    4
+  const verificationOutputs = state.records
+    .get("UnifiedPaymentVerifierV4")
+    .abi.find(
+      (/** @type {{name?: string}} */ entry) => entry.name === "verifyPayment"
+    ).outputs;
+  assert.deepEqual(
+    verificationOutputs.map(
+      (/** @type {{name: string, type: string}} */ entry) => [entry.name, entry.type]
+    ),
+    [["result", "tuple"], ["extensionData", "bytes"]]
+  );
+  assert.deepEqual(
+    verificationOutputs[0].components.map(
+      (/** @type {{name: string, type: string}} */ entry) => [entry.name, entry.type]
+    ),
+    [
+      ["success", "bool"],
+      ["intentHash", "bytes32"],
+      ["releaseAmount", "uint256"],
+      ["balanceFunded", "bool"],
+      ["attestedReleaseAmount", "uint256"],
+      ["payment", "tuple"],
+      ["intent", "tuple"],
+    ]
   );
   await activateLane46(state.fakeHre);
   const o4 = await ethers.getContractAt(

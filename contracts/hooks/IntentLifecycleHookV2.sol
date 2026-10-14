@@ -5,14 +5,14 @@ pragma solidity ^0.8.18;
 import {IIntentLifecycleHookV2} from "../interfaces/IIntentLifecycleHookV2.sol";
 import {ICascadeDisputeProtectionPolicy} from "../interfaces/ICascadeDisputeProtectionPolicy.sol";
 import {IOrchestratorRegistry} from "../interfaces/IOrchestratorRegistry.sol";
-import {IOrchestratorV3} from "../interfaces/IOrchestratorV3.sol";
+import {IOrchestratorV4} from "../interfaces/IOrchestratorV4.sol";
 import {IWhitelistPolicy} from "../interfaces/IWhitelistPolicy.sol";
 
 interface IDeferredSettlementOrchestrator {
     /// @notice Returns the supported lifecycle settlement interface.
     function lifecycleHookInterfaceId() external view returns (bytes4);
     /// @notice Returns canonical intent data.
-    function getIntent(bytes32 _intentHash) external view returns (IOrchestratorV3.Intent memory);
+    function getIntent(bytes32 _intentHash) external view returns (IOrchestratorV4.Intent memory);
 }
 
 /// @notice Routes whitelist admission and cascade settlement for compatible registered orchestrators.
@@ -62,7 +62,7 @@ contract IntentLifecycleHookV2 is IIntentLifecycleHookV2 {
         if (bytes32(result) != bytes32(type(IIntentLifecycleHookV2).interfaceId)) {
             revert UnsupportedOrchestrator(msg.sender);
         }
-        IOrchestratorV3.Intent memory intent = IDeferredSettlementOrchestrator(msg.sender).getIntent(_intentHash);
+        IOrchestratorV4.Intent memory intent = IDeferredSettlementOrchestrator(msg.sender).getIntent(_intentHash);
         if (intent.owner == address(0)) revert IntentNotFound(_intentHash);
 
         bool isWhitelistEnabled = whitelistPolicy.enabled(intent.escrow, intent.depositId, intent.paymentMethod);

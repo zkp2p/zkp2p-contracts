@@ -269,3 +269,15 @@ production, package, and publication approval into one implied action.
 ## Code Style
 
 Follow the precision rules in [AGENTS.md](AGENTS.md#coding-style--naming-conventions).
+
+### UPV4 return compatibility
+
+UPV4 accepts a 480-byte payment/snapshot/balance-flag prefix followed by optional signed
+extension bytes. The attestation service continues signing exactly 480 bytes; no downstream
+change is required. The entire payload, including extensions, is covered by `dataHash`.
+Its fully static result preserves the V1 `success`, `intentHash`, `releaseAmount` prefix,
+then returns `balanceFunded`, the uncapped `attestedReleaseAmount`, verified `PaymentDetails`
+and signed/validated `IntentSnapshot`. Dynamic extension bytes are a separate trailing return
+value; unsigned metadata is never returned. O3 reads the V1 prefix, and O4 uses the capped
+release amount and balance flag while ignoring the additional data. IOrchestratorV4 owns its
+Intent, SignalIntentParams and FulfillIntentParams structs with the same ABI layouts as V3.

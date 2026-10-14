@@ -10,7 +10,7 @@ import { IEscrow } from "contracts/interfaces/IEscrow.sol";
 
 contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
 
-    struct PaymentDetails {
+    struct MockPaymentDetails {
         uint256 amount;
         uint256 timestamp;
         bytes32 payeeDetails;
@@ -70,8 +70,8 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
     /// @notice Verifies a mock proof and returns the capped release and balance flag.
     function verifyPayment(
         IPaymentVerifier.VerifyPaymentData calldata _verifyPaymentData
-    ) external view override returns (PaymentVerificationResultV2 memory) {
-        PaymentDetails memory paymentDetails = _extractPaymentDetails(_verifyPaymentData.paymentProof);
+    ) external view override returns (PaymentVerificationResultV2 memory result, bytes memory extensionData) {
+        MockPaymentDetails memory paymentDetails = _extractMockPaymentDetails(_verifyPaymentData.paymentProof);
 
         Snapshot memory snapshot = _fetchSnapshot(paymentDetails.intentHash);
 
@@ -91,7 +91,8 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
         }
 
         if (shouldReturnFalse) {
-            return PaymentVerificationResultV2({ success: false, intentHash: bytes32(0), releaseAmount: 0, balanceFunded: balanceFunded });
+            result.balanceFunded = balanceFunded;
+            return (result, "");
         }
 
         uint256 releaseAmount = paymentDetails.amount;
@@ -103,12 +104,11 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
             releaseAmount = snapshot.amount;
         }
 
-        return PaymentVerificationResultV2({
-            success: true,
-            intentHash: paymentDetails.intentHash,
-            releaseAmount: releaseAmount,
-            balanceFunded: balanceFunded
-        });
+        result.success = true;
+        result.intentHash = paymentDetails.intentHash;
+        result.releaseAmount = releaseAmount;
+        result.balanceFunded = balanceFunded;
+        return (result, "");
     }
 
     function _fetchSnapshot(bytes32 intentHash) internal view returns (Snapshot memory snapshot) {
@@ -155,10 +155,10 @@ contract PaymentVerifierV2Mock is IPaymentVerifierV2 {
         });
     }
 
-    function _extractPaymentDetails(bytes calldata _proof) internal pure returns (PaymentDetails memory) {
+    function _extractMockPaymentDetails(bytes calldata _proof) internal pure returns (MockPaymentDetails memory) {
         (uint256 amount, uint256 timestamp, bytes32 payeeDetails, bytes32 fiatCurrency, bytes32 intentHash) =
             abi.decode(_proof, (uint256, uint256, bytes32, bytes32, bytes32));
 
-        return PaymentDetails(amount, timestamp, payeeDetails, fiatCurrency, intentHash);
+        return MockPaymentDetails(amount, timestamp, payeeDetails, fiatCurrency, intentHash);
     }
 }

@@ -12,7 +12,7 @@ import { IPaymentVerifierV2 } from "../interfaces/IPaymentVerifierV2.sol";
 
 /**
  * @title UnifiedPaymentVerifierV4
- * @notice Preserves V3 payment verification and returns the attestation-signed balance funding flag.
+ * @notice Preserves V3 payment verification and returns all verified fields and signed extension data.
  *
  * Key features:
  * - Supports multiple payment methods, each with custom configuration
@@ -21,7 +21,9 @@ import { IPaymentVerifierV2 } from "../interfaces/IPaymentVerifierV2.sol";
  * - Verifies standardized payment details against provided data
  * @dev Payment attestations use this deployment's EIP-712 domain. Governance must reuse the payment-nullifier
  * registry, route payment methods to this verifier, and retire V3's registry write permission during activation.
- * attestation.data is `abi.encode(PaymentDetails, IntentSnapshot, bool balanceFunded)`;
+ * attestation.data starts with the 480-byte `abi.encode(PaymentDetails, IntentSnapshot, bool balanceFunded)`
+ * payload, optionally followed by opaque extension bytes. The entire data is signed through dataHash;
+ * unsigned attestation.metadata is never returned.
  * intent.data is never read and belongs to post-intent hooks.
  */
 contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerifierV3 {
@@ -69,26 +71,6 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
 
     /* ============ Structs ============ */
 
-    struct PaymentDetails {
-        bytes32 method;           // Payment method hash (e.g., "venmo", "paypal", "wise")
-        bytes32 payeeId;          // Payment recipient ID (hashed payee details to preserve privacy)
-        uint256 amount;           // Payment amount in smallest currency unit (i.e. cents)
-        bytes32 currency;         // Payment currency hash (e.g., "USD", "EUR")
-        uint256 timestamp;        // Payment timestamp in UTC in milliseconds
-        bytes32 paymentId;        // Hashed payment identifier from the service (e.g. hashed venmo payment ID to preserve privacy)
-    }
-
-    struct IntentSnapshot {
-        bytes32 intentHash;
-        uint256 amount;
-        bytes32 paymentMethod;
-        bytes32 fiatCurrency;
-        bytes32 payeeDetails;
-        uint256 conversionRate;
-        uint256 signalTimestamp;
-        uint256 timestampBuffer;
-    }
-
     struct PaymentAttestation {
         bytes32 intentHash;       // Binds the payment to the intent on Orchestrator
         uint256 releaseAmount;    // Final token amount to release on-chain after FX
@@ -129,7 +111,8 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
      * Hence only Orchestrator can call this function to prevent griefing.
      *
      * @param _verifyPaymentData Payment proof and intent details required for verification
-     * @return result The payment verification result containing success status, intent hash, release amount, and balance funding flag
+     * @return result Fully static verified result with the V1 three-word prefix and uncapped attested amount
+     * @return extensionData Signed bytes after the 480-byte payload; empty for current attestations
      * @dev Ensure the orchestrator verifies the intent exists before calling this function
      */
     function verifyPayment(
@@ -138,13 +121,13 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
         external
         override
         onlyOrchestrator()
-        returns (IPaymentVerifierV2.PaymentVerificationResultV2 memory result)
+        returns (IPaymentVerifierV2.PaymentVerificationResultV2 memory result, bytes memory extensionData)
     {
         PaymentAttestation memory attestation = _decodeAttestation(_verifyPaymentData.paymentProof);
         require(attestation.intentHash == _verifyPaymentData.intentHash, "UPV: Attestation hash mismatch");
         require(attestation.releaseAmount != 0, "UPV: Invalid release amount");
 
-        require(attestation.data.length == PAYMENT_PAYLOAD_LENGTH, "UPV: Invalid payload length");
+        require(attestation.data.length >= PAYMENT_PAYLOAD_LENGTH, "UPV: Invalid payload length");
 
         (
             PaymentDetails memory paymentDetails,
@@ -172,10 +155,16 @@ contract UnifiedPaymentVerifierV4 is IPaymentVerifierV2, BaseUnifiedPaymentVerif
             success: true,
             intentHash: attestation.intentHash,
             releaseAmount: releaseAmount,
-            balanceFunded: balanceFunded
+            balanceFunded: balanceFunded,
+            attestedReleaseAmount: attestation.releaseAmount,
+            payment: paymentDetails,
+            intent: intentSnapshot
         });
 
-        return result;
+        extensionData = new bytes(attestation.data.length - PAYMENT_PAYLOAD_LENGTH);
+        for (uint256 index; index < extensionData.length; index++) {
+            extensionData[index] = attestation.data[PAYMENT_PAYLOAD_LENGTH + index];
+        }
     }
 
     /* ============ Internal Functions ============ */

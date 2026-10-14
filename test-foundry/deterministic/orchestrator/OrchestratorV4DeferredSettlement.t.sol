@@ -49,7 +49,7 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
     }
 
     function test_PayNowPathMatchesV3() public {
-        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.postIntentHook = postIntentHook;
         params.data = abi.encode(taker);
         params.referralFees = _twoReferralFees();
@@ -62,7 +62,7 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
 
     function test_DeferredSendsNetToVaultAndCallsBack() public {
         hook.setDeferralVault(address(hook));
-        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.referralFees = _twoReferralFees();
         bytes32 hash = _signal(taker, params);
         uint256 net = INTENT_AMOUNT - 250_000;
@@ -82,7 +82,7 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
 
     function test_DeferredSkipsPostIntentHook() public {
         hook.setDeferralVault(address(hook));
-        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.postIntentHook = postIntentHook;
         params.data = abi.encode(address(0));
         bytes32 hash = _signal(taker, params);
@@ -99,7 +99,7 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         hook.setDeferralVault(address(hook));
         orchestrator.setProtocolFee(1e16);
         vm.mockCall(address(escrow), abi.encodeWithSignature("getManagerFee(uint256)", depositId), abi.encode(delegate, 2e16));
-        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.referralFees = _twoReferralFees();
         bytes32 hash = _signal(taker, params);
         hook.expectFeeBalances(protocolFeeRecipient, 500_000, referrer, 150_000, delegate, 1_000_000);
@@ -185,7 +185,7 @@ contract OrchestratorV4DeferredSettlementTest is OrchestratorV4Fixture {
         assertEq(orchestrator.intentCounter(), oldOrchestrator.intentCounter());
         bytes32 hash = _signalDefault();
         vm.prank(taker);
-        oldOrchestrator.signalIntent(_defaultParams());
+        oldOrchestrator.signalIntent(abi.decode(abi.encode(_defaultParams()), (IOrchestratorV3.SignalIntentParams)));
         bytes32[] memory hashes = oldOrchestrator.getAccountIntents(taker);
         assertEq(hashes.length, 1);
         assertNotEq(hash, hashes[0]);

@@ -48,13 +48,17 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
             IPaymentVerifier.VerifyPaymentData memory request = IPaymentVerifier.VerifyPaymentData(
                 intentHash, _encodeProof(verifier, intentHash, AMOUNT + 1, keccak256(data), data, WITNESS_KEY), ""
             );
-            IPaymentVerifierV2.PaymentVerificationResultV2 memory result = i == 0
+            (IPaymentVerifierV2.PaymentVerificationResultV2 memory result, bytes memory extensionData) = i == 0
                 ? legacy.verifyPayment(IPaymentVerifierV2(address(verifier)), request)
                 : v2.verifyPayment(IPaymentVerifierV2(address(verifier)), request);
             assertTrue(result.success);
             assertEq(result.intentHash, intentHash);
             assertEq(result.releaseAmount, AMOUNT);
             assertEq(result.balanceFunded, flag);
+            assertEq(result.attestedReleaseAmount, AMOUNT + 1);
+            assertEq(abi.encode(result.payment), abi.encode(_payment(paymentId)));
+            assertEq(abi.encode(result.intent), abi.encode(_snapshot(intentHash)));
+            assertEq(extensionData, "");
         }
     }
 
@@ -62,8 +66,53 @@ contract UnifiedPaymentVerifierV4Test is UnifiedPaymentVerifierV3Test {
         _rejectPayload("", bytes("UPV: Invalid payload length"));
     }
 
-    function test_RejectsOverlongPayload() public {
-        _rejectPayload(abi.encode(false, uint256(0)), bytes("UPV: Invalid payload length"));
+    function test_ReturnsSignedExtensionData() public {
+        _checkExtension(hex"deadbeef010203");
+    }
+
+    function testFuzz_ReturnsSignedExtensionData(bytes memory extensionData) public {
+        vm.assume(extensionData.length <= 1024);
+        _checkExtension(extensionData);
+    }
+
+    function _checkExtension(bytes memory extensionData) internal {
+        UnifiedPaymentVerifierV4CallerHarness caller = new UnifiedPaymentVerifierV4CallerHarness();
+        caller.setIntent(LEGACY_INTENT, legacyCaller.getIntent(LEGACY_INTENT));
+        orchestratorRegistry.addOrchestrator(address(caller));
+        bytes32 paymentId = keccak256("extension");
+        bytes memory data = bytes.concat(abi.encode(_payment(paymentId), _snapshot(LEGACY_INTENT), true), extensionData);
+        bytes memory proof = _encodeProof(verifier, LEGACY_INTENT, AMOUNT - 1, keccak256(data), data, WITNESS_KEY);
+        UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(proof, (UnifiedPaymentVerifierV4.PaymentAttestation));
+        attestation.metadata = hex"badbad";
+        (IPaymentVerifierV2.PaymentVerificationResultV2 memory result, bytes memory returnedExtension) = caller.verifyPayment(
+            IPaymentVerifierV2(address(verifier)), IPaymentVerifier.VerifyPaymentData(LEGACY_INTENT, abi.encode(attestation), "")
+        );
+        assertTrue(result.success);
+        assertEq(result.intentHash, LEGACY_INTENT);
+        assertEq(result.releaseAmount, AMOUNT - 1);
+        assertEq(result.attestedReleaseAmount, AMOUNT - 1);
+        assertTrue(result.balanceFunded);
+        assertEq(abi.encode(result.payment), abi.encode(_payment(paymentId)));
+        assertEq(abi.encode(result.intent), abi.encode(_snapshot(LEGACY_INTENT)));
+        assertEq(returnedExtension, extensionData);
+    }
+
+    function test_ExtensionTamperingFails() public {
+        bytes32 paymentId = keccak256("tampered-extension");
+        bytes memory data = bytes.concat(abi.encode(_payment(paymentId), _snapshot(LEGACY_INTENT), true), hex"010203");
+        bytes memory proof = _encodeProof(verifier, LEGACY_INTENT, AMOUNT, keccak256(data), data, WITNESS_KEY);
+        UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(proof, (UnifiedPaymentVerifierV4.PaymentAttestation));
+        attestation.data[481] = 0xff;
+        vm.expectRevert("UPV: Data hash mismatch");
+        _call(IUnifiedVerifierCaller(address(legacyCaller)), verifier, LEGACY_INTENT, abi.encode(attestation));
+        attestation.dataHash = keccak256(attestation.data);
+        vm.expectRevert("ThresholdSigVerifierUtils: Not enough valid witness signatures");
+        _call(IUnifiedVerifierCaller(address(legacyCaller)), verifier, LEGACY_INTENT, abi.encode(attestation));
+        assertFalse(nullifierRegistry.isNullified(_nullifier(paymentId)));
+    }
+
+    function test_Rejects479BytePayload() public {
+        _rejectPayload(new bytes(31), bytes("UPV: Invalid payload length"));
     }
 
     function test_RejectsNonCanonicalFlag() public {

@@ -20,6 +20,7 @@ import {UnifiedPaymentVerifierV3} from "contracts/unifiedVerifier/UnifiedPayment
 import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol";
 import {IStakeVault} from "contracts/interfaces/IStakeVault.sol";
 import {INullifierRegistryV2} from "contracts/interfaces/INullifierRegistryV2.sol";
+import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
 import {IPaymentVerifier} from "contracts/interfaces/IPaymentVerifier.sol";
 
@@ -265,7 +266,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
     }
 
     function test_O4SignalRevertsBeforeRegistration() public {
-        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        IOrchestratorV4.SignalIntentParams memory params = abi.decode(abi.encode(_defaultParams()), (IOrchestratorV4.SignalIntentParams));
         vm.expectRevert(
             abi.encodeWithSelector(IntentLifecycleHookV2.UnauthorizedOrchestrator.selector, address(orchestratorV4))
         );
@@ -300,6 +301,25 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
             uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED)
         );
         assertEq(address(orchestrator.lifecycleHook()), address(predecessorHook));
+    }
+
+    function test_O3PendingIntentFulfilsThroughUPV4WithExtensionAfterCutover() public {
+        _stake(predecessorVault);
+        bytes32 id = _signalDefault();
+        _activateLane46();
+        _settle(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, false, hex"010203deadbeef"));
+        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
+        assertEq(orchestrator.getIntent(id).owner, address(0));
+        assertEq(predecessorVault.lockedStake(taker), INTENT_AMOUNT);
+        assertEq(uint256(predecessorPolicy.getDisputeProtectionIntent(id).status), uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED));
+    }
+
+    function test_O4FulfilsThroughUPV4WithExtensionAfterCutover() public {
+        _activateLane46();
+        bytes32 id = _signalO4();
+        _settleO4(id, _signedProof(id, PAYMENT_ID, successor.DOMAIN_SEPARATOR(), true, true, hex"ff01020304"));
+        assertEq(token.balanceOf(other), INTENT_AMOUNT);
+        assertEq(orchestratorV4.getIntent(id).owner, address(0));
     }
 
     function test_O4DeferredSettlementAfterCutover() public {
@@ -373,7 +393,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         );
         vm.prank(depositor);
         whitelist.setEnabled(address(escrow), depositId, METHOD, true);
-        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        IOrchestratorV4.SignalIntentParams memory params = abi.decode(abi.encode(_defaultParams()), (IOrchestratorV4.SignalIntentParams));
         vm.expectRevert(
             abi.encodeWithSelector(
                 IntentLifecycleHookV2.TakerNotWhitelisted.selector, address(escrow), depositId, METHOD, taker
@@ -428,7 +448,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
             uint256(keccak256(abi.encodePacked(address(orchestratorV4), orchestratorV4.intentCounter())))
                 % CIRCOM_PRIME_FIELD
         );
-        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        IOrchestratorV4.SignalIntentParams memory params = abi.decode(abi.encode(_defaultParams()), (IOrchestratorV4.SignalIntentParams));
         params.to = other;
         vm.prank(taker);
         orchestratorV4.signalIntent(params);
@@ -475,7 +495,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
 
     function _attestationData(bytes32 intentHash, bytes32 paymentId) private view returns (bytes memory) {
         IOrchestratorV3.Intent memory intent = orchestrator.getIntent(intentHash);
-        if (intent.owner == address(0)) intent = orchestratorV4.getIntent(intentHash);
+        if (intent.owner == address(0)) intent = abi.decode(abi.encode(orchestratorV4.getIntent(intentHash)), (IOrchestratorV3.Intent));
         return abi.encode(
             UnifiedPaymentVerifierV3.PaymentDetails(METHOD, PAYEE, 5000, USD, block.timestamp * 1000, paymentId),
             UnifiedPaymentVerifierV3.IntentSnapshot(
@@ -497,9 +517,16 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
         view
         returns (bytes memory)
     {
+        return _signedProof(intentHash, paymentId, domain, v4, balanceFunded, "");
+    }
+
+    function _signedProof(bytes32 intentHash, bytes32 paymentId, bytes32 domain, bool v4, bool balanceFunded, bytes memory extensionData)
+        private view returns (bytes memory)
+    {
         bytes memory data = _attestationData(intentHash, paymentId);
         if (v4) data = bytes.concat(data, abi.encode(balanceFunded));
         assertEq(data.length, v4 ? 480 : 448);
+        data = bytes.concat(data, extensionData);
         bytes32 dataHash = keccak256(data);
         bytes32 structHash = keccak256(
             abi.encode(
@@ -519,7 +546,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
     }
 
     function _settleO4(bytes32 intentHash, bytes memory proof) private {
-        orchestratorV4.fulfillIntent(IOrchestratorV3.FulfillIntentParams(proof, intentHash, "", ""));
+        orchestratorV4.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, intentHash, "", ""));
     }
 
     function _settle(bytes32 intentHash, bytes memory proof) private {

@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
+
 import {OrchestratorV4Fixture} from "./OrchestratorV4Fixture.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {CascadeDisputeProtectionPolicy} from "contracts/hooks/CascadeDisputeProtectionPolicy.sol";
 import {IntentLifecycleHookV2} from "contracts/hooks/IntentLifecycleHookV2.sol";
 import {WhitelistPolicy} from "contracts/hooks/WhitelistPolicy.sol";
-import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
+import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 import {AddressGroupRegistry} from "contracts/registries/AddressGroupRegistry.sol";
 import {NullifierRegistry} from "contracts/registries/NullifierRegistry.sol";
@@ -58,7 +60,7 @@ abstract contract CascadeStackFixture is OrchestratorV4Fixture {
         orchestrator.setProtocolFee(PROTOCOL_FEE);
     }
 
-    function _defaultParams() internal view override returns (IOrchestratorV3.SignalIntentParams memory params) {
+    function _defaultParams() internal view override returns (IOrchestratorV4.SignalIntentParams memory params) {
         params = super._defaultParams();
         params.to = other;
         params.referralFees = new IReferralFee.ReferralFee[](1);
@@ -77,10 +79,10 @@ abstract contract CascadeStackFixture is OrchestratorV4Fixture {
         return keccak256(abi.encode("payment", id));
     }
 
-    function _proof(bytes32 id, IOrchestratorV3.Intent memory intent, uint256 amount, bool balanceFunded) internal view returns (bytes memory) {
+    function _proof(bytes32 id, IOrchestratorV4.Intent memory intent, uint256 amount, bool balanceFunded) internal view returns (bytes memory) {
         bytes memory data = abi.encode(
-            UnifiedPaymentVerifierV4.PaymentDetails(intent.paymentMethod, PAYEE, amount / 10000, USD, block.timestamp * 1000, _paymentId(id)),
-            UnifiedPaymentVerifierV4.IntentSnapshot(id, intent.amount, intent.paymentMethod, USD, PAYEE, CONVERSION_RATE, intent.timestamp, 0),
+            IPaymentVerifierV2.PaymentDetails(intent.paymentMethod, PAYEE, amount / 10000, USD, block.timestamp * 1000, _paymentId(id)),
+            IPaymentVerifierV2.IntentSnapshot(id, intent.amount, intent.paymentMethod, USD, PAYEE, CONVERSION_RATE, intent.timestamp, 0),
             balanceFunded
         );
         return _signedProof(id, data, amount);
@@ -99,6 +101,6 @@ abstract contract CascadeStackFixture is OrchestratorV4Fixture {
     }
 
     function _settle(bytes32 id, uint256 amount, bool balanceFunded) internal {
-        orchestrator.fulfillIntent(IOrchestratorV3.FulfillIntentParams(_proof(id, orchestrator.getIntent(id), amount, balanceFunded), id, "", ""));
+        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(_proof(id, orchestrator.getIntent(id), amount, balanceFunded), id, "", ""));
     }
 }

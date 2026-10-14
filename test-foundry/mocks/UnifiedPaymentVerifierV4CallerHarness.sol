@@ -19,10 +19,10 @@ contract UnifiedPaymentVerifierV4CallerHarness {
         return intents[intentHash];
     }
 
-    /// @notice Calls the verifier and decodes all four result fields.
+    /// @notice Calls the verifier and decodes the static result and signed extension bytes.
     function verifyPayment(IPaymentVerifierV2 verifier, IPaymentVerifier.VerifyPaymentData calldata data)
         external
-        returns (IPaymentVerifierV2.PaymentVerificationResultV2 memory)
+        returns (IPaymentVerifierV2.PaymentVerificationResultV2 memory, bytes memory)
     {
         return verifier.verifyPayment(data);
     }
@@ -41,10 +41,10 @@ contract UnifiedPaymentVerifierV4V2CallerHarness {
         return intents[intentHash];
     }
 
-    /// @notice Calls the verifier and decodes all four result fields.
+    /// @notice Calls the verifier and decodes the static result and signed extension bytes.
     function verifyPayment(IPaymentVerifierV2 verifier, IPaymentVerifier.VerifyPaymentData calldata data)
         external
-        returns (IPaymentVerifierV2.PaymentVerificationResultV2 memory)
+        returns (IPaymentVerifierV2.PaymentVerificationResultV2 memory, bytes memory)
     {
         return verifier.verifyPayment(data);
     }

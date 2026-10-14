@@ -5,7 +5,9 @@ import {CascadeStackFixture} from "../helpers/CascadeStackFixture.sol";
 import {ICascadeDisputeProtectionPolicy as P} from "contracts/interfaces/ICascadeDisputeProtectionPolicy.sol";
 import {IDisputeProtectionPolicy} from "contracts/interfaces/IDisputeProtectionPolicy.sol";
 import {IDisputeVerifier} from "contracts/interfaces/IDisputeVerifier.sol";
+import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
+import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol";
 import {OrchestratorV3} from "contracts/OrchestratorV3.sol";
 import {StakeVault} from "contracts/StakeVault.sol";
 import {DisputeProtectionPolicy} from "contracts/hooks/DisputeProtectionPolicy.sol";
@@ -20,6 +22,21 @@ contract DeferredPayoutCascadeTest is CascadeStackFixture {
         assertEq(token.balanceOf(address(vault)), 0);
         assertEq(vault.totalAccounted(), 0);
         assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.BYPASS));
+        _assertFees();
+    }
+
+    function test_DeferredSettlementWithSignedExtension() public {
+        bytes32 id = _signalDefault();
+        UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
+            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, false),
+            (UnifiedPaymentVerifierV4.PaymentAttestation)
+        );
+        bytes memory proof = _signedProof(id, bytes.concat(attestation.data, hex"deadbeef0102"), INTENT_AMOUNT);
+        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, "", ""));
+        assertEq(token.balanceOf(other), 0);
+        _assertLock(id, other, NET);
+        assertEq(token.balanceOf(address(vault)), NET);
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.DEFERRED_PAYOUT));
         _assertFees();
     }
 
@@ -93,15 +110,15 @@ contract DeferredPayoutCascadeTest is CascadeStackFixture {
     }
 
     function test_PostIntentHookRunsOnPayNowAndNotOnDeferred() public {
-        IOrchestratorV3.SignalIntentParams memory params = _defaultParams();
+        IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.postIntentHook = postIntentHook;
         params.data = abi.encode(other);
         bytes32 paid = _signal(taker, params);
-        orchestrator.fulfillIntent(IOrchestratorV3.FulfillIntentParams(_proof(paid, orchestrator.getIntent(paid), INTENT_AMOUNT, true), paid, "", hex"abcd"));
+        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(_proof(paid, orchestrator.getIntent(paid), INTENT_AMOUNT, true), paid, "", hex"abcd"));
         assertEq(postIntentHook.lastPostIntentHookData(), hex"abcd");
         assertEq(token.balanceOf(other), NET);
         bytes32 deferred = _signal(taker, params);
-        orchestrator.fulfillIntent(IOrchestratorV3.FulfillIntentParams(_proof(deferred, orchestrator.getIntent(deferred), INTENT_AMOUNT, false), deferred, "", hex"1234"));
+        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(_proof(deferred, orchestrator.getIntent(deferred), INTENT_AMOUNT, false), deferred, "", hex"1234"));
         assertEq(postIntentHook.lastPostIntentHookData(), hex"abcd");
         assertEq(token.balanceOf(other), NET);
         _assertLock(deferred, other, NET);
@@ -145,9 +162,9 @@ contract DeferredPayoutCascadeTest is CascadeStackFixture {
         _stake(oldVault, taker, INTENT_AMOUNT);
         bytes32 id = bytes32(uint256(keccak256(abi.encodePacked(address(v3), v3.intentCounter()))) % CIRCOM_PRIME_FIELD);
         vm.prank(taker);
-        v3.signalIntent(_defaultParams());
+        v3.signalIntent(abi.decode(abi.encode(_defaultParams()), (IOrchestratorV3.SignalIntentParams)));
         assertEq(oldVault.lockedStake(taker), INTENT_AMOUNT);
-        v3.fulfillIntent(IOrchestratorV3.FulfillIntentParams(_proof(id, v3.getIntent(id), INTENT_AMOUNT, true), id, "", ""));
+        v3.fulfillIntent(IOrchestratorV3.FulfillIntentParams(_proof(id, abi.decode(abi.encode(v3.getIntent(id)), (IOrchestratorV4.Intent)), INTENT_AMOUNT, true), id, "", ""));
         assertEq(token.balanceOf(other), NET);
         assertEq(oldVault.lockedStake(taker), INTENT_AMOUNT);
         assertEq(uint256(oldPolicy.getDisputeProtectionIntent(id).status), uint256(IDisputeProtectionPolicy.DisputeProtectionIntentStatus.SETTLED));

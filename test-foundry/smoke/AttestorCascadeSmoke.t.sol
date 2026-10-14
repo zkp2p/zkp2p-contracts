@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import {IPaymentVerifierV2} from "contracts/interfaces/IPaymentVerifierV2.sol";
+
 import {CascadeStackFixture} from "../deterministic/helpers/CascadeStackFixture.sol";
 import {ICascadeDisputeProtectionPolicy as P} from "contracts/interfaces/ICascadeDisputeProtectionPolicy.sol";
-import {IOrchestratorV3} from "contracts/interfaces/IOrchestratorV3.sol";
+import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 import {UnifiedPaymentVerifierV4} from "contracts/unifiedVerifier/UnifiedPaymentVerifierV4.sol";
 
 /// @notice Opt-in cross-repo smoke; set ATTESTOR_POLICY_SMOKE_ROOT to a checkout with dependencies.
@@ -28,13 +30,13 @@ contract AttestorCascadeSmokeTest is CascadeStackFixture {
             assertEq(attestation.data.length, 480);
             (,, bool balanceFunded) = abi.decode(
                 attestation.data,
-                (UnifiedPaymentVerifierV4.PaymentDetails, UnifiedPaymentVerifierV4.IntentSnapshot, bool)
+                (IPaymentVerifierV2.PaymentDetails, IPaymentVerifierV2.IntentSnapshot, bool)
             );
             assertEq(balanceFunded, index == 0);
             assertEq(attestation.releaseAmount, index == 2 ? 45e6 : INTENT_AMOUNT);
             uint256 net = attestation.releaseAmount - attestation.releaseAmount * PROTOCOL_FEE / 1e18
                 - attestation.releaseAmount * REFERRAL_FEE / 1e18;
-            orchestrator.fulfillIntent(IOrchestratorV3.FulfillIntentParams(proof, id, "", ""));
+            orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, "", ""));
             P.DisputeProtectionIntent memory record = protection.getDisputeProtectionIntent(id);
             (address lockOwner, uint256 lockedAmount,) = vault.locks(id);
             if (index == 0) {
@@ -63,7 +65,7 @@ contract AttestorCascadeSmokeTest is CascadeStackFixture {
         private
         returns (bytes memory)
     {
-        IOrchestratorV3.Intent memory intent = orchestrator.getIntent(id);
+        IOrchestratorV4.Intent memory intent = orchestrator.getIntent(id);
         string[] memory command = new string[](11);
         command[0] = "node";
         command[1] = string.concat(attestor, "/node_modules/tsx/dist/cli.mjs");
