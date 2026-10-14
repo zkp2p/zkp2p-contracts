@@ -252,6 +252,9 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated.
      * Settlement notifies the snapshotted lifecycle hook (fail-closed), then executes the exact fee plan and
      * transfers the deposit token to the intent.to address (or post-intent hook).
+     * @dev Signed extension word 0 is the attested conditions hash, zero when none. Extensions shorter than
+     * 32 bytes attest zero. The attested hash must equal the stored intent conditions hash, including zero;
+     * any bytes after word 0 are accepted and reserved.
      * @dev This function adds a reentrancy guard as it's calling the post intent hook contract which itself might call 
      * malicious contracts.
      *
@@ -281,11 +284,9 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (!verificationResult.success) revert PaymentVerificationFailed();
         if (verificationResult.intentHash != _params.intentHash) revert HashMismatch(_params.intentHash, verificationResult.intentHash);
 
-        bytes32 conditionsHash = intentConditions[_params.intentHash];
-        if (conditionsHash != bytes32(0)) {
-            if (extensionData.length < 32 || abi.decode(extensionData, (bytes32)) != conditionsHash) {
-                revert ConditionsNotAttested(_params.intentHash);
-            }
+        bytes32 attestedConditionsHash = extensionData.length >= 32 ? abi.decode(extensionData, (bytes32)) : bytes32(0);
+        if (attestedConditionsHash != intentConditions[_params.intentHash]) {
+            revert ConditionsNotAttested(_params.intentHash);
         }
 
         // Effects

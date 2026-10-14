@@ -20,17 +20,38 @@ contract OrchestratorV4ConditionsTest is OrchestratorV4Fixture {
         vm.stopPrank();
     }
 
-    function test_PlainSignalPreservesGatingAndIgnoresExtensions() public {
+    function test_PlainSignalPreservesGatingAndAcceptsAbsentOrZeroAttestedHash() public {
         _useGatedDeposit();
-        for (uint256 i; i < 3; ++i) {
+        bytes[4] memory extensions = [bytes(""), bytes(hex"01"), new bytes(31), abi.encode(bytes32(0))];
+        for (uint256 i; i < extensions.length; ++i) {
             IOrchestratorV4.SignalIntentParams memory params =
                 _gatedParams(depositId, gatingServiceKey, taker, block.timestamp + 1 days);
             bytes32 id = _signal(taker, params);
             assertEq(orchestrator.intentConditions(id), bytes32(0));
-            verifier.setExtensionData(i == 0 ? bytes("") : i == 1 ? bytes(hex"01") : abi.encode(CONDITIONS));
+            verifier.setExtensionData(extensions[i]);
             _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
         }
-        assertEq(token.balanceOf(taker), 3 * INTENT_AMOUNT);
+        assertEq(token.balanceOf(taker), extensions.length * INTENT_AMOUNT);
+    }
+
+    function test_UnconditionedIntentRejectsNonZeroAttestedHash() public {
+        bytes32 id = _signalDefault();
+        uint256 escrowBalance = token.balanceOf(address(escrow));
+        verifier.setExtensionData(abi.encode(CONDITIONS));
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.ConditionsNotAttested.selector, id));
+        _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
+        assertEq(orchestrator.intentConditions(id), bytes32(0));
+        assertEq(orchestrator.getIntent(id).owner, taker);
+        assertEq(token.balanceOf(address(escrow)), escrowBalance);
+        assertEq(token.balanceOf(taker), 0);
+    }
+
+    function test_UnconditionedIntentAcceptsZeroAttestedHashWithTrailingBytes() public {
+        bytes32 id = _signalDefault();
+        verifier.setExtensionData(bytes.concat(abi.encode(bytes32(0)), hex"010203"));
+        _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
+        assertEq(orchestrator.getIntent(id).owner, address(0));
+        assertEq(token.balanceOf(taker), INTENT_AMOUNT);
     }
 
     function test_ConditionedSignalStoresHashAndPreservesHookData() public {
@@ -72,7 +93,7 @@ contract OrchestratorV4ConditionsTest is OrchestratorV4Fixture {
         _useGatedDeposit();
         bytes32 id = _signalWithConditions(CONDITIONS);
         uint256 escrowBalance = token.balanceOf(address(escrow));
-        bytes[3] memory extensions = [bytes(""), new bytes(31), abi.encode(keccak256("wrong"))];
+        bytes[4] memory extensions = [bytes(""), new bytes(31), abi.encode(bytes32(0)), abi.encode(keccak256("wrong"))];
         for (uint256 i; i < extensions.length; ++i) {
             verifier.setExtensionData(extensions[i]);
             vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.ConditionsNotAttested.selector, id));

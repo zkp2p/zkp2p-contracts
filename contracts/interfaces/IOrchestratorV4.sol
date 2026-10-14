@@ -184,6 +184,8 @@ interface IOrchestratorV4 {
     function cancelIntent(bytes32 intentHash) external;
 
     /// @notice Verifies payment and settles immediately or defers the net payout.
+    /// @dev Signed extension word 0 is the attested conditions hash, zero when none; fewer than 32 bytes means zero.
+    /// The attested hash must equal intentConditions(intentHash), including zero. Later bytes are accepted and reserved.
     function fulfillIntent(FulfillIntentParams calldata params) external;
 
     /// @notice Manually settles an intent as its depositor.

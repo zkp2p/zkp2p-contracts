@@ -38,7 +38,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
             _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, balanceFunded),
             (UnifiedPaymentVerifierV4.PaymentAttestation)
         );
-        bytes[3] memory invalidExtensions = [bytes(""), new bytes(31), abi.encode(keccak256("wrong"))];
+        bytes[4] memory invalidExtensions = [bytes(""), new bytes(31), abi.encode(bytes32(0)), abi.encode(keccak256("wrong"))];
         uint256 escrowBalance = token.balanceOf(address(escrow));
         uint256 vaultBalance = token.balanceOf(address(vault));
         for (uint256 i; i < invalidExtensions.length; ++i) {
@@ -91,6 +91,51 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         );
         bytes memory proof = _signedProof(id, bytes.concat(attestation.data, hex"deadbeef0102"), INTENT_AMOUNT);
         orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, "", ""));
+        assertEq(token.balanceOf(other), 0);
+        _assertLock(id, other, NET);
+        assertEq(token.balanceOf(address(vault)), NET);
+        assertEq(uint256(protection.getDisputeProtectionIntent(id).collateralSource), uint256(P.CollateralSource.DEFERRED_PAYOUT));
+        _assertFees();
+    }
+
+    function test_UnconditionedIntentRejectsNonZeroAttestedHash() public {
+        bytes32 id = _signalDefault();
+        UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
+            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, true),
+            (UnifiedPaymentVerifierV4.PaymentAttestation)
+        );
+        assertEq(attestation.data.length, 480);
+        bytes memory proof = _signedProof(id, bytes.concat(attestation.data, abi.encode(CONDITIONS)), INTENT_AMOUNT);
+        uint256 escrowBalance = token.balanceOf(address(escrow));
+        vm.expectRevert(abi.encodeWithSelector(IOrchestratorV4.ConditionsNotAttested.selector, id));
+        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, "", ""));
+        assertEq(orchestrator.intentConditions(id), bytes32(0));
+        assertEq(orchestrator.getIntent(id).owner, taker);
+        assertEq(token.balanceOf(address(escrow)), escrowBalance);
+        assertEq(token.balanceOf(address(vault)), 0);
+        assertEq(token.balanceOf(other), 0);
+        assertEq(token.balanceOf(protocolFeeRecipient), 0);
+        assertEq(token.balanceOf(referrer), 0);
+        assertEq(nullifiers.nullifierByIntentHash(id), bytes32(0));
+        assertEq(nullifiers.intentHashByNullifier(keccak256(abi.encodePacked(METHOD, _paymentId(id)))), bytes32(0));
+
+        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(abi.encode(attestation), id, "", ""));
+        assertEq(orchestrator.getIntent(id).owner, address(0));
+        assertEq(token.balanceOf(other), NET);
+        _assertFees();
+    }
+
+    function test_UnconditionedIntentAcceptsZeroAttestedHashWithTrailingBytes() public {
+        bytes32 id = _signalDefault();
+        UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
+            _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, false),
+            (UnifiedPaymentVerifierV4.PaymentAttestation)
+        );
+        bytes memory proof = _signedProof(
+            id, bytes.concat(attestation.data, abi.encode(bytes32(0)), hex"010203"), INTENT_AMOUNT
+        );
+        orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, "", ""));
+        assertEq(orchestrator.getIntent(id).owner, address(0));
         assertEq(token.balanceOf(other), 0);
         _assertLock(id, other, NET);
         assertEq(token.balanceOf(address(vault)), NET);

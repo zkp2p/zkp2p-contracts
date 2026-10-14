@@ -993,7 +993,7 @@ Its fully static result preserves the V1 `success`, `intentHash`, `releaseAmount
 then returns `balanceFunded`, the uncapped `attestedReleaseAmount`, verified `PaymentDetails`
 and signed/validated `IntentSnapshot`. Dynamic extension bytes are a separate trailing return
 value; unsigned metadata is never returned. O3 reads the V1 prefix, and O4 uses the capped
-release amount and balance flag, and checks the signed extension for conditioned intents.
+release amount and balance flag, and checks the signed extension's conditions hash for every intent.
 IOrchestratorV4 owns its Intent, SignalIntentParams and FulfillIntentParams structs with the
 same ABI layouts as V3.
 
@@ -1012,10 +1012,14 @@ service. The gating service signs the existing 336-byte packed message with the 
 appended (368 bytes total). `signalIntent(params)` retains its original calldata and signature
 format. `intentConditions(intentHash)` exposes the hash until the intent is pruned.
 
-The hash is opaque on-chain. For conditioned fulfillment, UPV4's signed `extensionData` word 0
-must echo the conditions hash; later bytes are reserved. Missing, short, or mismatched echoes
-revert before funds move on every settlement path. Unconditioned intents ignore extensions,
-and manual release ignores conditions. `intent.data` remains the post-intent hook payload.
+The hash is opaque on-chain. UPV4's signed `extensionData` word 0 is the attested conditions
+hash, zero when none. An absent extension or one shorter than 32 bytes attests zero. On every
+fulfillment path, the attested hash must equal `intentConditions(intentHash)` or revert with
+`ConditionsNotAttested(intentHash)` before funds move. Unconditioned intents accept the current
+480-byte attestations without extensions and extensions with word 0 equal to zero, but reject
+a nonzero attested hash. Conditioned intents require the exact hash. Extra bytes after word 0
+are accepted and reserved. Manual release ignores conditions. `intent.data` remains the
+post-intent hook payload.
 
 Off-chain convention v1 is
 `conditionsHash = keccak256(abi.encode(uint8(1), salt, payerIdHash))`,
