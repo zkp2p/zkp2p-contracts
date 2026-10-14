@@ -46,7 +46,7 @@ interface IOrchestratorV4 {
         IPostIntentHookV2 postIntentHook;           // Optional post-intent hook (address(0) for no hook)
         bytes preIntentHookData;                    // Ephemeral data passed only to the pre-intent hook during signalIntent
         bytes data;                                 // Signal data persisted in Intent and forwarded as post-intent hook signalHookData
-        bytes32 conditionsHash;                     // Opaque attested-conditions hash; bytes32(0) = no conditions
+        bytes lifecycleHookData;                    // Opaque lifecycle hook data; empty = none
     }
 
     struct FulfillIntentParams {
@@ -134,8 +134,7 @@ interface IOrchestratorV4 {
     error InvalidPreIntentHook(address hook);
     error InvalidLifecycleHook(address hook);
     error InvalidSignature();
-    error ConditionsRequireGatingService();
-    error ConditionsRequireLifecycleHook();
+    error LifecycleHookDataRequiresHook();
     error SignatureExpired(uint256 expiration, uint256 currentTime);
 
     // Verification errors
@@ -163,14 +162,14 @@ interface IOrchestratorV4 {
     /// @notice Returns the hook snapshotted for the intent.
     function getIntentLifecycleHook(bytes32 intentHash) external view returns (IIntentLifecycleHookV2);
 
-    /// @notice Returns the opaque conditions hash, or zero for an unconditioned or pruned intent.
-    function intentConditions(bytes32 intentHash) external view returns (bytes32);
+    /// @notice Returns opaque lifecycle hook data, or empty bytes for an unset or pruned intent.
+    function getIntentLifecycleHookData(bytes32 intentHash) external view returns (bytes memory);
 
     /* ============ External Functions for Users ============ */
 
-    /// @notice Signals an intent and locks its escrow funds, with optional attested conditions.
-    /// @dev A nonzero conditionsHash requires a lifecycle hook and deposit gating service and is appended to its signed message.
-    /// A zero conditionsHash preserves the plain V3 gating message byte-for-byte.
+    /// @notice Signals an intent and locks its escrow funds, with optional opaque lifecycle hook data.
+    /// @dev Non-empty data requires a lifecycle hook and appends keccak256(lifecycleHookData) to the gating message.
+    /// Empty data preserves the plain V3 gating message byte-for-byte. Only the lifecycle hook interprets this data.
     function signalIntent(SignalIntentParams calldata params) external;
 
     /// @notice Sets the deposit pre-intent hook as depositor or delegate.
@@ -183,8 +182,7 @@ interface IOrchestratorV4 {
     function cancelIntent(bytes32 intentHash) external;
 
     /// @notice Verifies payment and settles immediately or defers the net payout.
-    /// @dev Signed extension word 0 is the attested conditions hash, zero when none; fewer than 32 bytes means zero.
-    /// The attested hash must equal intentConditions(intentHash), including zero. Later bytes are accepted and reserved.
+    /// @dev Forwards stored lifecycle hook data and raw signed extension bytes to the snapshotted lifecycle hook.
     function fulfillIntent(FulfillIntentParams calldata params) external;
 
     /// @notice Manually settles an intent as its depositor.

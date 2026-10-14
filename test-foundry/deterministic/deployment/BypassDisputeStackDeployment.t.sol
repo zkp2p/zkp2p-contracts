@@ -459,7 +459,7 @@ contract BypassDisputeStackDeploymentTest is OrchestratorV3Fixture {
             postIntentHook: params.postIntentHook,
             preIntentHookData: params.preIntentHookData,
             data: params.data,
-            conditionsHash: bytes32(0)
+            lifecycleHookData: ""
         });
     }
 

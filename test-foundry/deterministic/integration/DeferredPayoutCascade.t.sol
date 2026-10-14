@@ -34,7 +34,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         depositId = _createDeposit(gatingService, delegate);
         vm.stopPrank();
         if (staked) _stake(vault, taker, INTENT_AMOUNT);
-        bytes32 id = _signalWithConditions(CONDITIONS);
+        bytes32 id = _signalWithLifecycleHookData(abi.encode(uint8(1), CONDITIONS));
         UnifiedPaymentVerifierV4.PaymentAttestation memory attestation = abi.decode(
             _proof(id, orchestrator.getIntent(id), INTENT_AMOUNT, balanceFunded),
             (UnifiedPaymentVerifierV4.PaymentAttestation)
@@ -48,7 +48,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
             );
             vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.ConditionsNotAttested.selector, id));
             orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(invalidProof, id, "", ""));
-            assertEq(orchestrator.intentConditions(id), CONDITIONS);
+            assertEq(orchestrator.getIntentLifecycleHookData(id), abi.encode(uint8(1), CONDITIONS));
             assertEq(orchestrator.getIntent(id).owner, taker);
             assertEq(token.balanceOf(address(escrow)), escrowBalance);
             assertEq(token.balanceOf(address(vault)), vaultBalance);
@@ -60,7 +60,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
             id, bytes.concat(attestation.data, abi.encode(CONDITIONS, keccak256("reserved"))), INTENT_AMOUNT
         );
         orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, "", ""));
-        assertEq(orchestrator.intentConditions(id), bytes32(0));
+        assertEq(orchestrator.getIntentLifecycleHookData(id), "");
         assertEq(orchestrator.getIntent(id).owner, address(0));
         assertEq(token.balanceOf(other), balanceFunded || staked ? NET : 0);
         P.CollateralSource source = balanceFunded ? P.CollateralSource.BYPASS
@@ -110,7 +110,7 @@ contract DeferredPayoutCascadeTest is DisputeProtectionStackV2Fixture {
         uint256 escrowBalance = token.balanceOf(address(escrow));
         vm.expectRevert(abi.encodeWithSelector(IntentLifecycleHookV2.ConditionsNotAttested.selector, id));
         orchestrator.fulfillIntent(IOrchestratorV4.FulfillIntentParams(proof, id, "", ""));
-        assertEq(orchestrator.intentConditions(id), bytes32(0));
+        assertEq(orchestrator.getIntentLifecycleHookData(id), "");
         assertEq(orchestrator.getIntent(id).owner, taker);
         assertEq(token.balanceOf(address(escrow)), escrowBalance);
         assertEq(token.balanceOf(address(vault)), 0);

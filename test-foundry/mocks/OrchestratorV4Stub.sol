@@ -25,8 +25,8 @@ contract OrchestratorV4Stub is ERC165 {
     }
 
     /// @notice Calls admission as the registered orchestrator.
-    function signal(IIntentLifecycleHookV2 _hook, bytes32 _intentHash) external {
-        _hook.onIntentSignaled(_intentHash);
+    function signal(IIntentLifecycleHookV2 _hook, bytes32 _intentHash, bytes calldata _lifecycleHookData) external {
+        _hook.onIntentSignaled(_intentHash, _lifecycleHookData);
     }
 
     /// @notice Calls cancellation as the registered orchestrator.

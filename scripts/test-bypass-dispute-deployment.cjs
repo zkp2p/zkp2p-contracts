@@ -741,11 +741,30 @@ test("local lane 45 prepares without activation and lane 46 activates idempotent
       ["recipient", "address"],
       ["releaseAmount", "uint256"],
       ["netAmount", "uint256"],
-      ["conditionsHash", "bytes32"],
+      ["lifecycleHookData", "bytes"],
       ["extensionData", "bytes"],
       ["isManualRelease", "bool"],
     ]
   );
+  const hookInterface = new ethers.utils.Interface(
+    state.records.get("IntentLifecycleHookV2").abi
+  );
+  assert.equal(
+    hookInterface.getFunction("onIntentSignaled").format(),
+    "onIntentSignaled(bytes32,bytes)"
+  );
+  assert.equal(hookInterface.getFunction("conditionsHashOf").stateMutability, "pure");
+  const o4Abi = state.records.get("OrchestratorV4").abi;
+  const v3Abi = state.records.get("OrchestratorV3").abi;
+  /** @param {any[]} abi */
+  const signalFields = (abi) => new ethers.utils.Interface(abi)
+    .getFunction("signalIntent").inputs[0].components.map(
+      (/** @type {{name: string, type: string}} */ entry) => [entry.name, entry.type]
+    );
+  assert.deepEqual(signalFields(o4Abi), [...signalFields(v3Abi), ["lifecycleHookData", "bytes"]]);
+  assert.equal(o4Abi.some(
+    (/** @type {{name?: string}} */ entry) => /conditions/i.test(entry.name || "")
+  ), false);
   await activateLane46(state.fakeHre);
   const o4 = await ethers.getContractAt(
     "OrchestratorV4",

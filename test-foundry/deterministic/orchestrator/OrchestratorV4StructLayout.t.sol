@@ -8,9 +8,9 @@ import {IReferralFee} from "contracts/interfaces/IReferralFee.sol";
 import {IPostIntentHookV2} from "contracts/interfaces/IPostIntentHookV2.sol";
 
 contract OrchestratorV4StructLayoutTest is Test {
-    function test_SignalSelectorIncludesTrailingConditionsHash() public pure {
+    function test_SignalSelectorIncludesTrailingLifecycleHookData() public pure {
         bytes4 expected = bytes4(keccak256(
-            "signalIntent((address,uint256,uint256,address,bytes32,bytes32,uint256,(address,uint256)[],bytes,uint256,address,bytes,bytes,bytes32))"
+            "signalIntent((address,uint256,uint256,address,bytes32,bytes32,uint256,(address,uint256)[],bytes,uint256,address,bytes,bytes,bytes))"
         ));
         assertEq(IOrchestratorV4.signalIntent.selector, expected);
     }
@@ -50,7 +50,7 @@ contract OrchestratorV4StructLayoutTest is Test {
         assertEq(abi.encode(v3), abi.encode(v4));
     }
 
-    function test_SignalIntentParamsExtendsV3WithConditionsHashLast() public pure {
+    function test_SignalIntentParamsExtendsV3WithLifecycleHookDataLast() public pure {
         IReferralFee.ReferralFee[] memory fees = _fees();
         IOrchestratorV3.SignalIntentParams memory v3 = IOrchestratorV3.SignalIntentParams({
             escrow: address(1),
@@ -67,8 +67,8 @@ contract OrchestratorV4StructLayoutTest is Test {
             preIntentHookData: hex"44556677",
             data: hex"8899"
         });
-        bytes32 conditionsHash = keccak256("conditions");
-        // Positional construction locks V3's field order and the appended conditions hash.
+        bytes memory lifecycleHookData = hex"0102030405";
+        // Positional construction locks V3's field order and the appended lifecycleHookData.
         IOrchestratorV4.SignalIntentParams memory v4 = IOrchestratorV4.SignalIntentParams(
             v3.escrow,
             v3.depositId,
@@ -83,7 +83,7 @@ contract OrchestratorV4StructLayoutTest is Test {
             v3.postIntentHook,
             v3.preIntentHookData,
             v3.data,
-            conditionsHash
+            lifecycleHookData
         );
         assertEq(v4.escrow, v3.escrow);
         assertEq(v4.depositId, v3.depositId);
@@ -98,7 +98,7 @@ contract OrchestratorV4StructLayoutTest is Test {
         assertEq(address(v4.postIntentHook), address(v3.postIntentHook));
         assertEq(v4.preIntentHookData, v3.preIntentHookData);
         assertEq(v4.data, v3.data);
-        assertEq(v4.conditionsHash, conditionsHash);
+        assertEq(v4.lifecycleHookData, lifecycleHookData);
     }
 
     function test_FulfillIntentParamsEncodingMatchesV3() public pure {

@@ -6,9 +6,9 @@ import {OrchestratorV4Fixture} from "../helpers/OrchestratorV4Fixture.sol";
 import {IIntentLifecycleHookV2} from "contracts/interfaces/IIntentLifecycleHookV2.sol";
 import {IOrchestratorV4} from "contracts/interfaces/IOrchestratorV4.sol";
 
-contract OrchestratorV4ConditionsTest is OrchestratorV4Fixture {
+contract OrchestratorV4HookDataTest is OrchestratorV4Fixture {
     LifecycleHookV2Mock internal lifecycleHookMock;
-    bytes32 internal constant CONDITIONS = keccak256("conditions");
+    bytes internal constant HOOK_DATA = hex"ff010203040506070809";
 
     function setUp() public override {
         super.setUp();
@@ -16,12 +16,26 @@ contract OrchestratorV4ConditionsTest is OrchestratorV4Fixture {
         orchestrator.setLifecycleHook(lifecycleHookMock);
     }
 
-    function test_ConditionsRequireGatingService() public {
+    function test_OpaqueDataDoesNotRequireGatingService() public {
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        params.conditionsHash = CONDITIONS;
-        vm.expectRevert(IOrchestratorV4.ConditionsRequireGatingService.selector);
-        vm.prank(taker);
-        orchestrator.signalIntent(params);
+        params.lifecycleHookData = HOOK_DATA;
+        bytes32 id = _signal(taker, params);
+        assertEq(orchestrator.getIntentLifecycleHookData(id), HOOK_DATA);
+        assertEq(lifecycleHookMock.lastSignaledLifecycleHookData(), HOOK_DATA);
+    }
+
+    function test_PlainSignalDoesNotWriteHookDataStorage() public {
+        bytes32 id = _intentHash(orchestrator.intentCounter());
+        vm.record();
+        assertEq(orchestrator.getIntentLifecycleHookData(id), "");
+        (bytes32[] memory dataReads,) = vm.accesses(address(orchestrator));
+        assertEq(dataReads.length, 1);
+        vm.record();
+        _signalDefault();
+        (, bytes32[] memory writes) = vm.accesses(address(orchestrator));
+        for (uint256 i; i < writes.length; ++i) assertNotEq(writes[i], dataReads[0]);
+        assertEq(orchestrator.getIntentLifecycleHookData(id), "");
+        assertEq(lifecycleHookMock.lastSignaledLifecycleHookData(), "");
     }
 
     function _useGatedDeposit() internal {
@@ -30,151 +44,155 @@ contract OrchestratorV4ConditionsTest is OrchestratorV4Fixture {
         vm.stopPrank();
     }
 
-    function test_PlainSignalPreservesGatingAndAcceptsAbsentOrZeroAttestedHash() public {
+    function test_PlainSignalPreservesGatingAndForwardsAnyExtension() public {
         _useGatedDeposit();
         bytes[4] memory extensions = [bytes(""), bytes(hex"01"), new bytes(31), abi.encode(bytes32(0))];
         for (uint256 i; i < extensions.length; ++i) {
             IOrchestratorV4.SignalIntentParams memory params =
                 _gatedParams(depositId, gatingServiceKey, taker, block.timestamp + 1 days);
             bytes32 id = _signal(taker, params);
-            assertEq(orchestrator.intentConditions(id), bytes32(0));
+            assertEq(orchestrator.getIntentLifecycleHookData(id), "");
             verifier.setExtensionData(extensions[i]);
             _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
         }
         assertEq(token.balanceOf(taker), extensions.length * INTENT_AMOUNT);
     }
 
-    function test_ConditionsRequireLifecycleHook() public {
+    function test_NonEmptyDataRequiresLifecycleHook() public {
         _useGatedDeposit();
         orchestrator.setLifecycleHook(IIntentLifecycleHookV2(address(0)));
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        params.conditionsHash = CONDITIONS;
-        params.gatingServiceSignature = _conditionsSignature(params, CONDITIONS);
+        params.lifecycleHookData = HOOK_DATA;
+        params.gatingServiceSignature = _lifecycleHookDataSignature(params, HOOK_DATA);
         uint256 counter = orchestrator.intentCounter();
-        vm.expectRevert(IOrchestratorV4.ConditionsRequireLifecycleHook.selector);
+        vm.expectRevert(IOrchestratorV4.LifecycleHookDataRequiresHook.selector);
         _signalCall(taker, params);
         assertEq(orchestrator.intentCounter(), counter);
         assertEq(escrow.getDeposit(depositId).outstandingIntentAmount, 0);
     }
 
-    function test_UnconditionedIntentForwardsUninterpretedExtension() public {
+    function test_PlainIntentForwardsUninterpretedExtension() public {
         bytes32 id = _signalDefault();
-        bytes memory raw = abi.encode(uint256(2), CONDITIONS, keccak256("reserved"));
+        bytes memory raw = abi.encode(uint256(2), keccak256(HOOK_DATA), keccak256("reserved"));
         verifier.setExtensionData(raw);
         _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
-        (,,,,, bytes32 conditions, bytes memory forwarded, bool manual) = lifecycleHookMock.lastSettlementContext();
-        assertEq(conditions, bytes32(0));
+        (,,,,, bytes memory hookData, bytes memory forwarded, bool manual) = lifecycleHookMock.lastSettlementContext();
+        assertEq(hookData, "");
         assertEq(forwarded, raw);
         assertFalse(manual);
     }
 
-    function test_ConditionedSignalStoresHashAndPreservesHookData() public {
+    function test_SignalStoresAndForwardsLifecycleDataAndPreservesPostHookData() public {
         _useGatedDeposit();
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
         params.data = hex"deadbeef";
-        params.conditionsHash = CONDITIONS;
-        params.gatingServiceSignature = _conditionsSignature(params, CONDITIONS);
+        params.lifecycleHookData = HOOK_DATA;
+        params.gatingServiceSignature = _lifecycleHookDataSignature(params, HOOK_DATA);
         bytes32 id = _intentHash(orchestrator.intentCounter());
         vm.prank(taker);
         orchestrator.signalIntent(params);
-        assertEq(orchestrator.intentConditions(id), CONDITIONS);
+        assertEq(orchestrator.getIntentLifecycleHookData(id), HOOK_DATA);
         assertEq(orchestrator.getIntent(id).data, hex"deadbeef");
+        assertEq(lifecycleHookMock.lastSignaledLifecycleHookData(), HOOK_DATA);
+        assertEq(lifecycleHookMock.lastIntentHash(), id);
     }
 
-    function test_ZeroConditionsUsesPlainGatingMessage() public {
+    function test_EmptyDataUsesPlainGatingMessage() public {
         _useGatedDeposit();
         IOrchestratorV4.SignalIntentParams memory params =
             _gatedParams(depositId, gatingServiceKey, taker, block.timestamp + 1 days);
-        params.conditionsHash = bytes32(0);
+        params.lifecycleHookData = "";
         bytes memory plainSignature = params.gatingServiceSignature;
-        params.gatingServiceSignature = _conditionsSignature(params, bytes32(0));
+        params.gatingServiceSignature = _lifecycleHookDataSignature(params, "");
         vm.expectRevert(IOrchestratorV4.InvalidSignature.selector);
         _signalCall(taker, params);
         params.gatingServiceSignature = plainSignature;
         bytes32 id = _signal(taker, params);
-        assertEq(orchestrator.intentConditions(id), bytes32(0));
+        assertEq(orchestrator.getIntentLifecycleHookData(id), "");
         assertEq(orchestrator.getIntent(id).owner, taker);
         _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
         assertEq(orchestrator.getIntent(id).owner, address(0));
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
     }
 
-    function test_GatingSignaturesCannotCrossPathsOrConditions() public {
+    function test_GatingSignaturesCannotCrossPathsOrData() public {
         _useGatedDeposit();
         IOrchestratorV4.SignalIntentParams memory params =
             _gatedParams(depositId, gatingServiceKey, taker, block.timestamp + 1 days);
-        params.conditionsHash = CONDITIONS;
+        params.lifecycleHookData = HOOK_DATA;
         vm.expectRevert(IOrchestratorV4.InvalidSignature.selector);
         vm.prank(taker);
         orchestrator.signalIntent(params);
-        params.gatingServiceSignature = _conditionsSignature(params, CONDITIONS);
-        params.conditionsHash = bytes32(0);
+        params.gatingServiceSignature = _lifecycleHookDataSignature(params, HOOK_DATA);
+        params.lifecycleHookData = "";
         vm.expectRevert(IOrchestratorV4.InvalidSignature.selector);
         vm.prank(taker);
         orchestrator.signalIntent(params);
-        params.conditionsHash = keccak256("other conditions");
+        params.lifecycleHookData = hex"ff01020304050607080a";
         vm.expectRevert(IOrchestratorV4.InvalidSignature.selector);
         vm.prank(taker);
         orchestrator.signalIntent(params);
     }
 
-    function test_ForwardsRawExtensionAndPrePruneConditionsToSnapshottedHook() public {
+    function test_ForwardsRawExtensionAndPrePruneDataToSnapshottedHook() public {
         _useGatedDeposit();
-        bytes32 id = _signalWithConditions(CONDITIONS);
+        bytes32 id = _signalWithLifecycleHookData(HOOK_DATA);
         orchestrator.setLifecycleHook(IIntentLifecycleHookV2(address(0)));
         bytes memory raw = hex"ff010203";
         verifier.setExtensionData(raw);
         _fulfill(id, INTENT_AMOUNT, CONVERSION_RATE);
-        (bytes32 settledId,,,,, bytes32 conditions, bytes memory forwarded, bool manual) = lifecycleHookMock.lastSettlementContext();
+        (bytes32 settledId,,,,, bytes memory hookData, bytes memory forwarded, bool manual) = lifecycleHookMock.lastSettlementContext();
         assertEq(settledId, id);
-        assertEq(conditions, CONDITIONS);
+        assertEq(hookData, HOOK_DATA);
         assertEq(forwarded, raw);
         assertFalse(manual);
         assertEq(lifecycleHookMock.settlementCalls(), 1);
-        assertEq(orchestrator.intentConditions(id), bytes32(0));
+        assertEq(orchestrator.getIntentLifecycleHookData(id), "");
         assertEq(orchestrator.getIntent(id).owner, address(0));
     }
 
-    function test_CancelClearsConditions() public {
+    function test_CancelClearsHookData() public {
         _useGatedDeposit();
-        bytes32 id = _signalWithConditions(CONDITIONS);
+        bytes32 id = _signalWithLifecycleHookData(HOOK_DATA);
         vm.prank(taker);
         orchestrator.cancelIntent(id);
-        assertEq(orchestrator.intentConditions(id), bytes32(0));
+        assertEq(orchestrator.getIntentLifecycleHookData(id), "");
     }
 
-    function test_PruneClearsConditions() public {
+    function test_PruneClearsHookData() public {
         _useGatedDeposit();
-        bytes32 id = _signalWithConditions(CONDITIONS);
+        bytes memory longData = abi.encode(uint256(99), keccak256("opaque"), type(uint256).max);
+        bytes32 id = _signalWithLifecycleHookData(longData);
+        assertEq(orchestrator.getIntentLifecycleHookData(id), longData);
         vm.warp(block.timestamp + 3601);
         escrow.pruneExpiredIntents(depositId);
         assertEq(orchestrator.getIntent(id).owner, address(0));
-        assertEq(orchestrator.intentConditions(id), bytes32(0));
+        assertEq(orchestrator.getIntentLifecycleHookData(id), "");
     }
 
-    function test_OrphanCleanupClearsConditions() public {
+    function test_OrphanCleanupClearsHookData() public {
         _useGatedDeposit();
-        bytes32 id = _signalWithConditions(CONDITIONS);
+        bytes32 id = _signalWithLifecycleHookData(HOOK_DATA);
         vm.store(address(escrow), keccak256(abi.encode(id, uint256(15))), bytes32(0));
         vm.warp(block.timestamp + 3601);
         escrow.pruneExpiredIntents(depositId);
-        assertEq(orchestrator.intentConditions(id), CONDITIONS);
+        assertEq(orchestrator.getIntentLifecycleHookData(id), HOOK_DATA);
         bytes32[] memory ids = new bytes32[](1);
         ids[0] = id;
         orchestrator.cleanupOrphanedIntents(ids);
         assertEq(orchestrator.getIntent(id).owner, address(0));
-        assertEq(orchestrator.intentConditions(id), bytes32(0));
+        assertEq(orchestrator.getIntentLifecycleHookData(id), "");
     }
 
-    function test_ManualReleaseIgnoresConditionsAndClearsHash() public {
+    function test_ManualReleaseForwardsHookDataAndClearsStorage() public {
         _useGatedDeposit();
-        bytes32 id = _signalWithConditions(CONDITIONS);
+        bytes32 id = _signalWithLifecycleHookData(HOOK_DATA);
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(id);
         assertEq(token.balanceOf(taker), INTENT_AMOUNT);
-        assertEq(orchestrator.intentConditions(id), bytes32(0));
-        (,,,,, bytes32 conditions, bytes memory forwarded, bool manual) = lifecycleHookMock.lastSettlementContext();
-        assertEq(conditions, CONDITIONS);
+        assertEq(orchestrator.getIntentLifecycleHookData(id), "");
+        (,,,,, bytes memory hookData, bytes memory forwarded, bool manual) = lifecycleHookMock.lastSettlementContext();
+        assertEq(hookData, HOOK_DATA);
         assertEq(forwarded, "");
         assertTrue(manual);
     }

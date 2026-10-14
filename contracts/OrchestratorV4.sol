@@ -62,7 +62,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
     mapping(bytes32 => address) internal intentManagerFeeRecipient;
     mapping(bytes32 => uint256) internal intentManagerFee;
 
-    mapping(bytes32 => bytes32) public intentConditions;
+    mapping(bytes32 => bytes) internal intentLifecycleHookData;
 
     // Optional pre-intent hooks configured per escrow + depositId.
     mapping(address => mapping(uint256 => IPreIntentHook)) internal depositPreIntentHooks;
@@ -114,8 +114,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * service to prove their eligibility to take liquidity. This function captures and stores all values required for fullfilling
      * the intent to give strong guarantees to the buyer. Snapshots the global lifecycle hook and executes fail-closed risk
      * admission before locking liquidity for the corresponding deposit on the escrow contract.
-     * Nonzero conditionsHash requires a lifecycle hook and deposit gating service and is appended to its signed message;
-     * zero preserves the plain V3 gating message byte-for-byte.
+     * Non-empty lifecycleHookData requires a lifecycle hook and appends its keccak256 hash to the gating message;
+     * empty data preserves the plain V3 gating message byte-for-byte. The data is opaque to this contract.
      *
      * @param _params                   Struct containing all the intent parameters
      */
@@ -140,7 +140,9 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (managerFee > MAX_MANAGER_FEE) revert FeeExceedsMaximum(managerFee, MAX_MANAGER_FEE);  // policy cap (e.g., 5%)
         intentManagerFeeRecipient[intentHash] = managerFeeRecipient;
         intentManagerFee[intentHash] = managerFee;
-        intentConditions[intentHash] = _params.conditionsHash;
+        if (_params.lifecycleHookData.length != 0) {
+            intentLifecycleHookData[intentHash] = _params.lifecycleHookData;
+        }
 
         Intent storage storedIntent = intents[intentHash];
         storedIntent.owner = msg.sender;
@@ -190,7 +192,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         intentLifecycleHooks[intentHash] = snapshottedLifecycleHook;
 
         if (address(snapshottedLifecycleHook) != address(0)) {
-            snapshottedLifecycleHook.onIntentSignaled(intentHash);
+            snapshottedLifecycleHook.onIntentSignaled(intentHash, _params.lifecycleHookData);
         }
         emit IntentLifecycleHookSnapshotted(intentHash, address(snapshottedLifecycleHook));
 
@@ -240,9 +242,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
      * offchain payment proof is verified, payment details are validated, intent is removed, and escrow state is updated.
      * Settlement notifies the snapshotted lifecycle hook (fail-closed), then executes the exact fee plan and
      * transfers the deposit token to the intent.to address (or post-intent hook).
-     * @dev Signed extension word 0 is the attested conditions hash, zero when none. Extensions shorter than
-     * 32 bytes attest zero. The attested hash must equal the stored intent conditions hash, including zero;
-     * any bytes after word 0 are accepted and reserved.
+     * @dev Stored lifecycle hook data and raw signed extension bytes are forwarded opaquely to the snapshotted hook.
      * @dev This function adds a reentrancy guard as it's calling the post intent hook contract which itself might call 
      * malicious contracts.
      *
@@ -272,7 +272,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (!verificationResult.success) revert PaymentVerificationFailed();
         if (verificationResult.intentHash != _params.intentHash) revert HashMismatch(_params.intentHash, verificationResult.intentHash);
 
-        bytes32 conditionsHash = intentConditions[_params.intentHash];
+        bytes memory lifecycleHookData = intentLifecycleHookData[_params.intentHash];
 
         // Effects
         _pruneIntent(_params.intentHash);
@@ -289,7 +289,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             managerFeeRecipient,
             managerFee,
             false,
-            conditionsHash,
+            lifecycleHookData,
             extensionData
         );
     }
@@ -314,7 +314,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         // Snapshot manager fee terms before pruning (pruning deletes the mappings).
         address managerFeeRecipient = intentManagerFeeRecipient[_intentHash];
         uint256 managerFee = intentManagerFee[_intentHash];
-        bytes32 conditionsHash = intentConditions[_intentHash];
+        bytes memory lifecycleHookData = intentLifecycleHookData[_intentHash];
         
         // Effects
         _pruneIntent(_intentHash);
@@ -331,7 +331,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             managerFeeRecipient,
             managerFee,
             true,
-            conditionsHash,
+            lifecycleHookData,
             ""
         );
     }
@@ -537,6 +537,11 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         return intentLifecycleHooks[_intentHash];
     }
 
+    /// @notice Returns the opaque lifecycle hook data, or empty bytes for an unset or pruned intent.
+    function getIntentLifecycleHookData(bytes32 _intentHash) external view returns (bytes memory) {
+        return intentLifecycleHookData[_intentHash];
+    }
+
     /* ============ Internal Functions ============ */
 
     /**
@@ -595,9 +600,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         if (_intent.conversionRate < minConversionRate) revert RateBelowMinimum(_intent.conversionRate, minConversionRate);
 
         address intentGatingService = IEscrow(_intent.escrow).getDepositGatingService(_intent.depositId, _intent.paymentMethod);
-        if (_intent.conditionsHash != bytes32(0)) {
-            if (intentGatingService == address(0)) revert ConditionsRequireGatingService();
-            if (address(lifecycleHook) == address(0)) revert ConditionsRequireLifecycleHook();
+        if (_intent.lifecycleHookData.length != 0 && address(lifecycleHook) == address(0)) {
+            revert LifecycleHookDataRequiresHook();
         }
         if (intentGatingService != address(0)) {
             // Check if signature has expired
@@ -682,7 +686,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         delete intents[_intentHash];
         delete intentManagerFeeRecipient[_intentHash];
         delete intentManagerFee[_intentHash];
-        delete intentConditions[_intentHash];
+        delete intentLifecycleHookData[_intentHash];
 
         emit IntentPruned(_intentHash);
     }
@@ -744,7 +748,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
         address _managerFeeRecipient,
         uint256 _managerFee,
         bool _isManualRelease,
-        bytes32 _conditionsHash,
+        bytes memory _lifecycleHookData,
         bytes memory _extensionData
     ) internal {
         IIntentLifecycleHookV2 snapshottedLifecycleHook = intentLifecycleHooks[_intentHash];
@@ -761,7 +765,7 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
                     recipient: _intent.to,
                     releaseAmount: _releaseAmount,
                     netAmount: netAmount,
-                    conditionsHash: _conditionsHash,
+                    lifecycleHookData: _lifecycleHookData,
                     extensionData: _extensionData,
                     isManualRelease: _isManualRelease
                 })
@@ -853,8 +857,8 @@ contract OrchestratorV4 is ERC165, Ownable, Pausable, ReentrancyGuard, IOrchestr
             chainId
         );
 
-        if (_intent.conditionsHash != bytes32(0)) {
-            message = abi.encodePacked(message, _intent.conditionsHash);
+        if (_intent.lifecycleHookData.length != 0) {
+            message = abi.encodePacked(message, keccak256(_intent.lifecycleHookData));
         }
 
         bytes32 verifierPayload = keccak256(message).toEthSignedMessageHash();

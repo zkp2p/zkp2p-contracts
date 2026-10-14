@@ -13,6 +13,7 @@ contract LifecycleHookV2Mock is ERC165, IIntentLifecycleHookV2 {
     bool public revertOnFunding;
     address public deferralVault;
     bytes32 public lastIntentHash;
+    bytes public lastSignaledLifecycleHookData;
     bytes32 public lastFundedIntentHash;
     SettlementContext public lastSettlementContext;
     uint256 public signaledCalls;
@@ -57,9 +58,10 @@ contract LifecycleHookV2Mock is ERC165, IIntentLifecycleHookV2 {
     }
 
     /// @inheritdoc IIntentLifecycleHookV2
-    function onIntentSignaled(bytes32 _intentHash) external override {
+    function onIntentSignaled(bytes32 _intentHash, bytes calldata _lifecycleHookData) external override {
         if (revertOnSignal) revert("risk admission failed");
         lastIntentHash = _intentHash;
+        lastSignaledLifecycleHookData = _lifecycleHookData;
         signaledCalls++;
     }
 
@@ -91,6 +93,13 @@ contract LifecycleHookV2Mock is ERC165, IIntentLifecycleHookV2 {
         require(balanceAtFunding >= lastSettlementContext.netAmount, "payout not funded");
         lastFundedIntentHash = _intentHash;
         fundedCalls++;
+    }
+
+    /// @inheritdoc IIntentLifecycleHookV2
+    function conditionsHashOf(bytes calldata _lifecycleHookData) external pure override returns (bytes32) {
+        if (_lifecycleHookData.length == 0) return bytes32(0);
+        (, bytes32 hash) = abi.decode(_lifecycleHookData, (uint8, bytes32));
+        return hash;
     }
 
     /// @notice Reports ERC-165 and IIntentLifecycleHookV2 support.

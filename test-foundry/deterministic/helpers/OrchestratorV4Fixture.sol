@@ -185,7 +185,7 @@ abstract contract OrchestratorV4Fixture is Test {
             postIntentHook: hook,
             preIntentHookData: "",
             data: data,
-            conditionsHash: bytes32(0)
+            lifecycleHookData: ""
         });
     }
 
@@ -268,13 +268,13 @@ abstract contract OrchestratorV4Fixture is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    function _conditionsSignature(IOrchestratorV4.SignalIntentParams memory params, bytes32 conditionsHash)
+    function _lifecycleHookDataSignature(IOrchestratorV4.SignalIntentParams memory params, bytes memory lifecycleHookData)
         internal view returns (bytes memory)
     {
         bytes memory message = abi.encodePacked(
             address(orchestrator), params.escrow, params.depositId, params.amount, taker, params.to,
             params.paymentMethod, params.fiatCurrency, params.conversionRate, _referralHash(params.referralFees),
-            params.signatureExpiration, CHAIN_ID, conditionsHash
+            params.signatureExpiration, CHAIN_ID, keccak256(lifecycleHookData)
         );
         assertEq(message.length, 368);
         bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", keccak256(message)));
@@ -282,10 +282,10 @@ abstract contract OrchestratorV4Fixture is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    function _signalWithConditions(bytes32 conditionsHash) internal returns (bytes32 hash) {
+    function _signalWithLifecycleHookData(bytes memory lifecycleHookData) internal returns (bytes32 hash) {
         IOrchestratorV4.SignalIntentParams memory params = _defaultParams();
-        params.conditionsHash = conditionsHash;
-        params.gatingServiceSignature = _conditionsSignature(params, conditionsHash);
+        params.lifecycleHookData = lifecycleHookData;
+        params.gatingServiceSignature = _lifecycleHookDataSignature(params, lifecycleHookData);
         hash = _intentHash(orchestrator.intentCounter());
         vm.prank(taker);
         orchestrator.signalIntent(params);

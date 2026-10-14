@@ -109,7 +109,7 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
             address recipient,
             uint256 releaseAmount,
             uint256 netAmount,
-            bytes32 conditionsHash,
+            bytes memory lifecycleHookData,
             bytes memory extensionData,
             bool isManualRelease
         ) = lifecycleHookMock.lastSettlementContext();
@@ -118,7 +118,7 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         assertEq(recipient, taker);
         assertEq(releaseAmount, INTENT_AMOUNT);
         assertEq(netAmount, INTENT_AMOUNT - 250_000);
-        assertEq(conditionsHash, bytes32(0));
+        assertEq(lifecycleHookData, "");
         assertEq(extensionData, abi.encode(uint256(1)));
         assertFalse(isManualRelease);
         assertEq(token.balanceOf(referrer) - referrerBefore, 150_000);
@@ -162,8 +162,8 @@ contract OrchestratorV4LifecycleTest is OrchestratorV4Fixture {
         vm.prank(depositor);
         orchestrator.releaseFundsToPayer(intentHash);
         assertEq(lifecycleHookMock.settlementCalls(), 1);
-        (,,,,, bytes32 conditionsHash, bytes memory extensionData, bool isManualRelease) = lifecycleHookMock.lastSettlementContext();
-        assertEq(conditionsHash, bytes32(0));
+        (,,,,, bytes memory lifecycleHookData, bytes memory extensionData, bool isManualRelease) = lifecycleHookMock.lastSettlementContext();
+        assertEq(lifecycleHookData, "");
         assertEq(extensionData, "");
         assertTrue(isManualRelease);
         assertEq(token.balanceOf(taker), recipientBefore);
