@@ -106,8 +106,8 @@ contract DisputeProtectionPolicyV2 is IDisputeProtectionPolicyV2, Ownable2Step, 
         address _escrow,
         uint256 _depositId,
         address _taker,
-        address _recipient,
-        bytes32 _paymentMethod
+        bytes32 _paymentMethod,
+        address _recipient
     ) external override onlyLifecycleHook nonReentrant {
         uint64 riskWindow = paymentMethodRiskWindow[_paymentMethod];
         if (riskWindow == 0) return;

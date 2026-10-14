@@ -59,7 +59,7 @@ contract DisputeProtectionPolicyV2Test is Test {
         disputes.addWritePermission(address(policy));
     }
     function _signal(bytes32 id) internal {
-        policy.onIntentSignaled(id, address(escrow), 1, TAKER, RECIPIENT, METHOD);
+        policy.onIntentSignaled(id, address(escrow), 1, TAKER, METHOD, RECIPIENT);
     }
     function _stake(address owner, uint256 amount) internal {
         usdc.transfer(owner, amount);
@@ -358,7 +358,7 @@ contract DisputeProtectionPolicyV2Test is Test {
         _fund();
         _mature();
         policy.releaseMaturedDisputeProtectionIntent(ID);
-        policy.onIntentSignaled(ID2, address(escrow), 1, RECIPIENT, STRANGER, METHOD);
+        policy.onIntentSignaled(ID2, address(escrow), 1, RECIPIENT, METHOD, STRANGER);
         assertFalse(policy.onIntentSettled(ID2, 60e6, 59e6, false, false));
         _claim(TAKER);
         assertEq(usdc.balanceOf(RECIPIENT), 39.05e6);
@@ -387,7 +387,7 @@ contract DisputeProtectionPolicyV2Test is Test {
     function test_LifecycleEntrypointsRequireAuthorizedHook() public {
         vm.startPrank(STRANGER);
         vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedLifecycleHook.selector, STRANGER));
-        policy.onIntentSignaled(ID, address(escrow), 1, TAKER, RECIPIENT, METHOD);
+        policy.onIntentSignaled(ID, address(escrow), 1, TAKER, METHOD, RECIPIENT);
         vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedLifecycleHook.selector, STRANGER));
         policy.onIntentCancelled(ID);
         vm.expectRevert(abi.encodeWithSelector(P.UnauthorizedLifecycleHook.selector, STRANGER));

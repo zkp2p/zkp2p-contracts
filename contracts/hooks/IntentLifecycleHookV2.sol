@@ -69,7 +69,7 @@ contract IntentLifecycleHookV2 is ERC165, IIntentLifecycleHookV2 {
         }
         if (disputeProtectionPolicy.isDisputeProtectionEnabled(intent.escrow, intent.depositId, intent.paymentMethod)) {
             disputeProtectionPolicy.onIntentSignaled(
-                _intentHash, intent.escrow, intent.depositId, intent.owner, intent.to, intent.paymentMethod
+                _intentHash, intent.escrow, intent.depositId, intent.owner, intent.paymentMethod, intent.to
             );
         } else if (isWhitelistEnabled) {
             revert TakerNotWhitelisted(intent.escrow, intent.depositId, intent.paymentMethod, intent.owner);

@@ -88,7 +88,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
             uint256 relocked = bound(seed, 0, available);
             bytes32 lockId = keccak256(abi.encode("relock", step));
             if (relocked != 0) {
-                policy.onIntentSignaled(lockId, address(escrow), 1, RECIPIENT, TAKER, METHOD);
+                policy.onIntentSignaled(lockId, address(escrow), 1, RECIPIENT, METHOD, TAKER);
                 _accounting();
                 assertFalse(policy.onIntentSettled(lockId, relocked, relocked, false, false));
                 _accounting();
@@ -118,7 +118,7 @@ contract DeferredPayoutCascadeFuzzTest is Test {
         uint256 referralFee = gross * referralBps / 10000;
         net = gross - protocolFee - referralFee;
         if (freeStake != 0) _deposit(TAKER, freeStake);
-        policy.onIntentSignaled(ID, address(escrow), 1, TAKER, RECIPIENT, METHOD);
+        policy.onIntentSignaled(ID, address(escrow), 1, TAKER, METHOD, RECIPIENT);
         _accounting();
         bool deferred = policy.onIntentSettled(ID, gross, net, balanceFunded, false);
         _accounting();

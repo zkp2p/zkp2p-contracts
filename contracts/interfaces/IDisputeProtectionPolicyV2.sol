@@ -54,7 +54,7 @@ interface IDisputeProtectionPolicyV2 {
     error OwnershipRenunciationDisabled();
 
     /// @notice Records admission without locking collateral.
-    function onIntentSignaled(bytes32 _intentHash, address _escrow, uint256 _depositId, address _taker, address _recipient, bytes32 _paymentMethod) external;
+    function onIntentSignaled(bytes32 _intentHash, address _escrow, uint256 _depositId, address _taker, bytes32 _paymentMethod, address _recipient) external;
     /// @notice Cancels a pending admission.
     function onIntentCancelled(bytes32 _intentHash) external;
     /// @notice Selects settlement collateral and returns whether payout funding is required.
